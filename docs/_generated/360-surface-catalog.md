@@ -34,10 +34,10 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 10/11 | 3 | 1 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 8/11 | 4 | 3 | 0 | `commerce360` | — |
 | [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 11/11 | 5 | 0 | 0 | `communication360` | — |
-| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 8/11 | 4 | 3 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
+| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 9/11 | 5 | 2 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
 | [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution`, `workflow_run` | 11 | 11/11 | 7 | 0 | 0 | `execution360` | — |
 | [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 2 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
-| [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 8/11 | 6 | 3 | 2 | `episode360`, `profile360`, `communication360` | — |
+| [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 9/11 | 7 | 2 | 2 | `episode360`, `profile360`, `communication360` | — |
 | [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 5/11 | 2 | 6 | 4 | `geographic360`, `population360`, `profile360` | — |
 | [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 8/10 | 2 | 2 | 0 | `memory360` | — |
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 12/13 | 8 | 1 | 6 | `economic360`, `outcome360`, `profile360`, `geographic360`, `relationship360`, `risk360` | — |
@@ -46,7 +46,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 7/10 | 4 | 3 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 6/10 | 6 | 4 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 11/11 | 9 | 0 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360`, `risk360` | — |
-| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 8/11 | 5 | 3 | 0 | `workflow360` | — |
+| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 9/11 | 6 | 2 | 0 | `workflow360` | — |
 
 ## Account 360
 
@@ -348,7 +348,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 | `episode_summary` | required |  | `episode_facts`, `evidence` | `episode360` (primary): subjects `episode`; `summary`, `evidence` | — | — | Exact tenant episode record with evidence lineage. |
 | `evidence_trace` | required |  | `episode_facts`, `evidence` | `episode360` (primary): subjects `episode`; `evidence` | — | — | Episode record and lineage refs; source event provenance is partial. |
 | `participants` | required |  | `episode_facts` | `episode360` (primary): subjects `episode`; `interactions`, `episode_context` | — | — | Primary user or agent subject reference only; full participant resolution is pending. |
-| `risk_flags` | required |  | `risk_outputs` | — | — | Unbound: `episode_risk_authority_not_joined` | Required episode360 slot: risk flags. |
+| `risk_flags` | required |  | `episode_facts`, `risk_signals` | `episode360` (primary): subjects `episode`; `risk_flags` | — | Partial: `Only current RiskSignals for the exact typed primary subject of one tenant-scoped EpisodeRecord are joined; risk history, complete signal coverage, policy, freshness, and causality remain unknown.` | Current canonical RiskSignals for an exact tenant episode primary subject; no episode-to-risk causality is inferred. |
 | `sessions` | required |  | `episode_facts` | `episode360` (primary): subjects `episode`; `episode_context` | — | — | Primary session reference only; session inventory is pending. |
 | `timeline` | required |  | `episode_facts`, `temporal`, `silver_semantic_observations`, `evidence` | `episode360` (primary): subjects `episode`; `timeline` | — | Partial: `Only observation IDs explicitly recorded by episodes are resolved; source namespaces are untyped, broader activity and session completeness is unavailable, and freshness and policy remain unknown.` | Episode observation IDs joined to active tenant-scoped semantic Silver rows with bounded temporal context. |
 | `touchpoints` | required |  | `episode_facts`, `campaign_touchpoints` | `episode360` (primary): subjects `episode`; `interactions` | — | Partial: `Only journey_touchpoint_ids explicitly recorded by tenant-scoped EpisodeRecords are resolved to canonical touchpoint rows with evidence. Legacy records, incomplete link inventories, freshness, policy, and attribution links remain unknown.` | Exact tenant touchpoints explicitly linked by canonical episode records; journey touchpoints remain separate from attribution credits. |
@@ -371,7 +371,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_executions`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `communication_facts`, `episode_facts`, `evidence`, `graph`, `identity`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `silver_semantic_observations`, `temporal`.
+Canonical authorities: `agent_executions`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `communication_facts`, `episode_facts`, `evidence`, `graph`, `identity`, `outcome_facts`, `relationship_facts`, `risk_signals`, `silver_semantic_observations`, `temporal`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -507,7 +507,7 @@ Governed temporal view of journey state, stages, events, handoffs, and measured 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
 | `agent_interventions` | required |  | `evidence`, `journeys` | `episode360` (primary): subjects `journey`; `interactions` | — | Partial: `Only current journey version activity IDs join to unique, current tenant-scoped agent-family journey steps with version and step evidence. Canonical agent identity, delegated authority, intervention outcome, and full step-inventory completeness remain unknown.` | Explicit current-journey references to agent-family JourneySteps, with exact step evidence; actor identity, authority, and intervention outcome remain unjoined. |
-| `attribution` | required |  | `attribution_credits` | — | — | Unbound: `immutable_attribution_credit_authority_not_joined` | Required journey360 slot: attribution. |
+| `attribution` | required |  | `journeys`, `attribution_runs`, `attribution_credits` | `episode360` (primary): subjects `journey`; `journey_attribution` | — | Partial: `Only active completed credits from exact same-tenant attribution runs for the current journey version are joined; inactive and historical runs, conversion and touchpoint resolution, policy, freshness, and causal validity remain unknown.` | Active completed attribution credits linked through a same-tenant run for the exact current JourneyVersion. |
 | `communications` | required |  | `communication_facts` | `communication360` (primary): subjects `journey`; `evidence`, `interactions` | — | Partial: `Only tenant-scoped canonical communication facts carrying this exact typed journey ID are joined. Message-spine coverage, completeness, freshness, and historical replay remain unestablished.` | Tenant-scoped canonical communication facts carrying this exact typed journey ID. |
 | `conversions` | required |  | `canonical_conversions`, `journeys` | `episode360` (primary): subjects `journey`; `outcomes` | — | Partial: `Only the current journey version's explicit conversion IDs are resolved; wider conversion inventory and historical versions are not established.` | Canonical conversions explicitly referenced by the current JourneyVersion. |
 | `dropoffs` | required |  | `outcome_facts` | — | — | Unbound: `journey_dropoff_authority_not_joined` | Required journey360 slot: dropoffs. |
@@ -536,7 +536,7 @@ Governed temporal view of journey state, stages, events, handoffs, and measured 
 
 ### Authority and governance contract
 
-Canonical authorities: `actions`, `attribution_credits`, `campaign_touchpoints`, `canonical_conversions`, `communication_facts`, `episode_facts`, `events`, `evidence`, `graph`, `identity`, `journeys`, `outcome_facts`.
+Canonical authorities: `actions`, `attribution_credits`, `attribution_runs`, `campaign_touchpoints`, `canonical_conversions`, `communication_facts`, `episode_facts`, `events`, `evidence`, `graph`, `identity`, `journeys`, `outcome_facts`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -1042,7 +1042,7 @@ Governed operational view of agent executions, actions and tools, integration li
 | `evidence_trace` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `evidence_trace` | — | — | Lineage of exact workflow run linked AI invocation facts. |
 | `failures` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `failures` | — | — | Observed AI invocation failure status only; workflow failure state is unknown. |
 | `outcomes` | required |  | `ai_execution_facts`, `outcome_facts`, `evidence` | `workflow360` (primary): subjects `run`, `workflow_run`; `outcomes` | — | Partial: `Only canonical outcome IDs explicitly referenced by tenant/run invocation facts are joined with invocation and outcome evidence; this association does not establish workflow causality or complete outcome coverage, and policy and freshness remain unknown.` | Canonical outcomes explicitly referenced by tenant-scoped invocation facts for an exact workflow run. |
-| `risk` | required |  | `risk_outputs` | — | — | Unbound: `canonical_workflow_risk_policy_join_not_available` | Required Workflow 360 slot: risk. |
+| `risk` | required |  | `agent_executions`, `risk_assessments` | `workflow360` (primary): subjects `run`, `workflow_run`; `risk` | — | Partial: `Only current RiskAssessments for exact admitted AgentExecution subjects linked to the requested run are joined; workflow execution coverage, risk history, policy authority and replay, freshness, and causality remain unknown.` | Current canonical RiskAssessments for exact run-linked AgentExecution subjects. |
 | `runs` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `runs` | — | — | AI invocation facts explicitly linked to a workflow run ID; run state is partial. |
 | `triggers` | required |  | `agent_executions`, `events` | `workflow360` (primary): subjects `run`, `workflow_run`; `triggers` | — | Partial: `Only exact tenant/run-linked AgentExecution records and their stored trigger event references are joined; trigger definitions, workflow causality, complete coverage, policy authority, and freshness remain unknown.` | Exact run-linked event references stored on admitted AgentExecution records; does not establish workflow trigger causality or coverage. |
 | `workflow_summary` | required |  | `execution_facts` | — | — | Unbound: `canonical_workflow_definition_authority_not_available` | Required Workflow 360 slot: workflow summary. |
@@ -1061,7 +1061,7 @@ Governed operational view of agent executions, actions and tools, integration li
 
 ### Authority and governance contract
 
-Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `ai_execution_facts`, `evidence`, `events`, `execution_facts`, `commerce`, `identity`, `outcome_facts`, `resources`, `risk_outputs`, `tools`.
+Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `ai_execution_facts`, `commerce`, `events`, `evidence`, `execution_facts`, `identity`, `outcome_facts`, `resources`, `risk_assessments`, `tools`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 

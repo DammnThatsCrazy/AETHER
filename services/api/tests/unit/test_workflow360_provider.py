@@ -28,6 +28,7 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     WorkflowOutcomeRead,
     WorkflowRunInvocationRead,
     WorkflowTriggerRead,
+    WorkflowRiskAssessmentRead,
     register_provider,
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
@@ -53,6 +54,7 @@ class FakeWorkflowSource:
         approvals: WorkflowApprovalRead | None = None,
         trigger_events: WorkflowTriggerRead | None = None,
         outcomes: WorkflowOutcomeRead | None = None,
+        risk_assessments: WorkflowRiskAssessmentRead | None = None,
     ) -> None:
         self.read = read
         self.identities = identities or WorkflowAgentIdentityRead((), True, True)
@@ -71,6 +73,9 @@ class FakeWorkflowSource:
             source_read_state="available",
         )
         self.outcome_read = outcomes or WorkflowOutcomeRead((), True, True)
+        self.risk_assessment_read = risk_assessments or WorkflowRiskAssessmentRead(
+            (), False, False, reason="canonical_execution_risk_assessment_source_not_configured"
+        )
         self.calls: list[tuple[str, str, int]] = []
         self.identity_calls: list[tuple[str, set[str], int]] = []
         self.agent_execution_calls: list[tuple[str, str, int]] = []
@@ -79,6 +84,9 @@ class FakeWorkflowSource:
             tuple[str, str, tuple[dict[str, Any], ...], int]
         ] = []
         self.outcome_calls: list[
+            tuple[str, str, tuple[dict[str, Any], ...], int]
+        ] = []
+        self.risk_assessment_calls: list[
             tuple[str, str, tuple[dict[str, Any], ...], int]
         ] = []
 
@@ -142,6 +150,19 @@ class FakeWorkflowSource:
         )
         return self.outcome_read
 
+    async def run_execution_risk_assessments(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowRiskAssessmentRead:
+        self.risk_assessment_calls.append(
+            (tenant_id, workflow_run_id, execution_rows, limit)
+        )
+        return self.risk_assessment_read
+
 
 def _row(
     invocation_id: str,
@@ -201,6 +222,37 @@ def _agent_execution_row(
     }
 
 
+def _risk_assessment_row(
+    assessment_id: str = "risk-assessment-a",
+    *,
+    tenant_id: str = TENANT_A,
+    execution_id: str = "agent-execution-a",
+    assessed_at: str = "2026-10-18T10:00:03Z",
+) -> dict[str, Any]:
+    return {
+        "assessment_id": assessment_id,
+        "tenant_id": tenant_id,
+        "subject_kind": "execution",
+        "subject_id": execution_id,
+        "policy_id": "policy_agent_execution",
+        "policy_version": "2",
+        "dimensions": [],
+        "vector": {"components": []},
+        "claim_state": "unknown",
+        "evidence_refs": [
+            {
+                "id": f"risk-input-{assessment_id}",
+                "type": "event",
+                "source": "risk_signals",
+                "observedAt": assessed_at,
+                "uri": f"store://risk_signals/risk-input-{assessment_id}",
+            }
+        ],
+        "run_id": f"risk-run-{assessment_id}",
+        "assessed_at": assessed_at,
+    }
+
+
 def _request(
     *,
     subject_kind: str = "workflow_run",
@@ -241,6 +293,103 @@ def test_workflow360_registers_through_provider_registry() -> None:
     register_provider(registry)
 
     assert registry.get(PROJECTION_ID) is not None
+
+
+@pytest.mark.asyncio
+async def test_workflow360_joins_canonical_risk_assessment_by_admitted_execution() -> None:
+    invocation = _row(
+        "invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"
+    )
+    execution = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((invocation,), True, True),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        risk_assessments=WorkflowRiskAssessmentRead(
+            (_risk_assessment_row(),), True, True
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    risk = _sections(result)["risk"]
+    assert risk.state == "available"
+    assert risk.content["assessmentCount"] == 1
+    assert risk.content["assessments"][0]["executionId"] == "agent-execution-a"
+    assert risk.content["assessments"][0]["associationBoundary"] == (
+        "recorded_execution_subject_not_workflow_causation"
+    )
+    assert risk.content["freshness"]["state"] == "unknown"
+    assert risk.content["policyAuthority"]["state"] == "unknown"
+    assert {ref["source"] for ref in risk.content["evidenceRefs"]} == {
+        "agent_executions",
+        "risk_assessments",
+        "risk_signals",
+    }
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "risk_assessment_recorded_for_run_linked_execution"
+    )
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert {ref.source for ref in claim.evidenceRefs} >= {
+        "agent_executions",
+        "risk_assessments",
+    }
+    assert source.risk_assessment_calls == [
+        (TENANT_A, RUN_ID, (execution,), 200)
+    ]
+    assert "private reasoning" not in str(result.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_workflow360_drops_risk_assessment_outside_admitted_execution_scope() -> None:
+    invocation = _row(
+        "invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"
+    )
+    execution = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((invocation,), True, True),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        risk_assessments=WorkflowRiskAssessmentRead(
+            (_risk_assessment_row(execution_id="another-execution"),), True, True
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    risk = _sections(result)["risk"]
+    assert risk.state == "degraded"
+    assert risk.content["assessments"] == []
+    assert risk.content["evidenceRefs"] == []
+    assert not any(
+        claim.kind == "risk_assessment_recorded_for_run_linked_execution"
+        for claim in result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_workflow360_does_not_read_current_risk_assessments_for_historical_request() -> None:
+    invocation = _row(
+        "invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"
+    )
+    execution = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((invocation,), True, True),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        risk_assessments=WorkflowRiskAssessmentRead(
+            (_risk_assessment_row(),), True, True
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(
+        _request(as_of="2026-10-18T10:00:04Z", temporal_mode="as_of"), _context()
+    )
+
+    risk = _sections(result)["risk"]
+    assert source.risk_assessment_calls == []
+    assert risk.state == "unknown"
+    assert risk.content["historicalRiskState"] == "unknown"
+    assert risk.content["assessments"] == []
 
 
 @pytest.mark.asyncio
@@ -1509,6 +1658,65 @@ async def test_repository_source_reads_only_exact_run_linked_agent_executions(
     assert read.available is True
     assert read.complete is True
     assert read.rows == (_agent_execution_row(),)
+
+
+@pytest.mark.asyncio
+async def test_repository_source_reads_risk_assessments_by_exact_execution_subject(
+    monkeypatch,
+) -> None:
+    import intelligence.risk360.store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class RiskAssessments:
+        async def list_by_subject(
+            self, tenant_id: str, subject_kind: str, subject_id: str, *, limit: int
+        ) -> list[dict[str, Any]]:
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [_risk_assessment_row(execution_id=subject_id)]
+
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessments)
+    execution = _agent_execution_row()
+
+    read = await RepositoryWorkflow360Source().run_execution_risk_assessments(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(execution,),
+        limit=20,
+    )
+
+    assert calls == [(TENANT_A, "execution", "agent-execution-a", 21)]
+    assert read.available is True
+    assert read.complete is True
+    assert read.scope_mismatch is False
+    assert read.rows == (_risk_assessment_row(),)
+
+
+@pytest.mark.asyncio
+async def test_repository_source_does_not_query_risk_for_foreign_run_execution(
+    monkeypatch,
+) -> None:
+    import intelligence.risk360.store as risk_store
+
+    class RiskAssessments:
+        async def list_by_subject(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+            pytest.fail("foreign workflow execution must not reach risk authority")
+
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessments)
+    foreign = _agent_execution_row()
+    foreign["workflow_run_id"] = "another-run"
+
+    read = await RepositoryWorkflow360Source().run_execution_risk_assessments(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(foreign,),
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.complete is False
+    assert read.scope_mismatch is True
+    assert read.rows == ()
 
 
 @pytest.mark.asyncio

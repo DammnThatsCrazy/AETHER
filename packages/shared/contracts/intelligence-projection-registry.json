@@ -603,7 +603,10 @@
         "evidence",
         "temporal",
         "campaign_touchpoints",
-        "silver_semantic_observations"
+        "silver_semantic_observations",
+        "attribution_runs",
+        "attribution_credits",
+        "risk_signals"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -631,7 +634,9 @@
         "episode_context",
         "interactions",
         "outcomes",
-        "stages"
+        "stages",
+        "risk_flags",
+        "journey_attribution"
       ],
       "supportedTemporalModes": [
         "window",
@@ -2737,7 +2742,8 @@
         "identity",
         "outcome_facts",
         "evidence",
-        "events"
+        "events",
+        "risk_assessments"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -4151,12 +4157,24 @@
         {
           "id": "risk_flags",
           "requirement": "required",
-          "description": "Required episode360 slot: risk flags.",
+          "description": "Current canonical RiskSignals for an exact tenant episode primary subject; no episode-to-risk causality is inferred.",
           "canonicalAuthorityRefs": [
-            "risk_outputs"
+            "episode_facts",
+            "risk_signals"
           ],
-          "projectionBindings": [],
-          "unboundReason": "episode_risk_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "episode360",
+              "role": "primary",
+              "sectionIds": [
+                "risk_flags"
+              ],
+              "subjectKinds": [
+                "episode"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only current RiskSignals for the exact typed primary subject of one tenant-scoped EpisodeRecord are joined; risk history, complete signal coverage, policy, freshness, and causality remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -4288,7 +4306,7 @@
           "identity",
           "outcome_facts",
           "relationship_facts",
-          "risk_outputs",
+          "risk_signals",
           "silver_semantic_observations",
           "temporal"
         ],
@@ -5592,12 +5610,25 @@
         {
           "id": "attribution",
           "requirement": "required",
-          "description": "Required journey360 slot: attribution.",
+          "description": "Active completed attribution credits linked through a same-tenant run for the exact current JourneyVersion.",
           "canonicalAuthorityRefs": [
+            "journeys",
+            "attribution_runs",
             "attribution_credits"
           ],
-          "projectionBindings": [],
-          "unboundReason": "immutable_attribution_credit_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "episode360",
+              "role": "primary",
+              "sectionIds": [
+                "journey_attribution"
+              ],
+              "subjectKinds": [
+                "journey"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined; inactive and historical runs, conversion and touchpoint resolution, policy, freshness, and causal validity remain unknown."
         },
         {
           "id": "recommended_actions",
@@ -5707,6 +5738,7 @@
         "canonicalAuthorities": [
           "actions",
           "attribution_credits",
+          "attribution_runs",
           "campaign_touchpoints",
           "canonical_conversions",
           "communication_facts",
@@ -9824,12 +9856,25 @@
         {
           "id": "risk",
           "requirement": "required",
-          "description": "Required Workflow 360 slot: risk.",
+          "description": "Current canonical RiskAssessments for exact run-linked AgentExecution subjects.",
           "canonicalAuthorityRefs": [
-            "risk_outputs"
+            "agent_executions",
+            "risk_assessments"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_workflow_risk_policy_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "workflow360",
+              "role": "primary",
+              "sectionIds": [
+                "risk"
+              ],
+              "subjectKinds": [
+                "run",
+                "workflow_run"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only current RiskAssessments for exact admitted AgentExecution subjects linked to the requested run are joined; workflow execution coverage, risk history, policy authority and replay, freshness, and causality remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -9868,14 +9913,14 @@
           "agent_entities",
           "agent_executions",
           "ai_execution_facts",
-          "evidence",
-          "events",
-          "execution_facts",
           "commerce",
+          "events",
+          "evidence",
+          "execution_facts",
           "identity",
           "outcome_facts",
           "resources",
-          "risk_outputs",
+          "risk_assessments",
           "tools"
         ],
         "ownsCanonicalTruth": false,

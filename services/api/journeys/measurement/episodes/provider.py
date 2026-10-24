@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Protocol
 from urllib.parse import quote
 from uuid import UUID
@@ -53,6 +54,8 @@ _SECTION_TITLES = {
     "episode_context": "Episode subject and graph context",
     "interactions": "Episode interactions",
     "outcomes": "Episode outcomes",
+    "risk_flags": "Episode risk flags",
+    "journey_attribution": "Journey attribution",
     "timeline": "Episode timeline",
     "stages": "Journey stage observations",
 }
@@ -69,6 +72,8 @@ _JOURNEY_TOUCHPOINT_SOURCE = (
 _JOURNEY_CONVERSION_SOURCE = (
     "services/api/journeys/measurement/repositories/conversion_repo.py:canonical_conversions"
 )
+_JOURNEY_ATTRIBUTION_RUN_SOURCE = "attribution_runs"
+_JOURNEY_ATTRIBUTION_CREDIT_SOURCE = "attribution_credits"
 _EPISODE_RECORD_SOURCE = "shared.backend_interpretation.stores.EpisodeStore"
 _EPISODE_OBSERVATION_SOURCE = "semantic_intelligence.silver_semantic_observations"
 _EPISODE_OUTCOME_TRUTH_SOURCE = "shared.backend_interpretation.stores.OutcomeTruthStore"
@@ -81,6 +86,7 @@ _EPISODE_CONVERSION_DEFINITION_REFS = frozenset(
 _JOURNEY_STEP_CAP = 200
 _JOURNEY_TOUCHPOINT_CAP = 200
 _JOURNEY_CONVERSION_CAP = 100
+_JOURNEY_ATTRIBUTION_CREDIT_CAP = 100
 _JOURNEY_EPISODE_CAP = 100
 _JOURNEY_AGENT_ACTIVITY_CAP = 200
 _JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
@@ -89,7 +95,9 @@ _EPISODE_SUBJECT_RELATIONSHIP_CAP = 100
 _EPISODE_OBSERVATION_CAP = 200
 _EPISODE_TOUCHPOINT_CAP = 200
 _EPISODE_OUTCOME_CAP = 100
+_EPISODE_RISK_SIGNAL_CAP = 100
 _GRAPH_LEDGER_SOURCE = "graph_mutation_ledger"
+_EPISODE_RISK_SIGNAL_SOURCE = "risk360/risk_signals"
 _JOURNEY_REQUIRED_SLOT_IDS = (
     "journey_summary",
     "stages",
@@ -135,6 +143,25 @@ class JourneyConversionRead:
     requested_ids: tuple[str, ...] = ()
     rows: tuple[dict[str, Any], ...] = ()
     evidence_refs: tuple[EvidenceRef, ...] = ()
+    state: str = "unknown"
+    warnings: tuple[str, ...] = ()
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
+class JourneyAttributionCredit:
+    """One canonical credit linked through an exact active attribution run."""
+
+    record: dict[str, Any]
+    run_ref: EvidenceRef
+    credit_ref: EvidenceRef
+
+
+@dataclass(frozen=True)
+class JourneyAttributionRead:
+    """Bounded active credits joined through tenant-scoped journey run keys."""
+
+    credits: tuple[JourneyAttributionCredit, ...] = ()
     state: str = "unknown"
     warnings: tuple[str, ...] = ()
     truncated: bool = False
@@ -247,6 +274,22 @@ class EpisodeOutcomeRead:
 
 
 @dataclass(frozen=True)
+class EpisodeRiskFlagRead:
+    """Exact-primary-subject risk signals joined to one canonical episode."""
+
+    subject_kind: Optional[str] = None
+    subject_id: Optional[str] = None
+    signals: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    state: str = "unknown"
+    reason: str = "episode_risk_signal_read_not_performed"
+    truncated: bool = False
+    invalid_records: bool = False
+    tenant_mismatch: bool = False
+    read_failed: bool = False
+
+
+@dataclass(frozen=True)
 class EpisodeTouchpointRead:
     """Exact tenant-bound touchpoints named by canonical episode records."""
 
@@ -262,6 +305,41 @@ class EpisodeOutcomeSource(Protocol):
     """Exact composite-key reader over canonical outcome truth."""
 
     async def get(self, tenant_id: str, outcome_id: str) -> Any: ...
+
+
+class EpisodeRiskSignalSource(Protocol):
+    """Bounded tenant + exact typed-subject read over canonical RiskSignals."""
+
+    async def signals(
+        self,
+        *,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        limit: int,
+    ) -> list[dict[str, Any]]: ...
+
+
+class RepositoryEpisodeRiskSignalSource:
+    """Adapter over Risk360's tenant-scoped exact-subject signal repository."""
+
+    async def signals(
+        self,
+        *,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        from intelligence.risk360.store import RiskSignalRepository
+
+        return await RiskSignalRepository().list_by_subject(
+            tenant_id,
+            subject_kind,
+            subject_id,
+            limit=limit,
+            offset=0,
+        )
 
 
 class EpisodeObservationSource(Protocol):
@@ -360,6 +438,19 @@ class JourneyConversionSource(Protocol):
     async def get(self, tenant_id: str, conversion_id: str) -> Optional[dict[str, Any]]: ...
 
 
+class JourneyAttributionSource(Protocol):
+    """Bounded active-credit read through an exact tenant/journey-version run link."""
+
+    async def list_active_credits_for_journey(
+        self,
+        tenant_id: str,
+        journey_id: str,
+        journey_version_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, Any]]: ...
+
+
 class RepositoryJourney360Source:
     """Adapter over the canonical versioned journey and ordered-step stores."""
 
@@ -442,6 +533,46 @@ class RepositoryJourneyConversionSource:
         return _as_mapping(row)
 
 
+class RepositoryJourneyAttributionSource:
+    """Adapter over active credits joined to exact-journey attribution runs."""
+
+    def __init__(self, *, repository: Any = None) -> None:
+        self._repository = repository
+
+    def _attribution_repository(self) -> Any:
+        if self._repository is None:
+            from journeys.measurement.repositories.attribution_run_repo import (
+                AttributionRunRepository,
+            )
+
+            self._repository = AttributionRunRepository()
+        return self._repository
+
+    async def list_active_credits_for_journey(
+        self,
+        tenant_id: str,
+        journey_id: str,
+        journey_version_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        try:
+            UUID(journey_id)
+            UUID(journey_version_id)
+        except (TypeError, ValueError, AttributeError) as exc:
+            # UUID-keyed SQL lookups return no rows for invalid IDs. Surface
+            # invalid current journey keys as unavailable so they cannot be
+            # mistaken for an authoritative empty attribution result.
+            raise ValueError("canonical journey and version IDs must be UUIDs") from exc
+        rows = await self._attribution_repository().list_active_credits_for_journey(
+            tenant_id,
+            journey_id,
+            journey_version_id,
+            limit=limit,
+        )
+        return [row for value in rows if (row := _as_mapping(value)) is not None]
+
+
 class Episode360Provider:
     """The ``episode360`` intelligence projection provider (read_only)."""
 
@@ -457,6 +588,8 @@ class Episode360Provider:
         subject_relationship_reader: Optional[EpisodeSubjectRelationshipReader] = None,
         observation_source: Optional[EpisodeObservationSource] = None,
         outcome_source: Optional[EpisodeOutcomeSource] = None,
+        risk_signal_source: Optional[EpisodeRiskSignalSource] = None,
+        attribution_source: Optional[JourneyAttributionSource] = None,
     ) -> None:
         """``episode_store`` may be injected (tests); defaults to the durable
         :class:`EpisodeStore` (WS-D item 2). Observation rows default to the
@@ -467,6 +600,8 @@ class Episode360Provider:
         self._conversion_source = conversion_source
         self._observation_source = observation_source
         self._outcome_source = outcome_source
+        self._attribution_source = attribution_source
+        self._risk_signal_source = risk_signal_source
         self._subject_relationship_reader = (
             subject_relationship_reader
             if subject_relationship_reader is not None
@@ -839,6 +974,148 @@ class Episode360Provider:
             read_failed=read_failed,
         )
 
+    async def _load_episode_risk_flags(
+        self, tenant_id: str, episode: EpisodeRecord
+    ) -> EpisodeRiskFlagRead:
+        """Read current RiskSignals for an episode's exact typed primary subject.
+
+        The episode-to-subject ``EntityRef`` and RiskSignal's typed subject
+        fields form the only admitted join. Risk is not inferred from episode
+        observations, outcome type, nearby graph edges, or event labels.
+        """
+        subject_kind = _journey_text(episode.subject.kind)
+        subject_id = _journey_text(episode.subject.id)
+        if episode.tenant_id != tenant_id:
+            return EpisodeRiskFlagRead(
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                state="unknown",
+                reason="episode_risk_reference_tenant_mismatch",
+                tenant_mismatch=True,
+            )
+        if subject_kind is None or subject_id is None:
+            return EpisodeRiskFlagRead(
+                state="unknown",
+                reason="episode_primary_subject_not_typed_for_risk_lookup",
+            )
+
+        source = self._risk_signal_source or RepositoryEpisodeRiskSignalSource()
+        try:
+            raw_rows = await source.signals(
+                tenant_id=tenant_id,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                limit=_EPISODE_RISK_SIGNAL_CAP + 1,
+            )
+        except Exception:  # noqa: BLE001 - risk authority fails closed independently
+            return EpisodeRiskFlagRead(
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                state="unknown",
+                reason="episode_risk_signal_authority_unavailable",
+                read_failed=True,
+            )
+        if not isinstance(raw_rows, list):
+            return EpisodeRiskFlagRead(
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                state="unknown",
+                reason="episode_risk_signal_authority_returned_invalid_rows",
+                invalid_records=True,
+            )
+
+        from intelligence.risk360.contracts import RiskSignal
+
+        truncated = len(raw_rows) > _EPISODE_RISK_SIGNAL_CAP
+        signals: list[dict[str, Any]] = []
+        signal_evidence: list[EvidenceRef] = []
+        invalid_records = False
+        tenant_mismatch = False
+        for value in raw_rows[:_EPISODE_RISK_SIGNAL_CAP]:
+            row = _as_mapping(value)
+            if row is None:
+                invalid_records = True
+                continue
+            if row.get("tenant_id") != tenant_id:
+                tenant_mismatch = True
+                continue
+            if (
+                _journey_text(row.get("subject_kind")) != subject_kind
+                or _journey_text(row.get("subject_id")) != subject_id
+            ):
+                invalid_records = True
+                continue
+            try:
+                signal = RiskSignal.model_validate(row)
+            except Exception:  # noqa: BLE001 - malformed canonical rows stay unknown
+                invalid_records = True
+                continue
+            if not signal.evidence_refs:
+                invalid_records = True
+                continue
+            if signal.observed_at is not None and (
+                signal.observed_at.tzinfo is None or signal.observed_at.utcoffset() is None
+            ):
+                invalid_records = True
+                continue
+
+            signal_refs = _dedupe_evidence_refs(signal.evidence_refs)
+            record_ref = EvidenceRef(
+                id=signal.signal_id,
+                type="event",
+                source=_EPISODE_RISK_SIGNAL_SOURCE,
+                observedAt=(signal.observed_at.isoformat() if signal.observed_at else None),
+                uri=f"store://risk_signals/{quote(signal.signal_id, safe='')}",
+            )
+            signal_evidence.extend([record_ref, *signal_refs])
+            signals.append(
+                {
+                    "signalId": signal.signal_id,
+                    "subject": {"kind": signal.subject_kind, "id": signal.subject_id},
+                    "riskDimension": signal.risk_dimension,
+                    "claimState": getattr(signal.claim_state, "value", signal.claim_state),
+                    "confidence": signal.confidence,
+                    "score": signal.score,
+                    "value": signal.value,
+                    "source": signal.source,
+                    "detectorVersion": signal.detector_version,
+                    "observedAt": (
+                        signal.observed_at.isoformat() if signal.observed_at is not None else None
+                    ),
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True) for ref in signal_refs
+                    ],
+                }
+            )
+
+        evidence_refs = tuple(_dedupe_evidence_refs(signal_evidence))
+        if signals:
+            reason = (
+                "episode_risk_signal_read_truncated_history_policy_and_freshness_unresolved"
+                if truncated
+                else "episode_risk_signal_read_contains_unscoped_or_invalid_rows"
+                if invalid_records or tenant_mismatch
+                else "exact_episode_primary_subject_risk_signals_observed_history_policy_and_freshness_unresolved"
+            )
+            state = "degraded"
+        elif truncated or invalid_records or tenant_mismatch:
+            reason = "episode_risk_signal_read_incomplete"
+            state = "degraded"
+        else:
+            reason = "no_exact_episode_primary_subject_risk_signal_observed_absence_not_established"
+            state = "unknown"
+        return EpisodeRiskFlagRead(
+            subject_kind=subject_kind,
+            subject_id=subject_id,
+            signals=tuple(signals),
+            evidence_refs=evidence_refs,
+            state=state,
+            reason=reason,
+            truncated=truncated,
+            invalid_records=invalid_records,
+            tenant_mismatch=tenant_mismatch,
+        )
+
     async def _load_episode_touchpoints(
         self, tenant_id: str, episodes: list[EpisodeRecord]
     ) -> EpisodeTouchpointRead:
@@ -1110,6 +1387,183 @@ class Episode360Provider:
             truncated=truncated,
         )
 
+    async def _load_journey_attribution(
+        self, tenant_id: str, journey: dict[str, Any]
+    ) -> JourneyAttributionRead:
+        """Read only credits reached through the exact active tenant/journey run.
+
+        The credit table itself has no journey key. The repository joins each
+        row to its same-tenant attribution run, and this boundary revalidates
+        that link before any credit or claim is projected.
+        """
+        journey_id = _journey_text(journey.get("journey_id"))
+        journey_version_id = _journey_text(journey.get("journey_version_id"))
+        if journey_id is None or journey_version_id is None:
+            return JourneyAttributionRead(
+                warnings=("journey_attribution_current_journey_key_missing",)
+            )
+        source = self._attribution_source or RepositoryJourneyAttributionSource()
+        try:
+            raw_rows = await source.list_active_credits_for_journey(
+                tenant_id,
+                journey_id,
+                journey_version_id,
+                limit=_JOURNEY_ATTRIBUTION_CREDIT_CAP + 1,
+            )
+        except Exception:  # noqa: BLE001 - attribution outage stays unknown
+            return JourneyAttributionRead(
+                warnings=("journey_attribution_authority_unavailable",)
+            )
+        if not isinstance(raw_rows, list):
+            return JourneyAttributionRead(
+                warnings=("journey_attribution_result_invalid",)
+            )
+
+        truncated = len(raw_rows) > _JOURNEY_ATTRIBUTION_CREDIT_CAP
+        bounded_rows = raw_rows[:_JOURNEY_ATTRIBUTION_CREDIT_CAP]
+        warnings: list[str] = []
+        if truncated:
+            warnings.append("journey_attribution_credit_read_truncated")
+        credits: list[JourneyAttributionCredit] = []
+        seen_credit_ids: set[str] = set()
+        invalid_records = False
+        scope_mismatch = False
+        missing_timestamps = False
+        for value in bounded_rows:
+            row = _as_mapping(value)
+            if row is None:
+                invalid_records = True
+                continue
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("linked_tenant_id") != tenant_id
+                or _journey_text(row.get("linked_journey_id")) != journey_id
+                or _journey_text(row.get("linked_journey_version_id"))
+                != journey_version_id
+            ):
+                scope_mismatch = True
+                continue
+            if (
+                row.get("attribution_run_status") != "complete"
+                or row.get("attribution_run_is_active") is not True
+            ):
+                invalid_records = True
+                continue
+
+            credit_id = _journey_text(row.get("credit_id"))
+            run_id = _journey_text(row.get("attribution_run_id"))
+            conversion_id = _journey_text(row.get("conversion_id"))
+            linked_conversion_id = _journey_text(row.get("linked_conversion_id"))
+            credit_weight = _journey_decimal_text(row.get("credit_weight"))
+            if (
+                credit_id is None
+                or run_id is None
+                or credit_id in seen_credit_ids
+                or conversion_id is None
+                or conversion_id != linked_conversion_id
+                or credit_weight is None
+            ):
+                invalid_records = True
+                continue
+            try:
+                parsed_weight = Decimal(credit_weight)
+            except (InvalidOperation, ValueError):
+                invalid_records = True
+                continue
+            if not parsed_weight.is_finite() or not Decimal("0") <= parsed_weight <= Decimal("1"):
+                invalid_records = True
+                continue
+
+            run_completed_at = _journey_timestamp(
+                row.get("attribution_run_completed_at")
+            )
+            credit_created_at = _journey_timestamp(row.get("created_at"))
+            if run_completed_at is None or credit_created_at is None:
+                missing_timestamps = True
+            run_ref = EvidenceRef(
+                id=run_id,
+                type="model_output",
+                source=_JOURNEY_ATTRIBUTION_RUN_SOURCE,
+                observedAt=run_completed_at,
+                uri=f"store://attribution_runs/{run_id}",
+            )
+            credit_ref = EvidenceRef(
+                id=credit_id,
+                type="model_output",
+                source=_JOURNEY_ATTRIBUTION_CREDIT_SOURCE,
+                observedAt=credit_created_at,
+                uri=f"store://attribution_credits/{credit_id}",
+            )
+            seen_credit_ids.add(credit_id)
+            record = {
+                "creditId": credit_id,
+                "attributionRunId": run_id,
+                "journeyId": journey_id,
+                "journeyVersionId": _journey_text(
+                    row.get("linked_journey_version_id")
+                ),
+                "recordedConversionId": conversion_id,
+                "conversionResolutionState": "unknown",
+                "recordedTouchpointId": _journey_text(row.get("touchpoint_id")),
+                "touchpointResolutionState": (
+                    "unknown" if row.get("touchpoint_id") is not None else "not_recorded"
+                ),
+                "campaignId": _journey_text(row.get("campaign_id")),
+                "channel": _journey_text(row.get("channel")),
+                "source": _journey_text(row.get("source")),
+                "creditWeight": credit_weight,
+                "attributedConversionCount": _journey_decimal_text(
+                    row.get("attributed_conversion_count")
+                ),
+                "attributedGrossRevenue": _journey_decimal_text(
+                    row.get("attributed_gross_revenue")
+                ),
+                "attributedNetRevenue": _journey_decimal_text(
+                    row.get("attributed_net_revenue")
+                ),
+                "attributedContributionValue": _journey_decimal_text(
+                    row.get("attributed_contribution_value")
+                ),
+                "modelType": _journey_text(row.get("attribution_model_type")),
+                "modelVersion": _journey_text(row.get("attribution_model_version")),
+                "dataWatermark": _journey_timestamp(
+                    row.get("attribution_data_watermark")
+                ),
+                "evidenceRefs": [
+                    run_ref.model_dump(mode="json", exclude_none=True),
+                    credit_ref.model_dump(mode="json", exclude_none=True),
+                ],
+            }
+            credits.append(
+                JourneyAttributionCredit(
+                    record=record,
+                    run_ref=run_ref,
+                    credit_ref=credit_ref,
+                )
+            )
+
+        if scope_mismatch:
+            warnings.append("journey_attribution_scope_mismatch")
+        if invalid_records:
+            warnings.append("journey_attribution_rows_invalid_or_ambiguous")
+        if missing_timestamps:
+            warnings.append("journey_attribution_timestamps_missing_or_invalid")
+        state = (
+            "degraded"
+            if credits and warnings
+            else "available"
+            if credits
+            else "unknown"
+            if warnings
+            else "empty"
+        )
+        return JourneyAttributionRead(
+            credits=tuple(credits),
+            state=state,
+            warnings=tuple(dict.fromkeys(warnings)),
+            truncated=truncated,
+        )
+
     async def project(
         self,
         request: ProjectionRequest,
@@ -1123,6 +1577,23 @@ class Episode360Provider:
         observation_read = await self._load_episode_observations(request.tenantId, episodes)
         outcome_read = await self._load_episode_outcomes(request.tenantId, episodes)
         touchpoint_read = await self._load_episode_touchpoints(request.tenantId, episodes)
+        risk_read = EpisodeRiskFlagRead(reason="episode_risk_slot_not_requested")
+        if (
+            (request.includeSections is None or "risk_flags" in request.includeSections)
+            and
+            request.subject.kind == "episode"
+            and len(episodes) == 1
+            and episodes[0].episode_id == request.subject.id
+            and episodes[0].tenant_id == request.tenantId
+        ):
+            if context.tenantId != request.tenantId:
+                risk_read = EpisodeRiskFlagRead(
+                    state="unknown",
+                    reason="projection_context_tenant_mismatch",
+                    tenant_mismatch=True,
+                )
+            else:
+                risk_read = await self._load_episode_risk_flags(request.tenantId, episodes[0])
         warnings: list[str] = []
         if read.truncated:
             warnings.append("episode_page_truncated")
@@ -1160,6 +1631,8 @@ class Episode360Provider:
             warnings.append("episode_outcome_references_unresolved")
         if outcome_read.missing_evidence_ids:
             warnings.append("episode_outcome_lineage_unavailable")
+        if risk_read.state == "degraded":
+            warnings.append(risk_read.reason)
         warnings.extend(touchpoint_read.warnings)
         if not read.available:
             availability = "missing"
@@ -1216,10 +1689,14 @@ class Episode360Provider:
             observation_read=observation_read,
             outcome_read=outcome_read,
             touchpoint_read=touchpoint_read,
+            risk_read=risk_read,
         )
         section_by_id = {section.id: section for section in sections}
         sections = [section_by_id[section_id] for section_id in _EPISODE360_SECTIONS]
-        claims = self._build_claims(request, episodes, outcome_read, touchpoint_read)
+        if request.includeSections is not None:
+            wanted_sections = set(request.includeSections)
+            sections = [section for section in sections if section.id in wanted_sections]
+        claims = self._build_claims(request, episodes, outcome_read, touchpoint_read, risk_read)
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=request.tenantId,
@@ -1573,6 +2050,16 @@ class Episode360Provider:
             await self._load_journey_conversions(request.tenantId, journey)
         )
         warnings.extend(journey_conversions["warnings"])
+        if request.includeSections is None or "journey_attribution" in request.includeSections:
+            journey_attribution_read = await self._load_journey_attribution(
+                request.tenantId, journey
+            )
+        else:
+            journey_attribution_read = JourneyAttributionRead(
+                warnings=("journey_attribution_slot_not_requested",)
+            )
+        journey_attribution = _journey_attribution_context(journey_attribution_read)
+        warnings.extend(journey_attribution["warnings"])
 
         sections = _build_journey_sections(
             request=request,
@@ -1588,6 +2075,7 @@ class Episode360Provider:
             episode_context=journey_episodes,
             touchpoint_context=journey_touchpoints,
             conversion_context=journey_conversions,
+            attribution_context=journey_attribution,
         )
         if request.includeSections is not None:
             wanted = set(request.includeSections)
@@ -1600,6 +2088,7 @@ class Episode360Provider:
                 journey_ref,
                 journey_touchpoints["claims"],
                 journey_conversions["claims"],
+                journey_attribution["claims"],
                 agent_interventions["claims"],
                 journey_episode_claims,
             )
@@ -1638,13 +2127,16 @@ class Episode360Provider:
         observation_read: Optional[EpisodeObservationRead] = None,
         outcome_read: Optional[EpisodeOutcomeRead] = None,
         touchpoint_read: Optional[EpisodeTouchpointRead] = None,
+        risk_read: Optional[EpisodeRiskFlagRead] = None,
     ) -> list[ProjectionSection]:
         complete = availability in {"available", "empty"}
         observation_read = observation_read or EpisodeObservationRead(available=False)
         outcome_read = outcome_read or EpisodeOutcomeRead(available=False, read_failed=True)
         touchpoint_read = touchpoint_read or EpisodeTouchpointRead()
+        risk_read = risk_read or EpisodeRiskFlagRead()
         conversion_context = _episode_conversion_context(outcome_read)
         touchpoint_context = _episode_touchpoint_context(touchpoint_read, episodes)
+        risk_context = _episode_risk_context(risk_read)
         by_kind = _kind_counts(episodes)
         by_status = _status_distribution(episodes)
         episode_evidence = _collect_evidence(episodes)
@@ -1793,6 +2285,7 @@ class Episode360Provider:
                             observation_read=observation_read,
                             outcome_read=outcome_read,
                             touchpoint_read=touchpoint_read,
+                            risk_read=risk_read,
                         )
                         if request.subject.kind == "episode"
                         else None
@@ -1956,13 +2449,30 @@ class Episode360Provider:
                         **_unknown_episode_slot("episode_attribution_authority_not_joined"),
                         "links": [],
                     },
-                    "riskFlags": {
-                        **_unknown_episode_slot("episode_risk_authority_not_joined"),
-                        "flags": [],
-                    },
                     "coverage": "partial" if episodes else availability,
                 },
                 warnings=warnings or None,
+            ),
+            ProjectionSection(
+                id="risk_flags",
+                state=risk_context["state"],
+                title=_SECTION_TITLES["risk_flags"],
+                content=risk_context,
+                canonicalAuthorityRefs=["episode_facts", "risk_outputs"],
+                warnings=[risk_context["reason"]]
+                if isinstance(risk_context.get("reason"), str)
+                else None,
+            ),
+            ProjectionSection(
+                id="journey_attribution",
+                state="unknown",
+                title=_SECTION_TITLES["journey_attribution"],
+                content={
+                    "state": "unknown",
+                    "reason": "journey_attribution_requires_journey_subject",
+                    "evidenceRefs": [],
+                },
+                warnings=["journey_attribution_requires_journey_subject"],
             ),
             ProjectionSection(
                 id="timeline",
@@ -2043,6 +2553,7 @@ class Episode360Provider:
         episodes: list[EpisodeRecord],
         outcome_read: Optional[EpisodeOutcomeRead] = None,
         touchpoint_read: Optional[EpisodeTouchpointRead] = None,
+        risk_read: Optional[EpisodeRiskFlagRead] = None,
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for episode in episodes:
@@ -2172,6 +2683,36 @@ class Episode360Provider:
                     ],
                     claimState=claim_state,
                     domainSlotIds=["conversion_events", "evidence_trace"],
+                )
+            )
+        for signal in (risk_read or EpisodeRiskFlagRead()).signals:
+            raw_refs = signal.get("evidenceRefs")
+            if not isinstance(raw_refs, list):
+                continue
+            evidence_refs: list[EvidenceRef] = []
+            for raw_ref in raw_refs:
+                try:
+                    evidence_refs.append(EvidenceRef.model_validate(raw_ref))
+                except Exception:  # noqa: BLE001 - malformed claim evidence is omitted
+                    continue
+            signal_id = _journey_text(signal.get("signalId"))
+            subject = signal.get("subject")
+            subject_kind = _journey_text(subject.get("kind")) if isinstance(subject, dict) else None
+            subject_id = _journey_text(subject.get("id")) if isinstance(subject, dict) else None
+            if not signal_id or not subject_kind or not subject_id or not evidence_refs:
+                continue
+            claim_state = _risk_signal_claim_state(signal.get("claimState"))
+            claims.append(
+                ClaimEnvelope(
+                    id=f"episode360.risk-signal:{quote(signal_id, safe='')}",
+                    kind="episode_primary_subject_risk_signal",
+                    subject=request.subject,
+                    evidenceRefs=evidence_refs,
+                    claims=[
+                        f"Canonical risk signal {signal_id!r} is recorded for the episode's exact primary subject {subject_kind!r}:{subject_id!r}; it does not establish that the episode caused the risk condition."
+                    ],
+                    claimState=claim_state,
+                    domainSlotIds=["risk_flags", "evidence_trace"],
                 )
             )
         return claims
@@ -2731,6 +3272,61 @@ def _journey_conversion_context(read: JourneyConversionRead) -> dict[str, Any]:
     }
 
 
+def _journey_attribution_context(read: JourneyAttributionRead) -> dict[str, Any]:
+    """Expose exact active-run credits with explicit history and policy gaps."""
+    credits = [credit.record for credit in read.credits]
+    evidence_refs = [
+        ref.model_dump(mode="json", exclude_none=True)
+        for credit in read.credits
+        for ref in (credit.run_ref, credit.credit_ref)
+    ]
+    if read.state == "available":
+        reason = "active_attribution_credits_resolved_through_exact_tenant_journey_runs"
+        coverage = "active_completed_run_links_only"
+    elif read.state == "empty":
+        reason = "no_active_attribution_credit_rows_for_exact_tenant_journey"
+        coverage = "active_completed_run_links_only"
+    elif read.warnings:
+        reason = read.warnings[0]
+        coverage = "partial" if credits else "unknown"
+    else:
+        reason = "journey_attribution_read_unknown"
+        coverage = "unknown"
+    return {
+        "state": read.state,
+        "coverage": coverage,
+        "reason": reason,
+        "count": len(credits) if read.state in {"available", "empty"} else None,
+        "observedCount": len(credits),
+        "credits": credits,
+        "history": {
+            "state": "unknown",
+            "reason": "inactive_or_historical_attribution_runs_not_loaded",
+        },
+        "freshness": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "attribution_freshness_threshold_not_configured",
+        },
+        "policy": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "journey_attribution_policy_not_evaluated_by_projection",
+        },
+        "limitations": [
+            "credit_weights_are_canonical_model_outputs_not_independent_causal_proof",
+            "conversion_and_touchpoint_ids_are_recorded_refs_not_joined_subjects",
+            "inactive_and_historical_attribution_runs_are_not_loaded",
+        ],
+        "evidenceRefs": evidence_refs,
+        "warnings": list(read.warnings),
+        "claims": [
+            (credit.record["creditId"], credit.run_ref, credit.credit_ref)
+            for credit in read.credits
+        ],
+    }
+
+
 def _journey_ordered_values(value: Any) -> list[str]:
     """Return stable, non-empty string IDs without inventing joins."""
     if not isinstance(value, (list, tuple)):
@@ -2815,6 +3411,7 @@ def _build_journey_sections(
     episode_context: dict[str, Any],
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
+    attribution_context: dict[str, Any],
 ) -> list[ProjectionSection]:
     time_window = {
         "from": request.timeRange.from_ if request.timeRange is not None else None,
@@ -2845,6 +3442,7 @@ def _build_journey_sections(
     episode_evidence = episode_context["evidenceRefs"]
     touchpoint_evidence = touchpoint_context["evidenceRefs"]
     conversion_evidence = conversion_context["evidenceRefs"]
+    attribution_evidence = attribution_context["evidenceRefs"]
     required_slot_coverage = _journey_required_slot_coverage(
         journey=journey,
         steps=steps,
@@ -2857,6 +3455,7 @@ def _build_journey_sections(
         agent_interventions=agent_interventions,
         touchpoint_context=touchpoint_context,
         conversion_context=conversion_context,
+        attribution_context=attribution_context,
     )
     complete_evidence = step_state in {"available", "empty"} and episode_context[
         "state"
@@ -2869,7 +3468,6 @@ def _build_journey_sections(
         "recordedConversionIds": conversion_context["conversionIds"],
         "conversionTruthState": conversion_context["state"],
         "conversions": conversion_context["conversions"],
-        "attributionState": "unknown",
         "journeyVersionEvidenceRefs": version_evidence,
         "evidenceRefs": version_evidence + conversion_evidence,
         "reason": conversion_context["reason"],
@@ -2950,10 +3548,17 @@ def _build_journey_sections(
                 "journeyVersion": version_evidence[0],
                 "journeySteps": step_evidence,
                 "sourceEventIds": _journey_values(journey.get("event_ids")),
-                "evidenceRefs": version_evidence + step_evidence + touchpoint_evidence + conversion_evidence,
+                "evidenceRefs": (
+                    version_evidence
+                    + step_evidence
+                    + touchpoint_evidence
+                    + conversion_evidence
+                    + attribution_evidence
+                ),
                 "rawStepEvidenceSummaryIncluded": False,
                 "journeyEpisodes": episode_evidence,
                 "journeyTouchpoints": touchpoint_evidence,
+                "journeyAttribution": attribution_evidence,
                 "coverage": "complete" if complete_evidence else "partial",
             },
             warnings=sorted(
@@ -3008,7 +3613,26 @@ def _build_journey_sections(
             state=outcome_state,
             title=_SECTION_TITLES["outcomes"],
             content=outcome_content,
-            warnings=conversion_context["warnings"] or ["journey_attribution_authority_not_joined"],
+            warnings=conversion_context["warnings"] or None,
+        ),
+        "journey_attribution": ProjectionSection(
+            id="journey_attribution",
+            state=attribution_context["state"],
+            title=_SECTION_TITLES["journey_attribution"],
+            content=attribution_context,
+            canonicalAuthorityRefs=["attribution_runs", "attribution_credits"],
+            warnings=attribution_context["warnings"] or None,
+        ),
+        "risk_flags": ProjectionSection(
+            id="risk_flags",
+            state="unknown",
+            title=_SECTION_TITLES["risk_flags"],
+            content={
+                "state": "unknown",
+                "reason": "episode_risk_flags_require_exact_episode_subject",
+                "evidenceRefs": [],
+            },
+            warnings=["episode_risk_flags_require_exact_episode_subject"],
         ),
         "timeline": ProjectionSection(
             id="timeline",
@@ -3164,6 +3788,7 @@ def _journey_required_slot_coverage(
     agent_interventions: dict[str, Any],
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
+    attribution_context: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     """Expose SSOT slot states using only tenant/version-bound canonical evidence.
 
@@ -3182,12 +3807,16 @@ def _journey_required_slot_coverage(
     episode_evidence = [
         ref for ref in episode_context.get("evidenceRefs", []) if isinstance(ref, dict)
     ]
+    attribution_evidence = [
+        ref for ref in attribution_context.get("evidenceRefs", []) if isinstance(ref, dict)
+    ]
     all_evidence = (
         version_evidence
         + step_evidence
         + episode_evidence
         + touchpoint_evidence
         + conversion_evidence
+        + attribution_evidence
     )
 
     touchpoint_state = touchpoint_context.get("state")
@@ -3225,6 +3854,13 @@ def _journey_required_slot_coverage(
         "coverage": conversion_context["coverage"],
         "reason": conversion_context["reason"],
         "evidenceRefs": version_evidence + conversion_evidence,
+    }
+
+    attribution_slot = {
+        "state": attribution_context["state"],
+        "coverage": attribution_context["coverage"],
+        "reason": attribution_context["reason"],
+        "evidenceRefs": attribution_evidence,
     }
 
     episode_slot = {
@@ -3273,10 +3909,7 @@ def _journey_required_slot_coverage(
         },
         "conversions": conversion_slot,
         "attribution": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "immutable_attribution_credit_authority_not_joined",
-            "evidenceRefs": [],
+            **attribution_slot,
         },
         "recommended_actions": {
             "state": "unknown",
@@ -3300,6 +3933,7 @@ def _build_journey_claims(
     journey_ref: EvidenceRef,
     touchpoint_claims: list[tuple[str, EvidenceRef]],
     conversion_claims: list[tuple[str, EvidenceRef]],
+    attribution_claims: list[tuple[str, EvidenceRef, EvidenceRef]],
     agent_intervention_claims: list[tuple[str, EvidenceRef]],
     episode_claims: list[tuple[str, EvidenceRef]],
 ) -> list[ClaimEnvelope]:
@@ -3411,6 +4045,24 @@ def _build_journey_claims(
                 claims=["A canonical conversion is referenced by this current journey version."],
                 claimState=EpistemicStatus.OBSERVED,
                 domainSlotIds=["conversions"],
+            )
+        )
+    for credit_id, run_evidence, credit_evidence in attribution_claims:
+        if len(claims) >= 301:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:attribution-credit:{credit_id}",
+                kind="journey_attribution_credit",
+                subject=request.subject,
+                evidenceRefs=[journey_ref, run_evidence, credit_evidence],
+                claims=[
+                    "A same-tenant completed active attribution run explicitly links this model-output credit to the canonical journey.",
+                    "The credit is not independent causal proof or evidence that its recorded conversion or touchpoint resolved.",
+                    "Inactive and historical run completeness, freshness, and policy disposition remain unknown.",
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["attribution"],
             )
         )
     for episode_id, evidence in episode_claims:
@@ -3584,6 +4236,21 @@ def _journey_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _journey_decimal_text(value: Any) -> Optional[str]:
+    """Serialize finite canonical numeric values without float coercion."""
+    if value is None or isinstance(value, bool) or not isinstance(
+        value, (str, int, float, Decimal)
+    ):
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not parsed.is_finite():
+        return None
+    return format(parsed, "f")
 
 
 def _journey_timestamp(value: Any) -> Optional[str]:
@@ -3860,6 +4527,54 @@ def _unknown_episode_slot(reason: str) -> dict[str, Any]:
     return {"state": "unknown", "coverage": "unknown", "items": [], "reason": reason}
 
 
+def _episode_risk_context(read: EpisodeRiskFlagRead) -> dict[str, Any]:
+    """Render direct-subject risk observations without implying history or causality."""
+    evidence_refs = [ref.model_dump(mode="json", exclude_none=True) for ref in read.evidence_refs]
+    has_signals = bool(read.signals)
+    return {
+        "state": read.state,
+        "coverage": "exact_episode_primary_subject_signals_only" if has_signals else "unknown",
+        "subject": (
+            {"kind": read.subject_kind, "id": read.subject_id}
+            if read.subject_kind and read.subject_id
+            else None
+        ),
+        "flags": list(read.signals),
+        "count": None,
+        "observedCount": len(read.signals),
+        "truncated": read.truncated,
+        "invalidRecords": read.invalid_records,
+        "tenantMismatch": read.tenant_mismatch,
+        "evidenceRefs": evidence_refs,
+        "reason": read.reason,
+        "freshness": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "risk_signal_source_watermark_not_available",
+        },
+        "policy": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "episode_risk_policy_not_evaluated_by_projection",
+        },
+        "provenance": {
+            "state": "partial" if has_signals else "unknown",
+            "authority": _EPISODE_RISK_SIGNAL_SOURCE,
+            "referenceAuthority": _EPISODE_RECORD_SOURCE,
+            "coverage": "episode_primary_subject_exact_typed_reference_only",
+            "reason": read.reason,
+        },
+    }
+
+
+def _risk_signal_claim_state(value: Any) -> EpistemicStatus:
+    """Keep the canonical RiskSignal epistemic state, defaulting safely to unknown."""
+    try:
+        return EpistemicStatus(value)
+    except (TypeError, ValueError):
+        return EpistemicStatus.UNKNOWN
+
+
 def _episode_conversion_context(
     read: EpisodeOutcomeRead,
 ) -> dict[str, Any]:
@@ -3946,6 +4661,7 @@ def _episode_required_slot_coverage(
     observation_read: EpisodeObservationRead,
     outcome_read: EpisodeOutcomeRead,
     touchpoint_read: EpisodeTouchpointRead,
+    risk_read: EpisodeRiskFlagRead,
 ) -> dict[str, dict[str, Any]]:
     """Expose the SSOT slot status without promoting partial sources to complete."""
     evidence = [ref.model_dump() for ref in evidence_refs]
@@ -3986,6 +4702,7 @@ def _episode_required_slot_coverage(
     session_state = "degraded" if episode.subject.kind == "session" else "unknown"
     conversion_context = _episode_conversion_context(outcome_read)
     touchpoint_context = _episode_touchpoint_context(touchpoint_read, episodes)
+    risk_context = _episode_risk_context(risk_read)
     return {
         "episode_summary": {
             "state": "available",
@@ -4051,10 +4768,10 @@ def _episode_required_slot_coverage(
             "evidenceRefs": [],
         },
         "risk_flags": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "episode_risk_authority_not_joined",
-            "evidenceRefs": [],
+            "state": risk_context["state"],
+            "coverage": risk_context["coverage"],
+            "reason": risk_context["reason"],
+            "evidenceRefs": risk_context["evidenceRefs"],
         },
         "evidence_trace": {
             "state": "degraded",

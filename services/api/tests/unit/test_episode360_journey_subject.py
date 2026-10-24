@@ -19,6 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from journeys.measurement.episodes.provider import (  # noqa: E402
     Episode360Provider,
     EpisodeSubjectGraphRead,
+    RepositoryJourneyAttributionSource,
     RepositoryJourney360Source,
 )
 from graph.operational_intelligence.models import EntityRef, EvidenceRef  # noqa: E402
@@ -38,6 +39,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTION_DEFINITIONS,
 )
+from uuid import uuid4
 
 TENANT = "tenant-journey-episode360"
 JOURNEY_ID = "journey-1"
@@ -263,6 +265,58 @@ class FakeJourneyConversionSource:
     async def get(self, tenant_id: str, conversion_id: str):
         self.calls.append((tenant_id, conversion_id))
         return self.rows.get(conversion_id)
+
+
+class FakeJourneyAttributionSource:
+    def __init__(self, rows: list[dict] | None = None, *, raises: Exception | None = None) -> None:
+        self.rows = [] if rows is None else rows
+        self.raises = raises
+        self.calls: list[tuple[str, str, str, int]] = []
+
+    async def list_active_credits_for_journey(
+        self,
+        tenant_id: str,
+        journey_id: str,
+        journey_version_id: str,
+        *,
+        limit: int,
+    ):
+        self.calls.append((tenant_id, journey_id, journey_version_id, limit))
+        if self.raises is not None:
+            raise self.raises
+        return self.rows
+
+
+def _journey_attribution_credit(**overrides: object) -> dict:
+    row = {
+        "tenant_id": TENANT,
+        "linked_tenant_id": TENANT,
+        "linked_journey_id": JOURNEY_ID,
+        "linked_journey_version_id": VERSION_ID,
+        "linked_conversion_id": "conversion-recorded",
+        "attribution_run_status": "complete",
+        "attribution_run_is_active": True,
+        "attribution_run_id": "attribution-run-1",
+        "attribution_run_completed_at": "2026-10-16T10:00:00+00:00",
+        "attribution_run_created_at": "2026-10-16T09:59:00+00:00",
+        "attribution_model_type": "last_touch",
+        "attribution_model_version": "v1",
+        "attribution_data_watermark": "2026-10-16T09:58:00+00:00",
+        "credit_id": "attribution-credit-1",
+        "conversion_id": "conversion-recorded",
+        "touchpoint_id": "touchpoint-recorded",
+        "campaign_id": "campaign-1",
+        "channel": "web",
+        "source": "owned",
+        "credit_weight": "0.7500",
+        "attributed_conversion_count": "1",
+        "attributed_gross_revenue": "42.50",
+        "attributed_net_revenue": "38.00",
+        "attributed_contribution_value": "12.25",
+        "created_at": "2026-10-16T10:01:00+00:00",
+    }
+    row.update(overrides)
+    return row
 
 
 def _section(result: object, section_id: str):
@@ -1202,7 +1256,7 @@ async def test_journey_conversion_and_touchpoint_references_do_not_claim_outcome
     assert outcomes.state == "unknown"
     assert outcomes.content["recordedConversionIds"] == ["conversion-recorded"]
     assert outcomes.content["conversionTruthState"] == "unknown"
-    assert outcomes.content["attributionState"] == "unknown"
+    assert _section(result, "journey_attribution").content["state"] == "unknown"
     assert outcomes.content["journeyVersionEvidenceRefs"][0]["id"] == VERSION_ID
     touchpoints = _section(result, "timeline").content["touchpointReferences"]
     assert touchpoints["touchpointIds"] == ["touchpoint-recorded"]
@@ -1242,11 +1296,218 @@ async def test_journey_conversion_joins_exact_canonical_row_with_evidence() -> N
     assert outcomes.state == "available"
     assert outcomes.content["conversionTruthState"] == "available"
     assert outcomes.content["conversions"][0]["conversionType"] == "purchase"
-    assert outcomes.content["attributionState"] == "unknown"
+    assert _section(result, "journey_attribution").content["state"] == "unknown"
     claim = next(item for item in result.claims if item.kind == "canonical_journey_conversion")
     assert claim.domainSlotIds == ["conversions"]
     assert {ref.id for ref in claim.evidenceRefs} == {VERSION_ID, "conversion-1"}
     assert "private-profile-id" not in json.dumps(result.model_dump(mode="json"))
+
+
+async def test_journey_attribution_uses_exact_tenant_journey_run_and_evidence() -> None:
+    source = FakeJourneySource(journey=_journey(conversion_ids=[]), steps=[])
+    attribution = FakeJourneyAttributionSource([_journey_attribution_credit()])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        conversion_source=FakeJourneyConversionSource({}),
+        attribution_source=attribution,
+    ).project(_request(), _context())
+
+    assert attribution.calls == [(TENANT, JOURNEY_ID, VERSION_ID, 101)]
+    summary = _section(result, "summary").content
+    coverage = summary["requiredSlotCoverage"]["attribution"]
+    assert coverage["state"] == "available"
+    assert coverage["coverage"] == "active_completed_run_links_only"
+    assert {ref["id"] for ref in coverage["evidenceRefs"]} == {
+        "attribution-run-1",
+        "attribution-credit-1",
+    }
+    attribution_content = _section(result, "journey_attribution").content
+    assert "attribution" not in _section(result, "outcomes").content
+    assert attribution_content["credits"][0]["creditWeight"] == "0.7500"
+    assert attribution_content["credits"][0]["conversionResolutionState"] == "unknown"
+    assert attribution_content["credits"][0]["touchpointResolutionState"] == "unknown"
+    assert attribution_content["history"]["state"] == "unknown"
+    assert attribution_content["freshness"]["state"] == "unknown"
+    assert attribution_content["policy"]["state"] == "unknown"
+    claim = next(item for item in result.claims if item.kind == "journey_attribution_credit")
+    assert claim.domainSlotIds == ["attribution"]
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        VERSION_ID,
+        "attribution-run-1",
+        "attribution-credit-1",
+    }
+    assert any("not independent causal proof" in item for item in claim.claims)
+
+
+async def test_journey_attribution_is_not_read_or_exposed_when_slot_is_not_requested() -> None:
+    source = FakeJourneySource(journey=_journey(conversion_ids=[]), steps=[])
+    attribution = FakeJourneyAttributionSource([_journey_attribution_credit()])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        conversion_source=FakeJourneyConversionSource({}),
+        attribution_source=attribution,
+    ).project(_request(includeSections=["outcomes"]), _context())
+
+    assert attribution.calls == []
+    assert all(section.id != "journey_attribution" for section in result.sections)
+    outcomes = _section(result, "outcomes").content
+    assert "attribution" not in outcomes
+    assert "attributionState" not in outcomes
+
+
+async def test_journey_attribution_rejects_foreign_tenant_and_journey_rows() -> None:
+    source = FakeJourneySource(journey=_journey(conversion_ids=[]), steps=[])
+    attribution = FakeJourneyAttributionSource(
+        [
+            _journey_attribution_credit(
+                credit_id="foreign-tenant-credit", tenant_id="foreign-tenant"
+            ),
+            _journey_attribution_credit(
+                credit_id="foreign-journey-credit", linked_journey_id="another-journey"
+            ),
+            _journey_attribution_credit(
+                credit_id="old-version-credit",
+                linked_journey_version_id="older-version",
+            ),
+        ]
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        conversion_source=FakeJourneyConversionSource({}),
+        attribution_source=attribution,
+    ).project(_request(), _context())
+
+    coverage = _section(result, "summary").content["requiredSlotCoverage"]["attribution"]
+    assert coverage["state"] == "unknown"
+    assert coverage["reason"] == "journey_attribution_scope_mismatch"
+    assert coverage["evidenceRefs"] == []
+    assert not any(item.kind == "journey_attribution_credit" for item in result.claims)
+    payload = json.dumps(result.model_dump(mode="json"))
+    assert "foreign-tenant-credit" not in payload
+    assert "foreign-journey-credit" not in payload
+    assert "old-version-credit" not in payload
+
+
+async def test_journey_attribution_repository_joins_same_tenant_active_run_by_exact_current_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from journeys.measurement.repositories import attribution_run_repo
+    from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+
+    attribution_run_repo._reset_local_attribution()
+    repository = AttributionRunRepository()
+
+    async def no_pool():
+        return None
+
+    monkeypatch.setattr(repository, "_pool", no_pool)
+    journey_id = str(uuid4())
+    version_id = str(uuid4())
+    exact_conversion_id = str(uuid4())
+
+    async def add_credit_run(
+        tenant_id: str,
+        run_journey_id: str,
+        conversion_id: str,
+        run_version_id: str = version_id,
+    ) -> None:
+        run_id = str(uuid4())
+        await repository.create_run(
+            {
+                "attribution_run_id": run_id,
+                "tenant_id": tenant_id,
+                "conversion_id": conversion_id,
+                "journey_id": run_journey_id,
+                "journey_version_id": run_version_id,
+                "status": "pending",
+                "is_active": False,
+            }
+        )
+        await repository.complete_run_atomically(
+            run_id,
+            tenant_id,
+            conversion_id,
+            [{"credit_id": str(uuid4()), "credit_weight": "0.5"}],
+            {
+                "journey_id": run_journey_id,
+                "journey_version_id": run_version_id,
+                "completed_at": "2026-10-16T10:00:00+00:00",
+            },
+        )
+
+    try:
+        await add_credit_run(TENANT, journey_id, exact_conversion_id)
+        await add_credit_run(TENANT, journey_id, str(uuid4()), str(uuid4()))
+        await add_credit_run(TENANT, str(uuid4()), str(uuid4()))
+        await add_credit_run("foreign-tenant", journey_id, str(uuid4()))
+        rows = await RepositoryJourneyAttributionSource(repository=repository).list_active_credits_for_journey(
+            TENANT,
+            journey_id,
+            version_id,
+            limit=101,
+        )
+    finally:
+        attribution_run_repo._reset_local_attribution()
+
+    assert len(rows) == 1
+    assert rows[0]["tenant_id"] == TENANT
+    assert rows[0]["linked_tenant_id"] == TENANT
+    assert rows[0]["linked_journey_id"] == journey_id
+    assert rows[0]["attribution_run_status"] == "complete"
+    assert rows[0]["attribution_run_is_active"] is True
+
+
+async def test_journey_attribution_repository_sql_binds_current_version_and_limit_separately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+
+    class Connection:
+        query = ""
+        args: tuple[object, ...] = ()
+
+        async def fetch(self, query: str, *args: object) -> list[dict]:
+            self.query = query
+            self.args = args
+            return []
+
+    connection = Connection()
+
+    class Acquire:
+        async def __aenter__(self) -> Connection:
+            return connection
+
+        async def __aexit__(self, *_: object) -> bool:
+            return False
+
+    class Pool:
+        def acquire(self) -> Acquire:
+            return Acquire()
+
+    repository = AttributionRunRepository()
+
+    async def database_pool() -> Pool:
+        return Pool()
+
+    monkeypatch.setattr(repository, "_pool", database_pool)
+    journey_id = str(uuid4())
+    version_id = str(uuid4())
+
+    rows = await repository.list_active_credits_for_journey(
+        TENANT,
+        journey_id,
+        version_id,
+        limit=23,
+    )
+
+    assert rows == []
+    assert tuple(map(str, connection.args[:3])) == (TENANT, journey_id, version_id)
+    assert connection.args[3] == 23
+    assert "ar.journey_version_id = $3" in connection.query
+    assert "LIMIT $4" in connection.query
 
 
 async def test_journey_conversion_rejects_foreign_tenant_row() -> None:

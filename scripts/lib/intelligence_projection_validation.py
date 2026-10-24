@@ -288,6 +288,7 @@ _OUTPUT_SECTIONS = frozenset(
         "value",
         "risk",
         "workflow_summary",
+        "journey_attribution",
         "triggers",
         "runs",
         "actors",

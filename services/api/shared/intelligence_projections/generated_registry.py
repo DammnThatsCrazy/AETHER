@@ -566,12 +566,12 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/episode360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("campaign_touchpoints", "canonical_conversions", "episode_facts", "events", "evidence", "graph", "journeys", "outcome_facts", "silver_semantic_observations", "temporal"),
+        "canonicalAuthorities": ("attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "episode_facts", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal"),
         "hardDependencies": ("contract_spine", "journey_continuity", "temporal_kernel"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
         "inputRefs": ("EntityRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "RelationshipRef", "TimeRangeFilter"),
-        "outputSections": ("episode_context", "evidence", "interactions", "outcomes", "stages", "state", "summary", "timeline"),
+        "outputSections": ("episode_context", "evidence", "interactions", "journey_attribution", "outcomes", "risk_flags", "stages", "state", "summary", "timeline"),
         "supportedTemporalModes": ("relative", "window"),
         "surfaceIds": ("journeys", "timeline"),
         "capabilityKeys": ("episode360.explore", "episode360.read"),
@@ -1533,7 +1533,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("automation", "run", "trigger", "workflow", "workflow_run"),
-        "canonicalAuthorities": ("agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "identity", "outcome_facts"),
+        "canonicalAuthorities": ("agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "identity", "outcome_facts", "risk_assessments"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -3101,12 +3101,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("risk_outputs",),
-                "description": "Required episode360 slot: risk flags.",
+                "canonicalAuthorityRefs": ("episode_facts", "risk_signals"),
+                "description": "Current canonical RiskSignals for an exact tenant episode primary subject; no episode-to-risk causality is inferred.",
                 "id": "risk_flags",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "episode_risk_authority_not_joined"
+                "partialImplementationReason": "Only current RiskSignals for the exact typed primary subject of one tenant-scoped EpisodeRecord are joined; risk history, complete signal coverage, policy, freshness, and causality remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "episode360",
+                        "role": "primary",
+                        "subjectKinds": ("episode",),
+                        "sectionIds": ("risk_flags",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "sessions",
@@ -3208,7 +3215,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("agent_executions", "attribution_credits", "campaign_facts", "campaign_touchpoints", "communication_facts", "episode_facts", "evidence", "graph", "identity", "outcome_facts", "relationship_facts", "risk_outputs", "silver_semantic_observations", "temporal"),
+            "canonicalAuthorities": ("agent_executions", "attribution_credits", "campaign_facts", "campaign_touchpoints", "communication_facts", "episode_facts", "evidence", "graph", "identity", "outcome_facts", "relationship_facts", "risk_signals", "silver_semantic_observations", "temporal"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -3703,12 +3710,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("attribution_credits",),
-                "description": "Required journey360 slot: attribution.",
+                "canonicalAuthorityRefs": ("attribution_credits", "attribution_runs", "journeys"),
+                "description": "Active completed attribution credits linked through a same-tenant run for the exact current JourneyVersion.",
                 "id": "attribution",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "immutable_attribution_credit_authority_not_joined"
+                "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined; inactive and historical runs, conversion and touchpoint resolution, policy, freshness, and causal validity remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "episode360",
+                        "role": "primary",
+                        "subjectKinds": ("journey",),
+                        "sectionIds": ("journey_attribution",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("communication_facts",),
@@ -3901,7 +3915,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "attribution_credits", "campaign_touchpoints", "canonical_conversions", "communication_facts", "episode_facts", "events", "evidence", "graph", "identity", "journeys", "outcome_facts"),
+            "canonicalAuthorities": ("actions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "communication_facts", "episode_facts", "events", "evidence", "graph", "identity", "journeys", "outcome_facts"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -6270,12 +6284,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("risk_outputs",),
-                "description": "Required Workflow 360 slot: risk.",
+                "canonicalAuthorityRefs": ("agent_executions", "risk_assessments"),
+                "description": "Current canonical RiskAssessments for exact run-linked AgentExecution subjects.",
                 "id": "risk",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "canonical_workflow_risk_policy_join_not_available"
+                "partialImplementationReason": "Only current RiskAssessments for exact admitted AgentExecution subjects linked to the requested run are joined; workflow execution coverage, risk history, policy authority and replay, freshness, and causality remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "workflow360",
+                        "role": "primary",
+                        "subjectKinds": ("run", "workflow_run"),
+                        "sectionIds": ("risk",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "runs",
@@ -6346,7 +6367,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "identity", "outcome_facts", "resources", "risk_outputs", "tools"),
+            "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "identity", "outcome_facts", "resources", "risk_assessments", "tools"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },

@@ -52,6 +52,7 @@ _MAX_INVOCATION_FACTS = 200
 _MAX_AGENT_EXECUTIONS = 200
 _MAX_TRIGGER_EVENTS = 200
 _MAX_WORKFLOW_OUTCOMES = 200
+_MAX_WORKFLOW_RISK_ASSESSMENTS = 200
 _RUN_SUBJECT_KINDS = frozenset({"run", "workflow_run"})
 _APPROVAL_DECISION_ACTIONS = frozenset({"approve", "reject", "escalate", "revoke"})
 _OUTCOME_STATES = frozenset(OUTCOME_STATES)
@@ -139,6 +140,17 @@ class WorkflowOutcomeRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class WorkflowRiskAssessmentRead:
+    """Bounded exact execution-subject risk assessment reads for one run."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    scope_mismatch: bool = False
+    reason: Optional[str] = None
+
+
 class Workflow360Source(Protocol):
     """Tenant-scoped exact-ID read seam for workflow run evidence."""
 
@@ -184,6 +196,15 @@ class Workflow360Source(Protocol):
         invocation_rows: tuple[dict[str, Any], ...],
         limit: int,
     ) -> WorkflowOutcomeRead: ...
+
+    async def run_execution_risk_assessments(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowRiskAssessmentRead: ...
 
 
 class RepositoryWorkflow360Source:
@@ -650,6 +671,128 @@ class RepositoryWorkflow360Source:
                 (), False, False, reason="canonical_execution_approval_source_unavailable"
             )
 
+    async def run_execution_risk_assessments(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowRiskAssessmentRead:
+        """Read Risk360 snapshots only for exact tenant/run-linked executions.
+
+        AgentExecution rows are independently admitted by the provider after
+        verifying their stored invocation IDs and action IDs against this
+        tenant's invocation facts. This adapter keeps the next join exact at
+        both boundaries: workflow_run_id -> execution_id -> RiskAssessment's
+        execution subject. The assessment is association evidence, not proof
+        that the workflow caused the recorded risk.
+        """
+        if not tenant_id or not workflow_run_id:
+            return WorkflowRiskAssessmentRead(
+                (),
+                False,
+                False,
+                reason="exact_tenant_workflow_run_scope_required",
+            )
+
+        execution_ids: list[str] = []
+        scope_mismatch = False
+        for row in execution_rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("workflow_run_id") != workflow_run_id
+            ):
+                scope_mismatch = True
+                continue
+            execution_id = _safe_identifier(row.get("execution_id"))
+            if execution_id is None or execution_id in execution_ids:
+                scope_mismatch = True
+                continue
+            execution_ids.append(execution_id)
+
+        if not execution_ids:
+            return WorkflowRiskAssessmentRead(
+                (),
+                True,
+                not scope_mismatch,
+                scope_mismatch=scope_mismatch,
+                reason=(
+                    "unscoped_or_duplicate_workflow_execution_rows_dropped"
+                    if scope_mismatch
+                    else None
+                ),
+            )
+
+        bounded_limit = min(max(int(limit), 1), _MAX_WORKFLOW_RISK_ASSESSMENTS)
+        query_ids = execution_ids[:_MAX_WORKFLOW_RISK_ASSESSMENTS]
+        truncated = len(query_ids) < len(execution_ids)
+        per_subject_limit = max(1, bounded_limit // len(query_ids))
+        exact_rows: list[dict[str, Any]] = []
+        try:
+            from intelligence.risk360.store import RiskAssessmentRepository
+
+            repository = RiskAssessmentRepository()
+            for execution_id in query_ids:
+                rows = await repository.list_by_subject(
+                    tenant_id,
+                    "execution",
+                    execution_id,
+                    limit=per_subject_limit + 1,
+                )
+                if not isinstance(rows, list):
+                    return WorkflowRiskAssessmentRead(
+                        (),
+                        False,
+                        False,
+                        scope_mismatch=scope_mismatch,
+                        reason="canonical_execution_risk_assessment_read_invalid",
+                    )
+                if len(rows) > per_subject_limit:
+                    truncated = True
+                for row in rows[:per_subject_limit]:
+                    if (
+                        not isinstance(row, dict)
+                        or row.get("tenant_id") != tenant_id
+                        or row.get("subject_kind") != "execution"
+                        or row.get("subject_id") != execution_id
+                    ):
+                        scope_mismatch = True
+                        continue
+                    exact_rows.append(
+                        {
+                            key: value
+                            for key, value in row.items()
+                            if key not in {"id", "created_at", "updated_at"}
+                        }
+                    )
+        except Exception:  # noqa: BLE001 - canonical source failure remains explicit
+            return WorkflowRiskAssessmentRead(
+                (),
+                False,
+                False,
+                scope_mismatch=scope_mismatch,
+                reason="canonical_execution_risk_assessment_source_unavailable",
+            )
+
+        if len(exact_rows) > bounded_limit:
+            exact_rows = exact_rows[:bounded_limit]
+            truncated = True
+        return WorkflowRiskAssessmentRead(
+            tuple(exact_rows),
+            True,
+            not truncated and not scope_mismatch,
+            scope_mismatch=scope_mismatch,
+            reason=(
+                "canonical_execution_risk_assessment_scope_mismatch"
+                if scope_mismatch
+                else "canonical_execution_risk_assessment_read_truncated"
+                if truncated
+                else None
+            ),
+        )
+
     async def run_linked_outcomes(
         self,
         *,
@@ -995,6 +1138,62 @@ class Workflow360Provider:
             and not approval_read.scope_mismatch
             and not approval_scope_mismatch
         )
+        risk_requested = (
+            request.includeSections is None or "risk" in request.includeSections
+        )
+        historical_risk_scope = bool(
+            request.asOf is not None
+            or context.asOf is not None
+            or request.temporalMode in {"as_of", "compare", "relative"}
+        )
+        if not risk_requested:
+            risk_read = WorkflowRiskAssessmentRead(
+                (), False, False, reason="workflow_risk_slot_not_requested"
+            )
+        elif historical_risk_scope:
+            risk_read = WorkflowRiskAssessmentRead(
+                (), False, False, reason="workflow_risk_historical_state_unavailable"
+            )
+        elif subject.kind in _RUN_SUBJECT_KINDS and agent_execution_rows:
+            risk_reader = getattr(self._source, "run_execution_risk_assessments", None)
+            if risk_reader is None:
+                risk_read = WorkflowRiskAssessmentRead(
+                    (),
+                    False,
+                    False,
+                    reason="canonical_execution_risk_assessment_source_unavailable",
+                )
+            else:
+                try:
+                    risk_read = await risk_reader(
+                        tenant_id=tenant_id,
+                        workflow_run_id=subject.id,
+                        execution_rows=tuple(agent_execution_rows),
+                        limit=_MAX_WORKFLOW_RISK_ASSESSMENTS,
+                    )
+                except Exception:  # noqa: BLE001 - optional canonical source stays unknown
+                    risk_read = WorkflowRiskAssessmentRead(
+                        (),
+                        False,
+                        False,
+                        reason="canonical_execution_risk_assessment_source_unavailable",
+                    )
+        elif subject.kind in _RUN_SUBJECT_KINDS:
+            risk_read = WorkflowRiskAssessmentRead(
+                (),
+                False,
+                False,
+                reason=(
+                    "no_admitted_run_linked_agent_execution_for_risk_join"
+                    if agent_execution_read.available
+                    else _safe_reason(agent_execution_read.reason)
+                    or "canonical_agent_execution_repository_unavailable"
+                ),
+            )
+        else:
+            risk_read = WorkflowRiskAssessmentRead(
+                (), False, False, reason="subject_kind_not_supported_by_workflow_run_evidence"
+            )
         principal_user_ids = {
             principal_id
             for row in agent_execution_rows
@@ -1086,6 +1285,18 @@ class Workflow360Provider:
             ),
             time_range=request.timeRange,
         )
+        risk_section, risk_claims = _workflow_risk_section(
+            subject,
+            tenant_id=tenant_id,
+            read=risk_read,
+            execution_rows=agent_execution_rows,
+            execution_refs=agent_execution_refs,
+            execution_inventory_complete=agent_execution_read_complete,
+            time_range=request.timeRange,
+            requested=risk_requested,
+            historical=historical_risk_scope,
+            subject_supported=subject.kind in _RUN_SUBJECT_KINDS,
+        )
 
         if records and read_complete:
             run_state = "available"
@@ -1144,6 +1355,7 @@ class Workflow360Provider:
         claims.extend(approval_claims)
         claims.extend(agent_step_claims)
         claims.extend(outcome_claims)
+        claims.extend(risk_claims)
 
         sections: list[ProjectionSection] = [
             _unknown_section("workflow_summary"),
@@ -1170,7 +1382,7 @@ class Workflow360Provider:
                 reason=read_reason,
             ),
             outcomes_section,
-            _unknown_section("risk"),
+            risk_section,
             _evidence_trace_section(
                 subject,
                 tenant_id=tenant_id,
@@ -2266,6 +2478,279 @@ def _linked_outcomes_section(
             canonicalAuthorityRefs=(
                 [_SOURCE, _OUTCOME_SOURCE] if available and records else None
             ),
+        ),
+        claims,
+    )
+
+
+def _workflow_risk_section(
+    subject: Any,
+    *,
+    tenant_id: str,
+    read: WorkflowRiskAssessmentRead,
+    execution_rows: list[dict[str, Any]],
+    execution_refs: list[EvidenceRef],
+    execution_inventory_complete: bool,
+    time_range: Any,
+    requested: bool,
+    historical: bool,
+    subject_supported: bool,
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Project risk snapshots only through admitted exact run-linked executions."""
+    if not requested:
+        return _unknown_section("risk"), []
+    if historical:
+        return (
+            ProjectionSection(
+                id="risk",
+                state="unknown",
+                title="Workflow risk evidence",
+                content={
+                    "state": "unknown",
+                    "reasonCode": "workflow_risk_historical_state_unavailable",
+                    "assessments": [],
+                    "evidenceRefs": [],
+                    "historicalRiskState": "unknown",
+                },
+                warnings=["workflow_risk_historical_state_unavailable"],
+                canonicalAuthorityRefs=["risk_assessments", _AGENT_EXECUTION_SOURCE],
+            ),
+            [],
+        )
+
+    reason = (
+        "subject_kind_not_supported_by_workflow_run_evidence"
+        if not subject_supported
+        else read.reason or "no_admitted_run_linked_agent_execution_for_risk_join"
+        if not execution_rows
+        else read.reason or "canonical_execution_risk_assessment_source_unavailable"
+        if not read.available
+        else _safe_reason(read.reason)
+    )
+    execution_evidence_by_id = {
+        execution_id: ref
+        for row in execution_rows
+        if (execution_id := _safe_identifier(row.get("execution_id"))) is not None
+        and (ref := next((item for item in execution_refs if item.id == execution_id), None))
+        is not None
+    }
+    from intelligence.risk360.contracts import RiskAssessment
+
+    records: list[dict[str, Any]] = []
+    claims: list[ClaimEnvelope] = []
+    all_refs: list[EvidenceRef] = []
+    invalid_seen = read.scope_mismatch
+    filtered_outside_time_range = False
+    lower_raw = getattr(time_range, "from_", None) if time_range else None
+    upper_raw = getattr(time_range, "to", None) if time_range else None
+    lower = _parse_timestamp(lower_raw) if lower_raw else None
+    upper = _parse_timestamp(upper_raw) if upper_raw else None
+    invalid_window = bool(
+        time_range is not None
+        and (
+            (lower_raw is not None and lower is None)
+            or (upper_raw is not None and upper is None)
+            or (lower is not None and upper is not None and upper < lower)
+        )
+    )
+    seen_assessment_ids: set[str] = set()
+    for raw in read.rows if read.available else ():
+        if not isinstance(raw, dict) or raw.get("tenant_id") != tenant_id:
+            invalid_seen = True
+            continue
+        execution_id = _safe_identifier(raw.get("subject_id"))
+        if (
+            raw.get("subject_kind") != "execution"
+            or execution_id is None
+            or execution_id not in execution_evidence_by_id
+        ):
+            invalid_seen = True
+            continue
+        try:
+            assessment = RiskAssessment.model_validate(raw)
+        except Exception:  # noqa: BLE001 - malformed canonical rows are not evidence
+            invalid_seen = True
+            continue
+        if (
+            not assessment.assessment_id.strip()
+            or assessment.assessment_id in seen_assessment_ids
+            or assessment.subject_kind != "execution"
+            or assessment.subject_id != execution_id
+            or assessment.tenant_id != tenant_id
+        ):
+            invalid_seen = True
+            continue
+        assessed_at = assessment.assessed_at
+        if assessed_at is not None:
+            if assessed_at.tzinfo is None or assessed_at.utcoffset() is None:
+                invalid_seen = True
+                continue
+            assessed_at = assessed_at.astimezone(timezone.utc)
+        if time_range is not None:
+            if assessed_at is None:
+                invalid_seen = True
+                continue
+            if (lower is not None and assessed_at < lower) or (
+                upper is not None and assessed_at > upper
+            ):
+                filtered_outside_time_range = True
+                continue
+
+        observed_at = assessed_at.isoformat() if assessed_at is not None else None
+        assessment_ref = EvidenceRef(
+            id=assessment.assessment_id,
+            type="model_output",
+            source="risk_assessments",
+            observedAt=observed_at,
+            uri=(
+                "store://risk_assessments/"
+                f"{quote(f'{tenant_id}:{assessment.assessment_id}', safe='')}"
+            ),
+        )
+        assessment_refs = [assessment_ref, *assessment.evidence_refs]
+        for component in assessment.vector.components:
+            assessment_refs.extend(component.evidence_refs)
+        assessment_refs = _dedupe_evidence_refs(assessment_refs)
+        if not assessment_refs or any(
+            not ref.id.strip() or not ref.source.strip() for ref in assessment_refs
+        ):
+            invalid_seen = True
+            continue
+        evidence_refs = _dedupe_evidence_refs(
+            [execution_evidence_by_id[execution_id], *assessment_refs]
+        )
+        records.append(
+            {
+                "executionId": execution_id,
+                "assessmentId": assessment.assessment_id,
+                "policyId": assessment.policy_id,
+                "policyVersion": assessment.policy_version,
+                "dimensions": list(assessment.dimensions),
+                "claimState": assessment.claim_state.value,
+                "confidence": assessment.confidence,
+                "assessedAt": observed_at,
+                "runId": assessment.run_id,
+                "components": [
+                    {
+                        "dimension": component.dimension,
+                        "state": component.state.value,
+                        "score": component.score,
+                        "claimState": component.claim_state.value,
+                        "confidence": component.confidence,
+                        "evidenceRefs": [
+                            ref.model_dump(
+                                mode="json", by_alias=True, exclude_none=True
+                            )
+                            for ref in component.evidence_refs
+                        ],
+                    }
+                    for component in assessment.vector.components
+                ],
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                    for ref in evidence_refs
+                ],
+                "associationBoundary": "recorded_execution_subject_not_workflow_causation",
+            }
+        )
+        seen_assessment_ids.add(assessment.assessment_id)
+        all_refs.extend(evidence_refs)
+        claims.append(
+            ClaimEnvelope(
+                id=f"workflow360.risk_assessment.{quote(assessment.assessment_id, safe='')}",
+                kind="risk_assessment_recorded_for_run_linked_execution",
+                subject=subject,
+                evidenceRefs=evidence_refs,
+                claims=[
+                    "A tenant-scoped canonical RiskAssessment names an exact AgentExecution linked to this workflow run; this records subject association only and does not establish workflow causation, complete risk coverage, or current policy authority."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["risk", "evidence_trace"],
+            )
+        )
+
+    complete = bool(
+        read.available
+        and read.complete
+        and not read.scope_mismatch
+        and not invalid_seen
+        and execution_inventory_complete
+    )
+    if invalid_window:
+        state = "unknown"
+        reason = "workflow_risk_time_window_invalid"
+        records = []
+        claims = []
+        all_refs = []
+    elif not subject_supported or not execution_rows:
+        state = "unknown"
+    elif not read.available:
+        state = "unknown"
+    elif not execution_inventory_complete or invalid_seen or not read.complete:
+        state = "degraded"
+        reason = read.reason or "run_execution_or_risk_assessment_scope_incomplete"
+    elif records:
+        state = "available"
+        reason = "exact_execution_risk_assessment_snapshots_history_and_freshness_unknown"
+    else:
+        state = "empty"
+        reason = (
+            "no_execution_risk_assessments_in_requested_time_range"
+            if filtered_outside_time_range
+            else "no_recorded_execution_risk_assessments_for_admitted_workflow_executions"
+        )
+
+    latest_assessed_at = max(
+        (item["assessedAt"] for item in records if item["assessedAt"] is not None),
+        default=None,
+    )
+    content = {
+        "state": state,
+        "reasonCode": reason,
+        "scope": "current canonical assessments for exact run-linked AgentExecution subjects",
+        "assessmentCount": len(records) if read.available else None,
+        "assessments": records,
+        "sourceReadState": "available" if read.available else "unavailable",
+        "sourceReadCompleteForExactExecutionSubjects": complete,
+        "workflowExecutionCoverage": {
+            "state": "partial" if execution_rows else "unknown",
+            "reason": "complete_workflow_definition_and_execution_coverage_not_available",
+        },
+        "riskHistoryCoverage": {
+            "state": "unknown",
+            "reason": "risk_assessment_history_not_reconstructed",
+        },
+        "freshness": {
+            "state": "unknown",
+            "latestAssessedAt": latest_assessed_at,
+            "reason": "no_workflow_execution_risk_freshness_threshold_is_configured",
+        },
+        "policyAuthority": {
+            "state": "unknown",
+            "reason": "recorded_policy_id_and_version_do_not_prove_current_or_replayed_authority",
+        },
+        "causalAttribution": {
+            "state": "unknown",
+            "reason": "execution_subject_association_does_not_establish_workflow_causation",
+        },
+        "truncated": not complete,
+        "evidenceRefs": [
+            ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+            for ref in _dedupe_evidence_refs(all_refs)
+        ],
+    }
+    return (
+        ProjectionSection(
+            id="risk",
+            state=state,
+            title="Workflow risk evidence",
+            content=content,
+            warnings=[
+                "workflow_execution_coverage_and_risk_history_remain_unknown",
+                "execution_risk_assessment_subject_links_do_not_prove_workflow_causation_or_current_policy_authority",
+                "workflow_execution_risk_freshness_threshold_not_configured",
+            ],
+            canonicalAuthorityRefs=["risk_assessments", _AGENT_EXECUTION_SOURCE],
         ),
         claims,
     )

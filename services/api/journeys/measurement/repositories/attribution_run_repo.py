@@ -655,6 +655,121 @@ class AttributionRunRepository:
             )
         return [dict(row) for row in rows]
 
+    async def list_active_credits_for_journey(
+        self,
+        tenant_id: str,
+        journey_id: str,
+        journey_version_id: str,
+        *,
+        limit: int = 101,
+    ) -> list[dict[str, Any]]:
+        """Read active completed credits through their exact linked journey run.
+
+        ``attribution_credits`` has no journey key of its own. A credit belongs
+        to a journey only when the same-tenant ``attribution_runs`` row joined
+        by ``attribution_run_id`` carries that exact journey and current
+        version. Callers should pass a bounded look-ahead limit to detect
+        truncation.
+        """
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        journey_uuid = _uuid_or_none(journey_id)
+        journey_version_uuid = _uuid_or_none(journey_version_id)
+        if journey_uuid is None or journey_version_uuid is None:
+            return []
+
+        pool = await self._pool()
+        if pool is None:
+            runs_by_id: dict[str, dict[str, Any]] = {}
+            for key, run in _local_runs.items():
+                run_id = str(run.get("attribution_run_id") or key)
+                if (
+                    run.get("tenant_id") == tenant_id
+                    and str(run.get("journey_id")) == str(journey_uuid)
+                    and str(run.get("journey_version_id")) == str(journey_version_uuid)
+                    and run.get("status") == "complete"
+                    and run.get("is_active") is True
+                ):
+                    runs_by_id[run_id] = run
+
+            joined: list[dict[str, Any]] = []
+            for credit in _local_credits:
+                run_id = str(credit.get("attribution_run_id") or "")
+                run = runs_by_id.get(run_id)
+                if (
+                    run is None
+                    or credit.get("tenant_id") != tenant_id
+                ):
+                    continue
+                joined.append(
+                    {
+                        **credit,
+                        "linked_tenant_id": run.get("tenant_id"),
+                        "linked_journey_id": run.get("journey_id"),
+                        "linked_journey_version_id": run.get("journey_version_id"),
+                        "linked_conversion_id": run.get("conversion_id"),
+                        "attribution_run_status": run.get("status"),
+                        "attribution_run_is_active": run.get("is_active"),
+                        "attribution_model_type": run.get("model_type"),
+                        "attribution_model_version": run.get("model_version"),
+                        "attribution_data_watermark": run.get("data_watermark"),
+                        "attribution_run_completed_at": run.get("completed_at"),
+                        "attribution_run_created_at": run.get("created_at"),
+                    }
+                )
+
+            def local_order(row: dict[str, Any]) -> tuple[datetime, datetime, Decimal, str]:
+                completed = _parse_ts(row.get("attribution_run_completed_at"))
+                created = _parse_ts(row.get("attribution_run_created_at"))
+                return (
+                    completed or datetime.min.replace(tzinfo=timezone.utc),
+                    created or datetime.min.replace(tzinfo=timezone.utc),
+                    _to_decimal(row.get("credit_weight")) or Decimal("0"),
+                    str(row.get("credit_id") or ""),
+                )
+
+            joined.sort(key=local_order, reverse=True)
+            return joined[:limit]
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    ac.*,
+                    ar.tenant_id AS linked_tenant_id,
+                    ar.journey_id AS linked_journey_id,
+                    ar.journey_version_id AS linked_journey_version_id,
+                    ar.conversion_id AS linked_conversion_id,
+                    ar.status AS attribution_run_status,
+                    ar.is_active AS attribution_run_is_active,
+                    ar.model_type AS attribution_model_type,
+                    ar.model_version AS attribution_model_version,
+                    ar.data_watermark AS attribution_data_watermark,
+                    ar.completed_at AS attribution_run_completed_at,
+                    ar.created_at AS attribution_run_created_at
+                FROM attribution_credits ac
+                JOIN attribution_runs ar
+                  ON ar.tenant_id = ac.tenant_id
+                 AND ar.attribution_run_id = ac.attribution_run_id
+                WHERE ac.tenant_id = $1
+                  AND ar.tenant_id = $1
+                  AND ar.journey_id = $2
+                  AND ar.journey_version_id = $3
+                  AND ar.status = 'complete'
+                  AND ar.is_active = TRUE
+                ORDER BY ar.completed_at DESC NULLS LAST,
+                         ar.created_at DESC,
+                         ac.credit_weight DESC,
+                         ac.credit_id
+                LIMIT $4
+                """,
+                tenant_id,
+                journey_uuid,
+                journey_version_uuid,
+                limit,
+            )
+        return [dict(row) for row in rows]
+
     async def campaign_credit_summary(
         self,
         tenant_id: str,
