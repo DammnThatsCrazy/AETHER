@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0bdf0f163a658c0c0ed4931b1ff5cf124aea912705f00ba06b6d68a64ac0df4f"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8fb16ce5cec86f4f45bf76e0db4f27611f1ff69e1568184c7c981627a2622a67"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -161,11 +161,11 @@ only through an exact tenant-scoped active `USER_ID` alias and active surviving
 identity subject, with both identity evidence references. Missing, conflicting,
 or unavailable identity reads remain unknown, and the link does not establish
 action authorization or delegation authority.
-Its `risk_events` slot now joins canonical RiskSignals only to exact execution
-IDs admitted by tenant server lifecycle records. Signal evidence is recorded
-risk context, not proof that the execution caused the signal or a complete risk
-assessment; explicit producer coverage and RiskAssessment snapshot coverage
-remain unknown, as do freshness thresholds. The agentic risk-signal
+Its `risk_events` slot now joins bounded canonical RiskSignals and RiskAssessment
+snapshots to exact execution IDs admitted by tenant server lifecycle records.
+These records provide risk context, not proof that the execution caused a
+signal or assessment. Producer coverage, assessment history, and freshness
+thresholds remain unknown. The agentic risk-signal
 compute/store producer described in Bucket 4 is still missing. Agentic
 fraud-network detections are separately persisted to Risk360
 only after a unique tenant-owned Agent binding is resolved and its valid,
@@ -311,10 +311,11 @@ only when both carry evidence for the exact same tenant and subject. The risk
 claim must be an assessed economic, payment, or transaction dimension; generic
 RiskSignals do not qualify. Historical or explicitly ranged reads remain unknown because a
 coordinated snapshot is unavailable, and current freshness remains unknown, so
-the slot stays degraded. Three other required capabilities remain blocked by
-missing canonical source contracts: Episode360 touchpoints lack typed episode
-references, Risk360 anomaly events lack a typed subject-scoped event authority,
-and Memory360 cards/embedding metadata lack canonical records. Timing and
+the slot stays degraded. Three required slots remain incomplete: Episode360
+touchpoints now resolve only explicitly recorded episode touchpoint IDs, with
+legacy records, complete link inventory, policy, freshness, and attribution
+links unknown; Risk360 anomaly events lack a typed subject-scoped event
+authority; and Memory360 cards/embedding metadata lack canonical records. Timing and
 generic identifiers are not used to invent these links.
 The Value360 risk binding now requests only Risk360's narrow `financial_risk`
 section, excluding unrelated findings, poisoning evidence, policy flags, and

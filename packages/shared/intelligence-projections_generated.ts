@@ -716,7 +716,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/execution360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'episode', 'execution', 'workflow_run'],
-    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'temporal_kernel', 'tools'],
+    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_assessments', 'risk_signals', 'temporal_kernel', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'temporal_kernel'],
     projectionDependencies: ['agent360', 'episode360', 'outcome360', 'temporal360'],
     optionalProjectionDependencies: [],
@@ -3250,12 +3250,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['campaign_touchpoints'],
-        description: 'Required episode360 slot: touchpoints.',
+        canonicalAuthorityRefs: ['campaign_touchpoints', 'episode_facts'],
+        description: 'Exact tenant touchpoints explicitly linked by canonical episode records; journey touchpoints remain separate from attribution credits.',
         id: 'touchpoints',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'episode_record_has_no_typed_touchpoint_references'
+        partialImplementationReason: 'Only journey_touchpoint_ids explicitly recorded by tenant-scoped EpisodeRecords are resolved to canonical touchpoint rows with evidence. Legacy records, incomplete link inventories, freshness, policy, and attribution links remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'episode360',
+            role: 'primary',
+            subjectKinds: ['episode'],
+            sectionIds: ['interactions']
+          }
+        ],
+        requirement: 'required'
       }
     ],
     freshnessPolicy: {
@@ -3483,11 +3490,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['agent_executions', 'execution_facts', 'risk_signals'],
-        description: 'Current recorded RiskSignals joined to exact tenant-scoped executions admitted by lifecycle; producer coverage and assessment snapshots are not read.',
+        canonicalAuthorityRefs: ['agent_executions', 'execution_facts', 'risk_assessments', 'risk_signals'],
+        description: 'Bounded current RiskSignals and RiskAssessment snapshots joined by exact tenant/execution subject to lifecycle-admitted executions; producer coverage, assessment history, freshness, and causal attribution remain unknown.',
         id: 'risk_events',
         implementationCrosswalk: ['execution_identity_and_state'],
-        partialImplementationReason: 'only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_risk_assessments_and_freshness_threshold_unknown_signals_are_not_causal',
+        partialImplementationReason: 'bounded_execution_subject_risk_signals_and_assessment_snapshots_joined_to_admitted_lifecycle_executions_producer_coverage_history_freshness_and_causality_unknown',
         projectionBindings: [
           {
             projectionId: 'execution360',
@@ -3546,7 +3553,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'episode_facts', 'events', 'evidence', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'source_provenance', 'temporal_kernel', 'tools'],
+      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'episode_facts', 'events', 'evidence', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'risk_assessments', 'risk_signals', 'source_provenance', 'temporal_kernel', 'tools'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },

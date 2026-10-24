@@ -89,6 +89,16 @@ class FakeObservationSource:
         return self.rows
 
 
+class FakeTouchpointSource:
+    def __init__(self, rows: dict[str, dict[str, str]] | None = None) -> None:
+        self.rows = {} if rows is None else rows
+        self.calls: list[tuple[str, str]] = []
+
+    async def get(self, tenant_id: str, touchpoint_id: str):
+        self.calls.append((tenant_id, touchpoint_id))
+        return self.rows.get(touchpoint_id)
+
+
 class FakeFactRepository:
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[str]]] = []
@@ -174,6 +184,105 @@ async def test_episode_observation_join_uses_exact_tenant_ids_and_preserves_part
     serialized = json.dumps(result.model_dump(mode="json"))
     assert "private event payload" not in serialized
     assert "private-actor-id" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_episode_touchpoints_resolve_only_explicit_tenant_references():
+    episode = _episode([]).model_copy(
+        update={"journey_touchpoint_ids": ["touchpoint-1"]}
+    )
+    source = FakeTouchpointSource(
+        {
+            "touchpoint-1": {
+                "tenant_id": TENANT,
+                "touchpoint_id": "touchpoint-1",
+                "occurred_at": "2026-10-20T12:00:00+00:00",
+                "touchpoint_type": "email_click",
+                "interaction_type": "click",
+                "channel": "email",
+                "journey_role": "entry",
+                "campaign_id": "campaign-private-id",
+                "agent_id": "agent-private-id",
+                "landing_url": "https://private.example/secret",
+            }
+        }
+    )
+    result = await Episode360Provider(
+        episode_store=FakeEpisodeStore(episode),
+        observation_source=FakeObservationSource(),
+        touchpoint_source=source,
+    ).project(_request(), _context())
+
+    assert source.calls == [(TENANT, "touchpoint-1")]
+    interaction = _section(result, "interactions").content
+    touchpoints = interaction["touchpointContext"]
+    assert touchpoints["state"] == "available"
+    assert touchpoints["coverage"] == "exact_recorded_episode_references_only"
+    assert touchpoints["touchpointIds"] == ["touchpoint-1"]
+    assert touchpoints["touchpoints"] == [
+        {
+            "touchpointId": "touchpoint-1",
+            "occurredAt": "2026-10-20T12:00:00+00:00",
+            "touchpointType": "email_click",
+            "interactionType": "click",
+            "channel": "email",
+            "journeyRole": "entry",
+            "episodeIds": [EPISODE_ID],
+            "evidenceRefs": [
+                {
+                    "id": "touchpoint-1",
+                    "type": "event",
+                    "source": "services/api/journeys/measurement/repositories/touchpoint_repo.py:silver_campaign_touchpoint_facts",
+                    "observedAt": "2026-10-20T12:00:00+00:00",
+                    "confidence": None,
+                    "uri": "store://silver_campaign_touchpoint_facts/touchpoint-1",
+                }
+            ],
+        }
+    ]
+    assert touchpoints["freshness"]["state"] == "unknown"
+    assert touchpoints["policy"]["state"] == "unknown"
+    summary_coverage = _section(result, "summary").content["requiredSlotCoverage"]
+    assert summary_coverage["touchpoints"]["state"] == "available"
+    assert summary_coverage["touchpoints"]["coverage"] == (
+        "exact_recorded_episode_references_only"
+    )
+    assert summary_coverage["attribution_links"]["state"] == "unknown"
+    touchpoint_claim = next(
+        claim for claim in result.claims if "touchpoints" in (claim.domainSlotIds or [])
+    )
+    assert touchpoint_claim.kind == "episode_referenced_journey_touchpoint"
+    assert {ref.id for ref in touchpoint_claim.evidenceRefs} == {
+        EPISODE_ID,
+        "touchpoint-1",
+    }
+    serialized = json.dumps(result.model_dump(mode="json"))
+    assert "campaign-private-id" not in serialized
+    assert "agent-private-id" not in serialized
+    assert "private.example" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_episode_touchpoint_unknown_legacy_and_explicit_empty_are_distinct():
+    legacy = await Episode360Provider(
+        episode_store=FakeEpisodeStore(_episode([])),
+        observation_source=FakeObservationSource(),
+    ).project(_request(), _context())
+    legacy_context = _section(legacy, "interactions").content["touchpointContext"]
+    assert legacy_context["state"] == "unknown"
+    assert legacy_context["reason"] == "episode_touchpoint_reference_list_unavailable"
+
+    explicit_empty_episode = _episode([]).model_copy(
+        update={"journey_touchpoint_ids": []}
+    )
+    explicit_empty = await Episode360Provider(
+        episode_store=FakeEpisodeStore(explicit_empty_episode),
+        observation_source=FakeObservationSource(),
+    ).project(_request(), _context())
+    empty_context = _section(explicit_empty, "interactions").content["touchpointContext"]
+    assert empty_context["state"] == "empty"
+    assert empty_context["coverage"] == "explicit_episode_reference_set_empty"
+    assert empty_context["touchpoints"] == []
 
 
 @pytest.mark.asyncio

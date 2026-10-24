@@ -199,6 +199,12 @@ class EpisodeRecord(ContractSpineModel):
     title: Optional[str] = None
     occurred_from: Optional[str] = None
     occurred_to: Optional[str] = None
+    # Exact canonical journey touchpoint IDs explicitly linked by an episode
+    # writer. ``None`` means the source predates or does not provide this
+    # reference inventory; ``[]`` means the writer explicitly recorded none.
+    # Attribution credits remain a separate authority and are never inferred
+    # from these journey touchpoint references.
+    journey_touchpoint_ids: Optional[list[str]] = None
     outcome_ids: list[str] = Field(default_factory=list)
     observation_ids: list[str] = Field(default_factory=list)
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)

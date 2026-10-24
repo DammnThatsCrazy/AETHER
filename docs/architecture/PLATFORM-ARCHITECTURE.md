@@ -814,13 +814,15 @@ the projection declares `risk360.read`. The envelope binds tenant, surface,
 subject, slot, consumer, target, capability, and evaluated policy IDs. No
 independent actor-granted `risk360.read` capability authority is represented
 yet. Agent-specific freshness, historical replay, and causal contagion remain
-unknown. Execution360's `risk_events` now declares
-producer and RiskAssessment coverage unknown because it joins current,
-execution-scoped RiskSignals rather than assessment snapshots; the signals do
-not prove causality. Value360's `ltv` slot exposes evidenced confirmed or
-adjusted conversion net-value observations by native currency for exact
-supported subjects and occurred-at scope. It does not emit an LTV amount while
-lifecycle completeness, outcome attribution, and freshness remain unknown.
+unknown. Execution360's `risk_events` joins bounded, exact tenant/execution
+RiskSignals and RiskAssessment snapshots for execution IDs admitted from
+server lifecycle records. Producer coverage, assessment history, freshness,
+and causality remain unknown; the records do not prove that an execution
+caused a signal or assessment. Value360's `ltv` slot exposes evidenced
+confirmed or adjusted conversion net-value observations by native currency
+for exact supported subjects and occurred-at scope. It does not emit an LTV
+amount while lifecycle completeness, outcome attribution, and freshness remain
+unknown.
 
 The next 2026-10-23 provider slice adds partial `workflow_run` support to
 Execution360. It admits tenant-scoped AgentExecution rows only when their
@@ -856,10 +858,13 @@ tenant/run AI invocation facts; the link records association only. Missing
 policy, complete coverage, causal attribution, or source watermarks remain
 unknown, and all four product slots remain partial.
 
-Three additional required slots remain blocked by missing source contracts.
-Episode360 `touchpoints` stays unknown because Episode records do not persist
-typed canonical touchpoint references; Journey touchpoints, timing, labels, and
-attribution records are not substitutes. Risk360 `anomaly_events` stays
+Three required slots remain incomplete because of missing source contracts.
+Episode360 `touchpoints` now resolves only `journey_touchpoint_ids` explicitly
+recorded by tenant-scoped EpisodeRecords against canonical tenant-scoped
+touchpoint rows with evidence. Legacy records, complete link inventory,
+policy, freshness, and attribution links remain unknown; Journey touchpoints,
+timing, labels, and attribution records do not create episode links. Risk360
+`anomaly_events` stays
 unknown because no typed subject-scoped anomaly event authority exists;
 RiskSignals and assessment dimensions are not events. Memory360 `cards` and
 `embeddings_meta` stay unknown because semantic context pointers and optional

@@ -59,6 +59,7 @@ class EpisodeEngine:
         kind: str,
         evidence: Optional[EvidenceRef] = None,
         observation_id: Optional[str] = None,
+        journey_touchpoint_ids: Optional[Iterable[str]] = None,
         event_time: Optional[str] = None,
         source_event_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
@@ -85,6 +86,11 @@ class EpisodeEngine:
                 title=f"{kind} episode for {subject.kind}:{subject.id}",
                 occurred_from=event_time,
                 occurred_to=event_time,
+                journey_touchpoint_ids=(
+                    _unique_ids(journey_touchpoint_ids)
+                    if journey_touchpoint_ids is not None
+                    else None
+                ),
                 source_event_id=source_event_id
                 or (evidence.id if evidence is not None else None),
                 evidence_refs=[evidence] if evidence else [],
@@ -106,6 +112,7 @@ class EpisodeEngine:
                 kind=kind,
                 evidence=evidence,
                 observation_id=observation_id,
+                journey_touchpoint_ids=journey_touchpoint_ids,
                 event_time=event_time,
                 source_event_id=source_event_id,
                 correlation_id=correlation_id,
@@ -115,6 +122,7 @@ class EpisodeEngine:
             record,
             evidence=evidence,
             observation_id=observation_id,
+            journey_touchpoint_ids=journey_touchpoint_ids,
             event_time=event_time,
             completion_hint=completion_hint,
         )
@@ -126,6 +134,7 @@ class EpisodeEngine:
         evidence: Optional[EvidenceRef] = None,
         observation_id: Optional[str] = None,
         outcome_id: Optional[str] = None,
+        journey_touchpoint_ids: Optional[Iterable[str]] = None,
         event_time: Optional[str] = None,
         completion_hint: bool = False,
     ) -> EpisodeRecord:
@@ -138,6 +147,11 @@ class EpisodeEngine:
             record.observation_ids.append(observation_id)
         if outcome_id and outcome_id not in record.outcome_ids:
             record.outcome_ids.append(outcome_id)
+        if journey_touchpoint_ids is not None:
+            existing_touchpoint_ids = record.journey_touchpoint_ids or []
+            record.journey_touchpoint_ids = _unique_ids(
+                [*existing_touchpoint_ids, *journey_touchpoint_ids]
+            )
         if evidence and evidence.id not in {r.id for r in record.evidence_refs}:
             record.evidence_refs.append(evidence)
         if event_time is not None:
@@ -159,6 +173,29 @@ class EpisodeEngine:
         if outcome_id not in record.outcome_ids:
             record.outcome_ids.append(outcome_id)
             await self._store.upsert(record)
+        return record
+
+    async def link_journey_touchpoint(
+        self, tenant_id: str, episode_id: str, touchpoint_id: str
+    ) -> EpisodeRecord:
+        """Record an explicit journey-touchpoint link on one exact episode.
+
+        The episode writer must call this only when it has the canonical
+        relationship. Episode360 independently resolves ``touchpoint_id``
+        through the tenant-scoped touchpoint authority and will omit missing,
+        out-of-scope, or unevidenced rows. This method never joins by time,
+        subject labels, campaign labels, or attribution credit.
+        """
+        normalized_touchpoint_id = _first_str(touchpoint_id)
+        if normalized_touchpoint_id is None:
+            raise ValueError("link_journey_touchpoint requires a non-empty touchpoint_id")
+        record = await self._store.get(tenant_id, episode_id)
+        if record is None:
+            raise KeyError(f"episode {episode_id!r} not found for tenant {tenant_id!r}")
+        record.journey_touchpoint_ids = _unique_ids(
+            [*(record.journey_touchpoint_ids or []), normalized_touchpoint_id]
+        )
+        await self._store.upsert(record)
         return record
 
     async def close(self, tenant_id: str, episode_id: str) -> EpisodeRecord:
@@ -211,6 +248,7 @@ class EpisodeEngine:
         kind: str,
         observations: Iterable[dict[str, Any]],
         extract_evidence: Optional[Any] = None,
+        journey_touchpoint_ids: Optional[Iterable[str]] = None,
     ) -> EpisodeRecord:
         """Fold many normalized observation records into one episode.
 
@@ -249,6 +287,7 @@ class EpisodeEngine:
                 kind=kind,
                 evidence=evidence,
                 observation_id=obs_id,
+                journey_touchpoint_ids=journey_touchpoint_ids,
                 event_time=event_time,
                 source_event_id=obs_id,
                 completion_hint=bool(completion_hint),
@@ -263,6 +302,19 @@ def _first_str(*values: Any) -> Optional[str]:
         if value is not None and str(value).strip():
             return str(value)
     return None
+
+
+def _unique_ids(values: Iterable[Any]) -> list[str]:
+    """Normalize an explicit reference list without inventing any IDs."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = _first_str(value)
+        if normalized is None or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
 
 
 def _episode_id(

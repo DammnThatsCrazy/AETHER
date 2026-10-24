@@ -21,6 +21,7 @@ from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionCostRead,
     ExecutionEpisodeContextRead,
     ExecutionPrincipalIdentityRead,
+    ExecutionRiskAssessmentRead,
     ExecutionRiskEventRead,
     ExecutionToolCallRead,
     ExecutionWorkflowRunInvocationRead,
@@ -349,6 +350,49 @@ def _execution_risk_signal_row(
         "detector_version": "agentic-risk-v2",
         "observed_at": observed_at,
         "score": 0.64,
+    }
+
+
+def _execution_risk_assessment_row(
+    *,
+    assessment_id: str = "assessment-exec-1",
+    tenant_id: str = TENANT,
+    subject_kind: str = "execution",
+    subject_id: str = "exec-1",
+    assessed_at: str | None = "2026-10-16T10:00:02+00:00",
+) -> dict:
+    return {
+        "assessment_id": assessment_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+        "subject_id": subject_id,
+        "policy_id": "risk-policy-v2",
+        "policy_version": "2",
+        "dimensions": ["agentic"],
+        "vector": {
+            "components": [
+                {
+                    "dimension": "agentic",
+                    "state": "observed",
+                    "score": 0.61,
+                    "claim_state": "inferred",
+                    "confidence": 0.84,
+                    "evidence_refs": [
+                        {
+                            "id": f"evidence-{assessment_id}",
+                            "type": "model_output",
+                            "source": "aether.risk.assessment.agentic",
+                            "observedAt": assessed_at,
+                        }
+                    ],
+                }
+            ]
+        },
+        "claim_state": "inferred",
+        "confidence": 0.81,
+        "evidence_refs": [],
+        "run_id": "risk-run-1",
+        "assessed_at": assessed_at,
     }
 
 
@@ -1166,26 +1210,32 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     }
     assert interactions.content["riskEventLinkage"] == {
         "state": "empty",
-        "reason": "no_recorded_canonical_risk_signals_for_execution_subject",
+        "reason": "no_recorded_canonical_risk_signals_or_assessments_for_execution_subjects",
         "sourceReadState": "available",
-        "completeness": "recorded_execution_subject_signals_only",
+        "completeness": "bounded_recorded_execution_subject_signals_and_assessments",
         "scopeKnown": True,
         "producerCoverage": {
             "state": "unknown",
             "reason": "execution_risk_signal_producer_inventory_not_connected",
         },
         "riskAssessmentCoverage": {
-            "state": "unknown",
+            "state": "not_read",
             "sourceReadState": "not_read",
             "authority": "risk_assessments",
-            "reason": "execution_risk_events_slot_reads_risk_signals_not_assessment_snapshots",
+            "reason": None,
+            "scopeKnown": False,
+            "completeness": "exact_execution_subject_snapshots_only_history_and_producer_coverage_unknown",
+            "assessmentCount": None,
+            "joinedExecutionRiskAssessments": [],
+            "evidenceRefs": [],
+            "truncated": False,
         },
         "joinedExecutionRiskEvents": [],
         "evidenceRefs": [],
         "freshness": {
             "state": "unknown",
             "latestObservedAt": None,
-            "reason": "no_execution_risk_signal_freshness_threshold_is_configured",
+            "reason": "no_execution_risk_freshness_threshold_is_configured",
         },
         "truncated": False,
     }
@@ -2888,16 +2938,22 @@ async def test_execution_subject_joins_canonical_risk_signal_with_evidence() -> 
     interactions = next(section for section in result.sections if section.id == "interactions")
     linkage = interactions.content["riskEventLinkage"]
     assert linkage["state"] == "partial"
-    assert linkage["completeness"] == "recorded_execution_subject_signals_only"
+    assert linkage["completeness"] == "bounded_recorded_execution_subject_signals_and_assessments"
     assert linkage["producerCoverage"] == {
         "state": "unknown",
         "reason": "execution_risk_signal_producer_inventory_not_connected",
     }
     assert linkage["riskAssessmentCoverage"] == {
-        "state": "unknown",
+        "state": "not_read",
         "sourceReadState": "not_read",
         "authority": "risk_assessments",
-        "reason": "execution_risk_events_slot_reads_risk_signals_not_assessment_snapshots",
+        "reason": None,
+        "scopeKnown": False,
+        "completeness": "exact_execution_subject_snapshots_only_history_and_producer_coverage_unknown",
+        "assessmentCount": None,
+        "joinedExecutionRiskAssessments": [],
+        "evidenceRefs": [],
+        "truncated": False,
     }
     assert linkage["joinedExecutionRiskEvents"] == [
         {
@@ -2924,7 +2980,7 @@ async def test_execution_subject_joins_canonical_risk_signal_with_evidence() -> 
     assert linkage["freshness"] == {
         "state": "unknown",
         "latestObservedAt": "2026-10-16T10:00:01+00:00",
-        "reason": "no_execution_risk_signal_freshness_threshold_is_configured",
+        "reason": "no_execution_risk_freshness_threshold_is_configured",
     }
     assert linkage["evidenceRefs"][0]["id"] == "evidence-risk-exec-1"
     assert any(
@@ -2940,6 +2996,123 @@ async def test_execution_subject_joins_canonical_risk_signal_with_evidence() -> 
     assert claim.claimState == EpistemicStatus.INFERRED
     assert claim.domainSlotIds == ["risk_events", "evidence_trace"]
     assert claim.evidenceRefs[0].id == "evidence-risk-exec-1"
+
+
+async def test_execution_risk_assessment_snapshot_join_has_record_evidence() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[],
+            available=True,
+            scope_known=True,
+            assessment_read=ExecutionRiskAssessmentRead(
+                rows=[_execution_risk_assessment_row()],
+                available=True,
+                scope_known=True,
+            ),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assessment_coverage = linkage["riskAssessmentCoverage"]
+    assert linkage["state"] == "partial"
+    assert assessment_coverage["state"] == "partial"
+    assert assessment_coverage["sourceReadState"] == "available"
+    assert assessment_coverage["scopeKnown"] is True
+    assert assessment_coverage["assessmentCount"] == 1
+    assessment = assessment_coverage["joinedExecutionRiskAssessments"][0]
+    assert assessment["executionId"] == "exec-1"
+    assert assessment["assessmentId"] == "assessment-exec-1"
+    assert assessment["policyId"] == "risk-policy-v2"
+    assert assessment["claimState"] == "inferred"
+    assert assessment["components"] == [
+        {
+            "dimension": "agentic",
+            "state": "observed",
+            "score": 0.61,
+            "claimState": "inferred",
+            "confidence": 0.84,
+            "evidenceRefs": [
+                {
+                    "id": "evidence-assessment-exec-1",
+                    "type": "model_output",
+                    "source": "aether.risk.assessment.agentic",
+                    "observedAt": "2026-10-16T10:00:02+00:00",
+                }
+            ],
+        }
+    ]
+    assert assessment["evidenceRefs"][0] == {
+        "id": "assessment-exec-1",
+        "type": "model_output",
+        "source": "risk_assessments",
+        "observedAt": "2026-10-16T10:00:02+00:00",
+        "uri": "store://risk_assessments/tenant-execution360%3Aassessment-exec-1",
+    }
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "execution_subject_risk_assessment_snapshot"
+    )
+    assert claim.subject == request.subject
+    assert claim.claimState == EpistemicStatus.INFERRED
+    assert claim.domainSlotIds == ["risk_events", "evidence_trace"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "risk_assessments",
+        "aether.risk.assessment.agentic",
+    }
+    evidence_section = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        ref["source"] == "risk_assessments" and ref["id"] == "assessment-exec-1"
+        for ref in evidence_section.content["evidence"]
+    )
+
+
+async def test_execution_risk_assessment_is_retained_when_signal_read_fails() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[],
+            available=False,
+            scope_known=False,
+            reason="execution_risk_signal_source_unavailable",
+            assessment_read=ExecutionRiskAssessmentRead(
+                rows=[_execution_risk_assessment_row()],
+                available=True,
+                scope_known=True,
+            ),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["sourceReadState"] == "unavailable"
+    assessment_coverage = linkage["riskAssessmentCoverage"]
+    assert assessment_coverage["state"] == "partial"
+    assert assessment_coverage["assessmentCount"] == 1
+    assert assessment_coverage["joinedExecutionRiskAssessments"][0]["assessmentId"] == (
+        "assessment-exec-1"
+    )
 
 
 async def test_agent_subject_joins_risk_signals_only_to_admitted_execution_ids() -> None:
@@ -3092,7 +3265,12 @@ async def test_repository_risk_reader_uses_canonical_exact_tenant_execution_subj
                 _execution_risk_signal_row(signal_id="other-subject", subject_id="exec-2"),
             ]
 
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
     monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
     result = await RepositoryExecution360Source().execution_risk_events(
         tenant_id=TENANT,
         execution_ids=("exec-1",),
@@ -3130,7 +3308,12 @@ async def test_repository_risk_reader_uses_exact_tenant_execution_subjects(
                 }
             ]
 
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
     monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
     result = await RepositoryExecution360Source().execution_risk_events(
         tenant_id=TENANT,
         execution_ids=("exec-1", "exec-2"),
@@ -3149,7 +3332,7 @@ async def test_repository_risk_reader_uses_exact_tenant_execution_subjects(
     assert result.reason is None
 
 
-async def test_repository_risk_reader_bounds_execution_subject_fanout(
+async def test_repository_risk_assessment_reader_uses_exact_tenant_execution_subjects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from intelligence.risk360 import store as risk_store
@@ -3158,10 +3341,92 @@ async def test_repository_risk_reader_bounds_execution_subject_fanout(
 
     class RiskSignalRepo:
         async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [
+                _execution_risk_assessment_row(),
+                _execution_risk_assessment_row(
+                    assessment_id="wrong-subject",
+                    subject_id="exec-other",
+                ),
+                _execution_risk_assessment_row(
+                    assessment_id="wrong-tenant",
+                    tenant_id="tenant-other",
+                ),
+            ]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert calls == [(TENANT, "execution", "exec-1", 11)]
+    assert result.available is True
+    assert result.assessment_read is not None
+    assert result.assessment_read.available is True
+    assert result.assessment_read.scope_known is False
+    assert [row["assessment_id"] for row in result.assessment_read.rows] == ["assessment-exec-1"]
+    assert result.assessment_read.reason == "execution_risk_assessment_scope_mismatch"
+
+
+async def test_repository_risk_assessment_read_survives_signal_source_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            raise RuntimeError("signal table unavailable")
+
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return [_execution_risk_assessment_row()]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert result.available is False
+    assert result.reason == "execution_risk_signal_source_unavailable"
+    assert result.rows == []
+    assert result.assessment_read is not None
+    assert result.assessment_read.available is True
+    assert result.assessment_read.scope_known is True
+    assert [row["assessment_id"] for row in result.assessment_read.rows] == [
+        "assessment-exec-1"
+    ]
+
+
+async def test_repository_risk_reader_bounds_execution_subject_fanout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+    assessment_calls: list[tuple[str, str, str, int]] = []
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
             calls.append((tenant_id, subject_kind, subject_id, limit))
             return []
 
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            assessment_calls.append((tenant_id, subject_kind, subject_id, limit))
+            return []
+
     monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
     execution_ids = tuple(f"exec-{index}" for index in range(501))
 
     result = await RepositoryExecution360Source().execution_risk_events(
@@ -3179,6 +3444,11 @@ async def test_repository_risk_reader_bounds_execution_subject_fanout(
     assert result.truncated is True
     assert result.reason == "execution_risk_signal_read_truncated"
     assert result.rows == []
+    assert len(assessment_calls) == 500
+    assert [subject_id for _, _, subject_id, _ in assessment_calls] == sorted(execution_ids)[:500]
+    assert all(limit == 2 for _, _, _, limit in assessment_calls)
+    assert result.assessment_read is not None
+    assert result.assessment_read.truncated is True
 
 
 async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None:

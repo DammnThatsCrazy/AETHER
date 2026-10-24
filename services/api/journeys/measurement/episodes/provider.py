@@ -86,6 +86,7 @@ _JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
 _EPISODE_PAGE_DEFAULT = 50
 _EPISODE_SUBJECT_RELATIONSHIP_CAP = 100
 _EPISODE_OBSERVATION_CAP = 200
+_EPISODE_TOUCHPOINT_CAP = 200
 _EPISODE_OUTCOME_CAP = 100
 _GRAPH_LEDGER_SOURCE = "graph_mutation_ledger"
 _JOURNEY_REQUIRED_SLOT_IDS = (
@@ -220,6 +221,18 @@ class EpisodeOutcomeRead:
             or self.read_failed
             or self.disabled
         )
+
+
+@dataclass(frozen=True)
+class EpisodeTouchpointRead:
+    """Exact tenant-bound touchpoints named by canonical episode records."""
+
+    requested_ids: tuple[str, ...] = ()
+    rows: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    state: str = "unknown"
+    warnings: tuple[str, ...] = ()
+    missing_ids: tuple[str, ...] = ()
 
 
 class EpisodeOutcomeSource(Protocol):
@@ -758,6 +771,125 @@ class Episode360Provider:
             read_failed=read_failed,
         )
 
+    async def _load_episode_touchpoints(
+        self, tenant_id: str, episodes: list[EpisodeRecord]
+    ) -> EpisodeTouchpointRead:
+        """Resolve only touchpoint IDs explicitly recorded by EpisodeRecord.
+
+        ``None`` is retained for legacy records that predate this typed
+        reference inventory; an explicit empty list is distinguishable and
+        means only that the record names no touchpoints. It does not establish
+        complete journey touchpoint coverage or attribution credit.
+        """
+        reference_lists_available = True
+        malformed_reference = False
+        duplicate_reference = False
+        requested_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for episode in episodes:
+            raw_ids = episode.journey_touchpoint_ids
+            if raw_ids is None:
+                reference_lists_available = False
+                continue
+            if not isinstance(raw_ids, list):
+                malformed_reference = True
+                continue
+            episode_seen: set[str] = set()
+            for raw_id in raw_ids:
+                touchpoint_id = _journey_text(raw_id)
+                if touchpoint_id is None:
+                    malformed_reference = True
+                    continue
+                if touchpoint_id in episode_seen:
+                    duplicate_reference = True
+                    continue
+                episode_seen.add(touchpoint_id)
+                if touchpoint_id not in seen_ids:
+                    seen_ids.add(touchpoint_id)
+                    requested_ids.append(touchpoint_id)
+
+        warnings: list[str] = []
+        if not reference_lists_available:
+            warnings.append("episode_touchpoint_reference_list_unavailable")
+        if malformed_reference:
+            warnings.append("episode_touchpoint_reference_invalid")
+        if duplicate_reference:
+            warnings.append("episode_touchpoint_reference_duplicated")
+        if not requested_ids:
+            state = "empty" if reference_lists_available and not warnings else "unknown"
+            return EpisodeTouchpointRead(state=state, warnings=tuple(warnings))
+
+        truncated = len(requested_ids) > _EPISODE_TOUCHPOINT_CAP
+        bounded_ids = requested_ids[:_EPISODE_TOUCHPOINT_CAP]
+        if truncated:
+            warnings.append("episode_touchpoint_read_truncated")
+        source = self._touchpoint_source or RepositoryJourneyTouchpointSource()
+        semaphore = asyncio.Semaphore(_JOURNEY_TOUCHPOINT_READ_CONCURRENCY)
+
+        async def read_one(
+            touchpoint_id: str,
+        ) -> tuple[str, Optional[dict[str, Any]], bool]:
+            async with semaphore:
+                try:
+                    value = await source.get(tenant_id, touchpoint_id)
+                except Exception:  # noqa: BLE001 - exact authority failure stays unknown
+                    return touchpoint_id, None, True
+            return touchpoint_id, _as_mapping(value), False
+
+        results = await asyncio.gather(*(read_one(value) for value in bounded_ids))
+        rows: list[dict[str, Any]] = []
+        missing_ids: list[str] = []
+        read_failed = False
+        scope_mismatch = False
+        missing_evidence = False
+        evidence_refs: list[EvidenceRef] = []
+        for touchpoint_id, row, failed in results:
+            if failed:
+                read_failed = True
+                missing_ids.append(touchpoint_id)
+                continue
+            if row is None:
+                missing_ids.append(touchpoint_id)
+                continue
+            if (
+                str(row.get("tenant_id") or "") != tenant_id
+                or _journey_text(row.get("touchpoint_id")) != touchpoint_id
+            ):
+                scope_mismatch = True
+                missing_ids.append(touchpoint_id)
+                continue
+            evidence = _journey_touchpoint_ref(row)
+            if evidence is None:
+                missing_evidence = True
+                missing_ids.append(touchpoint_id)
+                continue
+            rows.append(row)
+            evidence_refs.append(evidence)
+
+        if read_failed:
+            warnings.append("episode_touchpoint_authority_unavailable")
+        if scope_mismatch:
+            warnings.append("episode_touchpoint_scope_mismatch")
+        if missing_ids:
+            warnings.append("episode_touchpoint_references_unresolved")
+        if missing_evidence:
+            warnings.append("episode_touchpoint_evidence_missing")
+        state = (
+            "available"
+            if rows and not warnings and len(rows) == len(requested_ids)
+            else "degraded"
+            if rows
+            else "unknown"
+        )
+        return EpisodeTouchpointRead(
+            requested_ids=tuple(requested_ids),
+            rows=tuple(rows),
+            evidence_refs=tuple(_dedupe_evidence_refs(evidence_refs)),
+            state=state,
+            warnings=tuple(dict.fromkeys(warnings)),
+            missing_ids=tuple(missing_ids),
+        )
+
     async def _load_journey_touchpoints(
         self,
         tenant_id: str,
@@ -922,6 +1054,7 @@ class Episode360Provider:
         episodes = list(read.episodes)
         observation_read = await self._load_episode_observations(request.tenantId, episodes)
         outcome_read = await self._load_episode_outcomes(request.tenantId, episodes)
+        touchpoint_read = await self._load_episode_touchpoints(request.tenantId, episodes)
         warnings: list[str] = []
         if read.truncated:
             warnings.append("episode_page_truncated")
@@ -959,6 +1092,7 @@ class Episode360Provider:
             warnings.append("episode_outcome_references_unresolved")
         if outcome_read.missing_evidence_ids:
             warnings.append("episode_outcome_lineage_unavailable")
+        warnings.extend(touchpoint_read.warnings)
         if not read.available:
             availability = "missing"
         elif not read.complete:
@@ -1013,10 +1147,11 @@ class Episode360Provider:
             subject_relationship_context=subject_relationship_context,
             observation_read=observation_read,
             outcome_read=outcome_read,
+            touchpoint_read=touchpoint_read,
         )
         section_by_id = {section.id: section for section in sections}
         sections = [section_by_id[section_id] for section_id in _EPISODE360_SECTIONS]
-        claims = self._build_claims(request, episodes, outcome_read)
+        claims = self._build_claims(request, episodes, outcome_read, touchpoint_read)
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=request.tenantId,
@@ -1428,11 +1563,14 @@ class Episode360Provider:
         subject_relationship_context: Optional[dict[str, Any]] = None,
         observation_read: Optional[EpisodeObservationRead] = None,
         outcome_read: Optional[EpisodeOutcomeRead] = None,
+        touchpoint_read: Optional[EpisodeTouchpointRead] = None,
     ) -> list[ProjectionSection]:
         complete = availability in {"available", "empty"}
         observation_read = observation_read or EpisodeObservationRead(available=False)
         outcome_read = outcome_read or EpisodeOutcomeRead(available=False, read_failed=True)
+        touchpoint_read = touchpoint_read or EpisodeTouchpointRead()
         conversion_context = _episode_conversion_context(outcome_read)
+        touchpoint_context = _episode_touchpoint_context(touchpoint_read, episodes)
         by_kind = _kind_counts(episodes)
         by_status = _status_distribution(episodes)
         episode_evidence = _collect_evidence(episodes)
@@ -1580,6 +1718,7 @@ class Episode360Provider:
                             evidence_refs=evidence,
                             observation_read=observation_read,
                             outcome_read=outcome_read,
+                            touchpoint_read=touchpoint_read,
                         )
                         if request.subject.kind == "episode"
                         else None
@@ -1687,10 +1826,9 @@ class Episode360Provider:
                     },
                     "sessionContext": _episode_session_context(request, episodes),
                     "touchpointContext": {
-                        **_unknown_episode_slot(
-                            "episode_record_contract_has_no_touchpoint_references"
-                        ),
-                        "touchpoints": [],
+                        key: value
+                        for key, value in touchpoint_context.items()
+                        if key != "claims"
                     },
                     "communicationContext": {
                         **_unknown_episode_slot(
@@ -1830,6 +1968,7 @@ class Episode360Provider:
         request: ProjectionRequest,
         episodes: list[EpisodeRecord],
         outcome_read: Optional[EpisodeOutcomeRead] = None,
+        touchpoint_read: Optional[EpisodeTouchpointRead] = None,
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for episode in episodes:
@@ -1909,6 +2048,25 @@ class Episode360Provider:
                         domainSlotIds=["timeline", "evidence_trace"],
                     )
                 )
+        touchpoint_context = _episode_touchpoint_context(
+            touchpoint_read or EpisodeTouchpointRead(), episodes
+        )
+        for touchpoint_id, evidence_refs, linked_episode_ids in touchpoint_context["claims"]:
+            if not evidence_refs or not linked_episode_ids:
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"episode360.touchpoint:{quote(touchpoint_id, safe='')}",
+                    kind="episode_referenced_journey_touchpoint",
+                    subject=request.subject,
+                    evidenceRefs=list(evidence_refs),
+                    claims=[
+                        f"Episode record(s) {', '.join(linked_episode_ids)} explicitly reference journey touchpoint {touchpoint_id!r}; this does not establish an attribution credit or complete journey touchpoint coverage."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["touchpoints", "evidence_trace"],
+                )
+            )
         for conversion in (outcome_read or EpisodeOutcomeRead()).conversions:
             evidence_refs: list[EvidenceRef] = []
             raw_refs = conversion.get("evidenceRefs")
@@ -2308,6 +2466,100 @@ def _journey_touchpoint_context(read: JourneyTouchpointRead) -> dict[str, Any]:
             for row in read.rows
             if (ref := _journey_touchpoint_ref(row)) is not None
         ],
+    }
+
+
+def _episode_touchpoint_context(
+    read: EpisodeTouchpointRead, episodes: list[EpisodeRecord]
+) -> dict[str, Any]:
+    """Render exact episode-to-touchpoint links without asserting completeness.
+
+    The episode record is the relationship witness and the touchpoint row is
+    the canonical event witness. Keep this separate from attribution credits,
+    which answer a different question and are not joined here.
+    """
+    episode_ids_by_touchpoint: dict[str, list[str]] = {}
+    for episode in episodes:
+        for touchpoint_id in episode.journey_touchpoint_ids or []:
+            normalized = _journey_text(touchpoint_id)
+            if normalized is None:
+                continue
+            linked_episodes = episode_ids_by_touchpoint.setdefault(normalized, [])
+            if episode.episode_id not in linked_episodes:
+                linked_episodes.append(episode.episode_id)
+
+    touchpoints: list[dict[str, Any]] = []
+    claims: list[tuple[str, tuple[EvidenceRef, ...], tuple[str, ...]]] = []
+    for row in read.rows:
+        touchpoint_id = _journey_text(row.get("touchpoint_id"))
+        evidence = _journey_touchpoint_ref(row)
+        if touchpoint_id is None or evidence is None:
+            continue
+        linked_episode_ids = tuple(episode_ids_by_touchpoint.get(touchpoint_id, ()))
+        touchpoints.append(
+            {
+                "touchpointId": touchpoint_id,
+                "occurredAt": _journey_timestamp(row.get("occurred_at")),
+                "touchpointType": _journey_text(row.get("touchpoint_type")),
+                "interactionType": _journey_text(row.get("interaction_type")),
+                "channel": _journey_text(row.get("channel")),
+                "journeyRole": _journey_text(row.get("journey_role")),
+                "episodeIds": list(linked_episode_ids),
+                "evidenceRefs": [evidence.model_dump(mode="json")],
+            }
+        )
+        relationship_refs = [
+            _episode_record_ref(episode)
+            for episode in episodes
+            if episode.episode_id in linked_episode_ids
+        ]
+        claims.append(
+            (
+                touchpoint_id,
+                tuple(_dedupe_evidence_refs([*relationship_refs, evidence])),
+                linked_episode_ids,
+            )
+        )
+
+    if read.state == "available":
+        reason = "exact_episode_record_touchpoint_references_resolved"
+    elif read.state == "empty":
+        reason = "episode_records_explicitly_name_no_journey_touchpoints"
+    else:
+        reason = read.warnings[0] if read.warnings else "episode_touchpoint_read_unresolved"
+    if read.state == "available":
+        coverage = "exact_recorded_episode_references_only"
+    elif read.state == "empty":
+        coverage = "explicit_episode_reference_set_empty"
+    elif touchpoints:
+        coverage = "partial_exact_episode_references"
+    else:
+        coverage = "unknown"
+
+    return {
+        "state": read.state,
+        "coverage": coverage,
+        "touchpointIds": list(read.requested_ids),
+        "touchpoints": touchpoints,
+        "count": len(touchpoints) if read.state in {"available", "empty"} else None,
+        "observedCount": len(touchpoints),
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in read.evidence_refs],
+        "missingTouchpointIds": list(read.missing_ids),
+        "warnings": list(read.warnings),
+        "reason": reason,
+        "relationshipAuthority": _EPISODE_RECORD_SOURCE,
+        "touchpointAuthority": _JOURNEY_TOUCHPOINT_SOURCE,
+        "freshness": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "episode_and_touchpoint_watermarks_not_compared",
+        },
+        "policy": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "episode_touchpoint_policy_evaluation_not_performed_by_projection",
+        },
+        "claims": claims,
     }
 
 
@@ -3360,6 +3612,11 @@ def _episode_view(episode: EpisodeRecord) -> dict[str, Any]:
         "occurredTo": episode.occurred_to,
         "subject": {"kind": episode.subject.kind, "id": episode.subject.id},
         "observationIds": list(episode.observation_ids),
+        "journeyTouchpointIds": (
+            list(episode.journey_touchpoint_ids)
+            if episode.journey_touchpoint_ids is not None
+            else None
+        ),
         "outcomeIds": list(episode.outcome_ids),
         "modelVersion": episode.model_version,
         "createdAt": _journey_timestamp(episode.created_at),
@@ -3520,6 +3777,7 @@ def _episode_required_slot_coverage(
     evidence_refs: list[EvidenceRef],
     observation_read: EpisodeObservationRead,
     outcome_read: EpisodeOutcomeRead,
+    touchpoint_read: EpisodeTouchpointRead,
 ) -> dict[str, dict[str, Any]]:
     """Expose the SSOT slot status without promoting partial sources to complete."""
     evidence = [ref.model_dump() for ref in evidence_refs]
@@ -3559,6 +3817,7 @@ def _episode_required_slot_coverage(
     )
     session_state = "degraded" if episode.subject.kind == "session" else "unknown"
     conversion_context = _episode_conversion_context(outcome_read)
+    touchpoint_context = _episode_touchpoint_context(touchpoint_read, episodes)
     return {
         "episode_summary": {
             "state": "available",
@@ -3594,10 +3853,10 @@ def _episode_required_slot_coverage(
             "evidenceRefs": subject_evidence if session_state == "degraded" else [],
         },
         "touchpoints": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "episode_record_contract_has_no_touchpoint_references",
-            "evidenceRefs": [],
+            "state": touchpoint_context["state"],
+            "coverage": touchpoint_context["coverage"],
+            "reason": touchpoint_context["reason"],
+            "evidenceRefs": touchpoint_context["evidenceRefs"],
         },
         "communications": {
             "state": "unknown",

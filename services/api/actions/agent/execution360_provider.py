@@ -79,6 +79,7 @@ _SOURCE_REPORTED_FAILURE_STATUSES = frozenset({"failed", "error", "denied", "rev
 _MAX_ROWS = 500
 _MAX_TOOL_EDGE_SCAN = 10_000
 _MAX_EXECUTION_RISK_SIGNAL_SCAN = 1000
+_MAX_EXECUTION_RISK_ASSESSMENT_SCAN = 500
 _MAX_EXECUTION_APPROVAL_DECISION_SCAN = 5000
 _MAX_EXECUTION_COST_SUBJECT_SCAN = 100
 _MAX_EXECUTION_COST_FACT_SCAN = 1000
@@ -143,6 +144,18 @@ class ExecutionToolCallRead:
 @dataclass(frozen=True)
 class ExecutionRiskEventRead:
     """Bounded canonical RiskSignal read for one exact execution subject."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+    assessment_read: Optional["ExecutionRiskAssessmentRead"] = None
+
+
+@dataclass(frozen=True)
+class ExecutionRiskAssessmentRead:
+    """Bounded RiskAssessment snapshots keyed to exact execution subjects."""
 
     rows: list[dict[str, Any]]
     available: bool
@@ -228,10 +241,18 @@ class ExecutionRiskEventContext:
 
     state: Literal["partial", "empty", "unknown", "degraded", "unavailable"]
     signals: tuple[Any, ...] = ()
+    assessments: tuple[Any, ...] = ()
     reason: Optional[str] = None
     source_read_state: Literal["available", "unavailable", "not_read"] = "not_read"
     truncated: bool = False
     scope_known: bool = False
+    assessment_state: Literal[
+        "partial", "empty", "unknown", "degraded", "unavailable", "not_read"
+    ] = "not_read"
+    assessment_source_read_state: Literal["available", "unavailable", "not_read"] = "not_read"
+    assessment_reason: Optional[str] = None
+    assessment_truncated: bool = False
+    assessment_scope_known: bool = False
 
 
 @dataclass(frozen=True)
@@ -1297,12 +1318,19 @@ class RepositoryExecution360Source:
     async def execution_risk_events(
         self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
     ) -> ExecutionRiskEventRead:
-        """Read RiskSignals whose subjects match admitted tenant execution IDs."""
+        """Read exact execution RiskSignals and RiskAssessment snapshots."""
         admitted_ids = sorted(
             {value for raw in execution_ids if (value := _safe_text(raw)) is not None}
         )
         if not admitted_ids:
-            return ExecutionRiskEventRead(rows=[], available=True, scope_known=True)
+            return ExecutionRiskEventRead(
+                rows=[],
+                available=True,
+                scope_known=True,
+                assessment_read=ExecutionRiskAssessmentRead(
+                    rows=[], available=True, scope_known=True
+                ),
+            )
 
         # RiskSignalRepository exposes an exact tenant + subject lookup. Use it
         # for every admitted execution instead of scanning all execution signals
@@ -1317,6 +1345,8 @@ class RepositoryExecution360Source:
         exact_rows: list[dict[str, Any]] = []
         mismatch = False
         scan_truncated = len(query_ids) < len(admitted_ids)
+        signal_available = True
+        signal_reason: Optional[str] = None
         try:
             from intelligence.risk360.store import RiskSignalRepository
 
@@ -1329,12 +1359,10 @@ class RepositoryExecution360Source:
                     limit=per_subject_scan_limit + 1,
                 )
                 if not isinstance(rows, list):
-                    return ExecutionRiskEventRead(
-                        rows=[],
-                        available=False,
-                        scope_known=False,
-                        reason="execution_risk_signal_read_invalid",
-                    )
+                    signal_available = False
+                    signal_reason = "execution_risk_signal_read_invalid"
+                    exact_rows = []
+                    break
                 if len(rows) > per_subject_scan_limit:
                     scan_truncated = True
                 for row in rows[:per_subject_scan_limit]:
@@ -1354,24 +1382,109 @@ class RepositoryExecution360Source:
                         }
                     )
         except Exception:  # noqa: BLE001 - optional canonical source failure is isolated
-            return ExecutionRiskEventRead(
-                rows=[],
-                available=False,
-                scope_known=False,
-                reason="execution_risk_signal_source_unavailable",
-            )
+            signal_available = False
+            signal_reason = "execution_risk_signal_source_unavailable"
+            exact_rows = []
 
         truncated = scan_truncated or len(exact_rows) > limit
         exact_rows = exact_rows[:limit]
+        assessment_read = await self._read_execution_risk_assessments(
+            tenant_id=tenant_id,
+            execution_ids=tuple(admitted_ids),
+            limit=limit,
+        )
         return ExecutionRiskEventRead(
+            rows=exact_rows,
+            available=signal_available,
+            scope_known=signal_available and not mismatch,
+            truncated=truncated,
+            reason=(
+                signal_reason
+                if signal_reason is not None
+                else "execution_risk_signal_scope_mismatch"
+                if mismatch
+                else "execution_risk_signal_read_truncated"
+                if truncated
+                else None
+            ),
+            assessment_read=assessment_read,
+        )
+
+    async def _read_execution_risk_assessments(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionRiskAssessmentRead:
+        """Read assessments with exact tenant + execution-subject repository keys."""
+        if not tenant_id:
+            return ExecutionRiskAssessmentRead(
+                [], False, False, reason="exact_tenant_execution_scope_required"
+            )
+        admitted_ids = sorted(
+            {value for raw in execution_ids if (value := _safe_text(raw)) is not None}
+        )
+        if not admitted_ids:
+            return ExecutionRiskAssessmentRead([], True, True)
+
+        query_ids = admitted_ids[:_MAX_EXECUTION_RISK_ASSESSMENT_SCAN]
+        per_subject_scan_limit = min(
+            max(1, limit),
+            max(1, _MAX_EXECUTION_RISK_ASSESSMENT_SCAN // len(query_ids)),
+        )
+        exact_rows: list[dict[str, Any]] = []
+        mismatch = False
+        truncated = len(query_ids) < len(admitted_ids)
+        try:
+            from intelligence.risk360.store import RiskAssessmentRepository
+
+            repository = RiskAssessmentRepository()
+            for execution_id in query_ids:
+                rows = await repository.list_by_subject(
+                    tenant_id,
+                    "execution",
+                    execution_id,
+                    limit=per_subject_scan_limit + 1,
+                )
+                if not isinstance(rows, list):
+                    return ExecutionRiskAssessmentRead(
+                        [],
+                        False,
+                        False,
+                        reason="execution_risk_assessment_read_invalid",
+                    )
+                if len(rows) > per_subject_scan_limit:
+                    truncated = True
+                for row in rows[:per_subject_scan_limit]:
+                    if (
+                        not isinstance(row, dict)
+                        or row.get("tenant_id") != tenant_id
+                        or row.get("subject_kind") != "execution"
+                        or row.get("subject_id") != execution_id
+                    ):
+                        mismatch = True
+                        continue
+                    exact_rows.append(
+                        {
+                            key: value
+                            for key, value in row.items()
+                            if key not in {"id", "created_at", "updated_at"}
+                        }
+                    )
+        except Exception:  # noqa: BLE001 - optional canonical source stays explicit
+            return ExecutionRiskAssessmentRead(
+                [],
+                False,
+                False,
+                reason="execution_risk_assessment_source_unavailable",
+            )
+
+        return ExecutionRiskAssessmentRead(
             rows=exact_rows,
             available=True,
             scope_known=not mismatch,
             truncated=truncated,
             reason=(
-                "execution_risk_signal_scope_mismatch"
+                "execution_risk_assessment_scope_mismatch"
                 if mismatch
-                else "execution_risk_signal_read_truncated"
+                else "execution_risk_assessment_read_truncated"
                 if truncated
                 else None
             ),
@@ -3157,6 +3270,7 @@ class Execution360Provider:
         )
         state = _section_state(server, observed, internal, external, temporal_unavailable)
         evidence = self._all_evidence(
+            tenant_id,
             internal,
             external,
             plan_decompositions,
@@ -3168,6 +3282,7 @@ class Execution360Provider:
         )
         claims = (
             self._claims(
+                tenant_id,
                 request.subject,
                 internal,
                 external,
@@ -3182,6 +3297,7 @@ class Execution360Provider:
             else []
         )
         sections = self._sections(
+            tenant_id,
             request.subject,
             internal,
             external,
@@ -3251,6 +3367,18 @@ class Execution360Provider:
                     available=False,
                     scope_known=False,
                     reason="execution_risk_event_source_returned_invalid_contract",
+                )
+            if result.assessment_read is not None and not isinstance(
+                result.assessment_read, ExecutionRiskAssessmentRead
+            ):
+                return replace(
+                    result,
+                    assessment_read=ExecutionRiskAssessmentRead(
+                        rows=[],
+                        available=False,
+                        scope_known=False,
+                        reason="execution_risk_assessment_source_returned_invalid_contract",
+                    ),
                 )
             return result
         except Exception:  # noqa: BLE001 - fail-isolate optional canonical source
@@ -3369,6 +3497,7 @@ class Execution360Provider:
 
     @staticmethod
     def _all_evidence(
+        tenant_id: str,
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
         plan_decompositions: list[dict[str, Any]],
@@ -3434,6 +3563,12 @@ class Execution360Provider:
                     continue
                 seen.add((ref.id, ref.source))
                 refs.append(ref)
+        for assessment in risk_events.assessments:
+            for ref in _risk_assessment_evidence(assessment, tenant_id):
+                if (ref.id, ref.source) in seen:
+                    continue
+                seen.add((ref.id, ref.source))
+                refs.append(ref)
         for ref in approval_chain.evidence_refs:
             if (ref.id, ref.source) in seen:
                 continue
@@ -3458,6 +3593,7 @@ class Execution360Provider:
 
     @staticmethod
     def _claims(
+        tenant_id: str,
         subject: ProjectionSubject,
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
@@ -3903,10 +4039,34 @@ class Execution360Provider:
                     domainSlotIds=[SLOT_RISK_EVENTS, SLOT_EVIDENCE],
                 )
             )
+        for assessment in risk_events.assessments:
+            assessed_at = (
+                assessment.assessed_at.astimezone(timezone.utc).isoformat()
+                if assessment.assessed_at is not None
+                else "an unrecorded time"
+            )
+            claims.append(
+                ClaimEnvelope(
+                    id=(
+                        "execution360:risk-assessment:"
+                        f"{quote(f'{assessment.subject_id}:{assessment.assessment_id}', safe='')}"
+                    ),
+                    kind="execution_subject_risk_assessment_snapshot",
+                    subject=subject,
+                    evidenceRefs=_risk_assessment_evidence(assessment, tenant_id),
+                    claims=[
+                        f"Canonical Risk360 assessment {assessment.assessment_id!r} records {len(assessment.vector.components)} dimension(s) for exact execution {assessment.subject_id!r}, with claim state {assessment.claim_state.value}, assessed at {assessed_at}; this snapshot does not establish causality, current standing risk, or complete assessment history."
+                    ],
+                    confidence=assessment.confidence,
+                    claimState=assessment.claim_state,
+                    domainSlotIds=[SLOT_RISK_EVENTS, SLOT_EVIDENCE],
+                )
+            )
         return claims
 
     @staticmethod
     def _sections(
+        tenant_id: str,
         subject: ProjectionSubject,
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
@@ -4166,21 +4326,51 @@ class Execution360Provider:
                 for ref in authority_check.evidence_refs
             ],
         }
+        risk_assessment_evidence = [
+            ref
+            for assessment in risk_events.assessments
+            for ref in _risk_assessment_evidence(assessment, tenant_id)
+        ]
+        risk_event_timestamps = [
+            signal.observed_at.astimezone(timezone.utc).isoformat()
+            for signal in risk_events.signals
+            if signal.observed_at is not None
+        ] + [
+            assessment.assessed_at.astimezone(timezone.utc).isoformat()
+            for assessment in risk_events.assessments
+            if assessment.assessed_at is not None
+        ]
         risk_event_linkage = {
             "state": risk_events.state,
             "reason": risk_events.reason,
             "sourceReadState": risk_events.source_read_state,
-            "completeness": "recorded_execution_subject_signals_only",
+            "completeness": "bounded_recorded_execution_subject_signals_and_assessments",
             "scopeKnown": risk_events.scope_known,
             "producerCoverage": {
                 "state": "unknown",
                 "reason": "execution_risk_signal_producer_inventory_not_connected",
             },
             "riskAssessmentCoverage": {
-                "state": "unknown",
-                "sourceReadState": "not_read",
+                "state": risk_events.assessment_state,
+                "sourceReadState": risk_events.assessment_source_read_state,
                 "authority": "risk_assessments",
-                "reason": "execution_risk_events_slot_reads_risk_signals_not_assessment_snapshots",
+                "reason": risk_events.assessment_reason,
+                "scopeKnown": risk_events.assessment_scope_known,
+                "completeness": "exact_execution_subject_snapshots_only_history_and_producer_coverage_unknown",
+                "assessmentCount": (
+                    len(risk_events.assessments)
+                    if risk_events.assessment_source_read_state == "available"
+                    else None
+                ),
+                "joinedExecutionRiskAssessments": [
+                    _execution_risk_assessment_payload(assessment, tenant_id)
+                    for assessment in risk_events.assessments
+                ],
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                    for ref in risk_assessment_evidence
+                ],
+                "truncated": risk_events.assessment_truncated,
             },
             "joinedExecutionRiskEvents": [
                 {
@@ -4207,20 +4397,19 @@ class Execution360Provider:
             ],
             "evidenceRefs": [
                 ref.model_dump(mode="json", by_alias=True, exclude_none=True)
-                for signal in risk_events.signals
-                for ref in signal.evidence_refs
+                for ref in [
+                    *(
+                        evidence_ref
+                        for signal in risk_events.signals
+                        for evidence_ref in signal.evidence_refs
+                    ),
+                    *risk_assessment_evidence,
+                ]
             ],
             "freshness": {
                 "state": "unknown",
-                "latestObservedAt": max(
-                    (
-                        signal.observed_at.astimezone(timezone.utc).isoformat()
-                        for signal in risk_events.signals
-                        if signal.observed_at is not None
-                    ),
-                    default=None,
-                ),
-                "reason": "no_execution_risk_signal_freshness_threshold_is_configured",
+                "latestObservedAt": max(risk_event_timestamps, default=None),
+                "reason": "no_execution_risk_freshness_threshold_is_configured",
             },
             "truncated": risk_events.truncated,
         }
@@ -4410,21 +4599,12 @@ def _execution_risk_event_context(
     execution_inventory_complete: bool,
     time_range: Optional[TimeRangeFilter],
 ) -> ExecutionRiskEventContext:
-    """Validate exact execution-scoped RiskSignals before projection.
+    """Validate exact execution-scoped RiskSignals and assessments before projection.
 
     A recorded signal is risk context, not a complete risk assessment or proof
     that the execution caused the signal. Signals without evidence or with
     invalid subject/time scope are omitted and downgrade the coverage state.
     """
-    if not read.available:
-        return ExecutionRiskEventContext(
-            state="unavailable",
-            reason=read.reason or "execution_risk_signal_source_unavailable",
-            source_read_state="unavailable",
-            truncated=read.truncated,
-            scope_known=False,
-        )
-
     lower = _parse_aware_instant(time_range.from_) if time_range and time_range.from_ else None
     upper = _parse_aware_instant(time_range.to) if time_range and time_range.to else None
     if (
@@ -4443,12 +4623,12 @@ def _execution_risk_event_context(
             scope_known=False,
         )
 
-    from intelligence.risk360.contracts import RiskSignal
+    from intelligence.risk360.contracts import RiskAssessment, RiskSignal
 
     signals: list[Any] = []
     seen_ids: set[str] = set()
     invalid_record_seen = False
-    for raw in read.rows:
+    for raw in read.rows if read.available else ():
         if (
             not isinstance(raw, dict)
             or raw.get("tenant_id") != tenant_id
@@ -4491,36 +4671,213 @@ def _execution_risk_event_context(
         seen_ids.add(signal.signal_id)
         signals.append(signal)
 
-    complete_read = (
-        read.scope_known
+    assessment_read = read.assessment_read
+    assessments: list[Any] = []
+    assessment_state: Literal[
+        "partial", "empty", "unknown", "degraded", "unavailable", "not_read"
+    ] = "not_read"
+    assessment_source_read_state: Literal["available", "unavailable", "not_read"] = (
+        "not_read"
+    )
+    assessment_reason: Optional[str] = None
+    assessment_truncated = False
+    assessment_scope_known = False
+    invalid_assessment_seen = False
+    if assessment_read is not None:
+        assessment_source_read_state = "available" if assessment_read.available else "unavailable"
+        assessment_truncated = assessment_read.truncated
+        assessment_scope_known = assessment_read.scope_known
+        assessment_reason = assessment_read.reason
+        if not assessment_read.available:
+            assessment_state = "unavailable"
+            assessment_reason = assessment_reason or "execution_risk_assessment_source_unavailable"
+        else:
+            seen_assessment_ids: set[str] = set()
+            for raw in assessment_read.rows:
+                if (
+                    not isinstance(raw, dict)
+                    or raw.get("tenant_id") != tenant_id
+                    or raw.get("subject_kind") != "execution"
+                    or raw.get("subject_id") not in execution_ids
+                ):
+                    invalid_assessment_seen = True
+                    continue
+                try:
+                    assessment = RiskAssessment.model_validate(raw)
+                except Exception:  # noqa: BLE001 - malformed assessment is not evidence
+                    invalid_assessment_seen = True
+                    continue
+                assessed_at = assessment.assessed_at
+                if assessed_at is not None:
+                    if assessed_at.tzinfo is None:
+                        invalid_assessment_seen = True
+                        continue
+                    assessed_at = assessed_at.astimezone(timezone.utc)
+                if (
+                    not assessment.assessment_id.strip()
+                    or assessment.assessment_id in seen_assessment_ids
+                    or any(
+                        not ref.id.strip() or not ref.source.strip()
+                        for ref in _risk_assessment_evidence(assessment, tenant_id)
+                    )
+                ):
+                    invalid_assessment_seen = True
+                    continue
+                if time_range is not None:
+                    if assessed_at is None:
+                        invalid_assessment_seen = True
+                        continue
+                    if lower is not None and assessed_at < lower:
+                        continue
+                    if upper is not None and assessed_at > upper:
+                        continue
+                seen_assessment_ids.add(assessment.assessment_id)
+                assessments.append(assessment)
+
+            assessment_complete = (
+                assessment_read.scope_known
+                and not assessment_read.truncated
+                and execution_inventory_complete
+                and not invalid_assessment_seen
+            )
+            if assessments:
+                assessment_state = "partial" if assessment_complete else "degraded"
+                assessment_reason = (
+                    "bounded_exact_execution_subject_assessment_snapshots_history_and_freshness_unknown"
+                    if assessment_complete
+                    else assessment_reason
+                    or "execution_inventory_or_risk_assessment_scope_incomplete"
+                )
+            elif assessment_complete:
+                assessment_state = "empty"
+                assessment_reason = "no_recorded_risk_assessments_for_execution_subjects"
+            else:
+                assessment_state = "degraded"
+                assessment_reason = assessment_reason or (
+                    "execution_inventory_or_risk_assessment_scope_incomplete"
+                )
+
+    signal_complete = (
+        read.available
+        and read.scope_known
         and not read.truncated
         and execution_inventory_complete
         and not invalid_record_seen
     )
-    if signals:
+    assessment_complete = assessment_read is None or (
+        assessment_read.available
+        and assessment_read.scope_known
+        and not assessment_read.truncated
+        and execution_inventory_complete
+        and not invalid_assessment_seen
+    )
+    combined_complete = signal_complete and assessment_complete
+    if signals or assessments:
         state: Literal["partial", "empty", "unknown", "degraded", "unavailable"] = (
-            "partial" if complete_read else "degraded"
+            "partial" if combined_complete else "degraded"
         )
         reason = (
-            "risk_signals_are_recorded_context_not_a_complete_execution_risk_assessment"
-            if complete_read
+            "execution_risk_records_are_snapshots_not_causal_or_complete_risk_history"
+            if combined_complete
             else read.reason
+            or assessment_reason
             or "execution_inventory_or_risk_signal_scope_incomplete"
         )
-    elif complete_read:
+    elif combined_complete:
         state = "empty"
-        reason = "no_recorded_canonical_risk_signals_for_execution_subject"
+        reason = "no_recorded_canonical_risk_signals_or_assessments_for_execution_subjects"
+    elif not read.available and (
+        assessment_read is None or not assessment_read.available
+    ):
+        state = "unavailable"
+        reason = (
+            read.reason
+            or assessment_reason
+            or "execution_risk_signal_and_assessment_sources_unavailable"
+        )
     else:
         state = "degraded"
-        reason = read.reason or "execution_inventory_or_risk_signal_scope_incomplete"
+        reason = (
+            read.reason
+            or assessment_reason
+            or "execution_inventory_or_risk_signal_scope_incomplete"
+        )
     return ExecutionRiskEventContext(
         state=state,
         signals=tuple(signals),
+        assessments=tuple(assessments),
         reason=reason,
-        source_read_state="available",
-        truncated=read.truncated,
-        scope_known=read.scope_known,
+        source_read_state="available" if read.available else "unavailable",
+        truncated=read.truncated or assessment_truncated,
+        scope_known=read.scope_known and (assessment_scope_known if assessment_read else True),
+        assessment_state=assessment_state,
+        assessment_source_read_state=assessment_source_read_state,
+        assessment_reason=assessment_reason,
+        assessment_truncated=assessment_truncated,
+        assessment_scope_known=assessment_scope_known,
     )
+
+
+def _risk_assessment_evidence(assessment: Any, tenant_id: str) -> list[EvidenceRef]:
+    """Ground an exact assessment join in its canonical record and inputs."""
+    assessed_at = assessment.assessed_at
+    observed_at = (
+        assessed_at.astimezone(timezone.utc).isoformat()
+        if assessed_at is not None and assessed_at.tzinfo is not None
+        else None
+    )
+    record_ref = EvidenceRef(
+        id=assessment.assessment_id,
+        type="model_output",
+        source="risk_assessments",
+        observedAt=observed_at,
+        uri=f"store://risk_assessments/{quote(f'{tenant_id}:{assessment.assessment_id}', safe='')}",
+    )
+    refs = [record_ref, *assessment.evidence_refs]
+    for component in assessment.vector.components:
+        refs.extend(component.evidence_refs)
+    unique: dict[tuple[str, str], EvidenceRef] = {}
+    for ref in refs:
+        unique.setdefault((ref.source, ref.id), ref)
+    return list(unique.values())
+
+
+def _execution_risk_assessment_payload(assessment: Any, tenant_id: str) -> dict[str, Any]:
+    """Render only bounded assessment state and its exact record evidence."""
+    assessed_at = (
+        assessment.assessed_at.astimezone(timezone.utc).isoformat()
+        if assessment.assessed_at is not None
+        else None
+    )
+    return {
+        "executionId": assessment.subject_id,
+        "assessmentId": assessment.assessment_id,
+        "policyId": assessment.policy_id,
+        "policyVersion": assessment.policy_version,
+        "dimensions": list(assessment.dimensions),
+        "claimState": assessment.claim_state.value,
+        "confidence": assessment.confidence,
+        "assessedAt": assessed_at,
+        "runId": assessment.run_id,
+        "components": [
+            {
+                "dimension": component.dimension,
+                "state": component.state.value,
+                "score": component.score,
+                "claimState": component.claim_state.value,
+                "confidence": component.confidence,
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                    for ref in component.evidence_refs
+                ],
+            }
+            for component in assessment.vector.components
+        ],
+        "evidenceRefs": [
+            ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+            for ref in _risk_assessment_evidence(assessment, tenant_id)
+        ],
+    }
 
 
 def _execution_approval_context(

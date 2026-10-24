@@ -2026,10 +2026,10 @@ Additional partial paths expose Identity360 `devices_sessions` identifier-type
 metadata from exact tenant-scoped source-identity records, with per-observation
 evidence references and no raw values or hashes; a dedicated device/session
 inventory and its completeness/freshness authority remain unjoined. Execution360
-`risk_events` joins only canonical RiskSignals with exact execution subject IDs
-admitted from tenant server lifecycle records; signal producer coverage and a
-freshness threshold remain unknown, and the signals are not a complete risk
-assessment. Social360 `propagation` returns bounded tenant-scoped FOLLOWS paths
+`risk_events` joins bounded canonical RiskSignals and RiskAssessment snapshots
+to exact execution subject IDs admitted from tenant server lifecycle records.
+Producer and snapshot history coverage, causality, and freshness remain
+unknown. Social360 `propagation` returns bounded tenant-scoped FOLLOWS paths
 only after endpoint consent, predicate eligibility, path timing, and evidence
 checks; it includes no component measurements and does not establish contagion
 or full path completeness. Episode360 `communications` binds only communication
@@ -2048,8 +2048,11 @@ observation and source-fact dimensions, event completeness, and freshness remain
 unknown; Memory360 does not evaluate current consent or policy. These provider
 changes add no HTTP routes and do not complete any surface.
 
-Episode360 `touchpoints` remains unknown because episode rows have no typed
-canonical touchpoint references. Risk360 `anomaly_events` remains unknown
+Episode360 `touchpoints` now resolves only explicitly recorded
+`journey_touchpoint_ids` from tenant-scoped episode rows to canonical
+tenant-scoped touchpoint records with evidence. Legacy references, complete
+link inventory, policy, freshness, and attribution links remain unknown.
+Risk360 `anomaly_events` remains unknown
 because generic signals and assessment dimensions are not typed anomaly
 events. Memory360 `cards` and `embeddings_meta` remain unknown because the
 repository has no canonical context-card or embedding-metadata records;
@@ -2144,9 +2147,10 @@ envelope binds the exact tenant, subject, slot, consumer, target, capability,
 and evaluated policy decision. An independent actor-granted `risk360.read`
 authority is not yet represented. Agent-specific freshness, historical replay,
 and contagion remain unknown.
-Execution360 now exposes producer coverage and RiskAssessment snapshot coverage
-as unknown because `risk_events` reads bounded, current RiskSignals joined to
-exact admitted execution IDs; it does not establish causality. Value360's `ltv`
+Execution360's `risk_events` now also reads bounded RiskAssessment snapshots
+through exact tenant/execution subject lookups alongside canonical RiskSignals.
+History and producer coverage, freshness, and causality remain unknown.
+Value360's `ltv`
 slot reports only evidenced confirmed/adjusted canonical conversion net-value
 observations by native currency and occurred-at scope. The scalar LTV amount
 stays null because lifetime completeness, outcome attribution, and freshness

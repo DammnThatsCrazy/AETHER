@@ -865,6 +865,7 @@
         "identity",
         "outcome_facts",
         "resources",
+        "risk_assessments",
         "risk_signals",
         "temporal_kernel",
         "tools"
@@ -3771,12 +3772,13 @@
         {
           "id": "risk_events",
           "requirement": "required",
-          "description": "Current recorded RiskSignals joined to exact tenant-scoped executions admitted by lifecycle; producer coverage and assessment snapshots are not read.",
-          "partialImplementationReason": "only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_risk_assessments_and_freshness_threshold_unknown_signals_are_not_causal",
+          "description": "Bounded current RiskSignals and RiskAssessment snapshots joined by exact tenant/execution subject to lifecycle-admitted executions; producer coverage, assessment history, freshness, and causal attribution remain unknown.",
+          "partialImplementationReason": "bounded_execution_subject_risk_signals_and_assessment_snapshots_joined_to_admitted_lifecycle_executions_producer_coverage_history_freshness_and_causality_unknown",
           "canonicalAuthorityRefs": [
             "agent_executions",
             "execution_facts",
-            "risk_signals"
+            "risk_signals",
+            "risk_assessments"
           ],
           "projectionBindings": [
             {
@@ -3856,6 +3858,7 @@
           "identity",
           "outcome_facts",
           "resources",
+          "risk_assessments",
           "risk_signals",
           "source_provenance",
           "temporal_kernel",
@@ -4057,12 +4060,24 @@
         {
           "id": "touchpoints",
           "requirement": "required",
-          "description": "Required episode360 slot: touchpoints.",
+          "description": "Exact tenant touchpoints explicitly linked by canonical episode records; journey touchpoints remain separate from attribution credits.",
           "canonicalAuthorityRefs": [
+            "episode_facts",
             "campaign_touchpoints"
           ],
-          "projectionBindings": [],
-          "unboundReason": "episode_record_has_no_typed_touchpoint_references"
+          "projectionBindings": [
+            {
+              "projectionId": "episode360",
+              "role": "primary",
+              "sectionIds": [
+                "interactions"
+              ],
+              "subjectKinds": [
+                "episode"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only journey_touchpoint_ids explicitly recorded by tenant-scoped EpisodeRecords are resolved to canonical touchpoint rows with evidence. Legacy records, incomplete link inventories, freshness, policy, and attribution links remain unknown."
         },
         {
           "id": "communications",
