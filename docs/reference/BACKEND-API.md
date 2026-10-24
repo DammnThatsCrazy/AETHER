@@ -2052,6 +2052,10 @@ Episode360 `touchpoints` now resolves only explicitly recorded
 `journey_touchpoint_ids` from tenant-scoped episode rows to canonical
 tenant-scoped touchpoint records with evidence. Legacy references, complete
 link inventory, policy, freshness, and attribution links remain unknown.
+Journey360 `episodes` also joins only tenant-scoped EpisodeRecords that
+explicitly persist the exact `journey_id`, with record/source evidence. Legacy
+or unlinked records, association completeness, store freshness, policy, and
+historical replay remain unknown; a missing link does not establish absence.
 Risk360 `anomaly_events` remains unknown
 because generic signals and assessment dimensions are not typed anomaly
 events. Memory360 `cards` and `embeddings_meta` remain unknown because the

@@ -81,6 +81,7 @@ _EPISODE_CONVERSION_DEFINITION_REFS = frozenset(
 _JOURNEY_STEP_CAP = 200
 _JOURNEY_TOUCHPOINT_CAP = 200
 _JOURNEY_CONVERSION_CAP = 100
+_JOURNEY_EPISODE_CAP = 100
 _JOURNEY_AGENT_ACTIVITY_CAP = 200
 _JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
 _EPISODE_PAGE_DEFAULT = 50
@@ -137,6 +138,28 @@ class JourneyConversionRead:
     state: str = "unknown"
     warnings: tuple[str, ...] = ()
     truncated: bool = False
+
+
+@dataclass(frozen=True)
+class JourneyEpisodeRead:
+    """Bounded tenant scan for EpisodeRecords that explicitly name a journey."""
+
+    episodes: tuple[EpisodeRecord, ...] = ()
+    available: bool = True
+    truncated: bool = False
+    invalid_records: bool = False
+    tenant_mismatch: bool = False
+    read_failed: bool = False
+
+    @property
+    def scan_complete(self) -> bool:
+        return not (
+            not self.available
+            or self.truncated
+            or self.invalid_records
+            or self.tenant_mismatch
+            or self.read_failed
+        )
 
 
 @dataclass(frozen=True)
@@ -507,6 +530,51 @@ class Episode360Provider:
             invalid_records=page.invalid_records,
             tenant_mismatch=tenant_mismatch,
             next_cursor=page.next_cursor,
+        )
+
+    async def _load_journey_episodes(
+        self, tenant_id: str, journey_id: str
+    ) -> JourneyEpisodeRead:
+        """Read explicit links from a bounded, tenant-scoped episode page.
+
+        The episode store has no secondary index for journey associations yet.
+        Therefore a full page proves only the records scanned; truncation or an
+        unlinked legacy record never establishes that a journey has no episodes.
+        """
+        store = self._load_store()
+        if store is None:
+            return JourneyEpisodeRead(available=False)
+        try:
+            page = await store.list_page_by_tenant(
+                tenant_id,
+                limit=_JOURNEY_EPISODE_CAP,
+            )
+        except Exception:  # noqa: BLE001 - episode relation read degrades independently
+            return JourneyEpisodeRead(read_failed=True)
+
+        episodes: list[EpisodeRecord] = []
+        invalid_records = page.invalid_records
+        tenant_mismatch = False
+        for value in page.records:
+            if not isinstance(value, EpisodeRecord):
+                invalid_records = True
+                continue
+            if value.tenant_id != tenant_id:
+                tenant_mismatch = True
+                continue
+            if value.journey_id == journey_id:
+                episodes.append(value)
+        episodes.sort(
+            key=lambda value: (
+                value.occurred_from or value.created_at,
+                value.episode_id,
+            )
+        )
+        return JourneyEpisodeRead(
+            episodes=tuple(episodes),
+            truncated=bool(page.truncated or page.next_cursor),
+            invalid_records=invalid_records,
+            tenant_mismatch=tenant_mismatch,
         )
 
     async def _load_episode_observations(
@@ -1490,7 +1558,12 @@ class Episode360Provider:
         )
         warnings.extend(agent_interventions["warnings"])
 
-        journey_episodes = _journey_episode_context(request)
+        journey_episodes = _journey_episode_context(
+            request,
+            journey_id=journey_id,
+            read=await self._load_journey_episodes(request.tenantId, journey_id),
+        )
+        journey_episode_claims = journey_episodes.pop("claims")
         warnings.extend(journey_episodes["warnings"])
         journey_touchpoints = _journey_touchpoint_context(
             await self._load_journey_touchpoints(request.tenantId, journey)
@@ -1528,6 +1601,7 @@ class Episode360Provider:
                 journey_touchpoints["claims"],
                 journey_conversions["claims"],
                 agent_interventions["claims"],
+                journey_episode_claims,
             )
             if request.includeClaims is not False and steps_available and not scope_mismatch
             else []
@@ -2221,24 +2295,84 @@ def _journey_time_bounds(
 
 def _journey_episode_context(
     request: ProjectionRequest,
+    *,
+    journey_id: str,
+    read: JourneyEpisodeRead,
 ) -> dict[str, Any]:
-    """Keep the episode slot unresolved until a typed journey association exists.
+    """Project only tenant-scoped episodes that explicitly name this journey."""
+    episodes = [
+        episode
+        for episode in read.episodes
+        if episode.tenant_id == request.tenantId
+        and episode.journey_id == journey_id
+    ]
+    evidence_refs = _dedupe_evidence_refs(
+        [ref for episode in episodes for ref in _episode_evidence_refs(episode)]
+    )
+    warnings: list[str] = []
+    if read.read_failed or not read.available:
+        reason = "journey_episode_authority_unavailable"
+        warnings.append(reason)
+    elif read.tenant_mismatch:
+        reason = "journey_episode_tenant_scope_mismatch"
+        warnings.append(reason)
+    elif read.invalid_records:
+        reason = "journey_episode_records_invalid_or_ambiguous"
+        warnings.append(reason)
+    elif read.truncated:
+        reason = "journey_episode_scan_truncated"
+        warnings.append(reason)
+    elif episodes:
+        reason = "exact_tenant_episode_records_explicitly_reference_journey"
+    else:
+        # EpisodeRecord writers are not yet required to emit a journey link,
+        # so a clean page without matches cannot establish absence.
+        reason = "episode_journey_association_not_recorded_or_not_observed"
+        warnings.append(reason)
 
-    EpisodeRecord subjects are constrained to graph EntityRef kinds and do
-    not carry a journey id. Joining by profile id or coincident opaque IDs
-    would attach unrelated episodes to a journey, so this provider does not
-    scan EpisodeStore for journey subjects.
-    """
+    if episodes and not read.read_failed and not read.tenant_mismatch and not read.invalid_records:
+        # This positive set is exact, but neither legacy-writer coverage nor
+        # relationship inventory completeness has an authoritative watermark.
+        warnings.append("journey_episode_association_completeness_unknown")
+
+    # ProjectionSection has a closed state vocabulary without ``partial``;
+    # positive explicit references therefore use degraded plus precise
+    # coverage metadata rather than implying a complete episode inventory.
+    state = "degraded" if episodes else "unknown"
     return {
-        "state": "unknown",
-        "coverage": "unknown",
+        "state": state,
+        "coverage": "explicit_episode_journey_id_references" if episodes else "unknown",
         "requestedSubject": {"kind": request.subject.kind, "id": request.subject.id},
         "episodeCount": None,
-        "observedEpisodeCount": None,
-        "episodes": [],
-        "evidenceRefs": [],
-        "warnings": ["journey_episode_subject_binding_unavailable"],
-        "reason": "episode_record_contract_has_no_typed_journey_subject_reference",
+        "observedEpisodeCount": len(episodes),
+        "associationCompleteness": "unknown",
+        "episodeStoreScanComplete": read.scan_complete,
+        "freshness": {
+            "state": "unknown",
+            "reason": "episode_store_freshness_watermark_not_available",
+        },
+        "episodes": [
+            {
+                "episodeId": episode.episode_id,
+                "kind": episode.kind,
+                "status": episode.status,
+                "occurredFrom": episode.occurred_from,
+                "occurredTo": episode.occurred_to,
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", exclude_none=True)
+                    for ref in _episode_evidence_refs(episode)
+                ],
+            }
+            for episode in episodes
+        ],
+        "evidenceRefs": [
+            ref.model_dump(mode="json", exclude_none=True) for ref in evidence_refs
+        ],
+        "claims": [
+            (episode.episode_id, _episode_record_ref(episode)) for episode in episodes
+        ],
+        "warnings": warnings,
+        "reason": reason,
     }
 
 
@@ -2719,13 +2853,14 @@ def _build_journey_sections(
         steps_available=steps_available,
         step_inventory_complete=step_inventory_complete,
         stage_context=stage_context,
+        episode_context=episode_context,
         agent_interventions=agent_interventions,
         touchpoint_context=touchpoint_context,
         conversion_context=conversion_context,
     )
-    complete_evidence = step_state not in {"unknown", "degraded"} and episode_context[
+    complete_evidence = step_state in {"available", "empty"} and episode_context[
         "state"
-    ] not in {"unknown", "degraded"} and touchpoint_context["state"] in {
+    ] in {"available", "empty"} and touchpoint_context["state"] in {
         "available",
         "empty",
     }
@@ -3025,6 +3160,7 @@ def _journey_required_slot_coverage(
     steps_available: bool,
     step_inventory_complete: bool,
     stage_context: dict[str, Any],
+    episode_context: dict[str, Any],
     agent_interventions: dict[str, Any],
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
@@ -3043,7 +3179,16 @@ def _journey_required_slot_coverage(
     conversion_evidence = [
         ref for ref in conversion_context.get("evidenceRefs", []) if isinstance(ref, dict)
     ]
-    all_evidence = version_evidence + step_evidence + touchpoint_evidence + conversion_evidence
+    episode_evidence = [
+        ref for ref in episode_context.get("evidenceRefs", []) if isinstance(ref, dict)
+    ]
+    all_evidence = (
+        version_evidence
+        + step_evidence
+        + episode_evidence
+        + touchpoint_evidence
+        + conversion_evidence
+    )
 
     touchpoint_state = touchpoint_context.get("state")
     if touchpoint_state == "available":
@@ -3082,6 +3227,14 @@ def _journey_required_slot_coverage(
         "evidenceRefs": version_evidence + conversion_evidence,
     }
 
+    episode_slot = {
+        "state": episode_context["state"],
+        "coverage": episode_context["coverage"],
+        "reason": episode_context["reason"],
+        "associationCompleteness": episode_context["associationCompleteness"],
+        "evidenceRefs": episode_evidence,
+    }
+
     return {
         "journey_summary": {
             "state": "available",
@@ -3095,12 +3248,7 @@ def _journey_required_slot_coverage(
             "reason": stage_context["reason"],
             "evidenceRefs": stage_context["evidenceRefs"],
         },
-        "episodes": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "episode_record_contract_has_no_typed_journey_subject_reference",
-            "evidenceRefs": [],
-        },
+        "episodes": episode_slot,
         "touchpoints": touchpoint_slot,
         "agent_interventions": {
             "state": agent_interventions["state"],
@@ -3153,6 +3301,7 @@ def _build_journey_claims(
     touchpoint_claims: list[tuple[str, EvidenceRef]],
     conversion_claims: list[tuple[str, EvidenceRef]],
     agent_intervention_claims: list[tuple[str, EvidenceRef]],
+    episode_claims: list[tuple[str, EvidenceRef]],
 ) -> list[ClaimEnvelope]:
     journey_id = _journey_text(journey.get("journey_id")) or request.subject.id
     version_id = _journey_text(journey.get("journey_version_id")) or journey_id
@@ -3160,6 +3309,7 @@ def _build_journey_claims(
     step_slots = _journey_slot_ids_for_sections({"timeline", "interactions", "evidence"})
     stage_slots = _journey_slot_ids_for_sections({"stages"})
     touchpoint_slots = _journey_slot_ids_for_sections({"timeline", "evidence"})
+    episode_slots = _journey_slot_ids_for_sections({"episode_context"})
     claims = [
         ClaimEnvelope(
             id=f"episode360:{journey_id}:{version_id}:journey-version",
@@ -3261,6 +3411,23 @@ def _build_journey_claims(
                 claims=["A canonical conversion is referenced by this current journey version."],
                 claimState=EpistemicStatus.OBSERVED,
                 domainSlotIds=["conversions"],
+            )
+        )
+    for episode_id, evidence in episode_claims:
+        if len(claims) >= 301:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:episode:{episode_id}",
+                kind="explicit_journey_episode_reference",
+                subject=request.subject,
+                evidenceRefs=[evidence],
+                claims=[
+                    f"Tenant-scoped episode record {episode_id!r} explicitly references this journey.",
+                    "This recorded link does not prove complete journey episode inventory.",
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=episode_slots,
             )
         )
     return claims
@@ -3605,6 +3772,7 @@ def _episode_evidence_refs(episode: EpisodeRecord) -> list[EvidenceRef]:
 def _episode_view(episode: EpisodeRecord) -> dict[str, Any]:
     return {
         "episodeId": episode.episode_id,
+        "journeyId": episode.journey_id,
         "kind": episode.kind,
         "status": episode.status,
         "title": episode.title,

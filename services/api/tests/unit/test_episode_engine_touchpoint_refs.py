@@ -15,7 +15,7 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from graph.operational_intelligence.models import EntityRef  # noqa: E402
+from graph.operational_intelligence.models import EntityRef, EvidenceRef  # noqa: E402
 from journeys.measurement.episodes.engine import EpisodeEngine  # noqa: E402
 from shared.backend_interpretation.primitives import EpisodeRecord  # noqa: E402
 
@@ -41,6 +41,18 @@ class MemoryEpisodeStore:
             and record.subject.kind == kind
             and record.subject.id == subject_id
         ]
+
+
+class MemoryJourneySource:
+    async def get_current(self, tenant_id: str, journey_id: str) -> dict | None:
+        if tenant_id not in {"tenant-a", "tenant-b"} or journey_id != "journey-1":
+            return None
+        return {
+            "tenant_id": tenant_id,
+            "journey_id": journey_id,
+            "journey_version_id": "journey-version-1",
+            "is_current": True,
+        }
 
 
 @pytest.mark.asyncio
@@ -87,3 +99,46 @@ async def test_episode_engine_requires_exact_existing_tenant_episode_for_touchpo
         await engine.link_journey_touchpoint("tenant-a", "episode-1", " ")
     with pytest.raises(KeyError, match="not found for tenant"):
         await engine.link_journey_touchpoint("tenant-a", "episode-1", "touchpoint-1")
+
+
+@pytest.mark.asyncio
+async def test_episode_engine_links_exact_journey_with_source_evidence():
+    store = MemoryEpisodeStore()
+    engine = EpisodeEngine(
+        store=store,
+        journey_source=MemoryJourneySource(),
+    )  # type: ignore[arg-type]
+    record = await engine.ingest_observation(
+        tenant_id="tenant-a",
+        subject=EntityRef(kind="agent", id="agent-1"),
+        kind="agent_execution",
+        observation_id="observation-1",
+    )
+    evidence = EvidenceRef(
+        id="journey-link-event",
+        type="relationship",
+        source="canonical-journey-writer",
+    )
+
+    linked = await engine.link_journey(
+        "tenant-a", record.episode_id, "journey-1", evidence=evidence
+    )
+
+    assert linked.journey_id == "journey-1"
+    assert linked.evidence_refs == [evidence]
+    with pytest.raises(ValueError, match="different canonical journey"):
+        await engine.link_journey(
+            "tenant-a", record.episode_id, "journey-2", evidence=evidence
+        )
+    unlinked = await engine.ingest_observation(
+        tenant_id="tenant-a",
+        subject=EntityRef(kind="agent", id="agent-2"),
+        kind="agent_execution",
+        observation_id="observation-2",
+    )
+    with pytest.raises(KeyError, match="current journey .* not found for tenant"):
+        await engine.link_journey(
+            "tenant-a", unlinked.episode_id, "journey-missing", evidence=evidence
+        )
+    with pytest.raises(KeyError, match="not found for tenant"):
+        await engine.link_journey("tenant-b", record.episode_id, "journey-1", evidence=evidence)

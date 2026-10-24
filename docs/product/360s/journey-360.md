@@ -40,6 +40,13 @@ not qualify. This closes the explicit fact-to-journey join, while message-spine
 coverage, completeness, freshness evaluation, and historical replay remain
 unestablished; the slot therefore stays partial.
 
+The required `episodes` slot reads only tenant-scoped EpisodeRecords that
+explicitly persist the exact `journey_id`. The projection includes linked
+episode IDs and their record/source evidence. Legacy records without that
+field are not joined by profile, subject, timestamp, or matching opaque IDs;
+association completeness and store freshness remain unknown, so the slot stays
+partial when explicit links are present and unknown when none are observed.
+
 Provider evidence that is missing, ambiguous, stale, truncated, or unavailable
 remains explicit. In particular, an execution or journey status is not
 promoted into a measured business outcome.

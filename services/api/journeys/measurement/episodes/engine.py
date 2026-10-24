@@ -40,8 +40,14 @@ class EpisodeEngine:
     replayable.
     """
 
-    def __init__(self, store: Optional[EpisodeStore] = None) -> None:
+    def __init__(
+        self,
+        store: Optional[EpisodeStore] = None,
+        *,
+        journey_source: Optional[Any] = None,
+    ) -> None:
         self._store = store or EpisodeStore()
+        self._journey_source = journey_source
         self._open_cache: dict[str, Optional[str]] = {}
 
     @property
@@ -195,6 +201,57 @@ class EpisodeEngine:
         record.journey_touchpoint_ids = _unique_ids(
             [*(record.journey_touchpoint_ids or []), normalized_touchpoint_id]
         )
+        await self._store.upsert(record)
+        return record
+
+    async def link_journey(
+        self,
+        tenant_id: str,
+        episode_id: str,
+        journey_id: str,
+        *,
+        evidence: EvidenceRef,
+    ) -> EpisodeRecord:
+        """Attach an episode to one exact journey with source evidence.
+
+        The writer must already know the canonical relation. This method does
+        not infer it from the episode subject, timestamps, journey steps, or
+        matching IDs. Re-linking to a different journey is rejected.
+        """
+        normalized_journey_id = _first_str(journey_id)
+        if normalized_journey_id is None:
+            raise ValueError("link_journey requires a non-empty journey_id")
+        if not isinstance(evidence, EvidenceRef) or not evidence.id or not evidence.source:
+            raise ValueError("link_journey requires source evidence")
+        record = await self._store.get(tenant_id, episode_id)
+        if record is None:
+            raise KeyError(f"episode {episode_id!r} not found for tenant {tenant_id!r}")
+        if record.journey_id not in (None, normalized_journey_id):
+            raise ValueError("episode is already linked to a different canonical journey")
+        source = self._journey_source
+        if source is None:
+            from journeys.measurement.repositories.journey_repo import JourneyRepository
+
+            source = JourneyRepository()
+        try:
+            journey = await source.get_current(tenant_id, normalized_journey_id)
+        except Exception as exc:  # noqa: BLE001 - writer cannot bind against an unread source
+            raise RuntimeError("canonical journey authority is unavailable") from exc
+        if (
+            not isinstance(journey, dict)
+            or journey.get("tenant_id") != tenant_id
+            or str(journey.get("journey_id")) != normalized_journey_id
+            or journey.get("is_current") is not True
+        ):
+            raise KeyError(
+                f"current journey {normalized_journey_id!r} not found for tenant {tenant_id!r}"
+            )
+        record.journey_id = normalized_journey_id
+        evidence_key = (evidence.id, evidence.type, evidence.source)
+        if evidence_key not in {
+            (ref.id, ref.type, ref.source) for ref in record.evidence_refs
+        }:
+            record.evidence_refs.append(evidence)
         await self._store.upsert(record)
         return record
 

@@ -3755,11 +3755,18 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("episode_facts",),
-                "description": "Required journey360 slot: episodes.",
+                "description": "Tenant-scoped episodes that explicitly record the exact journey ID.",
                 "id": "episodes",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "typed_journey_to_episode_reference_not_available"
+                "partialImplementationReason": "Only EpisodeRecords with an explicit journey_id are joined through the tenant-scoped episode store. Legacy or unlinked records, association-population completeness, store freshness, policy, and historical replay remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "episode360",
+                        "role": "primary",
+                        "subjectKinds": ("journey",),
+                        "sectionIds": ("episode_context",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "events_and_episode_context",

@@ -5468,12 +5468,23 @@
         {
           "id": "episodes",
           "requirement": "required",
-          "description": "Required journey360 slot: episodes.",
+          "description": "Tenant-scoped episodes that explicitly record the exact journey ID.",
           "canonicalAuthorityRefs": [
             "episode_facts"
           ],
-          "projectionBindings": [],
-          "unboundReason": "typed_journey_to_episode_reference_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "episode360",
+              "role": "primary",
+              "sectionIds": [
+                "episode_context"
+              ],
+              "subjectKinds": [
+                "journey"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only EpisodeRecords with an explicit journey_id are joined through the tenant-scoped episode store. Legacy or unlinked records, association-population completeness, store freshness, policy, and historical replay remain unknown."
         },
         {
           "id": "touchpoints",

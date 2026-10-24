@@ -141,12 +141,14 @@ def _episode(
     tenant_id: str = TENANT,
     subject_kind: str = "agent",
     subject_id: str = AGENT_ID,
+    journey_id: str | None = None,
 ) -> EpisodeRecord:
     return EpisodeRecord(
         episode_id=episode_id,
         tenant_id=tenant_id,
         subject=EntityRef(kind=subject_kind, id=subject_id),
         kind="agent_execution",
+        journey_id=journey_id,
         observation_ids=[f"observation-{episode_id}"],
         evidence_refs=[
             EvidenceRef(
@@ -957,7 +959,7 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
     assert all("stage taxonomy and stage completeness remain unknown" in claim.claims[0]
                for claim in frame_stage_slot.claims)
     assert slot_coverage["episodes"]["reason"] == (
-        "episode_record_contract_has_no_typed_journey_subject_reference"
+        "episode_journey_association_not_recorded_or_not_observed"
     )
     assert slot_coverage["touchpoints"]["state"] == "unknown"
     assert slot_coverage["agent_interventions"]["state"] == "degraded"
@@ -1496,7 +1498,7 @@ async def test_journey_touchpoint_list_disagreement_degrades_completeness() -> N
     assert "journey_touchpoint_endpoint_reference_not_in_list" in touchpoints["warnings"]
 
 
-async def test_journey_episode_context_stays_unknown_without_typed_episode_join() -> None:
+async def test_journey_episode_context_does_not_join_by_coincident_subject_id() -> None:
     coincident_profile_episode = _episode(
         episode_id="same-id-user-episode",
         subject_kind="user",
@@ -1520,10 +1522,85 @@ async def test_journey_episode_context_stays_unknown_without_typed_episode_join(
     assert episode_context.content["episodes"] == []
     assert (
         episode_context.content["reason"]
-        == "episode_record_contract_has_no_typed_journey_subject_reference"
+        == "episode_journey_association_not_recorded_or_not_observed"
     )
-    assert store.page_calls == []
+    assert store.page_calls == [{"tenant_id": TENANT, "limit": 100, "cursor": None}]
     assert _section(result, "evidence").content["coverage"] == "partial"
+
+
+async def test_journey_episode_context_joins_only_exact_tenant_episode_references() -> None:
+    linked = _episode(episode_id="episode-linked", journey_id=JOURNEY_ID)
+    wrong_journey = _episode(episode_id="episode-other", journey_id="journey-other")
+    store = FakeEpisodeStore(
+        EpisodePageRead(
+            records=(wrong_journey, linked),
+            next_cursor=None,
+            truncated=False,
+        )
+    )
+    result = await Episode360Provider(
+        episode_store=store,
+        journey_source=FakeJourneySource(),
+    ).project(_request(), _context())
+
+    episode_context = _section(result, "episode_context")
+    assert episode_context.state == "degraded"
+    assert episode_context.content["observedEpisodeCount"] == 1
+    assert episode_context.content["episodeCount"] is None
+    assert episode_context.content["associationCompleteness"] == "unknown"
+    assert [row["episodeId"] for row in episode_context.content["episodes"]] == [
+        "episode-linked"
+    ]
+    assert episode_context.content["evidenceRefs"]
+    assert (
+        _section(result, "summary")
+        .content["requiredSlotCoverage"]["episodes"]["state"]
+        == "degraded"
+    )
+    assert any(claim.kind == "explicit_journey_episode_reference" for claim in result.claims)
+
+
+async def test_journey_episode_context_drops_tenant_mismatched_rows() -> None:
+    foreign = _episode(
+        episode_id="episode-foreign",
+        tenant_id="tenant-other",
+        journey_id=JOURNEY_ID,
+    )
+    store = FakeEpisodeStore(
+        EpisodePageRead(records=(foreign,), next_cursor=None, truncated=False)
+    )
+    result = await Episode360Provider(
+        episode_store=store,
+        journey_source=FakeJourneySource(),
+    ).project(_request(), _context())
+
+    episode_context = _section(result, "episode_context")
+    assert episode_context.state == "unknown"
+    assert episode_context.content["episodes"] == []
+    assert episode_context.content["reason"] == "journey_episode_tenant_scope_mismatch"
+    assert episode_context.content["evidenceRefs"] == []
+
+
+async def test_journey_episode_context_keeps_truncated_scan_incomplete() -> None:
+    linked = _episode(episode_id="episode-linked", journey_id=JOURNEY_ID)
+    store = FakeEpisodeStore(
+        EpisodePageRead(
+            records=(linked,),
+            next_cursor="next-page",
+            truncated=True,
+        )
+    )
+    result = await Episode360Provider(
+        episode_store=store,
+        journey_source=FakeJourneySource(),
+    ).project(_request(), _context())
+
+    episode_context = _section(result, "episode_context")
+    assert episode_context.state == "degraded"
+    assert episode_context.content["episodeStoreScanComplete"] is False
+    assert episode_context.content["reason"] == "journey_episode_scan_truncated"
+    assert episode_context.content["observedEpisodeCount"] == 1
+    assert episode_context.content["episodeCount"] is None
 
 
 async def test_journey_step_evidence_missing_degrades_and_does_not_misattribute_claims() -> None:

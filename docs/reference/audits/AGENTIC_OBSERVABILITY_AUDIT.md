@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8fb16ce5cec86f4f45bf76e0db4f27611f1ff69e1568184c7c981627a2622a67"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:fe1a96cd98fca73e412c9b8512603867d6957f7fb46a89f96fa69a002d93a3b5"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -305,6 +305,11 @@ invocation facts through `OutcomeTruthStore`, without claiming workflow
 causality; historical reads are suppressed. These paths preserve incomplete
 coverage and unknown policy/freshness. They do not complete any of the 18
 product surfaces or add action authority.
+
+Journey360 `episodes` joins only tenant-scoped EpisodeRecords that explicitly
+persist the exact `journey_id`, with record/source evidence. The bounded store
+scan cannot establish complete association coverage; legacy or unlinked
+records, freshness, policy, and historical replay remain unknown.
 
 Value360 `financial_risk` now composes separate Economic360 and Risk360 claims
 only when both carry evidence for the exact same tenant and subject. The risk

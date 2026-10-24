@@ -746,6 +746,10 @@ qualify; message-spine coverage, completeness, freshness, and historical replay
 remain unknown. Episode360 `agent_handoffs` also remains unknown because
 episode records and observations do not reference a canonical execution or
 handoff ID. Event labels and agent metadata are not used to invent those links.
+Journey360 `episodes` now joins only tenant-scoped EpisodeRecords that
+explicitly persist the exact `journey_id`, with record/source evidence. Legacy
+or unlinked records, association completeness, store freshness, policy, and
+historical replay remain unknown; a missing link does not establish absence.
 The current agentic/support slice adds three partial paths: Agent360
 `owner_delegator` resolves the configured owner reference through an exact
 tenant entity lookup and now requires an exact tenant graph `OWNS` or
