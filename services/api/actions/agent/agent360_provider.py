@@ -944,12 +944,14 @@ def _safe_delegation(
         time_keys=("starts_at",),
     )
     scope = row.get("scope")
-    scope_view: Optional[dict[str, list[str]]] = None
+    scope_view: Optional[dict[str, Any]] = None
     if isinstance(scope, dict):
         scope_view = {
             "actions": _safe_strings(scope.get("actions")),
             "resources": _safe_strings(scope.get("resources")),
         }
+        if (max_amount := _first(scope, "max_amount")) is not None:
+            scope_view["maxAmount"] = max_amount
     return {
         "delegationId": _first(row, "delegation_id", "id"),
         "evidenceRef": evidence_ref.model_dump(mode="json") if evidence_ref else None,
@@ -2849,32 +2851,137 @@ class Agent360Provider:
             and "policy_boundary" in (claim.domainSlotIds or [])
         ]
         execution_read = data["executions"]
-        policy_boundary_warnings = ["standing_policy_boundary_not_exposed"]
+        incoming_delegation_ids = {
+            row_id
+            for row in incoming_rows
+            if (row_id := _first(row, "delegation_id", "id")) is not None
+        }
+        active_read_has_unmatched_record = any(
+            (row_id := _first(row, "delegation_id", "id")) is None
+            or row_id not in incoming_delegation_ids
+            for row in active_rows
+        )
+        standing_scope_records: list[dict[str, Any]] = []
+        standing_scope_identity_incomplete = False
+        if not invalid_window and request.timeRange is None:
+            for record in delegation_items:
+                if (
+                    record["relationToSubject"] != "incoming"
+                    or record["recordState"] != "active_as_reported_by_repository"
+                    or record["granteeEntityId"] != resolved_canonical_actor
+                ):
+                    continue
+                grantor = record["grantorParty"]
+                grantee = record["granteeParty"]
+                if (
+                    grantor["state"] != "resolved"
+                    or grantee["state"] != "resolved"
+                    or record["scope"] is None
+                    or record["evidenceRef"] is None
+                ):
+                    standing_scope_identity_incomplete = True
+                    continue
+                evidence_refs = _dedupe_json_refs(
+                    [
+                        record["evidenceRef"],
+                        *grantor.get("evidenceRefs", []),
+                        *grantee.get("evidenceRefs", []),
+                        *actor_identity_refs,
+                    ]
+                )
+                if not evidence_refs:
+                    standing_scope_identity_incomplete = True
+                    continue
+                standing_scope_records.append(
+                    {
+                        "delegationId": record["delegationId"],
+                        "grantorParty": grantor["party"],
+                        "granteeParty": grantee["party"],
+                        "scope": record["scope"],
+                        "authorizationKind": record["authorizationKind"],
+                        "startsAt": record["startsAt"],
+                        "endsAt": record["endsAt"],
+                        "recordState": "active_as_reported_by_repository",
+                        "effectiveAuthorization": "unknown",
+                        "evidenceRefs": evidence_refs,
+                    }
+                )
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"agent_standing_delegation_scope.{record['delegationId']}",
+                        kind="observed_standing_delegation_scope",
+                        subject=request.subject,
+                        evidenceRefs=[EvidenceRef.model_validate(ref) for ref in evidence_refs],
+                        claims=[
+                            "The tenant-scoped repository reports this delegation grant active and stores the cited scope. The record does not establish current action/resource authorization or complete standing policy."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["policy_boundary", "authority_envelope"],
+                    )
+                )
+        standing_scope_read_complete = (
+            resolved_canonical_actor is not None
+            and request.timeRange is None
+            and not invalid_window
+            and len(delegation_records) <= limit
+            and not standing_scope_identity_incomplete
+            and not active_read_has_unmatched_record
+            and not active_delegation_conflicts
+            and all(
+                read.available
+                and not read.truncated
+                and not read.scope_mismatch
+                and read.scope_known
+                for read in (
+                    data["incoming_delegations"],
+                    data["active_delegations"],
+                    data["delegation_parties"],
+                )
+            )
+        )
+        policy_boundary_warnings = [
+            "standing_policy_boundary_incomplete"
+            if standing_scope_records
+            else "standing_policy_boundary_not_exposed"
+        ]
+        if standing_scope_records and not standing_scope_read_complete:
+            policy_boundary_warnings.append("standing_delegation_scope_read_incomplete")
         if execution_read.truncated:
             policy_boundary_warnings.append("action_scoped_policy_decision_read_truncated")
         if execution_read.scope_mismatch or not execution_read.scope_known:
             policy_boundary_warnings.append("action_scoped_policy_decision_read_scope_incomplete")
         if invalid_window:
             policy_boundary_warnings.append("action_scoped_policy_decision_window_invalid")
-        if policy_boundary_claims:
+        if policy_boundary_claims or standing_scope_records:
             policy_boundary_section = ProjectionSection(
                 id="policy_boundary",
                 state="degraded",
-                title="Observed action-scoped policy decisions",
+                title="Observed delegation scopes and action-scoped decisions",
                 content={
                     "state": "partial",
                     "effectivePolicyState": "unknown",
-                    "decisionScope": "historical_action_scoped_only",
+                    "decisionScope": (
+                        "historical_action_scoped_only"
+                        if policy_boundary_claims
+                        else "no_action_scoped_decision_observed"
+                    ),
                     "decisions": [
                         claim.model_dump(mode="json", by_alias=True, exclude_none=True)
                         for claim in policy_boundary_claims
                     ],
+                    "standingDelegationScopes": standing_scope_records,
+                    "standingDelegationReadComplete": standing_scope_read_complete,
                     "limitations": [
-                        "A recorded decision is evidence about one request at its recorded time; it does not establish standing policy or current authorization."
+                        "Stored delegation scopes are repository observations and may lag revocation; they do not establish the full standing policy or authorize a new action.",
+                        "A recorded decision is evidence about one request at its recorded time; it does not establish current authorization.",
                     ],
                 },
                 warnings=policy_boundary_warnings,
-                canonicalAuthorityRefs=["agent_executions"],
+                canonicalAuthorityRefs=(
+                    ["agent_executions", "delegations", "entities"]
+                    if standing_scope_records
+                    else ["agent_executions"]
+                ),
             )
         elif not execution_read.available:
             policy_boundary_section = ProjectionSection(

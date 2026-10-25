@@ -139,7 +139,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/agent360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity"),
-        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_entity", "agent_executions", "economic_facts", "evidence", "graph", "identity", "observations", "outcome_facts", "source_provenance"),
+        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_entity", "agent_executions", "delegations", "economic_facts", "entities", "evidence", "graph", "identity", "observations", "outcome_facts", "source_provenance"),
         "hardDependencies": ("agentic_runtime_access", "contract_spine", "identity_resolution", "temporal_kernel"),
         "projectionDependencies": ("profile360",),
         "optionalProjectionDependencies": ("economic360", "outcome360"),
@@ -2170,11 +2170,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("agent_access", "agent_executions", "identity"),
-                "description": "Recorded execution-scoped policy decisions; standing agent policy and a new action decision remain unknown.",
+                "canonicalAuthorityRefs": ("agent_access", "agent_executions", "delegations", "entities", "identity"),
+                "description": "Exact stored active delegation scopes and recorded execution-scoped policy decisions; complete standing agent policy and a new action decision remain unknown.",
                 "id": "policy_boundary",
                 "implementationCrosswalk": ("authority_and_delegation",),
-                "partialImplementationReason": "only_stored_execution_time_decisions_are_available_and_standing_policy_is_not_exposed",
+                "partialImplementationReason": "current_repository_active_delegation_scopes_are_bounded_and_may_lag_revocation; non_delegation_policy_historical_replay_and_new_action_authorization_remain_unknown",
                 "projectionBindings": [
                     {
                         "projectionId": "agent360",
@@ -2301,7 +2301,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_entity", "agent_executions", "ai_execution_facts", "commerce", "communication_facts", "economic_facts", "evidence", "execution_facts", "graph", "identity", "observations", "outcome_facts", "payments", "relationship_facts", "resources", "risk_outputs", "social_observations", "source_provenance", "temporal", "tools"),
+            "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_entity", "agent_executions", "ai_execution_facts", "commerce", "communication_facts", "delegations", "economic_facts", "entities", "evidence", "execution_facts", "graph", "identity", "observations", "outcome_facts", "payments", "relationship_facts", "resources", "risk_outputs", "social_observations", "source_provenance", "temporal", "tools"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -4889,11 +4889,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "A matching event EvidenceRef does not verify the source observation record or establish producer coverage; no registered Gold alert writer currently supplies the explicit link triplet.",
+                "authorityGapReason": "A matching event EvidenceRef does not verify the source observation record or establish automatic detector producer coverage.",
                 "canonicalAuthorityRefs": ("evidence", "observations", "risk_outputs", "risk_signals"),
                 "description": "Exact tenant and typed-subject Gold anomaly alerts, with optional bounded RiskSignal and source-event evidence when the alert records explicit link identifiers.",
                 "id": "anomaly_events",
-                "partialImplementationReason": "Gold alerts with explicit signal and source-event references join exact tenant/subject RiskSignal rows and matching event evidence; legacy alerts remain metadata only. No registered Gold alert writer supplies the link triplet yet, and the underlying event record, detector coverage, cause, severity, and source timestamp remain unverified.",
+                "partialImplementationReason": "Authenticated Gold alert materialization now verifies an exact tenant/subject RiskSignal and one selected event EvidenceRef before writing the link triplet; legacy alerts remain metadata only. This is a caller-selected alert path, not an automatic detector producer. The underlying event record, detector coverage, cause, severity, and source timestamp remain unverified.",
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -6178,7 +6178,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("economic_facts", "risk_outputs"),
+                "canonicalAuthorityRefs": ("ai_execution_facts", "economic_facts", "risk_outputs"),
                 "description": "Financial risk linked to economic facts by exact subject.",
                 "id": "financial_risk",
                 "partialImplementationReason": "Exact tenant and subject economic claims join only to assessed economic, payment, or transaction Risk360 dimension claims on current reads; historical joins, coordinated freshness thresholds, and complete source coverage remain unknown.",
@@ -6302,7 +6302,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("canonical_activity", "commerce", "commerce_order_payment_ledger", "journey_steps", "payments"),
+                "canonicalAuthorityRefs": ("ai_execution_facts", "canonical_activity", "commerce", "commerce_order_payment_ledger", "journey_steps", "payments"),
                 "description": "Evidence-backed Web2 payment observations classified only after exact subject activity or journey-step association, tenant commerce-ledger order reference, and source payment evidence agree on a supported rail.",
                 "id": "web2_value",
                 "partialImplementationReason": "Only completed payment facts with exact campaign/entity activity or current journey-step evidence, the same tenant commerce-ledger order reference, and source transaction evidence are classified when the rail is explicitly supported. Non-USD normalization, historical association, source coverage, policy, and freshness remain unknown.",
@@ -6317,7 +6317,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("canonical_activity", "commerce", "commerce_order_payment_ledger", "currency_value_normalization", "journey_steps"),
+                "canonicalAuthorityRefs": ("ai_execution_facts", "canonical_activity", "commerce", "commerce_order_payment_ledger", "currency_value_normalization", "journey_steps"),
                 "description": "Evidence-backed Web3 native-asset payment observations with exact subject association and commerce-ledger order reference plus explicit flow, rail, chain, asset, amount, and transaction-hash evidence.",
                 "id": "web3_value",
                 "partialImplementationReason": "Only completed source payment facts with exact campaign/entity activity or current journey-step evidence, the same tenant commerce-ledger order reference, explicit crypto flow or on-chain rail, and a complete asset leg plus transaction-hash evidence are classified. Wallet identity, currency normalization, historical association, source coverage, policy, and freshness remain unknown.",

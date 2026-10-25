@@ -249,13 +249,14 @@ async def _seed_profile(world: World) -> None:
                 artifact_approval_state="promoted",
                 feature_schema_hash="schema-hash-v1",
                 feature_digest="0123456789abcdef",
+                state_schema_version="profile_future_state.v1",
                 policy_decision_id=f"policy-{prediction_id}",
                 policy_version="consent-v2",
                 actor_id="system-test",
                 generated_at=now,
                 valid_from=now - timedelta(minutes=1),
                 valid_until=now + timedelta(hours=1),
-                states=[{"state": "at_risk", "probability": 0.7}],
+                states=[{"state": "at_risk", "probability": 0.7, "rank": 1}],
                 evidence_refs=[
                     PredictionAuthorityEvidence(
                         id=f"event-{prediction_id}",
@@ -264,7 +265,7 @@ async def _seed_profile(world: World) -> None:
                         observed_at=now - timedelta(minutes=2),
                     ),
                     PredictionAuthorityEvidence(
-                        id=f"artifact-{prediction_id}",
+                        id="churn_prediction@v-production-2:" + "a" * 64,
                         type="model_output",
                         source="model_artifact_registry",
                     ),

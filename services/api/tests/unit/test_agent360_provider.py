@@ -1625,7 +1625,10 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
     assert policy_boundary.content["effectivePolicyState"] == "unknown"
     assert policy_boundary.content["decisionScope"] == "historical_action_scoped_only"
     assert policy_boundary.content["decisions"][0]["id"] == decision_claim.id
-    assert "standing_policy_boundary_not_exposed" in policy_boundary.warnings
+    assert "standing_policy_boundary_incomplete" in policy_boundary.warnings
+    assert policy_boundary.content["standingDelegationReadComplete"] is True
+    assert policy_boundary.content["standingDelegationScopes"][0]["delegationId"] == "delegation-in-1"
+    assert policy_boundary.content["standingDelegationScopes"][0]["effectiveAuthorization"] == "unknown"
     assert authority["delegationRecords"][0]["recordState"] == "active_as_reported_by_repository"
     assert authority["delegationRecords"][0]["authorizationDecision"] == "unknown"
     assert authority["delegationRecords"][0]["authorizationKind"] == "capability"
@@ -2157,7 +2160,7 @@ async def test_agent360_window_evidence_trace_claims_only_admitted_observations(
 
 
 @pytest.mark.asyncio
-async def test_agent360_policy_boundary_is_unknown_without_a_recorded_action_decision():
+async def test_agent360_policy_boundary_shows_stored_grant_without_action_decision():
     class NoActionDecisionSource(FakeSource):
         async def executions(self, tenant_id, agent_id, limit):
             rows = await super().executions(tenant_id, agent_id, limit)
@@ -2167,12 +2170,43 @@ async def test_agent360_policy_boundary_is_unknown_without_a_recorded_action_dec
     result = await Agent360Provider(NoActionDecisionSource()).project(_request(), _context())
     policy_boundary = _sections(result)["policy_boundary"]
 
-    assert policy_boundary.state == "unknown"
-    assert policy_boundary.content is None
-    assert policy_boundary.warnings == ["standing_policy_boundary_not_exposed"]
+    assert policy_boundary.state == "degraded"
+    assert policy_boundary.content["effectivePolicyState"] == "unknown"
+    assert policy_boundary.content["decisionScope"] == "no_action_scoped_decision_observed"
+    assert policy_boundary.content["decisions"] == []
+    assert policy_boundary.content["standingDelegationReadComplete"] is True
+    assert policy_boundary.content["standingDelegationScopes"][0]["scope"] == {
+        "actions": ["invoke"],
+        "resources": ["capability:tool-1"],
+    }
+    assert "standing_policy_boundary_incomplete" in policy_boundary.warnings
+    assert any(
+        claim.kind == "observed_standing_delegation_scope"
+        and "policy_boundary" in claim.domainSlotIds
+        for claim in result.claims
+    )
     assert not any(
         claim.kind == "server_recorded_delegation_decision" for claim in result.claims
     )
+
+
+@pytest.mark.asyncio
+async def test_agent360_policy_boundary_stays_unknown_without_grant_or_decision():
+    class NoPolicyEvidenceSource(FakeSource):
+        async def executions(self, tenant_id, agent_id, limit):
+            return []
+
+        async def incoming_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+            return []
+
+        async def active_incoming_delegations(self, tenant_id, canonical_agent_entity_id):
+            return Agent360ReadBatch(rows=[])
+
+    result = await Agent360Provider(NoPolicyEvidenceSource()).project(_request(), _context())
+    policy_boundary = _sections(result)["policy_boundary"]
+    assert policy_boundary.state == "unknown"
+    assert policy_boundary.content is None
+    assert policy_boundary.warnings == ["standing_policy_boundary_not_exposed"]
 
 
 @pytest.mark.asyncio

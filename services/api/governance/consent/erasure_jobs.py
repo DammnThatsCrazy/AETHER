@@ -66,7 +66,8 @@ references from raw Web3 observations, x402 lifecycle records, and risk-owned
 poisoning evidence, while honoring their storage-policy legal holds.
 
 The entity-keyed stores add ``web3_observations``,
-``x402_commerce``, and ``risk_poisoning_evidence``: these planes delete
+``x402_commerce``, ``risk_poisoning_evidence``,
+``risk_intervention_records``, and ``social_relationship_evidence_events``: these planes delete
 tenant rows with exact subject/source references, and x402 approval decisions
 are also removed when their approval is erased. Each plane returns its own row
 receipt.
@@ -500,7 +501,13 @@ async def _run_completeness_planes(
         + planes.IDENTITY_COMPONENTS
         # Keep explicit names here as well as in ENTITY_PLANES so static
         # coverage proves both newly connected stores are job-owned.
-        + ("web3_observations", "x402_commerce", "risk_poisoning_evidence")
+        + (
+            "web3_observations",
+            "x402_commerce",
+            "risk_poisoning_evidence",
+            "risk_intervention_records",
+            "social_relationship_evidence_events",
+        )
     ))
     try:
         subject = await planes.resolve_subject(tenant_id, user_id, anonymous_id)

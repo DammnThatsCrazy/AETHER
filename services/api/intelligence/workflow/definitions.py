@@ -217,10 +217,12 @@ class WorkflowDefinitionRepository:
             typed.tenant_id, [typed.record_id], subject=typed.workflow_id
         )
         if existing_rows:
+            if len(existing_rows) != 1:
+                raise ValueError("workflow_definition_revision_is_append_only")
             stored = _row_data(existing_rows[0])
             if stored is None or not _same_definition(stored, typed):
                 raise ValueError("workflow_definition_revision_is_append_only")
-            return typed
+            return WorkflowDefinitionRevision.model_validate(_domain_payload(stored))
         stored = await self._facts.upsert(
             {
                 "id": typed.record_id,
@@ -236,7 +238,7 @@ class WorkflowDefinitionRepository:
         persisted = _row_data(stored)
         if persisted is None or not _same_definition(persisted, typed):
             raise ValueError("workflow_definition_revision_is_append_only")
-        return typed
+        return WorkflowDefinitionRevision.model_validate(_domain_payload(persisted))
 
     async def read_latest(
         self, tenant_id: str, workflow_id: str
@@ -344,7 +346,11 @@ def _same_definition(raw: dict[str, Any], typed: WorkflowDefinitionRevision) -> 
         existing = WorkflowDefinitionRevision.model_validate(_domain_payload(raw))
     except Exception:  # noqa: BLE001 - malformed persisted row conflicts
         return False
-    return existing == typed and raw.get("definition_digest") == typed.definition_digest
+    return (
+        existing.model_dump(mode="json", exclude={"created_at"})
+        == typed.model_dump(mode="json", exclude={"created_at"})
+        and raw.get("definition_digest") == existing.definition_digest == typed.definition_digest
+    )
 
 
 def _domain_payload(data: dict[str, Any]) -> dict[str, Any]:

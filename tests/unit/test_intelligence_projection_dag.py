@@ -131,8 +131,8 @@ def test_optional_cycle_is_warning_not_error() -> None:
 
 
 def test_relationship_style_optional_cycle_is_warning() -> None:
-    # relationship360-style: r optional-> e while e required-> r. The DFS
-    # reports the cycle starting from the lexicographically smallest node (e).
+    # relationship360-style: r optional-> e while e required-> r. The
+    # diagnostic starts from the lexicographically smallest node (e).
     reg = _mk_reg([_entry("r", optional=["e"]), _entry("e", deps=["r"])])
     violations = validate_dependency_dag(reg)
     warnings = [v for v in violations if v.severity == "warning"]

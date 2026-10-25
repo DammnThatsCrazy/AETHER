@@ -66,7 +66,7 @@ class CampaignPopulationLinkStore(Protocol):
     async def append(self, event: dict[str, Any]) -> dict[str, Any]: ...
 
     async def latest_for_campaign(
-        self, tenant_id: str, campaign_id: str, *, limit: int
+        self, tenant_id: str, campaign_id: str, *, limit: int, effective_as_of: datetime
     ) -> tuple[list[dict[str, Any]], bool]: ...
 
 
@@ -122,20 +122,29 @@ class RepositoryCampaignPopulationLinkStore:
         return payload
 
     async def latest_for_campaign(
-        self, tenant_id: str, campaign_id: str, *, limit: int
+        self, tenant_id: str, campaign_id: str, *, limit: int, effective_as_of: datetime
     ) -> tuple[list[dict[str, Any]], bool]:
         from repositories.repos import get_pool
 
+        effective_anchor = _as_datetime(effective_as_of)
+        if effective_anchor is None:
+            raise ValueError("current campaign population read requires a timezone-aware instant")
         bounded = min(max(int(limit), 1), MAX_CAMPAIGN_POPULATION_LINKS)
         pool = await get_pool()
         if pool is None:
-            events = [
-                dict(event)
-                for (row_tenant, _), event in self._local_events.items()
-                if row_tenant == tenant_id
-                and event.get("tenant_id") == tenant_id
-                and event.get("campaign_id") == campaign_id
-            ]
+            events: list[dict[str, Any]] = []
+            for (row_tenant, _), event in self._local_events.items():
+                if (
+                    row_tenant != tenant_id
+                    or event.get("tenant_id") != tenant_id
+                    or event.get("campaign_id") != campaign_id
+                ):
+                    continue
+                effective = _as_datetime(event.get("effective_at"))
+                if effective is None:
+                    raise ValueError("campaign population event has invalid effective time")
+                if effective <= effective_anchor:
+                    events.append(dict(event))
             latest: dict[str, dict[str, Any]] = {}
             for event in events:
                 population_id = event.get("population_id")
@@ -154,14 +163,16 @@ class RepositoryCampaignPopulationLinkStore:
                               recorded_at, link_event_id
                          FROM campaign_population_link_events
                         WHERE tenant_id = $1 AND campaign_id = $2::uuid
+                          AND effective_at <= $3
                         ORDER BY population_id, effective_at DESC, recorded_at DESC,
                                  link_event_id DESC
                    )
                    SELECT payload FROM latest
                     ORDER BY effective_at DESC, recorded_at DESC, link_event_id DESC
-                    LIMIT $3""",
+                    LIMIT $4""",
                 tenant_id,
                 campaign_id,
+                effective_anchor,
                 bounded + 1,
             )
         records = [_decode_mapping(row["payload"]) for row in rows]
@@ -275,7 +286,10 @@ class CampaignPopulationLinkAuthority:
         try:
             campaign_uuid = str(UUID(campaign_id))
             rows, truncated = await self._store.latest_for_campaign(
-                tenant_id, campaign_uuid, limit=min(max(limit, 1), MAX_CAMPAIGN_POPULATION_LINKS)
+                tenant_id,
+                campaign_uuid,
+                limit=min(max(limit, 1), MAX_CAMPAIGN_POPULATION_LINKS),
+                effective_as_of=datetime.now(timezone.utc),
             )
         except Exception:  # noqa: BLE001 - source diagnostics stay private
             return CampaignPopulationLinkRead(

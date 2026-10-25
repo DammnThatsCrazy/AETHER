@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -780,6 +781,46 @@ async def test_social_contagion_and_trust_sections_keep_claim_ceiling_and_exact_
         "social_trust_edge_operator_assertion",
     }
     assert all(claim.claimState.value in {"correlated", "observed"} for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_social_assertion_reads_receive_parsed_temporal_bounds():
+    authority = FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT, "entity-a"), SocialEvidenceRead(TENANT, "entity-a")
+    )
+    provider = Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_evidence_authority=authority,
+    )
+    await provider.project(
+        _request(
+            include_sections=["social_contagion", "trust_edges"],
+            time_range=TimeRangeFilter(
+                from_="2026-10-23T00:00:00Z", to="2026-10-24T00:00:00Z"
+            ),
+            as_of="2026-10-24T12:00:00Z",
+        ),
+        _context(),
+    )
+    assert len(authority.calls) == 2
+    for _, _, bounds in authority.calls:
+        assert bounds["start"] == datetime(2026, 10, 23, tzinfo=timezone.utc)
+        assert bounds["end"] == datetime(2026, 10, 24, tzinfo=timezone.utc)
+        assert bounds["as_of"] == datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
+
+    authority.calls.clear()
+    result = await provider.project(
+        _request(
+            include_sections=["social_contagion"],
+            time_range=TimeRangeFilter(from_="not-an-instant"),
+        ),
+        _context(),
+    )
+    assert authority.calls == []
+    assertion = next(section for section in result.sections if section.id == "social_contagion")
+    assert assertion.state == "unknown"
+    assert "social_assertion_window_invalid" in assertion.warnings
 
 
 @pytest.mark.asyncio

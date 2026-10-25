@@ -116,6 +116,8 @@ class SocialEvidenceRead:
 class SocialEvidenceStore(Protocol):
     async def append(self, record: dict[str, Any]) -> dict[str, Any]: ...
 
+    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int: ...
+
     async def list_for_subject(
         self,
         tenant_id: str,
@@ -131,6 +133,51 @@ class RepositorySocialEvidenceStore:
     """Durable append-only ledger with a DB-free local/test adapter."""
 
     _local_rows: dict[tuple[str, str], dict[str, Any]] = {}
+
+    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int:
+        """Delete assertions naming this tenant's data subject in any role.
+
+        An assertion can concern the subject as a path intermediary or as the
+        authenticated annotating actor even when its indexed subject endpoint
+        belongs to someone else. The append-only trigger rejects UPDATE but
+        permits this governed DSR DELETE.
+        """
+        from repositories.repos import get_pool
+
+        exact_refs = sorted(ref for ref in refs if isinstance(ref, str) and ref)
+        if not tenant_id or not exact_refs:
+            return 0
+        pool = await get_pool()
+        if pool is None:
+            victims = [
+                key
+                for key, record in self._local_rows.items()
+                if key[0] == tenant_id
+                and record.get("tenant_id") == tenant_id
+                and _mentions_subject(record, set(exact_refs))
+            ]
+            for key in victims:
+                del self._local_rows[key]
+            return len(victims)
+
+        async with pool.acquire() as connection:
+            result = await connection.execute(
+                """DELETE FROM social_relationship_evidence_events
+                   WHERE tenant_id = $1
+                     AND (
+                       subject_entity_id = ANY($2::text[])
+                       OR source_entity_id = ANY($2::text[])
+                       OR target_entity_id = ANY($2::text[])
+                       OR payload->>'actor_id' = ANY($2::text[])
+                       OR (
+                         jsonb_typeof(payload->'path_entity_ids') = 'array'
+                         AND (payload->'path_entity_ids') ?| $2::text[]
+                       )
+                     )""",
+                tenant_id,
+                exact_refs,
+            )
+        return int(result.rsplit(" ", 1)[-1])
 
     async def append(self, record: dict[str, Any]) -> dict[str, Any]:
         from repositories.repos import get_pool
@@ -665,6 +712,21 @@ def _idempotent_record(record: dict[str, Any]) -> dict[str, Any]:
         for key, value in record.items()
         if key not in {"record_id", "recorded_at"}
     }
+
+
+def _mentions_subject(record: dict[str, Any], refs: set[str]) -> bool:
+    if any(
+        isinstance(record.get(field), str) and record[field] in refs
+        for field in (
+            "subject_entity_id",
+            "source_entity_id",
+            "target_entity_id",
+            "actor_id",
+        )
+    ):
+        return True
+    path = record.get("path_entity_ids")
+    return isinstance(path, list) and any(ref in refs for ref in path if isinstance(ref, str))
 
 
 def _decode_mapping(value: Any) -> dict[str, Any]:

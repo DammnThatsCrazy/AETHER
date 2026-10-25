@@ -793,16 +793,6 @@ def _find_cycles(edges: dict[str, set[str]]) -> list[list[str]]:
     return unique
 
 
-def _cycle_has_optional_edge(cycle: list[str], optional_edges: dict[str, set[str]]) -> bool:
-    """True if any edge of the cycle is an optional projection dependency."""
-    for i in range(len(cycle)):
-        src = cycle[i]
-        dst = cycle[(i + 1) % len(cycle)]
-        if dst in optional_edges.get(src, set()):
-            return True
-    return False
-
-
 def _format_optional_cycle_path(cycle: list[str], optional_edges: dict[str, set[str]]) -> str:
     """Render a cycle path with an ``(optional)`` marker on each optional edge.
 
@@ -819,6 +809,32 @@ def _format_optional_cycle_path(cycle: list[str], optional_edges: dict[str, set[
         else:
             segments.append(dst)
     return " -> ".join(segments)
+
+
+def _cycle_through_optional_edge(
+    source: str, target: str, edges: dict[str, set[str]]
+) -> list[str] | None:
+    """Find a shortest cycle containing one declared optional edge.
+
+    The general DFS cycle detector reports representative paths only. An
+    optional edge can therefore participate in a real cycle without appearing
+    in those paths. Search back from its target so every cyclic optional edge
+    receives a diagnostic. The registry is small, and sorted neighbors keep
+    warning paths stable across runs.
+    """
+    queue: list[list[str]] = [[target]]
+    visited = {target}
+    for path in queue:
+        node = path[-1]
+        if node == source:
+            cycle = [source, *path[:-1]]
+            first = cycle.index(min(cycle))
+            return cycle[first:] + cycle[:first]
+        for neighbor in sorted(edges.get(node, ())):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append([*path, neighbor])
+    return None
 
 
 def _pending_ids(p: dict) -> set[str]:
@@ -1056,26 +1072,30 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
             Violation("dependency_dag", "error", f"dependency cycle: {path}", cycle[0])
         )
 
-    # Union cycles (required ∪ optional) that exist only through an optional
-    # edge are benign → warning: the lazy runtime degrades missing optional deps
-    # to not_applicable, so a union cycle is never an ordering deadlock. Each
-    # warning labels the optional edge(s) with an ``(optional)`` marker.
+    # Union cycles (required ∪ optional) that exist through an optional edge
+    # are benign → warning: the lazy runtime degrades missing optional deps to
+    # not_applicable. Check each optional edge, since one representative cycle
+    # per component can conceal other participating optional edges.
     union_edges = {
         pid: set(required_edges.get(pid, ())) | set(optional_edges.get(pid, ()))
         for pid in ids
     }
-    for cycle in _find_cycles(union_edges):
-        if not _cycle_has_optional_edge(cycle, optional_edges):
-            continue  # fully-required cycle already reported as an error above
-        path = _format_optional_cycle_path(cycle, optional_edges)
-        violations.append(
-            Violation(
-                "dependency_dag",
-                "warning",
-                f"dependency cycle (via optional edge): {path}",
-                cycle[0],
+    reported_cycles: set[tuple[str, ...]] = set()
+    for source in sorted(optional_edges):
+        for target in sorted(optional_edges[source]):
+            cycle = _cycle_through_optional_edge(source, target, union_edges)
+            if cycle is None or tuple(cycle) in reported_cycles:
+                continue
+            reported_cycles.add(tuple(cycle))
+            path = _format_optional_cycle_path(cycle, optional_edges)
+            violations.append(
+                Violation(
+                    "dependency_dag",
+                    "warning",
+                    f"dependency cycle (via optional edge): {path}",
+                    cycle[0],
+                )
             )
-        )
 
     for p in projections:
         pid = p.get("id")

@@ -2107,6 +2107,12 @@ async def test_registered_workflow_definition_projects_latest_revision_without_r
     )
     await repository.register(first)
     await repository.register(second)
+    replay = WorkflowDefinitionRevision.model_validate(
+        second.model_dump(mode="json") | {"created_at": "2026-10-22T10:00:00Z"}
+    )
+    stored_replay = await repository.register(replay)
+    assert stored_replay.created_at == second.created_at
+    assert stored_replay.definition_digest == second.definition_digest
     with pytest.raises(ValueError, match="workflow_definition_revision_is_append_only"):
         await repository.register(second.model_copy(update={"name": "Mutated definition"}))
 

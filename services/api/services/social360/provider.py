@@ -2158,18 +2158,26 @@ class Social360Provider(IntelligenceProjectionProvider):
         if not callable(read_method):
             return unknown("social_assertion_authority_binding_unavailable")
 
-        start = request.timeRange.from_ if request.timeRange else None
-        end = request.timeRange.to if request.timeRange else None
+        start_raw = request.timeRange.from_ if request.timeRange else None
+        end_raw = request.timeRange.to if request.timeRange else None
         as_of_raw = request.asOf or context.asOf
-        if as_of_raw is not None:
-            as_of_raw = _parse_graph_time(as_of_raw)
+        start = _parse_graph_time(start_raw) if start_raw is not None else None
+        end = _parse_graph_time(end_raw) if end_raw is not None else None
+        as_of = _parse_graph_time(as_of_raw) if as_of_raw is not None else None
+        if (
+            (start_raw is not None and start is None)
+            or (end_raw is not None and end is None)
+            or (as_of_raw is not None and as_of is None)
+            or (start is not None and end is not None and start > end)
+        ):
+            return unknown("social_assertion_window_invalid")
         try:
             read = await read_method(
                 request.tenantId,
                 request.subject.id,
                 start=start,
                 end=end,
-                as_of=as_of_raw,
+                as_of=as_of,
                 limit=_MAX_SOCIAL_EVIDENCE_READ,
             )
         except Exception:  # noqa: BLE001 - authority failure is slot-local

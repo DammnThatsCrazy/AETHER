@@ -121,7 +121,10 @@ async def test_episode360_provider_renders_sections(wsd_flags):
         "evidence",
         "episode_context",
         "interactions",
+        "journey_attribution",
         "outcomes",
+        "risk_flags",
+        "stages",
         "state",
         "summary",
         "timeline",
@@ -159,10 +162,14 @@ async def test_episode360_provider_empty_store_is_typed_empty(wsd_flags):
     result = await provider.project(request, context)
     assert result.sections
     by_id = {section.id: section for section in result.sections}
-    assert all(
-        section.state == "empty"
-        for section in result.sections
-        if section.id != "episode_context"
-    )
+    # No episode rows proves absence only for record-backed sections. A
+    # subject graph lookup and journey/exact-episode-only authorities cannot
+    # be declared empty from the episode store alone.
+    assert {
+        section.id for section in result.sections if section.state == "empty"
+    } == {"evidence", "interactions", "outcomes", "state", "summary", "timeline"}
+    assert {
+        section.id for section in result.sections if section.state == "unknown"
+    } == {"episode_context", "journey_attribution", "risk_flags", "stages"}
     assert by_id["episode_context"].state == "unknown"
     assert by_id["episode_context"].content["coverage"] == "unknown"

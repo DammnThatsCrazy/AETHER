@@ -25,6 +25,9 @@ logger = get_logger("aether.semantic.consumer")
 _CANONICAL_CAMPAIGN_RE = re.compile(
     r"^(camp_|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$)", re.I
 )
+_NAMESPACE_STAMPED_SOURCES = frozenset(
+    {"ingestion.batch", "ingestion.outbox_relay", "ingestion.replay", "semantic.replay"}
+)
 
 # SDK event properties that commonly carry the semantic subject, in precedence
 # order. A full SemanticSubjectResolver (cross-tenant validation, review queue)
@@ -47,6 +50,28 @@ def _first(payload: dict, props: dict, *keys: str) -> Any:
             return payload[key]
         if props.get(key) is not None:
             return props[key]
+    return None
+
+
+def _trusted_source_namespace(event: Event, payload: dict[str, Any]) -> str | None:
+    """Carry only a namespace stamped by the authenticated SDK ingestion path."""
+    if (
+        event.source_service not in _NAMESPACE_STAMPED_SOURCES
+        or not event.tenant_id
+        or payload.get("tenant_id") not in (None, "", event.tenant_id)
+    ):
+        return None
+    context = payload.get("context")
+    if not isinstance(context, dict):
+        return None
+    namespace = context.get("identity_namespace")
+    if not isinstance(namespace, str) or not namespace.strip():
+        return None
+    namespace = namespace.strip()
+    if namespace == f"tenant:{event.tenant_id}":
+        return namespace
+    if namespace.startswith("site:") and namespace[5:].strip():
+        return namespace
     return None
 
 
@@ -79,6 +104,7 @@ def _to_semantic_payload(event: Event) -> dict[str, Any]:
 
     return {
         "source_event_id": payload.get("event_id") or event.event_id,
+        "source_namespace": _trusted_source_namespace(event, payload),
         "source_type": payload.get("event_type", "event"),
         "source_platform": (payload.get("context") or {}).get("platform"),
         "actor_ref": actor,

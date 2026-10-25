@@ -29,12 +29,14 @@ def upgrade() -> None:
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-        CREATE INDEX IF NOT EXISTS ix_risk_poisoning_evidence_tenant_subject_time
+        -- The read orders by recorded_at::timestamptz for chronological
+        -- correctness. PostgreSQL cannot index that JSONB text cast because
+        -- text-to-timestamptz depends on the session TimeZone setting.
+        CREATE INDEX IF NOT EXISTS ix_risk_poisoning_evidence_tenant_subject
             ON risk_poisoning_evidence (
                 tenant_id,
                 (data->>'subject_kind'),
                 (data->>'subject_id'),
-                ((data->>'recorded_at')::timestamptz) DESC,
                 id ASC
             );
         CREATE INDEX IF NOT EXISTS ix_risk_poisoning_evidence_tenant_source_subject

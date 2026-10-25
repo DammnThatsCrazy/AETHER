@@ -102,6 +102,7 @@ WEB3_OBSERVATIONS_COMPONENT = "web3_observations"
 X402_COMMERCE_COMPONENT = "x402_commerce"
 RISK_POISONING_EVIDENCE_COMPONENT = "risk_poisoning_evidence"
 RISK_INTERVENTION_RECORDS_COMPONENT = "risk_intervention_records"
+SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT = "social_relationship_evidence_events"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -1441,6 +1442,35 @@ async def erase_risk_intervention_records_plane(
     }
 
 
+async def erase_social_relationship_evidence_plane(
+    subject: ErasureSubject,
+) -> dict[str, Receipt]:
+    """Erase exact tenant social assertions naming a subject in any role."""
+    from shared.storage.lifecycle import StorageLifecycle
+    from services.social360.evidence_authority import RepositorySocialEvidenceStore
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(
+            subject.tenant_id, SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT, ref
+        )
+        if hold is not None:
+            return {
+                SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT: Receipt(
+                    status="skipped_legal_hold",
+                    policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                    blocked_reason=str(hold.get("reason") or "legal hold"),
+                )
+            }
+
+    deleted = await RepositorySocialEvidenceStore().erase_subject_refs(
+        subject.tenant_id, set(subject.refs)
+    )
+    return {
+        SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT: Receipt(records_impacted=deleted)
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Plane registry (execution order)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1472,6 +1502,11 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
         "risk_intervention_records",
         (RISK_INTERVENTION_RECORDS_COMPONENT,),
         erase_risk_intervention_records_plane,
+    ),
+    (
+        "social_relationship_evidence_events",
+        (SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT,),
+        erase_social_relationship_evidence_plane,
     ),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )

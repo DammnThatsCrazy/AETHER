@@ -28,6 +28,7 @@ from repositories.lake import (
     gold_market, gold_onchain, gold_identity,
     run_quality_checks,
 )
+from .anomaly_alerts import verified_anomaly_alert_dimensions
 
 logger = get_logger("aether.service.lake")
 router = APIRouter(prefix="/v1/lake", tags=["Data Lake"])
@@ -208,19 +209,33 @@ async def audit_source_tag(domain: str, source_tag: str, request: Request):
 
 @router.post("/materialize")
 async def materialize_gold(body: MaterializeRequest, request: Request):
-    """Write a Gold metric/feature/highlight."""
+    """Write a Gold metric/feature/highlight.
+
+    An identity anomaly alert must bind its source event to an exact persisted
+    RiskSignal before materialization. The caller selects the alert; this route
+    verifies its evidence reference rather than deriving an alert decision.
+    """
     request.state.tenant.require_permission("write")
 
     repo = _GOLD_REPOS.get(body.domain)
     if not repo:
         raise BadRequestError(f"Unknown Gold domain: {body.domain}")
 
+    dimensions = body.dimensions
+    if body.domain == "identity" and body.metric_name == "anomaly_alert":
+        dimensions = await verified_anomaly_alert_dimensions(
+            tenant_id=request.state.tenant.tenant_id,
+            subject_kind=body.entity_type,
+            subject_id=body.entity_id,
+            dimensions=body.dimensions,
+        )
+
     result = await repo.materialize(
         metric_name=body.metric_name,
         entity_id=body.entity_id,
         entity_type=body.entity_type,
         value=body.value,
-        dimensions=body.dimensions,
+        dimensions=dimensions,
         source_tag=body.source_tag,
         tenant_id=request.state.tenant.tenant_id,
     )

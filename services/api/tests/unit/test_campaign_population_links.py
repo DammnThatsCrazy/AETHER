@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -136,6 +136,51 @@ async def test_latest_population_event_replaces_old_link_and_replays_idempotentl
     assert len(read.rows) == 1
     assert read.rows[0]["link_event_id"] == unlinked["link_event_id"]
     assert read.rows[0]["event_type"] == "unlinked"
+
+
+@pytest.mark.asyncio
+async def test_future_effective_unlink_does_not_replace_current_association(monkeypatch):
+    import repositories.repos
+
+    async def no_database_pool():
+        return None
+
+    monkeypatch.setattr(repositories.repos, "get_pool", no_database_pool)
+    authority = _authority()
+    now = datetime.now(timezone.utc)
+    await authority.record(
+        "tenant-a",
+        CAMPAIGN_ID,
+        _event(source_event_id="link-now").model_copy(
+            update={"effective_at": now - timedelta(minutes=1)}
+        ),
+        actor_id="operator-1",
+        actor_type="tenant_user",
+    )
+    future_unlink = now + timedelta(days=1)
+    await authority.record(
+        "tenant-a",
+        CAMPAIGN_ID,
+        _event(event_type="unlinked", source_event_id="unlink-tomorrow").model_copy(
+            update={"effective_at": future_unlink}
+        ),
+        actor_id="operator-1",
+        actor_type="tenant_user",
+    )
+
+    current = await authority.read_current("tenant-a", CAMPAIGN_ID)
+    assert current.available is True
+    assert len(current.rows) == 1
+    assert current.rows[0]["event_type"] == "linked"
+
+    scheduled, truncated = await authority._store.latest_for_campaign(
+        "tenant-a",
+        CAMPAIGN_ID,
+        limit=100,
+        effective_as_of=future_unlink + timedelta(seconds=1),
+    )
+    assert truncated is False
+    assert scheduled[0]["event_type"] == "unlinked"
 
 
 @pytest.mark.asyncio

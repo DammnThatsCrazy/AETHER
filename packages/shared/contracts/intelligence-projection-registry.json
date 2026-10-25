@@ -246,7 +246,9 @@
         "agent_entities",
         "agent_entity",
         "agent_executions",
+        "delegations",
         "economic_facts",
+        "entities",
         "evidence",
         "graph",
         "identity",
@@ -3148,11 +3150,13 @@
         {
           "id": "policy_boundary",
           "requirement": "required",
-          "description": "Recorded execution-scoped policy decisions; standing agent policy and a new action decision remain unknown.",
-          "partialImplementationReason": "only_stored_execution_time_decisions_are_available_and_standing_policy_is_not_exposed",
+          "description": "Exact stored active delegation scopes and recorded execution-scoped policy decisions; complete standing agent policy and a new action decision remain unknown.",
+          "partialImplementationReason": "current_repository_active_delegation_scopes_are_bounded_and_may_lag_revocation; non_delegation_policy_historical_replay_and_new_action_authorization_remain_unknown",
           "canonicalAuthorityRefs": [
             "agent_access",
             "agent_executions",
+            "delegations",
+            "entities",
             "identity"
           ],
           "projectionBindings": [
@@ -3415,7 +3419,9 @@
           "ai_execution_facts",
           "commerce",
           "communication_facts",
+          "delegations",
           "economic_facts",
+          "entities",
           "evidence",
           "execution_facts",
           "graph",
@@ -6484,11 +6490,11 @@
               ]
             }
           ],
-          "partialImplementationReason": "Gold alerts with explicit signal and source-event references join exact tenant/subject RiskSignal rows and matching event evidence; legacy alerts remain metadata only. No registered Gold alert writer supplies the link triplet yet, and the underlying event record, detector coverage, cause, severity, and source timestamp remain unverified.",
+          "partialImplementationReason": "Authenticated Gold alert materialization now verifies an exact tenant/subject RiskSignal and one selected event EvidenceRef before writing the link triplet; legacy alerts remain metadata only. This is a caller-selected alert path, not an automatic detector producer. The underlying event record, detector coverage, cause, severity, and source timestamp remain unverified.",
           "unboundCanonicalAuthorityRefs": [
             "observations"
           ],
-          "authorityGapReason": "A matching event EvidenceRef does not verify the source observation record or establish producer coverage; no registered Gold alert writer currently supplies the explicit link triplet."
+          "authorityGapReason": "A matching event EvidenceRef does not verify the source observation record or establish automatic detector producer coverage."
         },
         {
           "id": "policy_flags",
@@ -7164,6 +7170,7 @@
           "requirement": "required",
           "description": "Evidence-backed Web2 payment observations classified only after exact subject activity or journey-step association, tenant commerce-ledger order reference, and source payment evidence agree on a supported rail.",
           "canonicalAuthorityRefs": [
+            "ai_execution_facts",
             "canonical_activity",
             "commerce",
             "commerce_order_payment_ledger",
@@ -7191,6 +7198,7 @@
           "requirement": "required",
           "description": "Evidence-backed Web3 native-asset payment observations with exact subject association and commerce-ledger order reference plus explicit flow, rail, chain, asset, amount, and transaction-hash evidence.",
           "canonicalAuthorityRefs": [
+            "ai_execution_facts",
             "canonical_activity",
             "commerce",
             "commerce_order_payment_ledger",
@@ -7375,6 +7383,7 @@
           "requirement": "required",
           "description": "Financial risk linked to economic facts by exact subject.",
           "canonicalAuthorityRefs": [
+            "ai_execution_facts",
             "risk_outputs",
             "economic_facts"
           ],

@@ -67,12 +67,14 @@ def upgrade() -> None:
                     AND COALESCE(length(btrim(data->>'decision_record_id')), 0) > 0)
             )
         );
-        CREATE INDEX IF NOT EXISTS ix_risk_intervention_subject_recorded
+        -- The repository casts recorded_at for chronological reads. A JSONB
+        -- text-to-timestamptz cast is STABLE, so only the immutable subject
+        -- filters belong in an expression index.
+        CREATE INDEX IF NOT EXISTS ix_risk_intervention_subject
             ON risk_intervention_records (
                 tenant_id,
                 (data->>'subject_kind'),
                 (data->>'subject_id'),
-                ((data->>'recorded_at')::timestamptz) DESC,
                 id ASC
             );
         CREATE INDEX IF NOT EXISTS ix_risk_intervention_id
@@ -106,7 +108,7 @@ def downgrade() -> None:
             ON risk_intervention_records;
         DROP FUNCTION IF EXISTS reject_risk_intervention_update();
         DROP INDEX IF EXISTS ix_risk_intervention_id;
-        DROP INDEX IF EXISTS ix_risk_intervention_subject_recorded;
+        DROP INDEX IF EXISTS ix_risk_intervention_subject;
         DROP TABLE IF EXISTS risk_intervention_records;
         """
     )
