@@ -1049,3 +1049,107 @@ async def test_risk_slot_rejects_cross_tenant_records_and_caps_current_reads() -
     assert capped_risk.state == "degraded"
     assert capped_risk.content["truncated"] is True
     assert len(capped_risk.content["signals"]) == 100
+
+
+@pytest.mark.asyncio
+async def test_exact_silver_exposure_and_cart_observations_require_catalog_subject() -> None:
+    from ingestion.silver.projectors.commerce_flow_projector import CommerceFlowProjector
+    from ingestion.silver.projectors.exposure_projector import ExposureProjector
+    from ingestion.silver.writer import SilverFactWriter, reset_local_tables
+
+    reset_local_tables()
+    try:
+        catalog = await _catalog_with_product()
+        exposure = ExposureProjector().project(
+            {
+                "type": "content_impression",
+                "messageId": "ea828ed0-cd70-4cab-9c5b-48616904c1d3",
+                "timestamp": "2026-10-20T10:15:00+00:00",
+                "context": {"tenantId": TENANT},
+                "properties": {
+                    "contentType": "product",
+                    "contentId": "prod-1",
+                    "secret": "must-not-leak",
+                },
+            }
+        )
+        cart = CommerceFlowProjector().project(
+            {
+                "type": "cart_item_added",
+                "messageId": "556a6796-cfef-4118-a07c-13c75727397c",
+                "timestamp": "2026-10-20T11:00:00+00:00",
+                "context": {"tenantId": TENANT},
+                "properties": {
+                    "productId": "prod-1",
+                    "cartId": "cart-1",
+                    "secret": "must-not-leak",
+                },
+            }
+        )
+        assert exposure is not None and cart is not None
+        exposure.rows[0]["received_at"] = "2026-10-20T11:01:00+00:00"
+        cart.rows[0]["received_at"] = "2026-10-20T11:02:00+00:00"
+        assert cart.rows[0]["payload"] == {}
+        assert await SilverFactWriter().persist([exposure, cart]) == 2
+
+        request = _request(
+            subject_kind="product",
+            subject_id="prod-1",
+            includeSections=["exposures", "cart_checkout", "evidence_trace"],
+        )
+        result = await Commerce360Provider(FakeCommerceSource(), catalog).project(
+            request, _context(request)
+        )
+        sections = {section.id: section for section in result.sections}
+        for slot in ("exposures", "cart_checkout"):
+            assert sections[slot].state == "degraded"
+            assert len(sections[slot].content["sourceObservedEvents"]) == 1
+            assert "must-not-leak" not in str(sections[slot].content)
+        assert len([claim for claim in result.claims if claim.kind == "commerce_source_observation"]) == 2
+        assert len(sections["evidence_trace"].content["evidence"]) >= 2
+
+        evidence_only = request.model_copy(update={"includeSections": ["evidence_trace"]})
+        evidence_frame = await Commerce360Provider(FakeCommerceSource(), catalog).project(
+            evidence_only, _context(evidence_only)
+        )
+        assert [section.id for section in evidence_frame.sections] == ["evidence_trace"]
+        assert len(evidence_frame.sections[0].content["evidence"]) >= 2
+
+        historical = _request(
+            subject_kind="product",
+            subject_id="prod-1",
+            asOf="2026-10-20T10:30:00+00:00",
+            includeSections=["exposures", "cart_checkout"],
+        )
+        old_result = await Commerce360Provider(FakeCommerceSource(), catalog).project(
+            historical, _context(historical)
+        )
+        assert all(section.state == "unknown" for section in old_result.sections)
+
+        unknown_subject = _request(
+            subject_kind="product",
+            subject_id="other-product",
+            includeSections=["exposures", "cart_checkout"],
+        )
+        no_join = await Commerce360Provider(FakeCommerceSource(), catalog).project(
+            unknown_subject, _context(unknown_subject)
+        )
+        assert all(section.state == "unknown" for section in no_join.sections)
+    finally:
+        reset_local_tables()
+
+
+def test_cart_checkout_projector_rejects_missing_or_ambiguous_catalog_keys() -> None:
+    from ingestion.silver.projectors.commerce_flow_projector import CommerceFlowProjector
+
+    projector = CommerceFlowProjector()
+    event = {
+        "type": "checkout_started",
+        "messageId": "31fbc534-e571-4716-8d0a-5c7cc61a10a1",
+        "timestamp": "2026-10-20T11:00:00+00:00",
+        "context": {"tenantId": TENANT},
+        "properties": {},
+    }
+    assert projector.project(event).skipped is True
+    event["properties"] = {"productId": "prod-1", "offerId": "offer-1"}
+    assert projector.project(event).skipped is True

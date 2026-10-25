@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -4621,3 +4622,68 @@ async def test_execution_provider_surfaces_agent_episode_context_and_historical_
     assert historical_section.content["reason"] == (
         "temporal_anchor_not_reconstructable_from_current_sources"
     )
+
+
+@pytest.mark.asyncio
+async def test_entity_observed_execution_read_exposes_owner_roster_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import actions.agent.deployments as deployment_module
+    import actions.agent.identity_resolution as identity_module
+    import actions.agent_marketplace.authority as authority_module
+    import actions.agent_marketplace.identity_binding as binding_module
+    import dependencies.providers as providers_module
+    import repositories.repos as repos_module
+
+    owner_id = "owner-with-many-agents"
+    agent_ids = [f"agent-{index}" for index in range(201)]
+
+    class AgentConfigs:
+        async def list_for_owner(self, owner_entity_id, *, limit, tenant_id):
+            assert owner_entity_id == owner_id
+            assert limit == 201
+            assert tenant_id == TENANT
+            return [
+                {"tenant_id": TENANT, "owner_entity_id": owner_id, "agent_id": agent_id}
+                for agent_id in agent_ids
+            ]
+
+    class Analytics:
+        def __init__(self, cache):
+            pass
+
+        async def query_silver(self, table, filters, *, limit):
+            assert filters == {"tenant_id": TENANT}
+            return []
+
+    async def resolve(tenant_id, source_agent_ids, **kwargs):
+        assert tenant_id == TENANT
+        assert len(source_agent_ids) == 200
+        return SimpleNamespace(
+            rows=[
+                {"agent_id": agent_id, "canonical_agent_entity_id": agent_id}
+                for agent_id in source_agent_ids
+            ],
+            scope_mismatch=False,
+            truncated=False,
+        )
+
+    monkeypatch.setattr(repos_module, "AgentConfigRepository", AgentConfigs)
+    monkeypatch.setattr(repos_module, "AnalyticsRepository", Analytics)
+    monkeypatch.setattr(identity_module, "resolve_agent_identities", resolve)
+    monkeypatch.setattr(deployment_module, "get_deployment_repository", lambda: object())
+    monkeypatch.setattr(binding_module, "AgentDeploymentIdentityBindingRepository", object)
+    monkeypatch.setattr(repos_module, "EntityRepository", object)
+    monkeypatch.setattr(authority_module, "AgentRunAuthorityResolver", object)
+    monkeypatch.setattr(providers_module, "get_cache", lambda: object())
+
+    result = await RepositoryExecution360Source().observed_facts(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="entity", id=owner_id),
+        limit=10,
+    )
+
+    assert result.available is True
+    assert result.scope_known is False
+    assert result.truncated is True
+    assert result.reason == "owner_agent_roster_read_truncated"

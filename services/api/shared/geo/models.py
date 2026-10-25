@@ -121,3 +121,9 @@ class LocationFact(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)  # canonical EvidenceRef ids
     precision_state: str = "full"  # 'full' | 'precision_reduced' | 'suppressed'
     schema_version: Optional[str] = None
+    # Canonical transformation lineage is separate from the LocationFact
+    # payload schema version. The write authority stamps normalization time.
+    normalization_version: Optional[str] = None
+    validation_version: Optional[str] = None
+    raw_record_ref: Optional[str] = None
+    normalization_timestamp: Optional[datetime] = None

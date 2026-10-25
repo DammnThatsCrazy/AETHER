@@ -1,8 +1,9 @@
 """Read-only Campaign360 projection over canonical campaign measurements.
 
 Campaign360 projects tenant-scoped campaign registry facts, campaign
-touchpoints, and active attribution-credit rows. Journey/episode, communication,
-population, economic, and policy/authority dimensions remain sibling-owned and
+touchpoints, active attribution-credit rows, canonical conversions, and
+bounded exact campaign spend observations. Journey/episode, communication,
+broader population, and policy/authority dimensions remain sibling-owned and
 are reported as unknown until their canonical providers are composed. This
 module does not resolve campaign aliases, write graph state, or turn missing
 measurement into a zero.
@@ -13,6 +14,7 @@ lazy, and ``register_provider`` is an explicit runtime wiring seam.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -37,6 +39,11 @@ from shared.intelligence_projections.generated_registry import (
 )
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
+from journeys.campaign.campaign_population_links import (
+    CampaignPopulationLinkAuthority,
+    CampaignPopulationLinkRead,
+    MAX_CAMPAIGN_POPULATION_LINKS,
+)
 
 
 PROJECTION_ID = "campaign360"
@@ -131,6 +138,7 @@ DEFAULT_PAGE_LIMIT = 100
 MAX_ASSOCIATED_CONTEXT_ROWS = 100
 MAX_CAMPAIGN_ANOMALIES = 100
 MAX_CAMPAIGN_SIGNAL_EVENTS = 100
+MAX_CAMPAIGN_PERFORMANCE_SPEND_ROWS = 500
 
 _JOURNEY_SOURCE = (
     "services/api/journeys/measurement/repositories/journey_repo.py:journey_versions"
@@ -173,12 +181,31 @@ class AttributionRead:
 
 
 @dataclass(frozen=True)
+class ConversionRecordRead:
+    """One exact canonical conversion lookup, scoped by tenant and ID."""
+
+    record: Optional[dict[str, Any]]
+    available: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class CampaignAnomalyRead:
     """Exact campaign-scoped targeting findings with explicit completeness."""
 
     rows: list[dict[str, Any]]
     available: bool
     complete: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CampaignSpendRead:
+    """Bounded exact campaign spend rows and explicit source completeness."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    complete: bool = False
     reason: Optional[str] = None
 
 
@@ -209,6 +236,10 @@ class Campaign360Source(Protocol):
         end: Optional[datetime],
     ) -> AttributionRead: ...
 
+    async def conversion_record(
+        self, tenant_id: str, conversion_id: str
+    ) -> ConversionRecordRead: ...
+
     async def journeys_for_campaign(
         self,
         tenant_id: str,
@@ -228,6 +259,20 @@ class Campaign360Source(Protocol):
     async def signal_events(
         self, tenant_id: str, event_ids: list[str], *, limit: int
     ) -> RowsRead: ...
+
+    async def campaign_population_links(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignPopulationLinkRead: ...
+
+    async def campaign_spend(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        start: Optional[datetime],
+        end: Optional[datetime],
+        limit: int,
+    ) -> CampaignSpendRead: ...
 
 
 class RepositoryCampaign360Source:
@@ -321,6 +366,29 @@ class RepositoryCampaign360Source:
             available=True,
             data_quality=_string_or_none(summary.get("data_quality")),
         )
+
+    async def conversion_record(
+        self, tenant_id: str, conversion_id: str
+    ) -> ConversionRecordRead:
+        """Read a canonical conversion by its exact tenant/conversion key.
+
+        Campaign membership is deliberately supplied by the separately
+        validated active attribution credit. This method does not resolve a
+        campaign alias or infer a campaign from profile/cluster identifiers.
+        """
+        try:
+            from journeys.measurement.repositories.conversion_repo import (
+                ConversionRepository,
+            )
+
+            record = await ConversionRepository().get(tenant_id, conversion_id)
+        except Exception:  # noqa: BLE001 - source failure is a typed state
+            return ConversionRecordRead(
+                record=None,
+                available=False,
+                reason="conversion_repository_unavailable",
+            )
+        return ConversionRecordRead(record=record, available=True)
 
     async def journeys_for_campaign(
         self,
@@ -449,6 +517,54 @@ class RepositoryCampaign360Source:
         except Exception:  # noqa: BLE001 - event authority failure is slot-local
             return RowsRead([], available=False, reason="campaign_event_authority_unavailable")
 
+    async def campaign_population_links(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignPopulationLinkRead:
+        """Read latest exact tenant/campaign population association events."""
+        return await CampaignPopulationLinkAuthority().read_current(
+            tenant_id,
+            campaign_id,
+            limit=min(max(limit, 1), MAX_CAMPAIGN_POPULATION_LINKS),
+        )
+
+    async def campaign_spend(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        start: Optional[datetime],
+        end: Optional[datetime],
+        limit: int,
+    ) -> CampaignSpendRead:
+        """Read bounded spend facts by their canonical tenant/campaign keys.
+
+        The spend ledger has no coverage watermark, so its rows are observed
+        facts and cannot attest that a period's campaign spend is complete.
+        """
+        try:
+            from journeys.measurement.repositories.spend_repo import SpendRepository
+
+            rows = await SpendRepository().list_by_campaign(
+                tenant_id,
+                campaign_id,
+                period_start=start,
+                period_end=end,
+                limit=min(max(limit, 1), MAX_CAMPAIGN_PERFORMANCE_SPEND_ROWS + 1),
+            )
+        except Exception:  # noqa: BLE001 - economic source failure is slot-local
+            return CampaignSpendRead(
+                rows=[],
+                available=False,
+                complete=False,
+                reason="campaign_spend_repository_unavailable",
+            )
+        return CampaignSpendRead(
+            rows=list(rows),
+            available=True,
+            complete=False,
+            reason="campaign_spend_coverage_watermark_unavailable",
+        )
+
 
 @dataclass(frozen=True)
 class _TemporalScope:
@@ -566,6 +682,315 @@ def _scalar(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _scalar(item) for key, item in value.items()}
     return str(value)
+
+
+def _parse_temporal_value(value: Any) -> Optional[datetime]:
+    """Parse an aware repository timestamp without inventing a timezone."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _finite_decimal(value: Any) -> Optional[Decimal]:
+    if value is None:
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except Exception:  # noqa: BLE001 - malformed numeric is unknown, not zero
+        return None
+    return parsed if parsed.is_finite() else None
+
+
+def _currency_code(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    code = value.strip().upper()
+    return code if len(code) == 3 and code.isascii() and code.isalpha() else None
+
+
+def _provenance_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+        return decoded if isinstance(decoded, dict) else {}
+    return {}
+
+
+def _conversion_monetary_state(record: dict[str, Any]) -> str:
+    """Whether canonical conversion amounts have a known normalized currency."""
+    source_currency = _currency_code(record.get("currency"))
+    normalized_currency = _currency_code(record.get("normalized_currency"))
+    if source_currency is None or normalized_currency is None:
+        return "unknown"
+    if source_currency == normalized_currency:
+        return "normalized"
+    provenance = _provenance_mapping(record.get("provenance"))
+    fx = provenance.get("fx_conversion")
+    if not isinstance(fx, dict) or fx.get("priced") is not True:
+        return "unpriced"
+    rate = _finite_decimal(record.get("exchange_rate"))
+    evidence_rate = _finite_decimal(fx.get("exchange_rate"))
+    if rate is None or rate <= 0 or evidence_rate is None or evidence_rate != rate:
+        return "unpriced"
+    return "normalized"
+
+
+def _normalized_spend_amount(
+    row: dict[str, Any],
+) -> Optional[tuple[Decimal, str]]:
+    """Return a spend amount only when its currency conversion is evidenced."""
+    amount = _finite_decimal(row.get("total_cost"))
+    billing_currency = _currency_code(row.get("billing_currency"))
+    normalized_currency = _currency_code(row.get("normalized_currency"))
+    if (
+        amount is None
+        or billing_currency is None
+        or normalized_currency is None
+    ):
+        return None
+    if billing_currency == normalized_currency:
+        return amount, normalized_currency
+    provenance = _provenance_mapping(row.get("provenance"))
+    fx = provenance.get("fx_conversion")
+    if not isinstance(fx, dict) or fx.get("priced") is not True:
+        return None
+    rate = _finite_decimal(row.get("exchange_rate"))
+    evidence_rate = _finite_decimal(fx.get("exchange_rate"))
+    if rate is None or rate <= 0 or evidence_rate is None or evidence_rate != rate:
+        return None
+    return amount * rate, normalized_currency
+
+
+def _safe_evidence_ref(value: Any) -> Optional[EvidenceRef]:
+    try:
+        return EvidenceRef.model_validate(value)
+    except Exception:  # noqa: BLE001 - malformed evidence is not projected
+        return None
+
+
+def _dedupe_evidence(refs: list[EvidenceRef]) -> list[EvidenceRef]:
+    unique: dict[tuple[str, str], EvidenceRef] = {}
+    for ref in refs:
+        unique[(ref.source, ref.id)] = ref
+    return list(unique.values())
+
+
+def _refs_from_wire(values: Any) -> list[EvidenceRef]:
+    if not isinstance(values, list):
+        return []
+    return _dedupe_evidence(
+        [ref for raw in values if (ref := _safe_evidence_ref(raw)) is not None]
+    )
+
+
+def _campaign_attributed_outcome(
+    *,
+    slot_states: dict[str, dict[str, Any]],
+    credit_items: list[dict[str, Any]],
+    conversion_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Summarize only complete active credits joined to exact conversions."""
+    attribution = slot_states.get(SLOT_ATTRIBUTION, {})
+    conversions_slot = slot_states.get(SLOT_CONVERSIONS, {})
+    base_metric = {"state": "unknown", "byCurrency": {}, "reason": None}
+    if attribution.get("state") == "empty":
+        return {
+            "state": "empty",
+            "conversionCount": 0,
+            "creditCount": 0,
+            "grossRevenue": {**base_metric, "reason": "no_active_campaign_attribution_credits"},
+            "netRevenue": {**base_metric, "reason": "no_active_campaign_attribution_credits"},
+            "grossEvidenceRefsByCurrency": {},
+            "netEvidenceRefsByCurrency": {},
+            "reason": "no_active_campaign_attribution_credits",
+        }
+    if attribution.get("state") != "available" or attribution.get("qualityState") != "complete":
+        reason = "active_campaign_attribution_incomplete"
+        return {
+            "state": "unknown",
+            "conversionCount": 0,
+            "creditCount": len(credit_items),
+            "grossRevenue": {**base_metric, "reason": reason},
+            "netRevenue": {**base_metric, "reason": reason},
+            "grossEvidenceRefsByCurrency": {},
+            "netEvidenceRefsByCurrency": {},
+            "reason": reason,
+        }
+    if conversions_slot.get("state") != "available":
+        reason = "canonical_campaign_conversion_join_incomplete"
+        return {
+            "state": "unknown",
+            "conversionCount": len(conversion_items),
+            "creditCount": len(credit_items),
+            "grossRevenue": {**base_metric, "reason": reason},
+            "netRevenue": {**base_metric, "reason": reason},
+            "grossEvidenceRefsByCurrency": {},
+            "netEvidenceRefsByCurrency": {},
+            "reason": reason,
+        }
+    if not credit_items:
+        reason = "active_attribution_credit_amounts_unavailable"
+        return {
+            "state": "unknown",
+            "conversionCount": len(conversion_items),
+            "creditCount": 0,
+            "grossRevenue": {**base_metric, "reason": reason},
+            "netRevenue": {**base_metric, "reason": reason},
+            "grossEvidenceRefsByCurrency": {},
+            "netEvidenceRefsByCurrency": {},
+            "reason": reason,
+        }
+
+    conversions: dict[str, dict[str, Any]] = {}
+    for item in conversion_items:
+        conversion = item.get("conversion") if isinstance(item, dict) else None
+        if not isinstance(conversion, dict):
+            continue
+        conversion_id = conversion.get("conversionId")
+        if isinstance(conversion_id, str) and conversion_id:
+            if conversion_id in conversions:
+                reason = "canonical_conversion_join_conflicted"
+                return {
+                    "state": "unknown",
+                    "conversionCount": len(conversions),
+                    "creditCount": len(credit_items),
+                    "grossRevenue": {**base_metric, "reason": reason},
+                    "netRevenue": {**base_metric, "reason": reason},
+                    "grossEvidenceRefsByCurrency": {},
+                    "netEvidenceRefsByCurrency": {},
+                    "reason": reason,
+                }
+            conversions[conversion_id] = conversion
+
+    credit_ids: set[str] = set()
+    gross: dict[str, Decimal] = {}
+    net: dict[str, Decimal] = {}
+    evidence_by_currency: dict[str, list[EvidenceRef]] = {}
+    gross_complete = True
+    net_complete = True
+    stale = False
+    conversion_ids: set[str] = set()
+    for item in credit_items:
+        credit = item.get("credit") if isinstance(item, dict) else None
+        if not isinstance(credit, dict):
+            gross_complete = net_complete = False
+            continue
+        credit_id = credit.get("creditId")
+        conversion_id = credit.get("conversionId")
+        if not isinstance(credit_id, str) or not credit_id or credit_id in credit_ids:
+            reason = "active_attribution_credit_identity_conflicted"
+            return {
+                "state": "unknown",
+                "conversionCount": len(conversion_ids),
+                "creditCount": len(credit_items),
+                "grossRevenue": {**base_metric, "reason": reason},
+                "netRevenue": {**base_metric, "reason": reason},
+                "reason": reason,
+            }
+        credit_ids.add(credit_id)
+        if not isinstance(conversion_id, str) or conversion_id not in conversions:
+            gross_complete = net_complete = False
+            continue
+        conversion_ids.add(conversion_id)
+        conversion = conversions[conversion_id]
+        currency = _currency_code(conversion.get("normalizedCurrency"))
+        if currency is None or conversion.get("conversionMonetaryState") != "normalized":
+            gross_complete = net_complete = False
+            continue
+        currency_refs = evidence_by_currency.setdefault(currency, [])
+        currency_refs.extend(_refs_from_wire(item.get("evidenceRefs", [])))
+        conversion_item = next(
+            (
+                candidate
+                for candidate in conversion_items
+                if isinstance(candidate, dict)
+                and isinstance(candidate.get("conversion"), dict)
+                and candidate["conversion"].get("conversionId") == conversion_id
+            ),
+            None,
+        )
+        if conversion_item is not None:
+            currency_refs.extend(_refs_from_wire(conversion_item.get("evidenceRefs", [])))
+        run_completed = _parse_temporal_value(credit.get("runCompletedAt"))
+        adjusted_at = _parse_temporal_value(conversion.get("adjustedAt"))
+        if run_completed is None:
+            gross_complete = net_complete = False
+            stale = True
+            continue
+        if adjusted_at is not None and adjusted_at > run_completed:
+            stale = True
+            gross_complete = net_complete = False
+            continue
+        gross_amount = _finite_decimal(credit.get("attributedGrossRevenue"))
+        net_amount = _finite_decimal(credit.get("attributedNetRevenue"))
+        if gross_amount is None:
+            gross_complete = False
+        else:
+            gross[currency] = gross.get(currency, Decimal("0")) + gross_amount
+        if net_amount is None:
+            net_complete = False
+        else:
+            net[currency] = net.get(currency, Decimal("0")) + net_amount
+
+    if len(conversion_ids) != len(conversions):
+        gross_complete = net_complete = False
+    gross_state = "available" if gross_complete and gross else "unknown"
+    net_state = "available" if net_complete and net else "unknown"
+    gross_reason = None if gross_state == "available" else (
+        "attribution_run_stale_to_conversion" if stale else "attributed_gross_amount_incomplete"
+    )
+    net_reason = None if net_state == "available" else (
+        "attribution_run_stale_to_conversion" if stale else "attributed_net_amount_incomplete"
+    )
+    state = "available" if gross_state == "available" or net_state == "available" else "unknown"
+    reason = None if state == "available" else gross_reason or net_reason
+    return {
+        "state": state,
+        "conversionCount": len(conversion_ids),
+        "creditCount": len(credit_items),
+        "grossRevenue": {
+            "state": gross_state,
+            "byCurrency": {currency: format(amount, "f") for currency, amount in sorted(gross.items())}
+            if gross_state == "available"
+            else {},
+            "reason": gross_reason,
+        },
+        "netRevenue": {
+            "state": net_state,
+            "byCurrency": {currency: format(amount, "f") for currency, amount in sorted(net.items())}
+            if net_state == "available"
+            else {},
+            "reason": net_reason,
+        },
+        "grossEvidenceRefsByCurrency": {
+            currency: [
+                ref.model_dump(by_alias=True, exclude_none=True)
+                for ref in _dedupe_evidence(refs)
+            ]
+            for currency, refs in evidence_by_currency.items()
+        },
+        "netEvidenceRefsByCurrency": {
+            currency: [
+                ref.model_dump(by_alias=True, exclude_none=True)
+                for ref in _dedupe_evidence(refs)
+            ]
+            for currency, refs in evidence_by_currency.items()
+        },
+        "reason": reason,
+    }
 
 
 def _string_or_none(value: Any) -> Optional[str]:
@@ -706,6 +1131,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "reason": "campaign_signal_source_join_unavailable",
         }
         credit_items: list[dict[str, Any]] = []
+        conversion_items: list[dict[str, Any]] = []
         campaign_anomaly_context: dict[str, Any] = {
             "state": "unknown",
             "subject": {"kind": subject.kind, "id": subject.id},
@@ -717,6 +1143,26 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             },
             "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
             "reason": "campaign_anomaly_authority_not_connected",
+        }
+        campaign_population_context: dict[str, Any] = {
+            "state": "unknown",
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "associations": [],
+            "dimensionStates": {
+                "explicitPopulationLinks": "unknown",
+                "broaderCohortMembership": "unknown",
+                "syndicateMembership": "unknown",
+            },
+            "reason": "campaign_population_link_authority_not_connected",
+        }
+        campaign_performance_context: dict[str, Any] = {
+            "state": "unknown",
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "attributedOutcome": {"state": "unknown", "reason": "campaign_outcome_join_unavailable"},
+            "spendObservations": {"state": "unknown", "reason": "campaign_spend_authority_not_connected"},
+            "roas": {"state": "unknown", "reason": "complete_spend_and_revenue_evidence_required"},
+            "roi": {"state": "unknown", "reason": "complete_cost_and_return_definition_required"},
+            "reason": "campaign_performance_join_unavailable",
         }
         touchpoint_page: Optional[PageInfo] = None
         campaign_found = False
@@ -895,13 +1341,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     )
                     slot_states[SLOT_PERFORMANCE].update(
                         state="unknown",
-                        reason="campaign_performance_metric_contract_unavailable",
+                        reason="campaign_performance_evidence_not_resolved",
                         sourceAuthorities=[
+                            "canonical_conversions",
                             "attribution_credits",
-                            "campaign_touchpoints",
-                            "computation",
-                            "economic",
-                            "outcomes",
+                            "spend_records",
                         ],
                     )
                     slot_states[SLOT_ANOMALIES].update(
@@ -961,6 +1405,27 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                             claims=claims,
                             degraded_reasons=degraded_reasons,
                         )
+                        await self._read_campaign_conversions(
+                            request=request,
+                            campaign_id=campaign_id,
+                            credit_items=credit_items,
+                            conversion_items=conversion_items,
+                            slot_states=slot_states,
+                            evidence_by_key=evidence_by_key,
+                            claims=claims,
+                            degraded_reasons=degraded_reasons,
+                        )
+                        campaign_performance_context = await self._read_campaign_performance(
+                            request=request,
+                            campaign_id=campaign_id,
+                            temporal=temporal,
+                            credit_items=credit_items,
+                            conversion_items=conversion_items,
+                            slot_states=slot_states,
+                            evidence_by_key=evidence_by_key,
+                            claims=claims,
+                            degraded_reasons=degraded_reasons,
+                        )
                     else:
                         for slot_id in (
                             SLOT_TOUCHPOINTS,
@@ -975,6 +1440,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                                     else ["attribution_credits"]
                                 ),
                             )
+                        slot_states[SLOT_CONVERSIONS].update(
+                            state="unknown",
+                            reason=temporal.reason or "temporal_scope_unavailable",
+                            sourceAuthorities=["canonical_conversions", "attribution_credits"],
+                        )
                         findings.append(
                             {
                                 "code": temporal.reason or "temporal_scope_unavailable",
@@ -999,6 +1469,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         state="unknown",
                         reason="campaign_registry_subject_not_available",
                         sourceAuthorities=["attribution_credits"],
+                    )
+                    slot_states[SLOT_CONVERSIONS].update(
+                        state="unknown",
+                        reason="campaign_registry_subject_not_available",
+                        sourceAuthorities=["canonical_conversions", "attribution_credits"],
                     )
 
                 # Join the canonical journey authority by its explicit
@@ -1058,28 +1533,56 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                             else "campaign_registry_subject_not_available"
                         ),
                     )
-                slot_states[SLOT_COHORTS_SYNDICATES].setdefault("state", "unknown")
-                slot_states[SLOT_COHORTS_SYNDICATES].update(
-                    state="unknown",
-                    reason="campaign_cohort_and_syndicate_membership_unavailable",
-                    sourceAuthorities=[
-                        "cohort_membership",
-                        "cluster_definitions",
-                        "cluster_membership",
-                        "relationship_facts",
-                    ],
-                )
-                slot_states[SLOT_PERFORMANCE].update(
-                    state="unknown",
-                    reason="campaign_performance_metric_contract_unavailable",
-                    sourceAuthorities=[
-                        "attribution_credits",
-                        "campaign_touchpoints",
-                        "computation",
-                        "economic",
-                        "outcomes",
-                    ],
-                )
+                if campaign_found and temporal.observations_supported:
+                    campaign_population_context = await self._read_campaign_population_links(
+                        request=request,
+                        campaign_id=campaign_id or "",
+                        slot_states=slot_states,
+                        evidence_by_key=evidence_by_key,
+                        claims=claims,
+                        degraded_reasons=degraded_reasons,
+                    )
+                else:
+                    reason = (
+                        temporal.reason
+                        if campaign_found
+                        else "campaign_registry_subject_not_available"
+                    )
+                    slot_states[SLOT_COHORTS_SYNDICATES].update(
+                        state="unknown",
+                        reason=reason,
+                        sourceAuthorities=[
+                            "campaign_population_link_events",
+                            "population_definitions",
+                            "cluster_membership",
+                            "relationship_facts",
+                        ],
+                        dimensionStates={
+                            "explicitPopulationLinks": "unknown",
+                            "broaderCohortMembership": "unknown",
+                            "syndicateMembership": "unknown",
+                        },
+                    )
+                    campaign_population_context.update(state="unknown", reason=reason)
+                if not campaign_found or not temporal.observations_supported:
+                    reason = (
+                        temporal.reason
+                        if campaign_found
+                        else "campaign_registry_subject_not_available"
+                    )
+                    slot_states[SLOT_PERFORMANCE].update(
+                        state="unknown",
+                        reason=reason,
+                        sourceAuthorities=[
+                            "canonical_conversions",
+                            "attribution_credits",
+                            "spend_records",
+                        ],
+                    )
+                    campaign_performance_context.update(
+                        state="unknown",
+                        reason=reason,
+                    )
 
         if temporal.reason is not None and temporal.reason not in {
             finding.get("code") for finding in findings
@@ -1179,16 +1682,14 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "state": slot_states[SLOT_CONVERSIONS]["state"],
                     "subject": {"kind": subject.kind, "id": subject.id},
                     "reason": slot_states[SLOT_CONVERSIONS].get("reason"),
+                    "conversionCount": len(conversion_items),
+                    "items": conversion_items,
                 },
                 SLOT_COHORTS_SYNDICATES: {
-                    "state": slot_states[SLOT_COHORTS_SYNDICATES]["state"],
-                    "subject": {"kind": subject.kind, "id": subject.id},
-                    "reason": slot_states[SLOT_COHORTS_SYNDICATES].get("reason"),
+                    **campaign_population_context,
                 },
                 SLOT_PERFORMANCE: {
-                    "state": slot_states[SLOT_PERFORMANCE]["state"],
-                    "subject": {"kind": subject.kind, "id": subject.id},
-                    "reason": slot_states[SLOT_PERFORMANCE].get("reason"),
+                    **campaign_performance_context,
                 },
                 SLOT_ANOMALIES: {
                     **campaign_anomaly_context,
@@ -1247,9 +1748,9 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         "touchpoint source classifications do not classify campaign registry provenance",
                         "signal_sources include exact touchpoint-linked events only; broader observations and source facts remain unknown",
                         "communication content remains governed by communication360",
-                        "campaign-to-conversion joins are unresolved",
-                        "cohort and syndicate membership requires canonical grouping authorities",
-                        "performance metrics require a registered metric contract and value composition",
+                        "conversion records are joined only through exact active campaign attribution credits; unattributed conversions remain outside this view",
+                        "explicit campaign-population links are operator asserted; broader cohort and syndicate membership remains unknown",
+                        "campaign spend coverage is not attested, so full-period totals and ROAS remain unknown",
                         "targeting leakage findings are a partial anomaly source; broader risk outputs and source anomalies remain unresolved",
                         "actor attribution, delegation, and authority are not resolved by this provider",
                         "current campaign state is not a historical snapshot",
@@ -1280,6 +1781,13 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                             SLOT_ATTRIBUTION
                         ].get("creditsTruncated", False),
                         "domainSlotIds": [SLOT_ATTRIBUTION],
+                        "zeroDefaulted": False,
+                    },
+                    "conversions": {
+                        "state": slot_states[SLOT_CONVERSIONS]["state"],
+                        "items": conversion_items,
+                        "domainSlotIds": [SLOT_CONVERSIONS],
+                        "joinAuthority": "canonical_conversions_by_exact_tenant_id_via_active_campaign_credit",
                         "zeroDefaulted": False,
                     },
                     "outcome360Dependency": _dependency_state(
@@ -2622,7 +3130,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 if in_key in row
             }
             credit_items.append(
-                {"credit": payload, "domainSlotIds": [SLOT_ATTRIBUTION_OUTCOMES]}
+                {
+                    "credit": payload,
+                    "evidenceRefs": [evidence.model_dump(by_alias=True, exclude_none=True)],
+                    "domainSlotIds": [SLOT_ATTRIBUTION_OUTCOMES],
+                }
             )
             claims.append(
                 _claim(
@@ -2665,6 +3177,711 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         )
         if reason is not None:
             degraded_reasons.append(reason)
+
+    async def _read_campaign_conversions(
+        self,
+        *,
+        request: ProjectionRequest,
+        campaign_id: str,
+        credit_items: list[dict[str, Any]],
+        conversion_items: list[dict[str, Any]],
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+        degraded_reasons: list[str],
+    ) -> None:
+        """Join canonical conversions only through exact active campaign credits.
+
+        The attribution credit is the exact campaign relation. A canonical
+        conversion lookup is independently scoped by tenant and conversion ID;
+        this keeps measured attribution credits distinct from conversion
+        records and prevents broad profile/cluster joins from inventing
+        campaign membership.
+        """
+        lookup = getattr(self._source, "conversion_record", None)
+        if not callable(lookup):
+            reason = "canonical_conversion_authority_binding_unavailable"
+            slot_states[SLOT_CONVERSIONS].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["canonical_conversions", "attribution_credits"],
+            )
+            return
+
+        credit_by_conversion: dict[str, list[EvidenceRef]] = {}
+        for item in credit_items:
+            credit = item.get("credit") if isinstance(item, dict) else None
+            conversion_id = credit.get("conversionId") if isinstance(credit, dict) else None
+            if not isinstance(conversion_id, str) or not conversion_id.strip():
+                continue
+            refs: list[EvidenceRef] = []
+            for raw in item.get("evidenceRefs", []):
+                try:
+                    refs.append(EvidenceRef.model_validate(raw))
+                except Exception:  # noqa: BLE001 - malformed linkage evidence fails closed
+                    continue
+            if refs:
+                credit_by_conversion.setdefault(conversion_id, []).extend(refs)
+
+        conversion_ids = list(credit_by_conversion)
+        if not conversion_ids:
+            attribution_state = slot_states[SLOT_ATTRIBUTION].get("state")
+            if attribution_state == "empty":
+                slot_states[SLOT_CONVERSIONS].update(
+                    state="empty",
+                    reason=None,
+                    sourceAuthorities=["canonical_conversions", "attribution_credits"],
+                    joinCoverage="active_attribution_credits_only",
+                    unattributedConversions="unknown",
+                )
+            else:
+                reason = "active_campaign_attribution_credit_conversion_ids_unavailable"
+                slot_states[SLOT_CONVERSIONS].update(
+                    state="unknown",
+                    reason=reason,
+                    sourceAuthorities=["canonical_conversions", "attribution_credits"],
+                    joinCoverage="active_attribution_credits_only",
+                )
+            return
+
+        truncated = len(conversion_ids) > MAX_ATTRIBUTION_CREDITS
+        conversion_ids = conversion_ids[:MAX_ATTRIBUTION_CREDITS]
+        missing = 0
+        invalid = 0
+        for conversion_id in conversion_ids:
+            try:
+                result = await lookup(request.tenantId, conversion_id)
+            except Exception:  # noqa: BLE001 - keep authority errors slot-local
+                result = ConversionRecordRead(None, available=False)
+            if not isinstance(result, ConversionRecordRead) or not result.available:
+                missing += 1
+                continue
+            record = result.record
+            if record is None:
+                missing += 1
+                continue
+            if (
+                str(record.get("tenant_id") or "") != request.tenantId
+                or str(record.get("conversion_id") or "") != conversion_id
+            ):
+                invalid += 1
+                continue
+
+            occurred_at = _string_or_none(record.get("occurred_at"))
+            source_currency = _currency_code(record.get("currency"))
+            normalized_currency = _currency_code(record.get("normalized_currency"))
+            conversion_monetary_state = _conversion_monetary_state(record)
+            conversion_ref = EvidenceRef(
+                id=conversion_id,
+                type="event",
+                source="services/api/journeys/measurement/repositories/conversion_repo.py:canonical_conversions",
+                observedAt=_string_or_none(record.get("observed_at") or occurred_at),
+                uri=f"store://canonical_conversions/{quote(conversion_id, safe='')}",
+            )
+            attribution_refs = credit_by_conversion.get(conversion_id, [])
+            refs = [conversion_ref, *attribution_refs]
+            _add_evidence(evidence_by_key, conversion_ref)
+            value_present = record.get("net_value") is not None or record.get("gross_value") is not None
+            conversion_items.append(
+                {
+                    "conversion": {
+                        "conversionId": conversion_id,
+                        "conversionType": _scalar(record.get("conversion_type")),
+                        "conversionName": _scalar(record.get("conversion_name")),
+                        "status": _scalar(record.get("conversion_status")),
+                        "occurredAt": occurred_at,
+                        "currency": source_currency,
+                        "normalizedCurrency": normalized_currency,
+                        "conversionMonetaryState": conversion_monetary_state,
+                        "grossValue": _scalar(record.get("gross_value")),
+                        "netValue": _scalar(record.get("net_value")),
+                        "adjustedAt": _scalar(record.get("adjusted_at")),
+                        "quantity": _scalar(record.get("quantity")),
+                        "valueState": "measured" if value_present else "unknown",
+                        "campaignAttribution": "exact_active_credit",
+                    },
+                    "evidenceRefs": [
+                        ref.model_dump(by_alias=True, exclude_none=True) for ref in refs
+                    ],
+                    "domainSlotIds": [SLOT_CONVERSIONS],
+                }
+            )
+            for ref in refs:
+                _add_evidence(evidence_by_key, ref)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"campaign360:{campaign_id}:conversion:{conversion_id}",
+                    kind="campaign_canonical_conversion",
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[
+                        "A canonical tenant-scoped conversion record is linked to this exact campaign by an active attribution credit; this is separate from measured attribution outcome."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_CONVERSIONS],
+                )
+            )
+
+        if invalid:
+            state, reason = "unknown", "canonical_conversion_scope_mismatch"
+        elif missing or truncated:
+            state, reason = "degraded", "canonical_conversion_join_incomplete"
+        else:
+            state = "available" if conversion_items else "empty"
+            reason = None
+        slot_states[SLOT_CONVERSIONS].update(
+            state=state,
+            reason=reason,
+            sourceAuthorities=["canonical_conversions", "attribution_credits"],
+            joinCoverage="active_attribution_credits_only",
+            unattributedConversions="unknown",
+            conversionCount=len(conversion_items),
+            conversionReadTruncated=truncated,
+            missingConversionRecords=missing,
+        )
+        if reason:
+            degraded_reasons.append(reason)
+
+    async def _read_campaign_performance(
+        self,
+        *,
+        request: ProjectionRequest,
+        campaign_id: str,
+        temporal: _TemporalScope,
+        credit_items: list[dict[str, Any]],
+        conversion_items: list[dict[str, Any]],
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+        degraded_reasons: list[str],
+    ) -> dict[str, Any]:
+        """Join exact campaign spend observations to active attributed outcomes.
+
+        The spend ledger has no coverage watermark, so recorded spend amounts
+        remain observations and do not support a campaign-wide ROAS/ROI claim.
+        Attributed revenue is emitted only when all active credits and their
+        exact canonical conversions are complete and amount-bearing.
+        """
+        outcome = _campaign_attributed_outcome(
+            slot_states=slot_states,
+            credit_items=credit_items,
+            conversion_items=conversion_items,
+        )
+        outcome_refs: list[EvidenceRef] = []
+        for item in [*credit_items, *conversion_items]:
+            for raw in item.get("evidenceRefs", []) if isinstance(item, dict) else []:
+                try:
+                    ref = EvidenceRef.model_validate(raw)
+                except Exception:  # noqa: BLE001 - incomplete evidence blocks the metric
+                    continue
+                _add_evidence(evidence_by_key, ref)
+                outcome_refs.append(ref)
+        outcome_refs = _dedupe_evidence(outcome_refs)
+        if outcome.get("grossRevenue", {}).get("state") == "available" or outcome.get(
+            "netRevenue", {}
+        ).get("state") == "available":
+            for currency, amount in sorted(
+                outcome.get("grossRevenue", {}).get("byCurrency", {}).items()
+            ):
+                currency_refs = _refs_from_wire(
+                    outcome.get("grossEvidenceRefsByCurrency", {}).get(currency, [])
+                )
+                if currency_refs and amount is not None:
+                    claims.append(
+                        ClaimEnvelope(
+                            id=f"campaign360:{campaign_id}:performance:gross:{currency}",
+                            kind="campaign_attributed_gross_revenue",
+                            subject=request.subject,
+                            evidenceRefs=currency_refs,
+                            claims=[
+                                f"Active exact campaign attribution credits report gross revenue of {amount} {currency} in normalized conversion currency."
+                            ],
+                            claimState=EpistemicStatus.OBSERVED,
+                            domainSlotIds=[SLOT_PERFORMANCE],
+                        )
+                    )
+            for currency, amount in sorted(
+                outcome.get("netRevenue", {}).get("byCurrency", {}).items()
+            ):
+                currency_refs = _refs_from_wire(
+                    outcome.get("netEvidenceRefsByCurrency", {}).get(currency, [])
+                )
+                if currency_refs and amount is not None:
+                    claims.append(
+                        ClaimEnvelope(
+                            id=f"campaign360:{campaign_id}:performance:net:{currency}",
+                            kind="campaign_attributed_net_revenue",
+                            subject=request.subject,
+                            evidenceRefs=currency_refs,
+                            claims=[
+                                f"Active exact campaign attribution credits report net revenue of {amount} {currency} in normalized conversion currency."
+                            ],
+                            claimState=EpistemicStatus.OBSERVED,
+                            domainSlotIds=[SLOT_PERFORMANCE],
+                        )
+                    )
+
+        spend_reader = getattr(self._source, "campaign_spend", None)
+        spend_context: dict[str, Any] = {
+            "state": "unknown",
+            "records": [],
+            "recordCount": 0,
+            "amountState": "unknown",
+            "coverage": "unknown",
+            "reason": "campaign_spend_authority_not_connected",
+        }
+        if not callable(spend_reader):
+            spend_read = CampaignSpendRead(
+                rows=[], available=False, reason="campaign_spend_authority_not_connected"
+            )
+        else:
+            try:
+                spend_read = await spend_reader(
+                    request.tenantId,
+                    campaign_id,
+                    start=temporal.start,
+                    end=temporal.end,
+                    limit=MAX_CAMPAIGN_PERFORMANCE_SPEND_ROWS + 1,
+                )
+            except Exception:  # noqa: BLE001 - spend source is slot-local
+                spend_read = CampaignSpendRead(
+                    rows=[], available=False, reason="campaign_spend_repository_unavailable"
+                )
+
+        spend_records: list[dict[str, Any]] = []
+        spend_refs: list[EvidenceRef] = []
+        invalid_spend_rows = 0
+        spend_amounts_complete = True
+        truncated = False
+        if not isinstance(spend_read, CampaignSpendRead) or not spend_read.available:
+            reason = (
+                spend_read.reason
+                if isinstance(spend_read, CampaignSpendRead) and spend_read.reason
+                else "campaign_spend_repository_unavailable"
+            )
+            spend_context.update(state="unknown", reason=reason)
+        elif any(not isinstance(row, dict) for row in spend_read.rows):
+            invalid_spend_rows = 1
+            spend_amounts_complete = False
+            spend_context.update(state="unknown", reason="campaign_spend_row_shape_invalid")
+        else:
+            rows = list(spend_read.rows)
+            truncated = len(rows) > MAX_CAMPAIGN_PERFORMANCE_SPEND_ROWS
+            for row in rows[:MAX_CAMPAIGN_PERFORMANCE_SPEND_ROWS]:
+                if (
+                    str(row.get("tenant_id") or "") != request.tenantId
+                    or str(row.get("campaign_id") or "") != campaign_id
+                ):
+                    invalid_spend_rows += 1
+                    continue
+                spend_record_id = str(row.get("spend_record_id") or "")
+                period_start = _parse_temporal_value(row.get("period_start"))
+                period_end = _parse_temporal_value(row.get("period_end"))
+                if (
+                    not _safe_campaign_source_id(spend_record_id)
+                    or period_start is None
+                    or period_end is None
+                    or period_end < period_start
+                ):
+                    invalid_spend_rows += 1
+                    continue
+                if temporal.start is not None and period_end <= temporal.start:
+                    continue
+                if temporal.end is not None and period_start >= temporal.end:
+                    continue
+                full_window_row = (
+                    (temporal.start is None or period_start >= temporal.start)
+                    and (temporal.end is None or period_end <= temporal.end)
+                )
+                normalized = _normalized_spend_amount(row)
+                amount = normalized[0] if normalized is not None else None
+                currency = normalized[1] if normalized is not None else None
+                if amount is None or currency is None or not full_window_row:
+                    spend_amounts_complete = False
+                spend_recorded_at = _parse_temporal_value(row.get("created_at"))
+                spend_ref = EvidenceRef(
+                    id=spend_record_id,
+                    type="event",
+                    source="services/api/journeys/measurement/repositories/spend_repo.py:spend_records",
+                    observedAt=(
+                        spend_recorded_at.isoformat()
+                        if spend_recorded_at is not None
+                        else None
+                    ),
+                    uri=f"store://spend_records/{quote(spend_record_id, safe='')}",
+                )
+                spend_refs.append(spend_ref)
+                _add_evidence(evidence_by_key, spend_ref)
+                spend_records.append(
+                    {
+                        "spendRecordId": spend_record_id,
+                        "periodStart": period_start.isoformat(),
+                        "periodEnd": period_end.isoformat(),
+                        "recordedAt": (
+                            spend_recorded_at.isoformat()
+                            if spend_recorded_at is not None
+                            else None
+                        ),
+                        "amount": None if amount is None else format(amount, "f"),
+                        "currency": currency,
+                        "sourceAmount": _scalar(row.get("total_cost")),
+                        "sourceCurrency": _currency_code(row.get("billing_currency")),
+                        "normalizedAmount": None if amount is None else format(amount, "f"),
+                        "normalizedCurrency": currency,
+                        "amountState": "observed" if amount is not None else "unknown",
+                        "withinRequestedWindow": full_window_row,
+                        "evidenceRefs": [
+                            spend_ref.model_dump(by_alias=True, exclude_none=True)
+                        ],
+                        "domainSlotIds": [SLOT_PERFORMANCE],
+                    }
+                )
+                if amount is not None:
+                    claims.append(
+                        ClaimEnvelope(
+                            id=f"campaign360:{campaign_id}:spend:{spend_record_id}",
+                            kind="campaign_spend_record",
+                            subject=request.subject,
+                            evidenceRefs=[spend_ref],
+                            claims=[
+                                f"A canonical tenant and campaign scoped spend record reports {format(amount, 'f')} {currency} for its recorded period."
+                            ],
+                            claimState=EpistemicStatus.OBSERVED,
+                            domainSlotIds=[SLOT_PERFORMANCE],
+                        )
+                    )
+
+            source_complete = (
+                spend_read.complete
+                and not truncated
+                and invalid_spend_rows == 0
+                and spend_amounts_complete
+            )
+            spend_context = {
+                "state": (
+                    "available"
+                    if source_complete
+                    else "partial"
+                    if spend_records
+                    else "empty"
+                    if spend_read.complete and not truncated and invalid_spend_rows == 0
+                    else "unknown"
+                ),
+                "records": spend_records,
+                "recordCount": len(spend_records),
+                "amountState": "complete" if source_complete else "observed_or_unknown",
+                "coverage": "source_attested" if source_complete else "bounded_rows_without_coverage_attestation",
+                "complete": source_complete,
+                "truncated": truncated,
+                "invalidRowCount": invalid_spend_rows,
+                "reason": None
+                if source_complete
+                else spend_read.reason
+                or "campaign_spend_coverage_or_amount_incomplete",
+                "evidenceRefs": [
+                    ref.model_dump(by_alias=True, exclude_none=True)
+                    for ref in _dedupe_evidence(spend_refs)
+                ],
+            }
+
+        outcome_measured = outcome.get("state") == "available"
+        spend_measured = bool(spend_records)
+        if outcome_measured and spend_context.get("complete") is True:
+            performance_state, performance_reason = "available", None
+        elif outcome_measured or spend_measured:
+            performance_state, performance_reason = "partial", (
+                "campaign_spend_coverage_or_amount_incomplete"
+                if spend_context.get("complete") is not True
+                else "campaign_attribution_or_conversion_join_incomplete"
+            )
+        else:
+            performance_state, performance_reason = "unknown", (
+                outcome.get("reason")
+                or spend_context.get("reason")
+                or "campaign_performance_evidence_unavailable"
+            )
+        slot_states[SLOT_PERFORMANCE].update(
+            state=performance_state,
+            reason=performance_reason,
+            sourceAuthorities=[
+                "canonical_conversions",
+                "attribution_credits",
+                "spend_records",
+            ],
+            dimensionStates={
+                "attributedOutcome": outcome.get("state", "unknown"),
+                "campaignSpend": spend_context.get("state", "unknown"),
+                "roas": "unknown",
+                "roi": "unknown",
+            },
+            conversionCount=outcome.get("conversionCount", 0),
+            spendRecordCount=spend_context.get("recordCount", 0),
+        )
+        if performance_state == "partial" and performance_reason:
+            degraded_reasons.append(performance_reason)
+        return {
+            "state": performance_state,
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "attributedOutcome": outcome,
+            "spendObservations": spend_context,
+            "roas": {
+                "state": "unknown",
+                "reason": "complete_campaign_spend_and_attributed_revenue_are_not_both_attested",
+            },
+            "roi": {
+                "state": "unknown",
+                "reason": "campaign_cost_and_return_definition_are_not_both_attested",
+            },
+            "reason": performance_reason,
+            "freshness": {
+                "state": (
+                    "available"
+                    if outcome_measured and spend_context.get("complete") is True
+                    else "partial"
+                    if outcome_measured or spend_measured
+                    else "unknown"
+                ),
+                "sourceTimestampsPreserved": True,
+                "dimensionStates": {
+                    "attributedOutcome": "available"
+                    if outcome_measured
+                    else "unknown",
+                    "campaignSpend": "unknown"
+                    if spend_context.get("complete") is not True
+                    else "available",
+                },
+            },
+            "evidenceRefs": [
+                ref.model_dump(by_alias=True, exclude_none=True)
+                for ref in _dedupe_evidence([*outcome_refs, *spend_refs])
+            ],
+            "limitations": [
+                "attributed revenue uses active attribution credits joined to exact tenant conversion records",
+                "campaign spend rows are bounded observations without a ledger coverage watermark",
+                "unattributed conversions are outside this campaign outcome join",
+                "ROAS and ROI remain unknown because both sides and period coverage are not jointly attested",
+            ],
+        }
+
+    async def _read_campaign_population_links(
+        self,
+        *,
+        request: ProjectionRequest,
+        campaign_id: str,
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+        degraded_reasons: list[str],
+    ) -> dict[str, Any]:
+        """Project exact operator-managed campaign/population link state.
+
+        This closes only the explicit audience association dimension. It does
+        not expand population members or imply that a cohort, cluster, or
+        syndicate membership exists for any entity.
+        """
+        base = {
+            "state": "unknown",
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "campaignId": campaign_id,
+            "associations": [],
+            "dimensionStates": {
+                "explicitPopulationLinks": "unknown",
+                "broaderCohortMembership": "unknown",
+                "syndicateMembership": "unknown",
+            },
+            "readAuthority": "campaign_population_link_events+campaign_facts+population_definitions",
+            "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
+        }
+        reader = getattr(self._source, "campaign_population_links", None)
+        if not callable(reader):
+            reason = "campaign_population_link_authority_binding_unavailable"
+            slot_states[SLOT_COHORTS_SYNDICATES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["campaign_population_link_events", "population_definitions"],
+                dimensionStates=base["dimensionStates"],
+            )
+            return {**base, "reason": reason}
+
+        try:
+            read = await reader(
+                request.tenantId,
+                campaign_id,
+                limit=MAX_CAMPAIGN_POPULATION_LINKS + 1,
+            )
+        except Exception:  # noqa: BLE001 - provider details stay private
+            read = None
+        if (
+            not isinstance(read, CampaignPopulationLinkRead)
+            or not read.available
+            or read.tenant_id != request.tenantId
+            or read.campaign_id != campaign_id
+        ):
+            reason = (
+                read.reason
+                if isinstance(read, CampaignPopulationLinkRead) and read.reason
+                else "campaign_population_link_authority_unavailable"
+            )
+            slot_states[SLOT_COHORTS_SYNDICATES].update(
+                state="degraded",
+                reason=reason,
+                sourceAuthorities=["campaign_population_link_events", "population_definitions"],
+                dimensionStates={
+                    **base["dimensionStates"],
+                    "explicitPopulationLinks": "unavailable",
+                },
+            )
+            degraded_reasons.append(reason)
+            return {
+                **base,
+                "state": "degraded",
+                "dimensionStates": {
+                    **base["dimensionStates"],
+                    "explicitPopulationLinks": "unavailable",
+                },
+                "reason": reason,
+            }
+
+        if len(read.rows) > MAX_CAMPAIGN_POPULATION_LINKS:
+            reason = "campaign_population_link_read_limit_exceeded"
+            slot_states[SLOT_COHORTS_SYNDICATES].update(
+                state="degraded",
+                reason=reason,
+                sourceAuthorities=["campaign_population_link_events", "population_definitions"],
+                dimensionStates={
+                    **base["dimensionStates"],
+                    "explicitPopulationLinks": "truncated",
+                },
+            )
+            degraded_reasons.append(reason)
+            return {
+                **base,
+                "state": "degraded",
+                "dimensionStates": {
+                    **base["dimensionStates"],
+                    "explicitPopulationLinks": "truncated",
+                },
+                "reason": reason,
+            }
+
+        associations: list[dict[str, Any]] = []
+        local_reasons: set[str] = set()
+        for row in read.rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != request.tenantId
+                or row.get("campaign_id") != campaign_id
+                or not _safe_campaign_source_id(row.get("population_id"))
+                or row.get("event_type") not in {"linked", "unlinked"}
+                or not isinstance(row.get("evidence_refs"), list)
+            ):
+                local_reasons.add("campaign_population_link_record_scope_invalid")
+                continue
+
+            population_id = row["population_id"]
+            evidence_refs: list[EvidenceRef] = []
+            try:
+                evidence_refs = [EvidenceRef.model_validate(item) for item in row["evidence_refs"]]
+            except Exception:  # noqa: BLE001 - malformed canonical links fail closed
+                local_reasons.add("campaign_population_link_evidence_invalid")
+                continue
+            if not all(ref.id and ref.source for ref in evidence_refs):
+                local_reasons.add("campaign_population_link_evidence_invalid")
+                continue
+            if not any(ref.id == campaign_id and ref.source.endswith(":campaigns") for ref in evidence_refs):
+                local_reasons.add("campaign_population_link_campaign_evidence_missing")
+                continue
+            if not any(ref.id == population_id and ref.source == "identity_populations" for ref in evidence_refs):
+                local_reasons.add("campaign_population_link_population_evidence_missing")
+                continue
+
+            if row["event_type"] == "unlinked":
+                continue
+            effective_at = _string_or_none(row.get("effective_at"))
+            observed_at = _string_or_none(row.get("source_observed_at"))
+            if not _safe_campaign_source_id(row.get("link_event_id")) or not effective_at or not observed_at:
+                local_reasons.add("campaign_population_link_timestamp_or_event_invalid")
+                continue
+            association = {
+                "populationId": population_id,
+                "associationState": "explicitly_linked",
+                "linkEventId": row["link_event_id"],
+                "sourceId": _string_or_none(row.get("source_id")),
+                "sourceRecordId": _string_or_none(row.get("source_record_id")),
+                "sourceRevisionId": _string_or_none(row.get("source_revision_id")),
+                "sourceEventId": _string_or_none(row.get("source_event_id")),
+                "actorId": _string_or_none(row.get("actor_id")),
+                "actorType": _string_or_none(row.get("actor_type")),
+                "sourceObservedAt": observed_at,
+                "effectiveAt": effective_at,
+                "evidenceRefs": [
+                    ref.model_dump(by_alias=True, exclude_none=True) for ref in evidence_refs
+                ],
+                "domainSlotIds": [SLOT_COHORTS_SYNDICATES],
+            }
+            associations.append(association)
+            for ref in evidence_refs:
+                _add_evidence(evidence_by_key, ref)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"campaign360:{campaign_id}:population-link:{row['link_event_id']}",
+                    kind="campaign_population_link_observation",
+                    subject=request.subject,
+                    evidenceRefs=evidence_refs,
+                    claims=[
+                        "An authenticated tenant operator explicitly linked this campaign to the exact canonical population; population membership is not inferred by Campaign360."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_COHORTS_SYNDICATES],
+                )
+            )
+
+        explicit_state = "available" if associations else "empty"
+        slot_state = "degraded" if read.truncated or local_reasons else "partial"
+        reason = (
+            "campaign_population_link_read_truncated"
+            if read.truncated
+            else sorted(local_reasons)[0]
+            if local_reasons
+            else "broader_campaign_cohort_and_syndicate_dimensions_unresolved"
+        )
+        dimensions = {
+            "explicitPopulationLinks": "truncated"
+            if read.truncated
+            else explicit_state,
+            "broaderCohortMembership": "unknown",
+            "syndicateMembership": "unknown",
+        }
+        slot_states[SLOT_COHORTS_SYNDICATES].update(
+            state=slot_state,
+            reason=reason,
+            sourceAuthorities=["campaign_population_link_events", "campaign_facts", "population_definitions"],
+            dimensionStates=dimensions,
+            explicitPopulationLinkCount=len(associations),
+            linkReadTruncated=read.truncated,
+        )
+        if slot_state == "degraded":
+            degraded_reasons.append(reason)
+        return {
+            **base,
+            "state": slot_state,
+            "associations": associations,
+            "dimensionStates": dimensions,
+            "coverage": "explicit_operator_links_only",
+            "reason": reason,
+            "freshness": {
+                "state": "available" if associations else "unknown",
+                "sourceTimestampsPreserved": True,
+                "latestEffectiveAt": max(
+                    (item["effectiveAt"] for item in associations), default=None
+                ),
+            },
+            "limitations": [
+                "population membership is not expanded here",
+                "broader cohort, cluster, and syndicate authorities remain unknown",
+                "historical campaign-to-population link replay is unsupported",
+            ],
+        }
 
 
 def _campaign_matches_scope(
@@ -2758,6 +3975,7 @@ __all__ = [
     "Campaign360Provider",
     "Campaign360Source",
     "CampaignRead",
+    "CampaignSpendRead",
     "OUTPUT_SECTIONS",
     "PROJECTION_ID",
     "RepositoryCampaign360Source",

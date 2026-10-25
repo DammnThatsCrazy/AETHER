@@ -546,20 +546,46 @@ class AttributionRunRepository:
                 await _insert_credits_conn(conn, prepared)
         return len(credits)
 
-    async def list_credits_for_run(self, tenant_id: str, attribution_run_id: str) -> list[dict[str, Any]]:
+    async def list_credits_for_run(
+        self, tenant_id: str, attribution_run_id: str, *, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        if limit is not None:
+            limit = max(1, min(int(limit), 1001))
         pool = await self._pool()
         if pool is None:
-            return [
+            rows = [
                 c for c in _local_credits
                 if c.get("tenant_id") == tenant_id
                 and c.get("attribution_run_id") == attribution_run_id
             ]
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM attribution_credits WHERE tenant_id=$1 AND attribution_run_id=$2 ORDER BY credit_weight DESC",
-                tenant_id, _uuid_or_none(attribution_run_id),
+            def credit_weight(row: dict[str, Any]) -> Decimal:
+                try:
+                    weight = Decimal(str(row.get("credit_weight")))
+                    return weight if weight.is_finite() else Decimal("-Infinity")
+                except (TypeError, ValueError, ArithmeticError):
+                    return Decimal("-Infinity")
+
+            rows.sort(
+                key=lambda row: (
+                    credit_weight(row),
+                    str(row.get("credit_id") or ""),
+                ),
+                reverse=True,
             )
+            return rows[:limit] if limit is not None else rows
+
+        async with pool.acquire() as conn:
+            query = (
+                "SELECT * FROM attribution_credits WHERE tenant_id=$1 "
+                "AND attribution_run_id=$2 ORDER BY credit_weight DESC, credit_id DESC"
+            )
+            if limit is not None:
+                rows = await conn.fetch(
+                    query + " LIMIT $3", tenant_id, _uuid_or_none(attribution_run_id), limit
+                )
+            else:
+                rows = await conn.fetch(query, tenant_id, _uuid_or_none(attribution_run_id))
             return [dict(r) for r in rows]
 
     async def list_credits_for_conversion(

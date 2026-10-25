@@ -356,6 +356,61 @@ async def build_experience360_frame(
                         policyEvaluatedAt=risk_disposition.evaluatedAt,
                     )
                 )
+        if request.surfaceId == "profile360" and projection_id == "profile360":
+            # Profile360 can read Relationship360 only for the exact entity
+            # subject of an explicitly allowed relationships slot. The
+            # provider still proves the current tenant profile/entity join
+            # before the nested ledger read; this envelope grants no alias or
+            # historical identity resolution.
+            relationship_slot_id = "relationships"
+            relationship_slot = slot_definitions.get(relationship_slot_id)
+            relationship_disposition = selected_policy.get(relationship_slot_id)
+            relationship_bindings = (
+                relationship_slot.get("projectionBindings", [])
+                if isinstance(relationship_slot, Mapping)
+                else []
+            )
+            profile_binding = next(
+                (
+                    binding
+                    for binding in relationship_bindings
+                    if isinstance(binding, Mapping)
+                    and binding.get("projectionId") == "profile360"
+                    and isinstance(binding.get("sectionIds"), (list, tuple))
+                    and "relationships" in binding["sectionIds"]
+                    and isinstance(binding.get("subjectKinds"), (list, tuple))
+                    and request.subject.kind in binding["subjectKinds"]
+                ),
+                None,
+            )
+            relationship_definition = INTELLIGENCE_PROJECTION_DEFINITIONS.get(
+                "relationship360", {}
+            )
+            relationship_capabilities = relationship_definition.get("capabilityKeys", [])
+            if (
+                relationship_slot_id in readable_slot_ids
+                and relationship_disposition is not None
+                and relationship_disposition.state == "allowed"
+                and isinstance(profile_binding, Mapping)
+                and request.subject.kind == "entity"
+                and isinstance(relationship_capabilities, (list, tuple))
+                and "relationship360.read" in relationship_capabilities
+                and relationship_definition.get("graphMutationPolicy") == "read_only"
+            ):
+                read_authorizations.append(
+                    ProjectionReadAuthorization(
+                        tenantId=request.tenantId,
+                        sourceSurfaceId=request.surfaceId,
+                        sourceSubject=request.subject,
+                        sourceSlotId=relationship_slot_id,
+                        consumerProjectionId="profile360",
+                        targetProjectionId="relationship360",
+                        capabilityKey="relationship360.read",
+                        policyState=relationship_disposition.state,
+                        policyIds=list(relationship_disposition.policyIds),
+                        policyEvaluatedAt=relationship_disposition.evaluatedAt,
+                    )
+                )
         async with semaphore:
             try:
                 execution_kwargs = {

@@ -2776,9 +2776,14 @@ class AgentConfigRepository(BaseRepository):
             "policy_version": 1,
         })
 
-    async def list_for_owner(self, owner_entity_id: str) -> list[dict]:
+    async def list_for_owner(
+        self, owner_entity_id: str, *, limit: int = 200, tenant_id: Optional[str] = None
+    ) -> list[dict]:
+        filters = {"owner_entity_id": owner_entity_id}
+        if tenant_id is not None:
+            filters["tenant_id"] = tenant_id
         return await self.find_many(
-            filters={"owner_entity_id": owner_entity_id}, limit=200,
+            filters=filters, limit=min(max(1, limit), 201),
         )
 
 

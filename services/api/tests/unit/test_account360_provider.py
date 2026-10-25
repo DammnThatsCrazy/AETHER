@@ -17,6 +17,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from identity.account360_provider import (  # noqa: E402
+    ACCOUNT_CONTRACTS_SLOT,
     ACCOUNT_AGENTS_SLOT,
     ACCOUNT_JOURNEYS_SLOT,
     ACCOUNT_MEMBERS_SLOT,
@@ -24,6 +25,8 @@ from identity.account360_provider import (  # noqa: E402
     ACCOUNT_RISK_SLOT,
     ACCOUNT_IDENTITY_SLOT,
     Account360Provider,
+    AccountContractRecord,
+    AccountContractsRead,
     AccountIdentityRead,
     AccountMember,
     AccountMembersRead,
@@ -92,6 +95,23 @@ class _MembersSource(_Source):
     ) -> AccountMembersRead:
         self.member_calls.append((tenant_id, organization_entity_id))
         return self.members_response
+
+
+class _ContractsSource(_Source):
+    def __init__(
+        self,
+        identity: AccountIdentityRead,
+        contracts: AccountContractsRead,
+    ) -> None:
+        super().__init__(identity)
+        self.contracts_response = contracts
+        self.contract_calls: list[tuple[str, str, int]] = []
+
+    async def account_contracts(
+        self, tenant_id: str, account_entity_id: str, *, limit: int
+    ) -> AccountContractsRead:
+        self.contract_calls.append((tenant_id, account_entity_id, limit))
+        return self.contracts_response
 
 
 class _RiskProvider:
@@ -1899,3 +1919,244 @@ async def test_account_journeys_policy_denial_skips_membership_and_member_reads(
     assert reader_calls == []
     assert slot.policyDisposition.state == "denied"
     assert slot.content is None
+
+
+@pytest.mark.asyncio
+async def test_account_contracts_join_only_exact_account_bound_commerce_records():
+    evidence = EvidenceRef(
+        id="contract-profile-1",
+        type="document",
+        source="tenant_contract_profiles",
+        observedAt="2026-10-17T09:00:00Z",
+    )
+    contract = AccountContractRecord(
+        tenant_id=TENANT_ID,
+        account_id=SUBJECT.id,
+        contract_profile_id=evidence.id,
+        contract_status="active",
+        billing_model="enterprise_contract",
+        package_id="enterprise",
+        plan_tier="enterprise",
+        billing_period="annual",
+        currency="USD",
+        contract_start_date="2026-01-01",
+        contract_end_date="2026-12-31",
+        renewal_date="2027-01-01",
+        evidence_ref=evidence,
+    )
+    source = _ContractsSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountContractsRead(
+            "available",
+            TENANT_ID,
+            SUBJECT.id,
+            records=(contract,),
+            source_as_of=evidence.observedAt,
+        ),
+    )
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    assert source.contract_calls == [(TENANT_ID, SUBJECT.id, 100)]
+    assert slot.policyDisposition.state == "allowed"
+    assert slot.state == "degraded"
+    assert slot.content["records"][0]["contractProfileId"] == "contract-profile-1"
+    assert slot.content["records"][0]["status"] == "active"
+    assert slot.content["records"][0]["contractEndDate"] == "2026-12-31"
+    assert [(ref.source, ref.id) for ref in slot.evidenceRefs] == [
+        ("tenant_contract_profiles", "contract-profile-1")
+    ]
+    assert "account_contract_freshness_sla_unconfigured" in slot.reasonCodes
+    assert "internal_notes" not in str(slot.content)
+
+
+@pytest.mark.asyncio
+async def test_account_contracts_do_not_join_without_exact_account_scope():
+    evidence = EvidenceRef(
+        id="contract-profile-foreign",
+        type="document",
+        source="tenant_contract_profiles",
+        observedAt="2026-10-17T09:00:00Z",
+    )
+    source = _ContractsSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountContractsRead(
+            "available",
+            "tenant-foreign",
+            SUBJECT.id,
+            records=(
+                AccountContractRecord(
+                    tenant_id="tenant-foreign",
+                    account_id=SUBJECT.id,
+                    contract_profile_id=evidence.id,
+                    contract_status="active",
+                    billing_model="enterprise_contract",
+                    package_id=None,
+                    plan_tier=None,
+                    billing_period="annual",
+                    currency="USD",
+                    contract_start_date=None,
+                    contract_end_date=None,
+                    renewal_date=None,
+                    evidence_ref=evidence,
+                ),
+            ),
+        ),
+    )
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+    assert "account_contract_scope_or_state_invalid" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_contracts_respect_policy_and_temporal_boundaries():
+    source = _ContractsSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountContractsRead("empty", TENANT_ID, SUBJECT.id),
+    )
+    provider = Account360Provider(source)
+    denied_policy = _allowed_slots()
+    denied_policy[ACCOUNT_CONTRACTS_SLOT] = Experience360PolicyDisposition(state="denied")
+    denied = await provider.compose(
+        _request(requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=denied_policy,
+    )
+    historical = await provider.compose(
+        _request(as_of="2026-10-16T00:00:00Z", requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        identity_read=source.response,
+    )
+
+    denied_slot = next(item for item in denied.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    historical_slot = next(item for item in historical.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    assert denied_slot.policyDisposition.state == "denied"
+    assert denied_slot.content is None
+    assert historical_slot.state == "unknown"
+    assert historical_slot.content is None
+    assert "account_contract_temporal_replay_unavailable" in historical_slot.reasonCodes
+    assert source.contract_calls == []
+
+
+@pytest.mark.asyncio
+async def test_repository_account_contract_source_uses_tenant_and_exact_account_id(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from billing.billing.revops import TenantContractProfileRepository
+
+    calls: list[tuple[dict[str, str], int]] = []
+
+    async def find_many(self, *, filters, limit=50, **_kwargs):
+        calls.append((filters, limit))
+        return [
+            {
+                "contract_profile_id": "contract-profile-exact",
+                "tenant_id": TENANT_ID,
+                "account_id": SUBJECT.id,
+                "contract_status": "active",
+                "billing_model": "enterprise_contract",
+                "package_id": "enterprise",
+                "plan_tier": "enterprise",
+                "billing_period": "annual",
+                "currency": "USD",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-10-17T09:00:00Z",
+                "internal_notes": "must-not-project",
+                "payment_terms": "must-not-project",
+            }
+        ]
+
+    monkeypatch.setattr(TenantContractProfileRepository, "find_many", find_many)
+    result = await RepositoryAccount360Source().account_contracts(
+        TENANT_ID, SUBJECT.id, limit=7
+    )
+
+    assert calls == [({"tenant_id": TENANT_ID, "account_id": SUBJECT.id}, 8)]
+    assert result.state == "available"
+    assert result.records[0].contract_profile_id == "contract-profile-exact"
+    assert result.records[0].evidence_ref.source == "tenant_contract_profiles"
+    assert result.source_as_of == "2026-10-17T09:00:00Z"
+    assert "must-not-project" not in str(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("contract_status", "guess_active"),
+        ("billing_model", "free_form"),
+        ("billing_period", "weekly"),
+        ("contract_start_date", "2026-02-30"),
+        ("contract_end_date", "2026-12-31T00:00:00Z"),
+        ("renewal_date", "not-a-date"),
+        ("currency", "US dollars"),
+    ],
+)
+async def test_repository_account_contract_source_fails_closed_on_invalid_typed_values(
+    monkeypatch: pytest.MonkeyPatch, field: str, value: str
+):
+    from billing.billing.revops import TenantContractProfileRepository
+
+    row = {
+        "contract_profile_id": "contract-profile-invalid",
+        "tenant_id": TENANT_ID,
+        "account_id": SUBJECT.id,
+        "contract_status": "active",
+        "billing_model": "enterprise_contract",
+        "billing_period": "annual",
+        "currency": "USD",
+        "contract_start_date": "2026-01-01",
+        "contract_end_date": "2026-12-31",
+        "renewal_date": "2027-01-01",
+        "updated_at": "2026-10-17T09:00:00Z",
+    }
+    row[field] = value
+
+    async def find_many(self, *, filters, limit=50, **_kwargs):
+        return [row]
+
+    monkeypatch.setattr(TenantContractProfileRepository, "find_many", find_many)
+    result = await RepositoryAccount360Source().account_contracts(
+        TENANT_ID, SUBJECT.id, limit=7
+    )
+
+    assert result.state == "unknown"
+    assert result.records == ()
+    assert result.reason_codes == ("account_contract_record_typed_value_invalid",)

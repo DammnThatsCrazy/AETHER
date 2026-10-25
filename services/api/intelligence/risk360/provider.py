@@ -34,9 +34,10 @@ The provider is a read-only, fail-isolated, tenant-scoped projection:
   instead of raising.
 
 The ``sources`` constructor seam is the read-only canonical seam (a
-:class:`RiskSourceReader``) — abstract enough that Phase 5 wires real detector
-output through it; the default :class:`RepositoryRiskSourceReader` reads the
-Phase-3 ``risk_assessments`` / ``risk_signals`` stores tenant-scoped.
+:class:`RiskSourceReader``). The default :class:`RepositoryRiskSourceReader`
+reads tenant-scoped risk assessments/signals, Gold anomaly-alert materializations,
+poisoning evidence, intervention records, and computation-run history. Graph
+paths and financial transfers stay on their own canonical read authorities.
 
 Imports stay lazy/defensive: importing this module must never require a
 database, a store backend, or any heavy canonical service. All canonical reads
@@ -48,6 +49,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Protocol
@@ -79,12 +81,16 @@ from shared.measurement.value_states import requires_value
 from intelligence.risk360.contracts import (
     EpistemicStatus,
     RiskAssessment,
+    RiskInterventionRecord,
     RiskPoisoningEvidence,
     RiskSignal,
 )
 from intelligence.risk360.dimensions import RISK_DIMENSIONS
 from intelligence.risk360.store import (
     RiskAssessmentRepository,
+    RiskInterventionRead,
+    RiskInterventionRepository,
+    RiskInterventionReadIncomplete,
     RiskPoisoningEvidenceRead,
     RiskPoisoningEvidenceRepository,
     RiskPoisoningEvidenceReadIncomplete,
@@ -124,9 +130,13 @@ SECTION_DEPENDENCIES: dict[str, str] = {
 _MAX_ASSESSMENT_SCAN = 50
 _MAX_SIGNAL_SCAN = 100
 _MAX_AGENT_POLICY_FLAG_SCAN = 100
+_MAX_RISK_ANOMALY_SCAN = 100
 _MAX_SOURCE_PROVENANCE_SCAN = 100
 _MAX_POISONING_EVIDENCE_SCAN = 100
+_MAX_RISK_INTERVENTION_SCAN = 100
 _MAX_ASSESSMENT_HISTORY_SCAN = 100
+_MAX_RISK_SOCIAL_CONTAGION_SCAN = 100
+_MAX_RISK_SOCIAL_CONTAGION_EVIDENCE_REFS = 512
 _MAX_FINANCIAL_PATH_NODES = 21
 _MAX_TRANSFERS_PER_PATH_EDGE = 2
 _MAX_SOCIAL_PROPAGATION_PATHS = 50
@@ -151,6 +161,15 @@ _BLUEPRINT_REQUIRED_SLOT_IDS = (
 
 class RiskSourceReadIncomplete(RuntimeError):
     """A canonical risk read could not establish complete exact-subject scope."""
+
+
+@dataclass(frozen=True)
+class RiskAnomalyEventRead:
+    """Bounded exact-subject anomaly-alert materializations from Gold."""
+
+    records: list[dict[str, Any]]
+    complete: bool
+    reason: Optional[str] = None
 
 
 def _dependency_missing(dep_state: list[Any], projection_id: str) -> bool:
@@ -349,6 +368,15 @@ class RiskSourceReader(Protocol):
         """Tenant-scoped RiskSignal records for ``subject`` (empty when none)."""
         ...
 
+    async def anomaly_events(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+    ) -> RiskAnomalyEventRead:
+        """Exact tenant/typed-subject Gold anomaly-alert records."""
+        ...
+
     async def agent_policy_flag_observations(
         self,
         *,
@@ -387,13 +415,35 @@ class RiskSourceReader(Protocol):
         """Bounded poisoning evidence for the exact tenant/subject binding."""
         ...
 
-    async def financial_flow_path(
+    async def interventions(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: Optional[datetime],
+    ) -> RiskInterventionRead:
+        """Bounded immutable intervention decision/outcome records."""
+        ...
+
+    async def financial_flow_path_subjects(
         self,
         *,
         tenant_id: str,
         path_id: str,
     ) -> Optional[dict[str, Any]]:
-        """Read one exact tenant-owned flow path and its transfer evidence."""
+        """Discover exact path entity subjects without reading flow details."""
+        ...
+
+    async def financial_flow_path_details(
+        self,
+        *,
+        tenant_id: str,
+        path_id: str,
+        trace_id: str,
+        path_nodes: list[str],
+        path_discovered_at: datetime,
+    ) -> Optional[dict[str, Any]]:
+        """Read trace/transfer detail after exact path entities pass consent."""
         ...
 
 
@@ -409,6 +459,7 @@ class RepositoryRiskSourceReader:
         self._assessments = RiskAssessmentRepository()
         self._signals = RiskSignalRepository()
         self._poisoning_evidence = RiskPoisoningEvidenceRepository()
+        self._interventions = RiskInterventionRepository()
         from intelligence.computation.repositories import get_computation_repository
 
         self._runs = get_computation_repository()
@@ -491,6 +542,58 @@ class RepositoryRiskSourceReader:
             started = _aware_datetime(started_at)
             if as_of is not None and started is not None and started > as_of:
                 raise RiskSourceReadIncomplete("risk assessment history exceeds as_of anchor")
+            supersedes_run_id = data.get("supersedes_run_id")
+            restatement_link: Optional[dict[str, Any]] = None
+            if supersedes_run_id is not None:
+                if (
+                    not isinstance(supersedes_run_id, str)
+                    or not supersedes_run_id.strip()
+                    or supersedes_run_id == run_id
+                ):
+                    raise RiskSourceReadIncomplete(
+                        "risk assessment run supersession reference is invalid"
+                    )
+                prior = await self._runs.get_run(tenant_id, supersedes_run_id)
+                prior_data = _decode_mapping(prior.get("data")) if isinstance(prior, dict) else {}
+                prior_started = (
+                    _aware_datetime(prior.get("started_at")) if isinstance(prior, dict) else None
+                )
+                if (
+                    not isinstance(prior, dict)
+                    or str(prior.get("tenant_id", "")) != tenant_id
+                    or prior.get("run_id") != supersedes_run_id
+                    or prior.get("definition_id") != row.get("definition_id")
+                    or prior.get("definition_version") != row.get("definition_version")
+                    or not isinstance(row.get("definition_version"), str)
+                    or not row["definition_version"].strip()
+                    or prior.get("context_hash") != row.get("context_hash")
+                    or not isinstance(row.get("context_hash"), str)
+                    or not row["context_hash"].strip()
+                    or prior.get("status") != "completed"
+                    or row.get("status") != "completed"
+                    or prior_data.get("assessment_id") != assessment_id
+                    or prior_data.get("subject_kind") != subject.kind
+                    or prior_data.get("subject_id") != subject.id
+                    or prior_started is None
+                    or started is None
+                    or prior_started > started
+                ):
+                    raise RiskSourceReadIncomplete(
+                        "risk assessment run supersession predecessor scope is incomplete"
+                    )
+                restatement_link = {
+                    "state": "verified_direct_predecessor",
+                    "prior_tenant_id": tenant_id,
+                    "prior_subject_kind": subject.kind,
+                    "prior_subject_id": subject.id,
+                    "prior_run_id": supersedes_run_id,
+                    "prior_assessment_id": assessment_id,
+                    "prior_definition_id": str(prior.get("definition_id", "")),
+                    "prior_definition_version": prior["definition_version"],
+                    "prior_context_hash": prior["context_hash"],
+                    "prior_status": prior.get("status"),
+                    "prior_started_at": prior_started.isoformat(),
+                }
             history.append(
                 {
                     "tenant_id": tenant_id,
@@ -508,7 +611,8 @@ class RepositoryRiskSourceReader:
                         if _aware_datetime(row.get("completed_at")) is not None
                         else None
                     ),
-                    "supersedes_run_id": data.get("supersedes_run_id"),
+                    "supersedes_run_id": supersedes_run_id,
+                    "restatement_link": restatement_link,
                     "claim_state": data.get("claim_state"),
                     "dimensions": data.get("dimensions")
                     if isinstance(data.get("dimensions"), list)
@@ -542,6 +646,118 @@ class RepositoryRiskSourceReader:
         if len(scoped) != len(rows) or len(rows) > _MAX_SIGNAL_SCAN:
             raise RiskSourceReadIncomplete("risk signal scope is incomplete")
         return scoped
+
+    async def anomaly_events(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+    ) -> RiskAnomalyEventRead:
+        """Read exact tenant-owned Gold anomaly alerts for one typed subject.
+
+        Gold is the existing alert materialization authority, not an immutable
+        event ledger. An optional ``dimensions`` triplet (``risk_signal_id``,
+        ``source_event_id``, ``source_event_source``) joins to one canonical
+        RiskSignal and its exact event EvidenceRef. Without that explicit link,
+        the alert remains metadata only. Consumers receive the alert record's
+        storage timestamp rather than an invented source event time.
+        """
+        if not tenant_id or not subject.kind or not subject.id:
+            return RiskAnomalyEventRead([], complete=False, reason="exact_anomaly_subject_required")
+        from repositories.lake import gold_identity
+
+        rows = await gold_identity.find_many(
+            filters={
+                "tenant_id": tenant_id,
+                "metric_name": "anomaly_alert",
+                "entity_id": subject.id,
+                "entity_type": subject.kind,
+            },
+            limit=_MAX_RISK_ANOMALY_SCAN + 1,
+            sort_by="updated_at",
+            sort_order="desc",
+        )
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise RiskSourceReadIncomplete("Gold anomaly alert read contract is invalid")
+        exact = [
+            row
+            for row in rows
+            if str(row.get("tenant_id", "")) == tenant_id
+            and row.get("metric_name") == "anomaly_alert"
+            and row.get("entity_id") == subject.id
+            and row.get("entity_type") == subject.kind
+        ]
+        if len(exact) != len(rows):
+            raise RiskSourceReadIncomplete("Gold anomaly alert scope is incomplete")
+        truncated = len(exact) > _MAX_RISK_ANOMALY_SCAN
+        enriched: list[dict[str, Any]] = []
+        for row in exact[:_MAX_RISK_ANOMALY_SCAN]:
+            enriched.append(
+                {
+                    **row,
+                    "source_event_join": await self._anomaly_source_event_join(
+                        row, tenant_id=tenant_id, subject=subject
+                    ),
+                }
+            )
+        return RiskAnomalyEventRead(
+            records=enriched,
+            complete=not truncated,
+            reason="gold_anomaly_alert_scan_truncated" if truncated else None,
+        )
+
+    async def _anomaly_source_event_join(
+        self,
+        alert: dict[str, Any],
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+    ) -> dict[str, Any]:
+        """Resolve only an explicit Gold-to-signal-to-event-evidence binding."""
+        dimensions = alert.get("dimensions")
+        if not isinstance(dimensions, dict):
+            return {"state": "degraded", "reason": "anomaly_alert_dimensions_invalid"}
+        keys = ("risk_signal_id", "source_event_id", "source_event_source")
+        if not any(key in dimensions for key in keys):
+            return {"state": "unknown", "reason": "explicit_anomaly_event_reference_unavailable"}
+        values = [dimensions.get(key) for key in keys]
+        if any(not isinstance(value, str) or not value.strip() for value in values):
+            return {"state": "degraded", "reason": "anomaly_event_reference_incomplete"}
+        signal_id, event_id, event_source = values
+        try:
+            raw_signal = await self._signals.get_scoped(tenant_id, signal_id)
+        except Exception:  # noqa: BLE001 - preserve the independently scoped Gold alert
+            return {"state": "degraded", "reason": "anomaly_event_risk_signal_read_failed"}
+        if not isinstance(raw_signal, dict):
+            return {"state": "degraded", "reason": "anomaly_event_risk_signal_unavailable"}
+        try:
+            signal = RiskSignal.model_validate(raw_signal)
+        except ValidationError:
+            return {"state": "degraded", "reason": "anomaly_event_risk_signal_invalid"}
+        if (
+            signal.tenant_id != tenant_id
+            or signal.subject_kind != subject.kind
+            or signal.subject_id != subject.id
+            or signal.signal_id != signal_id
+            or not signal.source.strip()
+        ):
+            return {"state": "degraded", "reason": "anomaly_event_risk_signal_scope_mismatch"}
+        matching_refs = [
+            ref
+            for ref in signal.evidence_refs
+            if ref.id == event_id and ref.source == event_source and ref.type == "event"
+        ]
+        if len(matching_refs) != 1:
+            return {"state": "degraded", "reason": "anomaly_event_evidence_reference_unverified"}
+        return {
+            "state": "verified_signal_evidence_reference",
+            "risk_signal_id": signal_id,
+            "detector_source": signal.source,
+            "detector_version": signal.detector_version,
+            "signal_claim_state": signal.claim_state.value,
+            "evidence_ref": matching_refs[0],
+            "source_event_record_read": "not_performed",
+        }
 
     async def agent_policy_flag_observations(
         self,
@@ -706,29 +922,37 @@ class RepositoryRiskSourceReader:
             limit=_MAX_POISONING_EVIDENCE_SCAN,
         )
 
-    async def financial_flow_path(
+    async def interventions(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: Optional[datetime],
+    ) -> RiskInterventionRead:
+        """Read immutable risk intervention records for an exact subject."""
+        if not tenant_id or not subject.kind or not subject.id:
+            raise RiskInterventionReadIncomplete(
+                "risk intervention read requires exact tenant and subject scope"
+            )
+        return await self._interventions.list_for_subject(
+            tenant_id,
+            subject.kind,
+            subject.id,
+            as_of=as_of,
+            limit=_MAX_RISK_INTERVENTION_SCAN,
+        )
+
+    async def financial_flow_path_subjects(
         self,
         *,
         tenant_id: str,
         path_id: str,
     ) -> Optional[dict[str, Any]]:
-        """Read a complete flow path and rejoin each edge to one transfer row.
-
-        ``flow_trace_paths`` currently stores ordered entity IDs but does not
-        retain transfer IDs. The reader therefore accepts only path rows whose
-        hop count matches the ordered node list and whose adjacent entity pair
-        has exactly one positive tenant-scoped transfer record. Missing or
-        ambiguous pair joins remain explicit unknowns; unrelated transfers are
-        never selected by recency or aggregated into a synthetic edge.
-        """
+        """Discover path membership before any trace or transfer detail read."""
         if not tenant_id or not path_id:
             return None
 
-        from repositories.repos import (
-            FlowTracePathRepository,
-            FlowTraceRepository,
-            TransferRepository,
-        )
+        from repositories.repos import FlowTracePathRepository
 
         path = await FlowTracePathRepository().find_by_id(path_id)
         if path is None:
@@ -741,15 +965,15 @@ class RepositoryRiskSourceReader:
             raise RiskSourceReadIncomplete("financial flow path scope is incomplete")
         trace_id = path.get("trace_id")
         if not isinstance(trace_id, str) or not trace_id.strip():
-            raise RiskSourceReadIncomplete("financial flow trace reference is incomplete")
-        trace = await FlowTraceRepository().find_by_id(trace_id)
-        if (
-            not isinstance(trace, dict)
-            or str(trace.get("id", "")) != trace_id
-            or str(trace.get("tenant_id", "")) != tenant_id
-            or trace.get("status") != "complete"
-        ):
-            raise RiskSourceReadIncomplete("financial flow trace scope is incomplete")
+            return {
+                "tenant_id": tenant_id,
+                "path_id": path_id,
+                "trace_id": None,
+                "path_nodes": [],
+                "hop_count": None,
+                "path_discovered_at": path.get("discovered_at"),
+                "linkage_reason": "financial_flow_trace_reference_unavailable",
+            }
 
         raw_nodes = path.get("path_nodes")
         hop_count = path.get("hop_count")
@@ -767,13 +991,89 @@ class RepositoryRiskSourceReader:
                 "path_id": path_id,
                 "trace_id": trace_id,
                 "path_nodes": [],
-                "transfer_edges": [],
+                "hop_count": hop_count,
+                "path_discovered_at": path.get("discovered_at"),
                 "linkage_reason": "financial_flow_path_sequence_not_exact",
             }
 
+        discovered_at = _aware_datetime(path.get("discovered_at"))
+        if discovered_at is None:
+            return {
+                "tenant_id": tenant_id,
+                "path_id": path_id,
+                "trace_id": trace_id,
+                "path_nodes": [],
+                "hop_count": hop_count,
+                "path_discovered_at": path.get("discovered_at"),
+                "linkage_reason": "financial_flow_path_discovery_time_unavailable",
+            }
+
+        return {
+            "tenant_id": tenant_id,
+            "path_id": path_id,
+            "trace_id": trace_id,
+            "path_nodes": list(raw_nodes),
+            "hop_count": hop_count,
+            "path_discovered_at": discovered_at.isoformat(),
+            "linkage_reason": None,
+        }
+
+    async def financial_flow_path_details(
+        self,
+        *,
+        tenant_id: str,
+        path_id: str,
+        trace_id: str,
+        path_nodes: list[str],
+        path_discovered_at: datetime,
+    ) -> Optional[dict[str, Any]]:
+        """Read trace and transfer facts only after consent for path members.
+
+        The flow path is reread and compared with the consent-gated discovery
+        result before any transfer query, preventing a changed path from
+        substituting unconsented entity subjects between the two reads.
+        """
+        if (
+            not tenant_id
+            or not path_id
+            or not trace_id
+            or not path_nodes
+            or path_discovered_at.tzinfo is None
+        ):
+            raise RiskSourceReadIncomplete("financial flow detail scope is incomplete")
+
+        from repositories.repos import (
+            FlowTracePathRepository,
+            FlowTraceRepository,
+            TransferRepository,
+        )
+
+        path = await FlowTracePathRepository().find_by_id(path_id)
+        if (
+            not isinstance(path, dict)
+            or str(path.get("id", "")) != path_id
+            or str(path.get("tenant_id", "")) != tenant_id
+            or path.get("trace_id") != trace_id
+            or path.get("path_nodes") != path_nodes
+            or path.get("hop_count") != len(path_nodes) - 1
+            or _aware_datetime(path.get("discovered_at")) != path_discovered_at
+        ):
+            raise RiskSourceReadIncomplete(
+                "financial flow path changed after consent-gated discovery"
+            )
+
+        trace = await FlowTraceRepository().find_by_id(trace_id)
+        if (
+            not isinstance(trace, dict)
+            or str(trace.get("id", "")) != trace_id
+            or str(trace.get("tenant_id", "")) != tenant_id
+            or trace.get("status") != "complete"
+        ):
+            raise RiskSourceReadIncomplete("financial flow trace scope is incomplete")
+
         transfer_repo = TransferRepository()
         transfer_edges: list[dict[str, Any]] = []
-        for from_entity_id, to_entity_id in zip(raw_nodes, raw_nodes[1:]):
+        for from_entity_id, to_entity_id in zip(path_nodes, path_nodes[1:]):
             rows = await transfer_repo.find_many(
                 filters={
                     "tenant_id": tenant_id,
@@ -787,7 +1087,10 @@ class RepositoryRiskSourceReader:
                     "tenant_id": tenant_id,
                     "path_id": path_id,
                     "trace_id": trace_id,
-                    "path_nodes": list(raw_nodes),
+                    "path_nodes": list(path_nodes),
+                    "hop_count": len(path_nodes) - 1,
+                    "path_discovered_at": path_discovered_at.isoformat(),
+                    "trace_completed_at": trace.get("completed_at"),
                     "transfer_edges": [],
                     "linkage_reason": (
                         "financial_transfer_edge_missing"
@@ -836,9 +1139,9 @@ class RepositoryRiskSourceReader:
             "tenant_id": tenant_id,
             "path_id": path_id,
             "trace_id": trace_id,
-            "path_nodes": list(raw_nodes),
-            "hop_count": hop_count,
-            "path_discovered_at": path.get("discovered_at"),
+            "path_nodes": list(path_nodes),
+            "hop_count": len(path_nodes) - 1,
+            "path_discovered_at": path_discovered_at.isoformat(),
             "trace_completed_at": trace.get("completed_at"),
             "transfer_edges": transfer_edges,
             "linkage_reason": None,
@@ -858,6 +1161,7 @@ class Risk360Provider:
         *,
         support_case_repository: Optional[SupportCaseRepository] = None,
         social_graph_path_reader: Optional[Any] = None,
+        social_evidence_authority: Optional[Any] = None,
         consent_reader: Optional[Any] = None,
     ) -> None:
         # Injected canonical reader (test seam); default reads the Phase-3
@@ -874,6 +1178,7 @@ class Risk360Provider:
         # graph + relationship-fact authorities and does not become a second
         # risk or contagion store.
         self._social_graph_path_reader = social_graph_path_reader
+        self._social_evidence_authority = social_evidence_authority
         self._consent_reader = consent_reader
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
@@ -960,6 +1265,22 @@ class Risk360Provider:
                 tenant_id, request.subject
             )
 
+        if not support_case_scope_verified:
+            anomaly_events, anomaly_events_degraded = [], False
+            anomaly_events_reason = "support_case_subject_scope_unavailable"
+        elif context.tenantId != tenant_id:
+            anomaly_events, anomaly_events_degraded = [], True
+            anomaly_events_reason = "risk_anomaly_alert_tenant_context_mismatch"
+        elif not _is_current_subject_read(request, context):
+            anomaly_events, anomaly_events_degraded = [], False
+            anomaly_events_reason = "gold_anomaly_alert_bitemporal_history_unavailable"
+        else:
+            (
+                anomaly_events,
+                anomaly_events_degraded,
+                anomaly_events_reason,
+            ) = await self._safe_anomaly_events(tenant_id, request.subject)
+
         if support_case_scope_verified:
             agent_policy_flags, agent_policy_flags_degraded, agent_policy_flags_reason = (
                 await self._safe_agent_policy_flag_observations(
@@ -993,6 +1314,29 @@ class Risk360Provider:
                 as_of=poisoning_as_of,
             )
 
+        interventions_as_of, intervention_anchor_reason = self._interventions_as_of(
+            request, context
+        )
+        if not support_case_scope_verified:
+            interventions, interventions_degraded = [], False
+            interventions_reason = "support_case_subject_scope_unavailable"
+        elif context.tenantId != tenant_id:
+            interventions, interventions_degraded = [], True
+            interventions_reason = "risk_intervention_tenant_context_mismatch"
+        elif intervention_anchor_reason is not None:
+            interventions, interventions_degraded = [], False
+            interventions_reason = intervention_anchor_reason
+        else:
+            (
+                interventions,
+                interventions_degraded,
+                interventions_reason,
+            ) = await self._safe_interventions(
+                tenant_id,
+                request.subject,
+                as_of=interventions_as_of,
+            )
+
         assessment_history_as_of, history_anchor_reason = self._assessment_history_as_of(
             request, context
         )
@@ -1022,6 +1366,9 @@ class Risk360Provider:
             social_propagation, social_path_claims = self._unknown_social_propagation(
                 "support_case_subject_scope_unavailable"
             ), []
+            social_contagion, social_contagion_claims = self._unknown_social_contagion(
+                "support_case_subject_scope_unavailable"
+            ), []
         elif request.subject.kind == "support_case":
             # A canonical support-case identity joins case-keyed assessments
             # and signals. It does not establish graph or financial-flow
@@ -1031,6 +1378,9 @@ class Risk360Provider:
             social_propagation, social_path_claims = self._unknown_social_propagation(
                 "support_case_contagion_authority_not_connected"
             ), []
+            social_contagion, social_contagion_claims = self._unknown_social_contagion(
+                "support_case_contagion_authority_not_connected"
+            ), []
         else:
             financial_link, financial_link_degraded, financial_link_reason = (
                 await self._safe_financial_contagion_link(request, context)
@@ -1038,19 +1388,25 @@ class Risk360Provider:
             social_propagation, social_path_claims = await self._safe_social_propagation_paths(
                 request, context
             )
+            social_contagion, social_contagion_claims = (
+                await self._safe_social_contagion_evidence(request, context)
+            )
 
         evidence = self._collect_evidence(
             assessment,
             signals,
+            anomaly_events,
             source_provenance,
             poisoning_evidence,
             agent_policy_flags,
+            interventions,
         )
         if support_case_evidence:
             evidence = _dedupe_evidence([*evidence, *support_case_evidence])
         if financial_link is not None:
             evidence = _dedupe_evidence([*evidence, *financial_link["evidence_refs"]])
         evidence = _dedupe_evidence([*evidence, *social_propagation["evidence_refs"]])
+        evidence = _dedupe_evidence([*evidence, *social_contagion["evidence_refs"]])
         history_evidence = self._assessment_history_evidence(assessment_history)
         evidence = _dedupe_evidence([*evidence, *history_evidence])
 
@@ -1070,8 +1426,12 @@ class Risk360Provider:
                     or signals_degraded
                     or source_provenance_degraded
                     or poisoning_evidence_degraded
+                    or interventions_degraded
                     or assessment_history_degraded
+                    or anomaly_events_degraded
+                    or financial_link_degraded
                     or social_propagation["state"] == "degraded"
+                    or social_contagion["state"] == "degraded"
                 ),
             ),
             self._findings_section(
@@ -1079,6 +1439,9 @@ class Risk360Provider:
                 assessment,
                 assessment_degraded,
                 signals,
+                anomaly_events,
+                anomaly_events_degraded,
+                anomaly_events_reason,
                 evidence,
                 source_provenance,
                 source_provenance_degraded,
@@ -1086,10 +1449,14 @@ class Risk360Provider:
                 poisoning_evidence,
                 poisoning_evidence_degraded,
                 poisoning_evidence_reason,
+                interventions,
+                interventions_degraded,
+                interventions_reason,
                 financial_link,
                 financial_link_degraded,
                 financial_link_reason,
                 social_propagation,
+                social_contagion,
                 agent_policy_flags,
                 agent_policy_flags_degraded,
                 agent_policy_flags_reason,
@@ -1101,6 +1468,9 @@ class Risk360Provider:
                 request,
                 assessment,
                 signals,
+                anomaly_events,
+                anomaly_events_degraded,
+                anomaly_events_reason,
                 assessment_degraded,
                 signals_degraded,
                 source_provenance,
@@ -1109,20 +1479,26 @@ class Risk360Provider:
                 poisoning_evidence,
                 poisoning_evidence_degraded,
                 poisoning_evidence_reason,
+                interventions,
+                interventions_degraded,
+                interventions_reason,
             ),
         ]
         claims = self._build_claims(
             request,
             assessment,
             signals,
+            anomaly_events,
             source_provenance,
             poisoning_evidence,
+            interventions,
             financial_link,
             agent_policy_flags,
             current_subject_read=_is_current_subject_read(request, context),
             support_case_evidence=support_case_evidence,
         )
         claims.extend(social_path_claims)
+        claims.extend(social_contagion_claims)
 
         if support_case_scope is not None:
             if support_case_scope_verified:
@@ -1290,6 +1666,427 @@ class Risk360Provider:
             "freshness": "unknown",
             "causalRiskPropagationEstablished": False,
         }
+
+    @staticmethod
+    def _unknown_social_contagion(reason: str, *, state: str = "unknown") -> dict[str, Any]:
+        return {
+            "state": state,
+            "reason": reason,
+            "records": [],
+            "evidence_refs": [],
+            "coverage": "bounded_exact_tenant_subject_source_reported_evidence",
+            "completeness": "unknown",
+            "freshness": "unknown",
+            "claimState": "unknown",
+            "causalStatus": "unverified",
+            "policyState": "unknown",
+            "causalRiskPropagationEstablished": False,
+        }
+
+    @staticmethod
+    def _financial_contagion_summary(
+        financial_link: Optional[dict[str, Any]],
+        *,
+        degraded: bool,
+        reason: Optional[str],
+    ) -> dict[str, Any]:
+        """Render a transfer/risk association without implying contagion or loss."""
+        if degraded or financial_link is None:
+            return {
+                "state": "degraded" if degraded else "unknown",
+                "reason": reason or (
+                    "financial_flow_risk_read_incomplete"
+                    if degraded
+                    else "exact_financial_flow_path_subject_required"
+                ),
+                "records": [],
+                "completeness": "unknown",
+                "freshness": "unknown",
+                "claimState": "unknown",
+                "causalStatus": "unverified",
+                "contagionAttribution": "not_established",
+                "exposureAttribution": "not_established",
+                "lossAttribution": "not_established",
+                "causalRiskPropagationEstablished": False,
+                "evidenceRefs": [],
+            }
+        evidence_refs = [
+            ref.model_dump(mode="json")
+            for ref in financial_link.get("evidence_refs", [])
+            if isinstance(ref, EvidenceRef)
+        ]
+        return {
+            "state": "partial",
+            "reason": "financial_value_risk_link_observed_contagion_attribution_unavailable",
+            "pathId": financial_link["path_id"],
+            "traceId": financial_link["trace_id"],
+            "transferCount": financial_link["transfer_count"],
+            "riskContexts": financial_link["risk_contexts"],
+            "exposureState": financial_link["exposure_state"],
+            "completeness": "complete_within_declared_bounds",
+            "freshness": "unknown",
+            "claimState": EpistemicStatus.CORRELATED.value,
+            "causalStatus": "unverified",
+            "contagionAttribution": "not_established",
+            "exposureAttribution": "not_established",
+            "lossAttribution": "not_established",
+            "causalRiskPropagationEstablished": False,
+            "evidenceRefs": evidence_refs,
+        }
+
+    async def _safe_social_contagion_evidence(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> tuple[dict[str, Any], list[ClaimEnvelope]]:
+        """Read source-reported correlated evidence without claiming causation."""
+        if request.subject.kind != "entity" or not request.subject.id:
+            return self._unknown_social_contagion("exact_entity_subject_required"), []
+        if context.tenantId != request.tenantId:
+            return self._unknown_social_contagion(
+                "social_contagion_runtime_tenant_context_mismatch", state="degraded"
+            ), []
+
+        request_anchor = _aware_datetime(request.asOf) if request.asOf is not None else None
+        context_anchor = _aware_datetime(context.asOf) if context.asOf is not None else None
+        if request.asOf is not None and request_anchor is None:
+            return self._unknown_social_contagion(
+                "social_contagion_as_of_anchor_invalid", state="degraded"
+            ), []
+        if context.asOf is not None and context_anchor is None:
+            return self._unknown_social_contagion(
+                "social_contagion_context_anchor_invalid", state="degraded"
+            ), []
+        if (
+            request_anchor is not None
+            and context_anchor is not None
+            and request_anchor != context_anchor
+        ):
+            return self._unknown_social_contagion(
+                "social_contagion_as_of_anchor_mismatch", state="degraded"
+            ), []
+        anchor = request_anchor or context_anchor or datetime.now(timezone.utc)
+        if request.temporalMode == "as_of" and request_anchor is None and context_anchor is None:
+            return self._unknown_social_contagion(
+                "social_contagion_as_of_anchor_missing", state="degraded"
+            ), []
+
+        start = end = None
+        if request.timeRange is not None:
+            raw_start = getattr(request.timeRange, "from_", None)
+            raw_end = getattr(request.timeRange, "to", None)
+            start = _aware_datetime(raw_start) if raw_start is not None else None
+            end = _aware_datetime(raw_end) if raw_end is not None else None
+            if (raw_start is not None and start is None) or (raw_end is not None and end is None):
+                return self._unknown_social_contagion(
+                    "social_contagion_time_range_invalid", state="degraded"
+                ), []
+            if start is not None and end is not None and end <= start:
+                return self._unknown_social_contagion(
+                    "social_contagion_time_range_invalid", state="degraded"
+                ), []
+
+        async def consent_for(entity_id: str) -> tuple[bool, Optional[str]]:
+            reader = self._consent_reader
+            if reader is None:
+                from governance.consent.authority import evaluate_consent
+
+                reader = evaluate_consent
+                self._consent_reader = reader
+            result = await reader(request.tenantId, entity_id, None, "analytics")
+            if isinstance(result, tuple) and result:
+                reason = result[1] if len(result) > 1 and isinstance(result[1], str) else None
+                return result[0] is True, reason
+            allowed = getattr(result, "allowed", False) is True
+            reason = getattr(result, "reason_code", None)
+            return allowed, reason if isinstance(reason, str) else None
+
+        # The subject's current consent gates access before the evidence read.
+        try:
+            subject_allowed, subject_consent_reason = await consent_for(request.subject.id)
+        except Exception:  # noqa: BLE001 - consent policy fails closed
+            return self._unknown_social_contagion(
+                "social_contagion_consent_authority_unavailable", state="degraded"
+            ), []
+        if not subject_allowed:
+            if subject_consent_reason == "consent_authority_unavailable":
+                return self._unknown_social_contagion(
+                    "social_contagion_consent_authority_unavailable", state="degraded"
+                ), []
+            return self._unknown_social_contagion(
+                "social_contagion_subject_consent_restricted"
+            ), []
+
+        try:
+            from services.social360.evidence_authority import (
+                MAX_SOCIAL_EVIDENCE_READ,
+                SocialEvidenceAuthority,
+                SocialEvidenceRead,
+            )
+
+            authority = self._social_evidence_authority
+            if authority is None:
+                authority = SocialEvidenceAuthority()
+                self._social_evidence_authority = authority
+            read = await authority.read_social_contagion_evidence(
+                request.tenantId,
+                request.subject.id,
+                start=start,
+                end=end,
+                as_of=anchor,
+                limit=min(_MAX_RISK_SOCIAL_CONTAGION_SCAN, MAX_SOCIAL_EVIDENCE_READ),
+            )
+        except Exception:  # noqa: BLE001 - evidence authority fails closed
+            return self._unknown_social_contagion(
+                "social_contagion_evidence_authority_unavailable", state="degraded"
+            ), []
+        if not isinstance(read, SocialEvidenceRead) or not isinstance(read.records, tuple):
+            return self._unknown_social_contagion(
+                "social_contagion_evidence_source_contract_invalid", state="degraded"
+            ), []
+        if read.tenant_id != request.tenantId or read.subject_entity_id != request.subject.id:
+            return self._unknown_social_contagion(
+                "social_contagion_evidence_scope_mismatch", state="degraded"
+            ), []
+        if not read.available:
+            reason = read.reason
+            if not isinstance(reason, str) or not reason.isidentifier() or len(reason) > 128:
+                reason = "social_contagion_evidence_authority_unavailable"
+            return self._unknown_social_contagion(
+                reason,
+                state="degraded",
+            ), []
+        if read.truncated or len(read.records) > min(
+            _MAX_RISK_SOCIAL_CONTAGION_SCAN, MAX_SOCIAL_EVIDENCE_READ
+        ):
+            reason = read.reason
+            if not isinstance(reason, str) or not reason.isidentifier() or len(reason) > 128:
+                reason = "social_contagion_evidence_read_truncated"
+            return self._unknown_social_contagion(
+                reason,
+                state="degraded",
+            ), []
+        if not read.records:
+            return self._unknown_social_contagion(
+                "social_contagion_evidence_not_observed"
+            ), []
+
+        validated_records: list[dict[str, Any]] = []
+        all_evidence: list[EvidenceRef] = []
+        seen_records: set[str] = set()
+        required_graph_nodes: set[str] = set()
+        for raw in read.records:
+            if not isinstance(raw, dict):
+                return self._unknown_social_contagion(
+                    "social_contagion_record_invalid", state="degraded"
+                ), []
+            path = raw.get("path_entity_ids")
+            source_entity_id = raw.get("source_entity_id")
+            target_entity_id = raw.get("target_entity_id")
+            signal_ids = raw.get("risk_signal_ids")
+            record_id = raw.get("record_id")
+            observed_at = _aware_datetime(raw.get("observed_at"))
+            effective_at = _aware_datetime(raw.get("effective_at"))
+            recorded_at = _aware_datetime(raw.get("recorded_at"))
+            if (
+                raw.get("tenant_id") != request.tenantId
+                or raw.get("subject_entity_id") != request.subject.id
+                or raw.get("assertion_kind") != "social_contagion"
+                or raw.get("assertion_state") != "source_reported"
+                or raw.get("claim_state") != EpistemicStatus.CORRELATED.value
+                or raw.get("causal_status") != "unverified"
+                or raw.get("policy_state") != "unknown"
+                or not isinstance(record_id, str)
+                or not record_id.strip()
+                or record_id in seen_records
+                or not isinstance(source_entity_id, str)
+                or not isinstance(target_entity_id, str)
+                or target_entity_id != request.subject.id
+                or not isinstance(path, list)
+                or not 3 <= len(path) <= 4
+                or any(not isinstance(entity_id, str) or not entity_id.strip() for entity_id in path)
+                or len(set(path)) != len(path)
+                or path[0] != source_entity_id
+                or path[-1] != target_entity_id
+                or not isinstance(signal_ids, list)
+                or not signal_ids
+                or len(signal_ids) > MAX_SOCIAL_EVIDENCE_READ
+                or any(not isinstance(signal_id, str) or not signal_id.strip() for signal_id in signal_ids)
+                or len(set(signal_ids)) != len(signal_ids)
+                or observed_at is None
+                or effective_at is None
+                or recorded_at is None
+                or observed_at > anchor
+                or effective_at > anchor
+                or recorded_at > anchor
+                or (start is not None and observed_at < start)
+                or (end is not None and observed_at >= end)
+                or not isinstance(raw.get("actor_id"), str)
+                or not raw["actor_id"].strip()
+                or not isinstance(raw.get("actor_type"), str)
+                or not raw["actor_type"].strip()
+                or not isinstance(raw.get("source_id"), str)
+                or not raw["source_id"].strip()
+                or not isinstance(raw.get("source_observation_id"), str)
+                or not raw["source_observation_id"].strip()
+                or not isinstance(raw.get("source_revision_id"), str)
+                or not raw["source_revision_id"].strip()
+                or not isinstance(raw.get("source_event_id"), str)
+                or not raw["source_event_id"].strip()
+                or not isinstance(raw.get("source_revision_status"), str)
+                or raw["source_revision_status"] not in {
+                    "canonical_source_revision_bound",
+                    "source_reported_revision_unverified",
+                }
+                or not isinstance(raw.get("source_trust_classification"), str)
+                or not raw["source_trust_classification"].strip()
+            ):
+                return self._unknown_social_contagion(
+                    "social_contagion_record_scope_or_semantics_invalid", state="degraded"
+                ), []
+
+            raw_source_refs = raw.get("source_evidence_refs", [])
+            raw_path_refs = raw.get("path_evidence_refs", [])
+            raw_risk_refs = raw.get("risk_evidence_refs", [])
+            if (
+                not isinstance(raw_source_refs, list)
+                or not isinstance(raw_path_refs, list)
+                or not isinstance(raw_risk_refs, list)
+                or len(raw_source_refs) != 1
+                or len(raw_path_refs) > _MAX_RISK_SOCIAL_CONTAGION_EVIDENCE_REFS
+                or len(raw_risk_refs) > _MAX_RISK_SOCIAL_CONTAGION_EVIDENCE_REFS
+            ):
+                return self._unknown_social_contagion(
+                    "social_contagion_evidence_join_invalid", state="degraded"
+                ), []
+            try:
+                source_refs = [EvidenceRef.model_validate(ref) for ref in raw_source_refs]
+                path_refs = [EvidenceRef.model_validate(ref) for ref in raw_path_refs]
+                risk_refs = [EvidenceRef.model_validate(ref) for ref in raw_risk_refs]
+            except Exception:  # noqa: BLE001 - malformed provenance fails closed
+                return self._unknown_social_contagion(
+                    "social_contagion_evidence_reference_invalid", state="degraded"
+                ), []
+            path_hop_count = len(path) - 1
+            graph_path_refs = [ref for ref in path_refs if ref.source == "entity_graph"]
+            relationship_fact_refs = [
+                ref for ref in path_refs if ref.source == "relationship_facts"
+            ]
+            if (
+                len(source_refs) != 1
+                or any(
+                    ref.source != "bronze_sdk_events"
+                    or ref.id != raw.get("source_event_id")
+                    or ref.type != "event"
+                    for ref in source_refs
+                )
+                or len(path_refs) > _MAX_RISK_SOCIAL_CONTAGION_EVIDENCE_REFS
+                or any(
+                    (ref.source == "entity_graph" and ref.type != "relationship")
+                    or (ref.source == "relationship_facts" and ref.type != "event")
+                    or ref.source not in {"entity_graph", "relationship_facts"}
+                    for ref in path_refs
+                )
+                or len(graph_path_refs) < path_hop_count
+                or len(relationship_fact_refs) < path_hop_count
+                or len({ref.id for ref in graph_path_refs}) != len(graph_path_refs)
+                or not risk_refs
+                or len(risk_refs) > _MAX_RISK_SOCIAL_CONTAGION_EVIDENCE_REFS
+                or not all(
+                    any(
+                        ref.type == "model_output"
+                        and ref.source.startswith("risk_signals:")
+                        and ref.id == signal_id
+                        for ref in risk_refs
+                    )
+                    for signal_id in signal_ids
+                )
+            ):
+                return self._unknown_social_contagion(
+                    "social_contagion_evidence_join_invalid", state="degraded"
+                ), []
+
+            seen_records.add(record_id)
+            required_graph_nodes.update(path)
+            refs = _dedupe_evidence([*source_refs, *path_refs, *risk_refs])
+            validated_records.append(
+                {
+                    "recordId": record_id,
+                    "sourceId": raw["source_id"],
+                    "sourceObservationId": raw["source_observation_id"],
+                    "sourceRevisionId": raw["source_revision_id"],
+                    "sourceRevisionStatus": raw["source_revision_status"],
+                    "sourceEventId": raw["source_event_id"],
+                    "sourceEntityId": source_entity_id,
+                    "targetEntityId": target_entity_id,
+                    "pathEntityIds": list(path),
+                    "riskSignalIds": list(signal_ids),
+                    "sourceTrustClassification": raw["source_trust_classification"],
+                    "actorId": raw["actor_id"],
+                    "actorType": raw["actor_type"],
+                    "observedAt": observed_at.isoformat(),
+                    "effectiveAt": effective_at.isoformat(),
+                    "recordedAt": recorded_at.isoformat(),
+                    "claimState": EpistemicStatus.CORRELATED.value,
+                    "causalStatus": "unverified",
+                    "policyState": "unknown",
+                    "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+                }
+            )
+            all_evidence.extend(refs)
+
+        # Consent is rechecked for every entity named in the source assertion.
+        # The stored policy_state is still unknown; an allowed read is not a
+        # retrospective policy decision or causal finding.
+        for entity_id in sorted(required_graph_nodes):
+            try:
+                allowed, reason = await consent_for(entity_id)
+            except Exception:  # noqa: BLE001 - consent failure suppresses evidence
+                return self._unknown_social_contagion(
+                    "social_contagion_consent_authority_unavailable", state="degraded"
+                ), []
+            if not allowed:
+                if reason == "consent_authority_unavailable":
+                    return self._unknown_social_contagion(
+                        "social_contagion_consent_authority_unavailable", state="degraded"
+                    ), []
+                return self._unknown_social_contagion(
+                    "social_contagion_path_consent_restricted"
+                ), []
+
+        claims: list[ClaimEnvelope] = []
+        for record in validated_records:
+            refs = [EvidenceRef.model_validate(ref) for ref in record["evidenceRefs"]]
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk360.social-contagion.{record['recordId']}",
+                    kind="risk_social_contagion_source_assertion",
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[
+                        "A source-reported risk assertion is linked to the recorded entity path. "
+                        "This is correlated source evidence only; causality and policy outcome remain unverified."
+                    ],
+                    claimState=EpistemicStatus.CORRELATED,
+                    domainSlotIds=["social_contagion", "evidence_trace"],
+                )
+            )
+        return (
+            {
+                "state": "partial",
+                "reason": "source_reported_correlated_evidence_causality_unverified_policy_unknown",
+                "records": validated_records,
+                "evidence_refs": _dedupe_evidence(all_evidence),
+                "coverage": "bounded_exact_tenant_subject_source_reported_evidence",
+                "completeness": "unknown",
+                "freshness": "unknown",
+                "claimState": EpistemicStatus.CORRELATED.value,
+                "causalStatus": "unverified",
+                "policyState": "unknown",
+                "causalRiskPropagationEstablished": False,
+            },
+            claims,
+        )
 
     @staticmethod
     def _attach_support_case_scope(
@@ -1633,6 +2430,9 @@ class Risk360Provider:
         assessment: Optional[RiskAssessment],
         assessment_degraded: bool,
         signals: list[RiskSignal],
+        anomaly_events: list[dict[str, Any]],
+        anomaly_events_degraded: bool,
+        anomaly_events_reason: Optional[str],
         evidence: list[EvidenceRef],
         source_provenance: list[dict[str, Any]],
         source_provenance_degraded: bool,
@@ -1640,10 +2440,14 @@ class Risk360Provider:
         poisoning_evidence: list[RiskPoisoningEvidence],
         poisoning_evidence_degraded: bool,
         poisoning_evidence_reason: Optional[str],
+        interventions: list[RiskInterventionRecord],
+        interventions_degraded: bool,
+        interventions_reason: Optional[str],
         financial_link: Optional[dict[str, Any]],
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
         social_propagation: dict[str, Any],
+        social_contagion: dict[str, Any],
         agent_policy_flags: list[dict[str, Any]],
         agent_policy_flags_degraded: bool,
         agent_policy_flags_reason: Optional[str],
@@ -1684,10 +2488,20 @@ class Risk360Provider:
                 "subject": {"kind": request.subject.kind, "id": request.subject.id},
                 "assessmentId": (assessment.assessment_id if assessment is not None else None),
                 "findings": [],
+                "anomalyEvents": self._anomaly_event_summary(
+                    anomaly_events,
+                    degraded=anomaly_events_degraded,
+                    reason=anomaly_events_reason,
+                ),
                 "poisoningEvidence": self._poisoning_evidence_summary(
                     poisoning_evidence,
                     degraded=poisoning_evidence_degraded,
                     reason=poisoning_evidence_reason,
+                ),
+                "interventions": self._intervention_summary(
+                    interventions,
+                    degraded=interventions_degraded,
+                    reason=interventions_reason,
                 ),
                 "policyFlags": {
                     "state": (
@@ -1722,15 +2536,33 @@ class Risk360Provider:
                     for key, value in social_propagation.items()
                     if key != "evidence_refs"
                 },
+                "financialContagion": self._financial_contagion_summary(
+                    financial_link,
+                    degraded=financial_link_degraded,
+                    reason=financial_link_reason,
+                ),
+                "socialContagion": {
+                    key: value
+                    for key, value in social_contagion.items()
+                    if key != "evidence_refs"
+                },
                 "auditHistory": self._assessment_history_summary(
                     assessment_history,
                     degraded=assessment_history_degraded,
                     reason=assessment_history_reason,
+                    interventions=self._intervention_summary(
+                        interventions,
+                        degraded=interventions_degraded,
+                        reason=interventions_reason,
+                    ),
                 ),
                 "requiredSlotCoverage": self._required_slot_coverage(
                     request,
                     assessment,
                     signals,
+                    anomaly_events,
+                    anomaly_events_degraded,
+                    anomaly_events_reason,
                     evidence,
                     source_provenance,
                     source_provenance_degraded,
@@ -1739,10 +2571,14 @@ class Risk360Provider:
                     poisoning_evidence,
                     poisoning_evidence_degraded,
                     poisoning_evidence_reason,
+                    interventions,
+                    interventions_degraded,
+                    interventions_reason,
                     financial_link,
                     financial_link_degraded,
                     financial_link_reason,
                     social_propagation,
+                    social_contagion,
                     agent_policy_flags,
                     agent_policy_flags_degraded,
                     agent_policy_flags_reason,
@@ -1754,9 +2590,18 @@ class Risk360Provider:
             warnings=warnings or None,
             canonicalAuthorityRefs=[
                 "computation_runs",
+                "gold_identity.anomaly_alert",
                 "graph",
                 "relationship_facts",
                 "risk_assessments",
+                "risk_intervention_records",
+                "social_relationship_evidence_events",
+                "bronze_sdk_events",
+                "entity_graph",
+                "risk_signals",
+                "flow_trace_paths",
+                "flow_traces",
+                "transfers",
             ],
         )
 
@@ -1847,10 +2692,172 @@ class Risk360Provider:
         }
 
     @staticmethod
+    def _anomaly_event_summary(
+        events: list[dict[str, Any]],
+        *,
+        degraded: bool,
+        reason: Optional[str],
+    ) -> dict[str, Any]:
+        """Expose exact Gold alerts and independently bound signal evidence refs."""
+        state = "degraded" if degraded else "partial" if events else "unknown"
+        verified_links = sum(
+            event.get("sourceEventJoin", {}).get("state")
+            == "verified_signal_evidence_reference"
+            for event in events
+        )
+        if verified_links:
+            default_reason = (
+                "gold_anomaly_alerts_with_exact_risk_signal_event_evidence_"
+                "references_detector_coverage_and_cause_not_attested"
+            )
+        elif events:
+            default_reason = (
+                "gold_anomaly_alerts_only_underlying_event_and_detector_coverage_not_attested"
+            )
+        else:
+            default_reason = "canonical_anomaly_detector_coverage_not_attested"
+        latest_recorded_at = max(
+            (event["recordedAt"] for event in events if event.get("recordedAt")),
+            default=None,
+        )
+        return {
+            "state": state,
+            "reason": reason or default_reason,
+            "records": [
+                {
+                    key: value
+                    for key, value in event.items()
+                    if key not in {"evidence_ref", "source_event_ref"}
+                }
+                | {
+                    "evidenceRef": event["evidence_ref"].model_dump(mode="json")
+                }
+                for event in events
+            ],
+            "coverage": {
+                "completeAlertRecordScan": not degraded and reason is None,
+                "detectorCoverage": "unattested",
+                "underlyingEventLineage": (
+                    "bounded_exact_risk_signal_event_evidence_reference"
+                    if verified_links
+                    else "not_attested"
+                ),
+                "verifiedSourceEventEvidenceLinkCount": verified_links,
+                "sourceEventRecordVerification": "not_performed",
+                "negativeFindingInference": "prohibited",
+                "rawAlertPayload": "excluded",
+            },
+            "freshness": {
+                "state": "degraded" if degraded else "known" if latest_recorded_at else "unknown",
+                "recordCount": len(events),
+                "timestampedRecordCount": sum(bool(event.get("recordedAt")) for event in events),
+                "latestMaterializedAt": latest_recorded_at,
+                "threshold": "unconfigured",
+            },
+        }
+
+    @staticmethod
+    def _intervention_summary(
+        records: list[RiskInterventionRecord],
+        *,
+        degraded: bool,
+        reason: Optional[str],
+    ) -> dict[str, Any]:
+        """Render immutable intervention reports without upgrading their claims."""
+        if degraded:
+            state = "degraded"
+        elif records:
+            state = "partial"
+        else:
+            state = "unknown"
+        safe_records = [
+            {
+                "recordId": record.record_id,
+                "interventionId": record.intervention_id,
+                "recordKind": record.record_kind,
+                "type": record.intervention_type,
+                "label": record.label,
+                "requiresConfirmation": record.requires_confirmation,
+                "reversible": record.reversible,
+                "decisionState": record.decision_state,
+                "reportedOutcome": record.reported_outcome,
+                "decisionRecordId": record.decision_record_id,
+                "subject": {"kind": record.subject_kind, "id": record.subject_id},
+                "actor": {
+                    "kind": record.actor_kind,
+                    "id": record.actor_id,
+                    "attributionState": "source_reported_unverified",
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json") for ref in record.actor_evidence_refs
+                    ],
+                },
+                "policyDecisionId": record.policy_decision_id,
+                "policyEvaluation": "reference_only_not_replayed",
+                "claimState": record.claim_state.value,
+                "observedAt": record.observed_at.isoformat(),
+                "effectiveAt": record.effective_at.isoformat(),
+                "recordedAt": record.recorded_at.isoformat(),
+                "sourceSystem": record.source_system,
+                "sourceRecordId": record.source_record_id,
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in record.evidence_refs],
+                "semantics": (
+                    "decision_record_only_not_proof_of_actor_authority_or_execution"
+                    if record.record_kind == "decision"
+                    else "source_reported_outcome_not_independently_verified"
+                ),
+            }
+            for record in records
+        ]
+        return {
+            "state": state,
+            "reason": reason
+            or (
+                "risk_intervention_actor_authority_and_outcome_coverage_not_attested"
+                if records
+                else "risk_intervention_producer_coverage_not_attested"
+            ),
+            "records": safe_records,
+            "semantics": {
+                "decisionProvesExecution": False,
+                "reportedOutcomeProvesExternalEffect": False,
+                "risk360ExecutesInterventions": False,
+                "actorAuthorityEvaluation": "not_performed_by_risk360",
+                "producerCoverage": "unattested",
+            },
+            "coverage": {
+                "completeRecordScan": not degraded and reason is None,
+                "producerCoverage": "unattested",
+                "actorIdentity": "source_reported_unverified",
+                "actorAuthority": "not_evaluated",
+                "applicationOutcomeVerification": "not_available",
+            },
+            "freshness": {
+                "state": "degraded" if degraded else "known" if records else "unknown",
+                "recordCount": len(records),
+                "timestampedRecordCount": sum(
+                    record.recorded_at is not None for record in records
+                ),
+                "latestObservedAt": max(
+                    (record.observed_at.isoformat() for record in records), default=None
+                ),
+                "latestEffectiveAt": max(
+                    (record.effective_at.isoformat() for record in records), default=None
+                ),
+                "latestRecordedAt": max(
+                    (record.recorded_at.isoformat() for record in records), default=None
+                ),
+                "threshold": "unconfigured",
+            },
+        }
+
+    @staticmethod
     def _required_slot_coverage(
         request: ProjectionRequest,
         assessment: Optional[RiskAssessment],
         signals: list[RiskSignal],
+        anomaly_events: list[dict[str, Any]],
+        anomaly_events_degraded: bool,
+        anomaly_events_reason: Optional[str],
         evidence: list[EvidenceRef],
         source_provenance: list[dict[str, Any]],
         source_provenance_degraded: bool,
@@ -1859,10 +2866,14 @@ class Risk360Provider:
         poisoning_evidence: list[RiskPoisoningEvidence],
         poisoning_evidence_degraded: bool,
         poisoning_evidence_reason: Optional[str],
+        interventions: list[RiskInterventionRecord],
+        interventions_degraded: bool,
+        interventions_reason: Optional[str],
         financial_link: Optional[dict[str, Any]],
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
         social_propagation: dict[str, Any],
+        social_contagion: dict[str, Any],
         agent_policy_flags: list[dict[str, Any]],
         agent_policy_flags_degraded: bool,
         agent_policy_flags_reason: Optional[str],
@@ -1945,6 +2956,50 @@ class Risk360Provider:
                 "reason": poisoning_evidence_reason or "poisoning_detector_coverage_not_attested",
             }
 
+        if anomaly_events_degraded:
+            anomaly_coverage = {
+                "state": "degraded",
+                "reason": anomaly_events_reason or "gold_anomaly_alert_read_incomplete",
+            }
+        elif anomaly_events:
+            anomaly_source_links = any(
+                event.get("sourceEventJoin", {}).get("state")
+                == "verified_signal_evidence_reference"
+                for event in anomaly_events
+            )
+            anomaly_coverage = {
+                "state": "partial",
+                "reason": (
+                    "gold_anomaly_alerts_with_exact_risk_signal_event_evidence_"
+                    "references_detector_coverage_and_cause_not_attested"
+                    if anomaly_source_links
+                    else "gold_anomaly_alerts_only_underlying_event_and_detector_coverage_not_attested"
+                ),
+            }
+        else:
+            anomaly_coverage = {
+                "state": "unknown",
+                "reason": anomaly_events_reason
+                or "canonical_anomaly_detector_coverage_not_attested",
+            }
+
+        intervention_coverage = (
+            {
+                "state": "degraded",
+                "reason": interventions_reason or "risk_intervention_read_incomplete",
+            }
+            if interventions_degraded
+            else {
+                "state": "partial",
+                "reason": "risk_intervention_records_available_actor_authority_and_outcome_verification_not_attested",
+            }
+            if interventions
+            else {
+                "state": "unknown",
+                "reason": interventions_reason or "risk_intervention_producer_coverage_not_attested",
+            }
+        )
+
         supported: dict[str, dict[str, str]] = {
             "risk_summary": (
                 {"state": "available"}
@@ -1957,7 +3012,9 @@ class Risk360Provider:
                 }
             ),
             "source_trust": source_trust_coverage,
+            "anomaly_events": anomaly_coverage,
             "poisoning_evidence": poisoning_coverage,
+            "interventions": intervention_coverage,
             "agent_amplification": (
                 {"state": "available"}
                 if agent_amplification
@@ -1969,25 +3026,51 @@ class Risk360Provider:
                 else {"state": "unknown", "reason": "canonical_evidence_references_unavailable"}
             ),
         }
-        unsupported_reasons = {
-            "anomaly_events": "canonical_anomaly_event_authority_unavailable",
-            "financial_contagion": "financial_contagion_attribution_authority_unavailable",
-            "social_contagion": "social_contagion_causal_evidence_authority_unavailable",
-            "interventions": "risk_intervention_authority_unavailable",
+        supported["financial_contagion"] = {
+            "state": "unknown",
+            "reason": "financial_contagion_attribution_authority_unavailable",
         }
-        for slot_id, reason in unsupported_reasons.items():
-            supported[slot_id] = {"state": "unknown", "reason": reason}
+        contagion_state = social_contagion.get("state")
+        if contagion_state == "degraded":
+            supported["social_contagion"] = {
+                "state": "degraded",
+                "reason": social_contagion.get("reason")
+                or "social_contagion_evidence_read_incomplete",
+            }
+        elif social_contagion.get("records"):
+            supported["social_contagion"] = {
+                "state": "partial",
+                "reason": "source_reported_correlated_evidence_causality_unverified_policy_unknown",
+            }
+        else:
+            supported["social_contagion"] = {
+                "state": "unknown",
+                "reason": social_contagion.get("reason")
+                or "social_contagion_evidence_not_observed",
+            }
         supported["policy_flags"] = policy_flags_coverage
-        if assessment_history_degraded:
+        has_verified_restatement_links = any(
+            isinstance(row.get("restatement_link"), dict)
+            and row["restatement_link"].get("state") == "verified_direct_predecessor"
+            for row in assessment_history
+        )
+        if assessment_history_degraded or interventions_degraded:
             supported["audit_history"] = {
                 "state": "degraded",
                 "reason": assessment_history_reason
-                or "risk_assessment_run_history_read_incomplete",
+                or interventions_reason
+                or "risk_intervention_audit_read_incomplete",
             }
-        elif assessment_history:
+        elif assessment_history or interventions:
             supported["audit_history"] = {
                 "state": "partial",
-                "reason": "assessment_run_history_available_intervention_audit_and_full_restatement_lineage_unavailable",
+                "reason": (
+                    "assessment_run_history_and_verified_direct_restatement_links_available_full_lineage_actor_authority_and_producer_coverage_unknown"
+                    if has_verified_restatement_links
+                    else "assessment_run_history_available_restatement_links_not_observed_actor_authority_and_producer_coverage_unknown"
+                    if assessment_history
+                    else "intervention_records_available_assessment_run_history_unavailable"
+                ),
             }
         else:
             supported["audit_history"] = {
@@ -2024,6 +3107,9 @@ class Risk360Provider:
         request: ProjectionRequest,
         assessment: Optional[RiskAssessment],
         signals: list[RiskSignal],
+        anomaly_events: list[dict[str, Any]],
+        anomaly_events_degraded: bool,
+        anomaly_events_reason: Optional[str],
         assessment_degraded: bool,
         signals_degraded: bool,
         source_provenance: list[dict[str, Any]],
@@ -2032,6 +3118,9 @@ class Risk360Provider:
         poisoning_evidence: list[RiskPoisoningEvidence],
         poisoning_evidence_degraded: bool,
         poisoning_evidence_reason: Optional[str],
+        interventions: list[RiskInterventionRecord],
+        interventions_degraded: bool,
+        interventions_reason: Optional[str],
     ) -> ProjectionSection:
         """health — detector/source freshness for the signals feeding the read.
 
@@ -2042,12 +3131,21 @@ class Risk360Provider:
         """
         state: str = "available"
         warnings: list[str] = []
-        if signals_degraded or poisoning_evidence_degraded:
+        if (
+            signals_degraded
+            or anomaly_events_degraded
+            or poisoning_evidence_degraded
+            or interventions_degraded
+        ):
             state = "degraded"
             if signals_degraded:
                 warnings.append("risk signal source unavailable; health is degraded")
+            if anomaly_events_degraded:
+                warnings.append("Gold anomaly alert source unavailable or incomplete")
             if poisoning_evidence_degraded:
                 warnings.append("poisoning evidence source unavailable or incomplete")
+            if interventions_degraded:
+                warnings.append("risk intervention source unavailable or incomplete")
         elif not signals:
             state = "missing"
             warnings.append(
@@ -2082,6 +3180,11 @@ class Risk360Provider:
             "tenantId": request.tenantId,
             "subject": {"kind": request.subject.kind, "id": request.subject.id},
             "signalSources": by_source,
+            "anomalyAlertFreshness": self._anomaly_event_summary(
+                anomaly_events,
+                degraded=anomaly_events_degraded,
+                reason=anomaly_events_reason,
+            )["freshness"],
             # Preserve each canonical signal-to-evidence association for
             # consumers that need the assessed context behind an Agent risk
             # dimension. The detector's epistemic state is carried verbatim;
@@ -2113,6 +3216,11 @@ class Risk360Provider:
                 poisoning_evidence,
                 degraded=poisoning_evidence_degraded,
                 reason=poisoning_evidence_reason,
+            )["freshness"],
+            "interventionFreshness": self._intervention_summary(
+                interventions,
+                degraded=interventions_degraded,
+                reason=interventions_reason,
             )["freshness"],
             "assessmentFreshness": (
                 None
@@ -2183,6 +3291,16 @@ class Risk360Provider:
                     degraded=poisoning_evidence_degraded,
                     reason=poisoning_evidence_reason,
                 )["freshness"],
+                "interventions": self._intervention_summary(
+                    interventions,
+                    degraded=interventions_degraded,
+                    reason=interventions_reason,
+                )["freshness"],
+                "anomalyAlerts": self._anomaly_event_summary(
+                    anomaly_events,
+                    degraded=anomaly_events_degraded,
+                    reason=anomaly_events_reason,
+                )["freshness"],
             },
         }
         return ProjectionSection(
@@ -2252,8 +3370,10 @@ class Risk360Provider:
         request: ProjectionRequest,
         assessment: Optional[RiskAssessment],
         signals: list[RiskSignal],
+        anomaly_events: list[dict[str, Any]],
         source_provenance: list[dict[str, Any]],
         poisoning_evidence: list[RiskPoisoningEvidence],
+        interventions: list[RiskInterventionRecord],
         financial_link: Optional[dict[str, Any]],
         agent_policy_flags: list[dict[str, Any]],
         *,
@@ -2324,6 +3444,36 @@ class Risk360Provider:
                         ),
                     )
                 )
+
+        for event in anomaly_events:
+            evidence_ref = event.get("evidence_ref")
+            if not isinstance(evidence_ref, EvidenceRef):
+                continue
+            source_event_ref = event.get("source_event_ref")
+            linked = isinstance(source_event_ref, EvidenceRef)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk360.anomaly-alert.{event['alertRecordId']}",
+                    kind="risk_anomaly_alert_recorded",
+                    subject=subject,
+                    evidenceRefs=[evidence_ref, source_event_ref]
+                    if linked
+                    else [evidence_ref],
+                    claims=[
+                        "The tenant-scoped Gold identity authority contains an anomaly_alert "
+                        "materialization for this exact typed subject, with a matching "
+                        "RiskSignal event evidence reference. Source event contents, cause, "
+                        "severity, and detector coverage are not verified here."
+                        if linked
+                        else "The tenant-scoped Gold identity authority contains an anomaly_alert "
+                        "materialization for this exact typed subject; the underlying event, "
+                        "cause, severity, and detector coverage are not attested here."
+                    ],
+                    confidence=None,
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["anomaly_events", "evidence_trace"],
+                )
+            )
 
         # Carry each evidence-backed signal as its own epistemically classified
         # assessment-context claim. In particular, an inferred Agentic
@@ -2437,6 +3587,37 @@ class Risk360Provider:
                 )
             )
 
+        for record in interventions:
+            if record.record_kind == "decision":
+                claim = (
+                    f"Risk intervention {record.intervention_id!r} has a recorded decision "
+                    f"state {record.decision_state!r} for {record.intervention_type!r}; "
+                    "the record does not establish actor authority or execution."
+                )
+                claim_kind = "risk_intervention_decision_recorded"
+            else:
+                claim = (
+                    f"Source {record.source_system!r} reports outcome "
+                    f"{record.reported_outcome!r} for intervention "
+                    f"{record.intervention_id!r}; the reported outcome is not independently "
+                    "verified as an external effect."
+                )
+                claim_kind = "risk_intervention_outcome_reported"
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk360.intervention.{record.record_id}",
+                    kind=claim_kind,
+                    subject=subject,
+                    evidenceRefs=_dedupe_evidence(
+                        [*record.evidence_refs, *record.actor_evidence_refs]
+                    ),
+                    claims=[claim],
+                    confidence=None,
+                    claimState=record.claim_state,
+                    domainSlotIds=["interventions", "audit_history", "evidence_trace"],
+                )
+            )
+
         if signals:
             # One claim per contributing signal source (detector health truth).
             refs_by_source: dict[str, list[EvidenceRef]] = {}
@@ -2473,7 +3654,7 @@ class Risk360Provider:
                     evidenceRefs=list(financial_link["evidence_refs"]),
                     claims=[financial_link["claim"]],
                     confidence=None,
-                    claimState=EpistemicStatus.DERIVED,
+                    claimState=EpistemicStatus.CORRELATED,
                     domainSlotIds=["financial_contagion", "evidence_trace"],
                 )
             )
@@ -2831,32 +4012,33 @@ class Risk360Provider:
         ):
             return None, False, "financial_flow_risk_bitemporal_history_unavailable"
 
-        reader = getattr(self._sources, "financial_flow_path", None)
-        if not callable(reader):
+        subject_reader = getattr(self._sources, "financial_flow_path_subjects", None)
+        details_reader = getattr(self._sources, "financial_flow_path_details", None)
+        if not callable(subject_reader) or not callable(details_reader):
             return None, False, "financial_flow_path_authority_not_connected"
         try:
-            raw_path = await reader(tenant_id=request.tenantId, path_id=request.subject.id)
+            raw_subjects = await subject_reader(
+                tenant_id=request.tenantId,
+                path_id=request.subject.id,
+            )
         except Exception:  # noqa: BLE001 - exact-source failures stay content-free
-            return None, True, "financial_flow_path_read_incomplete"
-        if raw_path is None:
+            return None, True, "financial_flow_path_subject_read_incomplete"
+        if raw_subjects is None:
             return None, False, "financial_flow_path_record_unavailable"
         if (
-            not isinstance(raw_path, dict)
-            or raw_path.get("tenant_id") != request.tenantId
-            or raw_path.get("path_id") != request.subject.id
-            or not isinstance(raw_path.get("trace_id"), str)
-            or not raw_path.get("trace_id")
+            not isinstance(raw_subjects, dict)
+            or raw_subjects.get("tenant_id") != request.tenantId
+            or raw_subjects.get("path_id") != request.subject.id
         ):
-            return None, True, "financial_flow_path_scope_incomplete"
-        linkage_reason = raw_path.get("linkage_reason")
+            return None, True, "financial_flow_path_subject_scope_incomplete"
+        linkage_reason = raw_subjects.get("linkage_reason")
         if isinstance(linkage_reason, str) and linkage_reason:
             return None, False, linkage_reason
 
-        path_nodes = raw_path.get("path_nodes")
-        transfer_edges = raw_path.get("transfer_edges")
-        hop_count = raw_path.get("hop_count")
-        path_discovered_at = _aware_datetime(raw_path.get("path_discovered_at"))
-        trace_completed_at = _aware_datetime(raw_path.get("trace_completed_at"))
+        path_nodes = raw_subjects.get("path_nodes")
+        hop_count = raw_subjects.get("hop_count")
+        trace_id = raw_subjects.get("trace_id")
+        path_discovered_at = _aware_datetime(raw_subjects.get("path_discovered_at"))
         if (
             not isinstance(path_nodes, list)
             or not 2 <= len(path_nodes) <= _MAX_FINANCIAL_PATH_NODES
@@ -2865,12 +4047,97 @@ class Risk360Provider:
             or not isinstance(hop_count, int)
             or hop_count != len(path_nodes) - 1
             or len(set(path_nodes)) < 2
-            or not isinstance(transfer_edges, list)
-            or len(transfer_edges) != hop_count
+            or not isinstance(trace_id, str)
+            or not trace_id.strip()
             or path_discovered_at is None
+        ):
+            return None, True, "financial_flow_path_subject_sequence_incomplete"
+
+        consent_reader = self._consent_reader
+        if consent_reader is None:
+            try:
+                from governance.consent.authority import evaluate_consent
+            except Exception:  # noqa: BLE001 - absent consent authority is fail closed
+                return None, True, "financial_contagion_consent_authority_unavailable"
+
+            consent_reader = evaluate_consent
+            self._consent_reader = consent_reader
+        if not callable(consent_reader):
+            return None, True, "financial_contagion_consent_authority_unavailable"
+        for entity_id in dict.fromkeys(path_nodes):
+            try:
+                consent = await consent_reader(
+                    request.tenantId,
+                    entity_id,
+                    None,
+                    "analytics",
+                )
+            except Exception:  # noqa: BLE001 - financial consent is fail closed
+                return None, True, "financial_contagion_consent_authority_unavailable"
+            if (
+                isinstance(consent, tuple)
+                and len(consent) == 2
+                and type(consent[0]) is bool
+                and (consent[1] is None or isinstance(consent[1], str))
+            ):
+                allowed, consent_reason = consent
+            elif (
+                hasattr(consent, "allowed")
+                and hasattr(consent, "reason_code")
+                and type(getattr(consent, "allowed")) is bool
+                and (
+                    getattr(consent, "reason_code") is None
+                    or isinstance(getattr(consent, "reason_code"), str)
+                )
+            ):
+                allowed = getattr(consent, "allowed")
+                consent_reason = getattr(consent, "reason_code")
+            else:
+                return None, False, "financial_contagion_consent_result_ambiguous"
+            if allowed and consent_reason is not None:
+                return None, False, "financial_contagion_consent_result_ambiguous"
+            if not allowed:
+                if consent_reason == "consent_authority_unavailable":
+                    return None, True, "financial_contagion_consent_authority_unavailable"
+                if consent_reason in {None, "consent_receipt_missing", "consent_unknown"}:
+                    return None, False, "financial_contagion_consent_not_affirmed"
+                return None, False, "financial_contagion_consent_restricted"
+
+        # No transfer, trace, or per-entity risk detail is read until every
+        # exact path entity has returned an affirmative analytics decision.
+        try:
+            raw_path = await details_reader(
+                tenant_id=request.tenantId,
+                path_id=request.subject.id,
+                trace_id=trace_id,
+                path_nodes=list(path_nodes),
+                path_discovered_at=path_discovered_at,
+            )
+        except Exception:  # noqa: BLE001 - detail authority fails closed
+            return None, True, "financial_flow_path_detail_read_incomplete"
+        if raw_path is None:
+            return None, False, "financial_flow_path_detail_unavailable"
+        if (
+            not isinstance(raw_path, dict)
+            or raw_path.get("tenant_id") != request.tenantId
+            or raw_path.get("path_id") != request.subject.id
+            or raw_path.get("trace_id") != trace_id
+            or raw_path.get("path_nodes") != path_nodes
+            or raw_path.get("hop_count") != hop_count
+            or _aware_datetime(raw_path.get("path_discovered_at")) != path_discovered_at
+        ):
+            return None, True, "financial_flow_path_detail_binding_changed"
+        linkage_reason = raw_path.get("linkage_reason")
+        if isinstance(linkage_reason, str) and linkage_reason:
+            return None, False, linkage_reason
+        transfer_edges = raw_path.get("transfer_edges")
+        trace_completed_at = _aware_datetime(raw_path.get("trace_completed_at"))
+        if (
+            not isinstance(transfer_edges, list)
+            or len(transfer_edges) != hop_count
             or trace_completed_at is None
         ):
-            return None, False, "financial_flow_path_sequence_or_freshness_unknown"
+            return None, False, "financial_flow_path_detail_sequence_or_freshness_unknown"
 
         transfer_refs: list[EvidenceRef] = []
         transfer_times: list[datetime] = []
@@ -2951,6 +4218,61 @@ class Risk360Provider:
             ):
                 return None, False, "financial_risk_policy_or_freshness_unknown"
 
+            exposure_context: Optional[dict[str, Any]] = None
+            exposure_refs: list[EvidenceRef] = []
+            exposure = assessment.exposure
+            if exposure is not None:
+                if (
+                    exposure.tenant_id != request.tenantId
+                    or exposure.subject_kind != "entity"
+                    or exposure.subject_id != entity_id
+                ):
+                    return None, True, "financial_exposure_exact_binding_mismatch"
+                exposure_refs = _dedupe_evidence(exposure.evidence_refs)
+                if any(not ref.id.strip() or not ref.source.strip() for ref in exposure_refs):
+                    return None, True, "financial_exposure_evidence_invalid"
+                if any(
+                    (observed := _aware_datetime(ref.observedAt)) is not None
+                    and observed > assessment_at
+                    for ref in exposure_refs
+                ):
+                    return None, True, "financial_exposure_evidence_temporal_order_invalid"
+                # An exposure without evidence is not surfaced as an observed
+                # path-node fact. A legitimate unpriced or label-only exposure
+                # remains representable when its canonical refs are present.
+                if exposure_refs:
+                    economic_value = exposure.economic_value
+                    exposure_context = {
+                        "subject": {"kind": "entity", "id": entity_id},
+                        "claimState": exposure.claim_state.value,
+                        "exposedAssetCount": len(exposure.exposed_asset_labels),
+                        "exposedOutcomeCount": len(exposure.exposed_outcome_labels),
+                        "exposedPopulationCount": len(exposure.exposed_population_labels),
+                        "economicValue": (
+                            {
+                                "amount": (
+                                    str(economic_value.amount)
+                                    if economic_value.amount is not None
+                                    else None
+                                ),
+                                "currency": economic_value.currency,
+                                "usdValue": (
+                                    str(economic_value.usd_value)
+                                    if economic_value.usd_value is not None
+                                    else None
+                                ),
+                                "valuation": (
+                                    economic_value.valuation.model_dump(mode="json")
+                                    if economic_value.valuation is not None
+                                    else None
+                                ),
+                            }
+                            if economic_value is not None
+                            else None
+                        ),
+                        "evidenceRefs": [ref.model_dump(mode="json") for ref in exposure_refs],
+                    }
+
             eligible_components = {
                 component.dimension: component
                 for component in assessment.vector.components
@@ -2991,6 +4313,7 @@ class Risk360Provider:
             for signal in matched_signals:
                 node_refs.extend(signal.evidence_refs)
                 node_refs.extend(matched_components[signal.risk_dimension].evidence_refs)
+            node_refs.extend(exposure_refs)
             node_refs = _dedupe_evidence(node_refs)
             if not node_refs:
                 return None, False, "financial_risk_evidence_unavailable_for_path_entity"
@@ -3004,6 +4327,7 @@ class Risk360Provider:
                     "assessed_at": assessment_at.isoformat(),
                     "dimensions": sorted(matched_components),
                     "signal_ids": sorted({signal.signal_id for signal in matched_signals}),
+                    "exposure": exposure_context,
                 }
             )
 
@@ -3020,6 +4344,7 @@ class Risk360Provider:
             }
         )
         assessment_times = sorted({row["assessed_at"] for row in risk_contexts})
+        exposure_count = sum(row["exposure"] is not None for row in risk_contexts)
         observed_transfer_times = sorted(
             {
                 ref.observedAt
@@ -3032,15 +4357,18 @@ class Risk360Provider:
             f"tenant-scoped transfer record(s) to evidence-backed economic, transaction, or "
             f"payment risk contexts for {len(risk_contexts)} path entities. The risk contexts "
             f"were assessed under {', '.join(policies)} at {', '.join(assessment_times)}; "
-            f"transfer timestamps are {', '.join(observed_transfer_times)}. This is a partial "
-            "financial value/risk linkage only; it does not establish contagion, causal "
-            "transmission, attributed exposure, loss, or freshness against an SLA."
+            f"transfer timestamps are {', '.join(observed_transfer_times)}. Evidence-backed "
+            f"subject exposures are present for {exposure_count} path entities; these are not "
+            "attributed to transfer edges. This is a correlated financial value/risk linkage "
+            "only; it does not establish contagion, causal transmission, loss, or freshness "
+            "against an SLA."
         )
         return (
             {
                 "path_id": request.subject.id,
                 "trace_id": raw_path["trace_id"],
                 "risk_contexts": risk_contexts,
+                "exposure_state": "partial" if exposure_count else "unknown",
                 "transfer_count": len(transfer_refs),
                 "evidence_refs": evidence_refs,
                 "claim": claim,
@@ -3217,6 +4545,171 @@ class Risk360Provider:
             "agent_policy_flag_record_invalid_or_scope_incomplete" if degraded else None
         )
 
+    async def _safe_anomaly_events(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+    ) -> tuple[list[dict[str, Any]], bool, Optional[str]]:
+        """Project exact Gold alerts and bounded, explicit signal evidence joins.
+
+        A Gold ``anomaly_alert`` materialization proves that an alert record
+        was stored for this exact typed subject. A matching canonical RiskSignal
+        can identify an event EvidenceRef and detector source; the event record
+        itself, detector coverage, cause, and severity remain unverified.
+        """
+        reader = getattr(self._sources, "anomaly_events", None)
+        if not callable(reader):
+            return [], False, "canonical_anomaly_event_authority_unavailable"
+        try:
+            result = await reader(tenant_id=tenant_id, subject=subject)
+        except Exception:  # noqa: BLE001 - source diagnostics stay private
+            return [], True, "gold_anomaly_alert_read_incomplete"
+        raw_records = getattr(result, "records", None)
+        complete = getattr(result, "complete", None)
+        read_reason = getattr(result, "reason", None)
+        if not isinstance(raw_records, list) or not isinstance(complete, bool):
+            return [], True, "gold_anomaly_alert_read_contract_invalid"
+        if len(raw_records) > _MAX_RISK_ANOMALY_SCAN:
+            return [], True, "gold_anomaly_alert_scan_limit_exceeded"
+
+        reason = read_reason.strip() if isinstance(read_reason, str) and read_reason.strip() else None
+        degraded = not complete or reason is not None
+        if reason is None and not complete:
+            reason = "gold_anomaly_alert_scan_truncated"
+        events: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        try:
+            from repositories.lake import GoldRepository
+
+            expected_id = GoldRepository.compute_record_id(
+                tenant_id,
+                "anomaly_alert",
+                subject.id,
+                subject.kind,
+            )
+        except Exception:  # noqa: BLE001 - missing identity authority stays unavailable
+            return [], True, "gold_anomaly_alert_identity_authority_unavailable"
+
+        for raw in raw_records:
+            if not isinstance(raw, dict):
+                degraded = True
+                reason = reason or "gold_anomaly_alert_record_invalid"
+                continue
+            alert_id = raw.get("id")
+            if (
+                str(raw.get("tenant_id", "")) != tenant_id
+                or raw.get("metric_name") != "anomaly_alert"
+                or raw.get("entity_id") != subject.id
+                or raw.get("entity_type") != subject.kind
+                or not isinstance(alert_id, str)
+                or alert_id != expected_id
+            ):
+                degraded = True
+                reason = reason or "gold_anomaly_alert_exact_binding_mismatch"
+                continue
+            if alert_id in seen_ids:
+                degraded = True
+                reason = reason or "gold_anomaly_alert_duplicate_record"
+                continue
+            seen_ids.add(alert_id)
+            materialized_at = _aware_datetime(raw.get("materialized_at"))
+            raw_join = raw.get("source_event_join")
+            source_event_ref: Optional[EvidenceRef] = None
+            event_join: dict[str, Any] = {
+                "state": "unknown",
+                "reason": "explicit_anomaly_event_reference_unavailable",
+            }
+            if isinstance(raw_join, dict) and raw_join.get("state") == "degraded":
+                degraded = True
+                reason = reason or "gold_anomaly_source_event_join_incomplete"
+                event_join = {
+                    "state": "degraded",
+                    "reason": "gold_anomaly_source_event_join_incomplete",
+                }
+            elif isinstance(raw_join, dict) and raw_join.get("state") == "verified_signal_evidence_reference":
+                dimensions = raw.get("dimensions")
+                ref = raw_join.get("evidence_ref")
+                signal_id = raw_join.get("risk_signal_id")
+                detector_source = raw_join.get("detector_source")
+                claim_state = raw_join.get("signal_claim_state")
+                if (
+                    not isinstance(dimensions, dict)
+                    or not isinstance(signal_id, str)
+                    or not signal_id.strip()
+                    or dimensions.get("risk_signal_id") != signal_id
+                    or not isinstance(ref, EvidenceRef)
+                    or ref.type != "event"
+                    or not ref.id.strip()
+                    or not ref.source.strip()
+                    or dimensions.get("source_event_id") != ref.id
+                    or dimensions.get("source_event_source") != ref.source
+                    or not isinstance(detector_source, str)
+                    or not detector_source.strip()
+                    or claim_state not in {state.value for state in EpistemicStatus}
+                    or raw_join.get("source_event_record_read") != "not_performed"
+                ):
+                    degraded = True
+                    reason = reason or "gold_anomaly_source_event_join_incomplete"
+                    event_join = {
+                        "state": "degraded",
+                        "reason": "gold_anomaly_source_event_join_incomplete",
+                    }
+                else:
+                    source_event_ref = ref
+                    event_join = {
+                        "state": "verified_signal_evidence_reference",
+                        "riskSignalId": signal_id,
+                        "detectorSource": detector_source,
+                        "detectorVersion": raw_join.get("detector_version")
+                        if isinstance(raw_join.get("detector_version"), str)
+                        else None,
+                        "signalClaimState": claim_state,
+                        "sourceEventRecordRead": "not_performed",
+                        "sourceEventEvidenceRef": ref.model_dump(mode="json"),
+                    }
+            elif raw_join is not None and (
+                not isinstance(raw_join, dict) or raw_join.get("state") != "unknown"
+            ):
+                degraded = True
+                reason = reason or "gold_anomaly_source_event_join_incomplete"
+                event_join = {
+                    "state": "degraded",
+                    "reason": "gold_anomaly_source_event_join_incomplete",
+                }
+            evidence_ref = EvidenceRef(
+                id=alert_id,
+                type="model_output",
+                source="gold_identity.anomaly_alert",
+                observedAt=materialized_at.isoformat() if materialized_at is not None else None,
+                uri=f"store://gold_identity/{quote(alert_id, safe='')}",
+            )
+            events.append(
+                {
+                    "alertRecordId": alert_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "recordedAt": (
+                        materialized_at.isoformat() if materialized_at is not None else None
+                    ),
+                    "timestampSemantics": "gold_materialization_time_not_source_event_time",
+                    "payload": "excluded",
+                    "evidence_ref": evidence_ref,
+                    "source_event_ref": source_event_ref,
+                    "sourceEventJoin": event_join,
+                    "semantics": (
+                        "tenant_scoped_gold_alert_with_exact_risk_signal_event_evidence_"
+                        "reference_cause_and_detector_coverage_unattested"
+                        if source_event_ref is not None
+                        else "tenant_scoped_gold_anomaly_alert_record_only_underlying_event_"
+                        "cause_and_detector_coverage_not_attested"
+                    ),
+                }
+            )
+        events.sort(
+            key=lambda row: (row["recordedAt"] or "", row["alertRecordId"]),
+            reverse=True,
+        )
+        return events, degraded, reason
+
     @staticmethod
     def _poisoning_as_of(
         request: ProjectionRequest,
@@ -3242,6 +4735,32 @@ class Risk360Provider:
         anchor = request_anchor or context_anchor
         if request.temporalMode == "as_of" and anchor is None:
             return None, "poisoning_evidence_as_of_anchor_missing"
+        return anchor, None
+
+    @staticmethod
+    def _interventions_as_of(
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> tuple[Optional[datetime], Optional[str]]:
+        """Resolve an exact known-then anchor; range reads are not supported."""
+        if request.timeRange is not None or request.temporalMode in {
+            "window",
+            "compare",
+            "relative",
+        }:
+            return None, "risk_intervention_window_history_unavailable"
+        request_anchor = _aware_datetime(request.asOf) if request.asOf is not None else None
+        context_anchor = _aware_datetime(context.asOf) if context.asOf is not None else None
+        if request.asOf is not None and request_anchor is None:
+            return None, "risk_intervention_as_of_anchor_invalid"
+        if context.asOf is not None and context_anchor is None:
+            return None, "risk_intervention_context_anchor_invalid"
+        if request_anchor is not None and context_anchor is not None:
+            if request_anchor != context_anchor:
+                return None, "risk_intervention_as_of_anchor_mismatch"
+        anchor = request_anchor or context_anchor
+        if request.temporalMode == "as_of" and anchor is None:
+            return None, "risk_intervention_as_of_anchor_missing"
         return anchor, None
 
     @staticmethod
@@ -3330,6 +4849,60 @@ class Risk360Provider:
                 degraded = True
                 reason = reason or "risk_assessment_history_dimensions_invalid"
                 dimensions = []
+            supersedes_run_id = raw.get("supersedes_run_id")
+            raw_link = raw.get("restatement_link")
+            restatement_link: Optional[dict[str, Any]] = None
+            if supersedes_run_id is None:
+                if raw_link is not None:
+                    degraded = True
+                    reason = reason or "risk_assessment_history_restatement_link_invalid"
+            elif not isinstance(supersedes_run_id, str) or not supersedes_run_id.strip():
+                degraded = True
+                reason = reason or "risk_assessment_history_restatement_reference_invalid"
+            else:
+                prior_started_at = (
+                    _aware_datetime(raw_link.get("prior_started_at"))
+                    if isinstance(raw_link, dict)
+                    else None
+                )
+                if (
+                    not isinstance(raw_link, dict)
+                    or raw_link.get("state") != "verified_direct_predecessor"
+                    or raw_link.get("prior_tenant_id") != tenant_id
+                    or raw_link.get("prior_subject_kind") != subject.kind
+                    or raw_link.get("prior_subject_id") != subject.id
+                    or raw_link.get("prior_run_id") != supersedes_run_id
+                    or supersedes_run_id == raw.get("run_id")
+                    or raw_link.get("prior_assessment_id") != raw.get("assessment_id")
+                    or not isinstance(raw_link.get("prior_definition_id"), str)
+                    or not raw_link["prior_definition_id"].startswith("risk360.")
+                    or raw_link["prior_definition_id"] != raw.get("definition_id")
+                    or raw_link.get("prior_definition_version") != raw.get("definition_version")
+                    or not isinstance(raw.get("definition_version"), str)
+                    or not raw["definition_version"].strip()
+                    or raw_link.get("prior_context_hash") != raw.get("context_hash")
+                    or not isinstance(raw.get("context_hash"), str)
+                    or not raw["context_hash"].strip()
+                    or raw_link.get("prior_status") != "completed"
+                    or prior_started_at is None
+                    or prior_started_at > started_at
+                ):
+                    degraded = True
+                    reason = reason or "risk_assessment_history_restatement_link_unverified"
+                else:
+                    restatement_link = {
+                        "state": "verified_direct_predecessor",
+                        "prior_run_id": supersedes_run_id,
+                        "prior_tenant_id": tenant_id,
+                        "prior_subject_kind": subject.kind,
+                        "prior_subject_id": subject.id,
+                        "prior_assessment_id": raw_link["prior_assessment_id"],
+                        "prior_definition_id": raw_link["prior_definition_id"],
+                        "prior_definition_version": raw_link["prior_definition_version"],
+                        "prior_context_hash": raw_link["prior_context_hash"],
+                        "prior_status": raw_link["prior_status"],
+                        "prior_started_at": prior_started_at.isoformat(),
+                    }
             rows.append(
                 {
                     **raw,
@@ -3340,6 +4913,7 @@ class Risk360Provider:
                         else None
                     ),
                     "dimensions": dimensions,
+                    "restatement_link": restatement_link,
                 }
             )
         rows.sort(
@@ -3350,23 +4924,37 @@ class Risk360Provider:
 
     @staticmethod
     def _assessment_history_evidence(rows: list[dict[str, Any]]) -> list[EvidenceRef]:
-        """Make each exact run-history record traceable to its substrate row."""
+        """Make run rows and verified predecessor links traceable to the substrate."""
         evidence: list[EvidenceRef] = []
         for row in rows:
             run_id = row.get("run_id")
             started_at = row.get("started_at")
-            if not isinstance(run_id, str) or not isinstance(started_at, str):
-                continue
-            evidence.append(
-                EvidenceRef(
-                    id=run_id,
-                    type="model_output",
-                    source="computation_runs",
-                    observedAt=started_at,
-                    uri=f"store://computation_runs/{run_id}",
+            if isinstance(run_id, str) and isinstance(started_at, str):
+                evidence.append(
+                    EvidenceRef(
+                        id=run_id,
+                        type="model_output",
+                        source="computation_runs",
+                        observedAt=started_at,
+                        uri=f"store://computation_runs/{run_id}",
+                    )
                 )
-            )
-        return evidence
+            link = row.get("restatement_link")
+            if not isinstance(link, dict) or link.get("state") != "verified_direct_predecessor":
+                continue
+            prior_run_id = link.get("prior_run_id")
+            prior_started_at = link.get("prior_started_at")
+            if isinstance(prior_run_id, str) and isinstance(prior_started_at, str):
+                evidence.append(
+                    EvidenceRef(
+                        id=prior_run_id,
+                        type="model_output",
+                        source="computation_runs",
+                        observedAt=prior_started_at,
+                        uri=f"store://computation_runs/{prior_run_id}",
+                    )
+                )
+        return _dedupe_evidence(evidence)
 
     @staticmethod
     def _assessment_history_summary(
@@ -3374,15 +4962,50 @@ class Risk360Provider:
         *,
         degraded: bool,
         reason: Optional[str],
+        interventions: dict[str, Any],
     ) -> dict[str, Any]:
         """Render assessment-run history while preserving uncovered audit areas."""
-        state = "degraded" if degraded else "partial" if rows else "unknown"
+        intervention_degraded = interventions.get("state") == "degraded"
+        has_interventions = bool(interventions.get("records"))
+        restatement_links = [
+            {
+                "priorRunId": row["restatement_link"]["prior_run_id"],
+                "newRunId": row["run_id"],
+                "assessmentId": row["assessment_id"],
+                "definitionId": row["definition_id"],
+                "definitionVersion": row["definition_version"],
+                "contextHash": row["context_hash"],
+                "priorStartedAt": row["restatement_link"]["prior_started_at"],
+                "newStartedAt": row["started_at"],
+                "relation": "computation_run_supersedes_run",
+                "evidenceRefs": [
+                    ref.model_dump(mode="json")
+                    for ref in Risk360Provider._assessment_history_evidence([row])
+                ],
+            }
+            for row in rows
+            if isinstance(row.get("restatement_link"), dict)
+            and row["restatement_link"].get("state") == "verified_direct_predecessor"
+        ]
+        state = (
+            "degraded"
+            if degraded or intervention_degraded
+            else "partial"
+            if rows or has_interventions
+            else "unknown"
+        )
         if degraded:
             resolved_reason = reason or "risk_assessment_run_history_read_incomplete"
+        elif intervention_degraded:
+            resolved_reason = interventions.get("reason") or "risk_intervention_read_incomplete"
         elif rows:
             resolved_reason = (
-                "assessment_run_history_available_intervention_audit_and_full_restatement_lineage_unavailable"
+                "assessment_run_history_and_verified_direct_restatement_links_available_full_lineage_actor_authority_and_producer_coverage_unknown"
+                if restatement_links
+                else "assessment_run_history_available_restatement_links_not_observed_actor_authority_and_producer_coverage_unknown"
             )
+        elif has_interventions:
+            resolved_reason = "intervention_records_available_assessment_run_history_unavailable"
         else:
             resolved_reason = reason or "risk_assessment_run_history_unavailable"
         records = [
@@ -3395,7 +5018,12 @@ class Risk360Provider:
                 "status": row.get("status"),
                 "startedAt": row["started_at"],
                 "completedAt": row.get("completed_at"),
-                "supersedesRunId": row.get("supersedes_run_id"),
+                "supersedesRunId": (
+                    row["restatement_link"]["prior_run_id"]
+                    if isinstance(row.get("restatement_link"), dict)
+                    and row["restatement_link"].get("state") == "verified_direct_predecessor"
+                    else None
+                ),
                 "claimState": row.get("claim_state"),
                 "dimensions": list(row.get("dimensions") or []),
                 "evidenceRef": Risk360Provider._assessment_history_evidence([row])[0].model_dump(
@@ -3408,14 +5036,20 @@ class Risk360Provider:
             "state": state,
             "reason": resolved_reason,
             "assessmentRuns": records,
-            "interventions": {
-                "state": "unknown",
-                "reason": "risk_intervention_authority_unavailable",
-            },
+            "restatementLinks": restatement_links,
+            "interventions": interventions,
             "coverage": {
                 "completeRunScan": not degraded and reason is None,
-                "assessmentVersionLineage": "partial",
-                "interventionAuditLineage": "unavailable",
+                "assessmentVersionLineage": (
+                    "bounded_verified_direct_predecessor_links"
+                    if restatement_links
+                    else "no_verified_direct_predecessor_links_observed"
+                ),
+                "verifiedDirectRestatementLinkCount": len(restatement_links),
+                "fullRestatementLineage": "unknown_beyond_direct_bounded_links",
+                "interventionAuditLineage": interventions.get("state", "unknown"),
+                "actorAuthorityEvaluation": "not_performed_by_risk360",
+                "externalOutcomeVerification": "unavailable",
                 "rawRunPayload": "excluded",
             },
         }
@@ -3507,6 +5141,93 @@ class Risk360Provider:
         )
         return records, degraded, reason
 
+    async def _safe_interventions(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[datetime],
+    ) -> tuple[list[RiskInterventionRecord], bool, Optional[str]]:
+        """Read typed intervention events and revalidate their exact scope."""
+        reader = getattr(self._sources, "interventions", None)
+        if not callable(reader):
+            return [], False, "risk_intervention_authority_unavailable"
+        try:
+            result = await reader(tenant_id=tenant_id, subject=subject, as_of=as_of)
+        except Exception:  # noqa: BLE001 - provider boundary returns safe absence
+            return [], True, "risk_intervention_read_incomplete"
+
+        raw_records = getattr(result, "records", None)
+        complete = getattr(result, "complete", None)
+        read_reason = getattr(result, "reason", None)
+        if not isinstance(raw_records, list) or not isinstance(complete, bool):
+            return [], True, "risk_intervention_read_contract_invalid"
+        if len(raw_records) > _MAX_RISK_INTERVENTION_SCAN:
+            return [], True, "risk_intervention_scan_limit_exceeded"
+
+        records: list[RiskInterventionRecord] = []
+        seen_ids: set[str] = set()
+        reason = read_reason.strip() if isinstance(read_reason, str) and read_reason.strip() else None
+        degraded = not complete or reason is not None
+        if reason is None and not complete:
+            reason = "risk_intervention_scan_truncated"
+        for raw in raw_records:
+            try:
+                record = (
+                    raw
+                    if isinstance(raw, RiskInterventionRecord)
+                    else RiskInterventionRecord.model_validate(raw)
+                )
+            except Exception:  # noqa: BLE001 - malformed rows cannot back a claim
+                degraded = True
+                reason = reason or "risk_intervention_contract_invalid"
+                continue
+            if (
+                record.tenant_id != tenant_id
+                or record.subject_kind != subject.kind
+                or record.subject_id != subject.id
+            ):
+                degraded = True
+                reason = reason or "risk_intervention_exact_binding_mismatch"
+                continue
+            if record.record_id in seen_ids:
+                degraded = True
+                reason = reason or "risk_intervention_duplicate_record"
+                continue
+            seen_ids.add(record.record_id)
+            if as_of is not None and (
+                record.recorded_at > as_of or record.observed_at > as_of
+            ):
+                degraded = True
+                reason = reason or "risk_intervention_as_of_read_inconsistent"
+                continue
+            records.append(record)
+
+        records.sort(
+            key=lambda record: (record.recorded_at, record.record_id),
+            reverse=True,
+        )
+        by_id = {record.record_id: record for record in records}
+        for record in records:
+            if record.record_kind != "outcome":
+                continue
+            decision = by_id.get(record.decision_record_id or "")
+            if decision is None:
+                degraded = True
+                reason = reason or "risk_intervention_decision_link_not_in_bounded_read"
+                continue
+            if (
+                decision.record_kind != "decision"
+                or decision.tenant_id != record.tenant_id
+                or decision.intervention_id != record.intervention_id
+                or decision.subject_kind != record.subject_kind
+                or decision.subject_id != record.subject_id
+                or decision.intervention_type != record.intervention_type
+            ):
+                degraded = True
+                reason = reason or "risk_intervention_decision_link_mismatch"
+        return records, degraded, reason
+
     async def _safe_assessment(
         self,
         tenant_id: str,
@@ -3578,9 +5299,11 @@ class Risk360Provider:
     def _collect_evidence(
         assessment: Optional[RiskAssessment],
         signals: list[RiskSignal],
+        anomaly_events: list[dict[str, Any]],
         source_provenance: list[dict[str, Any]],
         poisoning_evidence: list[RiskPoisoningEvidence],
         agent_policy_flags: list[dict[str, Any]],
+        interventions: list[RiskInterventionRecord],
     ) -> list[EvidenceRef]:
         """Every canonical EvidenceRef grounding this projection, deduped."""
         refs: list[EvidenceRef] = []
@@ -3588,6 +5311,13 @@ class Risk360Provider:
             refs.extend(Risk360Provider._assessment_evidence(assessment))
         for signal in signals:
             refs.extend(signal.evidence_refs)
+        for event in anomaly_events:
+            ref = event.get("evidence_ref")
+            if isinstance(ref, EvidenceRef):
+                refs.append(ref)
+            source_ref = event.get("source_event_ref")
+            if isinstance(source_ref, EvidenceRef):
+                refs.append(source_ref)
         for row in source_provenance:
             ref = row.get("evidence_ref")
             if isinstance(ref, EvidenceRef):
@@ -3596,6 +5326,9 @@ class Risk360Provider:
             refs.extend(record.evidence_refs)
             for event in record.lifecycle_events:
                 refs.extend(event.evidence_refs)
+        for record in interventions:
+            refs.extend(record.actor_evidence_refs)
+            refs.extend(record.evidence_refs)
         for row in agent_policy_flags:
             evidence_ref = row.get("evidence_ref")
             if isinstance(evidence_ref, EvidenceRef):
@@ -3631,6 +5364,7 @@ __all__ = [
     "PROJECTION_ID",
     "READ_CAPABILITY",
     "RepositoryRiskSourceReader",
+    "RiskAnomalyEventRead",
     "Risk360Provider",
     "RiskSourceReader",
     "SECTION_DEPENDENCIES",

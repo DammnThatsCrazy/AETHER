@@ -24,9 +24,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Awaitable, Callable, Mapping, Optional, Protocol, Sequence
 
 from graph.operational_intelligence.models import EvidenceRef
+from shared.temporal.instant import parse_instant_strict, to_iso_utc
 from shared.intelligence_projections.composition import (
     PRODUCT_360_SURFACE_DEFINITIONS,
     compose_experience360_frame,
@@ -59,6 +61,7 @@ ACCOUNT_AGENTS_SLOT = "agents"
 ACCOUNT_PROFILES_SLOT = "profiles"
 ACCOUNT_RISK_SLOT = "risk"
 ACCOUNT_JOURNEYS_SLOT = "journeys"
+ACCOUNT_CONTRACTS_SLOT = "contracts"
 _RISK_CONTEXT_PROJECTION_ID = "risk360"
 _MAX_ACCOUNT_MEMBER_EDGES = 10_000
 _MAX_ACCOUNT_MEMBER_LEDGER_ROWS = 100_000
@@ -68,6 +71,7 @@ _MAX_ACCOUNT_MEMBER_JOURNEY_FRAMES = 100
 _MAX_ACCOUNT_MEMBER_JOURNEY_CONCURRENCY = 4
 _MAX_ACCOUNT_MEMBER_RISK_FRAMES = 100
 _MAX_ACCOUNT_MEMBER_RISK_CONCURRENCY = 4
+_MAX_ACCOUNT_CONTRACT_RECORDS = 100
 # The canonical identity model distinguishes ``account`` from ``organization``;
 # the latter is the persisted entity-registry kind for a tenant's B2B business
 # account. Account360 may represent either account kind, but never a person,
@@ -86,6 +90,38 @@ class AccountIdentityRead:
     display_name: Optional[str] = None
     tenant_id: Optional[str] = None
     entity_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class AccountContractRecord:
+    """Sanitized tenant contract record explicitly bound to one account id."""
+
+    tenant_id: str
+    account_id: str
+    contract_profile_id: str
+    contract_status: Optional[str]
+    billing_model: Optional[str]
+    package_id: Optional[str]
+    plan_tier: Optional[str]
+    billing_period: Optional[str]
+    currency: Optional[str]
+    contract_start_date: Optional[str]
+    contract_end_date: Optional[str]
+    renewal_date: Optional[str]
+    evidence_ref: EvidenceRef
+
+
+@dataclass(frozen=True)
+class AccountContractsRead:
+    """Bounded canonical commerce contract lookup for an exact account."""
+
+    state: str
+    tenant_id: str
+    account_entity_id: str
+    records: tuple[AccountContractRecord, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    source_as_of: Optional[str] = None
+    truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -314,6 +350,10 @@ class Account360Source(Protocol):
     async def account_members(
         self, tenant_id: str, organization_entity_id: str
     ) -> AccountMembersRead: ...
+
+    async def account_contracts(
+        self, tenant_id: str, account_entity_id: str, *, limit: int
+    ) -> AccountContractsRead: ...
 
 
 class RepositoryAccount360Source:
@@ -726,6 +766,183 @@ class RepositoryAccount360Source:
             source_as_of=max(source_as_of_values) if source_as_of_values else None,
         )
 
+    async def account_contracts(
+        self, tenant_id: str, account_entity_id: str, *, limit: int
+    ) -> AccountContractsRead:
+        """Join only commerce contract profiles explicitly keyed by account id.
+
+        Tenant-level billing defaults are not treated as an account contract.
+        This query requires the tenant id from the authenticated frame request
+        and the exact canonical account entity id in the stored ``account_id``
+        field; it never infers account ownership from tenant membership.
+        """
+        if not tenant_id.strip() or not account_entity_id.strip():
+            return AccountContractsRead(
+                "unknown",
+                tenant_id,
+                account_entity_id,
+                reason_codes=("account_contract_scope_invalid",),
+            )
+        bounded_limit = min(max(limit, 1), _MAX_ACCOUNT_CONTRACT_RECORDS)
+        try:
+            from billing.billing.revops import TenantContractProfileRepository
+
+            rows = await TenantContractProfileRepository().find_many(
+                filters={"tenant_id": tenant_id, "account_id": account_entity_id},
+                limit=bounded_limit + 1,
+            )
+        except Exception:  # noqa: BLE001 - keep commerce source failure opaque
+            return AccountContractsRead(
+                "unavailable",
+                tenant_id,
+                account_entity_id,
+                reason_codes=("account_contract_commerce_authority_unavailable",),
+            )
+        if not isinstance(rows, list):
+            return AccountContractsRead(
+                "unknown",
+                tenant_id,
+                account_entity_id,
+                reason_codes=("account_contract_commerce_authority_invalid_response",),
+            )
+
+        truncated = len(rows) > bounded_limit
+        selected = rows[:bounded_limit]
+        records: list[AccountContractRecord] = []
+        seen_ids: set[str] = set()
+        for row in selected:
+            if not isinstance(row, dict):
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_commerce_record_invalid",),
+                    truncated=truncated,
+                )
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("account_id") != account_entity_id
+            ):
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_scope_mismatch",),
+                    truncated=truncated,
+                )
+            contract_id = row.get("contract_profile_id") or row.get("id")
+            if not isinstance(contract_id, str) or not contract_id.strip():
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_record_identity_missing",),
+                    truncated=truncated,
+                )
+            if contract_id in seen_ids:
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_record_identity_ambiguous",),
+                    truncated=truncated,
+                )
+            seen_ids.add(contract_id)
+            typed_values = {
+                "contract_status": _bounded_contract_value(
+                    row.get("contract_status"),
+                    {
+                        "draft",
+                        "active",
+                        "pending_signature",
+                        "expired",
+                        "cancelled",
+                        "renewal_pending",
+                    },
+                ),
+                "billing_model": _bounded_contract_value(
+                    row.get("billing_model"),
+                    {
+                        "flat_subscription",
+                        "usage_based",
+                        "hybrid",
+                        "enterprise_contract",
+                        "value_based",
+                        "pilot",
+                    },
+                ),
+                "billing_period": _bounded_contract_value(
+                    row.get("billing_period"),
+                    {"monthly", "quarterly", "annual", "custom"},
+                ),
+                "package_id": _bounded_text(row.get("package_id")),
+                "plan_tier": _bounded_text(row.get("plan_tier")),
+                "currency": _bounded_currency(row.get("currency")),
+                "contract_start_date": _account_contract_date(
+                    row.get("contract_start_date")
+                ),
+                "contract_end_date": _account_contract_date(
+                    row.get("contract_end_date")
+                ),
+                "renewal_date": _account_contract_date(row.get("renewal_date")),
+            }
+            invalid_fields = [
+                field
+                for field, value in typed_values.items()
+                if row.get(field) not in (None, "") and value is None
+            ]
+            if invalid_fields:
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_record_typed_value_invalid",),
+                    truncated=truncated,
+                )
+            observed_at = _account_contract_instant(
+                row.get("updated_at") or row.get("created_at")
+            )
+            evidence_ref = EvidenceRef(
+                id=contract_id,
+                type="document",
+                source="tenant_contract_profiles",
+                observedAt=observed_at,
+            )
+            records.append(
+                AccountContractRecord(
+                    tenant_id=tenant_id,
+                    account_id=account_entity_id,
+                    contract_profile_id=contract_id,
+                    contract_status=typed_values["contract_status"],
+                    billing_model=typed_values["billing_model"],
+                    package_id=typed_values["package_id"],
+                    plan_tier=typed_values["plan_tier"],
+                    billing_period=typed_values["billing_period"],
+                    currency=typed_values["currency"],
+                    contract_start_date=typed_values["contract_start_date"],
+                    contract_end_date=typed_values["contract_end_date"],
+                    renewal_date=typed_values["renewal_date"],
+                    evidence_ref=evidence_ref,
+                )
+            )
+        records.sort(key=lambda record: record.contract_profile_id)
+        timestamps = [
+            record.evidence_ref.observedAt
+            for record in records
+            if record.evidence_ref.observedAt
+        ]
+        return AccountContractsRead(
+            "truncated" if truncated else "available" if records else "empty",
+            tenant_id,
+            account_entity_id,
+            records=tuple(records),
+            reason_codes=(
+                ("account_contract_read_truncated",) if truncated else ()
+            ),
+            source_as_of=max(timestamps) if timestamps else None,
+            truncated=truncated,
+        )
+
 
 class Account360Provider:
     """Compose the Account360 frame from policy-scoped canonical projections."""
@@ -869,6 +1086,29 @@ class Account360Provider:
                 generated_at=generated_at,
                 reason_code=identity.reason_code or "account_entity_identity_unknown",
             )
+
+        contracts_read: Optional[AccountContractsRead] = None
+        if (
+            ACCOUNT_CONTRACTS_SLOT in requested_slot_ids
+            and effective_slot_policy[ACCOUNT_CONTRACTS_SLOT].state
+            in {"allowed", "not_applicable"}
+        ):
+            if not request.includeEvidence:
+                contracts_read = AccountContractsRead(
+                    "unknown",
+                    request.tenantId,
+                    request.subject.id,
+                    reason_codes=("account_contract_evidence_not_requested",),
+                )
+            elif request.asOf is not None or request.timeRange is not None:
+                contracts_read = AccountContractsRead(
+                    "unknown",
+                    request.tenantId,
+                    request.subject.id,
+                    reason_codes=("account_contract_temporal_replay_unavailable",),
+                )
+            else:
+                contracts_read = await self._read_account_contracts(request)
 
         members_read: Optional[AccountMembersRead] = None
         membership_slots = {
@@ -1021,10 +1261,16 @@ class Account360Provider:
             include_evidence=request.includeEvidence,
             requested_slot_ids=requested_slot_ids,
         )
-        return self._attach_risk_context(
+        frame = self._attach_risk_context(
             frame,
             risk_read,
             member_risks_read,
+            include_evidence=request.includeEvidence,
+            requested_slot_ids=requested_slot_ids,
+        )
+        return self._attach_account_contracts_context(
+            frame,
+            contracts_read,
             include_evidence=request.includeEvidence,
             requested_slot_ids=requested_slot_ids,
         )
@@ -1078,6 +1324,113 @@ class Account360Provider:
                 entity_id=request.subject.id,
             )
         return identity
+
+    async def _read_account_contracts(
+        self, request: Experience360FrameRequest
+    ) -> AccountContractsRead:
+        """Validate an exact-account commerce contract authority response."""
+
+        reader = getattr(self._source, "account_contracts", None)
+        if not callable(reader):
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_commerce_authority_not_joined",),
+            )
+        try:
+            result = await reader(
+                request.tenantId,
+                request.subject.id,
+                limit=_MAX_ACCOUNT_CONTRACT_RECORDS,
+            )
+        except Exception:  # noqa: BLE001 - authority failure remains content-free
+            return AccountContractsRead(
+                "unavailable",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_commerce_authority_unavailable",),
+            )
+        if not isinstance(result, AccountContractsRead):
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_commerce_authority_invalid_response",),
+            )
+        if (
+            result.tenant_id != request.tenantId
+            or result.account_entity_id != request.subject.id
+            or result.state not in {"available", "empty", "truncated", "unknown", "unavailable"}
+        ):
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_scope_or_state_invalid",),
+            )
+        if len(result.records) > _MAX_ACCOUNT_CONTRACT_RECORDS:
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_authority_limit_exceeded",),
+            )
+        records: list[AccountContractRecord] = []
+        seen_ids: set[str] = set()
+        for record in result.records:
+            if (
+                not isinstance(record, AccountContractRecord)
+                or record.tenant_id != request.tenantId
+                or record.account_id != request.subject.id
+                or not record.contract_profile_id.strip()
+                or record.contract_profile_id in seen_ids
+                or not isinstance(record.evidence_ref, EvidenceRef)
+                or record.evidence_ref.id != record.contract_profile_id
+                or record.evidence_ref.type != "document"
+                or record.evidence_ref.source != "tenant_contract_profiles"
+            ):
+                return AccountContractsRead(
+                    "unknown",
+                    request.tenantId,
+                    request.subject.id,
+                    reason_codes=("account_contract_scope_or_evidence_invalid",),
+                    truncated=result.truncated,
+                )
+            seen_ids.add(record.contract_profile_id)
+            records.append(record)
+        if result.state == "available" and not records:
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_authority_state_mismatch",),
+            )
+        if result.state == "empty" and records:
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_authority_state_mismatch",),
+            )
+        source_as_of = _account_contract_instant(result.source_as_of)
+        return AccountContractsRead(
+            result.state,
+            request.tenantId,
+            request.subject.id,
+            records=tuple(records),
+            reason_codes=tuple(
+                reason
+                for reason in result.reason_codes
+                if isinstance(reason, str)
+                and reason
+                and len(reason) <= 96
+                and reason.isascii()
+                and all(char.isalnum() or char in {"_", "-"} for char in reason)
+            ),
+            source_as_of=source_as_of,
+            truncated=result.truncated,
+        )
 
     @staticmethod
     def _requested_slot_ids(request: Experience360FrameRequest) -> list[str]:
@@ -2676,6 +3029,226 @@ class Account360Provider:
             return frame.model_copy(update={"slots": slots})
         return frame
 
+    @staticmethod
+    def _attach_account_contracts_context(
+        frame: Experience360Frame,
+        contracts_read: Optional[AccountContractsRead],
+        *,
+        include_evidence: bool,
+        requested_slot_ids: Sequence[str],
+    ) -> Experience360Frame:
+        """Attach exact account-bound commerce contracts under slot policy."""
+
+        if ACCOUNT_CONTRACTS_SLOT not in requested_slot_ids:
+            return frame
+        slots = list(frame.slots)
+        index = next(
+            (i for i, slot in enumerate(slots) if slot.id == ACCOUNT_CONTRACTS_SLOT),
+            None,
+        )
+        if index is None:
+            return frame
+        slot = slots[index]
+        if slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+            return frame
+
+        reasons = set(
+            contracts_read.reason_codes if contracts_read is not None else ()
+        )
+        if not include_evidence:
+            reasons.add("account_contract_evidence_not_requested")
+        if contracts_read is None:
+            reasons.add("account_contract_authority_not_requested")
+        elif (
+            contracts_read.tenant_id != frame.tenantId
+            or contracts_read.account_entity_id != frame.subject.id
+        ):
+            reasons.add("account_contract_scope_mismatch")
+            contracts_read = None
+        if contracts_read is not None and contracts_read.state in {"unknown", "unavailable"}:
+            if contracts_read.state == "unavailable":
+                reasons.add("account_contract_commerce_authority_unavailable")
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "unknown",
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown", sourceAsOf=contracts_read.source_as_of
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(reasons),
+                    "reasonCodes": sorted(reasons),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+        if contracts_read is None or not include_evidence:
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "unknown",
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(state="unknown"),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(reasons),
+                    "reasonCodes": sorted(reasons),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        if contracts_read.state == "empty" and not contracts_read.records:
+            provenance = Experience360ProjectionProvenance(
+                tenantId=frame.tenantId,
+                sourceState="empty",
+                generatedAt=frame.generatedAt,
+                sourceKind="authority",
+                claimOrigin="unknown",
+                canonicalAuthorityRefs=["commerce"],
+            )
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "empty",
+                    "content": {
+                        "state": "empty",
+                        "accountEntityId": frame.subject.id,
+                        "records": [],
+                        "coverage": {
+                            "source": "tenant_contract_profiles",
+                            "exactAccountMatch": True,
+                            "returned": 0,
+                            "truncated": False,
+                        },
+                        "freshness": {
+                            "state": "unknown",
+                            "reason": "account_contract_freshness_sla_unconfigured",
+                        },
+                    },
+                    "claims": [],
+                    "provenance": [provenance],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown", sourceAsOf=contracts_read.source_as_of
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown",
+                        reasonCodes=["account_contract_freshness_sla_unconfigured"],
+                    ),
+                    "limitations": [
+                        "No tenant contract profile with an exact account_id match was returned.",
+                        "Absence of a billing profile does not establish absence of external agreements or obligations.",
+                    ],
+                    "reasonCodes": [],
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        records = list(contracts_read.records)
+        if not records:
+            reasons.add("account_contract_authority_state_mismatch")
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "unknown",
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown", sourceAsOf=contracts_read.source_as_of
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(reasons),
+                    "reasonCodes": sorted(reasons),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        reasons.add("account_contract_freshness_sla_unconfigured")
+        if contracts_read.truncated or contracts_read.state == "truncated":
+            reasons.add("account_contract_read_truncated")
+        if any(record.evidence_ref.observedAt is None for record in records):
+            reasons.add("account_contract_source_timestamp_unknown")
+        evidence_refs = _unique_evidence_refs(
+            [record.evidence_ref for record in records]
+        )
+        provenance = Experience360ProjectionProvenance(
+            tenantId=frame.tenantId,
+            sourceState="degraded",
+            generatedAt=frame.generatedAt,
+            sourceKind="authority",
+            claimOrigin="canonical_authority",
+            evidenceRefs=evidence_refs,
+            canonicalAuthorityRefs=["commerce"],
+        )
+        record_content = [
+            {
+                "contractProfileId": record.contract_profile_id,
+                "accountId": record.account_id,
+                "status": record.contract_status,
+                "billingModel": record.billing_model,
+                "packageId": record.package_id,
+                "planTier": record.plan_tier,
+                "billingPeriod": record.billing_period,
+                "currency": record.currency,
+                "contractStartDate": record.contract_start_date,
+                "contractEndDate": record.contract_end_date,
+                "renewalDate": record.renewal_date,
+                "evidenceRef": record.evidence_ref.model_dump(
+                    mode="json", exclude_none=True
+                ),
+            }
+            for record in records
+        ]
+        slots[index] = slot.model_copy(
+            update={
+                "state": "degraded",
+                "content": {
+                    "state": "partial",
+                    "accountEntityId": frame.subject.id,
+                    "records": record_content,
+                    "coverage": {
+                        "source": "tenant_contract_profiles",
+                        "exactAccountMatch": True,
+                        "returned": len(records),
+                        "truncated": contracts_read.truncated,
+                        "sourceAsOf": contracts_read.source_as_of,
+                    },
+                    "freshness": {
+                        "state": "unknown",
+                        "sourceAsOf": contracts_read.source_as_of,
+                        "reason": "account_contract_freshness_sla_unconfigured",
+                    },
+                    "limitations": [
+                        "Only tenant contract profiles whose stored account_id equals this canonical account entity are included.",
+                        "Signed external agreement text and legal obligation coverage are not joined.",
+                    ],
+                },
+                "claims": [],
+                "provenance": [provenance],
+                "evidenceRefs": evidence_refs,
+                "freshness": Experience360Freshness(
+                    state="unknown", sourceAsOf=contracts_read.source_as_of
+                ),
+                "quality": Experience360Quality(
+                    state="partial",
+                    evidenceRefs=evidence_refs,
+                    reasonCodes=sorted(reasons),
+                ),
+                "limitations": sorted(reasons),
+                "reasonCodes": sorted(reasons),
+            }
+        )
+        return frame.model_copy(update={"slots": slots})
+
     def _unknown_entity_frame(
         self,
         request: Experience360FrameRequest,
@@ -2789,11 +3362,71 @@ def _safe_member_role(value: object) -> Optional[str]:
     return role
 
 
+def _account_contract_instant(value: object) -> Optional[str]:
+    """Normalize a source timestamp or leave freshness unknown."""
+
+    if isinstance(value, datetime):
+        try:
+            return to_iso_utc(value)
+        except ValueError:
+            return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return to_iso_utc(parse_instant_strict(value))
+    except ValueError:
+        return None
+
+
+def _account_contract_date(value: object) -> Optional[str]:
+    """Accept only a canonical ISO calendar date for contract effective dates."""
+
+    text = _bounded_text(value, max_length=10)
+    if text is None:
+        return None
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed.isoformat() if parsed.isoformat() == text else None
+
+
+def _bounded_text(value: object, *, max_length: int = 160) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if (
+        not text
+        or len(text) > max_length
+        or not text.isascii()
+        or any(ord(char) < 32 or ord(char) == 127 for char in text)
+    ):
+        return None
+    return text
+
+
+def _bounded_contract_value(value: object, allowed: set[str]) -> Optional[str]:
+    text = _bounded_text(value, max_length=64)
+    return text if text in allowed else None
+
+
+def _bounded_currency(value: object) -> Optional[str]:
+    text = _bounded_text(value, max_length=3)
+    if text is None:
+        return None
+    normalized = text.upper()
+    return normalized if len(normalized) == 3 and normalized.isalpha() else None
+
+
 __all__ = [
     "ACCOUNT_AGENTS_SLOT",
     "ACCOUNT_MEMBERS_SLOT",
     "ACCOUNT_IDENTITY_SLOT",
     "Account360Provider",
+    "AccountContractRecord",
+    "AccountContractsRead",
     "Account360Source",
     "AccountIdentityRead",
     "AccountMember",

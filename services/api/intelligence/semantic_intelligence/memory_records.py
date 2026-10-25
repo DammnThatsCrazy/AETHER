@@ -309,6 +309,98 @@ class SemanticMemoryRecordRepository:
             warnings=tuple(dict.fromkeys(warnings)),
         )
 
+    async def read_for_ids(
+        self,
+        tenant_id: str,
+        subject_ref: str,
+        memory_ids: list[str] | tuple[str, ...],
+    ) -> MemoryRecordPage:
+        """Resolve an exact bounded set of memory IDs with source/policy joins."""
+        ids = list(dict.fromkeys(str(value).strip() for value in memory_ids if str(value).strip()))
+        if not tenant_id or not subject_ref or len(ids) > 100:
+            return MemoryRecordPage(
+                state="unknown", warnings=("semantic_memory_exact_id_scope_invalid",)
+            )
+        if not ids:
+            return MemoryRecordPage(state="empty", complete=True)
+        warnings: list[str] = []
+        try:
+            raw_rows = await self._records.find_by_ids(tenant_id, ids, subject=subject_ref)
+        except Exception:  # noqa: BLE001 - exact memory authority read remains unknown
+            return MemoryRecordPage(
+                state="unknown", warnings=("semantic_memory_exact_id_read_unavailable",)
+            )
+        typed_rows: list[SemanticMemoryRecord] = []
+        for raw in raw_rows:
+            row = _mapping(raw)
+            if (
+                row is None
+                or row.get("tenant_id") != tenant_id
+                or row.get("subject_ref") != subject_ref
+            ):
+                warnings.append("semantic_memory_record_scope_mismatch")
+                continue
+            try:
+                record = SemanticMemoryRecord.model_validate(_domain_memory_payload(row))
+            except Exception:  # noqa: BLE001 - malformed exact memory row is omitted
+                warnings.append("semantic_memory_record_contract_invalid")
+                continue
+            if record.status not in _ACTIVE_MEMORY_STATUSES:
+                warnings.append("semantic_memory_record_non_active_omitted")
+                continue
+            typed_rows.append(record)
+        if {record.memory_id for record in typed_rows} != set(ids):
+            warnings.append("semantic_memory_exact_id_read_incomplete_or_non_active")
+        all_observation_ids = list(
+            dict.fromkeys(
+                source_id for record in typed_rows for source_id in record.source_observation_ids
+            )
+        )
+        try:
+            source_rows = await self._observations.find_by_ids(
+                tenant_id, all_observation_ids, subject=subject_ref
+            )
+        except Exception:  # noqa: BLE001 - evidence joins fail closed
+            source_rows = []
+            warnings.append("semantic_memory_source_observation_read_unavailable")
+        source_refs_by_id = _source_refs_by_id(
+            source_rows, tenant_id=tenant_id, subject_ref=subject_ref
+        )
+        resolved: list[ResolvedMemoryRecord] = []
+        for record in typed_rows:
+            refs = [source_refs_by_id.get(source_id) for source_id in record.source_observation_ids]
+            if any(ref is None for ref in refs):
+                warnings.append("semantic_memory_source_observation_join_missing")
+                continue
+            try:
+                policy_row = await self._policies.find_by_id(record.policy_decision_ref)
+            except Exception:  # noqa: BLE001 - exact policy read fails closed
+                policy_row = None
+            if not _policy_matches_record(policy_row, record):
+                warnings.append("semantic_memory_policy_decision_join_missing_or_denied")
+                continue
+            policy_ref = _policy_evidence_ref(policy_row, tenant_id)
+            memory_ref = _memory_record_ref(record)
+            if policy_ref is None or memory_ref is None:
+                warnings.append("semantic_memory_policy_or_record_timestamp_invalid")
+                continue
+            resolved.append(
+                ResolvedMemoryRecord(
+                    record=record,
+                    evidence_refs=tuple(
+                        _dedupe_refs([memory_ref, *[ref for ref in refs if ref], policy_ref])
+                    ),
+                    policy_outcome="historical_allow",
+                )
+            )
+        state = "degraded" if warnings else "available" if resolved else "empty"
+        return MemoryRecordPage(
+            records=tuple(resolved),
+            state=state,
+            complete=not warnings,
+            warnings=tuple(dict.fromkeys(warnings)),
+        )
+
 
 def _validated_source_refs(
     rows: list[dict[str, Any]],
@@ -415,7 +507,11 @@ def _same_immutable_memory(raw: dict[str, Any], requested: SemanticMemoryRecord)
 
 def _domain_memory_payload(raw: dict[str, Any]) -> dict[str, Any]:
     """Remove only fact-repository metadata before strict domain validation."""
-    return {key: value for key, value in raw.items() if key != "idempotency_key"}
+    return {
+        key: value
+        for key, value in raw.items()
+        if key not in {"idempotency_key", "record_id"}
+    }
 
 
 def _dedupe_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:

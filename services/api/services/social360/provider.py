@@ -53,10 +53,12 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "paths",
     "propagation",
     "risk_edges",
+    "social_contagion",
     "state",
     "summary",
     "syndicates",
     "timeline",
+    "trust_edges",
 )
 _MAX_READ_ROWS = 500
 _SOCIAL_PATH_DEPTH = 3
@@ -96,9 +98,23 @@ _SOCIAL_SYNDICATE_AUTHORITIES = [
     "population_definitions",
 ]
 _SOCIAL_RISK_EDGE_AUTHORITIES = ["graph", "relationship_facts", "risk_outputs"]
+_SOCIAL_CONTAGION_AUTHORITIES = [
+    "social_relationship_evidence_events",
+    "entity_identity",
+    "source_provenance",
+    "risk_signals",
+    "graph",
+    "relationship_facts",
+]
+_SOCIAL_TRUST_AUTHORITIES = [
+    "social_relationship_evidence_events",
+    "entity_identity",
+    "authenticated_tenant_permission",
+]
 _MAX_SYNDICATE_MEMBERSHIPS = 100
 _MAX_SOCIAL_RISK_EDGES = 100
 _MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY = 100
+_MAX_SOCIAL_EVIDENCE_READ = 100
 _SYNDICATE_POPULATION_TYPES = frozenset(
     {
         "segment",
@@ -1161,6 +1177,7 @@ class Social360Provider(IntelligenceProjectionProvider):
         syndicate_membership_reader: Optional[SocialSyndicateMembershipReader] = None,
         risk_context_edge_reader: Optional[SocialRiskContextEdgeReader] = None,
         risk_signal_reader: Optional[SocialRiskSignalReader] = None,
+        social_evidence_authority: Any = None,
     ) -> None:
         self._source = source if source is not None else RepositorySocial360Source()
         self._consent_reader = consent_reader or evaluate_consent
@@ -1204,6 +1221,11 @@ class Social360Provider(IntelligenceProjectionProvider):
             if risk_signal_reader is not None
             else RepositorySocialRiskSignalReader()
         )
+        if social_evidence_authority is None:
+            from services.social360.evidence_authority import SocialEvidenceAuthority
+
+            social_evidence_authority = SocialEvidenceAuthority()
+        self._social_evidence_authority = social_evidence_authority
 
     async def project(
         self, request: ProjectionRequest, context: ProjectionContext
@@ -1467,6 +1489,24 @@ class Social360Provider(IntelligenceProjectionProvider):
                 request,
                 endpoints=endpoints,
                 consent_by_endpoint=consent_by_endpoint,
+                temporal_filter_requested=temporal_filter_requested,
+            )
+        social_contagion_section: Optional[ProjectionSection] = None
+        social_contagion_claims: list[ClaimEnvelope] = []
+        if "social_contagion" in include:
+            social_contagion_section, social_contagion_claims = await self._social_assertion_section(
+                request,
+                context,
+                assertion_kind="social_contagion",
+                temporal_filter_requested=temporal_filter_requested,
+            )
+        trust_edges_section: Optional[ProjectionSection] = None
+        trust_edge_claims: list[ClaimEnvelope] = []
+        if "trust_edges" in include:
+            trust_edges_section, trust_edge_claims = await self._social_assertion_section(
+                request,
+                context,
+                assertion_kind="trust_edge",
                 temporal_filter_requested=temporal_filter_requested,
             )
         if "paths" in include:
@@ -2017,6 +2057,10 @@ class Social360Provider(IntelligenceProjectionProvider):
             sections.append(syndicates_section)
         if risk_edges_section is not None:
             sections.append(risk_edges_section)
+        if social_contagion_section is not None:
+            sections.append(social_contagion_section)
+        if trust_edges_section is not None:
+            sections.append(trust_edges_section)
 
         claims = self._claims(request.subject, rows_by_family, refs_by_family)
         claims.extend(path_claims)
@@ -2027,6 +2071,8 @@ class Social360Provider(IntelligenceProjectionProvider):
         if "syndicates" in include:
             claims.extend(syndicates_claims)
         claims.extend(risk_edge_claims)
+        claims.extend(social_contagion_claims)
+        claims.extend(trust_edge_claims)
         degraded_reasons = sorted(
             {
                 read.reason or f"{family}_source_unavailable"
@@ -2049,6 +2095,287 @@ class Social360Provider(IntelligenceProjectionProvider):
             asOf=(request.asOf or context.asOf) if request.temporalMode == "as_of" else None,
             degradedReasons=degraded_reasons,
             temporalMode=request.temporalMode or "window",
+        )
+
+    async def _social_assertion_section(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        *,
+        assertion_kind: Literal["social_contagion", "trust_edge"],
+        temporal_filter_requested: bool,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Project explicit Social evidence without inferring causality or trust.
+
+        Social360 and Risk360 read this append-only assertion ledger only for an
+        exact canonical entity subject. The frame runtime still owns policy and
+        redaction, and the provider retains source, graph, risk, and actor refs.
+        """
+        section_id = "social_contagion" if assertion_kind == "social_contagion" else "trust_edges"
+        authorities = (
+            _SOCIAL_CONTAGION_AUTHORITIES
+            if assertion_kind == "social_contagion"
+            else _SOCIAL_TRUST_AUTHORITIES
+        )
+        title = (
+            "Source reported social contagion evidence"
+            if assertion_kind == "social_contagion"
+            else "Operator asserted trust relationships"
+        )
+
+        def unknown(reason: str, *, state: str = "unknown") -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=section_id,
+                    state=state,
+                    title=title,
+                    content={
+                        "items": [],
+                        "coverage": "recorded_assertions_only",
+                        "causalContagionEstablished": False,
+                        "trustScoreInferred": False,
+                        "policyState": "unknown",
+                        "freshness": "unknown",
+                    },
+                    warnings=[reason],
+                    canonicalAuthorityRefs=list(authorities),
+                ),
+                [],
+            )
+
+        if request.subject.kind != "entity":
+            return unknown("social_assertion_entity_subject_required")
+        if request.temporalMode == "relative" and not (
+            request.timeRange
+            and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+        ):
+            return unknown("social_assertion_relative_scope_unavailable")
+
+        if assertion_kind == "social_contagion":
+            read_method = getattr(self._social_evidence_authority, "read_social_contagion_evidence", None)
+        else:
+            read_method = getattr(self._social_evidence_authority, "read_trust_edge_evidence", None)
+        if not callable(read_method):
+            return unknown("social_assertion_authority_binding_unavailable")
+
+        start = request.timeRange.from_ if request.timeRange else None
+        end = request.timeRange.to if request.timeRange else None
+        as_of_raw = request.asOf or context.asOf
+        if as_of_raw is not None:
+            as_of_raw = _parse_graph_time(as_of_raw)
+        try:
+            read = await read_method(
+                request.tenantId,
+                request.subject.id,
+                start=start,
+                end=end,
+                as_of=as_of_raw,
+                limit=_MAX_SOCIAL_EVIDENCE_READ,
+            )
+        except Exception:  # noqa: BLE001 - authority failure is slot-local
+            return unknown("social_assertion_authority_unavailable", state="degraded")
+        if (
+            getattr(read, "tenant_id", None) != request.tenantId
+            or getattr(read, "subject_entity_id", None) != request.subject.id
+            or not isinstance(getattr(read, "records", None), (tuple, list))
+        ):
+            return unknown("social_assertion_read_scope_or_contract_invalid", state="degraded")
+        if not getattr(read, "available", False):
+            return unknown(
+                getattr(read, "reason", None) or "social_assertion_authority_unavailable",
+                state="degraded",
+            )
+
+        visible: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        reasons: set[str] = set()
+        consent_cache: dict[str, bool] = {request.subject.id: True}
+        for row in read.records[:_MAX_SOCIAL_EVIDENCE_READ]:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != request.tenantId
+                or row.get("subject_entity_id") != request.subject.id
+                or row.get("assertion_kind") != assertion_kind
+                or not _text(row.get("record_id"))
+                or not _text(row.get("source_entity_id"))
+                or not _text(row.get("target_entity_id"))
+            ):
+                reasons.add("social_assertion_record_scope_invalid")
+                continue
+
+            entity_ids = row.get("path_entity_ids") if assertion_kind == "social_contagion" else [
+                row.get("source_entity_id"), row.get("target_entity_id")
+            ]
+            if (
+                not isinstance(entity_ids, (list, tuple))
+                or any(not _text(entity_id) for entity_id in entity_ids)
+                or request.subject.id not in entity_ids
+            ):
+                reasons.add("social_assertion_endpoint_scope_invalid")
+                continue
+            allowed = True
+            for entity_id in dict.fromkeys(entity_ids):
+                if entity_id in consent_cache:
+                    allowed = allowed and consent_cache[entity_id]
+                    continue
+                try:
+                    consent = await self._consent_reader(
+                        request.tenantId, entity_id, None, "analytics"
+                    )
+                except Exception:  # noqa: BLE001 - consent remains fail-closed
+                    consent = (False, "consent_authority_unavailable")
+                consent_cache[entity_id] = _consent_allowed(consent)
+                allowed = allowed and consent_cache[entity_id]
+            if not allowed:
+                reasons.add("social_assertion_endpoint_consent_restricted")
+                continue
+
+            evidence_fields = (
+                ("path_evidence_refs", "source_evidence_refs", "risk_evidence_refs")
+                if assertion_kind == "social_contagion"
+                else ("policy_evidence_refs", "risk_evidence_refs")
+            )
+            raw_refs: list[Any] = []
+            for field in evidence_fields:
+                values = row.get(field, [])
+                if values is None:
+                    continue
+                if not isinstance(values, list):
+                    reasons.add("social_assertion_evidence_contract_invalid")
+                    raw_refs = []
+                    break
+                raw_refs.extend(values)
+            if assertion_kind == "social_contagion" and not all(
+                isinstance(row.get(field), list) and row.get(field)
+                for field in ("path_evidence_refs", "source_evidence_refs", "risk_evidence_refs")
+            ):
+                reasons.add("social_contagion_evidence_chain_incomplete")
+                continue
+            try:
+                refs = [EvidenceRef.model_validate(value) for value in raw_refs]
+            except Exception:  # noqa: BLE001 - malformed evidence fails closed
+                reasons.add("social_assertion_evidence_contract_invalid")
+                continue
+            if not refs or any(not _text(ref.id) or not _text(ref.source) for ref in refs):
+                reasons.add("social_assertion_evidence_unavailable")
+                continue
+
+            record_ref = EvidenceRef(
+                id=str(row["record_id"]),
+                type="event",
+                source="services/api/services/social360/evidence_authority.py:social_relationship_evidence_events",
+                observedAt=_text(row.get("recorded_at")),
+                uri=f"store://social_relationship_evidence_events/{row['record_id']}",
+            )
+            refs = _dedupe_refs([record_ref, *refs])
+            observed = _parse_graph_time(row.get("observed_at"))
+            effective = _parse_graph_time(row.get("effective_at"))
+            if observed is None or effective is None:
+                reasons.add("social_assertion_timestamp_invalid")
+                continue
+            item: dict[str, Any] = {
+                "recordId": row["record_id"],
+                "sourceEntityId": row["source_entity_id"],
+                "targetEntityId": row["target_entity_id"],
+                "sourceId": row.get("source_id"),
+                "sourceObservationId": row.get("source_observation_id"),
+                "sourceRevisionId": row.get("source_revision_id"),
+                "sourceRevisionStatus": row.get(
+                    "source_revision_status", "source_reported_revision_unverified"
+                ),
+                "sourceEventId": row.get("source_event_id"),
+                "observedAt": observed.isoformat(),
+                "effectiveAt": effective.isoformat(),
+                "recordedAt": _text(row.get("recorded_at")),
+                "recordedBy": {
+                    "actorId": row.get("actor_id"),
+                    "actorType": row.get("actor_type"),
+                },
+                "evidenceRefs": [
+                    ref.model_dump(by_alias=True, exclude_none=True) for ref in refs
+                ],
+                "domainSlotIds": [section_id],
+            }
+            if assertion_kind == "social_contagion":
+                item.update(
+                    {
+                        "pathEntityIds": list(row.get("path_entity_ids", [])),
+                        "sourceTrustClassification": row.get("source_trust_classification"),
+                        "claimState": row.get("claim_state", EpistemicStatus.CORRELATED.value),
+                        "causalStatus": "unverified",
+                        "policyState": "unknown",
+                    }
+                )
+                claim_kind = "social_contagion_source_report"
+                claim_text = "A tenant-scoped source reported risk evidence associated with this exact observed social path; causation remains unverified."
+                claim_state = EpistemicStatus.CORRELATED
+            else:
+                item.update(
+                    {
+                        "assertionState": row.get("assertion_state", "operator_asserted"),
+                        "riskSignalIds": list(row.get("risk_signal_ids", [])),
+                        "trustScore": None,
+                        "policyState": "unknown",
+                    }
+                )
+                claim_kind = "social_trust_edge_operator_assertion"
+                claim_text = "An authenticated tenant operator recorded a directional trust assertion for this exact canonical entity pair; no trust score is inferred."
+                claim_state = EpistemicStatus.OBSERVED
+            visible.append(item)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"social360:{section_id}:{row['record_id']}",
+                    kind=claim_kind,
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[claim_text],
+                    claimState=claim_state,
+                    domainSlotIds=[section_id],
+                )
+            )
+
+        truncated = bool(getattr(read, "truncated", False)) or len(read.records) > _MAX_SOCIAL_EVIDENCE_READ
+        if truncated:
+            reasons.add("social_assertion_read_truncated")
+        if reasons:
+            state = "degraded"
+            warnings = sorted(reasons)
+        elif visible:
+            state = "available"
+            warnings = None
+        else:
+            state = "empty"
+            warnings = None
+        content = {
+            "items": visible,
+            "coverage": "recorded_assertions_only",
+            "complete": False,
+            "recordedAssertionCount": len(visible),
+            "causalContagionEstablished": False,
+            "trustScoreInferred": False,
+            "policyState": "unknown",
+            "freshness": {
+                "state": "unknown",
+                "sourceTimestampsPreserved": True,
+                "reason": "no_social_assertion_freshness_threshold_registered",
+            },
+            "limitations": [
+                "an empty assertion ledger does not establish absence of social transmission or trust",
+                "source ingress classification does not establish source reliability",
+                "recorded source reports are correlated evidence and do not prove causal contagion",
+                "policy and redaction are evaluated by the frame runtime",
+            ],
+        }
+        return (
+            ProjectionSection(
+                id=section_id,
+                state=state,
+                title=title,
+                content=content,
+                warnings=warnings,
+                canonicalAuthorityRefs=list(authorities),
+            ),
+            claims,
         )
 
     async def _read_social_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead:
@@ -3408,6 +3735,26 @@ class Social360Provider(IntelligenceProjectionProvider):
                     )
                 )
                 continue
+            if section_id in {"social_contagion", "trust_edges"}:
+                contagion = section_id == "social_contagion"
+                sections.append(
+                    ProjectionSection(
+                        id=section_id,
+                        state="unknown",
+                        title=(
+                            "Source reported social contagion evidence"
+                            if contagion
+                            else "Operator asserted trust relationships"
+                        ),
+                        warnings=["empty_population_has_no_entity_assertion_scope"],
+                        canonicalAuthorityRefs=list(
+                            _SOCIAL_CONTAGION_AUTHORITIES
+                            if contagion
+                            else _SOCIAL_TRUST_AUTHORITIES
+                        ),
+                    )
+                )
+                continue
             sections.append(
                 ProjectionSection(
                     id=section_id,
@@ -3452,6 +3799,10 @@ class Social360Provider(IntelligenceProjectionProvider):
                     if section_id == "syndicates"
                     else list(_SOCIAL_RISK_EDGE_AUTHORITIES)
                     if section_id == "risk_edges"
+                    else list(_SOCIAL_CONTAGION_AUTHORITIES)
+                    if section_id == "social_contagion"
+                    else list(_SOCIAL_TRUST_AUTHORITIES)
+                    if section_id == "trust_edges"
                     else None
                 ),
             )
@@ -3493,6 +3844,10 @@ class Social360Provider(IntelligenceProjectionProvider):
                     if section_id == "syndicates"
                     else list(_SOCIAL_RISK_EDGE_AUTHORITIES)
                     if section_id == "risk_edges"
+                    else list(_SOCIAL_CONTAGION_AUTHORITIES)
+                    if section_id == "social_contagion"
+                    else list(_SOCIAL_TRUST_AUTHORITIES)
+                    if section_id == "trust_edges"
                     else None
                 ),
             )

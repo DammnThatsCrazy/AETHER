@@ -79,6 +79,7 @@ flowchart LR
   profile360 --> evidence_provenance
   profile360 --> identity_resolution
   profile360 --> temporal_kernel
+  profile360 -.-o relationship360
   profile360 -.-o risk360
   relationship360 --> identity_resolution
   relationship360 --> relationship_fidelity

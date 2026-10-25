@@ -45,9 +45,11 @@ class EpisodeEngine:
         store: Optional[EpisodeStore] = None,
         *,
         journey_source: Optional[Any] = None,
+        authority_writer: Optional[Any] = None,
     ) -> None:
         self._store = store or EpisodeStore()
         self._journey_source = journey_source
+        self._authority_writer = authority_writer
         self._open_cache: dict[str, Optional[str]] = {}
 
     @property
@@ -254,6 +256,78 @@ class EpisodeEngine:
             record.evidence_refs.append(evidence)
         await self._store.upsert(record)
         return record
+
+    async def link_agent_handoff(
+        self,
+        tenant_id: str,
+        episode_id: str,
+        execution_id: str,
+    ) -> Any:
+        """Persist an execution/delegation link after exact source validation.
+
+        A link is accepted only when the canonical agent execution names an
+        observation already attached to this agent episode and the execution
+        references a tenant-owned delegation valid at execution time.
+        """
+        writer = self._authority_writer
+        if writer is None:
+            from journeys.measurement.episodes.related_authorities import (
+                EpisodeJourneyAuthorityWriter,
+            )
+
+            writer = EpisodeJourneyAuthorityWriter(episode_store=self._store)
+        return await writer.link_agent_handoff(
+            tenant_id=tenant_id,
+            episode_id=episode_id,
+            execution_id=execution_id,
+        )
+
+    async def link_observation_reference(
+        self, tenant_id: str, episode_id: str, observation_id: str
+    ) -> Any:
+        """Bind a recorded observation to its exact canonical source namespace.
+
+        The writer reads the tenant-owned semantic Silver row and refuses to
+        create a typed link when its source namespace or event lineage is absent.
+        """
+        writer = self._authority_writer
+        if writer is None:
+            from journeys.measurement.episodes.related_authorities import (
+                EpisodeJourneyAuthorityWriter,
+            )
+
+            writer = EpisodeJourneyAuthorityWriter(episode_store=self._store)
+        return await writer.link_observation_reference(
+            tenant_id=tenant_id,
+            episode_id=episode_id,
+            observation_id=observation_id,
+        )
+
+    async def link_attribution_credit(
+        self,
+        tenant_id: str,
+        episode_id: str,
+        outcome_id: str,
+        conversion_id: str,
+        attribution_run_id: str,
+        credit_id: str,
+    ) -> Any:
+        """Persist one exact outcome → conversion → active credit association."""
+        writer = self._authority_writer
+        if writer is None:
+            from journeys.measurement.episodes.related_authorities import (
+                EpisodeJourneyAuthorityWriter,
+            )
+
+            writer = EpisodeJourneyAuthorityWriter(episode_store=self._store)
+        return await writer.link_attribution_credit(
+            tenant_id=tenant_id,
+            episode_id=episode_id,
+            outcome_id=outcome_id,
+            conversion_id=conversion_id,
+            attribution_run_id=attribution_run_id,
+            credit_id=credit_id,
+        )
 
     async def close(self, tenant_id: str, episode_id: str) -> EpisodeRecord:
         record = await self._store.get(tenant_id, episode_id)

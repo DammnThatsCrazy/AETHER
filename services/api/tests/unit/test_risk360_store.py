@@ -32,6 +32,7 @@ from intelligence.risk360.contracts import (  # noqa: E402
     MonetaryAmount,
     RiskAssessment,
     RiskComponent,
+    RiskInterventionRecord,
     RiskPoisoningEvidence,
     RiskSignal,
     RiskVector,
@@ -41,6 +42,9 @@ from intelligence.risk360.store import (  # noqa: E402
     RiskAssessmentRepository,
     RiskPoisoningEvidenceConflict,
     RiskPoisoningEvidenceRepository,
+    RiskInterventionConflict,
+    RiskInterventionRepository,
+    RiskInterventionReadIncomplete,
     RiskSignalRepository,
 )
 
@@ -139,6 +143,49 @@ def _poisoning_evidence(
         version=version,
         supersedes_evidence_id=supersedes_evidence_id,
         restatement_reason=restatement_reason,
+    )
+
+
+def _intervention_record(
+    record_id: str,
+    *,
+    tenant_id: str = TENANT_A,
+    subject_kind: str = "agent",
+    subject_id: str = "agent-1",
+    record_kind: str = "decision",
+    decision_record_id: str | None = None,
+    now: datetime | None = None,
+) -> RiskInterventionRecord:
+    instant = now or datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    return RiskInterventionRecord(
+        record_id=record_id,
+        intervention_id="intervention-1",
+        tenant_id=tenant_id,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        intervention_type="disable_agent_action",
+        label="Pause anomalous action",
+        record_kind=record_kind,  # type: ignore[arg-type]
+        decision_state="approved" if record_kind == "decision" else None,
+        reported_outcome="reported_applied" if record_kind == "outcome" else None,
+        decision_record_id=decision_record_id,
+        requires_confirmation=True,
+        reversible=True,
+        actor_kind="human",
+        actor_id="operator-1",
+        actor_evidence_refs=[
+            EvidenceRef(id="actor-auth-1", type="event", source="identity-authority")
+        ],
+        evidence_refs=[
+            EvidenceRef(id=f"evidence-{record_id}", type="event", source="risk-review")
+        ],
+        policy_decision_id="policy-decision-1",
+        observed_at=instant,
+        effective_at=instant,
+        recorded_at=instant,
+        claim_state=EpistemicStatus.OBSERVED,
+        source_system="risk-operations",
+        source_record_id=f"source-{record_id}",
     )
 
 
@@ -295,6 +342,95 @@ async def test_poisoning_evidence_repository_reports_bounded_truncation() -> Non
     assert read.reason == "poisoning_evidence_scan_truncated"
     assert len(read.records) == 1
     assert read.records[0].evidence_id == "p-2"
+
+
+@pytest.mark.asyncio
+async def test_risk_intervention_repository_is_append_only_and_tenant_subject_scoped() -> None:
+    repo = RiskInterventionRepository()
+    base = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    decision = _intervention_record("decision-1", now=base)
+    await repo.create(decision)
+    await repo.create(_intervention_record("decision-1", now=base))
+    await repo.create(
+        _intervention_record("decision-1", tenant_id=TENANT_B, now=base)
+    )
+    await repo.create(
+        _intervention_record("other-subject", subject_id="agent-2", now=base)
+    )
+
+    read = await repo.list_for_subject(TENANT_A, "agent", "agent-1")
+    assert read.complete is True
+    assert [record.record_id for record in read.records] == ["decision-1"]
+    assert (await repo.get(TENANT_A, "decision-1")) == decision
+    assert await repo.get(TENANT_B, "missing") is None
+    assert await repo.get(TENANT_A, "other-subject") is not None
+    assert await repo.get(TENANT_B, "other-subject") is None
+    with pytest.raises(NotImplementedError, match="append-only"):
+        await repo.update_scoped(TENANT_A, "decision-1", {"decision_state": "rejected"})
+
+    conflicting = decision.model_copy(update={"decision_state": "rejected"})
+    with pytest.raises(RiskInterventionConflict, match="already exists"):
+        await repo.create(conflicting)
+
+
+@pytest.mark.asyncio
+async def test_risk_intervention_outcome_requires_exact_decision_and_bounded_reads() -> None:
+    repo = RiskInterventionRepository()
+    base = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    decision = _intervention_record("decision-1", now=base)
+    await repo.create(decision)
+
+    outcome = _intervention_record(
+        "outcome-1",
+        record_kind="outcome",
+        decision_record_id="decision-1",
+        now=base + timedelta(seconds=1),
+    )
+    await repo.create(outcome)
+    with pytest.raises(RiskInterventionConflict, match="unavailable"):
+        await repo.create(
+            _intervention_record(
+                "foreign-outcome",
+                tenant_id=TENANT_B,
+                record_kind="outcome",
+                decision_record_id="decision-1",
+                now=base + timedelta(seconds=2),
+            )
+        )
+    with pytest.raises(RiskInterventionConflict, match="matching tenant and subject"):
+        await repo.create(
+            _intervention_record(
+                "wrong-subject-outcome",
+                subject_id="agent-2",
+                record_kind="outcome",
+                decision_record_id="decision-1",
+                now=base + timedelta(seconds=2),
+            )
+        )
+
+    historical = await repo.list_for_subject(
+        TENANT_A, "agent", "agent-1", as_of=base + timedelta(microseconds=1)
+    )
+    assert [record.record_id for record in historical.records] == ["decision-1"]
+    bounded = await repo.list_for_subject(TENANT_A, "agent", "agent-1", limit=1)
+    assert bounded.complete is False
+    assert bounded.reason == "risk_intervention_scan_truncated"
+    assert [record.record_id for record in bounded.records] == ["outcome-1"]
+
+
+@pytest.mark.asyncio
+async def test_risk_intervention_as_of_read_degrades_on_malformed_stored_timestamps() -> None:
+    repo = RiskInterventionRepository()
+    await repo.create(_intervention_record("malformed", now=datetime.now(timezone.utc)))
+    repo._store[f"{TENANT_A}:malformed"]["observed_at"] = "not-a-timestamp"
+
+    with pytest.raises(RiskInterventionReadIncomplete, match="timestamp is invalid"):
+        await repo.list_for_subject(
+            TENANT_A,
+            "agent",
+            "agent-1",
+            as_of=datetime.now(timezone.utc),
+        )
 
 
 @pytest.mark.asyncio

@@ -30,7 +30,6 @@ from journeys.support360.provider import (  # noqa: E402
     _REASON_CALLBACK_NOT_FOUND,
     _REASON_JOURNEY_JOIN_MISSING,
     _REASON_PARTIAL_ENTITY_JOIN,
-    _REASON_PARTICIPANT_AUTHORITY_MISSING,
     _REASON_RESOLUTION_AUTHORITY_MISSING,
     _REASON_SUPPORT_BUSINESS_OUTCOME_MISSING,
     _REASON_SOURCE_UNAVAILABLE,
@@ -78,6 +77,18 @@ class FakeSource:
         return self.read
 
 
+class SelectedSupportConnection:
+    async def find(self, connection_id: str):
+        return {
+            "tenant_id": TENANT_A,
+            "connection_id": connection_id,
+            "provider_identity": "support-desk",
+            "state": "verified",
+            "last_verified_at": "2026-10-17T10:00:00Z",
+            "selected_accounts": ["support-account-1"],
+        }
+
+
 def _row(
     fact_id: str,
     *,
@@ -92,6 +103,9 @@ def _row(
         "profile_id": None,
         "recipient_entity_id": entity_id,
         "user_id": None,
+        "provider": "support-desk",
+        "provider_account_id": "support-account-1",
+        "external_thread_id": "provider-thread-1",
         "message_category": category,
         "source_event_type": "support_message_received",
         "support_case_id": support_case_id,
@@ -184,7 +198,6 @@ async def test_entity_projection_filters_tenant_category_and_exact_subject() -> 
             "participants",
             "sla",
             "journey_links",
-            "agents",
             "risk",
             "resolution",
         )
@@ -406,19 +419,16 @@ async def test_canonical_support_case_subject_reads_exact_case_summary_with_evid
     assert slots["evidence_trace"]["state"] == "degraded"
     assert slots["callbacks"]["state"] == "empty"
     assert slots["callbacks"]["count"] == 0
-    assert all(
-        slots[slot_id]["state"] == "unknown"
-        for slot_id in (
-            "conversation_history",
-            "participants",
-            "sla",
-            "journey_links",
-            "agents",
-            "risk",
-            "resolution",
-        )
-    )
-    assert result.claims[0].domainSlotIds == ["case_summary", "evidence_trace"]
+    assert slots["conversation_history"]["state"] == "unknown"
+    assert slots["participants"]["state"] == "unknown"
+    assert slots["sla"]["state"] == "empty"
+    assert slots["journey_links"]["state"] == "empty"
+    assert slots["risk"]["state"] == "unknown"
+    assert slots["resolution"]["state"] == "observed"
+    assert slots["agents"]["state"] == "degraded"
+    assert slots["agents"]["count"] == 0
+    assert slots["agents"]["sourceHistoryComplete"] is False
+    assert result.claims[0].domainSlotIds == ["case_summary", "resolution", "evidence_trace"]
     assert result.claims[0].claimState.value == "observed"
     assert {ref.id for ref in result.claims[0].evidenceRefs} == {
         record["case_id"],
@@ -556,7 +566,10 @@ async def test_canonical_case_joins_only_same_tenant_connection_and_source_case_
             "source_connector_id": "case-connection-a",
         }
     )
-    source = RepositorySupport360Source(facts=facts_repository)
+    source = RepositorySupport360Source(
+        facts=facts_repository,
+        connections=SelectedSupportConnection(),
+    )
     request = _request("support_case", case_record["case_id"])
 
     result = await Support360Provider(source, case_repository=case_repository).project(
@@ -580,8 +593,8 @@ async def test_canonical_case_joins_only_same_tenant_connection_and_source_case_
         "case-connection-a",
     }
     assert "sourceReportedSupportCaseRef" not in entry
-    assert slots["participants"]["state"] == "unknown"
-    assert slots["participants"]["reasonCode"] == _REASON_PARTICIPANT_AUTHORITY_MISSING
+    assert slots["participants"]["state"] == "empty"
+    assert "support_case_participant_source_roster_history_unverified" in slots["participants"]["reasonCodes"]
     assert {reference.id for reference in sections["evidence"].content["evidenceRefs"]} >= {
         case_record["case_id"],
         "case-created-a",
@@ -601,6 +614,118 @@ async def test_canonical_case_joins_only_same_tenant_connection_and_source_case_
     )
     reset_local_support_case_store()
     reset_local_stores()
+
+
+@pytest.mark.asyncio
+async def test_support_case_participants_join_only_exact_canonical_provider_conversations(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from datetime import datetime, timezone
+
+    from journeys.communication360.repository import (
+        Communication360FactsRepository,
+        reset_local_stores as reset_communication360_stores,
+    )
+    from journeys.comms.repository import CommsFactsRepository, reset_local_stores
+
+    reset_local_support_case_store()
+    reset_local_stores()
+    reset_communication360_stores()
+    case_repository = SupportCaseRepository()
+    case_record = await case_repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="case-connection-participants",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="private-source-case-participants",
+            source_event_id="case-created-participants",
+            event_type=SupportCaseEventType.CREATED,
+            occurred_at=datetime(2026, 10, 17, 11, tzinfo=timezone.utc),
+        ),
+    )
+    silver = CommsFactsRepository()
+    participant_facts = Communication360FactsRepository()
+
+    async def local_pool():
+        return None
+
+    monkeypatch.setattr(silver, "_pool", local_pool)
+    monkeypatch.setattr(participant_facts, "_pool", local_pool)
+    await silver.upsert(
+        {
+            **_row("case-message-thread-match", support_case_id="private-source-case-participants"),
+            "idempotency_key": "case-message-thread-match",
+            "source_connector_id": "case-connection-participants",
+        }
+    )
+    participant_payload = {
+        "provider": "support-desk",
+        "provider_account_id": "support-account-1",
+        "provider_conversation_id": "provider-thread-1",
+        "communication_scope_kind": "provider_conversation",
+        "communication_scope": "provider-thread-1",
+    }
+    await participant_facts.upsert(
+        {
+            "tenant_id": TENANT_A,
+            "kind": "participant_binding",
+            "source_event_id": "roster-event-match",
+            "occurred_at": "2026-10-17T11:30:00Z",
+            "idempotency_key": "participant-match",
+            "payload": participant_payload,
+        }
+    )
+    for suffix, changes in (
+        ("wrong-account", {"provider_account_id": "other-account"}),
+        ("wrong-conversation", {"provider_conversation_id": "other-thread", "communication_scope": "other-thread"}),
+        ("wrong-provider", {"provider": "other-provider"}),
+    ):
+        await participant_facts.upsert(
+            {
+                "tenant_id": TENANT_A,
+                "kind": "participant_binding",
+                "source_event_id": f"roster-event-{suffix}",
+                "occurred_at": "2026-10-17T11:31:00Z",
+                "idempotency_key": f"participant-{suffix}",
+                "payload": participant_payload | changes,
+            }
+        )
+    await participant_facts.upsert(
+        {
+            "tenant_id": TENANT_B,
+            "kind": "participant_binding",
+            "source_event_id": "roster-event-other-tenant",
+            "occurred_at": "2026-10-17T11:32:00Z",
+            "idempotency_key": "participant-other-tenant",
+            "payload": participant_payload,
+        }
+    )
+
+    read = await RepositorySupport360Source(
+        facts=silver,
+        communication360_facts=participant_facts,
+        connections=SelectedSupportConnection(),
+    ).support_participants_for_case(
+        TENANT_A,
+        "case-connection-participants",
+        "private-source-case-participants",
+        "support-desk",
+        limit=100,
+    )
+
+    assert read.available and read.scope_known and read.complete
+    assert read.conversation_scopes == (
+        ("support-desk", "support-account-1", "provider-thread-1"),
+    )
+    assert len(read.rows) == 1
+    assert read.rows[0]["source_event_id"] == "roster-event-match"
+    assert read.subject_join == (
+        "support_case_connection_source_case_to_provider_account_conversation_exact_match"
+    )
+    reset_local_support_case_store()
+    reset_local_stores()
+    reset_communication360_stores()
 
 
 @pytest.mark.asyncio
@@ -709,7 +834,7 @@ async def test_support_case_resolution_joins_exact_applied_lifecycle_event_evide
     }
     assert result.claims[0].domainSlotIds == ["case_summary", "resolution", "evidence_trace"]
     assert sections["outcomes"].state == "unknown"
-    assert sections["outcomes"].warnings == [_REASON_RESOLUTION_AUTHORITY_MISSING]
+    assert sections["outcomes"].warnings == ["support_business_outcome_authority_unavailable"]
     reset_local_support_case_store()
 
 

@@ -140,3 +140,102 @@ def test_get_returns_row_and_none_for_missing() -> None:
     assert fetched["actor_id"] == "entity-1"
     assert _run(repo.get(TENANT_A, "does-not-exist")) is None
     assert _run(repo.get(TENANT_B, stored["fact_id"])) is None
+
+
+def test_exact_subject_reference_read_is_tenant_typed_bounded_and_temporal() -> None:
+    repo = Communication360FactsRepository()
+    _run(
+        repo.upsert(
+            _row(
+                TENANT_A,
+                "episode-before",
+                occurred_at="2026-09-03T09:59:59Z",
+                received_at="2026-09-03T10:00:00Z",
+                payload={"episode_id": "episode-1"},
+            )
+        )
+    )
+    _run(
+        repo.upsert(
+            _row(
+                TENANT_A,
+                "episode-singular",
+                occurred_at="2026-09-03T10:15:00Z",
+                received_at="2026-09-03T10:30:00Z",
+                payload={"episode_id": "episode-1", "message_body": "private"},
+            )
+        )
+    )
+    _run(
+        repo.upsert(
+            _row(
+                TENANT_A,
+                "episode-plural",
+                occurred_at="2026-09-03T10:30:00Z",
+                received_at="2026-09-03T10:31:00Z",
+                payload={"episode_ids": ["episode-1", "episode-2"]},
+            )
+        )
+    )
+    _run(
+        repo.upsert(
+            _row(
+                TENANT_A,
+                "journey-only",
+                occurred_at="2026-09-03T10:15:00Z",
+                received_at="2026-09-03T10:15:00Z",
+                payload={"journey_id": "episode-1"},
+            )
+        )
+    )
+    _run(
+        repo.upsert(
+            _row(
+                TENANT_B,
+                "cross-tenant",
+                occurred_at="2026-09-03T10:15:00Z",
+                received_at="2026-09-03T10:15:00Z",
+                payload={"episode_id": "episode-1"},
+            )
+        )
+    )
+    _run(
+        repo.upsert(
+            _row(
+                TENANT_A,
+                "free-text",
+                occurred_at="2026-09-03T10:15:00Z",
+                received_at="2026-09-03T10:15:00Z",
+                payload={"description": "episode-1"},
+            )
+        )
+    )
+
+    rows, complete = _run(
+        repo.facts_for_exact_reference(
+            TENANT_A,
+            "episode",
+            "episode-1",
+            after="2026-09-03T10:00:00Z",
+            before="2026-09-03T11:00:00Z",
+            received_before="2026-09-03T10:30:00Z",
+        )
+    )
+
+    assert complete is True
+    assert [row["idempotency_key"] for row in rows] == ["episode-singular"]
+    assert "message_body" in rows[0]["payload"]  # repository preserves source evidence
+
+
+def test_exact_subject_reference_read_rejects_invalid_temporal_bound() -> None:
+    repo = Communication360FactsRepository()
+    rows, complete = _run(
+        repo.facts_for_exact_reference(
+            TENANT_A,
+            "journey",
+            "journey-1",
+            after="2026-09-03T10:00:00",  # no timezone is an invalid boundary
+        )
+    )
+    assert rows == []
+    assert complete is False

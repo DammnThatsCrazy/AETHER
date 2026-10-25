@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ from journeys.measurement.episodes.provider import (  # noqa: E402
     RepositoryJourneyAttributionSource,
     RepositoryJourney360Source,
 )
+from journeys.traffic.classifier import SOURCE_CLASSIFIER_VERSION  # noqa: E402
 from graph.operational_intelligence.models import EntityRef, EvidenceRef  # noqa: E402
 from graph.temporal360.history_replay import SubjectEvent  # noqa: E402
 from shared.intelligence_projections.composition import (  # noqa: E402
@@ -285,6 +287,56 @@ class FakeJourneyAttributionSource:
         if self.raises is not None:
             raise self.raises
         return self.rows
+
+
+class FakeCommunicationFactReferenceSource:
+    def __init__(self, rows: list[dict] | None = None, *, complete: bool = True) -> None:
+        self.rows = [] if rows is None else rows
+        self.complete = complete
+        self.calls: list[dict[str, object]] = []
+
+    async def list_for_reference(
+        self,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        *,
+        after,
+        before,
+        received_before,
+        limit: int,
+    ):
+        self.calls.append(
+            {
+                "tenant_id": tenant_id,
+                "subject_kind": subject_kind,
+                "subject_id": subject_id,
+                "after": after,
+                "before": before,
+                "received_before": received_before,
+                "limit": limit,
+            }
+        )
+        return self.rows, self.complete
+
+
+def _communication_fact(
+    fact_id: str,
+    *,
+    tenant_id: str = TENANT,
+    occurred_at: str = "2026-10-16T09:59:00+00:00",
+    received_at: str = "2026-10-16T09:59:30+00:00",
+    payload: dict | None = None,
+) -> dict:
+    return {
+        "fact_id": fact_id,
+        "tenant_id": tenant_id,
+        "kind": "communication_act",
+        "source_event_id": f"source-{fact_id}",
+        "occurred_at": occurred_at,
+        "received_at": received_at,
+        "payload": {} if payload is None else payload,
+    }
 
 
 def _journey_attribution_credit(**overrides: object) -> dict:
@@ -933,6 +985,7 @@ async def test_invalid_or_cross_tenant_episode_page_stays_unknown() -> None:
 
 
 async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> None:
+    assert SOURCE_CLASSIFIER_VERSION == "3.0"
     source = FakeJourneySource(
         journey=_journey(agent_activity_ids=["activity-step-1"]),
         steps=[
@@ -940,8 +993,9 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
                 agent_id=AGENT_ID,
                 actor_type="agent",
                 activity_family="agent",
+                source_classifier_version="3.0",
             ),
-            _step(step_id="step-2", position=2),
+            _step(step_id="step-2", position=2, source_classifier_version="3.0"),
         ],
     )
     result = await Episode360Provider(
@@ -975,7 +1029,13 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
     assert slot_coverage["journey_summary"]["state"] == "available"
     assert slot_coverage["journey_summary"]["evidenceRefs"][0]["id"] == VERSION_ID
     assert slot_coverage["stages"]["state"] == "partial"
-    assert slot_coverage["stages"]["coverage"] == "observed_role_markers"
+    assert slot_coverage["stages"]["coverage"] == "typed_source_role_markers"
+    assert slot_coverage["stages"]["roleTaxonomyState"] == "available"
+    assert slot_coverage["stages"]["roleTaxonomyVersion"] == "3.0"
+    assert slot_coverage["stages"]["stageTaxonomyState"] == "unknown"
+    assert slot_coverage["stages"]["stageCompletenessState"] == "unknown"
+    assert slot_coverage["stages"]["roleMarkerInventory"]["state"] == "complete"
+    assert slot_coverage["stages"]["roleMarkerInventory"]["stepCount"] == 2
     stage_observations = _section(result, "timeline").content["stageObservations"]
     assert stage_observations["stageTaxonomyState"] == "unknown"
     assert [item["journeyRole"] for item in stage_observations["stageObservations"]] == [
@@ -986,6 +1046,18 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
         "step-1",
         "step-2",
     ]
+    assert [item["typedRole"] for item in stage_observations["stageObservations"]] == [
+        "entry",
+        "entry",
+    ]
+    assert [item["activityId"] for item in stage_observations["stageObservations"]] == [
+        "activity-step-1",
+        "activity-step-2",
+    ]
+    assert all(
+        item["roleTaxonomy"]["version"] == "3.0"
+        for item in stage_observations["stageObservations"]
+    )
     assert all(item["evidenceRefs"] for item in stage_observations["stageObservations"])
     stage_claims = [
         claim for claim in result.claims if "stages" in (claim.domainSlotIds or [])
@@ -1010,8 +1082,11 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
     frame_stage_slot = frame.slots[0]
     assert frame_stage_slot.state == "degraded"
     assert {ref.id for ref in frame_stage_slot.evidenceRefs} == {"step-1", "step-2"}
-    assert all("stage taxonomy and stage completeness remain unknown" in claim.claims[0]
-               for claim in frame_stage_slot.claims)
+    assert all(
+        "does not define business-stage boundaries or establish stage completeness"
+        in claim.claims[0]
+        for claim in frame_stage_slot.claims
+    )
     assert slot_coverage["episodes"]["reason"] == (
         "episode_journey_association_not_recorded_or_not_observed"
     )
@@ -1236,6 +1311,44 @@ async def test_journey_stage_marker_without_step_evidence_is_degraded() -> None:
     assert stage_slot["reason"] == "journey_role_marker_invalid_or_missing_exact_step_evidence"
     assert stage_observations["stageObservations"] == []
     assert stage_observations["evidenceRefs"] == []
+
+
+async def test_journey_stage_role_taxonomy_requires_known_role_and_exact_classifier_version() -> None:
+    source = FakeJourneySource(
+        steps=[
+            _step(step_id="unversioned-role", journey_role="entry"),
+            _step(
+                step_id="unknown-role",
+                position=2,
+                journey_role="exit",
+                source_classifier_version="3.0",
+            ),
+        ]
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "degraded"
+    assert stage_slot["coverage"] == "untyped_source_role_markers"
+    assert stage_slot["roleTaxonomyState"] == "unknown"
+    assert stage_slot["stageTaxonomyState"] == "unknown"
+    assert stage_slot["stageCompletenessState"] == "unknown"
+    assert stage_slot["roleMarkerInventory"]["state"] == "complete"
+    assert stage_slot["roleMarkerInventory"]["observedRoleMarkerCount"] == 2
+    assert stage_slot["roleMarkerInventory"]["typedRoleMarkerCount"] == 0
+    assert stage_slot["roleMarkerInventory"]["untypedRoleMarkerCount"] == 2
+    assert [item["typedRole"] for item in stage_observations["stageObservations"]] == [
+        None,
+        None,
+    ]
+    assert {ref["id"] for ref in stage_slot["roleMarkerInventory"]["evidenceRefs"]} == {
+        "unversioned-role",
+        "unknown-role",
+    }
 
 
 async def test_journey_conversion_and_touchpoint_references_do_not_claim_outcome_or_attribution() -> (
@@ -1916,6 +2029,148 @@ async def test_journey_projection_drops_rows_outside_tenant_or_version_scope() -
     assert [row["stepId"] for row in timeline.content["timeline"]] == ["step-1"]
     assert "unscoped_journey_step_rows_dropped" in result.degradedReasons
     assert result.claims == []
+
+
+async def test_episode_communications_join_exact_typed_facts_and_honor_both_as_of_clocks() -> None:
+    episode_id = "episode-communication-link"
+    episode = _episode(episode_id=episode_id)
+    anchor = "2026-10-16T10:00:00+00:00"
+    source = FakeCommunicationFactReferenceSource(
+        [
+            _communication_fact(
+                "comm-exact",
+                payload={
+                    "episode_id": episode_id,
+                    "message_body": "private message text must not project",
+                    "conversation_id": "conversation-1",
+                },
+            ),
+            _communication_fact(
+                "comm-received-late",
+                occurred_at="2026-10-16T09:58:00+00:00",
+                received_at="2026-10-16T10:01:00+00:00",
+                payload={"episode_id": episode_id},
+            ),
+            _communication_fact(
+                "comm-event-future",
+                occurred_at="2026-10-16T10:01:00+00:00",
+                received_at="2026-10-16T10:01:00+00:00",
+                payload={"episode_id": episode_id},
+            ),
+            _communication_fact(
+                "comm-wrong-reference",
+                payload={"episode_id": f"{episode_id}-other"},
+            ),
+            _communication_fact(
+                "comm-cross-tenant",
+                tenant_id="tenant-other",
+                payload={"episode_id": episode_id},
+            ),
+            _communication_fact(
+                "comm-free-text",
+                payload={"description": episode_id},
+            ),
+        ]
+    )
+    request = _episode_request(
+        subject=ProjectionSubject(kind="episode", id=episode_id),
+        asOf=anchor,
+        temporalMode="as_of",
+    )
+    result = await Episode360Provider(
+        episode_store=FakeEpisodeStore(
+            EpisodePageRead(records=(), next_cursor=None, truncated=False),
+            direct_record=episode,
+        ),
+        communication_fact_source=source,
+    ).project(request, _context())
+
+    assert source.calls == [
+        {
+            "tenant_id": TENANT,
+            "subject_kind": "episode",
+            "subject_id": episode_id,
+            "after": None,
+            "before": datetime.fromisoformat(anchor) + timedelta(microseconds=1),
+            "received_before": datetime.fromisoformat(anchor),
+            "limit": 201,
+        }
+    ]
+    summary = _section(result, "summary").content
+    communication_slot = summary["requiredSlotCoverage"]["communications"]
+    assert communication_slot["state"] == "degraded"
+    assert communication_slot["reason"] == (
+        "communication_fact_tenant_scope_mismatch"
+    )
+    assert [ref["id"] for ref in communication_slot["evidenceRefs"]] == ["comm-exact"]
+    assert communication_slot["temporal"]["state"] == "as_of_event_and_receipt_time_applied"
+    communication_context = _section(result, "interactions").content["communicationContext"]
+    assert [row["factId"] for row in communication_context["communications"]] == [
+        "comm-exact"
+    ]
+    assert "conversationIds" not in communication_context["communications"][0]
+    assert "conversation-1" not in str(result.model_dump())
+    assert "private message text must not project" not in str(result.model_dump())
+    communication_claims = [
+        claim for claim in result.claims if claim.kind == "explicit_episode_communication_reference"
+    ]
+    assert len(communication_claims) == 1
+    assert communication_claims[0].domainSlotIds == ["communications", "evidence_trace"]
+    assert {ref.id for ref in communication_claims[0].evidenceRefs} == {
+        episode_id,
+        "comm-exact",
+    }
+
+
+async def test_journey_communications_join_only_exact_tenant_fact_references() -> None:
+    source = FakeCommunicationFactReferenceSource(
+        [
+            _communication_fact(
+                "journey-comm-exact",
+                payload={"journey_id": JOURNEY_ID, "message_body": "private"},
+            ),
+            _communication_fact(
+                "journey-comm-wrong",
+                payload={"journey_id": f"{JOURNEY_ID}-other"},
+            ),
+            _communication_fact(
+                "journey-comm-cross-tenant",
+                tenant_id="tenant-other",
+                payload={"journey_id": JOURNEY_ID},
+            ),
+            _communication_fact(
+                "journey-comm-free-text",
+                payload={"description": JOURNEY_ID},
+            ),
+        ]
+    )
+    result = await Episode360Provider(
+        journey_source=FakeJourneySource(),
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        communication_fact_source=source,
+    ).project(_request(), _context())
+
+    assert source.calls[0]["tenant_id"] == TENANT
+    assert source.calls[0]["subject_kind"] == "journey"
+    assert source.calls[0]["subject_id"] == JOURNEY_ID
+    coverage = _section(result, "summary").content["requiredSlotCoverage"]
+    communication_slot = coverage["communications"]
+    assert communication_slot["state"] == "degraded"
+    assert communication_slot["coverage"] == "exact_reference_facts_only"
+    assert [ref["id"] for ref in communication_slot["evidenceRefs"]] == [
+        "journey-comm-exact"
+    ]
+    interactions = _section(result, "interactions").content["communications"]
+    assert [row["factId"] for row in interactions["communications"]] == [
+        "journey-comm-exact"
+    ]
+    assert "private" not in str(result.model_dump())
+    claims = [
+        claim for claim in result.claims if claim.kind == "explicit_journey_communication_reference"
+    ]
+    assert len(claims) == 1
+    assert claims[0].domainSlotIds == ["communications", "evidence_trace"]
+    assert {ref.id for ref in claims[0].evidenceRefs} == {VERSION_ID, "journey-comm-exact"}
 
 
 async def test_journey_point_in_time_request_is_unknown_until_history_read_is_supported() -> None:

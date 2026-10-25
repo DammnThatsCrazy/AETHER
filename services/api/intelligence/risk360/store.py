@@ -1,12 +1,11 @@
 """Risk360 persistence — tenant-scoped JSONB repositories (BaseRepository pattern).
 
-Risk signals and risk assessments are stored as auto-created JSONB tables (see
+Risk signals and risk assessments use auto-created JSONB tables (see
 ``repositories/repos.py``); in the local environment the store is in-memory.
-Record IDs are tenant-qualified (``{tenant_id}:{natural_id}``) so identical
-natural ids never collide across tenants, and every read path re-checks the
-tenant before returning a row. **NO Alembic migrations** — BaseRepository owns
-the schema (the convention established for new stores, first used by the
-comparison workbench).
+Poisoning evidence and intervention histories use explicit Alembic migrations
+over the same JSONB repository contract. Record IDs are tenant-qualified
+(``{tenant_id}:{natural_id}``) so identical natural ids never collide across
+tenants, and every read path re-checks the tenant before returning a row.
 
 The tenant-scoped JSONB base is **reused** from the comparison workbench store
 (``services/api/intelligence/intelligence/comparison/store.py``, single-monolith reuse) rather
@@ -33,6 +32,7 @@ from intelligence.risk360.contracts import (
     PoisoningEvidenceStatus,
     RiskPoisoningEvidence,
     RiskPoisoningLifecycleEvent,
+    RiskInterventionRecord,
 )
 class RiskPoisoningEvidenceConflict(RuntimeError):
     """A poisoning evidence id or version chain conflicts with stored truth."""
@@ -51,6 +51,23 @@ class RiskPoisoningEvidenceRead:
     reason: Optional[str] = None
 
 
+class RiskInterventionConflict(RuntimeError):
+    """An immutable intervention record conflicts with canonical history."""
+
+
+class RiskInterventionReadIncomplete(RuntimeError):
+    """An exact tenant/subject intervention read could not be established."""
+
+
+@dataclass(frozen=True)
+class RiskInterventionRead:
+    """Bounded, exact-scope risk intervention read result."""
+
+    records: list[RiskInterventionRecord]
+    complete: bool
+    reason: Optional[str] = None
+
+
 _POISONING_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     "open": frozenset({"acknowledged", "resolved", "dismissed"}),
     "acknowledged": frozenset({"open", "resolved", "dismissed"}),
@@ -62,6 +79,21 @@ _POISONING_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _aware_datetime(value: Any) -> Optional[datetime]:
+    """Parse one timezone-aware datetime without accepting naive timestamps."""
+    parsed: Optional[datetime]
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed.tzinfo is not None and parsed.utcoffset() is not None else None
 
 
 def _record_id(tenant_id: str, evidence_id: str) -> str:
@@ -720,6 +752,251 @@ class RiskPoisoningEvidenceRepository(TenantScopedRiskRepository):
         return subject_rows + source_rows
 
 
+class RiskInterventionRepository(TenantScopedRiskRepository):
+    """Append-only risk intervention decision/outcome authority.
+
+    Each row is immutable. A reported outcome points at an exact decision row;
+    this validates linkage but deliberately does not authorize or execute the
+    intervention. Corrections are new records with new IDs. Deletion is exposed
+    only through the explicit DSR erasure method.
+    """
+
+    natural_id_key = "record_id"
+
+    def __init__(self) -> None:
+        super().__init__("risk_intervention_records")
+
+    async def create(self, record: RiskInterventionRecord) -> RiskInterventionRecord:
+        """Append one immutable decision or source-reported outcome record."""
+        if record.record_kind == "outcome":
+            decision = await self.get(record.tenant_id, record.decision_record_id or "")
+            if decision is None:
+                raise RiskInterventionConflict("outcome decision record is unavailable")
+            if (
+                decision.record_kind != "decision"
+                or decision.tenant_id != record.tenant_id
+                or decision.intervention_id != record.intervention_id
+                or decision.subject_kind != record.subject_kind
+                or decision.subject_id != record.subject_id
+                or decision.intervention_type != record.intervention_type
+            ):
+                raise RiskInterventionConflict(
+                    "outcome must reference a matching tenant and subject decision"
+                )
+
+        record_id = _record_id(record.tenant_id, record.record_id)
+        payload = record.model_dump(mode="json")
+        existing = await super().get_scoped(record.tenant_id, record.record_id)
+        if existing is not None:
+            if existing == payload:
+                return RiskInterventionRecord.model_validate(existing)
+            raise RiskInterventionConflict("risk intervention record id already exists")
+
+        inserted = await super().insert_if_absent(record_id, payload, record.tenant_id)
+        if inserted:
+            return record
+        # A concurrent identical create is idempotent; a different body under
+        # the same immutable key is a conflict and is never overwritten.
+        existing = await super().get_scoped(record.tenant_id, record.record_id)
+        if existing == payload:
+            return RiskInterventionRecord.model_validate(existing)
+        raise RiskInterventionConflict("risk intervention record id already exists")
+
+    async def get(
+        self, tenant_id: str, record_id: str
+    ) -> Optional[RiskInterventionRecord]:
+        """Fetch one exact tenant-owned immutable event."""
+        if not tenant_id or not record_id:
+            return None
+        raw = await super().get_scoped(tenant_id, record_id)
+        if raw is None:
+            return None
+        try:
+            record = RiskInterventionRecord.model_validate(raw)
+        except Exception as exc:  # malformed stored data is not a record
+            raise RiskInterventionReadIncomplete(
+                "stored risk intervention contract is invalid"
+            ) from exc
+        if record.tenant_id != tenant_id or record.record_id != record_id:
+            raise RiskInterventionReadIncomplete(
+                "stored risk intervention scope is inconsistent"
+            )
+        return record
+
+    async def list_for_subject(
+        self,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        *,
+        as_of: Optional[datetime] = None,
+        limit: int = 100,
+    ) -> RiskInterventionRead:
+        """Read bounded records for the exact tenant and typed subject.
+
+        Point-in-time reads filter both source observation and Aether recorded
+        time. This preserves what was known at the anchor while retaining the
+        separate effective time as a reported domain timestamp.
+        """
+        if not tenant_id or not subject_kind or not subject_id or limit < 1 or limit > 500:
+            raise ValueError("risk intervention read requires exact scope and bounded limit")
+        if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
+            raise ValueError("risk intervention as_of must include a timezone")
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            candidates = [
+                row
+                for row in self._store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("subject_kind") == subject_kind
+                and row.get("subject_id") == subject_id
+            ]
+            candidates.sort(
+                key=lambda row: (str(row.get("recorded_at", "")), str(row.get("record_id", ""))),
+                reverse=True,
+            )
+            if as_of is not None:
+                historical: list[dict[str, Any]] = []
+                for row in candidates:
+                    recorded = _aware_datetime(row.get("recorded_at"))
+                    observed = _aware_datetime(row.get("observed_at"))
+                    if recorded is None or observed is None:
+                        raise RiskInterventionReadIncomplete(
+                            "stored risk intervention timestamp is invalid"
+                        )
+                    if recorded <= as_of and observed <= as_of:
+                        historical.append(row)
+                candidates = historical
+        else:
+            await self._ensure_table()
+            query_limit = limit + 1
+            async with pool.acquire() as conn:
+                if as_of is None:
+                    rows = await conn.fetch(
+                        """SELECT id, data, tenant_id FROM risk_intervention_records
+                           WHERE tenant_id = $1
+                             AND data->>'subject_kind' = $2
+                             AND data->>'subject_id' = $3
+                           ORDER BY (data->>'recorded_at')::timestamptz DESC, id ASC
+                           LIMIT $4""",
+                        tenant_id,
+                        subject_kind,
+                        subject_id,
+                        query_limit,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """SELECT id, data, tenant_id FROM risk_intervention_records
+                           WHERE tenant_id = $1
+                             AND data->>'subject_kind' = $2
+                             AND data->>'subject_id' = $3
+                             AND (data->>'recorded_at')::timestamptz <= $4
+                             AND (data->>'observed_at')::timestamptz <= $4
+                           ORDER BY (data->>'recorded_at')::timestamptz DESC, id ASC
+                           LIMIT $5""",
+                        tenant_id,
+                        subject_kind,
+                        subject_id,
+                        as_of,
+                        query_limit,
+                    )
+            candidates = []
+            for row in rows:
+                payload = _json_payload(row["data"])
+                if (
+                    row["tenant_id"] != tenant_id
+                    or payload.get("tenant_id") != tenant_id
+                    or payload.get("subject_kind") != subject_kind
+                    or payload.get("subject_id") != subject_id
+                ):
+                    raise RiskInterventionReadIncomplete(
+                        "risk intervention exact binding is inconsistent"
+                    )
+                candidates.append({**payload, "id": row["id"]})
+
+        truncated = len(candidates) > limit
+        records: list[RiskInterventionRecord] = []
+        for raw in candidates[:limit]:
+            try:
+                record = RiskInterventionRecord.model_validate(_public_record(raw))
+            except Exception as exc:
+                raise RiskInterventionReadIncomplete(
+                    "stored risk intervention contract is invalid"
+                ) from exc
+            if (
+                record.tenant_id != tenant_id
+                or record.subject_kind != subject_kind
+                or record.subject_id != subject_id
+            ):
+                raise RiskInterventionReadIncomplete(
+                    "risk intervention exact binding is inconsistent"
+                )
+            if as_of is not None and (
+                record.recorded_at > as_of or record.observed_at > as_of
+            ):
+                raise RiskInterventionReadIncomplete(
+                    "risk intervention point-in-time read is inconsistent"
+                )
+            records.append(record)
+
+        by_id = {record.record_id: record for record in records}
+        for record in records:
+            if record.record_kind != "outcome":
+                continue
+            decision = by_id.get(record.decision_record_id or "")
+            if decision is None:
+                # The related event may be older than the bounded page. This
+                # must be reported as partial by callers, never silently
+                # interpreted as a standalone successful outcome.
+                continue
+            if (
+                decision.record_kind != "decision"
+                or decision.tenant_id != record.tenant_id
+                or decision.intervention_id != record.intervention_id
+                or decision.subject_kind != record.subject_kind
+                or decision.subject_id != record.subject_id
+                or decision.intervention_type != record.intervention_type
+            ):
+                raise RiskInterventionReadIncomplete(
+                    "risk intervention outcome linkage is inconsistent"
+                )
+
+        return RiskInterventionRead(
+            records=records,
+            complete=not truncated,
+            reason="risk_intervention_scan_truncated" if truncated else None,
+        )
+
+    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int:
+        """Erase exact tenant-owned intervention records naming a subject or actor."""
+        subject_rows = await self.delete_for_tenant_where(tenant_id, "subject_id", refs)
+        actor_rows = await self.delete_for_tenant_where(tenant_id, "actor_id", refs)
+        return subject_rows + actor_rows
+
+    async def insert(self, record_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError("risk intervention history is append-only; use create()")
+
+    async def upsert_scoped(
+        self, tenant_id: str, natural_id: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        raise NotImplementedError("risk intervention history is append-only; use create()")
+
+    async def update(self, record_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError("risk intervention history is append-only")
+
+    async def update_scoped(
+        self, tenant_id: str, natural_id: str, patch: dict[str, Any]
+    ) -> Optional[dict[str, Any]]:
+        raise NotImplementedError("risk intervention history is append-only")
+
+    async def delete(self, record_id: str) -> bool:
+        raise NotImplementedError("risk intervention history can only be erased by DSR")
+
+    async def delete_scoped(self, tenant_id: str, natural_id: str) -> bool:
+        raise NotImplementedError("risk intervention history can only be erased by DSR")
+
+
 __all__ = [
     "TenantScopedRiskRepository",
     "RiskSignalRepository",
@@ -728,4 +1005,8 @@ __all__ = [
     "RiskPoisoningEvidenceRead",
     "RiskPoisoningEvidenceConflict",
     "RiskPoisoningEvidenceReadIncomplete",
+    "RiskInterventionRepository",
+    "RiskInterventionRead",
+    "RiskInterventionConflict",
+    "RiskInterventionReadIncomplete",
 ]

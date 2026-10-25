@@ -301,9 +301,10 @@ async def test_location_fact_source_lineage_reaches_geographic360_normalization_
             "source_observation_id": "capsule-observation-21",
             "evidence_refs": ["evidence:source-21"],
             "schema_version": "2.1.0",
+            "normalization_version": "context_capsule_location_fact.v1",
         }
     )
-    await repo.record(fact)
+    stored = await repo.record(fact)
     reader = GeographicLocationReader(repository=repo)
     provider = Geographic360Provider(reader=reader)
     request = ProjectionRequest(
@@ -329,7 +330,18 @@ async def test_location_fact_source_lineage_reaches_geographic360_normalization_
             "sourceEvidenceRefsTruncated": False,
             "locationFactSchemaVersion": "2.1.0",
             "sourceObservedAt": fact.model_dump(mode="json")["observed_at"],
+            "normalizationVersion": "context_capsule_location_fact.v1",
+            "normalizationTimestamp": stored["normalization_timestamp"],
         }
     ]
-    assert "normalizationVersion" in normalization["content"]["unavailableLineageFields"]
+    assert normalization["content"]["unavailableLineageFields"] == [
+        "validationVersion",
+        "rawRecordRef",
+    ]
+    assert normalization["content"]["transformationVersionedFactCount"] == 1
+    assert normalization["content"]["rawRecordLinkedFactCount"] == 0
+    assert normalization["freshness"]["state"] == "available"
+    assert normalization["freshness"]["latestNormalizationAt"] == stored[
+        "normalization_timestamp"
+    ]
     assert "Portland" not in str(normalization)

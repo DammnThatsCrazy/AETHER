@@ -34,6 +34,7 @@ from identity.profile.profile360_provider import (
     ProfileRead,
     RepositoryProfile360Source,
     SessionIdentityRead,
+    SessionRollupRead,
     SyndicateMembership,
     SyndicateMembershipRead,
 )
@@ -861,18 +862,85 @@ async def test_resolved_session_identity_projects_partial_profile_history_withou
                 scope_known=True,
             )
 
+        async def analytics_session_rollups(self, tenant_id, session_ids, *, limit):
+            self.calls.append(("session_rollups", tenant_id, tuple(session_ids), limit))
+            return SessionRollupRead(
+                rows=[{
+                    "tenant_id": TENANT,
+                    "session_id": "raw-session-secret",
+                    "record_type": "analytics_session",
+                    "id": "analytics-session-row-1",
+                    "first_seen_at": "2026-05-01T12:00:00Z",
+                    "last_seen_at": "2026-05-01T12:05:00Z",
+                    "event_count": 3,
+                    "page_views": 1,
+                    "last_event_type": "page_view",
+                }],
+                available=True,
+                scope_known=True,
+            )
+
+        async def session_events(
+            self, tenant_id, subject, session_ids, *, limit, start, end
+        ):
+            self.calls.append(("session_events", tenant_id, subject.id, tuple(session_ids)))
+            return self.events
+
     source = _SessionSource()
+    source.events = EventRead(
+        rows=[
+            {
+                "tenant_id": TENANT,
+                "canonical_entity_id": USER_ID,
+                "event_id": "event-session-exact",
+                "event_type": "page_view",
+                "session_id": "raw-session-secret",
+                "occurred_at": "2026-05-01T12:00:00Z",
+                "properties": {"private": "must not escape"},
+            },
+            {
+                "tenant_id": TENANT,
+                "canonical_entity_id": "another-entity",
+                "event_id": "event-session-foreign-entity",
+                "event_type": "page_view",
+                "session_id": "raw-session-secret",
+                "occurred_at": "2026-05-01T12:01:00Z",
+            },
+        ],
+        available=True,
+        scope_known=True,
+        canonical_subject_id=USER_ID,
+    )
     result = await _project(
         Profile360Provider(source), _request(include_sections=["sessions"])
     )
-    assert {call[0] for call in source.calls} == {"identity", "entity", "session_identities"}
+    assert {call[0] for call in source.calls} == {
+        "identity",
+        "entity",
+        "session_identities",
+        "session_rollups",
+        "session_events",
+    }
     section = _section(result, "sessions")
     assert section.state == "degraded"
     assert section.content["complete"] is False
     assert section.content["items"][0]["sourceIdentityId"] == "source-identity-11"
+    assert section.content["items"][0]["eventCount"] == 1
+    assert section.content["items"][0]["events"][0]["eventId"] == "event-session-exact"
+    assert section.content["items"][0]["sessionRollup"]["observedEventCount"] == 3
+    assert section.content["items"][0]["timelineComplete"] is False
+    assert section.content["roster"]["complete"] is False
+    assert section.content["timeline"]["complete"] is False
+    assert "analytics_events" in section.canonicalAuthorityRefs
+    assert "analytics-session-row-1" in str(result)
     assert "raw-session-secret" not in str(result)
+    assert "event-session-foreign-entity" not in str(result)
     assert "raw_claim" not in str(result)
-    assert [claim.domainSlotIds for claim in result.claims] == [["session_history"]]
+    assert [claim.domainSlotIds for claim in result.claims] == [
+        ["session_history"],
+        ["session_history"],
+        ["session_history"],
+    ]
 
     allowed = Experience360PolicyDisposition(state="allowed")
     frame = compose_experience360_frame(
@@ -957,6 +1025,156 @@ async def test_session_identity_repository_uses_exact_resolved_tenant_scope(monk
     assert read.scope_known is True
     assert read.truncated is True
     assert [row["id"] for row in read.rows] == ["source-1"]
+
+
+@pytest.mark.asyncio
+async def test_session_rollup_repository_uses_exact_tenant_and_session_keys(monkeypatch):
+    calls = []
+
+    class _Analytics:
+        async def query_sessions(self, tenant_id, filters, *, limit):
+            calls.append((tenant_id, filters, limit))
+            assert filters == {"session_id": "session-exact"}
+            assert limit == 2
+            return [{
+                "id": "analytics-session-row",
+                "tenant_id": tenant_id,
+                "session_id": "session-exact",
+                "record_type": "analytics_session",
+                "first_seen_at": "2026-05-01T12:00:00Z",
+                "last_seen_at": "2026-05-01T12:05:00Z",
+                "event_count": 2,
+                "page_views": 1,
+                "last_event_type": "page_view",
+                "properties": {"must_not_escape": "private"},
+            }]
+
+    monkeypatch.setattr("dependencies.providers.get_cache", lambda: object())
+    monkeypatch.setattr("repositories.repos.AnalyticsRepository", lambda _cache: _Analytics())
+    read = await RepositoryProfile360Source().analytics_session_rollups(
+        TENANT, ["session-exact"], limit=10
+    )
+
+    assert calls == [(TENANT, {"session_id": "session-exact"}, 2)]
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.rows == [{
+        "tenant_id": TENANT,
+        "session_id": "session-exact",
+        "record_type": "analytics_session",
+        "id": "analytics-session-row",
+        "first_seen_at": "2026-05-01T12:00:00Z",
+        "last_seen_at": "2026-05-01T12:05:00Z",
+        "event_count": 2,
+        "page_views": 1,
+        "last_event_type": "page_view",
+    }]
+
+
+@pytest.mark.asyncio
+async def test_session_event_repository_requires_exact_identity_owned_event_ids(monkeypatch):
+    identity_calls = []
+    event_calls = []
+
+    class _IdentityRepository:
+        async def get_event_ids_for_canonical_entity(self, tenant_id, entity_id, *, limit):
+            identity_calls.append((tenant_id, entity_id, limit))
+            return ["owned-event"]
+
+    class _Analytics:
+        async def query_events(self, tenant_id, filters, *, limit):
+            event_calls.append((tenant_id, filters, limit))
+            return [
+                {
+                    "tenant_id": tenant_id,
+                    "session_id": "session-exact",
+                    "event_id": "owned-event",
+                    "occurred_at": "2026-05-01T12:00:00Z",
+                },
+                {
+                    "tenant_id": tenant_id,
+                    "session_id": "session-exact",
+                    "event_id": "unowned-event",
+                    "occurred_at": "2026-05-01T12:01:00Z",
+                },
+            ]
+
+    monkeypatch.setattr("dependencies.providers.get_cache", lambda: object())
+    monkeypatch.setattr(
+        "identity.identity.repository.IdentityResolutionRepository",
+        _IdentityRepository,
+    )
+    monkeypatch.setattr("repositories.repos.AnalyticsRepository", lambda _cache: _Analytics())
+    read = await RepositoryProfile360Source().session_events(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        ["session-exact"],
+        limit=10,
+        start=WINDOW_START,
+        end=WINDOW_END,
+    )
+
+    assert identity_calls == [(TENANT, USER_ID, 10_000)]
+    assert event_calls == [(
+        TENANT,
+        {
+            "session_id": "session-exact",
+            "start_date": WINDOW_START,
+            "end_date": WINDOW_END,
+        },
+        11,
+    )]
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.canonical_subject_id == USER_ID
+    assert [row["event_id"] for row in read.rows] == ["owned-event"]
+
+
+@pytest.mark.asyncio
+async def test_session_history_does_not_claim_empty_roster_or_event_timeline_complete():
+    class _SessionSource(_FakeProfileSource):
+        async def resolved_session_identities(self, tenant_id, subject, *, limit):
+            return SessionIdentityRead(
+                rows=[{
+                    "id": "source-session-link",
+                    "tenant_id": TENANT,
+                    "canonical_entity_id": USER_ID,
+                    "status": "resolved",
+                    "source_system_id": "sdk-system",
+                    "source_namespace": "sdk:site-a",
+                    "session_id": "session-without-rollup",
+                    "first_seen_at": "2026-05-01T00:00:00Z",
+                    "last_seen_at": "2026-05-01T00:00:00Z",
+                }],
+                available=True,
+                scope_known=True,
+            )
+
+        async def analytics_session_rollups(self, tenant_id, session_ids, *, limit):
+            return SessionRollupRead([], available=True, scope_known=True)
+
+        async def session_events(
+            self, tenant_id, subject, session_ids, *, limit, start, end
+        ):
+            return EventRead(
+                rows=[], available=True, scope_known=True,
+                canonical_subject_id=USER_ID,
+            )
+
+    source = _SessionSource(events=EventRead(
+        rows=[], available=True, scope_known=True, canonical_subject_id=USER_ID
+    ))
+    result = await _project(Profile360Provider(source), _request(include_sections=["sessions"]))
+    section = _section(result, "sessions")
+
+    assert section.state == "degraded"
+    assert section.content["complete"] is False
+    assert section.content["roster"]["state"] == "partial"
+    assert section.content["timeline"]["state"] == "unknown"
+    assert section.content["items"][0]["sessionRollup"] is None
+    assert section.content["items"][0]["events"] == []
+    assert "profile_session_rollup_not_observed_for_resolved_link" in section.content["reasonCodes"]
+    assert "profile_session_event_roster_completeness_unknown" in section.content["reasonCodes"]
 
 
 def _related_request(kind: str, subject_id: str, *, as_of: Optional[str] = None):
@@ -1381,7 +1599,9 @@ async def test_agent_delegations_reuses_exact_tenant_scoped_agent360_authority()
     )
 
     section = _section(result, "agent_delegations")
-    assert section.state == "available"
+    # Delegation evidence is present, while Agent360's combined authority
+    # dimension remains degraded without verified owner and capability scope.
+    assert section.state == "degraded"
     assert section.canonicalAuthorityRefs == [
         "agent_access",
         "agent_executions",
@@ -1405,7 +1625,7 @@ async def test_agent_delegations_reuses_exact_tenant_scoped_agent360_authority()
         ],
     }
     authority = section.content["delegationAuthority"]
-    assert authority["state"] == "available"
+    assert authority["state"] == "degraded"
     assert authority["delegationRecords"][0]["delegationId"] == "delegation-1"
     assert authority["delegationRecords"][0]["granteeEntityId"] == source.canonical_agent_id
     assert authority["delegationRecords"][0]["authorizationDecision"] == "unknown"
@@ -1532,7 +1752,7 @@ async def test_agent_delegations_accepts_only_the_exact_canonical_agent_entity()
     )
 
     section = _section(result, "agent_delegations")
-    assert section.state == "available"
+    assert section.state == "degraded"
     assert section.content["identityBinding"]["canonicalAgentEntityId"] == (
         source.canonical_agent_id
     )

@@ -41,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Reused canonical primitives — never re-declared (identity-parity tested).
 from graph.operational_intelligence.models import (  # noqa: F401  (re-exported)
+    ActorKind,
     EntityRef,
     EvidenceRef,
     GraphSnapshotRef,
@@ -122,6 +123,117 @@ PoisoningType = Literal[
 PoisoningEvidenceStatus = Literal[
     "open", "acknowledged", "resolved", "dismissed", "superseded"
 ]
+
+RiskInterventionType = Literal[
+    "quarantine_source",
+    "downgrade_source_trust",
+    "require_human_review",
+    "freeze_attribution_updates",
+    "disable_agent_action",
+    "restrict_campaign_resolution",
+    "metadata_only_comms",
+    "alert_security_operator",
+]
+RiskInterventionRecordKind = Literal["decision", "outcome"]
+RiskInterventionDecisionState = Literal["proposed", "approved", "rejected", "withdrawn"]
+RiskInterventionReportedOutcome = Literal[
+    "reported_applied",
+    "reported_partially_applied",
+    "reported_failed",
+    "reported_not_applied",
+]
+
+
+class RiskInterventionRecord(RiskContract):
+    """Append-only report of a risk intervention decision or reported outcome.
+
+    A decision and a reported outcome are distinct records. An ``approved``
+    decision does not prove actor authority or execution. Outcome values are
+    deliberately prefixed ``reported_``: Risk360 records the evidence-bearing
+    assertion from its producer, but does not execute or independently verify
+    an external effect.
+    """
+
+    record_id: str
+    intervention_id: str
+    tenant_id: str
+    subject_kind: str
+    subject_id: str
+    intervention_type: RiskInterventionType
+    label: str
+    record_kind: RiskInterventionRecordKind
+    decision_state: Optional[RiskInterventionDecisionState] = None
+    reported_outcome: Optional[RiskInterventionReportedOutcome] = None
+    decision_record_id: Optional[str] = None
+    requires_confirmation: bool
+    reversible: bool
+    actor_kind: ActorKind
+    actor_id: str
+    actor_evidence_refs: list[EvidenceRef] = Field(min_length=1)
+    evidence_refs: list[EvidenceRef] = Field(min_length=1)
+    #: Pointer to the canonical governance decision when one was recorded.
+    #: Presence is a reference only; Risk360 does not replay or authorize it.
+    policy_decision_id: Optional[str] = None
+    #: Source assertion time, the intervention's effective time, and when
+    #: Aether recorded this immutable report are separate temporal anchors.
+    observed_at: datetime
+    effective_at: datetime
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    claim_state: EpistemicStatus = EpistemicStatus.OBSERVED
+    source_system: str
+    source_record_id: str
+
+    @model_validator(mode="after")
+    def _intervention_record_is_exact_and_temporally_valid(
+        self,
+    ) -> "RiskInterventionRecord":
+        for label, value in (
+            ("record_id", self.record_id),
+            ("intervention_id", self.intervention_id),
+            ("tenant_id", self.tenant_id),
+            ("subject_kind", self.subject_kind),
+            ("subject_id", self.subject_id),
+            ("label", self.label),
+            ("actor_id", self.actor_id),
+            ("source_system", self.source_system),
+            ("source_record_id", self.source_record_id),
+        ):
+            if not value.strip():
+                raise ValueError(f"risk intervention {label} must not be empty")
+        if len(self.label) > 256:
+            raise ValueError("risk intervention label must be at most 256 characters")
+        if self.record_kind == "decision":
+            if self.decision_state is None or self.reported_outcome is not None:
+                raise ValueError(
+                    "decision records require decision_state and cannot carry an outcome"
+                )
+            if self.decision_record_id is not None:
+                raise ValueError("decision records cannot reference another decision record")
+        else:
+            if self.reported_outcome is None or self.decision_state is not None:
+                raise ValueError(
+                    "outcome records require a reported_outcome and cannot carry a decision state"
+                )
+            if not self.decision_record_id or not self.decision_record_id.strip():
+                raise ValueError("outcome records require their exact decision_record_id")
+        timestamps = (self.observed_at, self.effective_at, self.recorded_at)
+        if any(value.tzinfo is None or value.utcoffset() is None for value in timestamps):
+            raise ValueError("risk intervention timestamps must include a timezone")
+        if self.recorded_at < self.observed_at:
+            raise ValueError("risk intervention cannot be recorded before it was observed")
+        evidence_ids = [ref.id for ref in self.evidence_refs]
+        actor_evidence_ids = [ref.id for ref in self.actor_evidence_refs]
+        if any(not value.strip() for value in (*evidence_ids, *actor_evidence_ids)):
+            raise ValueError("risk intervention evidence references must have ids")
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError("risk intervention evidence references must be unique")
+        if len(actor_evidence_ids) != len(set(actor_evidence_ids)):
+            raise ValueError("risk intervention actor evidence references must be unique")
+        if any(not ref.source.strip() for ref in (*self.evidence_refs, *self.actor_evidence_refs)):
+            raise ValueError("risk intervention evidence references must name their source")
+        if self.policy_decision_id is not None and not self.policy_decision_id.strip():
+            raise ValueError("policy_decision_id must not be empty when supplied")
+        return self
 
 
 class RiskPoisoningLifecycleEvent(RiskContract):
@@ -470,6 +582,11 @@ __all__ = [
     "RiskPoisoningLifecycleEvent",
     "PoisoningType",
     "PoisoningEvidenceStatus",
+    "RiskInterventionRecord",
+    "RiskInterventionType",
+    "RiskInterventionRecordKind",
+    "RiskInterventionDecisionState",
+    "RiskInterventionReportedOutcome",
     "RiskComponent",
     "RiskVector",
     "ExposureAssessment",

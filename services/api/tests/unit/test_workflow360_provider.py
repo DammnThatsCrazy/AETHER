@@ -23,6 +23,7 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     WorkflowAgentExecutionRead,
     WorkflowAgentIdentityRead,
     WorkflowApprovalRead,
+    WorkflowActionRead,
     Workflow360Provider,
     WorkflowPrincipalIdentityRead,
     WorkflowOutcomeRead,
@@ -30,6 +31,12 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     WorkflowTriggerRead,
     WorkflowRiskAssessmentRead,
     register_provider,
+)
+from intelligence.workflow.definitions import (  # noqa: E402
+    WorkflowDefinitionRepository,
+    WorkflowDefinitionRevision,
+    WorkflowStepDefinition,
+    WorkflowTriggerDefinition,
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from shared.intelligence_projections.contracts import (  # noqa: E402
@@ -162,6 +169,52 @@ class FakeWorkflowSource:
             (tenant_id, workflow_run_id, execution_rows, limit)
         )
         return self.risk_assessment_read
+
+
+class FakeWorkflowDefinitionFactStore:
+    def __init__(self) -> None:
+        self.rows: dict[str, dict[str, Any]] = {}
+
+    async def upsert(self, fact: dict[str, Any]) -> dict[str, Any]:
+        self.rows[fact["id"]] = fact
+        return fact
+
+    async def find_by_ids(
+        self,
+        tenant_id: str,
+        record_ids: list[str] | tuple[str, ...],
+        *,
+        subject: str | None = None,
+    ) -> list[dict[str, Any]]:
+        found = []
+        for record_id in record_ids:
+            row = self.rows.get(record_id)
+            if (
+                row
+                and row["tenant_id"] == tenant_id
+                and (subject is None or row["subject_ref"] == subject)
+            ):
+                found.append({"id": record_id, "data": row["data"]})
+        return found
+
+    async def latest_for_subject(
+        self, tenant_id: str, workflow_id: str
+    ) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self.rows.values()
+            if row["tenant_id"] == tenant_id and row["subject_ref"] == workflow_id
+        ]
+        rows.sort(key=lambda row: row["data"]["revision"], reverse=True)
+        return [
+            {
+                "id": row["id"],
+                "tenant_id": row["tenant_id"],
+                "subject_ref": row["subject_ref"],
+                "data": row["data"],
+            }
+            for row in rows[:2]
+        ]
 
 
 def _row(
@@ -1901,3 +1954,190 @@ async def test_repository_source_resolves_principal_through_tenant_user_alias() 
         "identity_aliases",
         "identity_subjects",
     }
+
+
+@pytest.mark.asyncio
+async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
+    monkeypatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import shared.graph.graph as graph_module
+
+    execution = _agent_execution_row()
+    edge = SimpleNamespace(
+        edge_type=graph_module.EdgeType.CALLED_TOOL,
+        from_vertex_id=f"{TENANT_A}:agent:{execution['agent_id']}",
+        to_vertex_id=f"{TENANT_A}:tool:tool-a",
+        properties={
+            "tenant_id": TENANT_A,
+            "execution_id": execution["execution_id"],
+            "called_at": "2026-10-18T10:00:01Z",
+            "idempotency_key": "tool-call-event-a",
+        },
+    )
+
+    class FakeGraph:
+        async def get_edges_for_tenant(self, tenant_id: str, *, limit: int, edge_types: list[Any]):
+            assert tenant_id == TENANT_A
+            assert limit == 10_000
+            assert edge_types == [graph_module.EdgeType.CALLED_TOOL]
+            return [edge], False
+
+        async def get_vertex_for_tenant(self, tenant_id: str, vertex_id: str):
+            assert tenant_id == TENANT_A
+            assert vertex_id == f"{TENANT_A}:tool:tool-a"
+            return SimpleNamespace(
+                vertex_type="Tool",
+                properties={"tenant_id": tenant_id, "tool_id": "tool-a"},
+            )
+
+    monkeypatch.setattr(graph_module, "GraphClient", FakeGraph)
+    read = await RepositoryWorkflow360Source().run_execution_actions(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(execution,),
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.complete is True
+    assert read.scope_mismatch is False
+    assert len(read.rows) == 1
+    assert read.rows[0]["execution_id"] == execution["execution_id"]
+    assert read.rows[0]["tool_id"] == "tool-a"
+    assert read.rows[0]["evidence_ref"]["id"] == "tool-call-event-a"
+    assert read.rows[0]["evidence_ref"]["source"] == "graph_edges"
+
+
+@pytest.mark.asyncio
+async def test_workflow_actions_project_observed_calls_without_inference() -> None:
+    invocation = _row(
+        "invocation-a",
+        agent_id="canonical-agent-a",
+        action_id="agent-execution-a",
+    )
+    execution = _agent_execution_row()
+    action = {
+        "tenant_id": TENANT_A,
+        "workflow_run_id": RUN_ID,
+        "execution_id": "agent-execution-a",
+        "agent_id": "canonical-agent-a",
+        "tool_id": "tool-a",
+        "called_at": "2026-10-18T10:00:01Z",
+        "evidence_ref": {
+            "id": "tool-call-event-a",
+            "type": "event",
+            "source": "graph_edges",
+            "observedAt": "2026-10-18T10:00:01+00:00",
+            "uri": "store://graph_edges/tool-call-event-a",
+        },
+    }
+
+    class SourceWithActions(FakeWorkflowSource):
+        async def run_execution_actions(
+            self,
+            *,
+            tenant_id: str,
+            workflow_run_id: str,
+            execution_rows: tuple[dict[str, Any], ...],
+            limit: int,
+        ) -> WorkflowActionRead:
+            assert tenant_id == TENANT_A
+            assert workflow_run_id == RUN_ID
+            assert execution_rows == (execution,)
+            assert limit == 500
+            return WorkflowActionRead((action,), True, True)
+
+    source = SourceWithActions(
+        WorkflowRunInvocationRead((invocation,), True, True),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+    )
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    actions = _sections(result)["actions"]
+    assert actions.state == "available"
+    assert actions.content["actionProducerCoverage"] == "unknown"
+    assert actions.content["authorizationState"] == "not_established_by_tool_call_edge"
+    assert actions.content["externalEffectState"] == "unknown"
+    assert actions.content["actions"][0]["operationState"] == (
+        "call_observed_external_effect_unknown"
+    )
+    claim = next(claim for claim in result.claims if "actions" in claim.domainSlotIds)
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "graph_edges",
+        "agent_executions",
+    }
+    assert "does not establish" in claim.claims[0]
+    assert _sections(result)["workflow_summary"].state == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_registered_workflow_definition_projects_latest_revision_without_run_inference() -> None:
+    fact_store = FakeWorkflowDefinitionFactStore()
+    repository = WorkflowDefinitionRepository(fact_store)
+    first = WorkflowDefinitionRevision(
+        workflow_id="workflow-definition-1",
+        tenant_id=TENANT_A,
+        revision=1,
+        name="Onboarding",
+        status="active",
+        triggers=[
+            WorkflowTriggerDefinition(
+                trigger_id="signup-trigger",
+                kind="event",
+                event_type="user.signup",
+            )
+        ],
+        steps=[
+            WorkflowStepDefinition(
+                step_id="welcome-step",
+                kind="agent",
+                label="Prepare welcome message",
+                agent_ref="agent-welcome",
+            )
+        ],
+        actor_ref="tenant-user-1",
+        created_at="2026-10-20T10:00:00Z",
+    )
+    second = WorkflowDefinitionRevision.model_validate(
+        first.model_dump(mode="json")
+        | {"revision": 2, "name": "Onboarding v2", "created_at": "2026-10-21T10:00:00Z"}
+    )
+    await repository.register(first)
+    await repository.register(second)
+    with pytest.raises(ValueError, match="workflow_definition_revision_is_append_only"):
+        await repository.register(second.model_copy(update={"name": "Mutated definition"}))
+
+    latest = await repository.read_latest(TENANT_A, first.workflow_id)
+    assert latest.available is True
+    assert latest.complete is True
+    assert latest.rows[0]["revision"] == 2
+
+    request = _request(subject_kind="workflow", subject_id=first.workflow_id)
+    # The shared registry currently declares run subjects only; root integration
+    # will add the workflow-definition subject kinds after this provider lands.
+    request = request.model_copy(
+        update={
+            "subject": ProjectionSubject.model_construct(kind="workflow", id=first.workflow_id)
+        }
+    )
+    result = await Workflow360Provider(
+        source=RepositoryWorkflow360Source(workflow_definition_repository=repository)
+    ).project(request, _context())
+
+    sections = _sections(result)
+    summary = sections["workflow_summary"]
+    assert summary.state == "available"
+    assert summary.content["revision"] == 2
+    assert summary.content["name"] == "Onboarding v2"
+    assert summary.content["registeredByActorRef"] == "tenant-user-1"
+    assert summary.content["declaredTriggers"][0]["event_type"] == "user.signup"
+    assert summary.content["triggerExecutionState"] == "unknown"
+    assert summary.content["externalEffectState"] == "unknown"
+    assert summary.canonicalAuthorityRefs == ["workflow_definition_revisions"]
+    claim = next(claim for claim in result.claims if claim.kind == "registered_workflow_definition_revision")
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert claim.evidenceRefs[0].id == second.record_id
+    assert sections["runs"].state == "unknown"

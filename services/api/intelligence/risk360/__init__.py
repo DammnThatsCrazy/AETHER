@@ -62,6 +62,7 @@ from .contracts import (
     RiskComponent,
     RiskPoisoningEvidence,
     RiskPoisoningLifecycleEvent,
+    RiskInterventionRecord,
     RiskSignal,
     RiskVector,
 )
@@ -72,6 +73,7 @@ from .provider import (
     PROJECTION_ID,
     READ_CAPABILITY,
     RepositoryRiskSourceReader,
+    RiskAnomalyEventRead,
     Risk360Provider,
     RiskSourceReader,
     build_projection_request,
@@ -84,6 +86,10 @@ from .store import (
     RiskPoisoningEvidenceRead,
     RiskPoisoningEvidenceReadIncomplete,
     RiskPoisoningEvidenceRepository,
+    RiskInterventionConflict,
+    RiskInterventionRead,
+    RiskInterventionReadIncomplete,
+    RiskInterventionRepository,
     RiskSignalRepository,
 )
 
@@ -135,6 +141,7 @@ __all__ = [
     "RiskAssessmentRun",
     "RiskPoisoningEvidence",
     "RiskPoisoningLifecycleEvent",
+    "RiskInterventionRecord",
     # Dimension registry
     "RiskDimension",
     "RISK_DIMENSIONS",
@@ -147,12 +154,17 @@ __all__ = [
     "RiskPoisoningEvidenceRead",
     "RiskPoisoningEvidenceConflict",
     "RiskPoisoningEvidenceReadIncomplete",
+    "RiskInterventionRepository",
+    "RiskInterventionRead",
+    "RiskInterventionConflict",
+    "RiskInterventionReadIncomplete",
     # Provider (Phase 4)
     "EXPLORE_CAPABILITY",
     "OUTPUT_SECTIONS",
     "PROJECTION_ID",
     "READ_CAPABILITY",
     "RepositoryRiskSourceReader",
+    "RiskAnomalyEventRead",
     "Risk360Provider",
     "RiskSourceReader",
     "build_projection_request",

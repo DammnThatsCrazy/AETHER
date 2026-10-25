@@ -38,6 +38,7 @@ from value.economic.economic360_provider import (  # noqa: E402
     Economic360Provider,
     RepositoryConversionInventoryReader,
     RepositoryCampaignIdentityReader,
+    RepositoryClusterIdentityReader,
     RepositoryEconomicSourceReader,
     register_provider,
 )
@@ -656,7 +657,9 @@ async def test_repository_attribution_reader_uses_tenant_and_exact_conversion(mo
                 "model_confidence": 0.8,
             }
 
-        async def list_credits_for_run(self, requested_tenant: str, requested_run: str):
+        async def list_credits_for_run(
+            self, requested_tenant: str, requested_run: str, *, limit: int | None = None
+        ):
             assert (requested_tenant, requested_run) == (tenant_id, run_id)
             return [
                 {
@@ -745,7 +748,9 @@ async def test_repository_attribution_reader_degrades_unresolved_touchpoint_join
                 "completed_at": "2026-10-20T09:00:00Z",
             }
 
-        async def list_credits_for_run(self, requested_tenant: str, requested_run: str):
+        async def list_credits_for_run(
+            self, requested_tenant: str, requested_run: str, *, limit: int | None = None
+        ):
             assert (requested_tenant, requested_run) == (tenant_id, run_id)
             return [
                 {
@@ -815,7 +820,9 @@ async def test_repository_attribution_reader_bounds_touchpoint_lookups(monkeypat
                 "completed_at": "2026-10-20T09:00:00Z",
             }
 
-        async def list_credits_for_run(self, requested_tenant: str, requested_run: str):
+        async def list_credits_for_run(
+            self, requested_tenant: str, requested_run: str, *, limit: int | None = None
+        ):
             return [
                 {
                     "tenant_id": tenant_id,
@@ -851,6 +858,74 @@ async def test_repository_attribution_reader_bounds_touchpoint_lookups(monkeypat
     assert result["touchpointReadTruncated"] is True
     assert result["state"] == "degraded"
     assert result["reason"] == "canonical_attribution_touchpoint_read_truncated"
+
+
+async def test_repository_attribution_reader_bounds_credit_rows_and_reports_truncation(
+    monkeypatch,
+) -> None:
+    from journeys.measurement.repositories import attribution_run_repo, touchpoint_repo
+    from value.economic import economic360_provider as provider_module
+
+    tenant_id = "tenant-a"
+    conversion_id = "00000000-0000-4000-8000-000000000431"
+    run_id = "00000000-0000-4000-8000-000000000432"
+    touchpoint_id = "00000000-0000-4000-8000-000000000433"
+    requested_limits: list[int | None] = []
+
+    class ExactAttributionRepository:
+        async def get_active_run(self, requested_tenant: str, requested_conversion: str):
+            assert (requested_tenant, requested_conversion) == (tenant_id, conversion_id)
+            return {
+                "tenant_id": tenant_id,
+                "conversion_id": conversion_id,
+                "attribution_run_id": run_id,
+                "status": "complete",
+                "is_active": True,
+                "completed_at": "2026-10-20T09:00:00Z",
+            }
+
+        async def list_credits_for_run(
+            self, requested_tenant: str, requested_run: str, *, limit: int | None = None
+        ):
+            assert (requested_tenant, requested_run) == (tenant_id, run_id)
+            requested_limits.append(limit)
+            return [
+                {
+                    "tenant_id": tenant_id,
+                    "conversion_id": conversion_id,
+                    "attribution_run_id": run_id,
+                    "credit_id": f"00000000-0000-4000-8000-00000000043{index}",
+                    "credit_weight": "0.5",
+                    "touchpoint_id": touchpoint_id,
+                    "campaign_id": "campaign-7",
+                    "created_at": "2026-10-20T09:00:00Z",
+                }
+                for index in (4, 5)
+            ]
+
+    class ExactTouchpointRepository:
+        async def get(self, requested_tenant: str, requested_touchpoint: str):
+            assert (requested_tenant, requested_touchpoint) == (tenant_id, touchpoint_id)
+            return {
+                "tenant_id": tenant_id,
+                "touchpoint_id": touchpoint_id,
+                "campaign_id": "campaign-7",
+                "occurred_at": "2026-10-20T08:55:00Z",
+                "received_at": "2026-10-20T08:55:01Z",
+            }
+
+    monkeypatch.setattr(provider_module, "_MAX_ATTRIBUTION_CREDITS_PER_RUN", 1)
+    monkeypatch.setattr(provider_module, "_MAX_ATTRIBUTION_CREDITS_TOTAL", 1)
+    monkeypatch.setattr(attribution_run_repo, "AttributionRunRepository", ExactAttributionRepository)
+    monkeypatch.setattr(touchpoint_repo, "TouchpointRepository", ExactTouchpointRepository)
+
+    result = await RepositoryAttributionCreditReader().read(tenant_id, [conversion_id])
+    assert requested_limits == [2]
+    assert result["creditRowsExamined"] == 1
+    assert result["creditReadTruncated"] is True
+    assert len(result["records"]) == 1
+    assert result["state"] == "degraded"
+    assert result["reason"] == "canonical_attribution_credit_read_truncated"
 
 
 async def test_summary_surfaces_absorbed_metrics(healthy_source: FakeSource) -> None:
@@ -3005,6 +3080,18 @@ async def test_repository_conversion_inventory_uses_exact_supported_subject_join
             assert (tenant_id, identity_id) == ("tenant-a", subject_id)
             return True
 
+        async def validate_account(self, tenant_id: str, identity_id: str):
+            assert (tenant_id, identity_id) == ("tenant-a", subject_id)
+            return True, [
+                EvidenceRef(id=identity_id, type="entity", source="entity_registry")
+            ]
+
+        async def validate_cluster(self, tenant_id: str, identity_id: str):
+            assert (tenant_id, identity_id) == ("tenant-a", subject_id)
+            return True, [
+                EvidenceRef(id=identity_id, type="entity", source="identity_clusters_v2")
+            ]
+
     class ExactConversionRepository:
         calls: list[tuple[str, tuple, dict]] = []
 
@@ -3037,18 +3124,16 @@ async def test_repository_conversion_inventory_uses_exact_supported_subject_join
     identities = ExactIdentityReader()
     result = await RepositoryConversionInventoryReader(
         agent_identity_reader=identities,
+        account_identity_reader=identities,
+        cluster_identity_reader=identities,
         campaign_identity_reader=identities,
         profile_identity_reader=identities,
     ).read(
         _request(subject=ProjectionSubject(kind=subject_kind, id=subject_id))
     )
 
-    if subject_kind in {"account", "cluster"}:
-        assert result["state"] == "degraded"
-        assert result["completeness"] == "partial"
-    else:
-        assert result["state"] == "available"
-        assert result["completeness"] == "complete"
+    assert result["state"] == "available"
+    assert result["completeness"] == "complete"
     assert result["joinBasis"] == expected_join_basis
     assert [record["conversionId"] for record in result["records"]] == ["conversion-1"]
     assert [ref["id"] for ref in result["evidenceRefs"]] == ["conversion-1"]
@@ -3057,6 +3142,10 @@ async def test_repository_conversion_inventory_uses_exact_supported_subject_join
         assert repository.calls[0][2]["identity_type"] == "profile"
     elif subject_kind == "cluster":
         assert repository.calls[0][2]["identity_type"] == "cluster"
+        assert result["clusterIdentity"]["state"] == "validated"
+        assert result["canonicalAuthorityRefs"] == [
+            "canonical_conversions", "identity_clusters_v2"
+        ]
     elif subject_kind == "campaign":
         assert repository.calls[0][2]["include_unattributed"] is True
     elif subject_kind in {"account", "agent"}:
@@ -3081,6 +3170,12 @@ async def test_unvalidated_or_bounded_conversion_subject_empties_remain_unknown(
         async def is_canonical_agent(self, tenant_id: str, agent_id: str):
             return True
 
+        async def validate_account(self, tenant_id: str, account_id: str):
+            return False, []
+
+        async def validate_cluster(self, tenant_id: str, cluster_id: str):
+            return False, []
+
     class EmptyConversionRepository:
         async def list_by_profile(self, tenant_id: str, identity_id: str, **kwargs):
             return []
@@ -3099,6 +3194,8 @@ async def test_unvalidated_or_bounded_conversion_subject_empties_remain_unknown(
     identity_reader = ExactIdentityReader()
     result = await RepositoryConversionInventoryReader(
         agent_identity_reader=identity_reader,
+        account_identity_reader=identity_reader,
+        cluster_identity_reader=identity_reader,
     ).read(
         _request(subject=ProjectionSubject(kind=subject_kind, id="subject-1"))
     )
@@ -3107,6 +3204,202 @@ async def test_unvalidated_or_bounded_conversion_subject_empties_remain_unknown(
     assert result["completeness"] == "unknown"
     assert result["records"] == []
     assert result["evidenceRefs"] == []
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    [
+        (
+            {
+                "tenant_id": "tenant-a",
+                "id": "cluster-1",
+                "status": "active",
+                "canonical_entity_id": "entity-1",
+                "updated_at": "2026-10-24T12:00:00Z",
+            },
+            True,
+        ),
+        ({"tenant_id": "other", "id": "cluster-1", "status": "active"}, False),
+        (
+            {
+                "tenant_id": "tenant-a",
+                "id": "cluster-1",
+                "status": "merged",
+                "canonical_entity_id": "entity-1",
+            },
+            False,
+        ),
+    ],
+)
+async def test_cluster_identity_reader_requires_active_exact_tenant_record(
+    monkeypatch, row, expected
+) -> None:
+    from identity.identity import repository as identity_repository
+
+    class ClusterRepository:
+        async def get_cluster_for_tenant(self, tenant_id: str, cluster_id: str):
+            assert (tenant_id, cluster_id) == ("tenant-a", "cluster-1")
+            return row
+
+    monkeypatch.setattr(identity_repository, "IdentityResolutionRepository", ClusterRepository)
+    valid, evidence = await RepositoryClusterIdentityReader().validate_cluster(
+        "tenant-a", "cluster-1"
+    )
+    assert valid is expected
+    if expected:
+        assert [ref.id for ref in evidence] == ["cluster-1"]
+        assert evidence[0].source == "identity_clusters_v2"
+        assert evidence[0].uri == "store://identity_clusters_v2/cluster-1"
+    else:
+        assert evidence == []
+
+
+@pytest.mark.parametrize("subject_kind", ["account", "cluster"])
+async def test_value_provider_rejects_unproven_identity_in_injected_conversion_inventory(
+    subject_kind: str,
+) -> None:
+    ref = EvidenceRef(
+        id="conversion-1",
+        type="transaction",
+        source="canonical_conversions",
+        uri="store://canonical_conversions/conversion-1",
+    )
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[
+            {"conversionId": "conversion-1", "evidenceRefs": [ref.model_dump(mode="json")]}
+        ],
+        evidence_refs=[ref.model_dump(mode="json")],
+    )
+    request = _request(subject=ProjectionSubject(kind=subject_kind, id="subject-1"))
+    normalized = await Economic360Provider(
+        sources=FakeSource([]), conversion_inventory_reader=inventory
+    )._safe_conversion_inventory(request)
+
+    assert normalized["state"] == "unknown"
+    assert normalized["reason"] == f"canonical_{subject_kind}_identity_evidence_missing"
+    assert normalized["records"] == []
+
+
+async def test_value_revenue_adjustments_join_exact_conversion_with_bounded_read() -> None:
+    conversion_id = "conversion-1"
+    ref = EvidenceRef(
+        id=conversion_id,
+        type="transaction",
+        source="canonical_conversions",
+        uri=f"store://canonical_conversions/{conversion_id}",
+    )
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[{"conversionId": conversion_id, "evidenceRefs": [ref.model_dump(mode="json")]}],
+        evidence_refs=[ref.model_dump(mode="json")],
+        join_basis="exact_canonical_conversion_id",
+    )
+
+    class Adjustments:
+        calls: list[tuple[str, str, int]] = []
+
+        async def list_for_conversion(self, tenant_id, row_conversion_id, *, limit):
+            self.calls.append((tenant_id, row_conversion_id, limit))
+            return [
+                {
+                    "tenant_id": tenant_id,
+                    "conversion_id": conversion_id,
+                    "adjustment_id": "adjustment-1",
+                    "adjustment_type": "refund",
+                    "amount": "-3.50",
+                    "currency": "USD",
+                    "occurred_at": "2026-10-24T12:00:00Z",
+                    "created_at": "2026-10-24T12:01:00Z",
+                }
+            ]
+
+    source = Adjustments()
+    request = _request(subject=ProjectionSubject(kind="conversion", id=conversion_id))
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=inventory,
+        revenue_adjustment_reader=source,
+    ).project(request, await _make_context(ProviderRegistry()))
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    adjustments = evidence.content["revenue_adjustments"]
+    assert source.calls == [("tenant-a", conversion_id, 21)]
+    assert adjustments["state"] == "available"
+    assert adjustments["records"][0]["amount"] == "-3.50"
+    claim = next(
+        claim for claim in result.claims
+        if claim.kind == "canonical_revenue_adjustment_event"
+    )
+    assert claim.domainSlotIds == ["revenue_events", "evidence_trace"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "canonical_conversions", "revenue_adjustments"
+    }
+    assert "not recognized revenue" in claim.claims[0]
+
+
+async def test_value_revenue_adjustments_drop_wrong_tenant_row_and_degrade() -> None:
+    conversion_id = "conversion-1"
+    ref = EvidenceRef(
+        id=conversion_id,
+        type="transaction",
+        source="canonical_conversions",
+        uri=f"store://canonical_conversions/{conversion_id}",
+    )
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[{"conversionId": conversion_id, "evidenceRefs": [ref.model_dump(mode="json")]}],
+        evidence_refs=[ref.model_dump(mode="json")],
+    )
+
+    class CrossTenantAdjustments:
+        async def list_for_conversion(self, tenant_id, row_conversion_id, *, limit):
+            return [
+                {
+                    "tenant_id": "other-tenant",
+                    "conversion_id": row_conversion_id,
+                    "adjustment_id": "bad-adjustment",
+                    "adjustment_type": "renewal",
+                    "amount": "20.00",
+                    "currency": "USD",
+                    "occurred_at": "2026-10-24T12:00:00Z",
+                }
+            ]
+
+    request = _request(subject=ProjectionSubject(kind="conversion", id=conversion_id))
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=inventory,
+        revenue_adjustment_reader=CrossTenantAdjustments(),
+    ).project(request, await _make_context(ProviderRegistry()))
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.content["revenue_adjustments"]["state"] == "degraded"
+    assert evidence.content["revenue_adjustments"]["records"] == []
+    assert not any(
+        claim.kind == "canonical_revenue_adjustment_event" for claim in result.claims
+    )
+
+
+async def test_value_revenue_adjustments_preserve_unknown_temporal_scope() -> None:
+    class MustNotRead:
+        async def list_for_conversion(self, *args, **kwargs):
+            raise AssertionError("historical adjustment read must not run")
+
+    request = _request(
+        subject=ProjectionSubject(kind="conversion", id="conversion-1"),
+        asOf="2026-10-24T12:00:00Z",
+        temporalMode="as_of",
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        revenue_adjustment_reader=MustNotRead(),
+    ).project(request, await _make_context(ProviderRegistry()))
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.content["revenue_adjustments"]["state"] == "unknown"
+    assert evidence.content["revenue_adjustments"]["reason"] == (
+        "revenue_adjustment_history_not_bitemporal"
+    )
 
 
 async def test_exact_agent_conversion_empty_is_complete_but_roster_is_unknown(monkeypatch) -> None:

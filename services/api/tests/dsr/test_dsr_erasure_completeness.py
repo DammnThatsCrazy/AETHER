@@ -28,7 +28,7 @@ import io
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 os.environ.setdefault("AETHER_ENV", "local")
@@ -215,6 +215,12 @@ async def _seed_graph(world: World) -> None:
 
 
 async def _seed_profile(world: World) -> None:
+    from identity.profile.prediction_authority import (
+        PredictionAuthorityEvidence,
+        ProfilePredictionOutput,
+        ProfilePredictionOutputRepository,
+    )
+
     t = world.tenant
     await _ProfileStore().insert(tenant_record_id(t, USER),
                                  {"tenant_id": t, "user_id": USER, "traits": {"email": "s@x"}})
@@ -228,6 +234,52 @@ async def _seed_profile(world: World) -> None:
     await JourneyChainRepository().upsert_chain(
         f"chain-{world.other_entity}", world.other_entity, t, "j3", "j3", 1, "a", "b",
     )
+
+    async def _prediction(tenant: str, entity: str, prediction_id: str) -> None:
+        now = datetime.now(timezone.utc)
+        await ProfilePredictionOutputRepository().record(
+            ProfilePredictionOutput(
+                prediction_id=prediction_id,
+                idempotency_key=f"{prediction_id}-key",
+                tenant_id=tenant,
+                entity_id=entity,
+                model_id="churn_prediction",
+                artifact_version="v-production-2",
+                artifact_checksum_sha256="a" * 64,
+                artifact_approval_state="promoted",
+                feature_schema_hash="schema-hash-v1",
+                feature_digest="0123456789abcdef",
+                policy_decision_id=f"policy-{prediction_id}",
+                policy_version="consent-v2",
+                actor_id="system-test",
+                generated_at=now,
+                valid_from=now - timedelta(minutes=1),
+                valid_until=now + timedelta(hours=1),
+                states=[{"state": "at_risk", "probability": 0.7}],
+                evidence_refs=[
+                    PredictionAuthorityEvidence(
+                        id=f"event-{prediction_id}",
+                        type="event",
+                        source="analytics_events",
+                        observed_at=now - timedelta(minutes=2),
+                    ),
+                    PredictionAuthorityEvidence(
+                        id=f"artifact-{prediction_id}",
+                        type="model_output",
+                        source="model_artifact_registry",
+                    ),
+                    PredictionAuthorityEvidence(
+                        id=f"policy-{prediction_id}",
+                        type="annotation",
+                        source="consent_policy_decisions",
+                    ),
+                ],
+            )
+        )
+
+    await _prediction(t, world.entity, f"prediction-subject-{world.tenant}")
+    await _prediction(t, world.other_entity, f"prediction-other-{world.tenant}")
+    await _prediction(world.other_tenant, world.entity, f"prediction-tenant-{world.other_tenant}")
 
 
 async def _seed_features(world: World, cache) -> None:
@@ -497,7 +549,7 @@ async def test_full_erasure_leaves_no_component_pending_and_erases_every_store()
     # graph_edges: 1 identity_edges row + 2 entity graph edges + the profile
     # user vertex's edge (tenant-scoped).
     assert records("graph_edges") == 4
-    assert records("profile360_snapshots") == 3
+    assert records("profile360_snapshots") == 4
     assert records("feature_rows") == 1
     assert steps["feature_rows"]["artifacts_impacted"] == 1
     assert records("prediction_drift_buffers") == 2

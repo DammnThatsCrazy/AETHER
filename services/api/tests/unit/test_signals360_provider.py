@@ -1364,3 +1364,55 @@ async def test_signals360_projects_campaign_links_with_touchpoint_and_campaign_e
         and campaign_id in " ".join(claim.claims)
         for claim in result.claims
     )
+
+
+@pytest.mark.asyncio
+async def test_signals360_normalization_discloses_only_exact_gateway_adapter_lineage() -> None:
+    event_id = "evt-normalized-1"
+    record = {
+        "tenant_id": TENANT_A,
+        "provider_record_id": event_id,
+        "source": "sdk",
+        "payload": {
+            "event_type": "track",
+            "private_property": "must not escape",
+            "observation_envelope": {
+                "tenancy": {"tenant_id": TENANT_A},
+                "source": {"source_type": "sdk"},
+                "observation": {
+                    "observation_id": event_id,
+                    "observation_type": "track",
+                    "family": "core",
+                    "schema_version": "1.0.0",
+                    "ingested_at": "2026-10-20T11:00:00Z",
+                },
+                "quality": {"validation_state": "gateway:accepted"},
+                "provenance": {"adapter": "sdk", "adapter_version": "1.0.0"},
+                "temporal": {"temporal_quality": "source_clock_unverified"},
+            },
+        },
+    }
+    source = FakeSignalSource(
+        SignalSummaryRead((), available=False, complete=False),
+        ObservationQualityRead(record, available=True, complete=True),
+    )
+    request = ProjectionRequest(
+        projectionId=PROJECTION_ID,
+        tenantId=TENANT_A,
+        subject=ProjectionSubject(kind="observation", id=event_id),
+        includeSections=["normalization"],
+    )
+    result = await Signals360Provider(source=source).project(request, _context())
+    section = _sections(result)["normalization"]
+    assert source.quality_calls == [(TENANT_A, event_id)]
+    assert section.state == "degraded"
+    assert section.content["adapterVersion"] == "1.0.0"
+    assert section.content["envelopeSchemaVersion"] == "1.0.0"
+    assert section.content["semanticCorrectness"] == "unknown"
+    assert "must not escape" not in str(section.content)
+    assert any(claim.domainSlotIds == ["normalization"] for claim in result.claims)
+
+    record["payload"]["observation_envelope"]["provenance"]["adapter"] = "client"
+    rejected = await Signals360Provider(source=source).project(request, _context())
+    assert _sections(rejected)["normalization"].state == "unknown"
+    assert not any(claim.domainSlotIds == ["normalization"] for claim in rejected.claims)

@@ -77,6 +77,7 @@ DSRComponent = Literal[
     "x402_commerce",
     "journey_handoffs",
     "risk_poisoning_evidence",
+    "risk_intervention_records",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -116,6 +117,7 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "x402_commerce",
     "journey_handoffs",
     "risk_poisoning_evidence",
+    "risk_intervention_records",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

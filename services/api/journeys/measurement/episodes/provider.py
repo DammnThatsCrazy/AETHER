@@ -19,8 +19,9 @@ plane stays up when the episode store is empty or unavailable.
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Protocol
 from urllib.parse import quote
@@ -28,6 +29,18 @@ from uuid import UUID
 
 from shared.backend_interpretation.primitives import EpisodeRecord, OutcomeTruthRecord
 from shared.backend_interpretation.stores import EpisodeStore
+from journeys.measurement.episodes.related_authorities import (
+    AuthorityFactRead,
+    AuthorityFactSource,
+    EpisodeAgentHandoffRecord,
+    EpisodeAttributionLinkRecord,
+    EpisodeObservationReferenceRecord,
+    EpisodeJourneyAuthorityRepository,
+    JourneyAcquisitionRole,
+    JourneyActionIntentRecord,
+    JourneyDropoffRecord,
+    JourneySourceRoleMarker,
+)
 from shared.contracts_models.epistemic import EpistemicStatus
 from graph.operational_intelligence.models import EvidenceRef, PageInfo
 from shared.intelligence_projections.contracts import (
@@ -76,6 +89,15 @@ _JOURNEY_ATTRIBUTION_RUN_SOURCE = "attribution_runs"
 _JOURNEY_ATTRIBUTION_CREDIT_SOURCE = "attribution_credits"
 _EPISODE_RECORD_SOURCE = "shared.backend_interpretation.stores.EpisodeStore"
 _EPISODE_OBSERVATION_SOURCE = "semantic_intelligence.silver_semantic_observations"
+_EPISODE_OBSERVATION_REFERENCE_SOURCE = (
+    "episode_journey_authority_records:episode_observation_reference"
+)
+_EPISODE_OBSERVATION_EVENT_REF_SOURCE = (
+    "semantic_intelligence.silver_semantic_observations.source_event_id"
+)
+_EPISODE_OBSERVATION_RECEIPT_REF_SOURCE = (
+    "semantic_intelligence.silver_semantic_observations.received_at"
+)
 _EPISODE_OUTCOME_TRUTH_SOURCE = "shared.backend_interpretation.stores.OutcomeTruthStore"
 _EPISODE_AGENT_HANDOFF_GAP_REASON = (
     "episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id"
@@ -96,8 +118,11 @@ _EPISODE_OBSERVATION_CAP = 200
 _EPISODE_TOUCHPOINT_CAP = 200
 _EPISODE_OUTCOME_CAP = 100
 _EPISODE_RISK_SIGNAL_CAP = 100
+_COMMUNICATION_FACT_CAP = 200
+_EPISODE_AUTHORITY_CAP = 100
 _GRAPH_LEDGER_SOURCE = "graph_mutation_ledger"
 _EPISODE_RISK_SIGNAL_SOURCE = "risk360/risk_signals"
+_COMMUNICATION_FACT_SOURCE = "services/api/journeys/communication360/communication360_facts"
 _JOURNEY_REQUIRED_SLOT_IDS = (
     "journey_summary",
     "stages",
@@ -168,6 +193,30 @@ class JourneyAttributionRead:
 
 
 @dataclass(frozen=True)
+class JourneyAuthorityRead:
+    """Bounded typed dropoff/action-intent records for one exact journey."""
+
+    action_intents: AuthorityFactRead = AuthorityFactRead()
+    dropoffs: AuthorityFactRead = AuthorityFactRead()
+
+
+@dataclass(frozen=True)
+class CommunicationFactLinkRead:
+    """Exact tenant-scoped communication facts linked by a typed subject ID."""
+
+    rows: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    state: str = "unknown"
+    reason: str = "communication_fact_link_not_read"
+    complete: bool = False
+    truncated: bool = False
+    invalid_records: bool = False
+    tenant_mismatch: bool = False
+    missing_evidence: bool = False
+    temporal_state: str = "unknown"
+
+
+@dataclass(frozen=True)
 class JourneyEpisodeRead:
     """Bounded tenant scan for EpisodeRecords that explicitly name a journey."""
 
@@ -214,11 +263,12 @@ class Episode360Read:
 
 @dataclass(frozen=True)
 class EpisodeObservationRead:
-    """Exact tenant-bound reads for observation IDs recorded by episodes."""
+    """Exact tenant + source-namespace reads for recorded Episode observations."""
 
     requested_ids: tuple[str, ...] = ()
     rows: tuple[dict[str, Any], ...] = ()
     evidence_refs: tuple[EvidenceRef, ...] = ()
+    reference_links: tuple[tuple[str, str, EvidenceRef], ...] = ()
     available: bool = True
     truncated: bool = False
     invalid_records: bool = False
@@ -226,6 +276,12 @@ class EpisodeObservationRead:
     inactive_records: bool = False
     timestamps_missing: bool = False
     missing_ids: tuple[str, ...] = ()
+    namespace_missing_ids: tuple[str, ...] = ()
+    missing_episode_links: tuple[tuple[str, str], ...] = ()
+    ambiguous_ids: tuple[str, ...] = ()
+    out_of_window_ids: tuple[str, ...] = ()
+    temporal_state: str = "unknown"
+    temporal_reason: Optional[str] = None
     read_failed: bool = False
 
     @property
@@ -238,6 +294,9 @@ class EpisodeObservationRead:
             or self.inactive_records
             or self.timestamps_missing
             or self.missing_ids
+            or self.namespace_missing_ids
+            or self.missing_episode_links
+            or self.ambiguous_ids
             or self.read_failed
         )
 
@@ -301,6 +360,14 @@ class EpisodeTouchpointRead:
     missing_ids: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class EpisodeAuthorityRead:
+    """Two exact episode association reads; neither proves full inventory."""
+
+    agent_handoffs: AuthorityFactRead = AuthorityFactRead()
+    attribution_links: AuthorityFactRead = AuthorityFactRead()
+
+
 class EpisodeOutcomeSource(Protocol):
     """Exact composite-key reader over canonical outcome truth."""
 
@@ -343,10 +410,10 @@ class RepositoryEpisodeRiskSignalSource:
 
 
 class EpisodeObservationSource(Protocol):
-    """Canonical exact-ID lookup for semantic Silver observation rows."""
+    """Canonical exact tenant, ID, and namespace lookup for Silver rows."""
 
-    async def find_by_ids(
-        self, tenant_id: str, observation_ids: list[str]
+    async def find_by_namespaced_ids(
+        self, tenant_id: str, namespaces_by_id: dict[str, str]
     ) -> list[dict[str, Any]]: ...
 
 
@@ -369,6 +436,63 @@ class RepositoryEpisodeObservationSource:
         self, tenant_id: str, observation_ids: list[str]
     ) -> list[dict[str, Any]]:
         return await self._observation_repository().find_by_ids(tenant_id, observation_ids)
+
+    async def find_by_namespaced_ids(
+        self, tenant_id: str, namespaces_by_id: dict[str, str]
+    ) -> list[dict[str, Any]]:
+        """Read only rows matching an exact tenant, ID, and source namespace."""
+        bounded = [
+            (observation_id, source_namespace)
+            for observation_id, source_namespace in namespaces_by_id.items()
+            if observation_id and source_namespace
+        ][: _EPISODE_OBSERVATION_CAP]
+        if not tenant_id or not bounded:
+            return []
+        repository = self._observation_repository()
+        pool = await repository._pool()
+        if pool is None:
+            rows = await repository.find_by_ids(
+                tenant_id, [observation_id for observation_id, _ in bounded]
+            )
+            exact_namespace = dict(bounded)
+            return [
+                row
+                for row in rows
+                if isinstance(row, dict)
+                and row.get("tenant_id") == tenant_id
+                and row.get("source_namespace") == exact_namespace.get(
+                    _journey_text(row.get("record_id"))
+                )
+            ]
+
+        ids = [observation_id for observation_id, _ in bounded]
+        namespaces = [source_namespace for _, source_namespace in bounded]
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "WITH requested(id, source_namespace) AS ("
+                "SELECT * FROM unnest($2::text[], $3::text[])"
+                ") SELECT f.id, f.tenant_id, f.subject_ref, f.data "
+                "FROM silver_semantic_observations AS f "
+                "JOIN requested AS r ON r.id=f.id "
+                "AND r.source_namespace=f.data->>'source_namespace' "
+                "WHERE f.tenant_id=$1 ORDER BY f.id ASC",
+                tenant_id,
+                ids,
+                namespaces,
+            )
+        result: list[dict[str, Any]] = []
+        for raw in rows:
+            data = raw["data"]
+            if isinstance(data, str):
+                data = json.loads(data)
+            if not isinstance(data, dict):
+                continue
+            normalized = dict(data)
+            normalized.setdefault("tenant_id", raw["tenant_id"])
+            normalized.setdefault("subject_ref", raw["subject_ref"])
+            normalized.setdefault("record_id", raw["id"])
+            result.append(normalized)
+        return result
 
 
 @dataclass(frozen=True)
@@ -449,6 +573,57 @@ class JourneyAttributionSource(Protocol):
         *,
         limit: int,
     ) -> list[dict[str, Any]]: ...
+
+
+class CommunicationFactReferenceSource(Protocol):
+    """Read facts by one exact journey or episode reference in one tenant."""
+
+    async def list_for_reference(
+        self,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        *,
+        after: Optional[datetime],
+        before: Optional[datetime],
+        received_before: Optional[datetime],
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]: ...
+
+
+class RepositoryCommunicationFactReferenceSource:
+    """Adapter over the canonical communication fact JSONB reference index."""
+
+    def __init__(self, *, repository: Any = None) -> None:
+        self._repository = repository
+
+    def _fact_repository(self) -> Any:
+        if self._repository is None:
+            from journeys.communication360.repository import Communication360FactsRepository
+
+            self._repository = Communication360FactsRepository()
+        return self._repository
+
+    async def list_for_reference(
+        self,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        *,
+        after: Optional[datetime],
+        before: Optional[datetime],
+        received_before: Optional[datetime],
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return await self._fact_repository().facts_for_exact_reference(
+            tenant_id,
+            subject_kind,
+            subject_id,
+            after=after,
+            before=before,
+            received_before=received_before,
+            limit=limit,
+        )
 
 
 class RepositoryJourney360Source:
@@ -590,6 +765,8 @@ class Episode360Provider:
         outcome_source: Optional[EpisodeOutcomeSource] = None,
         risk_signal_source: Optional[EpisodeRiskSignalSource] = None,
         attribution_source: Optional[JourneyAttributionSource] = None,
+        communication_fact_source: Optional[CommunicationFactReferenceSource] = None,
+        episode_authority_source: Optional[AuthorityFactSource] = None,
     ) -> None:
         """``episode_store`` may be injected (tests); defaults to the durable
         :class:`EpisodeStore` (WS-D item 2). Observation rows default to the
@@ -601,12 +778,97 @@ class Episode360Provider:
         self._observation_source = observation_source
         self._outcome_source = outcome_source
         self._attribution_source = attribution_source
+        self._communication_fact_source = communication_fact_source
+        self._episode_authority_source = episode_authority_source
         self._risk_signal_source = risk_signal_source
         self._subject_relationship_reader = (
             subject_relationship_reader
             if subject_relationship_reader is not None
             else RepositoryEpisodeSubjectRelationshipReader()
         )
+
+    async def _load_episode_authorities(
+        self,
+        tenant_id: str,
+        episode: EpisodeRecord,
+        *,
+        as_of: Optional[datetime] = None,
+    ) -> EpisodeAuthorityRead:
+        """Read explicit typed links by exact tenant + episode reference."""
+        source = self._episode_authority_source or EpisodeJourneyAuthorityRepository()
+        try:
+            handoffs = await source.list_for_subject(
+                tenant_id,
+                "episode",
+                episode.episode_id,
+                "episode_agent_handoff",
+                limit=_EPISODE_AUTHORITY_CAP,
+            )
+            attributions = await source.list_for_subject(
+                tenant_id,
+                "episode",
+                episode.episode_id,
+                "episode_attribution_link",
+                limit=_EPISODE_AUTHORITY_CAP,
+            )
+        except Exception:  # noqa: BLE001 - optional relation authority fails closed
+            unavailable = AuthorityFactRead(
+                available=False,
+                complete=False,
+                read_failed=True,
+            )
+            return EpisodeAuthorityRead(unavailable, unavailable)
+
+        return EpisodeAuthorityRead(
+            agent_handoffs=_episode_authority_read_for_as_of(
+                handoffs,
+                record_type="episode_agent_handoff",
+                tenant_id=tenant_id,
+                episode=episode,
+                as_of=as_of,
+            ),
+            attribution_links=_episode_authority_read_for_as_of(
+                attributions,
+                record_type="episode_attribution_link",
+                tenant_id=tenant_id,
+                episode=episode,
+                as_of=as_of,
+            ),
+        )
+
+    async def _load_journey_action_intents(
+        self, tenant_id: str, journey_id: str
+    ) -> JourneyAuthorityRead:
+        """Read explicit action intents through an exact tenant + journey key."""
+        source = self._episode_authority_source or EpisodeJourneyAuthorityRepository()
+        try:
+            read = await source.list_for_subject(
+                tenant_id,
+                "journey",
+                journey_id,
+                "journey_action_intent",
+                limit=_EPISODE_AUTHORITY_CAP,
+            )
+        except Exception:  # noqa: BLE001 - optional action authority fails closed
+            read = AuthorityFactRead(available=False, complete=False, read_failed=True)
+        return JourneyAuthorityRead(action_intents=read)
+
+    async def _load_journey_dropoffs(
+        self, tenant_id: str, journey_id: str
+    ) -> JourneyAuthorityRead:
+        """Read bounded canonical dropoff facts for an exact tenant journey."""
+        source = self._episode_authority_source or EpisodeJourneyAuthorityRepository()
+        try:
+            read = await source.list_for_subject(
+                tenant_id,
+                "journey",
+                journey_id,
+                "journey_dropoff",
+                limit=_EPISODE_AUTHORITY_CAP,
+            )
+        except Exception:  # noqa: BLE001 - optional dropoff authority fails closed
+            read = AuthorityFactRead(available=False, complete=False, read_failed=True)
+        return JourneyAuthorityRead(dropoffs=read)
 
     def _load_store(self) -> Optional[EpisodeStore]:
         if self._episode_store is not None:
@@ -713,36 +975,218 @@ class Episode360Provider:
         )
 
     async def _load_episode_observations(
-        self, tenant_id: str, episodes: list[EpisodeRecord]
+        self,
+        tenant_id: str,
+        episodes: list[EpisodeRecord],
+        *,
+        after: Optional[datetime] = None,
+        before: Optional[datetime] = None,
+        as_of: Optional[datetime] = None,
     ) -> EpisodeObservationRead:
-        """Resolve only observation IDs explicitly recorded by these episodes.
+        """Resolve only namespaced observation links explicitly recorded by episodes.
 
-        The association is taken from the canonical EpisodeRecord and each fact
-        is read with the authenticated tenant plus its exact observation ID.
-        The semantic Silver table is one observation authority, so even a full
-        match remains partial coverage of the broader episode event inventory.
+        Bare legacy IDs are not enough to identify a source. An exact typed
+        ``episode_observation_reference`` must bind tenant, episode, observation,
+        source namespace and source event lineage before the canonical semantic
+        row is fetched. Event time constrains windows; an as-of frame also
+        requires source receipt, semantic processing, and the typed episode
+        association to exist by the anchor.
         """
         requested_ids = _journey_ordered_values(
             [observation_id for episode in episodes for observation_id in episode.observation_ids]
         )
         truncated = len(requested_ids) > _EPISODE_OBSERVATION_CAP
         bounded_ids = requested_ids[:_EPISODE_OBSERVATION_CAP]
+        temporal_state = (
+            "event_receipt_processing_and_link_time_as_of_applied"
+            if as_of is not None
+            else "event_time_window_applied"
+            if after is not None or before is not None
+            else "event_time_order_only"
+        )
         if not bounded_ids:
             return EpisodeObservationRead(
                 requested_ids=tuple(requested_ids),
                 available=True,
                 truncated=truncated,
+                temporal_state=temporal_state,
+            )
+
+        # EpisodeRecord stores bare IDs, so a separate typed authority must
+        # supply their source namespace and canonical event lineage. Reads stay
+        # bounded to the current Episode page and the shared authority cap.
+        authority_source = self._episode_authority_source or EpisodeJourneyAuthorityRepository()
+        reference_records: dict[str, EpisodeObservationReferenceRecord] = {}
+        reference_records_by_episode: dict[
+            tuple[str, str], EpisodeObservationReferenceRecord
+        ] = {}
+        ambiguous_ids: set[str] = set()
+        authority_unavailable = False
+        authority_invalid = False
+        authority_tenant_mismatch = False
+        remaining = _EPISODE_OBSERVATION_CAP
+        scanned_episode_ids: set[str] = set()
+        scanned_observation_ids: set[str] = set()
+        for episode in episodes:
+            if remaining <= 0:
+                truncated = True
+                break
+            if episode.tenant_id != tenant_id:
+                authority_tenant_mismatch = True
+                continue
+            scanned_episode_ids.add(episode.episode_id)
+            scanned_observation_ids.update(episode.observation_ids)
+            try:
+                read = await authority_source.list_for_subject(
+                    tenant_id,
+                    "episode",
+                    episode.episode_id,
+                    "episode_observation_reference",
+                    limit=min(_EPISODE_OBSERVATION_CAP, remaining),
+                )
+            except Exception:  # noqa: BLE001 - namespace reference authority fails closed
+                authority_unavailable = True
+                continue
+            if not isinstance(read, AuthorityFactRead):
+                authority_unavailable = True
+                continue
+            authority_unavailable = authority_unavailable or not read.available or read.read_failed
+            authority_invalid = authority_invalid or read.invalid_records
+            authority_tenant_mismatch = authority_tenant_mismatch or read.tenant_mismatch
+            truncated = truncated or read.truncated
+            if not read.complete and not (
+                read.invalid_records
+                or read.tenant_mismatch
+                or read.truncated
+                or read.read_failed
+                or not read.available
+            ):
+                authority_invalid = True
+            remaining -= len(read.records)
+            episode_ids = set(episode.observation_ids)
+            local_seen: dict[str, EpisodeObservationReferenceRecord] = {}
+            for raw in read.records:
+                try:
+                    record = EpisodeObservationReferenceRecord.model_validate(raw)
+                except Exception:  # noqa: BLE001 - malformed namespace rows stay unknown
+                    authority_invalid = True
+                    continue
+                if (
+                    record.tenant_id != tenant_id
+                    or record.episode_id != episode.episode_id
+                    or record.record_type != "episode_observation_reference"
+                    or record.observation_id not in episode_ids
+                    or not _episode_observation_reference_has_evidence(record)
+                ):
+                    if record.tenant_id != tenant_id:
+                        authority_tenant_mismatch = True
+                    else:
+                        authority_invalid = True
+                    continue
+                previous = local_seen.get(record.observation_id)
+                if previous is not None and previous != record:
+                    ambiguous_ids.add(record.observation_id)
+                    continue
+                local_seen[record.observation_id] = record
+                reference_records_by_episode[(episode.episode_id, record.observation_id)] = record
+                existing = reference_records.get(record.observation_id)
+                if existing is not None and (
+                    existing.source_namespace != record.source_namespace
+                    or existing.source_event_id != record.source_event_id
+                    or existing.occurred_at != record.occurred_at
+                    or existing.received_at != record.received_at
+                    or existing.recorded_at != record.recorded_at
+                ):
+                    ambiguous_ids.add(record.observation_id)
+                    reference_records.pop(record.observation_id, None)
+                    continue
+                if existing is None or record.linked_at < existing.linked_at:
+                    reference_records[record.observation_id] = record
+
+        bounded_set = set(bounded_ids)
+        missing_episode_links = tuple(
+            (episode.episode_id, observation_id)
+            for episode in episodes
+            for observation_id in episode.observation_ids
+            if episode.episode_id in scanned_episode_ids
+            and observation_id in bounded_set
+            and (episode.episode_id, observation_id) not in reference_records_by_episode
+        )
+        namespace_missing_ids = {
+            observation_id
+            for observation_id in bounded_ids
+            if observation_id in scanned_observation_ids
+            and observation_id not in reference_records
+            and observation_id not in ambiguous_ids
+        }
+        ambiguous_ids &= bounded_set
+        namespace_missing_ids -= ambiguous_ids
+
+        # The authority row is an explicit namespace assertion, but the source
+        # row is read again and checked against it. This prevents a stale or
+        # inconsistent namespace association from authorizing a different fact.
+        out_of_window_ids: set[str] = set()
+        eligible_records: dict[str, EpisodeObservationReferenceRecord] = {}
+        for observation_id, record in reference_records.items():
+            if observation_id in ambiguous_ids:
+                continue
+            if as_of is not None and record.linked_at > as_of:
+                out_of_window_ids.add(observation_id)
+                continue
+            if not _episode_observation_time_matches(
+                record.occurred_at,
+                record.recorded_at,
+                record.evidence_refs,
+                received_at=record.received_at,
+                after=after,
+                before=before,
+                as_of=as_of,
+            ):
+                out_of_window_ids.add(observation_id)
+                continue
+            eligible_records[observation_id] = record
+        fetch_ids = [value for value in bounded_ids if value in eligible_records]
+        if not fetch_ids:
+            return EpisodeObservationRead(
+                requested_ids=tuple(requested_ids),
+                evidence_refs=(),
+                available=not authority_unavailable,
+                truncated=truncated,
+                invalid_records=authority_invalid,
+                tenant_mismatch=authority_tenant_mismatch,
+                missing_ids=(),
+                namespace_missing_ids=tuple(
+                    value for value in bounded_ids if value in namespace_missing_ids
+                ),
+                missing_episode_links=missing_episode_links,
+                ambiguous_ids=tuple(value for value in bounded_ids if value in ambiguous_ids),
+                out_of_window_ids=tuple(value for value in bounded_ids if value in out_of_window_ids),
+                temporal_state=temporal_state,
+                read_failed=authority_unavailable,
             )
 
         source = self._observation_source or RepositoryEpisodeObservationSource()
         try:
-            raw_rows = await source.find_by_ids(tenant_id, bounded_ids)
+            namespaces_by_id = {
+                observation_id: eligible_records[observation_id].source_namespace
+                for observation_id in fetch_ids
+            }
+            raw_rows = await source.find_by_namespaced_ids(
+                tenant_id, namespaces_by_id
+            )
         except Exception:  # noqa: BLE001 - source observation authority stays isolated
             return EpisodeObservationRead(
                 requested_ids=tuple(requested_ids),
                 available=False,
                 truncated=truncated,
-                missing_ids=tuple(bounded_ids),
+                missing_ids=tuple(fetch_ids),
+                namespace_missing_ids=tuple(
+                    value for value in bounded_ids if value in namespace_missing_ids
+                ),
+                missing_episode_links=missing_episode_links,
+                ambiguous_ids=tuple(value for value in bounded_ids if value in ambiguous_ids),
+                out_of_window_ids=tuple(value for value in bounded_ids if value in out_of_window_ids),
+                temporal_state=temporal_state,
                 read_failed=True,
             )
         if not isinstance(raw_rows, list):
@@ -750,11 +1194,18 @@ class Episode360Provider:
                 requested_ids=tuple(requested_ids),
                 available=False,
                 truncated=truncated,
-                missing_ids=tuple(bounded_ids),
+                missing_ids=tuple(fetch_ids),
                 invalid_records=True,
+                namespace_missing_ids=tuple(
+                    value for value in bounded_ids if value in namespace_missing_ids
+                ),
+                missing_episode_links=missing_episode_links,
+                ambiguous_ids=tuple(value for value in bounded_ids if value in ambiguous_ids),
+                out_of_window_ids=tuple(value for value in bounded_ids if value in out_of_window_ids),
+                temporal_state=temporal_state,
             )
 
-        requested_set = set(bounded_ids)
+        requested_set = set(fetch_ids)
         rows_by_id: dict[str, dict[str, Any]] = {}
         seen_ids: set[str] = set()
         invalid_ids: set[str] = set()
@@ -786,38 +1237,104 @@ class Episode360Provider:
                 rows_by_id.pop(record_id, None)
                 continue
             seen_ids.add(record_id)
+            reference = eligible_records[record_id]
+            if (
+                _journey_text(row.get("source_namespace")) != reference.source_namespace
+                or _journey_text(row.get("source_event_id")) != reference.source_event_id
+            ):
+                ambiguous_ids.add(record_id)
+                invalid_ids.add(record_id)
+                continue
             status = _journey_text(row.get("status"))
             if status not in {"classified", "partial"}:
                 inactive_records = True
                 continue
             rows_by_id[record_id] = row
+            occurred_at = _parse_utc_timestamp(row.get("occurred_at"))
+            received_at = _parse_utc_timestamp(row.get("received_at"))
+            processed_at = _parse_utc_timestamp(row.get("processed_at"))
             if (
-                _journey_timestamp(row.get("processed_at"))
-                or _journey_timestamp(row.get("occurred_at"))
-            ) is None:
+                occurred_at is None
+                or processed_at is None
+                or (as_of is not None and received_at is None)
+            ):
                 timestamps_missing = True
+                rows_by_id.pop(record_id, None)
+                continue
+            if occurred_at != reference.occurred_at.astimezone(timezone.utc):
+                ambiguous_ids.add(record_id)
+                invalid_ids.add(record_id)
+                rows_by_id.pop(record_id, None)
+                continue
+            if (
+                received_at != reference.received_at.astimezone(timezone.utc)
+                or processed_at != reference.recorded_at.astimezone(timezone.utc)
+            ):
+                ambiguous_ids.add(record_id)
+                invalid_ids.add(record_id)
+                rows_by_id.pop(record_id, None)
+                continue
+            if not _episode_observation_time_matches(
+                occurred_at,
+                processed_at,
+                reference.evidence_refs,
+                received_at=received_at,
+                after=after,
+                before=before,
+                as_of=as_of,
+            ):
+                out_of_window_ids.add(record_id)
+                rows_by_id.pop(record_id, None)
+                continue
 
         for invalid_id in invalid_ids:
             if invalid_id in rows_by_id:
                 rows_by_id.pop(invalid_id, None)
-        missing_ids = [value for value in bounded_ids if value not in rows_by_id]
-        ordered_rows = [rows_by_id[value] for value in bounded_ids if value in rows_by_id]
+        missing_ids = [value for value in fetch_ids if value not in rows_by_id and value not in out_of_window_ids]
+        ordered_rows = [rows_by_id[value] for value in fetch_ids if value in rows_by_id]
+        resolved_ids = set(rows_by_id)
+        reference_links = tuple(
+            (episode_id, observation_id, _episode_observation_reference_ref(record))
+            for (episode_id, observation_id), record in reference_records_by_episode.items()
+            if observation_id in resolved_ids and observation_id not in ambiguous_ids
+            and (as_of is None or record.linked_at <= as_of)
+        )
         evidence_refs = [
             ref
             for row in ordered_rows
             if (ref := _episode_observation_ref(tenant_id, row)) is not None
         ]
+        evidence_refs.extend(
+            ref
+            for row in ordered_rows
+            if (ref := _episode_observation_source_event_ref(tenant_id, row)) is not None
+        )
+        evidence_refs.extend(
+            ref
+            for row in ordered_rows
+            if (ref := _episode_observation_receipt_ref(tenant_id, row)) is not None
+        )
+        evidence_refs.extend(link_ref for _, _, link_ref in reference_links)
         return EpisodeObservationRead(
             requested_ids=tuple(requested_ids),
             rows=tuple(ordered_rows),
             evidence_refs=tuple(evidence_refs),
-            available=True,
+            reference_links=reference_links,
+            available=not authority_unavailable,
             truncated=truncated,
-            invalid_records=bool(invalid_ids),
-            tenant_mismatch=tenant_mismatch,
+            invalid_records=bool(invalid_ids) or authority_invalid,
+            tenant_mismatch=tenant_mismatch or authority_tenant_mismatch,
             inactive_records=inactive_records,
             timestamps_missing=timestamps_missing,
             missing_ids=tuple(missing_ids),
+            namespace_missing_ids=tuple(
+                value for value in bounded_ids if value in namespace_missing_ids
+            ),
+            missing_episode_links=missing_episode_links,
+            ambiguous_ids=tuple(value for value in bounded_ids if value in ambiguous_ids),
+            out_of_window_ids=tuple(value for value in bounded_ids if value in out_of_window_ids),
+            temporal_state=temporal_state,
+            read_failed=authority_unavailable,
         )
 
     async def _load_episode_outcomes(
@@ -1564,6 +2081,144 @@ class Episode360Provider:
             truncated=truncated,
         )
 
+    async def _load_communication_fact_links(
+        self,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        *,
+        after: Optional[datetime] = None,
+        before: Optional[datetime] = None,
+        as_of: Optional[datetime] = None,
+    ) -> CommunicationFactLinkRead:
+        """Join only canonical facts that explicitly name this exact subject.
+
+        Communication messages are not matched by sender, campaign, episode
+        timing, thread label, or payload text. The canonical fact store is
+        queried by its typed episode_id(s) or journey_id(s) field and each
+        returned row is checked again at the projection boundary.
+        """
+        if subject_kind not in {"episode", "journey"} or not subject_id.strip():
+            return CommunicationFactLinkRead(reason="communication_subject_reference_invalid")
+        if as_of is not None:
+            # Event time and durable receipt time both constrain what was
+            # knowable at the requested frame anchor.
+            as_of_before = as_of + timedelta(microseconds=1)
+            before = min(before, as_of_before) if before is not None else as_of_before
+        source = self._communication_fact_source or RepositoryCommunicationFactReferenceSource()
+        try:
+            result = await source.list_for_reference(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                after=after,
+                before=before,
+                received_before=as_of,
+                limit=_COMMUNICATION_FACT_CAP + 1,
+            )
+        except Exception:  # noqa: BLE001 - communication authority degrades independently
+            return CommunicationFactLinkRead(
+                state="unknown",
+                reason="communication_fact_authority_unavailable",
+                temporal_state="unknown",
+            )
+        if (
+            not isinstance(result, tuple)
+            or len(result) != 2
+            or not isinstance(result[0], list)
+            or not isinstance(result[1], bool)
+        ):
+            return CommunicationFactLinkRead(
+                state="unknown",
+                reason="communication_fact_authority_returned_invalid_result",
+            )
+
+        raw_rows, source_complete = result
+        truncated = len(raw_rows) > _COMMUNICATION_FACT_CAP or not source_complete
+        bounded_rows = raw_rows[:_COMMUNICATION_FACT_CAP]
+        rows: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        invalid_records = False
+        tenant_mismatch = False
+        missing_evidence = False
+        seen_fact_ids: set[str] = set()
+        for value in bounded_rows:
+            row = _as_mapping(value)
+            if row is None:
+                invalid_records = True
+                continue
+            if row.get("tenant_id") != tenant_id:
+                tenant_mismatch = True
+                continue
+            if not _communication_row_references_subject(row, subject_kind, subject_id):
+                invalid_records = True
+                continue
+            occurred_at = _parse_utc_timestamp(row.get("occurred_at"))
+            received_at = _parse_utc_timestamp(row.get("received_at"))
+            if occurred_at is None or (as_of is not None and received_at is None):
+                invalid_records = True
+                continue
+            if after is not None and occurred_at <= after:
+                continue
+            if before is not None and occurred_at >= before:
+                continue
+            if as_of is not None and (
+                occurred_at > as_of or received_at is None or received_at > as_of
+            ):
+                continue
+            reference = _communication_fact_evidence(row)
+            if reference is None:
+                missing_evidence = True
+                continue
+            if reference.id in seen_fact_ids:
+                invalid_records = True
+                continue
+            seen_fact_ids.add(reference.id)
+            rows.append(row)
+            evidence_refs.append(reference)
+
+        complete = source_complete and not truncated
+        if tenant_mismatch or invalid_records or missing_evidence:
+            reason = (
+                "communication_fact_tenant_scope_mismatch"
+                if tenant_mismatch
+                else "communication_fact_reference_rows_invalid_or_ambiguous"
+                if invalid_records
+                else "communication_fact_evidence_missing"
+            )
+            state = "degraded"
+        elif truncated:
+            reason = "communication_fact_reference_read_truncated"
+            state = "degraded"
+        elif rows:
+            reason = "exact_tenant_communication_facts_explicitly_reference_subject"
+            # Positive exact links do not establish complete real-world
+            # communication inventory or provider message coverage.
+            state = "degraded"
+        else:
+            reason = "no_exact_communication_reference_observed_inventory_unknown"
+            state = "unknown"
+
+        temporal_state = (
+            "as_of_event_and_receipt_time_applied"
+            if as_of is not None
+            else "event_time_window_applied"
+            if after is not None or before is not None
+            else "event_time_order_only"
+        )
+        return CommunicationFactLinkRead(
+            rows=tuple(rows),
+            evidence_refs=tuple(_dedupe_evidence_refs(evidence_refs)),
+            state=state,
+            reason=reason,
+            complete=complete,
+            truncated=truncated,
+            invalid_records=invalid_records,
+            tenant_mismatch=tenant_mismatch,
+            missing_evidence=missing_evidence,
+            temporal_state=temporal_state,
+        )
+
     async def project(
         self,
         request: ProjectionRequest,
@@ -1574,7 +2229,61 @@ class Episode360Provider:
             return await self._project_journey(request, context)
         read = await self._load_episodes(request)
         episodes = list(read.episodes)
-        observation_read = await self._load_episode_observations(request.tenantId, episodes)
+        observation_after, observation_before, observation_time_issue = _journey_time_bounds(request)
+        anchor_value = request.asOf or context.asOf
+        observation_anchor = _parse_utc_timestamp(anchor_value) if anchor_value else None
+        anchor_mismatch = bool(
+            request.asOf is not None
+            and context.asOf is not None
+            and _parse_utc_timestamp(request.asOf) != _parse_utc_timestamp(context.asOf)
+        )
+        if context.tenantId != request.tenantId:
+            observation_read = EpisodeObservationRead(
+                requested_ids=tuple(
+                    _journey_ordered_values(
+                        [
+                            observation_id
+                            for episode in episodes
+                            for observation_id in episode.observation_ids
+                        ]
+                    )
+                ),
+                available=False,
+                tenant_mismatch=True,
+                temporal_state="unknown",
+                temporal_reason="projection_context_tenant_mismatch",
+            )
+        elif observation_time_issue is not None or anchor_mismatch or (
+            anchor_value is not None and observation_anchor is None
+        ):
+            observation_read = EpisodeObservationRead(
+                requested_ids=tuple(
+                    _journey_ordered_values(
+                        [
+                            observation_id
+                            for episode in episodes
+                            for observation_id in episode.observation_ids
+                        ]
+                    )
+                ),
+                available=False,
+                invalid_records=True,
+                temporal_state="unknown",
+                temporal_reason=(
+                    "episode_observation_as_of_context_mismatch"
+                    if anchor_mismatch
+                    else observation_time_issue
+                    or "episode_observation_as_of_anchor_invalid"
+                ),
+            )
+        else:
+            observation_read = await self._load_episode_observations(
+                request.tenantId,
+                episodes,
+                after=observation_after,
+                before=observation_before,
+                as_of=observation_anchor,
+            )
         outcome_read = await self._load_episode_outcomes(request.tenantId, episodes)
         touchpoint_read = await self._load_episode_touchpoints(request.tenantId, episodes)
         risk_read = EpisodeRiskFlagRead(reason="episode_risk_slot_not_requested")
@@ -1594,6 +2303,94 @@ class Episode360Provider:
                 )
             else:
                 risk_read = await self._load_episode_risk_flags(request.tenantId, episodes[0])
+        communication_read = CommunicationFactLinkRead(
+            reason="exact_episode_subject_record_unavailable"
+        )
+        episode_authority_read = EpisodeAuthorityRead(
+            agent_handoffs=AuthorityFactRead(
+                available=False,
+                complete=False,
+            ),
+            attribution_links=AuthorityFactRead(
+                available=False,
+                complete=False,
+            ),
+        )
+        if (
+            request.subject.kind == "episode"
+            and len(episodes) == 1
+            and episodes[0].episode_id == request.subject.id
+            and episodes[0].tenant_id == request.tenantId
+        ):
+            if context.tenantId != request.tenantId:
+                communication_read = CommunicationFactLinkRead(
+                    reason="projection_context_tenant_mismatch"
+                )
+            elif request.asOf is not None and context.asOf is not None:
+                request_anchor = _parse_utc_timestamp(request.asOf)
+                context_anchor = _parse_utc_timestamp(context.asOf)
+                if request_anchor != context_anchor:
+                    communication_read = CommunicationFactLinkRead(
+                        reason="communication_as_of_context_mismatch"
+                    )
+                else:
+                    after, before, issue = _journey_time_bounds(request)
+                    anchor = request_anchor
+                    communication_read = (
+                        CommunicationFactLinkRead(reason=issue)
+                        if issue is not None
+                        else await self._load_communication_fact_links(
+                            request.tenantId,
+                            "episode",
+                            request.subject.id,
+                            after=after,
+                            before=before,
+                            as_of=anchor,
+                        )
+                    )
+            else:
+                after, before, issue = _journey_time_bounds(request)
+                anchor_value = request.asOf or context.asOf
+                anchor = _parse_utc_timestamp(anchor_value) if anchor_value else None
+                communication_read = (
+                    CommunicationFactLinkRead(
+                        reason="communication_as_of_anchor_invalid"
+                    )
+                    if anchor_value is not None and anchor is None
+                    else CommunicationFactLinkRead(reason=issue)
+                    if issue is not None
+                    else await self._load_communication_fact_links(
+                        request.tenantId,
+                        "episode",
+                        request.subject.id,
+                        after=after,
+                        before=before,
+                        as_of=anchor,
+                    )
+                )
+            if context.tenantId != request.tenantId:
+                unavailable = AuthorityFactRead(
+                    available=False,
+                    complete=False,
+                    tenant_mismatch=True,
+                )
+                episode_authority_read = EpisodeAuthorityRead(unavailable, unavailable)
+            else:
+                anchor_value = request.asOf or context.asOf
+                anchor = _parse_utc_timestamp(anchor_value) if anchor_value else None
+                if anchor_value is not None and anchor is None:
+                    unavailable = AuthorityFactRead(
+                        available=False,
+                        complete=False,
+                        invalid_records=True,
+                    )
+                    episode_authority_read = EpisodeAuthorityRead(unavailable, unavailable)
+                else:
+                    episode_authority_read = await self._load_episode_authorities(
+                        request.tenantId,
+                        episodes[0],
+                        as_of=anchor,
+                    )
         warnings: list[str] = []
         if read.truncated:
             warnings.append("episode_page_truncated")
@@ -1617,6 +2414,14 @@ class Episode360Provider:
             warnings.append("episode_observation_timestamps_missing_or_invalid")
         if observation_read.missing_ids:
             warnings.append("episode_observation_references_unresolved")
+        if observation_read.namespace_missing_ids:
+            warnings.append("episode_observation_source_namespace_untyped_or_missing")
+        if observation_read.missing_episode_links:
+            warnings.append("episode_observation_typed_reference_missing_for_episode")
+        if observation_read.ambiguous_ids:
+            warnings.append("episode_observation_source_namespace_or_lineage_ambiguous")
+        if observation_read.temporal_reason:
+            warnings.append(observation_read.temporal_reason)
         if outcome_read.disabled:
             warnings.append("episode_outcome_truth_store_disabled")
         if outcome_read.read_failed:
@@ -1633,6 +2438,20 @@ class Episode360Provider:
             warnings.append("episode_outcome_lineage_unavailable")
         if risk_read.state == "degraded":
             warnings.append(risk_read.reason)
+        if communication_read.state in {"unknown", "degraded"}:
+            warnings.append(communication_read.reason)
+        for slot_id, source_read in (
+            ("agent_handoffs", episode_authority_read.agent_handoffs),
+            ("attribution_links", episode_authority_read.attribution_links),
+        ):
+            if source_read.read_failed:
+                warnings.append(f"episode_{slot_id}_authority_unavailable")
+            elif source_read.truncated:
+                warnings.append(f"episode_{slot_id}_authority_read_truncated")
+            elif source_read.invalid_records:
+                warnings.append(f"episode_{slot_id}_authority_records_invalid")
+            elif source_read.tenant_mismatch:
+                warnings.append(f"episode_{slot_id}_authority_tenant_mismatch")
         warnings.extend(touchpoint_read.warnings)
         if not read.available:
             availability = "missing"
@@ -1690,13 +2509,23 @@ class Episode360Provider:
             outcome_read=outcome_read,
             touchpoint_read=touchpoint_read,
             risk_read=risk_read,
+            communication_read=communication_read,
+            episode_authority_read=episode_authority_read,
         )
         section_by_id = {section.id: section for section in sections}
         sections = [section_by_id[section_id] for section_id in _EPISODE360_SECTIONS]
         if request.includeSections is not None:
             wanted_sections = set(request.includeSections)
             sections = [section for section in sections if section.id in wanted_sections]
-        claims = self._build_claims(request, episodes, outcome_read, touchpoint_read, risk_read)
+        claims = self._build_claims(
+            request,
+            episodes,
+            outcome_read,
+            touchpoint_read,
+            risk_read,
+            communication_read,
+            episode_authority_read,
+        )
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=request.tenantId,
@@ -2024,6 +2853,12 @@ class Episode360Provider:
             and after is None
             and before is None
         )
+        stage_context = _journey_stage_context(
+            steps=rendered_steps,
+            step_refs=step_refs,
+            steps_available=steps_available,
+            step_inventory_complete=step_inventory_complete,
+        )
 
         agent_interventions = _journey_agent_intervention_context(
             journey=journey,
@@ -2061,6 +2896,39 @@ class Episode360Provider:
         journey_attribution = _journey_attribution_context(journey_attribution_read)
         warnings.extend(journey_attribution["warnings"])
 
+        communication_read = await self._load_communication_fact_links(
+            request.tenantId,
+            "journey",
+            journey_id,
+            after=after,
+            before=before,
+        )
+        if communication_read.state in {"unknown", "degraded"}:
+            warnings.append(communication_read.reason)
+        journey_communications = _communication_fact_link_context(
+            communication_read,
+            subject_kind="journey",
+        )
+        action_intents = _journey_action_intent_context(
+            await self._load_journey_action_intents(request.tenantId, journey_id),
+            tenant_id=request.tenantId,
+            journey=journey,
+            step_refs=step_refs,
+            after=after,
+            before=before,
+        )
+        warnings.extend(action_intents["warnings"])
+        dropoffs = _journey_dropoff_context(
+            await self._load_journey_dropoffs(request.tenantId, journey_id),
+            tenant_id=request.tenantId,
+            journey=journey,
+            steps=rendered_steps,
+            step_refs=step_refs,
+            after=after,
+            before=before,
+        )
+        warnings.extend(dropoffs["warnings"])
+
         sections = _build_journey_sections(
             request=request,
             journey=journey,
@@ -2069,6 +2937,7 @@ class Episode360Provider:
             step_refs=step_refs,
             steps_available=steps_available,
             step_inventory_complete=step_inventory_complete,
+            stage_context=stage_context,
             truncated=truncated,
             warnings=warnings,
             agent_interventions=agent_interventions,
@@ -2076,6 +2945,9 @@ class Episode360Provider:
             touchpoint_context=journey_touchpoints,
             conversion_context=journey_conversions,
             attribution_context=journey_attribution,
+            communication_context=journey_communications,
+            action_intent_context=action_intents,
+            dropoff_context=dropoffs,
         )
         if request.includeSections is not None:
             wanted = set(request.includeSections)
@@ -2086,11 +2958,15 @@ class Episode360Provider:
                 journey,
                 rendered_steps,
                 journey_ref,
+                stage_context,
                 journey_touchpoints["claims"],
                 journey_conversions["claims"],
                 journey_attribution["claims"],
                 agent_interventions["claims"],
                 journey_episode_claims,
+                journey_communications["claims"],
+                action_intents["claims"],
+                dropoffs["claims"],
             )
             if request.includeClaims is not False and steps_available and not scope_mismatch
             else []
@@ -2128,19 +3004,62 @@ class Episode360Provider:
         outcome_read: Optional[EpisodeOutcomeRead] = None,
         touchpoint_read: Optional[EpisodeTouchpointRead] = None,
         risk_read: Optional[EpisodeRiskFlagRead] = None,
+        communication_read: Optional[CommunicationFactLinkRead] = None,
+        episode_authority_read: Optional[EpisodeAuthorityRead] = None,
     ) -> list[ProjectionSection]:
         complete = availability in {"available", "empty"}
         observation_read = observation_read or EpisodeObservationRead(available=False)
         outcome_read = outcome_read or EpisodeOutcomeRead(available=False, read_failed=True)
         touchpoint_read = touchpoint_read or EpisodeTouchpointRead()
         risk_read = risk_read or EpisodeRiskFlagRead()
+        communication_read = communication_read or CommunicationFactLinkRead()
+        episode_authority_read = episode_authority_read or EpisodeAuthorityRead(
+            AuthorityFactRead(available=False, complete=False),
+            AuthorityFactRead(available=False, complete=False),
+        )
         conversion_context = _episode_conversion_context(outcome_read)
         touchpoint_context = _episode_touchpoint_context(touchpoint_read, episodes)
         risk_context = _episode_risk_context(risk_read)
+        communication_context = _communication_fact_link_context(
+            communication_read,
+            subject_kind="episode",
+        )
+        exact_episode = (
+            episodes[0]
+            if request.subject.kind == "episode"
+            and len(episodes) == 1
+            and episodes[0].episode_id == request.subject.id
+            and episodes[0].tenant_id == request.tenantId
+            else None
+        )
+        handoff_context = (
+            _episode_authority_context(
+                episode_authority_read.agent_handoffs,
+                record_type="episode_agent_handoff",
+                tenant_id=request.tenantId,
+                episode=exact_episode,
+            )
+            if exact_episode is not None
+            else _unknown_episode_slot("exact_episode_subject_required_for_agent_handoffs")
+        )
+        attribution_link_context = (
+            _episode_authority_context(
+                episode_authority_read.attribution_links,
+                record_type="episode_attribution_link",
+                tenant_id=request.tenantId,
+                episode=exact_episode,
+            )
+            if exact_episode is not None
+            else _unknown_episode_slot("exact_episode_subject_required_for_attribution_links")
+        )
         by_kind = _kind_counts(episodes)
         by_status = _status_distribution(episodes)
         episode_evidence = _collect_evidence(episodes)
-        evidence = _dedupe_evidence_refs(episode_evidence + list(observation_read.evidence_refs))
+        evidence = _dedupe_evidence_refs(
+            episode_evidence
+            + list(observation_read.evidence_refs)
+            + list(communication_read.evidence_refs)
+        )
         evidence_complete = complete and observation_read.complete
         interaction_count = sum(len(e.observation_ids) for e in episodes)
         outcome_count = sum(len(e.outcome_ids) for e in episodes)
@@ -2178,13 +3097,26 @@ class Episode360Provider:
                     else "episode_evidence_unavailable"
                 ),
             },
+            "communicationReferences": {
+                key: value
+                for key, value in communication_context.items()
+                if key != "claims"
+            },
+            "agentHandoffEvidence": handoff_context,
+            "attributionLinkEvidence": attribution_link_context,
             "observationReferences": {
                 "state": _episode_observation_read_state(observation_read),
                 "coverage": "recorded_episode_ids_only",
                 "requestedCount": len(observation_read.requested_ids),
                 "resolvedCount": len(observation_read.rows),
                 "observations": [
-                    _episode_observation_view(request.tenantId, row)
+                    _episode_observation_view(
+                        request.tenantId,
+                        row,
+                        reference_refs=_episode_observation_reference_refs_for_id(
+                            _journey_text(row.get("observation_id")), observation_read
+                        ),
+                    )
                     for row in observation_read.rows
                 ],
                 "evidenceRefs": [ref.model_dump() for ref in observation_read.evidence_refs],
@@ -2286,6 +3218,8 @@ class Episode360Provider:
                             outcome_read=outcome_read,
                             touchpoint_read=touchpoint_read,
                             risk_read=risk_read,
+                            communication_read=communication_read,
+                            episode_authority_read=episode_authority_read,
                         )
                         if request.subject.kind == "episode"
                         else None
@@ -2303,7 +3237,11 @@ class Episode360Provider:
                     "provenance": {
                         "state": "partial" if episodes else "unknown",
                         "authority": _EPISODE_RECORD_SOURCE,
-                        "joinedAuthorities": [_EPISODE_RECORD_SOURCE, _EPISODE_OBSERVATION_SOURCE],
+                        "joinedAuthorities": [
+                            _EPISODE_RECORD_SOURCE,
+                            _EPISODE_OBSERVATION_REFERENCE_SOURCE,
+                            _EPISODE_OBSERVATION_SOURCE,
+                        ],
                         "reason": (
                             _episode_observation_read_reason(observation_read)
                             if episodes and not observation_read.complete
@@ -2373,7 +3311,13 @@ class Episode360Provider:
                         "resolvedCount": len(observation_read.rows),
                         "observationIds": _flatten(e.observation_ids for e in episodes),
                         "observations": [
-                            _episode_observation_view(request.tenantId, row)
+                            _episode_observation_view(
+                                request.tenantId,
+                                row,
+                                reference_refs=_episode_observation_reference_refs_for_id(
+                                    _journey_text(row.get("observation_id")), observation_read
+                                ),
+                            )
                             for row in observation_read.rows
                         ],
                         "evidenceRefs": [
@@ -2398,14 +3342,15 @@ class Episode360Provider:
                         if key != "claims"
                     },
                     "communicationContext": {
-                        **_unknown_episode_slot(
-                            "episode_record_contract_has_no_communication_references"
-                        ),
-                        "communications": [],
+                        **{
+                            key: value
+                            for key, value in communication_context.items()
+                            if key != "claims"
+                        },
                     },
                     "agentHandoffs": {
-                        **_unknown_episode_slot(_EPISODE_AGENT_HANDOFF_GAP_REASON),
-                        "handoffs": [],
+                        **handoff_context,
+                        "handoffs": handoff_context.get("records", []),
                     },
                     "policy": {
                         "state": "unknown",
@@ -2446,8 +3391,8 @@ class Episode360Provider:
                         **conversion_context,
                     },
                     "attributionLinks": {
-                        **_unknown_episode_slot("episode_attribution_authority_not_joined"),
-                        "links": [],
+                        **attribution_link_context,
+                        "links": attribution_link_context.get("records", []),
                     },
                     "coverage": "partial" if episodes else availability,
                 },
@@ -2513,7 +3458,13 @@ class Episode360Provider:
                     ],
                     "observationTimeline": sorted(
                         [
-                            _episode_observation_view(request.tenantId, row)
+                            _episode_observation_view(
+                                request.tenantId,
+                                row,
+                                reference_refs=_episode_observation_reference_refs_for_id(
+                                    _journey_text(row.get("observation_id")), observation_read
+                                ),
+                            )
                             for row in observation_read.rows
                         ],
                         key=lambda row: (
@@ -2521,11 +3472,47 @@ class Episode360Provider:
                             row["observationId"],
                         ),
                     ),
+                    "orderingSemantics": {
+                        "basis": "canonical_observation_occurred_at",
+                        "meaning": "chronological_order_only",
+                        "causality": {
+                            "state": "unknown",
+                            "reason": "chronological_order_does_not_establish_causality",
+                        },
+                    },
                     "observationCoverage": {
                         "state": _episode_observation_read_state(observation_read),
                         "coverage": "recorded_episode_ids_only",
                         "requestedCount": len(observation_read.requested_ids),
                         "resolvedCount": len(observation_read.rows),
+                        "sourceNamespaceResolvedCount": len(observation_read.rows),
+                        "namespaceMissingCount": len(observation_read.namespace_missing_ids),
+                        "missingEpisodeReferenceCount": len(
+                            observation_read.missing_episode_links
+                        ),
+                        "resolvedEpisodeReferenceCount": len(
+                            observation_read.reference_links
+                        ),
+                        "ambiguousReferenceCount": len(observation_read.ambiguous_ids),
+                        "outOfWindowCount": len(observation_read.out_of_window_ids),
+                        "temporal": {
+                            "state": (
+                                "unknown"
+                                if observation_read.temporal_state == "unknown"
+                                else "applied"
+                            ),
+                            "evaluation": (
+                                "not_performed"
+                                if observation_read.temporal_state == "unknown"
+                                else "applied"
+                            ),
+                            "semantics": observation_read.temporal_state,
+                            "reason": observation_read.temporal_reason,
+                        },
+                        "causality": {
+                            "state": "unknown",
+                            "reason": "chronological_order_does_not_establish_causality",
+                        },
                         "evidenceRefs": [
                             ref.model_dump() for ref in observation_read.evidence_refs
                         ],
@@ -2554,6 +3541,8 @@ class Episode360Provider:
         outcome_read: Optional[EpisodeOutcomeRead] = None,
         touchpoint_read: Optional[EpisodeTouchpointRead] = None,
         risk_read: Optional[EpisodeRiskFlagRead] = None,
+        communication_read: Optional[CommunicationFactLinkRead] = None,
+        episode_authority_read: Optional[EpisodeAuthorityRead] = None,
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for episode in episodes:
@@ -2715,6 +3704,77 @@ class Episode360Provider:
                     domainSlotIds=["risk_flags", "evidence_trace"],
                 )
             )
+        communication_read = communication_read or CommunicationFactLinkRead()
+        if (
+            request.subject.kind == "episode"
+            and len(episodes) == 1
+            and episodes[0].episode_id == request.subject.id
+            and episodes[0].tenant_id == request.tenantId
+        ):
+            episode = episodes[0]
+            episode_ref = _episode_record_ref(episode)
+            for fact_id, communication_evidence in _communication_fact_link_context(
+                communication_read,
+                subject_kind="episode",
+            )["claims"]:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"episode360.communication:{quote(fact_id, safe='')}:{quote(episode.episode_id, safe='')}",
+                        kind="explicit_episode_communication_reference",
+                        subject=request.subject,
+                        evidenceRefs=[episode_ref, communication_evidence],
+                        claims=[
+                            f"Canonical communication fact {fact_id!r} explicitly references episode {episode.episode_id!r}.",
+                            "This typed reference does not establish communication content, causality, or a complete conversation inventory.",
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["communications", "evidence_trace"],
+                    )
+                )
+            authority_read = episode_authority_read or EpisodeAuthorityRead()
+            for record_type, source_read, slot_id, claim_kind in (
+                (
+                    "episode_agent_handoff",
+                    authority_read.agent_handoffs,
+                    "agent_handoffs",
+                    "episode_agent_execution_delegation_link",
+                ),
+                (
+                    "episode_attribution_link",
+                    authority_read.attribution_links,
+                    "attribution_links",
+                    "episode_outcome_conversion_credit_link",
+                ),
+            ):
+                context = _episode_authority_context(
+                    source_read,
+                    record_type=record_type,
+                    tenant_id=request.tenantId,
+                    episode=episode,
+                )
+                for row in context["records"]:
+                    refs = [EvidenceRef.model_validate(value) for value in row["evidence_refs"]]
+                    refs.append(
+                        EvidenceRef(
+                            id=row["record_id"],
+                            type="event",
+                            source="episode_journey_authority_records",
+                            observedAt=row["recorded_at"],
+                        )
+                    )
+                    claims.append(
+                        ClaimEnvelope(
+                            id=f"episode360.{slot_id}:{quote(row['record_id'], safe='')}",
+                            kind=claim_kind,
+                            subject=request.subject,
+                            evidenceRefs=refs,
+                            claims=[
+                                f"Explicit {record_type} record {row['record_id']!r} connects exact episode {episode.episode_id!r} to canonical referenced facts; inventory completeness and current authorization remain unknown."
+                            ],
+                            claimState=EpistemicStatus.OBSERVED,
+                            domainSlotIds=[slot_id, "evidence_trace"],
+                        )
+                    )
         return claims
 
 
@@ -3396,6 +4456,282 @@ def _journey_touchpoint_view(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _journey_dropoff_context(
+    read: JourneyAuthorityRead,
+    *,
+    tenant_id: str,
+    journey: dict[str, Any],
+    steps: list[dict[str, Any]],
+    step_refs: list[EvidenceRef],
+    after: Optional[datetime],
+    before: Optional[datetime],
+) -> dict[str, Any]:
+    """Expose only exact current-version facts backed by journey_abandoned steps."""
+    source = read.dropoffs
+    journey_id = _journey_text(journey.get("journey_id"))
+    version_id = _journey_text(journey.get("journey_version_id"))
+    exact_step_refs = {ref.id: ref for ref in step_refs}
+    step_rows: dict[str, list[dict[str, Any]]] = {}
+    for step in steps:
+        step_id = _journey_text(step.get("step_id"))
+        if step_id:
+            step_rows.setdefault(step_id, []).append(step)
+
+    records: list[dict[str, Any]] = []
+    evidence_refs: list[EvidenceRef] = []
+    claims: list[tuple[str, list[EvidenceRef]]] = []
+    warnings: list[str] = []
+    if not source.available or source.read_failed:
+        warnings.append("journey_dropoff_authority_unavailable")
+    if source.truncated:
+        warnings.append("journey_dropoff_authority_read_truncated")
+    if source.invalid_records or source.tenant_mismatch:
+        warnings.append("journey_dropoff_authority_read_invalid_or_unscoped")
+    if not source.complete and not any(
+        (source.truncated, source.invalid_records, source.tenant_mismatch, source.read_failed)
+    ):
+        warnings.append("journey_dropoff_authority_coverage_incomplete")
+
+    for raw in source.records:
+        try:
+            record = JourneyDropoffRecord.model_validate(raw)
+        except Exception:  # noqa: BLE001 - malformed facts cannot support a dropoff claim
+            warnings.append("journey_dropoff_record_invalid")
+            continue
+        if (
+            record.tenant_id != tenant_id
+            or record.journey_id != journey_id
+            or record.journey_version_id != version_id
+            or record.activity_type != "journey_abandoned"
+            or journey.get("is_current") is not True
+        ):
+            warnings.append("journey_dropoff_current_version_or_scope_mismatch")
+            continue
+        if after is not None and record.occurred_at < after:
+            continue
+        if before is not None and record.occurred_at >= before:
+            continue
+        matches = step_rows.get(record.step_id, [])
+        if (
+            len(matches) != 1
+            or _journey_text(matches[0].get("activity_id")) != record.activity_id
+            or _journey_text(matches[0].get("activity_type")) != "journey_abandoned"
+            or _journey_timestamp(matches[0].get("occurred_at")) != record.occurred_at.isoformat()
+        ):
+            warnings.append("journey_dropoff_step_not_resolved_in_current_projection_page")
+            continue
+        record_version_ref = any(
+            ref.source == _JOURNEY_VERSION_SOURCE
+            and ref.id == version_id
+            and ref.uri == f"store://journey_versions/{version_id}"
+            for ref in record.evidence_refs
+        )
+        record_step_ref = any(
+            ref.source == _JOURNEY_STEP_SOURCE
+            and ref.id == record.step_id
+            and ref.uri == f"store://journey_steps/{record.step_id}"
+            for ref in record.evidence_refs
+        )
+        canonical_step_ref = exact_step_refs.get(record.step_id)
+        if (
+            not record_version_ref
+            or not record_step_ref
+            or canonical_step_ref is None
+            or canonical_step_ref.uri != f"store://journey_steps/{record.step_id}"
+        ):
+            warnings.append("journey_dropoff_canonical_evidence_unresolved")
+            continue
+        authority_ref = EvidenceRef(
+            id=record.record_id,
+            type="event",
+            source="episode_journey_authority_records",
+            observedAt=record.recorded_at.isoformat(),
+        )
+        refs = _dedupe_evidence_refs(
+            [authority_ref, *record.evidence_refs, canonical_step_ref]
+        )
+        evidence_refs.extend(refs)
+        records.append(
+            {
+                "recordId": record.record_id,
+                "journeyId": record.journey_id,
+                "journeyVersionId": record.journey_version_id,
+                "stepId": record.step_id,
+                "activityId": record.activity_id,
+                "activityType": record.activity_type,
+                "occurredAt": record.occurred_at.isoformat(),
+                "recordedAt": record.recorded_at.isoformat(),
+                "assertion": "explicit_journey_abandoned_event",
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+            }
+        )
+        claims.append((record.record_id, refs))
+
+    if records:
+        state = "degraded" if warnings else "available"
+        reason = (
+            warnings[0]
+            if warnings
+            else "exact_current_journey_version_abandonment_step_joined"
+        )
+        coverage = "explicit_abandonment_facts_observed"
+    else:
+        state = "unknown"
+        reason = (
+            warnings[0]
+            if warnings
+            else "no_explicit_journey_abandoned_fact_recorded_absence_not_established"
+        )
+        coverage = "unknown"
+    return {
+        "state": state,
+        "coverage": coverage,
+        "reason": reason,
+        "authority": "episode_journey_authority_records",
+        "joinedAuthorities": [
+            "episode_journey_authority_records",
+            _JOURNEY_VERSION_SOURCE,
+            _JOURNEY_STEP_SOURCE,
+        ],
+        "records": records,
+        "observedCount": len(records),
+        "count": len(records) if source.complete and not warnings else None,
+        "evidenceRefs": [
+            ref.model_dump(mode="json", exclude_none=True)
+            for ref in _dedupe_evidence_refs(evidence_refs)
+        ],
+        "temporal": {
+            "state": "bounded_by_journey_request_window",
+            "after": after.isoformat() if after is not None else None,
+            "before": before.isoformat() if before is not None else None,
+        },
+        "freshness": {
+            "state": "unknown",
+            "reason": "journey_dropoff_authority_watermark_unavailable",
+        },
+        "policy": {
+            "state": "unknown",
+            "reason": "journey_dropoff_policy_disposition_not_evaluated",
+        },
+        "sourceReadComplete": source.complete and not warnings,
+        "warnings": list(dict.fromkeys(warnings)),
+        "claims": claims,
+    }
+
+
+def _journey_action_intent_context(
+    read: JourneyAuthorityRead,
+    *,
+    tenant_id: str,
+    journey: dict[str, Any],
+    step_refs: list[EvidenceRef],
+    after: Optional[datetime],
+    before: Optional[datetime],
+) -> dict[str, Any]:
+    """Expose exact current-version, non-executable intent records only."""
+    source = read.action_intents
+    journey_id = _journey_text(journey.get("journey_id"))
+    version_id = _journey_text(journey.get("journey_version_id"))
+    step_ids = {ref.id for ref in step_refs}
+    records: list[dict[str, Any]] = []
+    refs: list[EvidenceRef] = []
+    claims: list[tuple[str, list[EvidenceRef]]] = []
+    warnings: list[str] = []
+    if not source.available or source.read_failed:
+        warnings.append("journey_action_intent_authority_unavailable")
+    if source.truncated:
+        warnings.append("journey_action_intent_read_truncated")
+    if source.invalid_records or source.tenant_mismatch:
+        warnings.append("journey_action_intent_read_invalid_or_unscoped")
+    for raw in source.records:
+        try:
+            record = JourneyActionIntentRecord.model_validate(raw)
+        except Exception:  # noqa: BLE001 - a malformed intent cannot support a claim
+            warnings.append("journey_action_intent_record_invalid")
+            continue
+        if (
+            record.tenant_id != tenant_id
+            or record.journey_id != journey_id
+            or record.journey_version_id != version_id
+            or record.status != "proposed"
+            or journey.get("is_current") is not True
+        ):
+            warnings.append("journey_action_intent_current_version_or_state_unverified")
+            continue
+        if after is not None and record.occurred_at < after:
+            continue
+        if before is not None and record.occurred_at >= before:
+            continue
+        version_refs = [
+            ref for ref in record.evidence_refs
+            if ref.id == version_id
+            and ref.uri == f"store://journey_versions/{version_id}"
+        ]
+        action_step_refs = [
+            ref for ref in record.evidence_refs
+            if ref.id in step_ids
+            and ref.source == "journey_steps"
+            and ref.uri == f"store://journey_steps/{ref.id}"
+        ]
+        if not version_refs or not action_step_refs:
+            warnings.append("journey_action_intent_version_or_page_step_evidence_unresolved")
+            continue
+        row_ref = EvidenceRef(
+            id=record.record_id,
+            type="event",
+            source="episode_journey_authority_records",
+            observedAt=record.recorded_at.isoformat(),
+        )
+        row_refs = [row_ref, *record.evidence_refs]
+        refs.extend(row_refs)
+        records.append(
+            {
+                "recordId": record.record_id,
+                "actionIntentId": record.action_intent_id,
+                "recommendationId": record.recommendation_id,
+                "actionKey": record.action_key,
+                "actionType": record.action_type,
+                "label": record.label,
+                "status": record.status,
+                "actorRef": record.actor_ref,
+                "policyDecisionRef": record.policy_decision_ref,
+                "nonExecutable": True,
+                "occurredAt": record.occurred_at.isoformat(),
+                "recordedAt": record.recorded_at.isoformat(),
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in row_refs],
+            }
+        )
+        claims.append((record.record_id, row_refs))
+    if records:
+        state = "degraded" if warnings else "available"
+        reason = (
+            warnings[0]
+            if warnings
+            else "exact_current_journey_version_action_intents_with_step_evidence"
+        )
+    else:
+        state = "degraded" if warnings else "unknown"
+        reason = warnings[0] if warnings else "no_explicit_current_journey_action_intent_recorded"
+    return {
+        "state": state,
+        "coverage": "recorded_non_executable_intents_only" if records else "unknown",
+        "reason": reason,
+        "records": records,
+        "observedCount": len(records),
+        "count": len(records) if source.complete and not warnings else None,
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in _dedupe_evidence_refs(refs)],
+        "policy": {
+            "state": "unknown",
+            "reason": "action_intent_policy_decision_and_current_authority_not_re_evaluated",
+        },
+        "freshness": {"state": "unknown", "reason": "action_intent_watermark_unavailable"},
+        "inventoryComplete": False,
+        "sourceReadComplete": source.complete and not warnings,
+        "warnings": list(dict.fromkeys(warnings)),
+        "claims": claims,
+    }
+
+
 def _build_journey_sections(
     *,
     request: ProjectionRequest,
@@ -3405,6 +4741,7 @@ def _build_journey_sections(
     step_refs: list[EvidenceRef],
     steps_available: bool,
     step_inventory_complete: bool,
+    stage_context: dict[str, Any],
     truncated: bool,
     warnings: list[str],
     agent_interventions: dict[str, Any],
@@ -3412,6 +4749,9 @@ def _build_journey_sections(
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
     attribution_context: dict[str, Any],
+    communication_context: dict[str, Any],
+    action_intent_context: dict[str, Any],
+    dropoff_context: dict[str, Any],
 ) -> list[ProjectionSection]:
     time_window = {
         "from": request.timeRange.from_ if request.timeRange is not None else None,
@@ -3433,16 +4773,11 @@ def _build_journey_sections(
     version_evidence = [journey_ref.model_dump(mode="json")]
     journey_view = _journey_view(journey)
     timeline = [_journey_step_view(row) for row in steps]
-    stage_context = _journey_stage_context(
-        steps=steps,
-        step_refs=step_refs,
-        steps_available=steps_available,
-        step_inventory_complete=step_inventory_complete,
-    )
     episode_evidence = episode_context["evidenceRefs"]
     touchpoint_evidence = touchpoint_context["evidenceRefs"]
     conversion_evidence = conversion_context["evidenceRefs"]
     attribution_evidence = attribution_context["evidenceRefs"]
+    communication_evidence = communication_context["evidenceRefs"]
     required_slot_coverage = _journey_required_slot_coverage(
         journey=journey,
         steps=steps,
@@ -3456,13 +4791,16 @@ def _build_journey_sections(
         touchpoint_context=touchpoint_context,
         conversion_context=conversion_context,
         attribution_context=attribution_context,
+        communication_context=communication_context,
+        action_intent_context=action_intent_context,
+        dropoff_context=dropoff_context,
     )
     complete_evidence = step_state in {"available", "empty"} and episode_context[
         "state"
     ] in {"available", "empty"} and touchpoint_context["state"] in {
         "available",
         "empty",
-    }
+    } and bool(communication_context.get("sourceReadComplete"))
     outcome_state = conversion_context["state"]
     outcome_content = {
         "recordedConversionIds": conversion_context["conversionIds"],
@@ -3544,6 +4882,11 @@ def _build_journey_sections(
             id="evidence",
             state="degraded" if not complete_evidence else "available",
             title=_SECTION_TITLES["evidence"],
+            canonicalAuthorityRefs=[
+                "episode_journey_authority_records",
+                "journey_versions",
+                "journey_steps",
+            ],
             content={
                 "journeyVersion": version_evidence[0],
                 "journeySteps": step_evidence,
@@ -3554,11 +4897,25 @@ def _build_journey_sections(
                     + touchpoint_evidence
                     + conversion_evidence
                     + attribution_evidence
+                    + communication_evidence
+                    + action_intent_context["evidenceRefs"]
+                    + dropoff_context["evidenceRefs"]
                 ),
                 "rawStepEvidenceSummaryIncluded": False,
                 "journeyEpisodes": episode_evidence,
                 "journeyTouchpoints": touchpoint_evidence,
                 "journeyAttribution": attribution_evidence,
+                "recommendedActions": {
+                    key: value for key, value in action_intent_context.items() if key != "claims"
+                },
+                "journeyDropoffs": {
+                    key: value for key, value in dropoff_context.items() if key != "claims"
+                },
+                "journeyCommunications": {
+                    key: value
+                    for key, value in communication_context.items()
+                    if key != "claims"
+                },
                 "coverage": "complete" if complete_evidence else "partial",
             },
             warnings=sorted(
@@ -3577,6 +4934,10 @@ def _build_journey_sections(
             id="interactions",
             state=step_state,
             title=_SECTION_TITLES["interactions"],
+            canonicalAuthorityRefs=[
+                "episode_journey_authority_records",
+                "journey_steps",
+            ],
             content=(
                 {
                     "interactionCount": len(steps),
@@ -3600,6 +4961,17 @@ def _build_journey_sections(
                         key: value
                         for key, value in agent_interventions.items()
                         if key not in {"activities", "claims", "warnings"}
+                    },
+                    "communications": {
+                        key: value
+                        for key, value in communication_context.items()
+                        if key != "claims"
+                    },
+                    "recommendedActions": {
+                        key: value for key, value in action_intent_context.items() if key != "claims"
+                    },
+                    "dropoffs": {
+                        key: value for key, value in dropoff_context.items() if key != "claims"
                     },
                     "evidenceRefs": step_evidence,
                 }
@@ -3676,38 +5048,88 @@ def _journey_stage_context(
     steps_available: bool,
     step_inventory_complete: bool,
 ) -> dict[str, Any]:
-    """Project explicit journey-role markers without inventing stage boundaries.
+    """Type supported source-role markers while leaving stage boundaries unknown.
 
-    ``journey_role`` is persisted on canonical journey steps by the source
-    classifier. It can identify observed markers such as entry, campaign, or
-    handoff, but it is not a typed stage definition or a completeness claim.
-    Each marker therefore remains attached to its exact journey step and the
-    slot stays partial until a governed stage taxonomy/authority exists.
+    The current canonical step row carries a versioned source-classifier role.
+    Only the closed version-3.0 vocabulary is typed here. The inventory
+    completeness flag applies to persisted role markers on the exact current
+    journey version; it does not imply complete business-stage coverage.
     """
     refs_by_step_id = {ref.id: ref for ref in step_refs}
     observations: list[dict[str, Any]] = []
     missing_evidence = False
     invalid_role = False
+    typed_role_count = 0
+    untyped_role_count = 0
+    role_marker_count = 0
     for row in steps:
         role = _journey_text(row.get("journey_role"))
         if role is None:
             continue
-        # Persisted journey roles are labels rather than an open-ended payload.
-        # Bound their projection size while marking malformed rows explicitly.
+        role_marker_count += 1
+        # Persisted role labels are source evidence, so keep the projection
+        # bounded and leave unsupported/open vocabulary untyped.
         if len(role) > 128:
             invalid_role = True
+            untyped_role_count += 1
             continue
         step_id = _journey_text(row.get("step_id"))
         evidence = refs_by_step_id.get(step_id or "")
         if evidence is None:
             missing_evidence = True
+            untyped_role_count += 1
             continue
+        position = _journey_int(row.get("step_position"), -1)
+        occurred_at = _parse_utc_timestamp(row.get("occurred_at"))
+        typed_marker: Optional[JourneySourceRoleMarker] = None
+        try:
+            typed_marker = JourneySourceRoleMarker.model_validate(
+                {
+                    "tenant_id": row.get("tenant_id"),
+                    "journey_id": row.get("journey_id"),
+                    "journey_version_id": row.get("journey_version_id"),
+                    "step_id": step_id,
+                    "activity_id": _journey_text(row.get("activity_id")),
+                    "step_position": position,
+                    "journey_role": role,
+                    "source_classifier_version": _journey_text(
+                        row.get("source_classifier_version")
+                    ),
+                    "occurred_at": occurred_at,
+                    "evidence_ref": evidence,
+                }
+            )
+        except Exception:  # noqa: BLE001 - unversioned or unsupported labels stay raw
+            untyped_role_count += 1
+        else:
+            typed_role_count += 1
         observations.append(
             {
                 "stepId": step_id,
-                "position": _journey_int(row.get("step_position"), 0),
+                "position": position if position >= 0 else None,
                 "journeyRole": role,
-                "occurredAt": _journey_timestamp(row.get("occurred_at")),
+                "typedRole": typed_marker.journey_role.value if typed_marker else None,
+                "activityId": (
+                    typed_marker.activity_id
+                    if typed_marker
+                    else _journey_text(row.get("activity_id"))
+                ),
+                "roleTaxonomy": (
+                    {
+                        "authority": "services/api/journeys/traffic/classifier.py:SOURCE_CLASSIFIER_VERSION",
+                        "version": typed_marker.source_classifier_version,
+                    }
+                    if typed_marker
+                    else None
+                ),
+                "sourceClassificationId": _journey_text(
+                    row.get("source_classification_id")
+                ),
+                "occurredAt": (
+                    typed_marker.occurred_at.isoformat()
+                    if typed_marker
+                    else _journey_timestamp(row.get("occurred_at"))
+                ),
                 "activityFamily": _journey_text(row.get("activity_family")),
                 "activityType": _journey_text(row.get("activity_type")),
                 "evidenceRefs": [evidence.model_dump(mode="json", exclude_none=True)],
@@ -3720,20 +5142,47 @@ def _journey_stage_context(
         for evidence in observation["evidenceRefs"]
     ]
     complete_refs = [ref.model_dump(mode="json", exclude_none=True) for ref in step_refs]
+    if typed_role_count:
+        role_taxonomy_state = "available" if untyped_role_count == 0 else "partial"
+    elif role_marker_count:
+        role_taxonomy_state = "unknown"
+    elif step_inventory_complete:
+        role_taxonomy_state = "not_observed"
+    else:
+        role_taxonomy_state = "unknown"
+
+    marker_inventory_state = (
+        "unknown"
+        if not steps_available
+        else "complete"
+        if step_inventory_complete
+        else "partial"
+    )
+    marker_inventory_coverage = (
+        "complete_current_version_step_inventory"
+        if step_inventory_complete
+        else "bounded_or_filtered_current_version_step_page"
+        if steps_available
+        else "unavailable"
+    )
     if not steps_available:
         state = "unknown"
         coverage = "unknown"
         reason = "journey_step_authority_unavailable"
-    elif invalid_role or missing_evidence:
+    elif invalid_role or missing_evidence or untyped_role_count:
         state = "degraded"
-        coverage = "partial"
-        reason = "journey_role_marker_invalid_or_missing_exact_step_evidence"
+        coverage = "untyped_source_role_markers"
+        reason = (
+            "journey_role_marker_invalid_or_missing_exact_step_evidence"
+            if invalid_role or missing_evidence
+            else "journey_role_taxonomy_version_or_value_unresolved"
+        )
     elif observations:
         state = "partial"
-        coverage = "observed_role_markers"
+        coverage = "typed_source_role_markers"
         reason = (
-            "explicit_journey_role_markers_loaded_from_exact_current_version_steps;"
-            "stage_taxonomy_and_stage_completeness_are_unresolved"
+            "versioned_source_role_markers_joined_to_exact_current_version_steps;"
+            "stage_boundaries_and_stage_completeness_are_unresolved"
         )
     elif step_inventory_complete:
         state = "empty"
@@ -3748,9 +5197,30 @@ def _journey_stage_context(
         "state": state,
         "coverage": coverage,
         "reason": reason,
-        "authority": "tenant_scoped_current_journey_version_steps",
+        "authority": _JOURNEY_STEP_SOURCE,
+        "roleTaxonomyState": role_taxonomy_state,
+        "roleTaxonomyAuthority": "services/api/journeys/traffic/classifier.py:SOURCE_CLASSIFIER_VERSION",
+        "roleTaxonomyVersion": "3.0" if typed_role_count else None,
         "stageTaxonomyState": "unknown",
+        "stageTaxonomyReason": "source_role_markers_do_not_define_business_stage_boundaries",
+        "stageCompletenessState": "unknown",
+        "stageCompletenessReason": "no_canonical_business_stage_inventory_or_boundary_authority",
         "inventoryComplete": step_inventory_complete,
+        "roleMarkerInventory": {
+            "state": marker_inventory_state,
+            "coverage": marker_inventory_coverage,
+            "authority": _JOURNEY_STEP_SOURCE,
+            "observedStepCount": len(steps),
+            "stepCount": len(steps) if step_inventory_complete else None,
+            "observedRoleMarkerCount": role_marker_count,
+            "typedRoleMarkerCount": typed_role_count,
+            "untypedRoleMarkerCount": untyped_role_count,
+            "evidenceRefs": (
+                complete_refs
+                if step_inventory_complete
+                else observed_refs
+            ),
+        },
         "stageObservations": observations,
         # A complete empty step inventory is evidence only that this source
         # recorded no explicit role markers; it does not prove no stages exist.
@@ -3764,7 +5234,7 @@ def _unknown_journey_slot_coverage(
     journey_summary_state: str = "unknown",
 ) -> dict[str, dict[str, Any]]:
     """Give every blueprint slot an explicit state when the exact journey read fails."""
-    return {
+    coverage = {
         slot_id: {
             "state": journey_summary_state if slot_id == "journey_summary" else "unknown",
             "coverage": "unknown",
@@ -3773,6 +5243,29 @@ def _unknown_journey_slot_coverage(
         }
         for slot_id in _JOURNEY_REQUIRED_SLOT_IDS
     }
+    coverage["stages"].update(
+        {
+            "roleTaxonomyState": "unknown",
+            "roleTaxonomyAuthority": "services/api/journeys/traffic/classifier.py:SOURCE_CLASSIFIER_VERSION",
+            "roleTaxonomyVersion": None,
+            "stageTaxonomyState": "unknown",
+            "stageTaxonomyReason": "current_journey_step_authority_unavailable",
+            "stageCompletenessState": "unknown",
+            "stageCompletenessReason": "no_canonical_business_stage_inventory_or_boundary_authority",
+            "roleMarkerInventory": {
+                "state": "unknown",
+                "coverage": "unavailable",
+                "authority": _JOURNEY_STEP_SOURCE,
+                "observedStepCount": 0,
+                "stepCount": None,
+                "observedRoleMarkerCount": 0,
+                "typedRoleMarkerCount": 0,
+                "untypedRoleMarkerCount": 0,
+                "evidenceRefs": [],
+            },
+        }
+    )
+    return coverage
 
 
 def _journey_required_slot_coverage(
@@ -3789,6 +5282,9 @@ def _journey_required_slot_coverage(
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
     attribution_context: dict[str, Any],
+    communication_context: dict[str, Any],
+    action_intent_context: dict[str, Any],
+    dropoff_context: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     """Expose SSOT slot states using only tenant/version-bound canonical evidence.
 
@@ -3810,6 +5306,15 @@ def _journey_required_slot_coverage(
     attribution_evidence = [
         ref for ref in attribution_context.get("evidenceRefs", []) if isinstance(ref, dict)
     ]
+    communication_evidence = [
+        ref for ref in communication_context.get("evidenceRefs", []) if isinstance(ref, dict)
+    ]
+    action_intent_evidence = [
+        ref for ref in action_intent_context.get("evidenceRefs", []) if isinstance(ref, dict)
+    ]
+    dropoff_evidence = [
+        ref for ref in dropoff_context.get("evidenceRefs", []) if isinstance(ref, dict)
+    ]
     all_evidence = (
         version_evidence
         + step_evidence
@@ -3817,6 +5322,9 @@ def _journey_required_slot_coverage(
         + touchpoint_evidence
         + conversion_evidence
         + attribution_evidence
+        + communication_evidence
+        + action_intent_evidence
+        + dropoff_evidence
     )
 
     touchpoint_state = touchpoint_context.get("state")
@@ -3882,6 +5390,14 @@ def _journey_required_slot_coverage(
             "state": stage_context["state"],
             "coverage": stage_context["coverage"],
             "reason": stage_context["reason"],
+            "roleTaxonomyState": stage_context["roleTaxonomyState"],
+            "roleTaxonomyAuthority": stage_context["roleTaxonomyAuthority"],
+            "roleTaxonomyVersion": stage_context["roleTaxonomyVersion"],
+            "stageTaxonomyState": stage_context["stageTaxonomyState"],
+            "stageTaxonomyReason": stage_context["stageTaxonomyReason"],
+            "stageCompletenessState": stage_context["stageCompletenessState"],
+            "stageCompletenessReason": stage_context["stageCompletenessReason"],
+            "roleMarkerInventory": stage_context["roleMarkerInventory"],
             "evidenceRefs": stage_context["evidenceRefs"],
         },
         "episodes": episode_slot,
@@ -3896,31 +5412,41 @@ def _journey_required_slot_coverage(
             "evidenceRefs": agent_interventions["evidenceRefs"],
         },
         "communications": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "journey_communication_fact_join_not_implemented",
-            "evidenceRefs": [],
+            "state": communication_context["state"],
+            "coverage": communication_context["coverage"],
+            "reason": communication_context["reason"],
+            "evidenceRefs": communication_evidence,
+            "temporal": communication_context["temporal"],
+            "freshness": communication_context["freshness"],
+            "policy": communication_context["policy"],
         },
         "dropoffs": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "journey_dropoff_authority_not_available",
-            "evidenceRefs": [],
+            "state": dropoff_context["state"],
+            "coverage": dropoff_context["coverage"],
+            "reason": dropoff_context["reason"],
+            "authority": dropoff_context["authority"],
+            "joinedAuthorities": dropoff_context["joinedAuthorities"],
+            "evidenceRefs": dropoff_evidence,
+            "temporal": dropoff_context["temporal"],
+            "freshness": dropoff_context["freshness"],
+            "policy": dropoff_context["policy"],
         },
         "conversions": conversion_slot,
         "attribution": {
             **attribution_slot,
         },
         "recommended_actions": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "journey_action_recommendation_authority_not_available",
-            "evidenceRefs": [],
+            "state": action_intent_context["state"],
+            "coverage": action_intent_context["coverage"],
+            "reason": action_intent_context["reason"],
+            "evidenceRefs": action_intent_evidence,
+            "policy": action_intent_context["policy"],
+            "freshness": action_intent_context["freshness"],
         },
         "evidence_trace": {
             "state": "degraded",
             "coverage": "partial",
-            "reason": "journey_version_and_linked_row_evidence_available_source_provenance_not_joined",
+            "reason": "journey_version_and_exact_reference_row_evidence_available_broader_source_provenance_unresolved",
             "evidenceRefs": all_evidence,
         },
     }
@@ -3931,11 +5457,15 @@ def _build_journey_claims(
     journey: dict[str, Any],
     steps: list[dict[str, Any]],
     journey_ref: EvidenceRef,
+    stage_context: dict[str, Any],
     touchpoint_claims: list[tuple[str, EvidenceRef]],
     conversion_claims: list[tuple[str, EvidenceRef]],
     attribution_claims: list[tuple[str, EvidenceRef, EvidenceRef]],
     agent_intervention_claims: list[tuple[str, EvidenceRef]],
     episode_claims: list[tuple[str, EvidenceRef]],
+    communication_claims: list[tuple[str, EvidenceRef]],
+    action_intent_claims: list[tuple[str, list[EvidenceRef]]],
+    dropoff_claims: list[tuple[str, list[EvidenceRef]]],
 ) -> list[ClaimEnvelope]:
     journey_id = _journey_text(journey.get("journey_id")) or request.subject.id
     version_id = _journey_text(journey.get("journey_version_id")) or journey_id
@@ -3973,6 +5503,38 @@ def _build_journey_claims(
         )
         if len(claims) >= 101:
             break
+    for record_id, refs in dropoff_claims:
+        if len(claims) >= 301:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:dropoff:{quote(record_id, safe='')}",
+                kind="journey_explicit_abandonment_fact",
+                subject=request.subject,
+                evidenceRefs=refs,
+                claims=[
+                    f"Current journey version {version_id!r} has a canonical dropoff fact linked to an explicit journey_abandoned step ({record_id!r}); the cause, permanence, and absence of later activity are not established."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["dropoffs", "evidence_trace"],
+            )
+        )
+    for record_id, refs in action_intent_claims:
+        if len(claims) >= 301:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:action-intent:{quote(record_id, safe='')}",
+                kind="journey_recorded_non_executable_action_intent",
+                subject=request.subject,
+                evidenceRefs=refs,
+                claims=[
+                    f"Current journey version {version_id!r} has an explicit, non-executable action recommendation record {record_id!r}; execution permission and outcome are not established."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["recommended_actions", "evidence_trace"],
+            )
+        )
     for activity_id, step_evidence in agent_intervention_claims:
         if len(claims) >= 301:
             break
@@ -3992,29 +5554,39 @@ def _build_journey_claims(
             )
         )
     if stage_slots:
-        for row in steps:
+        for observation in stage_context["stageObservations"]:
             if len(claims) >= 201:
                 break
-            step_id = _journey_text(row.get("step_id"))
-            role = _journey_text(row.get("journey_role"))
-            evidence = _journey_step_ref(row)
-            if (
-                not step_id
-                or role is None
-                or len(role) > 128
-                or evidence is None
-            ):
+            step_id = observation.get("stepId")
+            role = observation.get("journeyRole")
+            evidence_refs = observation.get("evidenceRefs")
+            if not isinstance(step_id, str) or not isinstance(role, str):
                 continue
+            try:
+                evidence = EvidenceRef.model_validate(evidence_refs[0])
+            except (IndexError, TypeError, ValueError):
+                continue
+            typed_role = observation.get("typedRole")
+            version = (
+                observation.get("roleTaxonomy", {}).get("version")
+                if isinstance(observation.get("roleTaxonomy"), dict)
+                else None
+            )
+            claims_text = (
+                f"Persisted journey step {step_id!r} has source-classified acquisition role "
+                f"{typed_role!r} under classifier version {version}; this marker does not "
+                "define business-stage boundaries or establish stage completeness."
+                if isinstance(typed_role, str) and isinstance(version, str)
+                else f"Persisted journey step {step_id!r} has explicit journey_role marker "
+                f"{role!r}; its taxonomy, stage boundaries, and stage completeness remain unknown."
+            )
             claims.append(
                 ClaimEnvelope(
                     id=f"episode360:{journey_id}:{version_id}:stage-marker:{step_id}",
                     kind="explicit_journey_role_marker",
                     subject=request.subject,
                     evidenceRefs=[evidence],
-                    claims=[
-                        f"Persisted journey step {step_id!r} has explicit journey_role marker "
-                        f"{role!r}; stage taxonomy and stage completeness remain unknown."
-                    ],
+                    claims=[claims_text],
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=stage_slots,
                 )
@@ -4082,6 +5654,23 @@ def _build_journey_claims(
                 domainSlotIds=episode_slots,
             )
         )
+    for fact_id, communication_evidence in communication_claims:
+        if len(claims) >= 401:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:communication:{quote(fact_id, safe='')}",
+                kind="explicit_journey_communication_reference",
+                subject=request.subject,
+                evidenceRefs=[journey_ref, communication_evidence],
+                claims=[
+                    f"Canonical communication fact {fact_id!r} explicitly references journey {journey_id!r}.",
+                    "This typed reference does not establish communication content, causality, or a complete conversation inventory.",
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["communications", "evidence_trace"],
+            )
+        )
     return claims
 
 
@@ -4103,7 +5692,14 @@ def _journey_slot_ids_for_sections(section_ids: set[str]) -> list[str]:
                 and section_ids.intersection(binding.get("sectionIds", []))
             ):
                 slot_id = slot.get("id")
-                if isinstance(slot_id, str) and slot_id in required_slot_ids:
+                # The generic summary/interactions/evidence sections contain
+                # many facts. Only their typed authority claims can attest
+                # recommendation and dropoff slots.
+                if (
+                    isinstance(slot_id, str)
+                    and slot_id in required_slot_ids
+                    and slot_id not in {"recommended_actions", "dropoffs"}
+                ):
                     slot_ids.add(slot_id)
     return sorted(slot_ids)
 
@@ -4269,6 +5865,103 @@ def _journey_timestamp(value: Any) -> Optional[str]:
     return None
 
 
+def _parse_utc_timestamp(value: Any) -> Optional[datetime]:
+    """Parse a timezone-aware canonical timestamp without assigning a zone."""
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc) if value.tzinfo is not None else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
+
+
+def _communication_payload(row: dict[str, Any]) -> dict[str, Any]:
+    payload = row.get("payload")
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str) and payload.strip():
+        import json
+
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _communication_row_references_subject(
+    row: dict[str, Any], subject_kind: str, subject_id: str
+) -> bool:
+    """Match only the named typed subject-reference fields, never prose."""
+    singular, plural = (
+        ("episode_id", "episode_ids")
+        if subject_kind == "episode"
+        else ("journey_id", "journey_ids")
+    )
+    payload = _communication_payload(row)
+
+    def has_reference(value: Any) -> bool:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key == singular and isinstance(child, str) and child == subject_id:
+                    return True
+                if key == plural and isinstance(child, (list, tuple)) and subject_id in child:
+                    return True
+                if has_reference(child):
+                    return True
+        elif isinstance(value, (list, tuple)):
+            return any(has_reference(child) for child in value)
+        return False
+
+    return has_reference(row) or has_reference(payload)
+
+
+def _communication_fact_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
+    fact_id = row.get("fact_id") or row.get("idempotency_key") or row.get("source_event_id")
+    if not isinstance(fact_id, (str, UUID)) or not str(fact_id).strip():
+        return None
+    return EvidenceRef(
+        id=str(fact_id),
+        type="event",
+        source=_COMMUNICATION_FACT_SOURCE,
+        observedAt=_journey_timestamp(row.get("occurred_at")),
+        uri=f"store://communication360_facts/{quote(str(fact_id), safe='')}",
+    )
+
+
+def _communication_fact_view(
+    row: dict[str, Any],
+    reference: EvidenceRef,
+    subject_kind: str,
+) -> dict[str, Any]:
+    """Render only typed metadata; communication bodies remain private."""
+    payload = _communication_payload(row)
+    singular, plural = (
+        ("episode_id", "episode_ids")
+        if subject_kind == "episode"
+        else ("journey_id", "journey_ids")
+    )
+    ids: list[str] = []
+    for key in (singular, plural):
+        value = payload.get(key)
+        candidates = value if isinstance(value, (list, tuple)) else [value]
+        for candidate in candidates:
+            if isinstance(candidate, str) and candidate and candidate not in ids:
+                ids.append(candidate)
+    return {
+        "factId": reference.id,
+        "kind": _journey_text(row.get("kind")),
+        "occurredAt": _journey_timestamp(row.get("occurred_at")),
+        "receivedAt": _journey_timestamp(row.get("received_at")),
+        "subjectReferenceIds": ids,
+        "evidenceRefs": [reference.model_dump(mode="json", exclude_none=True)],
+    }
+
+
 def _as_mapping(value: Any) -> Optional[dict[str, Any]]:
     if isinstance(value, dict):
         return dict(value)
@@ -4351,14 +6044,156 @@ def _episode_observation_ref(
     )
 
 
-def _episode_observation_view(tenant_id: str, row: dict[str, Any]) -> dict[str, Any]:
+def _episode_observation_source_event_ref(
+    tenant_id: str, row: dict[str, Any]
+) -> Optional[EvidenceRef]:
+    observation_id = _journey_text(row.get("observation_id"))
+    source_event_id = _journey_text(row.get("source_event_id"))
+    observed_at = _journey_timestamp(row.get("occurred_at"))
+    if (
+        observation_id is None
+        or source_event_id is None
+        or row.get("tenant_id") != tenant_id
+        or observed_at is None
+    ):
+        return None
+    observation_uri = (
+        "store://silver_semantic_observations/"
+        f"{quote(tenant_id, safe='')}:{quote(observation_id, safe='')}"
+    )
+    return EvidenceRef(
+        id=source_event_id,
+        type="event",
+        source=_EPISODE_OBSERVATION_EVENT_REF_SOURCE,
+        observedAt=observed_at,
+        uri=f"{observation_uri}/source-event/{quote(source_event_id, safe='')}",
+    )
+
+
+def _episode_observation_receipt_ref(
+    tenant_id: str, row: dict[str, Any]
+) -> Optional[EvidenceRef]:
+    observation_id = _journey_text(row.get("observation_id"))
+    received_at = _journey_timestamp(row.get("received_at"))
+    if observation_id is None or row.get("tenant_id") != tenant_id or received_at is None:
+        return None
+    observation_uri = (
+        "store://silver_semantic_observations/"
+        f"{quote(tenant_id, safe='')}:{quote(observation_id, safe='')}"
+    )
+    return EvidenceRef(
+        id=observation_id,
+        type="event",
+        source=_EPISODE_OBSERVATION_RECEIPT_REF_SOURCE,
+        observedAt=received_at,
+        uri=f"{observation_uri}/receipt",
+    )
+
+
+def _episode_observation_reference_ref(
+    record: EpisodeObservationReferenceRecord,
+) -> EvidenceRef:
+    return EvidenceRef(
+        id=record.record_id,
+        type="event",
+        source=_EPISODE_OBSERVATION_REFERENCE_SOURCE,
+        observedAt=record.linked_at.isoformat(),
+        uri=(
+            "store://episode_journey_authority_records/"
+            f"{quote(record.tenant_id, safe='')}:{quote(record.record_id, safe='')}"
+        ),
+    )
+
+
+def _episode_observation_reference_has_evidence(
+    record: EpisodeObservationReferenceRecord,
+) -> bool:
+    observation_uri = (
+        "store://silver_semantic_observations/"
+        f"{quote(record.tenant_id, safe='')}:{quote(record.observation_id, safe='')}"
+    )
+    expected = {
+        (
+            record.observation_id,
+            "event",
+            _EPISODE_OBSERVATION_SOURCE,
+            observation_uri,
+        ): record.recorded_at,
+        (
+            record.source_event_id,
+            "event",
+            _EPISODE_OBSERVATION_EVENT_REF_SOURCE,
+            f"{observation_uri}/source-event/{quote(record.source_event_id, safe='')}",
+        ): record.occurred_at,
+        (
+            record.observation_id,
+            "event",
+            _EPISODE_OBSERVATION_RECEIPT_REF_SOURCE,
+            f"{observation_uri}/receipt",
+        ): record.received_at,
+    }
+    observed_evidence = {
+        (ref.id, ref.type, ref.source, ref.uri): _parse_utc_timestamp(ref.observedAt)
+        for ref in record.evidence_refs
+        if ref.id and ref.source and ref.uri
+    }
+    return all(observed_evidence.get(key) == value for key, value in expected.items())
+
+
+def _episode_observation_time_matches(
+    occurred_at: datetime,
+    processed_at: datetime,
+    evidence_refs: tuple[EvidenceRef, ...] | list[EvidenceRef],
+    *,
+    received_at: Optional[datetime] = None,
+    after: Optional[datetime] = None,
+    before: Optional[datetime] = None,
+    as_of: Optional[datetime] = None,
+) -> bool:
+    occurred = occurred_at.astimezone(timezone.utc)
+    processed = processed_at.astimezone(timezone.utc)
+    received = received_at.astimezone(timezone.utc) if received_at is not None else None
+    lower = after.astimezone(timezone.utc) if after is not None else None
+    upper = before.astimezone(timezone.utc) if before is not None else None
+    anchor = as_of.astimezone(timezone.utc) if as_of is not None else None
+    if lower is not None and occurred < lower:
+        return False
+    if upper is not None and occurred > upper:
+        return False
+    if anchor is None:
+        return True
+    if occurred > anchor or processed > anchor or received is None or received > anchor:
+        return False
+    for ref in evidence_refs:
+        observed_at = _parse_utc_timestamp(ref.observedAt)
+        if observed_at is None or observed_at > anchor:
+            return False
+    return True
+
+
+def _episode_observation_view(
+    tenant_id: str,
+    row: dict[str, Any],
+    *,
+    reference_refs: tuple[EvidenceRef, ...] = (),
+) -> dict[str, Any]:
     evidence = _episode_observation_ref(tenant_id, row)
+    source_event_evidence = _episode_observation_source_event_ref(tenant_id, row)
+    receipt_evidence = _episode_observation_receipt_ref(tenant_id, row)
     return {
         "observationId": _journey_text(row.get("observation_id")),
+        "sourceNamespace": _journey_text(row.get("source_namespace")),
+        "sourceEventId": _journey_text(row.get("source_event_id")),
         "sourceType": _journey_text(row.get("source_type")),
         "occurredAt": _journey_timestamp(row.get("occurred_at")),
+        "receivedAt": _journey_timestamp(row.get("received_at")),
+        "processedAt": _journey_timestamp(row.get("processed_at")),
         "recordStatus": _journey_text(row.get("status")),
-        "evidenceRefs": [evidence.model_dump()] if evidence is not None else [],
+        "evidenceRefs": [
+            ref.model_dump()
+            for ref in (evidence, source_event_evidence, receipt_evidence, *reference_refs)
+            if ref is not None
+        ],
     }
 
 
@@ -4370,21 +6205,57 @@ def _episode_observation_views_for(
         for row in read.rows
         if _journey_text(row.get("observation_id")) is not None
     }
+    links = {
+        (episode_id, observation_id): ref
+        for episode_id, observation_id, ref in read.reference_links
+    }
     return [
-        _episode_observation_view(tenant_id, rows_by_id[observation_id])
+        _episode_observation_view(
+            tenant_id,
+            rows_by_id[observation_id],
+            reference_refs=(links[(episode.episode_id, observation_id)],),
+        )
         for observation_id in episode.observation_ids
         if observation_id in rows_by_id
+        and (episode.episode_id, observation_id) in links
     ]
+
+
+def _episode_observation_reference_refs_for_id(
+    observation_id: Optional[str], read: EpisodeObservationRead
+) -> tuple[EvidenceRef, ...]:
+    if observation_id is None:
+        return ()
+    return tuple(
+        ref
+        for _, linked_observation_id, ref in read.reference_links
+        if linked_observation_id == observation_id
+    )
 
 
 def _episode_observation_refs_for(
     episode: EpisodeRecord, read: EpisodeObservationRead
 ) -> list[EvidenceRef]:
-    wanted = set(episode.observation_ids)
-    return [
+    linked_ids = {
+        observation_id
+        for episode_id, observation_id, _ in read.reference_links
+        if episode_id == episode.episode_id
+    }
+    source_refs: list[EvidenceRef] = []
+    for row in read.rows:
+        if _journey_text(row.get("observation_id")) not in linked_ids:
+            continue
+        for make_ref in (
+            _episode_observation_ref,
+            _episode_observation_source_event_ref,
+            _episode_observation_receipt_ref,
+        ):
+            if (ref := make_ref(episode.tenant_id, row)) is not None:
+                source_refs.append(ref)
+    return source_refs + [
         ref
-        for ref in read.evidence_refs
-        if ref.id in wanted and ref.source == _EPISODE_OBSERVATION_SOURCE
+        for episode_id, observation_id, ref in read.reference_links
+        if episode_id == episode.episode_id and observation_id in linked_ids
     ]
 
 
@@ -4395,35 +6266,51 @@ def _episode_observation_read_state(read: EpisodeObservationRead) -> str:
         return "available"
     if read.rows:
         return "degraded"
+    if (
+        read.out_of_window_ids
+        and len(read.out_of_window_ids) == len(read.requested_ids)
+        and read.complete
+    ):
+        return "empty"
     return "unknown"
 
 
 def _episode_observation_read_reason(read: EpisodeObservationRead) -> str:
     if not read.requested_ids:
         return "episode_record_contains_no_observation_references"
+    if read.temporal_reason:
+        return read.temporal_reason
     if read.read_failed or not read.available:
-        return "semantic_observation_authority_unavailable"
+        return "episode_observation_namespace_or_semantic_authority_unavailable"
     if read.tenant_mismatch:
         return "semantic_observation_tenant_scope_mismatch"
+    if read.ambiguous_ids:
+        return "episode_observation_source_namespace_or_lineage_ambiguous"
+    if read.namespace_missing_ids:
+        return "episode_observation_source_namespace_untyped_or_missing"
+    if read.missing_episode_links:
+        return "episode_observation_typed_reference_missing_for_episode"
     if read.invalid_records:
-        return "semantic_observation_rows_invalid_or_ambiguous"
+        return "episode_observation_namespace_or_semantic_rows_invalid"
     if read.inactive_records:
         return "semantic_observation_non_active_rows_omitted"
     if read.timestamps_missing:
         return "semantic_observation_timestamps_missing_or_invalid"
+    if read.out_of_window_ids and not read.rows:
+        return "episode_observation_references_outside_requested_temporal_window"
     if read.truncated:
         return "episode_observation_reference_read_truncated"
     if read.missing_ids:
         return "episode_observation_ids_not_found_in_semantic_silver"
-    return "exact_tenant_observation_rows_resolved_recorded_episode_references_only"
+    return "exact_tenant_namespace_and_event_evidence_resolved_recorded_episode_references_only"
 
 
 def _dedupe_evidence_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
-    unique: dict[tuple[str, str, str], EvidenceRef] = {}
+    unique: dict[tuple[str, str, str, str], EvidenceRef] = {}
     for ref in refs:
         if not isinstance(ref, EvidenceRef) or not ref.id or not ref.source:
             continue
-        unique.setdefault((ref.id, ref.type, ref.source), ref)
+        unique.setdefault((ref.id, ref.type, ref.source, ref.uri or ""), ref)
     return list(unique.values())
 
 
@@ -4652,6 +6539,276 @@ def _episode_conversion_context(
     }
 
 
+def _communication_fact_link_context(
+    read: CommunicationFactLinkRead,
+    *,
+    subject_kind: str,
+) -> dict[str, Any]:
+    """Expose typed communication metadata without message or interpretation bodies."""
+    refs_by_id = {ref.id: ref for ref in read.evidence_refs}
+    communications: list[dict[str, Any]] = []
+    claims: list[tuple[str, EvidenceRef]] = []
+    for row in read.rows:
+        reference = _communication_fact_evidence(row)
+        if reference is None:
+            continue
+        canonical_ref = refs_by_id.get(reference.id)
+        if canonical_ref is None:
+            continue
+        communications.append(
+            _communication_fact_view(row, canonical_ref, subject_kind)
+        )
+        claims.append((canonical_ref.id, canonical_ref))
+    return {
+        "state": read.state,
+        "coverage": "exact_reference_facts_only" if communications else (
+            "partial" if read.truncated or read.invalid_records else "unknown"
+        ),
+        "reason": read.reason,
+        "requestedSubjectKind": subject_kind,
+        "communicationCount": len(communications) if read.complete else None,
+        "observedCommunicationCount": len(communications),
+        "communications": communications,
+        "evidenceRefs": [
+            ref.model_dump(mode="json", exclude_none=True)
+            for ref in read.evidence_refs
+        ],
+        "temporal": {
+            "state": read.temporal_state,
+            "evaluation": "applied" if read.temporal_state != "unknown" else "not_performed",
+        },
+        "freshness": {
+            "state": "unknown",
+            "reason": "communication_fact_projection_watermark_not_available",
+        },
+        "policy": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "communication_fact_policy_not_evaluated_by_episode_projection",
+        },
+        "sourceReadComplete": read.complete,
+        "claims": claims,
+    }
+
+
+def _episode_authority_read_for_as_of(
+    read: AuthorityFactRead,
+    *,
+    record_type: str,
+    tenant_id: str,
+    episode: EpisodeRecord,
+    as_of: Optional[datetime],
+) -> AuthorityFactRead:
+    """Validate exact Episode associations and apply their recorded-time bound."""
+    model = {
+        "episode_agent_handoff": EpisodeAgentHandoffRecord,
+        "episode_attribution_link": EpisodeAttributionLinkRecord,
+    }.get(record_type)
+    if model is None:
+        return AuthorityFactRead(
+            available=False,
+            complete=False,
+            invalid_records=True,
+        )
+    if as_of is not None and as_of.tzinfo is None:
+        return AuthorityFactRead(
+            available=False,
+            complete=False,
+            invalid_records=True,
+        )
+    anchor = as_of.astimezone(timezone.utc) if as_of is not None else None
+    records: list[dict[str, Any]] = []
+    invalid_records = read.invalid_records
+    tenant_mismatch = read.tenant_mismatch
+    for raw in read.records:
+        try:
+            record = model.model_validate(raw)
+        except Exception:  # noqa: BLE001 - malformed association rows degrade the slot
+            invalid_records = True
+            continue
+        if record.tenant_id != tenant_id:
+            tenant_mismatch = True
+            continue
+        if record.episode_id != episode.episode_id or record.record_type != record_type:
+            invalid_records = True
+            continue
+        if isinstance(record, EpisodeAgentHandoffRecord):
+            if (
+                episode.subject.kind != "agent"
+                or record.agent_id != episode.subject.id
+                or record.source_event_id not in set(episode.observation_ids)
+            ):
+                invalid_records = True
+                continue
+        elif record.outcome_id not in set(episode.outcome_ids):
+            invalid_records = True
+            continue
+        if anchor is not None:
+            evidence_times = [
+                _parse_utc_timestamp(ref.observedAt)
+                for ref in record.evidence_refs
+                if ref.observedAt is not None
+            ]
+            if (
+                record.occurred_at > anchor
+                or record.recorded_at > anchor
+                or any(value is None or value > anchor for value in evidence_times)
+            ):
+                continue
+        records.append(record.model_dump(mode="json", exclude_none=True))
+    complete = (
+        read.complete
+        and not read.truncated
+        and not invalid_records
+        and not tenant_mismatch
+        and not read.read_failed
+    )
+    return AuthorityFactRead(
+        records=tuple(records),
+        available=read.available,
+        complete=complete,
+        truncated=read.truncated,
+        invalid_records=invalid_records,
+        tenant_mismatch=tenant_mismatch,
+        read_failed=read.read_failed,
+    )
+
+
+def _episode_authority_context(
+    read: AuthorityFactRead,
+    *,
+    record_type: str,
+    tenant_id: str,
+    episode: EpisodeRecord,
+) -> dict[str, Any]:
+    """Project positive typed links; an empty relation scan is not absence proof."""
+    model = (
+        EpisodeAgentHandoffRecord
+        if record_type == "episode_agent_handoff"
+        else EpisodeAttributionLinkRecord
+    )
+    records: list[dict[str, Any]] = []
+    evidence_refs: list[EvidenceRef] = []
+    invalid = read.invalid_records
+    tenant_mismatch = read.tenant_mismatch
+    for raw in read.records:
+        try:
+            record = model.model_validate(raw)
+        except Exception:  # noqa: BLE001 - malformed relationship rows stay unknown
+            invalid = True
+            continue
+        if (
+            record.tenant_id != tenant_id
+            or record.episode_id != episode.episode_id
+            or record.record_type != record_type
+        ):
+            tenant_mismatch = tenant_mismatch or record.tenant_id != tenant_id
+            invalid = invalid or record.episode_id != episode.episode_id
+            continue
+        if isinstance(record, EpisodeAgentHandoffRecord) and (
+            episode.subject.kind != "agent"
+            or record.agent_id != episode.subject.id
+            or record.source_event_id not in set(episode.observation_ids)
+        ):
+            invalid = True
+            continue
+        if isinstance(record, EpisodeAttributionLinkRecord) and record.outcome_id not in set(
+            episode.outcome_ids
+        ):
+            invalid = True
+            continue
+        refs: list[EvidenceRef] = []
+        for raw_ref in record.evidence_refs:
+            try:
+                ref = EvidenceRef.model_validate(raw_ref)
+            except Exception:  # noqa: BLE001 - invalid evidence cannot support a link
+                invalid = True
+                continue
+            if ref.id and ref.source:
+                refs.append(ref)
+        if len(refs) < (2 if record_type == "episode_agent_handoff" else 4):
+            invalid = True
+            continue
+        refs.append(
+            EvidenceRef(
+                id=record.record_id,
+                type="event",
+                source="episode_journey_authority_records",
+                observedAt=record.recorded_at.isoformat(),
+            )
+        )
+        evidence_refs.extend(refs)
+        records.append(
+            record.model_dump(mode="json", exclude_none=True)
+        )
+    evidence_refs = _dedupe_evidence_refs(evidence_refs)
+    incomplete = (
+        not read.available
+        or read.truncated
+        or invalid
+        or tenant_mismatch
+        or read.read_failed
+    )
+    if records:
+        state = "degraded" if incomplete else "available"
+        coverage = "partial_explicit_links"
+        reason = (
+            "exact_episode_handoff_links_joined_inventory_incomplete"
+            if record_type == "episode_agent_handoff" and incomplete
+            else "exact_episode_execution_and_delegation_links_joined"
+            if record_type == "episode_agent_handoff"
+            else "exact_episode_attribution_credit_links_joined_inventory_incomplete"
+            if incomplete
+            else "exact_episode_outcome_conversion_and_attribution_credit_links_joined"
+        )
+    else:
+        state = "unknown"
+        coverage = "unknown"
+        reason = (
+            "no_explicit_episode_agent_handoff_link_recorded_absence_not_established"
+            if record_type == "episode_agent_handoff"
+            else "no_explicit_episode_attribution_link_recorded_absence_not_established"
+        )
+        if incomplete:
+            reason = (
+                "episode_agent_handoff_authority_read_incomplete"
+                if record_type == "episode_agent_handoff"
+                else "episode_attribution_authority_read_incomplete"
+            )
+    return {
+        "state": state,
+        "coverage": coverage,
+        "reason": reason,
+        "records": records,
+        "count": len(records) if records else None,
+        "observedCount": len(records),
+        "evidenceRefs": [
+            ref.model_dump(mode="json", exclude_none=True) for ref in evidence_refs
+        ],
+        "freshness": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "episode_authority_watermark_not_available",
+        },
+        "policy": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": (
+                "delegation_authorization_not_re_evaluated_by_episode_projection"
+                if record_type == "episode_agent_handoff"
+                else "attribution_policy_not_evaluated_by_episode_projection"
+            ),
+        },
+        "inventoryComplete": False,
+        "sourceReadComplete": not incomplete,
+        "warnings": (
+            [reason]
+            if incomplete
+            else []
+        ),
+    }
+
+
 def _episode_required_slot_coverage(
     request: ProjectionRequest,
     episodes: list[EpisodeRecord],
@@ -4662,6 +6819,8 @@ def _episode_required_slot_coverage(
     outcome_read: EpisodeOutcomeRead,
     touchpoint_read: EpisodeTouchpointRead,
     risk_read: EpisodeRiskFlagRead,
+    communication_read: CommunicationFactLinkRead,
+    episode_authority_read: EpisodeAuthorityRead,
 ) -> dict[str, dict[str, Any]]:
     """Expose the SSOT slot status without promoting partial sources to complete."""
     evidence = [ref.model_dump() for ref in evidence_refs]
@@ -4703,6 +6862,22 @@ def _episode_required_slot_coverage(
     conversion_context = _episode_conversion_context(outcome_read)
     touchpoint_context = _episode_touchpoint_context(touchpoint_read, episodes)
     risk_context = _episode_risk_context(risk_read)
+    communication_context = _communication_fact_link_context(
+        communication_read,
+        subject_kind="episode",
+    )
+    handoff_context = _episode_authority_context(
+        episode_authority_read.agent_handoffs,
+        record_type="episode_agent_handoff",
+        tenant_id=request.tenantId,
+        episode=episode,
+    )
+    attribution_link_context = _episode_authority_context(
+        episode_authority_read.attribution_links,
+        record_type="episode_attribution_link",
+        tenant_id=request.tenantId,
+        episode=episode,
+    )
     return {
         "episode_summary": {
             "state": "available",
@@ -4744,16 +6919,16 @@ def _episode_required_slot_coverage(
             "evidenceRefs": touchpoint_context["evidenceRefs"],
         },
         "communications": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "episode_record_contract_has_no_communication_references",
-            "evidenceRefs": [],
+            "state": communication_context["state"],
+            "coverage": communication_context["coverage"],
+            "reason": communication_context["reason"],
+            "evidenceRefs": communication_context["evidenceRefs"],
+            "temporal": communication_context["temporal"],
+            "freshness": communication_context["freshness"],
+            "policy": communication_context["policy"],
         },
         "agent_handoffs": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": _EPISODE_AGENT_HANDOFF_GAP_REASON,
-            "evidenceRefs": [],
+            **handoff_context,
         },
         "conversion_events": {
             "state": conversion_context["state"],
@@ -4762,10 +6937,7 @@ def _episode_required_slot_coverage(
             "evidenceRefs": conversion_context["evidenceRefs"],
         },
         "attribution_links": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "episode_attribution_authority_not_joined",
-            "evidenceRefs": [],
+            **attribution_link_context,
         },
         "risk_flags": {
             "state": risk_context["state"],

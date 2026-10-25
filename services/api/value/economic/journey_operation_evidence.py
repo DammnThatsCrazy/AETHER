@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from datetime import datetime
 from typing import Any, Optional
+
+from graph.operational_intelligence.models import EvidenceRef
 
 _PAYMENT_SOURCE_DETAIL_FIELDS = (
     "paymentRail",
@@ -58,11 +61,28 @@ async def journey_commerce_operation_evidence(
             "invalid_ledger_records": 0,
             "as_of": as_of,
         }
+    if (
+        str(journey.get("tenant_id")) != tenant_id
+        or str(journey.get("journey_id")) != journey_id
+        or not journey.get("is_current")
+        or not journey.get("journey_version_id")
+    ):
+        return {
+            "journey_id": journey_id,
+            "join_basis": "explicit_journey_step_commerce_order_ref",
+            "operation_links": [],
+            "payment_facts": [],
+            "association_evidence": [],
+            "reason": "journey_current_version_scope_invalid",
+            "evidence_truncated": True,
+            "as_of": as_of,
+        }
 
     repo = JourneyStepRepository()
     version_id = str(journey.get("journey_version_id"))
     refs: list[str] = []
     seen_refs: set[str] = set()
+    association_evidence: list[dict[str, Any]] = []
     scanned = 0
     cursor: Optional[str] = None
     truncated = False
@@ -78,6 +98,21 @@ async def journey_commerce_operation_evidence(
             break
         scanned += len(page)
         for step in page:
+            if not isinstance(step, dict):
+                invalid_reference_count += 1
+                continue
+            step_id = str(step.get("step_id") or "").strip()
+            activity_id = str(step.get("activity_id") or "").strip()
+            if (
+                str(step.get("tenant_id")) != tenant_id
+                or str(step.get("journey_id")) != journey_id
+                or str(step.get("journey_version_id")) != version_id
+                or not step_id
+                or not activity_id
+                or step.get("activity_status") in {"tombstoned", "deleted", "consent_restricted"}
+            ):
+                invalid_reference_count += 1
+                continue
             summary = step.get("evidence_summary")
             if isinstance(summary, str):
                 try:
@@ -86,30 +121,49 @@ async def journey_commerce_operation_evidence(
                     summary = None
             if not isinstance(summary, dict):
                 continue
+            created_at = step.get("created_at")
+            if isinstance(created_at, datetime):
+                created_at = created_at.isoformat()
+            step_evidence = EvidenceRef(
+                id=step_id,
+                type="event",
+                source="journey_steps",
+                observedAt=created_at if isinstance(created_at, str) else None,
+            ).model_dump(mode="json")
+
+            def admit_reference(value: Any) -> None:
+                nonlocal truncated, invalid_reference_count
+                reference = _valid_order_reference(value)
+                if reference is None:
+                    if value is not None:
+                        invalid_reference_count += 1
+                    return
+                if reference in seen_refs:
+                    return
+                seen_refs.add(reference)
+                if len(refs) >= max_order_refs:
+                    truncated = True
+                    return
+                refs.append(reference)
+                association_evidence.append(
+                    {
+                        "commerceOrderRef": reference,
+                        "subjectKind": "journey",
+                        "subjectId": journey_id,
+                        "journeyVersionId": version_id,
+                        "stepId": step_id,
+                        "activityId": activity_id,
+                        "evidence": step_evidence,
+                    }
+                )
+
             values = summary.get("commerce_order_refs", [])
             if isinstance(values, str):
                 values = [values]
             if isinstance(values, list):
                 for value in values:
-                    reference = _valid_order_reference(value)
-                    if reference is None and value is not None:
-                        invalid_reference_count += 1
-                    elif reference is not None and reference not in seen_refs:
-                        seen_refs.add(reference)
-                        if len(refs) < max_order_refs:
-                            refs.append(reference)
-                        else:
-                            truncated = True
-            single = summary.get("commerce_order_ref")
-            reference = _valid_order_reference(single)
-            if reference is None and single is not None:
-                invalid_reference_count += 1
-            elif reference is not None and reference not in seen_refs:
-                seen_refs.add(reference)
-                if len(refs) < max_order_refs:
-                    refs.append(reference)
-                else:
-                    truncated = True
+                    admit_reference(value)
+            admit_reference(summary.get("commerce_order_ref"))
         if len(page) < min(500, max_steps - (scanned - len(page))):
             break
         cursor = str(page[-1].get("step_position", ""))
@@ -179,6 +233,7 @@ async def journey_commerce_operation_evidence(
         "join_basis": "explicit_journey_step_commerce_order_ref",
         "operation_links": links,
         "payment_facts": payment_facts,
+        "association_evidence": association_evidence,
         "amounts_included": True,
         "operation_link_amounts_included": False,
         "facts_are_aggregated": False,

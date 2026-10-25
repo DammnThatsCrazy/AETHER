@@ -1478,6 +1478,23 @@ policies:
     requires_consent_invalidation: true
     requires_permission_hash: false
 
+  - resource_type: profile_prediction_outputs
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
   - resource_type: behavioral_signals
     authoritative_store: postgres
     metadata_store: postgres
@@ -1938,6 +1955,23 @@ policies:
     requires_permission_hash: false
 
   - resource_type: silver_exposure_facts
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
+  - resource_type: silver_commerce_flow_facts
     authoritative_store: postgres
     metadata_store: postgres
     projection_stores: []
@@ -5936,6 +5970,23 @@ policies:
     requires_permission_hash: false
 
   - resource_type: risk_poisoning_evidence
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: risk_intervention_records
     authoritative_store: postgres
     metadata_store: postgres
     projection_stores: []

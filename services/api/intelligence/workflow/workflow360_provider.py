@@ -1,7 +1,7 @@
-"""Read-only Workflow360 projection over exact workflow-run evidence links.
+"""Read-only Workflow360 projection over registered definitions and exact run evidence.
 
-The repository does not yet have a complete workflow-definition, trigger,
-approval, or run-state authority. Exact run-linked evidence comes from
+Workflow definitions are read only from explicitly registered, tenant-owned
+definition revisions. Exact run-linked evidence comes from
 tenant-scoped ``ai_execution_facts`` and AgentExecution rows validated against
 their explicit invocation ``action_id`` links. These records can reference
 canonical Agent identities, trigger events, x402 approvals, and outcome IDs.
@@ -18,6 +18,12 @@ from typing import Any, Literal, Optional, Protocol
 from urllib.parse import quote
 
 from graph.operational_intelligence.models import EvidenceRef
+from intelligence.workflow.definitions import (
+    WorkflowDefinitionRead,
+    WorkflowDefinitionRepository,
+    WorkflowDefinitionRevision,
+    workflow_definition_evidence,
+)
 from shared.backend_interpretation.primitives import CLAIM_TYPES, OUTCOME_STATES, VALUE_STATES
 from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
@@ -50,6 +56,8 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 
 _MAX_INVOCATION_FACTS = 200
 _MAX_AGENT_EXECUTIONS = 200
+_MAX_WORKFLOW_ACTIONS = 500
+_MAX_WORKFLOW_ACTION_EDGE_SCAN = 10_000
 _MAX_TRIGGER_EVENTS = 200
 _MAX_WORKFLOW_OUTCOMES = 200
 _MAX_WORKFLOW_RISK_ASSESSMENTS = 200
@@ -108,6 +116,17 @@ class WorkflowTriggerRead:
 
 
 @dataclass(frozen=True)
+class WorkflowActionRead:
+    """Bounded execution-linked tool-call edges for one exact workflow run."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    scope_mismatch: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class WorkflowPrincipalIdentityRead:
     """Tenant USER_ID alias resolutions for execution principals/approvers."""
 
@@ -154,6 +173,10 @@ class WorkflowRiskAssessmentRead:
 class Workflow360Source(Protocol):
     """Tenant-scoped exact-ID read seam for workflow run evidence."""
 
+    async def workflow_definition(
+        self, *, tenant_id: str, workflow_id: str
+    ) -> WorkflowDefinitionRead: ...
+
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
     ) -> WorkflowRunInvocationRead: ...
@@ -170,6 +193,15 @@ class Workflow360Source(Protocol):
         execution_rows: tuple[dict[str, Any], ...],
         limit: int,
     ) -> WorkflowTriggerRead: ...
+
+    async def run_execution_actions(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowActionRead: ...
 
     async def actor_identities(
         self, *, tenant_id: str, agent_ids: set[str], limit: int
@@ -215,9 +247,22 @@ class RepositoryWorkflow360Source:
         *,
         principal_identity_repository: Any = None,
         outcome_truth_store: Any = None,
+        workflow_definition_repository: Any = None,
     ) -> None:
         self._principal_identity_repository = principal_identity_repository
         self._outcome_truth_store = outcome_truth_store
+        self._workflow_definition_repository = workflow_definition_repository
+
+    async def workflow_definition(
+        self, *, tenant_id: str, workflow_id: str
+    ) -> WorkflowDefinitionRead:
+        if not tenant_id or not workflow_id:
+            return WorkflowDefinitionRead(reason="exact_tenant_workflow_id_required")
+        try:
+            repository = self._workflow_definition_repository or WorkflowDefinitionRepository()
+            return await repository.read_latest(tenant_id, workflow_id)
+        except Exception:  # noqa: BLE001 - definition authority remains unknown
+            return WorkflowDefinitionRead(reason="workflow_definition_read_unavailable")
 
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
@@ -292,6 +337,171 @@ class RepositoryWorkflow360Source:
             True,
             complete,
             reason=None if complete else "canonical_agent_execution_read_truncated",
+        )
+
+    async def run_execution_actions(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowActionRead:
+        """Resolve only graph tool-call edges tied to admitted run executions.
+
+        These edges establish an observed tool-call lifecycle reference. They
+        do not establish a workflow definition, action authorization, tool
+        completion, an external effect, or complete action coverage.
+        """
+        if not tenant_id or not workflow_run_id:
+            return WorkflowActionRead(
+                (), False, False, reason="exact_tenant_workflow_run_scope_required"
+            )
+
+        execution_agents: dict[str, str] = {}
+        scope_mismatch = False
+        for row in execution_rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("workflow_run_id") != workflow_run_id
+            ):
+                scope_mismatch = True
+                continue
+            execution_id = _safe_identifier(row.get("execution_id"))
+            agent_id = _safe_identifier(row.get("agent_id"))
+            if execution_id is None or agent_id is None:
+                scope_mismatch = True
+                continue
+            existing_agent = execution_agents.get(execution_id)
+            if existing_agent is not None:
+                scope_mismatch = scope_mismatch or existing_agent != agent_id
+                continue
+            execution_agents[execution_id] = agent_id
+
+        if not execution_agents:
+            return WorkflowActionRead(
+                (), True, False, scope_mismatch=scope_mismatch,
+                reason=(
+                    "unscoped_or_invalid_workflow_execution_rows_dropped"
+                    if scope_mismatch
+                    else "no_admitted_run_linked_execution_for_action_join"
+                ),
+            )
+
+        try:
+            from shared.graph.graph import EdgeType, GraphClient
+
+            graph = GraphClient()
+            edges, truncated = await graph.get_edges_for_tenant(
+                tenant_id,
+                limit=_MAX_WORKFLOW_ACTION_EDGE_SCAN,
+                edge_types=[EdgeType.CALLED_TOOL],
+            )
+        except Exception:  # noqa: BLE001 - graph source diagnostics stay private
+            return WorkflowActionRead(
+                (), False, False, scope_mismatch=scope_mismatch,
+                reason="canonical_workflow_action_graph_source_unavailable",
+            )
+        if not isinstance(edges, list):
+            return WorkflowActionRead(
+                (), False, False, scope_mismatch=scope_mismatch,
+                reason="canonical_workflow_action_graph_read_invalid",
+            )
+
+        rows: list[dict[str, Any]] = []
+        for edge in edges:
+            properties = getattr(edge, "properties", None)
+            if (
+                getattr(edge, "edge_type", None) != EdgeType.CALLED_TOOL
+                or not isinstance(properties, dict)
+            ):
+                scope_mismatch = True
+                continue
+            edge_tenant_id = _safe_identifier(
+                properties.get("tenant_id") or properties.get("tenantId")
+            )
+            execution_id = _safe_identifier(properties.get("execution_id"))
+            if edge_tenant_id != tenant_id:
+                scope_mismatch = True
+                continue
+            if execution_id is None or execution_id not in execution_agents:
+                continue
+
+            expected_agent_id = execution_agents[execution_id]
+            expected_agent_vertex = f"{tenant_id}:agent:{expected_agent_id}"
+            target_vertex_id = _safe_identifier(getattr(edge, "to_vertex_id", None))
+            tool_prefix = f"{tenant_id}:tool:"
+            if (
+                getattr(edge, "from_vertex_id", None) != expected_agent_vertex
+                or target_vertex_id is None
+                or not target_vertex_id.startswith(tool_prefix)
+            ):
+                scope_mismatch = True
+                continue
+
+            tool_id = _safe_identifier(target_vertex_id[len(tool_prefix):])
+            called_at = _safe_timestamp(properties.get("called_at"))
+            event_ref = _safe_identifier(
+                properties.get("source_event_id") or properties.get("idempotency_key")
+            )
+            if tool_id is None or called_at is None or event_ref is None:
+                scope_mismatch = True
+                continue
+            try:
+                tool_vertex = await graph.get_vertex_for_tenant(tenant_id, target_vertex_id)
+            except Exception:  # noqa: BLE001 - unresolved tool identity is omitted
+                scope_mismatch = True
+                continue
+            tool_properties = getattr(tool_vertex, "properties", None)
+            if (
+                tool_vertex is None
+                or getattr(tool_vertex, "vertex_type", None) != "Tool"
+                or not isinstance(tool_properties, dict)
+                or _safe_identifier(
+                    tool_properties.get("tenant_id") or tool_properties.get("tenantId")
+                ) != tenant_id
+                or _safe_identifier(tool_properties.get("tool_id")) != tool_id
+            ):
+                scope_mismatch = True
+                continue
+
+            evidence = EvidenceRef(
+                id=event_ref,
+                type="event",
+                source="graph_edges",
+                observedAt=called_at,
+                uri=f"store://graph_edges/{quote(event_ref, safe='')}",
+            )
+            rows.append(
+                {
+                    "tenant_id": tenant_id,
+                    "workflow_run_id": workflow_run_id,
+                    "execution_id": execution_id,
+                    "agent_id": expected_agent_id,
+                    "tool_id": tool_id,
+                    "called_at": called_at,
+                    "evidence_ref": evidence.model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    ),
+                }
+            )
+
+        bounded_limit = min(max(int(limit), 1), _MAX_WORKFLOW_ACTIONS)
+        truncated = bool(truncated or len(rows) > bounded_limit)
+        rows = rows[:bounded_limit]
+        return WorkflowActionRead(
+            tuple(rows),
+            True,
+            not truncated and not scope_mismatch,
+            scope_mismatch=scope_mismatch,
+            reason=(
+                "canonical_workflow_action_graph_scope_mismatch"
+                if scope_mismatch
+                else "canonical_workflow_action_graph_read_truncated"
+                if truncated
+                else None
+            ),
         )
 
     async def run_trigger_events(
@@ -922,6 +1132,49 @@ class Workflow360Provider:
             raise ValueError("Workflow360 request and projection context scope must match")
 
         subject = request.subject
+        summary_requested = (
+            request.includeSections is None or "workflow_summary" in request.includeSections
+        )
+        definition_read = WorkflowDefinitionRead(reason="workflow_summary_slot_not_requested")
+        definition_historical = bool(
+            request.asOf is not None
+            or context.asOf is not None
+            or request.timeRange is not None
+            or request.temporalMode in {"as_of", "compare", "relative"}
+        )
+        if summary_requested and not definition_historical and subject.kind in {
+            "workflow",
+            "automation",
+            "automation_id",
+        }:
+            definition_reader = getattr(self._source, "workflow_definition", None)
+            if definition_reader is None:
+                definition_read = WorkflowDefinitionRead(
+                    reason="workflow_definition_source_unavailable"
+                )
+            else:
+                try:
+                    definition_read = await definition_reader(
+                        tenant_id=tenant_id,
+                        workflow_id=subject.id,
+                    )
+                except Exception:  # noqa: BLE001 - definition source remains unknown
+                    definition_read = WorkflowDefinitionRead(
+                        reason="workflow_definition_source_unavailable"
+                    )
+        elif summary_requested and definition_historical:
+            definition_read = WorkflowDefinitionRead(
+                reason="workflow_definition_historical_revision_read_not_supported"
+            )
+        elif summary_requested and subject.kind in _RUN_SUBJECT_KINDS:
+            definition_read = WorkflowDefinitionRead(
+                reason="workflow_run_has_no_exact_workflow_definition_id_link"
+            )
+        elif summary_requested:
+            definition_read = WorkflowDefinitionRead(
+                reason="workflow_definition_subject_kind_not_supported"
+            )
+
         read: Optional[WorkflowRunInvocationRead] = None
         if subject.kind in _RUN_SUBJECT_KINDS:
             try:
@@ -1020,6 +1273,53 @@ class Workflow360Provider:
             for row in agent_execution_rows
             if (ref := _agent_execution_evidence(row)) is not None
         ]
+        actions_requested = (
+            request.includeSections is None or "actions" in request.includeSections
+        )
+        historical_action_scope = bool(
+            request.asOf is not None
+            or context.asOf is not None
+            or request.temporalMode in {"as_of", "compare", "relative"}
+        )
+        if not actions_requested:
+            action_read = WorkflowActionRead(
+                (), False, False, reason="workflow_action_slot_not_requested"
+            )
+        elif historical_action_scope:
+            action_read = WorkflowActionRead(
+                (), False, False, reason="workflow_action_historical_state_unavailable"
+            )
+        elif subject.kind not in _RUN_SUBJECT_KINDS:
+            action_read = WorkflowActionRead(
+                (), False, False, reason="subject_kind_not_supported_by_workflow_run_evidence"
+            )
+        elif not agent_execution_rows:
+            action_read = WorkflowActionRead(
+                (), False, False,
+                reason=(
+                    _safe_reason(agent_execution_read.reason)
+                    or "no_admitted_run_linked_execution_for_action_join"
+                ),
+            )
+        else:
+            action_reader = getattr(self._source, "run_execution_actions", None)
+            if action_reader is None:
+                action_read = WorkflowActionRead(
+                    (), False, False, reason="canonical_workflow_action_source_unavailable"
+                )
+            else:
+                try:
+                    action_read = await action_reader(
+                        tenant_id=tenant_id,
+                        workflow_run_id=subject.id,
+                        execution_rows=tuple(agent_execution_rows),
+                        limit=_MAX_WORKFLOW_ACTIONS,
+                    )
+                except Exception:  # noqa: BLE001 - graph source details stay private
+                    action_read = WorkflowActionRead(
+                        (), False, False,
+                        reason="canonical_workflow_action_source_unavailable",
+                    )
         historical_trigger_scope = bool(
             request.asOf is not None
             or context.asOf is not None
@@ -1297,6 +1597,24 @@ class Workflow360Provider:
             historical=historical_risk_scope,
             subject_supported=subject.kind in _RUN_SUBJECT_KINDS,
         )
+        actions_section, action_claims = _workflow_actions_section(
+            subject,
+            tenant_id=tenant_id,
+            read=action_read,
+            execution_rows=agent_execution_rows,
+            execution_refs=agent_execution_refs,
+            execution_inventory_complete=agent_execution_read_complete,
+            time_range=request.timeRange,
+            requested=actions_requested,
+            historical=historical_action_scope,
+        )
+        workflow_summary_section, workflow_summary_claims = _workflow_summary_section(
+            subject,
+            tenant_id=tenant_id,
+            read=definition_read,
+            requested=summary_requested,
+            historical=definition_historical,
+        )
 
         if records and read_complete:
             run_state = "available"
@@ -1354,11 +1672,13 @@ class Workflow360Provider:
         claims.extend(actor_claims)
         claims.extend(approval_claims)
         claims.extend(agent_step_claims)
+        claims.extend(action_claims)
         claims.extend(outcome_claims)
         claims.extend(risk_claims)
+        claims.extend(workflow_summary_claims)
 
         sections: list[ProjectionSection] = [
-            _unknown_section("workflow_summary"),
+            workflow_summary_section,
             triggers_section,
             ProjectionSection(
                 id="runs",
@@ -1371,7 +1691,7 @@ class Workflow360Provider:
             actor_section,
             approvals_section,
             agent_steps_section,
-            _unknown_section("actions"),
+            actions_section,
             _failure_section(
                 subject,
                 tenant_id=tenant_id,
@@ -1409,6 +1729,147 @@ class Workflow360Provider:
         )
 
 
+def _workflow_summary_section(
+    subject: Any,
+    *,
+    tenant_id: str,
+    read: WorkflowDefinitionRead,
+    requested: bool,
+    historical: bool,
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    if not requested:
+        return _unknown_section("workflow_summary"), []
+    if historical:
+        reason = "workflow_definition_historical_revision_read_not_supported"
+        return _unknown_section_with_reason("workflow_summary", reason), []
+    if subject.kind not in {"workflow", "automation", "automation_id"}:
+        reason = (
+            "workflow_run_has_no_exact_workflow_definition_id_link"
+            if subject.kind in _RUN_SUBJECT_KINDS
+            else "workflow_definition_subject_kind_not_supported"
+        )
+        return _unknown_section_with_reason("workflow_summary", reason), []
+    if not read.available:
+        return _unknown_section_with_reason(
+            "workflow_summary", read.reason or "workflow_definition_read_unavailable"
+        ), []
+    if read.reason:
+        return _unknown_section_with_reason("workflow_summary", read.reason), []
+    if not read.rows:
+        if read.complete:
+            return (
+                ProjectionSection(
+                    id="workflow_summary",
+                    state="empty",
+                    title="Registered workflow definition",
+                    content={
+                        "state": "empty",
+                        "coverage": "complete_for_exact_workflow_id_lookup",
+                        "reason": "no_registered_workflow_definition_for_exact_id",
+                        "workflowId": subject.id,
+                        "executionState": "unknown",
+                    },
+                    canonicalAuthorityRefs=["workflow_definition_revisions"],
+                ),
+                [],
+            )
+        return _unknown_section_with_reason(
+            "workflow_summary", "workflow_definition_read_incomplete"
+        ), []
+    if len(read.rows) != 1 or not read.complete:
+        return _unknown_section_with_reason(
+            "workflow_summary", "workflow_definition_latest_revision_not_proven"
+        ), []
+
+    raw = read.rows[0]
+    if (
+        not isinstance(raw, dict)
+        or raw.get("tenant_id") != tenant_id
+        or raw.get("workflow_id") != subject.id
+    ):
+        return _unknown_section_with_reason(
+            "workflow_summary", "workflow_definition_scope_mismatch"
+        ), []
+    allowed_fields = set(WorkflowDefinitionRevision.model_fields)
+    payload = {key: value for key, value in raw.items() if key in allowed_fields}
+    try:
+        definition = WorkflowDefinitionRevision.model_validate(payload)
+    except Exception:  # noqa: BLE001 - malformed authority payload remains unknown
+        return _unknown_section_with_reason(
+            "workflow_summary", "workflow_definition_contract_invalid"
+        ), []
+    if definition.tenant_id != tenant_id or definition.workflow_id != subject.id:
+        return _unknown_section_with_reason(
+            "workflow_summary", "workflow_definition_scope_mismatch"
+        ), []
+    if (
+        raw.get("definition_digest") != definition.definition_digest
+        or raw.get("record_id") != definition.record_id
+    ):
+        return _unknown_section_with_reason(
+            "workflow_summary", "workflow_definition_digest_or_record_id_mismatch"
+        ), []
+    evidence = workflow_definition_evidence(definition)
+    if evidence is None:
+        return _unknown_section_with_reason(
+            "workflow_summary", "workflow_definition_timestamp_invalid"
+        ), []
+
+    triggers = [item.model_dump(mode="json") for item in definition.triggers]
+    steps = [item.model_dump(mode="json") for item in definition.steps]
+    content = {
+        "state": "available",
+        "coverage": "complete_for_latest_registered_revision",
+        "reason": "explicit_tenant_registered_workflow_definition_revision",
+        "workflowId": definition.workflow_id,
+        "revision": definition.revision,
+        "name": definition.name,
+        "description": definition.description,
+        "status": definition.status,
+        "definitionDigest": raw.get("definition_digest"),
+        "registeredByActorRef": definition.actor_ref,
+        "registeredAt": _safe_timestamp(definition.created_at),
+        "effectiveAt": _safe_timestamp(definition.effective_at),
+        "declaredTriggers": triggers,
+        "declaredSteps": steps,
+        "definitionHistoryCoverage": "latest_revision_only",
+        "runLinkState": "unknown",
+        "triggerExecutionState": "unknown",
+        "stepExecutionState": "unknown",
+        "externalEffectState": "unknown",
+        "evidenceRefs": [evidence.model_dump(mode="json")],
+    }
+    section = ProjectionSection(
+        id="workflow_summary",
+        state="available",
+        title="Registered workflow definition",
+        content=content,
+        canonicalAuthorityRefs=["workflow_definition_revisions"],
+    )
+    claim = ClaimEnvelope(
+        id=f"workflow360:definition:{definition.record_id}",
+        kind="registered_workflow_definition_revision",
+        subject=subject,
+        evidenceRefs=[evidence],
+        claims=[
+            "A tenant-scoped workflow definition revision is explicitly registered; the record does not establish that its triggers or steps executed."
+        ],
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["workflow_summary", "evidence_trace"],
+    )
+    return section, [claim]
+
+
+def _unknown_section_with_reason(slot_id: str, reason: str) -> ProjectionSection:
+    return ProjectionSection(
+        id=slot_id,
+        state="unknown",
+        title=slot_id.replace("_", " ").title(),
+        content={"state": "unknown", "reasonCode": _safe_reason(reason) or "authority_read_unknown"},
+        warnings=[_safe_reason(reason) or "authority_read_unknown"],
+    )
+
+
 def _unknown_section(slot_id: str) -> ProjectionSection:
     reasons = {
         "workflow_summary": "canonical_workflow_definition_authority_not_available",
@@ -1427,6 +1888,236 @@ def _unknown_section(slot_id: str) -> ProjectionSection:
         title=slot_id.replace("_", " ").title(),
         content={"state": "unknown", "reasonCode": reason},
         warnings=[reason],
+    )
+
+
+def _workflow_actions_section(
+    subject: Any,
+    *,
+    tenant_id: str,
+    read: WorkflowActionRead,
+    execution_rows: list[dict[str, Any]],
+    execution_refs: list[EvidenceRef],
+    execution_inventory_complete: bool,
+    time_range: Any,
+    requested: bool,
+    historical: bool,
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Project exact observed tool-call edges without upgrading them to effects."""
+    reason = (
+        "workflow_action_slot_not_requested"
+        if not requested
+        else "workflow_action_historical_state_unavailable"
+        if historical
+        else _safe_reason(read.reason)
+    )
+    if subject.kind not in _RUN_SUBJECT_KINDS:
+        reason = "subject_kind_not_supported_by_workflow_run_evidence"
+    if not requested or historical or subject.kind not in _RUN_SUBJECT_KINDS or not read.available:
+        reason = reason or "canonical_workflow_action_source_unavailable"
+        return (
+            ProjectionSection(
+                id="actions",
+                state="unknown",
+                title="Observed workflow actions",
+                content={
+                    "state": "unknown",
+                    "coverage": "unknown",
+                    "reasonCode": reason,
+                    "workflowDefinitionState": "unknown",
+                    "actionProducerCoverage": "unknown",
+                    "freshness": {
+                        "state": "unknown",
+                        "thresholdSeconds": None,
+                        "reasonCode": "workflow_action_freshness_threshold_not_configured",
+                    },
+                },
+                warnings=[reason],
+            ),
+            [],
+        )
+
+    execution_by_id: dict[str, dict[str, Any]] = {}
+    for row in execution_rows:
+        execution_id = _safe_identifier(row.get("execution_id"))
+        if (
+            row.get("tenant_id") != tenant_id
+            or row.get("workflow_run_id") != subject.id
+            or execution_id is None
+            or execution_id in execution_by_id
+        ):
+            reason = "workflow_action_execution_join_incomplete"
+            continue
+        execution_by_id[execution_id] = row
+    execution_ref_by_id = {
+        ref.id: ref
+        for ref in execution_refs
+        if ref.source == _AGENT_EXECUTION_SOURCE and ref.id in execution_by_id
+    }
+
+    lower_raw = getattr(time_range, "from_", None) if time_range else None
+    upper_raw = getattr(time_range, "to", None) if time_range else None
+    lower = _parse_timestamp(lower_raw) if lower_raw is not None else None
+    upper = _parse_timestamp(upper_raw) if upper_raw is not None else None
+    invalid_window = bool(
+        time_range is not None
+        and (
+            (lower_raw is not None and lower is None)
+            or (upper_raw is not None and upper is None)
+            or (lower is not None and upper is not None and upper < lower)
+        )
+    )
+    if invalid_window:
+        reason = "workflow_action_time_range_invalid"
+        return (
+            ProjectionSection(
+                id="actions",
+                state="unknown",
+                title="Observed workflow actions",
+                content={
+                    "state": "unknown",
+                    "coverage": "unknown",
+                    "reasonCode": reason,
+                    "workflowDefinitionState": "unknown",
+                    "actionProducerCoverage": "unknown",
+                    "freshness": {
+                        "state": "unknown",
+                        "thresholdSeconds": None,
+                        "reasonCode": "workflow_action_freshness_threshold_not_configured",
+                    },
+                },
+                warnings=[reason],
+            ),
+            [],
+        )
+
+    actions: list[dict[str, Any]] = []
+    claims: list[ClaimEnvelope] = []
+    invalid_rows = False
+    filtered_by_time_range = False
+    raw_rows = read.rows if isinstance(read.rows, (tuple, list)) else ()
+    if not isinstance(read.rows, (tuple, list)):
+        invalid_rows = True
+    for raw in raw_rows:
+        execution_id = _safe_identifier(raw.get("execution_id")) if isinstance(raw, dict) else None
+        tool_id = _safe_identifier(raw.get("tool_id")) if isinstance(raw, dict) else None
+        called_at = _safe_timestamp(raw.get("called_at")) if isinstance(raw, dict) else None
+        raw_evidence = raw.get("evidence_ref") if isinstance(raw, dict) else None
+        if (
+            not isinstance(raw, dict)
+            or raw.get("tenant_id") != tenant_id
+            or raw.get("workflow_run_id") != subject.id
+            or execution_id is None
+            or execution_id not in execution_by_id
+            or tool_id is None
+            or called_at is None
+        ):
+            invalid_rows = True
+            continue
+        execution_evidence = execution_ref_by_id.get(execution_id)
+        try:
+            action_evidence = EvidenceRef.model_validate(raw_evidence)
+        except Exception:  # noqa: BLE001 - malformed source evidence is omitted
+            action_evidence = None
+        if (
+            execution_evidence is None
+            or action_evidence is None
+            or action_evidence.source != "graph_edges"
+            or _safe_identifier(action_evidence.id) is None
+            or _safe_timestamp(action_evidence.observedAt) != called_at
+        ):
+            invalid_rows = True
+            continue
+
+        called_at_instant = _parse_timestamp(called_at)
+        if (
+            lower is not None
+            and called_at_instant is not None
+            and called_at_instant < lower
+        ) or (
+            upper is not None
+            and called_at_instant is not None
+            and called_at_instant > upper
+        ):
+            filtered_by_time_range = True
+            continue
+
+        evidence_refs = [action_evidence, execution_evidence]
+        actions.append(
+            {
+                "executionId": execution_id,
+                "toolId": tool_id,
+                "calledAt": called_at,
+                "observationKind": "tenant_scoped_execution_linked_tool_call_edge",
+                "operationState": "call_observed_external_effect_unknown",
+                "authorityDecision": "not_established_by_tool_call_edge",
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                    for ref in evidence_refs
+                ],
+            }
+        )
+        claims.append(
+            ClaimEnvelope(
+                id=f"workflow360.tool_call.{action_evidence.id}",
+                kind="workflow_run_tool_invocation_observed",
+                subject=subject,
+                evidenceRefs=evidence_refs,
+                claims=[
+                    "A tenant-scoped CALLED_TOOL graph edge references an admitted execution linked to this workflow run; the edge does not establish action authorization, tool completion, or an external effect."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["actions", "evidence_trace"],
+            )
+        )
+
+    source_incomplete = bool(
+        not read.complete or read.scope_mismatch or invalid_rows or not execution_inventory_complete
+    )
+    state = "degraded" if source_incomplete and actions else "available" if actions else "unknown"
+    reason = (
+        "workflow_action_source_or_execution_inventory_incomplete"
+        if source_incomplete
+        else "no_tool_call_edge_in_requested_time_range"
+        if filtered_by_time_range
+        else "no_exact_execution_linked_tool_call_edges_observed"
+        if not actions
+        else reason
+    )
+    latest_observed_at = max((item["calledAt"] for item in actions), default=None)
+    content = {
+        "state": state,
+        "coverage": "partial" if actions else "unknown",
+        "reasonCode": reason,
+        "tenantId": tenant_id,
+        "subject": {"kind": subject.kind, "id": subject.id},
+        "source": "graph_edges",
+        "evidenceScope": "CALLED_TOOL edges joined to exact admitted tenant and workflow-run execution IDs",
+        "actions": actions,
+        "observedCount": len(actions),
+        "executionInventoryReadComplete": execution_inventory_complete,
+        "actionEdgeReadComplete": read.complete and not read.scope_mismatch and not invalid_rows,
+        "workflowDefinitionState": "unknown",
+        "actionProducerCoverage": "unknown",
+        "authorizationState": "not_established_by_tool_call_edge",
+        "externalEffectState": "unknown",
+        "freshness": {
+            "state": "unknown",
+            "latestReturnedObservedAt": latest_observed_at,
+            "thresholdSeconds": None,
+            "reasonCode": "workflow_action_freshness_threshold_not_configured",
+        },
+    }
+    return (
+        ProjectionSection(
+            id="actions",
+            state=state,
+            title="Observed workflow actions",
+            content=content,
+            warnings=[reason] if reason else None,
+            canonicalAuthorityRefs=["agent_executions", "graph_edges"] if actions else None,
+        ),
+        claims,
     )
 
 
@@ -3375,10 +4066,12 @@ __all__ = [
     "PROJECTION_ID",
     "RepositoryWorkflow360Source",
     "Workflow360Provider",
+    "WorkflowDefinitionRead",
     "WorkflowAgentIdentityRead",
     "WorkflowApprovalRead",
     "WorkflowPrincipalIdentityRead",
     "Workflow360Source",
+    "WorkflowActionRead",
     "WorkflowOutcomeRead",
     "WorkflowRunInvocationRead",
     "register_provider",

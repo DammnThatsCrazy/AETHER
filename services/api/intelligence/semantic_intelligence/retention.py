@@ -41,6 +41,9 @@ _SILVER_TABLES = (
     "silver_semantic_observations",
     "silver_sentiment_observations",
     "semantic_memory_records",
+    "semantic_context_cards",
+    "semantic_embedding_metadata",
+    "workflow_definition_revisions",
 )
 _GOLD_TABLES = ("gold_entity_semantic_state", "gold_entity_sentiment_state")
 

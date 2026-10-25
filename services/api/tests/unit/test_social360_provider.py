@@ -48,6 +48,7 @@ from services.social360.provider import (  # noqa: E402
     SocialRiskSignalRead,
     _domain_slot_ids,
 )
+from services.social360.evidence_authority import SocialEvidenceRead  # noqa: E402
 
 
 TENANT = "tenant-social-360"
@@ -74,6 +75,21 @@ class FakeSocialSource:
             truncated=len(rows) >= 500,
             reason=None if available else f"{fact_family}_source_unavailable",
         )
+
+
+class FakeSocialEvidenceAuthority:
+    def __init__(self, contagion: SocialEvidenceRead, trust: SocialEvidenceRead) -> None:
+        self.contagion = contagion
+        self.trust = trust
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+
+    async def read_social_contagion_evidence(self, tenant_id: str, subject_entity_id: str, **bounds):
+        self.calls.append(("social_contagion", tenant_id, {"subject_entity_id": subject_entity_id, **bounds}))
+        return self.contagion
+
+    async def read_trust_edge_evidence(self, tenant_id: str, subject_entity_id: str, **bounds):
+        self.calls.append(("trust_edge", tenant_id, {"subject_entity_id": subject_entity_id, **bounds}))
+        return self.trust
 
 
 class FakePopulationScopeReader:
@@ -682,6 +698,91 @@ async def test_denied_consent_suppresses_without_reading_social_facts():
 
 
 @pytest.mark.asyncio
+async def test_social_contagion_and_trust_sections_keep_claim_ceiling_and_exact_scope():
+    contagion = {
+        "record_id": "contagion-record-1",
+        "tenant_id": TENANT,
+        "assertion_kind": "social_contagion",
+        "subject_entity_id": "entity-a",
+        "source_entity_id": "entity-source",
+        "target_entity_id": "entity-a",
+        "path_entity_ids": ["entity-source", "entity-middle", "entity-a"],
+        "source_id": "connector:network-a",
+        "source_observation_id": "observation-1",
+        "source_revision_id": "revision-1",
+        "source_event_id": "source-event-1",
+        "observed_at": "2026-10-24T10:00:00Z",
+        "effective_at": "2026-10-24T10:00:00Z",
+        "recorded_at": "2026-10-24T10:01:00Z",
+        "actor_id": "operator-1",
+        "actor_type": "tenant_user",
+        "path_evidence_refs": [
+            {"id": "edge-1", "type": "relationship", "source": "relationship_facts"}
+        ],
+        "source_evidence_refs": [
+            {"id": "source-event-1", "type": "event", "source": "bronze_observation"}
+        ],
+        "risk_evidence_refs": [
+            {"id": "risk-1", "type": "model_output", "source": "risk_signals:model"}
+        ],
+        "source_trust_classification": "unverified_ingress",
+        "claim_state": "correlated",
+        "causal_status": "unverified",
+        "policy_state": "unknown",
+    }
+    trust = {
+        "record_id": "trust-record-1",
+        "tenant_id": TENANT,
+        "assertion_kind": "trust_edge",
+        "subject_entity_id": "entity-a",
+        "source_entity_id": "entity-source",
+        "target_entity_id": "entity-a",
+        "source_id": "aether.operator:operator-1",
+        "source_observation_id": "manual-observation-1",
+        "source_revision_id": "manual-revision-1",
+        "source_event_id": "manual-event-1",
+        "observed_at": "2026-10-24T10:00:00Z",
+        "effective_at": "2026-10-24T10:00:00Z",
+        "recorded_at": "2026-10-24T10:01:00Z",
+        "actor_id": "operator-1",
+        "actor_type": "tenant_user",
+        "policy_evidence_refs": [
+            {"id": "grant-1", "type": "annotation", "source": "authenticated_tenant_permission"}
+        ],
+        "risk_evidence_refs": [],
+        "assertion_state": "operator_asserted",
+        "risk_signal_ids": [],
+    }
+    authority = FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT, "entity-a", (contagion,)),
+        SocialEvidenceRead(TENANT, "entity-a", (trust,)),
+    )
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_evidence_authority=authority,
+    ).project(
+        _request(include_sections=["social_contagion", "trust_edges"]),
+        _context(),
+    )
+
+    contagion_section = next(section for section in result.sections if section.id == "social_contagion")
+    trust_section = next(section for section in result.sections if section.id == "trust_edges")
+    assert contagion_section.state == "available"
+    assert contagion_section.content["causalContagionEstablished"] is False
+    assert contagion_section.content["items"][0]["claimState"] == "correlated"
+    assert contagion_section.content["items"][0]["sourceTrustClassification"] == "unverified_ingress"
+    assert trust_section.state == "available"
+    assert trust_section.content["trustScoreInferred"] is False
+    assert trust_section.content["items"][0]["assertionState"] == "operator_asserted"
+    assert {claim.kind for claim in result.claims} == {
+        "social_contagion_source_report",
+        "social_trust_edge_operator_assertion",
+    }
+    assert all(claim.claimState.value in {"correlated", "observed"} for claim in result.claims)
+
+
+@pytest.mark.asyncio
 async def test_relationship_requires_consent_for_both_entities():
     source = FakeSocialSource()
     checked: list[str] = []
@@ -739,7 +840,9 @@ async def test_unavailable_identity_source_is_degraded_and_does_not_join_partial
     assert all(
         section.state == "degraded"
         for section_id, section in sections.items()
-        if section_id not in {"paths", "propagation", "influence", "syndicates"}
+        if section_id not in {
+            "paths", "propagation", "influence", "syndicates", "social_contagion", "trust_edges"
+        }
     )
     assert sections["paths"].state == "unknown"
     assert sections["propagation"].state == "unknown"
@@ -968,7 +1071,10 @@ async def test_population_truncation_empty_membership_and_historical_scope_are_e
     assert {
         section.state
         for section in empty.sections
-        if section.id not in {"paths", "propagation", "influence", "syndicates", "risk_edges"}
+        if section.id not in {
+            "paths", "propagation", "influence", "syndicates", "risk_edges",
+            "social_contagion", "trust_edges",
+        }
     } == {"empty"}
     assert next(section for section in empty.sections if section.id == "paths").state == "unknown"
     assert next(section for section in empty.sections if section.id == "influence").state == "unknown"

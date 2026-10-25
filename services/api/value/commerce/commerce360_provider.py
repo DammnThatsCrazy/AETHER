@@ -8,8 +8,9 @@ authority. Exact product/offer catalog records contribute lifecycle evidence to
 the availability/price slot, but do not establish inventory availability or
 offer price. Explicit intent declarations are read from their own append-only,
 tenant-scoped authority and joined only to canonical product and offer IDs.
-Exposure and cart/checkout slots stay explicitly unknown until their canonical
-authorities and exact subject joins exist. Risk360 signals and assessments can
+Accepted Silver exposure and cart/checkout observations join only after an
+exact tenant catalog key resolves; they do not prove a purchase or current cart
+state. Risk360 signals and assessments can
 be joined for current product/offer subjects only after an exact tenant-scoped
 catalog record resolves; other commerce subject kinds, historical risk reads,
 complete risk history, policy disposition, freshness, and causal validity remain
@@ -47,6 +48,7 @@ from value.commerce.commerce_intents import (
     CommerceIntentRecord,
     CommerceIntentRepository,
 )
+from value.commerce.observed_events import RepositoryCommerceObservedEventSource
 
 
 PROJECTION_ID = "commerce360"
@@ -118,6 +120,11 @@ _AVAILABILITY_UNKNOWN = "commerce_inventory_authority_not_connected"
 _OFFER_PRICE_UNKNOWN = "commerce_offer_price_authority_not_connected"
 _AVAILABILITY_PRICE_PARTIAL = "commerce_availability_price_authority_not_connected"
 _MAX_INTENT_RECORDS = 500
+_OBSERVATION_SLOTS = ("exposures", "cart_checkout")
+_OBSERVATION_TABLES = {
+    "exposures": "silver_exposure_facts",
+    "cart_checkout": "silver_commerce_flow_facts",
+}
 
 
 class CommerceOperationEvidenceSource(Protocol):
@@ -171,6 +178,21 @@ class CommerceRiskEvidenceSource(Protocol):
         assessment_limit: int,
     ) -> dict[str, Any]:
         """Return risk records for exactly one tenant and typed subject."""
+
+
+class CommerceObservedEventEvidenceSource(Protocol):
+    """Read bounded source events for an exact canonical catalog key."""
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        slot: str,
+        as_of: str,
+        historical: bool,
+    ) -> dict[str, Any]:
+        """Return accepted event observations without raw payloads."""
 
 
 class RepositoryCommerceRiskEvidenceSource:
@@ -739,6 +761,7 @@ class Commerce360Provider:
         catalog_source: Optional[CommerceProductOfferCatalogEvidenceSource] = None,
         intent_source: Optional[CommerceIntentEvidenceSource] = None,
         risk_source: Optional[CommerceRiskEvidenceSource] = None,
+        observed_event_source: Optional[CommerceObservedEventEvidenceSource] = None,
     ) -> None:
         self._source = source if source is not None else RepositoryCommerceOperationEvidenceSource()
         self._catalog_source = catalog_source
@@ -746,6 +769,9 @@ class Commerce360Provider:
             self._catalog_source = RepositoryCommerceProductOfferCatalogEvidenceSource()
         self._intent_source = intent_source or RepositoryCommerceIntentEvidenceSource()
         self._risk_source = risk_source or RepositoryCommerceRiskEvidenceSource()
+        self._observed_event_source = (
+            observed_event_source or RepositoryCommerceObservedEventSource()
+        )
 
     async def project(
         self,
@@ -815,6 +841,45 @@ class Commerce360Provider:
         catalog = self._validate_catalog_result(catalog_raw, request, as_of=requested_as_of)
         section_states.update(self._catalog_section_states(catalog, request.subject.kind))
 
+        observations: dict[str, dict[str, Any]] = {}
+        canonical_catalog_subject = self._catalog_subject_is_canonical(
+            request.subject.kind, request.subject.id, catalog
+        )
+        for slot in _OBSERVATION_SLOTS:
+            if (
+                request.includeSections is not None
+                and slot not in request.includeSections
+                and "evidence_trace" not in request.includeSections
+            ):
+                observation_raw = self._unknown_observation_result(
+                    request, slot, reason="commerce_observation_slot_not_requested"
+                )
+            elif not scope_valid:
+                observation_raw = self._unknown_observation_result(
+                    request, slot, reason="commerce_projection_context_scope_mismatch"
+                )
+            elif not canonical_catalog_subject:
+                observation_raw = self._unknown_observation_result(
+                    request, slot, reason="commerce_observation_requires_canonical_catalog_key"
+                )
+            else:
+                try:
+                    observation_raw = await self._observed_event_source.read(
+                        request.tenantId,
+                        request.subject,
+                        slot=slot,
+                        as_of=requested_as_of,
+                        historical=(request.asOf is not None or request.temporalMode == "as_of"),
+                    )
+                except Exception:  # noqa: BLE001 - isolate a Silver read failure
+                    observation_raw = self._unknown_observation_result(
+                        request, slot, reason="commerce_observation_source_unavailable"
+                    )
+            observations[slot] = self._validate_observation_result(
+                observation_raw, request, slot=slot, as_of=requested_as_of
+            )
+            section_states[slot] = observations[slot]["sourceState"]
+
         if scope_valid:
             try:
                 intent_raw = await self._intent_source.read(
@@ -834,6 +899,10 @@ class Commerce360Provider:
         section_states["intent"] = intents.get("sourceState", "unknown")
         if intents.get("records") and section_states.get("evidence_trace") in {"empty", "unknown"}:
             section_states["evidence_trace"] = "available"
+        if any(observations[slot]["records"] for slot in _OBSERVATION_SLOTS) and (
+            section_states.get("evidence_trace") in {"empty", "unknown"}
+        ):
+            section_states["evidence_trace"] = "degraded"
 
         risk_requested = request.includeSections is None or "risk" in request.includeSections
         has_canonical_risk_subject = self._catalog_subject_is_canonical(
@@ -894,10 +963,13 @@ class Commerce360Provider:
             catalog,
             intents,
             risk,
+            observations,
             section_states,
             as_of=requested_as_of,
         )
-        claims = self._build_claims(request, evidence, catalog, intents, risk, section_states)
+        claims = self._build_claims(
+            request, evidence, catalog, intents, risk, observations, section_states
+        )
         if request.includeSections is not None:
             include = set(request.includeSections)
             sections = [section for section in sections if section.id in include]
@@ -963,6 +1035,127 @@ class Commerce360Provider:
             "reason": reason,
             "product": None,
             "offers": [],
+        }
+
+    @staticmethod
+    def _unknown_observation_result(
+        request: ProjectionRequest, slot: str, *, reason: str
+    ) -> dict[str, Any]:
+        return {
+            "_scope": {
+                "tenantId": request.tenantId,
+                "subjectKind": request.subject.kind,
+                "subjectId": request.subject.id,
+            },
+            "slot": slot,
+            "sourceState": "unknown",
+            "reason": reason,
+            "records": [],
+            "sourceCompleteness": "unknown",
+            "truncated": False,
+            "authorityRefs": [
+                "commerce_product_offer_graph",
+                _OBSERVATION_TABLES[slot],
+                "source_provenance",
+            ],
+        }
+
+    def _validate_observation_result(
+        self,
+        raw: Any,
+        request: ProjectionRequest,
+        *,
+        slot: str,
+        as_of: str,
+    ) -> dict[str, Any]:
+        empty = self._unknown_observation_result(
+            request, slot, reason="commerce_observation_source_scope_mismatch"
+        )
+        expected_scope = empty["_scope"]
+        if (
+            not isinstance(raw, dict)
+            or raw.get("_scope") != expected_scope
+            or raw.get("slot") != slot
+        ):
+            return empty
+        state = raw.get("sourceState")
+        if state not in {"unknown", "degraded", "available"}:
+            return {**empty, "reason": "commerce_observation_state_invalid"}
+        if state == "unknown":
+            return {**empty, "reason": _safe_text(raw.get("reason"), limit=128) or empty["reason"]}
+        if raw.get("asOf") != as_of:
+            return {**empty, "reason": "commerce_observation_as_of_scope_mismatch"}
+        authority_refs = raw.get("authorityRefs")
+        required = {
+            "commerce_product_offer_graph",
+            _OBSERVATION_TABLES[slot],
+            "source_provenance",
+        }
+        if not isinstance(authority_refs, list) or not required.issubset(
+            set(ref for ref in authority_refs if isinstance(ref, str))
+        ):
+            return {**empty, "reason": "commerce_observation_authority_refs_missing"}
+        raw_records = raw.get("records")
+        if not isinstance(raw_records, list) or len(raw_records) > 500:
+            return {**empty, "reason": "commerce_observation_records_invalid"}
+        anchor = _parse_catalog_anchor(as_of)
+        if anchor is None:
+            return {**empty, "reason": "commerce_observation_anchor_invalid"}
+        records: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        historical = request.asOf is not None or request.temporalMode == "as_of"
+        for row in raw_records:
+            if not isinstance(row, dict):
+                return {**empty, "reason": "commerce_observation_record_invalid"}
+            source_id = _safe_text(row.get("sourceEventId"), limit=512)
+            event_type = _safe_text(row.get("eventType"), limit=128)
+            occurred = _parse_catalog_anchor(row.get("occurredAt"))
+            received = _parse_catalog_anchor(row.get("receivedAt"))
+            if (
+                not source_id
+                or source_id in seen
+                or not event_type
+                or occurred is None
+                or occurred > anchor
+                or row.get("subjectKind") != request.subject.kind
+                or row.get("subjectId") != request.subject.id
+                or row.get("sourceTable") != _OBSERVATION_TABLES[slot]
+                or (received is not None and received > anchor)
+                or (historical and received is None)
+            ):
+                return {**empty, "reason": "commerce_observation_record_invalid"}
+            seen.add(source_id)
+            record = {
+                "sourceEventId": source_id,
+                "eventType": event_type,
+                "subjectKind": request.subject.kind,
+                "subjectId": request.subject.id,
+                "occurredAt": occurred.isoformat(),
+                "receivedAt": received.isoformat() if received else None,
+                "sourceTable": _OBSERVATION_TABLES[slot],
+                "consentSnapshotId": _safe_text(row.get("consentSnapshotId"), limit=512),
+            }
+            if slot == "cart_checkout":
+                if event_type not in {
+                    "cart_item_added", "cart_item_removed", "cart_updated",
+                    "checkout_started", "checkout_step_completed",
+                }:
+                    return {**empty, "reason": "commerce_observation_event_type_invalid"}
+                record["cartId"] = _safe_text(row.get("cartId"), limit=256)
+                record["checkoutId"] = _safe_text(row.get("checkoutId"), limit=256)
+            records.append(record)
+        if not records:
+            return {**empty, "reason": "no_exact_source_observation_source_coverage_unknown"}
+        return {
+            "sourceState": "degraded",
+            "reason": _safe_text(raw.get("reason"), limit=128)
+            or "source_asserted_observations_coverage_and_freshness_unknown",
+            "records": records,
+            "truncated": raw.get("truncated") is True,
+            "sourceCompleteness": (
+                "partial" if raw.get("sourceCompleteness") == "partial" else "unknown"
+            ),
+            "authorityRefs": list(authority_refs),
         }
 
     @staticmethod
@@ -1862,6 +2055,7 @@ class Commerce360Provider:
         catalog: dict[str, Any],
         intents: dict[str, Any],
         risk: dict[str, Any],
+        observations: dict[str, dict[str, Any]],
         states: dict[str, str],
         *,
         as_of: Optional[str],
@@ -1939,6 +2133,54 @@ class Commerce360Provider:
                         or "commerce_product_offer_catalog_not_fully_available"
                     )
                     content["reasonCodes"] = reason_codes
+                sections.append(
+                    ProjectionSection(
+                        id=section_id,
+                        state=state,
+                        title=section_id.replace("_", " ").title(),
+                        content=content,
+                        warnings=reason_codes or None,
+                        canonicalAuthorityRefs=authorities,
+                    )
+                )
+                continue
+            elif section_id in _OBSERVATION_SLOTS:
+                observed = observations[section_id]
+                authorities = observed.get("authorityRefs")
+                if state in {"unknown", "degraded"}:
+                    reason_codes.append(
+                        observed.get("reason") or _UNKNOWN_SLOT_REASONS[section_id]
+                    )
+                records = observed.get("records", [])
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    sourceObservedEvents=[
+                        {
+                            **record,
+                            "evidenceRefs": [
+                                EvidenceRef(
+                                    id=record["sourceEventId"],
+                                    type="event",
+                                    source=record["sourceTable"],
+                                    observedAt=record["receivedAt"] or record["occurredAt"],
+                                ).model_dump(mode="json", exclude_none=True)
+                            ],
+                        }
+                        for record in records
+                    ],
+                    sourceCompleteness=observed.get("sourceCompleteness", "unknown"),
+                    truncated=observed.get("truncated", False),
+                    freshness={"state": "unknown", "reasonCode": _SOURCE_FRESHNESS_UNKNOWN},
+                    inference={
+                        "purchase": "not_established",
+                        "currentCartState": "not_established",
+                        "exposureEffect": "not_established",
+                    },
+                    policy=policy,
+                )
                 sections.append(
                     ProjectionSection(
                         id=section_id,
@@ -2104,6 +2346,8 @@ class Commerce360Provider:
                     "commerce",
                     "payments",
                     "commerce_intent_authority",
+                    "silver_exposure_facts",
+                    "silver_commerce_flow_facts",
                     "source_provenance",
                 ]
                 intent_evidence = [
@@ -2113,6 +2357,16 @@ class Commerce360Provider:
                     [
                         *[ref.model_dump(mode="json") for ref in evidence.get("evidence", [])],
                         *[ref.model_dump(mode="json") for ref in intent_evidence],
+                        *[
+                            EvidenceRef(
+                                id=record["sourceEventId"],
+                                type="event",
+                                source=record["sourceTable"],
+                                observedAt=record["receivedAt"] or record["occurredAt"],
+                            ).model_dump(mode="json", exclude_none=True)
+                            for slot in _OBSERVATION_SLOTS
+                            for record in observations[slot].get("records", [])
+                        ],
                     ]
                 )
                 if not merged_evidence and state == "empty":
@@ -2207,6 +2461,10 @@ class Commerce360Provider:
                     reason = intents.get("reason") or _UNKNOWN_SLOT_REASONS["intent"]
                 elif section_id == "risk":
                     reason = risk.get("reason") or _UNKNOWN_SLOT_REASONS["risk"]
+                elif section_id == "evidence_trace" and any(
+                    observations[slot]["records"] for slot in _OBSERVATION_SLOTS
+                ):
+                    reason = "commerce_observation_evidence_source_coverage_unknown"
                 else:
                     reason = evidence.get("reason") or (
                         "commerce_projection_context_scope_mismatch"
@@ -2235,9 +2493,36 @@ class Commerce360Provider:
         catalog: dict[str, Any],
         intents: dict[str, Any],
         risk: dict[str, Any],
+        observations: dict[str, dict[str, Any]],
         states: dict[str, str],
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
+        for slot in _OBSERVATION_SLOTS:
+            for record in observations[slot].get("records", []):
+                reference = EvidenceRef(
+                    id=record["sourceEventId"],
+                    type="event",
+                    source=record["sourceTable"],
+                    observedAt=record["receivedAt"] or record["occurredAt"],
+                )
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id(
+                            f"commerce.{slot}",
+                            f"{request.tenantId}:{record['sourceEventId']}:{slot}",
+                        ),
+                        kind="commerce_source_observation",
+                        subject=request.subject,
+                        evidenceRefs=[reference],
+                        claims=[
+                            f"accepted source event reports {record['eventType']} for exact "
+                            f"tenant catalog {request.subject.kind} {request.subject.id}; "
+                            "purchase, current cart state, and effect are unverified"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[slot, "evidence_trace"],
+                    )
+                )
         if states.get("intent") in {"available", "degraded"}:
             for record in intents.get("records", []):
                 refs = _parse_evidence_refs(

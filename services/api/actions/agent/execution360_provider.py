@@ -1178,11 +1178,15 @@ class RepositoryExecution360Source:
 
             if subject.kind == "agent":
                 source_agent_ids = {subject.id}
+                owner_roster_truncated = False
             elif subject.kind == "entity":
-                configs = await AgentConfigRepository().list_for_owner(subject.id)
+                configs = await AgentConfigRepository().list_for_owner(
+                    subject.id, limit=_MAX_EPISODE_AGENT_SCAN + 1, tenant_id=tenant_id
+                )
+                owner_roster_truncated = len(configs) > _MAX_EPISODE_AGENT_SCAN
                 source_agent_ids = {
                     str(row.get("agent_id"))
-                    for row in configs
+                    for row in configs[:_MAX_EPISODE_AGENT_SCAN]
                     if _tenant_agent_config(row, tenant_id, row.get("agent_id"))
                     and row.get("owner_entity_id") == subject.id
                 }
@@ -1195,6 +1199,7 @@ class RepositoryExecution360Source:
                         agent_ids=(),
                     )
             elif subject.kind == "episode":
+                owner_roster_truncated = False
                 if not source_agent_ids:
                     return ExecutionRead(
                         rows=[],
@@ -1230,6 +1235,7 @@ class RepositoryExecution360Source:
                 set(identity_map) == source_agent_ids
                 and not identity_read.scope_mismatch
                 and not identity_read.truncated
+                and not owner_roster_truncated
                 and (scope is None or scope.complete)
             )
             if not allowed_agent_ids:
@@ -1303,11 +1309,16 @@ class RepositoryExecution360Source:
                 and (scope is None or scope.complete)
             ),
             truncated=(
-                truncated or len(result) > limit or (scope is not None and not scope.complete)
+                truncated
+                or owner_roster_truncated
+                or len(result) > limit
+                or (scope is not None and not scope.complete)
             ),
             reason=(
                 "some_tenant_facts_have_unresolved_actor_binding"
                 if unresolved_actor_seen
+                else "owner_agent_roster_read_truncated"
+                if owner_roster_truncated
                 else "agent_identity_binding_incomplete"
                 if not identity_scope_complete
                 else scope.reason

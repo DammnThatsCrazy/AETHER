@@ -522,7 +522,7 @@ async def test_normalization_lineage_bounds_source_entries_and_reports_truncatio
 
 
 @pytest.mark.asyncio
-async def test_activity_density_is_exact_entity_temporal_only_and_evidence_backed():
+async def test_activity_density_without_exact_location_fact_reference_stays_unknown():
     posture = _posture(facts=_portland_facts())
     activity_reader = _FakeActivityReader(
         GeographicActivityDensityRead(
@@ -561,21 +561,12 @@ async def test_activity_density_is_exact_entity_temporal_only_and_evidence_backe
 
     slot = _sections(result)["state"].content["requiredSlots"]["activity_density"]
     assert activity_reader.calls == [(TENANT, "ent-portland", 200)]
-    assert slot["state"] == "degraded"
-    assert slot["reasonCode"] == "temporal_activity_density_not_linked_to_place"
-    assert slot["content"]["locationCorrelationState"] == "unknown"
-    assert slot["content"]["spatialDensityAsserted"] is False
-    assert slot["content"]["points"] == [
-        {
-            "dayOfWeek": "monday",
-            "hourUtc": 14,
-            "activityCount": 7,
-            "materializedAt": datetime.fromisoformat(T_RECENT).isoformat(),
-        }
-    ]
-    assert {ref["source"] for ref in slot["evidenceRefs"]} == {
-        "gold_temporal_heatmap"
-    }
+    assert slot["state"] == "unknown"
+    assert slot["reasonCode"] == (
+        "temporal_activity_density_not_linked_to_exact_location_fact"
+    )
+    assert slot["content"] is None
+    assert slot["evidenceRefs"] == []
     assert "America/Los_Angeles" not in str(slot)
     assert "Portland" not in str(slot)
     assert "8628h3cell" not in str(slot)
@@ -585,10 +576,7 @@ async def test_activity_density_is_exact_entity_temporal_only_and_evidence_backe
     assert timezone_slot["reasonCode"] == "canonical_timezone_authority_not_joined"
     assert timezone_slot["content"] is None
     assert timezone_slot["evidenceRefs"] == []
-    claim = next(claim for claim in result.claims if claim.id == "activity.temporal_density")
-    assert claim.domainSlotIds == ["activity_density"]
-    assert claim.evidenceRefs[0].source == "gold_temporal_heatmap"
-    assert "no timezone is inferred" in claim.claims[0]
+    assert not any(claim.id == "activity.temporal_density" for claim in result.claims)
 
 
 @pytest.mark.asyncio
@@ -601,6 +589,7 @@ async def test_activity_density_drops_foreign_rows_and_marks_partial_coverage():
                     "tenant_id": TENANT,
                     "entity_id": "ent-portland",
                     "dimensions": {
+                        "location_id": "loc-primary",
                         "day_of_week": "monday",
                         "hour_utc": 14,
                         "activity_count": 7,
@@ -639,7 +628,23 @@ async def test_activity_density_drops_foreign_rows_and_marks_partial_coverage():
     assert slot["reasonCode"] == "temporal_activity_density_read_incomplete"
     assert slot["content"]["pointCountComplete"] is False
     assert [point["activityCount"] for point in slot["content"]["points"]] == [7]
+    assert slot["content"]["locationCorrelationState"] == (
+        "exact_canonical_location_fact_reference"
+    )
+    assert slot["content"]["points"][0]["locationFactId"] == "loc-primary"
+    assert slot["content"]["points"][0]["locationReferenceBasis"] == "location_id"
+    assert {ref["source"] for ref in slot["evidenceRefs"]} == {
+        "gold_temporal_heatmap",
+        "location_facts",
+    }
     assert "foreign-activity" not in str(slot)
+    claim = next(claim for claim in result.claims if claim.id == "activity.temporal_density")
+    assert claim.domainSlotIds == ["activity_density"]
+    assert "loc-primary" in claim.claims[0]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "gold_temporal_heatmap",
+        "location_facts",
+    }
 
 
 @pytest.mark.asyncio

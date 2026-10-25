@@ -15,6 +15,7 @@ requested subject before projection.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from shared.temporal.instant import coerce_utc_lenient
@@ -115,6 +116,10 @@ class Identity360Source(Protocol):
         self, tenant_id: str, entity_id: str, *, limit: int
     ) -> IdentityBatchRead: ...
 
+    async def wallet_inventory_for_entity(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> IdentityBatchRead: ...
+
 
 class RepositoryIdentity360Source:
     """Adapter over existing canonical repositories; imports are lazy.
@@ -125,8 +130,9 @@ class RepositoryIdentity360Source:
     truncation; no table or truth is introduced here.
     """
 
-    def __init__(self, identity_repository: Any = None) -> None:
+    def __init__(self, identity_repository: Any = None, wallet_repository: Any = None) -> None:
         self._identity_repository = identity_repository
+        self._wallet_repository = wallet_repository
 
     def _identity_repo(self) -> Any:
         if self._identity_repository is None:
@@ -372,6 +378,38 @@ class RepositoryIdentity360Source:
             truncated=len(rows) > limit,
         )
 
+    async def wallet_inventory_for_entity(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> IdentityBatchRead:
+        """Read explicit tenant/entity wallet links without exposing addresses.
+
+        ``entity_wallets`` is the canonical link registry used by the financial
+        flow authority. A row proves that the tenant recorded a wallet link for
+        this exact owner entity; it does not prove current wallet control. The
+        extra row preserves truncation instead of turning a capped list into a
+        complete inventory claim.
+        """
+        try:
+            if self._wallet_repository is None:
+                from repositories.repos import WalletRepository
+
+                self._wallet_repository = WalletRepository()
+            rows = await self._wallet_repository.find_many(
+                filters={"tenant_id": tenant_id, "owner_entity_id": entity_id},
+                limit=limit + 1,
+            )
+        except Exception as exc:  # noqa: BLE001 - provider reports bounded degradation
+            return IdentityBatchRead(
+                available=False,
+                reason=f"entity_wallets_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list):
+            return IdentityBatchRead(
+                available=False,
+                reason="entity_wallets_invalid_response",
+            )
+        return IdentityBatchRead(rows=tuple(rows[:limit]), truncated=len(rows) > limit)
+
 
 @dataclass(frozen=True)
 class Identity360Slot:
@@ -555,6 +593,7 @@ class Identity360Provider:
         decisions_read = IdentityBatchRead()
         conflicts_read = IdentityBatchRead()
         verification_read = IdentityBatchRead()
+        wallet_inventory_read = IdentityBatchRead(reason="wallet_inventory_not_requested")
         claim_read = IdentityBatchRead()
         provider_registry_reads: dict[str, IdentityProviderRegistryRead] = {}
 
@@ -616,6 +655,19 @@ class Identity360Provider:
                     "identity_verification_evidence",
                     self._source.verification_for_entity(tenant_id, entity_id, limit=self._limit),
                 )
+            if want_wallets:
+                wallet_inventory_reader = getattr(
+                    self._source, "wallet_inventory_for_entity", None
+                )
+                if callable(wallet_inventory_reader):
+                    wallet_inventory_read = await self._safe_batch(
+                        "entity_wallets",
+                        wallet_inventory_reader(tenant_id, entity_id, limit=self._limit),
+                    )
+                else:
+                    wallet_inventory_read = IdentityBatchRead(
+                        reason="entity_wallets_authority_not_joined",
+                    )
             if want_conflicts or want_trace:
                 conflicts_read = await self._safe_batch(
                     "identity_conflicts",
@@ -663,6 +715,16 @@ class Identity360Provider:
             tenant_id,
             expected_entity_id=entity_id,
             source_field="canonical_entity_id",
+        )
+        wallet_inventory_rows, wallet_inventory_read = self._validated_rows(
+            wallet_inventory_read,
+            tenant_id,
+            expected_entity_id=entity_id,
+            source_field="owner_entity_id",
+            reason_on_mismatch="identity_wallet_inventory_subject_mismatch",
+        )
+        wallet_inventory_rows, wallet_inventory_read = self._validated_provenance_rows(
+            wallet_inventory_read, wallet_inventory_rows, "entity_wallets"
         )
 
         # For a source subject, include its exact source registry record and its
@@ -755,6 +817,43 @@ class Identity360Provider:
             )
             if ref is not None
         ]
+        wallet_inventory_items: list[dict[str, Any]] = []
+        wallet_inventory_refs: list[EvidenceRef] = []
+        for row in wallet_inventory_rows:
+            record_id = _safe_text(row.get("id"))
+            if record_id is None:
+                wallet_inventory_read = IdentityBatchRead(
+                    available=False,
+                    truncated=wallet_inventory_read.truncated,
+                    reason="entity_wallets_evidence_ref_missing",
+                )
+                wallet_inventory_items = []
+                wallet_inventory_refs = []
+                break
+            linked_at = _safe_text(row.get("linked_at"))
+            # The repository key may have been caller-supplied and can itself
+            # contain an address. Use a tenant-bound opaque record reference;
+            # never echo either the key or wallet address into the surface.
+            opaque_record_ref = "wallet-link:" + hashlib.sha256(
+                f"{tenant_id}\0{record_id}".encode("utf-8")
+            ).hexdigest()
+            evidence_ref = EvidenceRef(
+                id=opaque_record_ref,
+                type="annotation",
+                source="entity_wallets",
+                observedAt=linked_at,
+            )
+            wallet_inventory_refs.append(evidence_ref)
+            wallet_inventory_items.append(
+                {
+                    "recordRef": opaque_record_ref,
+                    "chain": _safe_text(row.get("chain")),
+                    "linkedAt": linked_at,
+                    "evidenceRef": evidence_ref.model_dump(
+                        mode="json", exclude_none=True
+                    ),
+                }
+            )
         conflict_items = [_safe_conflict(row) for row in conflict_rows]
         conflict_refs = [
             ref for ref in (_row_ref(row, "identity_conflicts") for row in conflict_rows) if ref is not None
@@ -781,6 +880,7 @@ class Identity360Provider:
                 *decision_rows,
                 *conflict_rows,
                 *verification_rows,
+                *wallet_inventory_rows,
             ]
         )
         entity_identity_known = entity_id is not None and subject_scope_known
@@ -1202,28 +1302,52 @@ class Identity360Provider:
             if item.get("sourceKind") == "sdk_wallet"
             or "wallet" in str(item.get("sourceNamespace") or "").lower()
         ]
+        wallet_inventory_coverage = _batch_coverage(
+            wallet_inventory_read, wallet_inventory_rows
+        )
+        if (
+            wallet_inventory_read.reason == "entity_wallets_authority_not_joined"
+            and not wallet_inventory_rows
+        ):
+            wallet_inventory_coverage["state"] = "unknown"
         if not want_wallets:
             wallet_state: IdentitySlotState = "unknown"
             wallet_reason = "identity_slot_not_requested"
         elif not subject_scope_known:
             wallet_state = "degraded" if warnings else "unknown"
             wallet_reason = "identity_subject_not_resolved"
+        elif wallet_inventory_read.truncated or verification_read.truncated:
+            wallet_state = "truncated"
+            wallet_reason = (
+                "wallet_inventory_read_truncated"
+                if wallet_inventory_read.truncated
+                else "wallet_proof_read_truncated"
+            )
+        elif wallet_inventory_items or wallet_verification_items:
+            # Canonical wallet links identify the recorded inventory for this
+            # exact entity; verification evidence proves control at a recorded
+            # time only. Neither source establishes current control.
+            wallet_state = "partial"
+            wallet_reason = (
+                "wallet_inventory_observed_current_control_unknown"
+                if wallet_inventory_items
+                else "wallet_ownership_proof_observed_wallet_inventory_unknown"
+            )
+            if not wallet_inventory_read.available:
+                wallet_reason = wallet_inventory_read.reason or wallet_reason
+            elif not verification_read.available:
+                wallet_reason = verification_read.reason or wallet_reason
+        elif not wallet_inventory_read.available:
+            wallet_state = "degraded"
+            wallet_reason = wallet_inventory_read.reason or "wallet_inventory_read_degraded"
         elif not verification_read.available:
             wallet_state = "degraded"
             wallet_reason = verification_read.reason or "wallet_proof_read_degraded"
-        elif verification_read.truncated:
-            wallet_state = "truncated"
-            wallet_reason = "wallet_proof_read_truncated"
-        elif wallet_verification_items:
-            # Verification evidence proves control at a point in time. It is
-            # not a wallet inventory and does not establish current control.
-            wallet_state = "partial"
-            wallet_reason = "wallet_ownership_proof_observed_current_control_unknown"
         else:
-            # An empty proof query does not establish that the entity has no
-            # wallets, so preserve unknown rather than returning an empty set.
+            # Absence from this link registry and proof table is not evidence
+            # that the subject has no wallet in other authorities.
             wallet_state = "unknown"
-            wallet_reason = "wallet_ownership_proof_not_observed_wallet_presence_unknown"
+            wallet_reason = "wallet_link_and_ownership_proof_not_observed_wallet_presence_unknown"
 
         all_refs = _dedupe_refs(
             [
@@ -1235,6 +1359,7 @@ class Identity360Provider:
                 *decision_refs,
                 *conflict_refs,
                 *verification_refs,
+                *wallet_inventory_refs,
             ]
         )
         all_reads = [
@@ -1245,6 +1370,7 @@ class Identity360Provider:
             decisions_read,
             conflicts_read,
             verification_read,
+            wallet_inventory_read,
         ]
         trace_state: IdentitySlotState
         if not subject_scope_known:
@@ -1450,25 +1576,46 @@ class Identity360Provider:
                     {
                         "state": wallet_state,
                         "observedSourceCandidates": wallet_candidates,
+                        "linkedWallets": wallet_inventory_items,
                         "ownershipProofs": wallet_verification_items,
+                        "inventoryState": (
+                            "degraded"
+                            if not wallet_inventory_read.available
+                            else "truncated"
+                            if wallet_inventory_read.truncated
+                            else "available"
+                            if wallet_inventory_items
+                            else "unknown"
+                        ),
                         "ownershipState": "unknown",
                         "currentControl": "unknown",
                         "addressIncluded": False,
                         "identifierHashIncluded": False,
-                        "authority": "identity_verification_evidence",
+                        "authorities": ["entity_wallets", "identity_verification_evidence"],
                         "coverage": {
+                            "walletInventory": _batch_coverage(
+                                wallet_inventory_read, wallet_inventory_rows
+                            )
+                            if wallet_inventory_read.reason
+                            != "entity_wallets_authority_not_joined"
+                            else wallet_inventory_coverage,
                             "verificationEvidence": _batch_coverage(
                                 verification_read, verification_rows
                             ),
+                            "linkedWalletsReturned": len(wallet_inventory_items),
                             "walletOwnershipProofsReturned": len(wallet_verification_items),
                         },
                         "limitations": [
-                            "Wallet addresses and identifier hashes are omitted.",
+                            "Wallet addresses, wallet identifiers, and identifier hashes are omitted.",
+                            "Linked-wallet records establish recorded entity associations only, not present control.",
                             "Verification proves control at the recorded time only; current control is unknown.",
                             "Source candidates do not establish ownership.",
                         ],
+                        "inventoryReason": wallet_inventory_read.reason,
                         "reason": wallet_reason,
-                        "freshness": _freshness(wallet_verification_rows),
+                        "freshness": _freshness(
+                            [*wallet_inventory_rows, *wallet_verification_rows]
+                        ),
                     }
                     if want_wallets
                     else {"state": "unknown", "reason": "identity_slot_not_requested"}
@@ -1481,13 +1628,18 @@ class Identity360Provider:
                             if item.get("sourceKind") == "sdk_wallet"
                             or "wallet" in str(item.get("sourceNamespace") or "").lower()
                         ]
+                        + wallet_inventory_refs
                         + wallet_verification_refs
                     )
                     if want_wallets
                     else ()
                 ),
                 reason=wallet_reason if want_wallets else "identity_slot_not_requested",
-                truncated=verification_read.truncated if want_wallets else False,
+                truncated=(
+                    wallet_inventory_read.truncated or verification_read.truncated
+                    if want_wallets
+                    else False
+                ),
             ),
             Identity360Slot(
                 id="policy_redactions",
@@ -2067,6 +2219,7 @@ def _freshness(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for timestamp in (
             _safe_text(row.get("updated_at"))
             or _safe_text(row.get("last_seen_at"))
+            or _safe_text(row.get("linked_at"))
             or _safe_text(row.get("verified_at"))
             or _safe_text(row.get("created_at"))
             or _safe_text(row.get("ingested_at")),

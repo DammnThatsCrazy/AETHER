@@ -1,3 +1,34 @@
+---
+title: Support360 Callback Schedule and Execution Authority
+slug: concepts/support360-callback-authority
+section: concepts
+visibility: I
+audience: [architect, dev-senior]
+status: stable
+since_version: "0.1.0"
+source_files:
+  - packages/shared/contracts/intelligence-projection-registry.json
+  - services/api/alembic/versions/20261023_support_callback_authority.py
+  - services/api/journeys/support360/callbacks.py
+  - services/api/journeys/support360/cases.py
+  - services/api/journeys/support360/provider.py
+  - services/api/journeys/support360/routes.py
+  - services/api/tests/unit/test_support360_provider.py
+  - services/api/tests/unit/test_support_callback_authority.py
+source_hashes:
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ecf5ef988f19d258a2e93d7e0f70f326aa42a8681751943675fe8ed0cc742060"
+  "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
+  "services/api/journeys/support360/callbacks.py": "sha256:ebef67295e285cdf71beee3990bcdfb8804aa78b23ee450193e6fa3732f91b84"
+  "services/api/journeys/support360/cases.py": "sha256:7ba654bcec070de5f707fc1c566cf07ec147ce2dab6b5771fec4edc555629c79"
+  "services/api/journeys/support360/provider.py": "sha256:46f9fa07f136c76d1539de7ef1ed17b449c9f52e4ce80e4dde56a8d541a08290"
+  "services/api/journeys/support360/routes.py": "sha256:eada10e0b663367781e76480b315d71d8557337d2031f661374616abf1c137f8"
+  "services/api/tests/unit/test_support360_provider.py": "sha256:4b91df59833c04f7866cfb8a4dbcc6dd2010ff19e70fb9983a43f16c79509b5a"
+  "services/api/tests/unit/test_support_callback_authority.py": "sha256:01fd2b33c2a736aff0ae359dbb739ccd068e5afb00aaac12d6e2c23bbe0cf3d1"
+canonical_owner: support@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
+
 # Support360 callback schedule and execution authority
 
 This slice adds the canonical callback schedule and observed execution-event

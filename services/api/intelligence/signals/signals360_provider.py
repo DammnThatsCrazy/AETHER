@@ -80,6 +80,19 @@ class ObservationQualityRead:
 
 
 @dataclass(frozen=True)
+class ObservationSourceAuthorityRead:
+    """Rights Authority trace bound to one exact tenant SDK observation."""
+
+    tenant_id: str
+    observation_id: str
+    trace: Optional[Any]
+    lineage_recorded: bool
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class LinkedEntity:
     """Minimal canonical entity and the evidence for its exact source join."""
 
@@ -188,6 +201,10 @@ class Signal360Source(Protocol):
         self, *, tenant_id: str, observation_id: str
     ) -> ObservationQualityRead: ...
 
+    async def observation_source_authority(
+        self, *, tenant_id: str, observation_id: str, record: dict[str, Any]
+    ) -> ObservationSourceAuthorityRead: ...
+
     async def linked_entities(
         self, *, tenant_id: str, subject_kind: str, subject_id: str
     ) -> LinkedEntitiesRead: ...
@@ -212,12 +229,16 @@ class RepositorySignal360Source:
         identity_repository: Any = None,
         campaign_touchpoints: Any = None,
         campaign_repository: Any = None,
+        rights_lineage_repository: Any = None,
+        source_authority_trace: Any = None,
     ) -> None:
         self._bronze = bronze
         self._signals = signals
         self._identity_repository = identity_repository
         self._campaign_touchpoints = campaign_touchpoints
         self._campaign_repository = campaign_repository
+        self._rights_lineage_repository = rights_lineage_repository
+        self._source_authority_trace = source_authority_trace
 
     async def entity_signals(
         self, *, tenant_id: str, entity_id: str, limit: int
@@ -323,6 +344,122 @@ class RepositorySignal360Source:
                 "canonical_observation_envelope_missing_or_mismatched",
             )
         return ObservationQualityRead(row, True, True)
+
+    async def observation_source_authority(
+        self, *, tenant_id: str, observation_id: str, record: dict[str, Any]
+    ) -> ObservationSourceAuthorityRead:
+        """Trace only explicit server-owned rights refs for this observation.
+
+        The source instance is an identity namespace, not a source ID. A rights
+        decision is eligible only when its exact observation envelope or an
+        exact tenant-scoped rights-lineage row records the reference, and the
+        canonical decision-to-grant trace agrees with every recorded ref.
+        """
+        def unknown(reason: str, *, available: bool = True) -> ObservationSourceAuthorityRead:
+            return ObservationSourceAuthorityRead(
+                tenant_id, observation_id, None, False, available, False, reason
+            )
+
+        if (
+            not _safe_identifier(tenant_id)
+            or not _safe_identifier(observation_id)
+            or not isinstance(record, dict)
+            or record.get("tenant_id") != tenant_id
+            or record.get("provider_record_id") != observation_id
+            or record.get("source") != "sdk"
+        ):
+            return unknown("exact_sdk_observation_scope_required", available=False)
+        payload = record.get("payload")
+        envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+        observation = envelope.get("observation") if isinstance(envelope, dict) else None
+        tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+        source = envelope.get("source") if isinstance(envelope, dict) else None
+        if (
+            not isinstance(observation, dict)
+            or observation.get("observation_id") != observation_id
+            or not isinstance(tenancy, dict)
+            or tenancy.get("tenant_id") != tenant_id
+            or not isinstance(source, dict)
+            or source.get("source_type") != "sdk"
+        ):
+            return unknown("canonical_sdk_observation_envelope_invalid")
+
+        rights = envelope.get("rights")
+        if rights is not None and not isinstance(rights, dict):
+            return unknown("observation_rights_references_invalid")
+        envelope_decisions = rights.get("rights_decision_refs", []) if rights else []
+        envelope_grants = rights.get("source_grant_refs", []) if rights else []
+        envelope_source_id = rights.get("source_id") if rights else None
+        if rights and (
+            not isinstance(envelope_decisions, list)
+            or not isinstance(envelope_grants, list)
+        ):
+            return unknown("observation_rights_references_invalid")
+
+        try:
+            if self._rights_lineage_repository is None:
+                from tenancy.rights_authority.repositories import RightsLineageRepository
+
+                self._rights_lineage_repository = RightsLineageRepository()
+            lineage = await self._rights_lineage_repository.get(observation_id)
+        except Exception:  # noqa: BLE001 - authority diagnostics stay private
+            return unknown("observation_rights_lineage_unavailable", available=False)
+        if lineage is not None and (
+            not isinstance(lineage, dict)
+            or lineage.get("tenant_id") != tenant_id
+            or lineage.get("artifact_id") != observation_id
+        ):
+            return unknown("observation_rights_lineage_scope_mismatch")
+
+        lineage_decisions = lineage.get("rights_decision_refs", []) if lineage else []
+        lineage_grants = lineage.get("source_grant_refs", []) if lineage else []
+        if lineage is not None and (
+            not isinstance(lineage_decisions, list)
+            or not isinstance(lineage_grants, list)
+        ):
+            return unknown("observation_rights_lineage_references_invalid")
+        if not envelope_decisions and not lineage_decisions:
+            return unknown("canonical_source_authority_reference_not_recorded")
+        if (
+            (envelope_decisions and len(envelope_decisions) != 1)
+            or (lineage_decisions and len(lineage_decisions) != 1)
+            or (envelope_grants and len(envelope_grants) != 1)
+            or (lineage_grants and len(lineage_grants) != 1)
+        ):
+            return unknown("observation_source_authority_ambiguous")
+        decision_ref = _safe_identifier((envelope_decisions or lineage_decisions)[0])
+        grant_ref = _safe_identifier((envelope_grants or lineage_grants)[0]) if (envelope_grants or lineage_grants) else None
+        if (
+            not decision_ref
+            or not decision_ref.startswith("rdec_")
+            or (envelope_decisions and lineage_decisions and envelope_decisions != lineage_decisions)
+            or (envelope_grants and lineage_grants and envelope_grants != lineage_grants)
+            or (lineage and lineage.get("effective_rights_decision_ref") not in (None, decision_ref))
+        ):
+            return unknown("observation_source_authority_references_mismatch")
+        try:
+            if self._source_authority_trace is None:
+                from tenancy.rights_authority.source_lineage import trace_source_authority
+
+                self._source_authority_trace = trace_source_authority
+            trace = await self._source_authority_trace(decision_ref, tenant_id=tenant_id)
+        except Exception:  # noqa: BLE001 - authority diagnostics stay private
+            return unknown("observation_source_authority_trace_unavailable", available=False)
+        if (
+            trace is None
+            or getattr(trace, "tenant_id", None) != tenant_id
+            or getattr(trace, "rights_decision_ref", None) != decision_ref
+            or not _safe_identifier(getattr(trace, "source_id", None))
+            or not _safe_identifier(getattr(trace, "source_grant_ref", None))
+            or not _safe_identifier(getattr(trace, "provider_identity", None))
+            or getattr(trace, "source_relationship", None) != source.get("source_relationship")
+            or (grant_ref is not None and getattr(trace, "source_grant_ref", None) != grant_ref)
+            or (envelope_source_id is not None and getattr(trace, "source_id", None) != envelope_source_id)
+        ):
+            return unknown("observation_source_authority_trace_mismatch")
+        return ObservationSourceAuthorityRead(
+            tenant_id, observation_id, trace, lineage is not None, True, True
+        )
 
     async def linked_entities(
         self, *, tenant_id: str, subject_kind: str, subject_id: str
@@ -946,7 +1083,7 @@ class Signals360Provider(IntelligenceProjectionProvider):
 
         requested_sections = set(request.includeSections or OUTPUT_SECTIONS)
         quality_read: Optional[ObservationQualityRead] = None
-        if {"quality", "source_inventory"}.intersection(requested_sections) and request.subject.kind in {
+        if {"quality", "source_inventory", "normalization"}.intersection(requested_sections) and request.subject.kind in {
             "event",
             "observation",
         }:
@@ -986,6 +1123,33 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         False,
                         False,
                         "sdk_observation_bronze_unavailable",
+                    )
+
+        source_authority_read: Optional[ObservationSourceAuthorityRead] = None
+        if (
+            "source_inventory" in requested_sections
+            and quality_read is not None
+            and quality_read.available
+            and quality_read.complete
+            and isinstance(quality_read.record, dict)
+        ):
+            authority_reader = getattr(self._source, "observation_source_authority", None)
+            if callable(authority_reader):
+                try:
+                    source_authority_read = await authority_reader(
+                        tenant_id=tenant_id,
+                        observation_id=request.subject.id,
+                        record=quality_read.record,
+                    )
+                except Exception:  # noqa: BLE001 - source diagnostics stay private
+                    source_authority_read = ObservationSourceAuthorityRead(
+                        tenant_id,
+                        request.subject.id,
+                        None,
+                        False,
+                        False,
+                        False,
+                        "observation_source_authority_unavailable",
                     )
 
         linked_read: Optional[LinkedEntitiesRead] = None
@@ -1159,6 +1323,7 @@ class Signals360Provider(IntelligenceProjectionProvider):
                     request.subject,
                     tenant_id=tenant_id,
                     read=quality_read,
+                    authority_read=source_authority_read,
                 )
                 sections.append(source_section)
                 if source_claim is not None:
@@ -1172,6 +1337,15 @@ class Signals360Provider(IntelligenceProjectionProvider):
                 sections.append(quality_section)
                 if quality_claim is not None:
                     claims.append(quality_claim)
+            elif slot_id == "normalization":
+                normalization_section, normalization_claim = _normalization_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    read=quality_read,
+                )
+                sections.append(normalization_section)
+                if normalization_claim is not None:
+                    claims.append(normalization_claim)
             elif slot_id == "classification":
                 classification_section, classification_claim = _classification_section(
                     request.subject,
@@ -2047,13 +2221,157 @@ def _quality_section(
     return section, claim
 
 
-def _source_inventory_section(
+def _normalization_section(
     subject: ProjectionSubject,
     *,
     tenant_id: str,
     read: Optional[ObservationQualityRead],
 ) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
-    """Expose authenticated source envelope facts for one exact SDK event."""
+    """Expose the exact SDK adapter and schema recorded on a Bronze observation.
+
+    The envelope proves that the gateway accepted one normalized event. It
+    does not prove semantic correctness, complete source mapping, or producer
+    coverage, so the slot remains degraded even with a valid record.
+    """
+    reason: Optional[str] = None
+    row: Optional[dict[str, Any]] = None
+    if subject.kind not in {"event", "observation"}:
+        reason = "exact_event_or_observation_subject_required"
+    elif read is None:
+        reason = "exact_observation_normalization_read_unavailable"
+    elif not read.available or not read.complete:
+        reason = read.reason or "exact_observation_normalization_read_incomplete"
+    elif read.record is None:
+        reason = read.reason or "exact_sdk_observation_not_found"
+    elif (
+        read.record.get("tenant_id") != tenant_id
+        or read.record.get("provider_record_id") != subject.id
+        or read.record.get("source") != "sdk"
+    ):
+        reason = "sdk_observation_scope_mismatch"
+    else:
+        row = read.record
+
+    observation: Optional[dict[str, Any]] = None
+    provenance: Optional[dict[str, Any]] = None
+    temporal: Optional[dict[str, Any]] = None
+    if row is not None:
+        payload = row.get("payload")
+        envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+        observation = envelope.get("observation") if isinstance(envelope, dict) else None
+        tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+        source = envelope.get("source") if isinstance(envelope, dict) else None
+        provenance = envelope.get("provenance") if isinstance(envelope, dict) else None
+        quality = envelope.get("quality") if isinstance(envelope, dict) else None
+        temporal = envelope.get("temporal") if isinstance(envelope, dict) else None
+        from ingestion.ingestion.generated_registry import CANONICAL_EVENT_TYPES, EVENT_FAMILY
+        from ingestion.ingestion.observation_envelope import ENVELOPE_SCHEMA_VERSION
+
+        event_type = (
+            _safe_token(observation.get("observation_type"))
+            if isinstance(observation, dict)
+            else None
+        )
+        if (
+            not isinstance(observation, dict)
+            or observation.get("observation_id") != subject.id
+            or not isinstance(tenancy, dict)
+            or tenancy.get("tenant_id") != tenant_id
+            or not isinstance(source, dict)
+            or source.get("source_type") != "sdk"
+            or not isinstance(provenance, dict)
+            or provenance.get("adapter") != "sdk"
+            or not _safe_token(provenance.get("adapter_version"))
+            or not isinstance(quality, dict)
+            or quality.get("validation_state") != "gateway:accepted"
+            or observation.get("schema_version") != ENVELOPE_SCHEMA_VERSION
+            or event_type not in CANONICAL_EVENT_TYPES
+            or payload.get("event_type") != event_type
+            or observation.get("family") != EVENT_FAMILY.get(event_type)
+        ):
+            reason = "canonical_sdk_normalization_lineage_missing_or_mismatched"
+
+    if reason is not None or row is None or observation is None or provenance is None:
+        failure = reason or "canonical_observation_normalization_unavailable"
+        return (
+            ProjectionSection(
+                id="normalization",
+                state=(
+                    "degraded" if read is not None and (not read.available or not read.complete)
+                    else "unknown"
+                ),
+                title="Canonical observation normalization",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "normalizationState": "unknown",
+                    "reasonCode": failure,
+                },
+                warnings=[failure],
+                canonicalAuthorityRefs=["observations", "source_schema"],
+            ),
+            None,
+        )
+
+    observed_at = _safe_timestamp(observation.get("ingested_at") or row.get("ingested_at"))
+    evidence = EvidenceRef(
+        id=subject.id,
+        type="event",
+        source="bronze_sdk_events",
+        observedAt=observed_at,
+    )
+    section = ProjectionSection(
+        id="normalization",
+        state="degraded",
+        title="Canonical observation normalization",
+        content={
+            "tenantId": tenant_id,
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "coverage": "one_exact_tenant_scoped_sdk_observation",
+            "normalizationState": "gateway_accepted_sdk_adapter_envelope",
+            "adapter": "sdk",
+            "adapterVersion": _safe_token(provenance.get("adapter_version")),
+            "envelopeSchemaVersion": observation.get("schema_version"),
+            "eventType": observation.get("observation_type"),
+            "eventFamily": observation.get("family"),
+            "sourceTemporalQuality": (
+                _safe_token(temporal.get("temporal_quality"))
+                if isinstance(temporal, dict)
+                else None
+            ),
+            "semanticCorrectness": "unknown",
+            "producerCoverage": "unknown",
+            "freshnessSla": "unknown",
+            "evidenceRefs": [evidence.model_dump(mode="json")],
+            "reasonCode": "exact_gateway_normalization_only",
+        },
+        warnings=[
+            "adapter and schema lineage are observed; semantic correctness, producer coverage, and freshness remain unknown"
+        ],
+        canonicalAuthorityRefs=["observations", "source_schema"],
+    )
+    claim = ClaimEnvelope(
+        id=f"signals360.observation_normalization.{subject.id}",
+        kind="sdk_observation_normalization_lineage",
+        subject=subject,
+        evidenceRefs=[evidence],
+        claims=[
+            "The exact tenant-scoped SDK observation records a gateway-accepted adapter and envelope schema version."
+        ],
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["normalization"],
+    )
+    return section, claim
+
+
+def _source_inventory_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    read: Optional[ObservationQualityRead],
+    authority_read: Optional[ObservationSourceAuthorityRead],
+) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
+    """Expose one SDK event's source facts and independently traced authority."""
     reason: Optional[str] = None
     row: Optional[dict[str, Any]] = None
     if subject.kind not in {"event", "observation"}:
@@ -2128,6 +2446,58 @@ def _source_inventory_section(
         source="bronze_sdk_events",
         observedAt=observed_at,
     )
+    authority_reason = "canonical_source_authority_reader_unavailable"
+    authority: dict[str, Any] = {"state": "unknown"}
+    authority_evidence: list[EvidenceRef] = []
+    if authority_read is not None:
+        if (
+            authority_read.tenant_id != tenant_id
+            or authority_read.observation_id != subject.id
+        ):
+            authority_reason = "observation_source_authority_scope_mismatch"
+        elif authority_read.available and authority_read.complete and authority_read.trace is not None:
+            trace = authority_read.trace
+            if (
+                _safe_identifier(getattr(trace, "source_id", None))
+                and _safe_identifier(getattr(trace, "rights_decision_ref", None))
+                and _safe_identifier(getattr(trace, "source_grant_ref", None))
+                and _safe_identifier(getattr(trace, "provider_identity", None))
+                and getattr(trace, "tenant_id", None) == tenant_id
+            ):
+                authority_evidence = [
+                    EvidenceRef(
+                        id=trace.rights_decision_ref,
+                        type="document",
+                        source="rights_decisions",
+                    ),
+                    EvidenceRef(
+                        id=trace.source_grant_ref,
+                        type="document",
+                        source="data_rights_grants",
+                    ),
+                ]
+                authority = {
+                    "state": "available",
+                    "sourceId": trace.source_id,
+                    "sourceRelationship": _safe_token(trace.source_relationship),
+                    "providerIdentity": trace.provider_identity,
+                    "rightsSourceClass": _safe_token(trace.rights_source_class),
+                    "lineageRecordPresent": authority_read.lineage_recorded,
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json") for ref in authority_evidence
+                    ],
+                }
+                authority_reason = "exact_source_authority_traced_inventory_unknown"
+            else:
+                authority_reason = "observation_source_authority_trace_invalid"
+        else:
+            authority_reason = (
+                _safe_reason_code(authority_read.reason)
+                or "canonical_source_authority_unavailable"
+            )
+            if not authority_read.available:
+                authority["state"] = "degraded"
+    authority["reasonCode"] = authority_reason
     item = {
         "observationId": subject.id,
         "sourceType": source_type,
@@ -2136,8 +2506,10 @@ def _source_inventory_section(
         "adapter": adapter,
         "adapterVersion": adapter_version,
         "observedAt": observed_at,
+        "sourceAuthority": authority,
         "evidenceRefs": [evidence.model_dump(mode="json")],
     }
+    evidence_refs = [evidence, *authority_evidence]
     section = ProjectionSection(
         id="source_inventory",
         state="available",
@@ -2148,11 +2520,13 @@ def _source_inventory_section(
             "coverage": "one_exact_sdk_observation",
             "sources": [item],
             "sourceReliability": "unknown",
+            "inventoryCompleteness": "unknown",
             "reasonCode": "single_event_source_seen_no_inventory_completeness_or_reliability",
-            "evidenceRefs": [evidence.model_dump(mode="json")],
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
         },
         warnings=[
-            "only authenticated source metadata for this SDK observation is available; fleet inventory and source reliability remain unknown"
+            "one exact SDK observation is described; fleet inventory and source reliability remain unknown",
+            authority_reason,
         ],
         canonicalAuthorityRefs=["observations", "source_provenance"],
     )
@@ -2160,9 +2534,15 @@ def _source_inventory_section(
         id=f"signals360.source_inventory.{subject.id}",
         kind="authenticated_observation_source_metadata",
         subject=subject,
-        evidenceRefs=[evidence],
+        evidenceRefs=evidence_refs,
         claims=[
-            "The exact tenant SDK observation records authenticated source and adapter metadata; this does not establish source reliability or inventory completeness."
+            "The exact tenant SDK observation records authenticated source and adapter metadata."
+            + (
+                " Its recorded rights reference resolves to the same tenant's source grant."
+                if authority["state"] == "available"
+                else " Canonical source authority remains unverified."
+            )
+            + " Source reliability and fleet inventory completeness remain unknown."
         ],
         confidence=1.0,
         claimState=EpistemicStatus.OBSERVED,

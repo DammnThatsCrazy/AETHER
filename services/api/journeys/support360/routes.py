@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from governance.security.request_context import tenant_actor
 from shared.auth.auth import Permissions
 from shared.common.common import APIResponse
 from journeys.support360.cases import (
@@ -25,6 +26,20 @@ from journeys.support360.callbacks import (
     SupportCallbackIngestionService,
     SupportCallbackNotFound,
     SupportCallbackTransitionError,
+)
+from journeys.support360.assignments import (
+    SupportAgentAssignmentAuthorityError,
+    SupportAgentAssignmentEventInput,
+    SupportAgentAssignmentEventType,
+    SupportAgentAssignmentIngestionService,
+    SupportAgentAssignmentNotFound,
+)
+from journeys.support360.context_authorities import (
+    SupportCaseContextAuthorityError,
+    SupportCaseContextIngestionService,
+    SupportCaseContextNotFound,
+    SupportJourneyLinkEventInput,
+    SupportSLAEventInput,
 )
 
 router = APIRouter(prefix="/v1/support/cases", tags=["Support Cases"])
@@ -68,6 +83,38 @@ class SupportCallbackIngestBody(BaseModel):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("callback timestamps must include a timezone")
         return value
+
+
+class SupportAgentAssignmentIngestBody(BaseModel):
+    """Allow-listed assignment revision without tenant or actor claims."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    connection_id: str = Field(min_length=1, max_length=256)
+    source_assignment_id: str = Field(min_length=1, max_length=256)
+    source_revision_id: str = Field(min_length=1, max_length=256)
+    source_event_id: str = Field(min_length=1, max_length=256)
+    event_type: SupportAgentAssignmentEventType
+    agent_entity_id: str | None = Field(default=None, max_length=256)
+    previous_agent_entity_id: str | None = Field(default=None, max_length=256)
+    source_observed_at: datetime
+    effective_at: datetime
+
+    @field_validator("source_observed_at", "effective_at")
+    @classmethod
+    def _require_assignment_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("assignment timestamps must include a timezone")
+        return value
+
+
+class SupportContextIngestBody(BaseModel):
+    """Typed context event envelope without tenant or actor claims."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    connection_id: str = Field(min_length=1, max_length=256)
+    event: SupportSLAEventInput | SupportJourneyLinkEventInput
 
 
 @router.post("/ingest")
@@ -152,6 +199,137 @@ async def ingest_support_callback_event(
             "retention_expires_at": record["retention_expires_at"],
         }
     ).to_dict()
+
+
+@router.post("/{case_id}/assignments/ingest")
+async def ingest_support_agent_assignment_event(
+    case_id: str,
+    request: Request,
+    body: SupportAgentAssignmentIngestBody,
+) -> dict[str, Any]:
+    """Record one authenticated, source-observed assignment or handoff event.
+
+    Tenant and assigning-principal IDs are taken only from authenticated request
+    context. The named agent IDs are accepted only after exact canonical entity
+    resolution within that tenant and do not imply an execution or outcome.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    actor = tenant_actor(request)
+    if actor.tenant_id != tenant.tenant_id:
+        raise HTTPException(status_code=403, detail="authenticated support principal is unavailable")
+    event = SupportAgentAssignmentEventInput(
+        case_id=case_id,
+        source_assignment_id=body.source_assignment_id,
+        source_revision_id=body.source_revision_id,
+        source_event_id=body.source_event_id,
+        event_type=body.event_type,
+        agent_entity_id=body.agent_entity_id,
+        previous_agent_entity_id=body.previous_agent_entity_id,
+        source_observed_at=body.source_observed_at,
+        effective_at=body.effective_at,
+    )
+    try:
+        record = await SupportAgentAssignmentIngestionService().ingest(
+            tenant.tenant_id,
+            body.connection_id,
+            event,
+            assigning_principal_id=actor.actor_id,
+            assigning_principal_type=str(actor.actor_type),
+        )
+    except SupportAgentAssignmentNotFound as exc:
+        raise HTTPException(status_code=409, detail="exact tenant-owned support case is unavailable") from exc
+    except SupportAgentAssignmentAuthorityError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="verified provider connection and canonical tenant-owned agent are required",
+        ) from exc
+    return APIResponse(
+        data={
+            "accepted": True,
+            "assignment_event_id": record["assignment_event_id"],
+            "case_id": record["case_id"],
+            "source_assignment_id": record["source_assignment_id"],
+            "source_revision_id": record["source_revision_id"],
+            "event_type": record["event_type"],
+            "agent_entity_id": record.get("agent_entity_id"),
+            "previous_agent_entity_id": record.get("previous_agent_entity_id"),
+            "source_observed_at": record["source_observed_at"],
+            "effective_at": record["effective_at"],
+            "received_at": record["received_at"],
+        }
+    ).to_dict()
+
+
+async def _ingest_support_case_context(
+    *,
+    kind: str,
+    case_id: str,
+    request: Request,
+    body: SupportContextIngestBody,
+) -> dict[str, Any]:
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    actor = tenant_actor(request)
+    if actor.tenant_id != tenant.tenant_id:
+        raise HTTPException(status_code=403, detail="authenticated support principal is unavailable")
+    if body.event.case_id != case_id:
+        raise HTTPException(status_code=422, detail="event case_id must match the canonical route case")
+    try:
+        record = await SupportCaseContextIngestionService().ingest(
+            kind,
+            tenant.tenant_id,
+            body.connection_id,
+            body.event,
+            actor_id=actor.actor_id,
+            actor_type=str(actor.actor_type),
+        )
+    except SupportCaseContextNotFound as exc:
+        raise HTTPException(status_code=409, detail="exact tenant-owned support case is unavailable") from exc
+    except SupportCaseContextAuthorityError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="verified provider scope and canonical reference are required",
+        ) from exc
+    return APIResponse(
+        data={
+            "accepted": True,
+            "context_event_id": record["context_event_id"],
+            "case_id": record["case_id"],
+            "context_kind": record["context_kind"],
+            "event_type": record["event_type"],
+            "source_event_id": record["source_event_id"],
+            "source_observed_at": record["source_observed_at"],
+            "effective_at": record["effective_at"],
+            "received_at": record["received_at"],
+        }
+    ).to_dict()
+
+
+@router.post("/{case_id}/sla/ingest")
+async def ingest_support_case_sla_event(
+    case_id: str,
+    request: Request,
+    body: SupportContextIngestBody,
+) -> dict[str, Any]:
+    if not isinstance(body.event, SupportSLAEventInput):
+        raise HTTPException(status_code=422, detail="SLA event contract is required")
+    return await _ingest_support_case_context(
+        kind="sla", case_id=case_id, request=request, body=body
+    )
+
+
+@router.post("/{case_id}/journey-links/ingest")
+async def ingest_support_case_journey_link_event(
+    case_id: str,
+    request: Request,
+    body: SupportContextIngestBody,
+) -> dict[str, Any]:
+    if not isinstance(body.event, SupportJourneyLinkEventInput):
+        raise HTTPException(status_code=422, detail="journey link event contract is required")
+    return await _ingest_support_case_context(
+        kind="journey_links", case_id=case_id, request=request, body=body
+    )
 
 
 __all__ = ["router"]

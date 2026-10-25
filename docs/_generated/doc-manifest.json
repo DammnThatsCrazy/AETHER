@@ -1127,6 +1127,22 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/blueprints/commerce360-intent-authority.md",
+      "title": "Commerce360 Intent Authority",
+      "slug": "concepts/commerce360-intent-authority",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "commerce@aether"
+    },
+    {
       "path": "docs/architecture/blueprints/communication360.md",
       "title": "Communication360 Vertical Slice Blueprint",
       "slug": "blueprints/communication360",
@@ -1357,6 +1373,22 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/architecture/blueprints/support360-callback-authority.md",
+      "title": "Support360 Callback Schedule and Execution Authority",
+      "slug": "concepts/support360-callback-authority",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "support@aether"
     },
     {
       "path": "docs/architecture/blueprints/support360.md",

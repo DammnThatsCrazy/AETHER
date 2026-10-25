@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from config.settings import Environment, settings
 from shared.auth.auth import Permissions
 from shared.common.common import APIResponse, NotFoundError, ForbiddenError, UnauthorizedError
 from governance.security.request_context import require_kyber_operator
+from governance.security.request_context import tenant_actor
 from .service import get_semantic_service
+from .memory_authorities import (
+    SemanticContextCard,
+    SemanticContextCardRepository,
+    SemanticEmbeddingMetadata,
+    SemanticEmbeddingMetadataRepository,
+)
 
 router = APIRouter(prefix="/v1/semantic", tags=["Semantic Sentiment Intelligence"])
 kyber_router = APIRouter(
@@ -39,6 +47,36 @@ class ObservationCreate(BaseModel):
     claims: list[str] = Field(default_factory=list)
     entity_mentions: list[str] = Field(default_factory=list)
     occurred_at: str | None = Field(default=None, description="ISO 8601 source event timestamp")
+
+
+class ContextCardCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    card_id: str = Field(min_length=8, max_length=128)
+    subject_ref: str = Field(min_length=1, max_length=512)
+    card_kind: Literal["summary", "profile", "preference", "operational"]
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = Field(min_length=1, max_length=2000)
+    source_memory_ids: list[str] = Field(min_length=1, max_length=20)
+    policy_decision_ref: str = Field(min_length=1, max_length=256)
+
+
+class EmbeddingMetadataCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    embedding_id: str = Field(min_length=8, max_length=128)
+    subject_ref: str = Field(min_length=1, max_length=512)
+    card_ids: list[str] = Field(min_length=1, max_length=20)
+    provider_id: str = Field(min_length=1, max_length=128)
+    model_id: str = Field(min_length=1, max_length=128)
+    model_version: str = Field(min_length=1, max_length=128)
+    dimensions: int = Field(ge=1, le=65_536)
+    vector_store: str = Field(min_length=1, max_length=128)
+    namespace: str = Field(min_length=1, max_length=256)
+    vector_ref: str = Field(min_length=1, max_length=512)
+    producer_receipt_id: str = Field(min_length=1, max_length=256)
+    policy_decision_ref: str = Field(min_length=1, max_length=256)
+    observed_at: datetime
 
 
 def tenant_id(request: Request) -> str:
@@ -114,6 +152,46 @@ async def create_observation(body: ObservationCreate, request: Request):
             "data_freshness": "fresh",
         }
     ).to_dict()
+
+
+@router.post("/memory/cards")
+async def create_context_card(body: ContextCardCreate, request: Request):
+    """Persist an exact-memory-linked card under the authenticated tenant actor."""
+    require_write_access(request)
+    actor = tenant_actor(request)
+    if not actor.tenant_id:
+        raise UnauthorizedError("authenticated tenant required")
+    record = SemanticContextCard(
+        **body.model_dump(),
+        tenant_id=actor.tenant_id,
+        actor_ref=actor.actor_id,
+        created_at=datetime.now(timezone.utc),
+    )
+    try:
+        stored = await SemanticContextCardRepository().create(record)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return APIResponse(data=stored.model_dump(mode="json")).to_dict()
+
+
+@router.post("/memory/embeddings/metadata")
+async def create_embedding_metadata(body: EmbeddingMetadataCreate, request: Request):
+    """Persist producer-reported metadata tied to exact cards and policy."""
+    require_write_access(request)
+    actor = tenant_actor(request)
+    if not actor.tenant_id:
+        raise UnauthorizedError("authenticated tenant required")
+    record = SemanticEmbeddingMetadata(
+        **body.model_dump(),
+        tenant_id=actor.tenant_id,
+        actor_ref=actor.actor_id,
+        created_at=datetime.now(timezone.utc),
+    )
+    try:
+        stored = await SemanticEmbeddingMetadataRepository().create(record)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return APIResponse(data=stored.model_dump(mode="json")).to_dict()
 
 
 @router.get("/observations/{observation_id}")

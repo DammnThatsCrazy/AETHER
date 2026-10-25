@@ -575,6 +575,17 @@ class IdentityResolutionRepository:
 
     # ── Clusters ──────────────────────────────────────────────────────────
 
+    async def get_cluster_for_tenant(
+        self, tenant_id: str, cluster_id: str
+    ) -> Optional[dict]:
+        """Read one exact cluster without exposing a different tenant's row."""
+        row = await self._clusters.find_by_id(cluster_id)
+        if not isinstance(row, dict):
+            return None
+        if row.get("tenant_id") != tenant_id or row.get("id") != cluster_id:
+            return None
+        return row
+
     async def upsert_cluster(
         self,
         tenant_id: str,

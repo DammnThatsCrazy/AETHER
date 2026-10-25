@@ -446,6 +446,10 @@ async def predict(
             )
             raise ForbiddenError(gate.reason or "inference denied: missing consent")
         request.state.inference_policy_decision_id = gate.policy_decision_id
+        request.state.inference_policy_allowed = bool(gate.allowed)
+        request.state.inference_policy_version = getattr(
+            gate.decision, "consent_policy_version", None
+        )
     except ForbiddenError:
         raise
     except Exception as exc:  # governance is additive — never break inference on a gate error
@@ -551,6 +555,50 @@ async def predict(
             prediction["envelope"] = _prediction_envelope(
                 canonical_id, tenant.tenant_id, body.features, body.consent_purposes
             )
+
+            # Persist only explicit, fully governed future-state output. Normal
+            # inference responses today do not include the required state list,
+            # future validity interval, and exact source-event refs, so they
+            # remain ordinary model responses and never become Profile360 facts.
+            try:
+                from identity.profile.prediction_authority import (
+                    record_eligible_profile_prediction,
+                )
+
+                envelope = prediction["envelope"]
+                persisted = await record_eligible_profile_prediction(
+                    tenant_id=tenant.tenant_id,
+                    requested_subject_id=body.entity_id,
+                    model_id=canonical_id,
+                    feature_digest=envelope.get("feature_digest"),
+                    feature_schema_hash=envelope.get("feature_schema_hash"),
+                    policy_decision_id=getattr(
+                        request.state, "inference_policy_decision_id", None
+                    ),
+                    policy_version=getattr(
+                        request.state, "inference_policy_version", None
+                    ),
+                    policy_allowed=bool(
+                        getattr(request.state, "inference_policy_allowed", False)
+                    ),
+                    model_result=ml_result,
+                    cache=cache,
+                )
+                metrics.increment(
+                    "ml_profile_prediction_output",
+                    labels={"status": "stored" if persisted.stored else "skipped"},
+                )
+                if not persisted.stored:
+                    logger.debug(
+                        "Profile prediction output not admitted: model=%s reason=%s",
+                        canonical_id,
+                        persisted.reason,
+                    )
+            except Exception as exc:  # governed projection storage is additive
+                logger.debug(
+                    "Profile prediction output authority unavailable: %s",
+                    type(exc).__name__,
+                )
 
             if was_deprecated_alias:
                 prediction["deprecated_alias_used"] = body.model_name

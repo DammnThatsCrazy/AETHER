@@ -290,6 +290,7 @@ from intelligence.semantic_intelligence.routes import (
     population_router as population_semantic_router,
     router as semantic_intelligence_router,
 )
+from intelligence.workflow.routes import router as workflow_definitions_router
 from intelligence.expectations.routes import router as expectations_router
 from intelligence.behavioral.routes import router as behavioral_router
 from graph.rwa.routes import router as rwa_router
@@ -939,9 +940,13 @@ def create_app() -> FastAPI:
     app.include_router(profile_router)
     app.include_router(profile360_router)
     app.include_router(experience360_router)  # /v1/experience360 — all catalogued frame surfaces
+    from services.social360.routes import router as social360_evidence_router
+
+    app.include_router(social360_evidence_router)
     app.include_router(sdk_coverage_router)
     app.include_router(population_router)
     app.include_router(semantic_intelligence_router)
+    app.include_router(workflow_definitions_router)
     app.include_router(kyber_semantic_router)
     app.include_router(campaign_semantic_router)
     app.include_router(graph_semantic_router)

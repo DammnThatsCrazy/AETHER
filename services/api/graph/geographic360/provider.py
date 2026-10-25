@@ -77,6 +77,10 @@ from shared.contracts_models.epistemic import EpistemicStatus
 
 # Reused canonical primitives (never redefined here).
 from graph.operational_intelligence.models import EvidenceRef
+from graph.geographic360.related_authorities import (
+    GeographicRelatedAuthorityReader,
+    RepositoryGeographicRelatedAuthorityReader,
+)
 
 # Geographic360 subject kinds (registry subjectKinds).
 GEOGRAPHIC_SUBJECT_KINDS = ("entity", "population", "source")
@@ -285,6 +289,10 @@ class LocationRow:
     # Source-owned evidence identifiers from LocationFact, kept distinct from
     # the stable location-fact EvidenceRef synthesized for this projection.
     source_evidence_refs: tuple[str, ...] = ()
+    normalization_version: Optional[str] = None
+    validation_version: Optional[str] = None
+    raw_record_ref: Optional[str] = None
+    normalization_timestamp: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -329,6 +337,22 @@ class GeographicActivityDensityReader(Protocol):
     async def activity_density(
         self, *, tenant_id: str, entity_id: str, limit: int
     ) -> GeographicActivityDensityRead:
+        ...
+
+
+class GeographicTimezoneReader(Protocol):
+    """Exact source-asserted timezone lookup for one canonical location fact."""
+
+    async def timezone_for_location(
+        self,
+        *,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        location_id: str,
+        as_of: datetime,
+        historical: bool,
+    ) -> Any:
         ...
 
 
@@ -392,6 +416,36 @@ class RepositoryGeographicActivityDensityReader:
         )
 
 
+class RepositoryGeographicTimezoneReader:
+    """Read exact timezone source assertions from ``geo_temporal_graph``."""
+
+    def __init__(self, authority: Optional[Any] = None) -> None:
+        self._authority = authority
+
+    async def timezone_for_location(
+        self,
+        *,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        location_id: str,
+        as_of: datetime,
+        historical: bool,
+    ) -> Any:
+        if self._authority is None:
+            from graph.geo.temporal_timezone import geo_temporal_timezone_authority
+
+            self._authority = geo_temporal_timezone_authority
+        return await self._authority.timezone_for_location(
+            tenant_id=tenant_id,
+            subject_kind=subject_kind,
+            subject_id=subject_id,
+            location_id=location_id,
+            as_of=as_of,
+            historical=historical,
+        )
+
+
 def _row_from_stored_fact(stored: dict) -> LocationRow:
     """Map one stored ``LocationFact`` JSONB row onto the render shape.
 
@@ -448,6 +502,10 @@ def _row_from_stored_fact(stored: dict) -> LocationRow:
         provider=stored.get("provider"),
         source_observation_id=stored.get("source_observation_id"),
         schema_version=stored.get("schema_version"),
+        normalization_version=stored.get("normalization_version"),
+        validation_version=stored.get("validation_version"),
+        raw_record_ref=stored.get("raw_record_ref"),
+        normalization_timestamp=stored.get("normalization_timestamp"),
         source_evidence_refs=(
             tuple(
                 reference
@@ -730,6 +788,8 @@ class Geographic360Provider:
         reader: Optional[Geographic360Reader] = None,
         *,
         activity_reader: Optional[GeographicActivityDensityReader] = None,
+        timezone_reader: Optional[GeographicTimezoneReader] = None,
+        related_authority_reader: Optional[GeographicRelatedAuthorityReader] = None,
         render_cap: Optional[str] = RENDER_CAP_NONE,
     ) -> None:
         use_default_reader = reader is None
@@ -743,6 +803,19 @@ class Geographic360Provider:
             RepositoryGeographicActivityDensityReader()
             if use_default_reader
             else None
+        )
+        # Like the activity join, timezone I/O is only implicit on the
+        # canonical default path. Custom location readers must inject their own
+        # timezone authority, so tests and alternate deployments cannot hide
+        # reads behind a canned location view.
+        self._timezone_reader = timezone_reader or (
+            RepositoryGeographicTimezoneReader() if use_default_reader else None
+        )
+        # Cross-domain required-slot joins are implicit only for the canonical
+        # location reader path. Custom readers must inject their own governed
+        # authorities so canned location fixtures cannot conceal database reads.
+        self._related_authority_reader = related_authority_reader or (
+            RepositoryGeographicRelatedAuthorityReader() if use_default_reader else None
         )
         # Surface/tenant render cap — the exact→city→metro downgrade boundary.
         # Default: no extra cap (evidence-limited only). Never rewritten per
@@ -789,10 +862,33 @@ class Geographic360Provider:
             and context.projectionId == self.projection_id,
         )
         activity_slot, activity_claim = _activity_density_projection(
-            request, posture=posture, read=activity_read
+            request, posture=posture, rows=rows, read=activity_read
         )
         normalization_slot, normalization_claim = _normalization_lineage_projection(
             view, subject=request.subject
+        )
+        timezone_read = await self._safe_timezone(
+            request=request,
+            view=view,
+            rows=rows,
+            scope_valid=(
+                context.tenantId == tenant_id
+                and context.projectionId == self.projection_id
+            ),
+        )
+        timezone_slot, timezone_claim = _timezone_slot_projection(
+            request=request,
+            rows=rows,
+            read=timezone_read,
+        )
+        related_slots = await self._safe_related_slots(
+            request=request,
+            view=view,
+            rows=rows,
+            scope_valid=(
+                context.tenantId == tenant_id
+                and context.projectionId == self.projection_id
+            ),
         )
 
         sections = [
@@ -802,7 +898,9 @@ class Geographic360Provider:
                 view,
                 rows,
                 activity_slot,
+                timezone_slot=timezone_slot,
                 normalization_slot=normalization_slot,
+                related_slots=related_slots,
             ),
             self._timeline_section(request, view, rows),
             self._evidence_section(view),
@@ -835,6 +933,8 @@ class Geographic360Provider:
             activity_claim=activity_claim,
             normalization_claim=normalization_claim,
         )
+        if timezone_claim is not None:
+            claims.append(timezone_claim)
 
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -947,7 +1047,9 @@ class Geographic360Provider:
         rows: list[LocationRow],
         activity_density_slot: dict[str, Any],
         *,
+        timezone_slot: Optional[dict[str, Any]] = None,
         normalization_slot: Optional[dict[str, Any]] = None,
+        related_slots: Optional[dict[str, dict[str, Any]]] = None,
     ) -> ProjectionSection:
         """state — typed per-dimension state (unknown != empty != 0 != missing)."""
         posture = view.posture
@@ -1080,11 +1182,18 @@ class Geographic360Provider:
             view,
             rows,
             activity_density_slot=activity_density_slot,
+            timezone_slot=timezone_slot,
             normalization_slot=normalization_slot,
+            related_slots=related_slots,
         )
         authorities = ["locations", "context_capsules"]
         if activity_density_slot.get("evidenceRefs"):
             authorities.append("gold_temporal_heatmap")
+        authorities.append("geo_temporal_timezone_assertions")
+        for slot in (related_slots or {}).values():
+            for authority in slot.get("canonicalAuthorities", []):
+                if isinstance(authority, str) and authority not in authorities:
+                    authorities.append(authority)
         return ProjectionSection(
             id="state",
             state=worst,  # type: ignore[arg-type]
@@ -1516,6 +1625,136 @@ class Geographic360Provider:
                 reason="temporal_activity_density_source_unavailable",
             )
 
+    async def _safe_timezone(
+        self,
+        *,
+        request: ProjectionRequest,
+        view: GeographicView,
+        rows: list[LocationRow],
+        scope_valid: bool,
+    ) -> Any:
+        """Resolve an explicit zone only for the exact rendered location ID."""
+        posture = view.posture
+        if (
+            not scope_valid
+            or posture is None
+            or posture.subject_type != request.subject.kind
+            or posture.subject_id != request.subject.id
+            or self._timezone_reader is None
+        ):
+            return None
+        primary = _primary_row(rows)
+        if primary is None or primary.precision_state == STATE_SUPPRESSED:
+            return None
+        try:
+            anchor = (
+                datetime.fromisoformat(request.asOf.replace("Z", "+00:00"))
+                if request.asOf is not None
+                else datetime.now(timezone.utc)
+            )
+            if anchor.tzinfo is None:
+                return None
+            anchor = anchor.astimezone(timezone.utc)
+            read = await self._timezone_reader.timezone_for_location(
+                tenant_id=request.tenantId,
+                subject_kind=request.subject.kind,
+                subject_id=request.subject.id,
+                location_id=primary.location_id,
+                as_of=anchor,
+                historical=request.asOf is not None,
+            )
+            from graph.geo.temporal_timezone import TimezoneAssertionRead
+
+            if not isinstance(read, TimezoneAssertionRead):
+                raise TypeError("timezone authority returned an invalid contract")
+            return read
+        except Exception:  # noqa: BLE001 - source internals never escape projection
+            from graph.geo.temporal_timezone import TimezoneAssertionRead
+
+            return TimezoneAssertionRead(
+                "unknown",
+                "geo_temporal_timezone_authority_unavailable",
+                None,
+                (),
+                {"state": "unknown", "reasonCode": "geo_temporal_timezone_authority_unavailable"},
+            )
+
+    async def _safe_related_slots(
+        self,
+        *,
+        request: ProjectionRequest,
+        view: GeographicView,
+        rows: list[LocationRow],
+        scope_valid: bool,
+    ) -> dict[str, dict[str, Any]]:
+        """Read exact cross-authority links for one rendered canonical location."""
+        unknown_reasons = {
+            "campaigns": "exact_location_campaign_join_unavailable",
+            "journeys": "exact_location_journey_join_unavailable",
+            "profiles": "exact_location_profile_join_unavailable",
+            "risk": "exact_location_risk_join_unavailable",
+            "value": "exact_location_value_join_unavailable",
+        }
+        reader = self._related_authority_reader
+        posture = view.posture
+        primary = _primary_row(rows)
+        if (
+            not scope_valid
+            or posture is None
+            or posture.subject_type != request.subject.kind
+            or posture.subject_id != request.subject.id
+            or primary is None
+            or primary.precision_state == STATE_SUPPRESSED
+            or reader is None
+        ):
+            from graph.geographic360.related_authorities import _unknown
+
+            return {slot_id: _unknown(slot_id, reason) for slot_id, reason in unknown_reasons.items()}
+        if request.asOf is not None or request.timeRange is not None or request.temporalMode not in {
+            None,
+            "window",
+        }:
+            from graph.geographic360.related_authorities import _unknown
+
+            reason = (
+                "location_related_history_not_bitemporal"
+                if request.asOf is not None
+                else "location_related_window_or_comparison_coverage_unavailable"
+            )
+            return {slot_id: _unknown(slot_id, reason) for slot_id in unknown_reasons}
+        try:
+            anchor = None
+            if request.asOf is not None:
+                anchor = datetime.fromisoformat(request.asOf.replace("Z", "+00:00"))
+                if anchor.tzinfo is None or anchor.utcoffset() is None:
+                    raise ValueError("asOf must be timezone-aware")
+                anchor = anchor.astimezone(timezone.utc)
+            slots = await reader.related_slots(
+                tenant_id=request.tenantId,
+                subject_kind=request.subject.kind,
+                subject_id=request.subject.id,
+                source_observation_id=primary.source_observation_id,
+                as_of=anchor,
+            )
+            if not isinstance(slots, dict) or any(
+                key not in unknown_reasons or not isinstance(value, dict)
+                for key, value in slots.items()
+            ):
+                raise TypeError("related authority returned an invalid slot map")
+            from graph.geographic360.related_authorities import _unknown
+
+            return {
+                slot_id: slots.get(slot_id) or _unknown(slot_id, reason)
+                for slot_id, reason in unknown_reasons.items()
+            }
+        except Exception:  # noqa: BLE001 - each related authority remains fail-isolated
+            from graph.geographic360.related_authorities import _unknown
+
+            return {
+                slot_id: _unknown(slot_id, "location_related_authority_unavailable")
+                for slot_id in unknown_reasons
+            }
+
 
 # ── Content render helpers (shared by summary) ───────────────────────────────
 
@@ -1550,6 +1789,7 @@ def _activity_density_projection(
     request: ProjectionRequest,
     *,
     posture: Optional[GeographicPosture],
+    rows: list[LocationRow],
     read: Optional[GeographicActivityDensityRead],
 ) -> tuple[dict[str, Any], Optional[ClaimEnvelope]]:
     """Render exact-entity temporal bins as partial activity, never spatial density."""
@@ -1575,6 +1815,9 @@ def _activity_density_projection(
         or read is None
     ):
         return slot, None
+    primary = _primary_row(rows)
+    if primary is None:
+        return slot, None
     if not read.available:
         slot["reasonCode"] = _safe_activity_reason(read.reason)
         slot["freshness"] = {
@@ -1587,6 +1830,7 @@ def _activity_density_projection(
     points: list[dict[str, Any]] = []
     evidence_refs: list[EvidenceRef] = []
     invalid_or_unscoped = read.scope_mismatch
+    location_link_missing = False
     timestamps: list[str] = []
     for row in read.rows:
         if (
@@ -1595,6 +1839,10 @@ def _activity_density_projection(
             or row.get("entity_id") != subject.id
         ):
             invalid_or_unscoped = True
+            continue
+        location_link_basis = _exact_activity_location_reference(row, primary)
+        if location_link_basis is None:
+            location_link_missing = True
             continue
         row_id = _safe_activity_identifier(row.get("id"))
         value = row.get("value") if isinstance(row.get("value"), dict) else {}
@@ -1622,6 +1870,8 @@ def _activity_density_projection(
             timestamps.append(observed_at)
         points.append(
             {
+                "locationFactId": primary.location_id,
+                "locationReferenceBasis": location_link_basis,
                 "dayOfWeek": day_value,
                 "hourUtc": hour,
                 "activityCount": count,
@@ -1637,11 +1887,15 @@ def _activity_density_projection(
                 uri=f"store://gold_temporal_heatmap/{quote(row_id, safe='')}",
             )
         )
+    if points:
+        evidence_refs.append(_row_evidence(primary))
 
     if not points:
         slot["reasonCode"] = (
             "temporal_activity_density_rows_unusable"
             if invalid_or_unscoped
+            else "temporal_activity_density_not_linked_to_exact_location_fact"
+            if location_link_missing or read.rows
             else "temporal_activity_density_not_materialized"
         )
         return slot, None
@@ -1655,20 +1909,23 @@ def _activity_density_projection(
         slot_state = "degraded"
         reason_code = (
             "temporal_activity_density_read_incomplete"
-            if invalid_or_unscoped or not read.complete
-            else "temporal_activity_density_not_linked_to_place"
+            if invalid_or_unscoped or location_link_missing or not read.complete
+            else "temporal_activity_density_location_linked_coverage_partial"
         )
     slot = {
         "state": slot_state,
         "reasonCode": reason_code,
         "content": {
             "densityKind": "temporal_activity_by_utc_hour",
-            "scope": "exact_tenant_entity_with_recorded_location_facts",
-            "locationCorrelationState": "unknown",
+            "scope": "exact_tenant_canonical_location_fact_reference",
+            "locationCorrelationState": "exact_canonical_location_fact_reference",
             "spatialDensityAsserted": False,
             "points": points,
             "returnedPointCount": len(points),
-            "pointCountComplete": read.complete and not invalid_or_unscoped,
+            "pointCountComplete": (
+                read.complete and not invalid_or_unscoped and not location_link_missing
+            ),
+            "locationFactId": primary.location_id,
             "source": "gold_temporal_heatmap",
         },
         "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
@@ -1685,12 +1942,45 @@ def _activity_density_projection(
         subject=subject,
         evidenceRefs=evidence_refs,
         claims=[
-            "Tenant-scoped Gold temporal heatmap records provide activity counts by UTC weekday and hour for this entity; no count is assigned to a geographic place and no timezone is inferred."
+            f"Tenant-scoped Gold temporal heatmap records explicitly reference canonical location fact {primary.location_id!r} and provide activity counts by UTC weekday and hour; this is not spatial density and no timezone is inferred."
         ],
         claimState=EpistemicStatus.OBSERVED,
         domainSlotIds=["activity_density"],
     )
     return slot, claim
+
+
+def _exact_activity_location_reference(
+    row: dict[str, Any], primary: LocationRow
+) -> Optional[str]:
+    """Require an explicit location-fact or source-observation reference."""
+    dimensions = row.get("dimensions") if isinstance(row.get("dimensions"), dict) else {}
+    values = row.get("value") if isinstance(row.get("value"), dict) else {}
+    objects = (row, dimensions, values)
+    declared_location_ids = [
+        value
+        for source in objects
+        if (value := source.get("location_id")) is not None
+    ]
+    declared_observation_ids = [
+        value
+        for source in objects
+        if (value := source.get("source_observation_id")) is not None
+    ]
+    for value in declared_location_ids:
+        if _safe_activity_identifier(value) != primary.location_id:
+            return None
+    for value in declared_observation_ids:
+        if (
+            primary.source_observation_id is None
+            or _safe_activity_identifier(value) != primary.source_observation_id
+        ):
+            return None
+    if declared_location_ids:
+        return "location_id"
+    if declared_observation_ids:
+        return "source_observation_id"
+    return None
 
 
 def _safe_activity_identifier(value: Any) -> Optional[str]:
@@ -1726,12 +2016,85 @@ def _safe_activity_reason(value: Any) -> str:
     return safe
 
 
+def _timezone_slot_projection(
+    *,
+    request: ProjectionRequest,
+    rows: list[LocationRow],
+    read: Any,
+) -> tuple[dict[str, Any], Optional[ClaimEnvelope]]:
+    """Render an explicit zone assertion and temporal conversion evidence."""
+    policy = {
+        "state": "not_evaluated_by_projection_provider",
+        "reasonCode": "policy_disposition_is_owned_by_frame_runtime",
+    }
+    if read is None:
+        return (
+            {
+                "state": "unknown",
+                "reasonCode": "canonical_timezone_authority_not_joined",
+                "content": None,
+                "evidenceRefs": [],
+                "freshness": {
+                    "state": "unknown",
+                    "reasonCode": "no_exact_source_join",
+                },
+                "policy": policy,
+            },
+            None,
+        )
+
+    primary = _primary_row(rows)
+    evidence_refs: list[EvidenceRef] = []
+    if primary is not None:
+        evidence_refs.append(_row_evidence(primary))
+    evidence_refs.extend(
+        ref for ref in read.evidence_refs if isinstance(ref, EvidenceRef)
+    )
+    unique_refs = {ref.id: ref for ref in evidence_refs}
+    slot = {
+        "state": read.state,
+        "reasonCode": read.reason_code,
+        "content": read.content,
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in unique_refs.values()],
+        "freshness": read.freshness,
+        "policy": policy,
+    }
+    content = read.content if isinstance(read.content, dict) else {}
+    zone_id = content.get("timezoneId")
+    if not isinstance(zone_id, str) or not zone_id or read.state == "conflicted":
+        return slot, None
+    claim_refs = list(unique_refs.values())
+    if not claim_refs:
+        return slot, None
+    conversion = content.get("conversion") if isinstance(content.get("conversion"), dict) else {}
+    instant = conversion.get("instant") or content.get("asOf")
+    claims = [
+        f"A source explicitly asserted IANA timezone {zone_id} for canonical location fact {primary.location_id if primary else 'unknown'}; the recorded observation and effective interval include {instant}."
+    ]
+    if isinstance(conversion.get("offsetMinutes"), int):
+        claims.append(
+            f"The temporal authority computes an offset of {conversion['offsetMinutes']} minutes at that instant using tzdb {conversion.get('tzdbVersion') or 'unknown'}."
+        )
+    claim = ClaimEnvelope(
+        id=f"timezone.location_fact.{request.subject.kind}.{request.subject.id}",
+        kind="source_asserted_geographic_timezone",
+        subject=request.subject,
+        evidenceRefs=claim_refs,
+        claims=claims,
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["timezone"],
+    )
+    return slot, claim
+
+
 def _required_location_slots(
     view: GeographicView,
     rows: list[LocationRow],
     *,
     activity_density_slot: Optional[dict[str, Any]] = None,
+    timezone_slot: Optional[dict[str, Any]] = None,
     normalization_slot: Optional[dict[str, Any]] = None,
+    related_slots: Optional[dict[str, dict[str, Any]]] = None,
 ) -> dict[str, dict[str, Any]]:
     """Expose every SSOT-required slot with source-backed state and gaps."""
     posture = view.posture
@@ -1750,6 +2113,8 @@ def _required_location_slots(
         }
         for slot_id, reason in _UNSUPPORTED_SLOT_REASONS.items()
     }
+    if timezone_slot is not None:
+        slots["timezone"] = timezone_slot
 
     if posture is None:
         missing_reason = view.missing_reason or "geographic_location_read_unavailable"
@@ -1787,6 +2152,9 @@ def _required_location_slots(
         slots["activity_density"] = activity_density_slot
     if normalization_slot is not None:
         slots["normalization"] = normalization_slot
+    for slot_id, slot in (related_slots or {}).items():
+        if slot_id in {"campaigns", "journeys", "profiles", "risk", "value"}:
+            slots[slot_id] = slot
 
     primary = _primary_row(rows)
     if primary is None:
@@ -1967,13 +2335,10 @@ def _normalization_lineage_projection(
     *,
     subject: ProjectionSubject,
 ) -> tuple[dict[str, Any], Optional[ClaimEnvelope]]:
-    """Expose only exact source lineage persisted on canonical LocationFacts.
+    """Expose recorded source and transformation lineage without substitution.
 
-    The current location authority can link a fact to an upstream observation
-    and source evidence, but it does not persist the normalization/validation
-    versions or the time of that transformation. A source-linked read is
-    therefore useful but deliberately degraded; it never treats the
-    LocationFact schema version as a normalization algorithm version.
+    LocationFact schema_version is never treated as a normalizer version.
+    Missing raw-record or validation lineage remains an explicit partial gap.
     """
     policy = {
         "state": "not_evaluated_by_projection_provider",
@@ -1998,30 +2363,49 @@ def _normalization_lineage_projection(
     for row in posture.facts:
         source_observation_id = _safe_activity_identifier(row.source_observation_id)
         source_provider = _safe_activity_identifier(row.provider)
+        normalization_version = _safe_activity_identifier(row.normalization_version)
+        validation_version = _safe_activity_identifier(row.validation_version)
+        raw_record_ref = _safe_activity_identifier(row.raw_record_ref)
+        normalization_timestamp = _safe_activity_timestamp(row.normalization_timestamp)
         source_evidence_refs_all = [
             safe_ref
             for value in row.source_evidence_refs
             if (safe_ref := _safe_activity_identifier(value)) is not None
         ]
-        if not source_observation_id and not source_evidence_refs_all:
-            continue
-        linked_rows.append(
+        if not any(
             (
-                row,
-                {
-                    "locationFactId": _safe_activity_identifier(row.location_id),
-                    "sourceLinkState": "linked",
-                    "sourceObservationId": source_observation_id,
-                    "sourceProvider": source_provider,
-                    "sourceEvidenceRefs": source_evidence_refs_all[:EVIDENCE_CAP],
-                    "sourceEvidenceRefsTruncated": len(source_evidence_refs_all)
-                    > EVIDENCE_CAP,
-                    "locationFactSchemaVersion": _safe_activity_identifier(
-                        row.schema_version
-                    ),
-                    "sourceObservedAt": row.observed_at,
-                },
+                source_observation_id,
+                source_evidence_refs_all,
+                normalization_version,
+                validation_version,
+                raw_record_ref,
+                normalization_timestamp,
             )
+        ):
+            continue
+        entry = {
+            "locationFactId": _safe_activity_identifier(row.location_id),
+            "sourceLinkState": (
+                "linked" if source_observation_id or source_evidence_refs_all else "unknown"
+            ),
+            "sourceObservationId": source_observation_id,
+            "sourceProvider": source_provider,
+            "sourceEvidenceRefs": source_evidence_refs_all[:EVIDENCE_CAP],
+            "sourceEvidenceRefsTruncated": len(source_evidence_refs_all)
+            > EVIDENCE_CAP,
+            "locationFactSchemaVersion": _safe_activity_identifier(row.schema_version),
+            "sourceObservedAt": row.observed_at,
+        }
+        if normalization_version is not None:
+            entry["normalizationVersion"] = normalization_version
+        if validation_version is not None:
+            entry["validationVersion"] = validation_version
+        if raw_record_ref is not None:
+            entry["rawRecordRef"] = raw_record_ref
+        if normalization_timestamp is not None:
+            entry["normalizationTimestamp"] = normalization_timestamp
+        linked_rows.append(
+            (row, entry)
         )
 
     if not linked_rows:
@@ -2035,28 +2419,73 @@ def _normalization_lineage_projection(
     entries = [entry for _, entry in listed_rows]
     evidence_refs = [_row_evidence(row) for row, _ in listed_rows]
     omitted_linked_count = len(linked_rows) - len(listed_rows)
+    omitted_source_linked_count = sum(
+        entry["sourceLinkState"] == "linked" for _, entry in linked_rows[:-EVIDENCE_CAP]
+    )
+    lineage_fields = (
+        "normalizationVersion",
+        "validationVersion",
+        "rawRecordRef",
+        "normalizationTimestamp",
+    )
+    unavailable_fields = [
+        field
+        for field in lineage_fields
+        if any(field not in entry for entry in entries)
+    ]
+    normalized_timestamps = [
+        value
+        for entry in entries
+        if isinstance((value := entry.get("normalizationTimestamp")), str)
+    ]
+    latest_normalized_at = max(normalized_timestamps, default=None)
+    normalization_freshness_state, normalization_freshness_reason = (
+        _freshness_for_timestamp(latest_normalized_at)
+        if latest_normalized_at is not None
+        else ("unknown", "location_normalization_timestamp_unavailable")
+    )
+    lineage_complete = not unavailable_fields and omitted_linked_count == 0
     slot = {
-        "state": "degraded",
-        "reasonCode": "location_normalization_algorithm_lineage_unavailable",
+        "state": "available" if lineage_complete else "degraded",
+        "reasonCode": (
+            None
+            if lineage_complete
+            else "location_normalization_source_lineage_partial"
+            if any("normalizationVersion" in entry for entry in entries)
+            else "location_normalization_algorithm_lineage_unavailable"
+        ),
         "content": {
-            "lineageCompleteness": "partial",
-            "lineageBasis": "source_links_recorded_on_canonical_location_facts",
+            "lineageCompleteness": "complete" if lineage_complete else "partial",
+            "lineageBasis": "canonical_location_fact_source_and_transformation_metadata",
             "entries": entries,
-            "sourceLinkedFactCount": len(linked_rows),
-            "listedSourceLinkedFactCount": len(listed_rows),
-            "omittedSourceLinkedFactCount": omitted_linked_count,
-            "sourceLinkedFactListTruncated": omitted_linked_count > 0,
-            "unavailableLineageFields": [
-                "normalizationVersion",
-                "validationVersion",
-                "rawRecordRef",
-                "normalizationTimestamp",
-            ],
+            "sourceLinkedFactCount": sum(
+                entry["sourceLinkState"] == "linked" for _, entry in linked_rows
+            ),
+            "lineageEntryCount": len(linked_rows),
+            "transformationVersionedFactCount": sum(
+                "normalizationVersion" in entry for entry in entries
+            ),
+            "rawRecordLinkedFactCount": sum(
+                "rawRecordRef" in entry for entry in entries
+            ),
+            "listedSourceLinkedFactCount": sum(
+                entry["sourceLinkState"] == "linked" for _, entry in listed_rows
+            ),
+            "omittedSourceLinkedFactCount": omitted_source_linked_count,
+            "omittedLineageEntryCount": omitted_linked_count,
+            "sourceLinkedFactListTruncated": omitted_source_linked_count > 0,
+            "lineageEntryListTruncated": omitted_linked_count > 0,
+            "unavailableLineageFields": unavailable_fields,
         },
         "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
         "freshness": {
-            "state": "unknown",
-            "reasonCode": "location_normalization_timestamp_unavailable",
+            "state": normalization_freshness_state,
+            "reasonCode": normalization_freshness_reason,
+            **(
+                {"latestNormalizationAt": latest_normalized_at}
+                if latest_normalized_at is not None
+                else {}
+            ),
         },
         "policy": policy,
     }
@@ -2068,7 +2497,11 @@ def _normalization_lineage_projection(
             subject=subject,
             evidenceRefs=evidence_refs,
             claims=[
-                "the canonical location facts expose explicit source observation or evidence links, but do not expose transformation-version or normalization-time lineage; normalization coverage is partial"
+                (
+                    "Canonical location facts expose their recorded transformation version and write timestamp; validation and raw-record lineage remain partial."
+                    if any("normalizationVersion" in entry for entry in entries)
+                    else "Canonical location facts expose source observation or evidence links, but no transformation version or normalization timestamp; normalization coverage is partial."
+                )
             ],
             domainSlotIds=["normalization"],
         )

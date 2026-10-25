@@ -959,6 +959,109 @@ async def test_wallet_slot_reads_exact_entity_bound_proof_without_identifier_val
 
 
 @pytest.mark.asyncio
+async def test_wallet_slot_joins_exact_tenant_inventory_without_echoing_wallet_identifiers() -> None:
+    source = FakeIdentity360Source()
+    source.wallet_inventory_for_entity = _wallet_inventory_reader(
+        [
+            {
+                "id": "0xprivate-wallet-address",
+                "wallet_id": "0xprivate-wallet-address",
+                "owner_entity_id": "entity-1",
+                "tenant_id": "tenant-a",
+                "chain": "eip155:1",
+                "address": "0xprivate-wallet-address",
+                "linked_at": "2026-10-12T00:00:00Z",
+            }
+        ]
+    )
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "partial"
+    assert wallets.content["inventoryState"] == "available"
+    assert wallets.content["ownershipState"] == "unknown"
+    assert wallets.content["currentControl"] == "unknown"
+    assert wallets.content["linkedWallets"][0]["chain"] == "eip155:1"
+    assert wallets.content["linkedWallets"][0]["linkedAt"] == "2026-10-12T00:00:00Z"
+    assert wallets.evidence_refs[0].source == "entity_wallets"
+    assert wallets.evidence_refs[0].id.startswith("wallet-link:")
+    assert "0xprivate-wallet-address" not in json.dumps(_payload(result), sort_keys=True)
+
+
+@pytest.mark.asyncio
+async def test_wallet_slot_rejects_cross_tenant_inventory_rows() -> None:
+    source = FakeIdentity360Source()
+    source.wallet_inventory_for_entity = _wallet_inventory_reader(
+        [
+            {
+                "id": "foreign-wallet-record",
+                "owner_entity_id": "entity-1",
+                "tenant_id": "tenant-b",
+                "chain": "eip155:1",
+                "linked_at": "2026-10-12T00:00:00Z",
+            }
+        ]
+    )
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "degraded"
+    assert wallets.content["linkedWallets"] == []
+    assert wallets.reason == "identity_row_tenant_mismatch"
+    assert "foreign-wallet-record" not in json.dumps(_payload(result), sort_keys=True)
+
+
+@pytest.mark.asyncio
+async def test_repository_identity_source_reads_wallet_links_by_tenant_and_owner_entity() -> None:
+    class _WalletRepository:
+        def __init__(self) -> None:
+            self.calls: list[tuple[dict[str, str], int]] = []
+
+        async def find_many(self, *, filters, limit):
+            self.calls.append((filters, limit))
+            return [
+                {
+                    "id": "wallet-link-record",
+                    "tenant_id": "tenant-a",
+                    "owner_entity_id": "entity-1",
+                    "wallet_id": "private-wallet-id",
+                    "chain": "eip155:1",
+                    "address": "private-wallet-address",
+                    "linked_at": "2026-10-12T00:00:00Z",
+                }
+            ]
+
+    wallet_repository = _WalletRepository()
+    source = RepositoryIdentity360Source(wallet_repository=wallet_repository)
+
+    result = await source.wallet_inventory_for_entity(
+        "tenant-a", "entity-1", limit=17
+    )
+
+    assert wallet_repository.calls == [
+        ({"tenant_id": "tenant-a", "owner_entity_id": "entity-1"}, 18)
+    ]
+    assert result.available is True
+    assert result.truncated is False
+    assert result.rows[0]["owner_entity_id"] == "entity-1"
+
+
+def _wallet_inventory_reader(rows: list[dict[str, Any]]):
+    async def read(tenant_id: str, entity_id: str, *, limit: int) -> IdentityBatchRead:
+        assert tenant_id == "tenant-a"
+        assert entity_id == "entity-1"
+        return IdentityBatchRead(rows=tuple(rows[:limit]), truncated=len(rows) > limit)
+
+    return read
+
+
+@pytest.mark.asyncio
 async def test_wallet_slot_rejects_cross_tenant_verification_evidence() -> None:
     source = FakeIdentity360Source()
     source.verification = [

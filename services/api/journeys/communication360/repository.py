@@ -204,6 +204,215 @@ class Communication360FactsRepository:
             )
         return dict(rec) if rec else None
 
+    async def participant_bindings_for_conversations(
+        self,
+        tenant_id: str,
+        provider: str,
+        provider_account_id: str,
+        conversation_ids: list[str],
+        *,
+        limit: int = 500,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Read participant bindings for exact provider conversation scopes.
+
+        This is deliberately narrower than ``query(tenant_id, kind=...)`` so
+        consumers can join an already-authorized provider conversation without
+        scanning or correlating the tenant's unrelated participant rosters.
+        ``complete`` means the bounded store query fit within ``limit``; it is
+        not a claim that the provider supplied a complete roster or full history.
+        """
+        exact_tenant = str(tenant_id or "").strip()
+        exact_provider = str(provider or "").strip()
+        exact_account = str(provider_account_id or "").strip()
+        exact_conversations = sorted(
+            {
+                str(value).strip()
+                for value in conversation_ids
+                if isinstance(value, str) and value.strip()
+            }
+        )
+        if not exact_tenant or not exact_provider or not exact_account or not exact_conversations:
+            return [], True
+        if len(exact_conversations) > 500:
+            return [], False
+        bounded_limit = min(max(int(limit), 1), 500)
+
+        def _matches(row: dict[str, Any]) -> bool:
+            payload = row.get("payload")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except json.JSONDecodeError:
+                    return False
+            return (
+                row.get("tenant_id") == exact_tenant
+                and row.get("kind") == "participant_binding"
+                and isinstance(payload, dict)
+                and payload.get("provider") == exact_provider
+                and payload.get("provider_account_id") == exact_account
+                and payload.get("provider_conversation_id") in exact_conversations
+                and payload.get("communication_scope_kind") == "provider_conversation"
+                and payload.get("communication_scope") == payload.get("provider_conversation_id")
+            )
+
+        pool = await self._pool()
+        if pool is None:
+            rows = [row for row in _local_facts.values() if _matches(row)]
+            rows.sort(
+                key=lambda row: (
+                    str(row.get("occurred_at") or ""),
+                    str(row.get("fact_id") or ""),
+                ),
+                reverse=True,
+            )
+            return rows[:bounded_limit], len(rows) <= bounded_limit
+
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                SELECT * FROM communication360_facts
+                WHERE tenant_id = $1
+                  AND kind = 'participant_binding'
+                  AND payload->>'provider' = $2
+                  AND payload->>'provider_account_id' = $3
+                  AND payload->>'provider_conversation_id' = ANY($4::text[])
+                  AND payload->>'communication_scope_kind' = 'provider_conversation'
+                  AND payload->>'communication_scope' = payload->>'provider_conversation_id'
+                ORDER BY occurred_at DESC, fact_id DESC
+                LIMIT $5
+                """,
+                exact_tenant,
+                exact_provider,
+                exact_account,
+                exact_conversations,
+                bounded_limit + 1,
+            )
+        fetched = [dict(record) for record in records]
+        return fetched[:bounded_limit], len(fetched) <= bounded_limit
+
+    async def facts_for_exact_reference(
+        self,
+        tenant_id: str,
+        reference_kind: str,
+        reference_id: str,
+        *,
+        after: Any = None,
+        before: Any = None,
+        received_before: Any = None,
+        limit: int = 200,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Read facts carrying one exact typed journey or episode reference.
+
+        The relationship is admitted only through the canonical JSONB
+        ``journey_id(s)`` / ``episode_id(s)`` fields. This does not match
+        arbitrary strings or search payload text. Returned ``complete`` only
+        describes this bounded exact-reference query; it is not a claim that a
+        communication authority has recorded every real-world conversation.
+        """
+        exact_tenant = str(tenant_id or "").strip()
+        exact_id = str(reference_id or "").strip()
+        field_names = {
+            "episode": ("episode_id", "episode_ids"),
+            "journey": ("journey_id", "journey_ids"),
+        }.get(reference_kind)
+        if not exact_tenant or not exact_id or field_names is None:
+            return [], True
+        bounded_limit = min(max(int(limit), 1), 500)
+        singular, plural = field_names
+
+        def _timestamp(value: Any) -> Optional[datetime]:
+            if isinstance(value, datetime):
+                parsed = value
+            elif isinstance(value, str):
+                parsed = _parse_ts(value)
+            else:
+                return None
+            if parsed is None or parsed.tzinfo is None:
+                return None
+            return parsed.astimezone(timezone.utc)
+
+        after_ts = _timestamp(after) if after is not None else None
+        before_ts = _timestamp(before) if before is not None else None
+        received_before_ts = (
+            _timestamp(received_before) if received_before is not None else None
+        )
+        if (
+            (after is not None and after_ts is None)
+            or (before is not None and before_ts is None)
+            or (received_before is not None and received_before_ts is None)
+        ):
+            return [], False
+
+        def _matches(row: dict[str, Any]) -> bool:
+            payload = row.get("payload")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except json.JSONDecodeError:
+                    return False
+            if not isinstance(payload, dict):
+                return False
+            values = payload.get(plural)
+            exact_match = payload.get(singular) == exact_id or (
+                isinstance(values, list) and exact_id in values
+            )
+            if not exact_match:
+                return False
+            occurred_at = _timestamp(row.get("occurred_at"))
+            received_at = _timestamp(row.get("received_at"))
+            if after_ts is not None and (occurred_at is None or occurred_at <= after_ts):
+                return False
+            if before_ts is not None and (occurred_at is None or occurred_at >= before_ts):
+                return False
+            if received_before_ts is not None and (
+                received_at is None or received_at > received_before_ts
+            ):
+                return False
+            return True
+
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row
+                for row in _local_facts.values()
+                if row.get("tenant_id") == exact_tenant and _matches(row)
+            ]
+            rows.sort(
+                key=lambda row: (
+                    str(row.get("occurred_at") or ""),
+                    str(row.get("fact_id") or ""),
+                )
+            )
+            return rows[:bounded_limit], len(rows) <= bounded_limit
+
+        conditions = [
+            "tenant_id = $1",
+            f"(payload->>'{singular}' = $2 OR COALESCE(payload->'{plural}', '[]'::jsonb) ? $2)",
+        ]
+        params: list[Any] = [exact_tenant, exact_id]
+        if after is not None:
+            params.append(after_ts)
+            conditions.append(f"occurred_at > ${len(params)}")
+        if before is not None:
+            params.append(before_ts)
+            conditions.append(f"occurred_at < ${len(params)}")
+        if received_before is not None:
+            params.append(received_before_ts)
+            conditions.append(f"received_at <= ${len(params)}")
+        params.append(bounded_limit + 1)
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                f"""
+                SELECT * FROM communication360_facts
+                WHERE {' AND '.join(conditions)}
+                ORDER BY occurred_at ASC, fact_id ASC
+                LIMIT ${len(params)}
+                """,
+                *params,
+            )
+        fetched = [dict(record) for record in records]
+        return fetched[:bounded_limit], len(fetched) <= bounded_limit
+
 
 def _parse_ts(value: Any) -> Any:
     if isinstance(value, datetime):

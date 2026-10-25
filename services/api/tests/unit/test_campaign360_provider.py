@@ -23,11 +23,16 @@ from journeys.campaign.campaign360_provider import (  # noqa: E402
     CampaignAnomalyRead,
     Campaign360Provider,
     CampaignRead,
+    CampaignSpendRead,
+    ConversionRecordRead,
     MAX_CAMPAIGN_ANOMALIES,
     OUTPUT_SECTIONS,
     RepositoryCampaign360Source,
     RowsRead,
     register_provider,
+)
+from journeys.campaign.campaign_population_links import (  # noqa: E402
+    CampaignPopulationLinkRead,
 )
 from shared.intelligence_projections.contracts import (  # noqa: E402
     ProjectionContext,
@@ -122,6 +127,7 @@ class FakeCampaign360Source:
         self.anomaly_calls: list[dict[str, object]] = []
         self.signal_calls: list[dict[str, object]] = []
 
+
     async def campaign(self, tenant_id: str, campaign_id: object) -> CampaignRead:
         self.campaign_calls.append((tenant_id, campaign_id))
         return self.campaign_result
@@ -181,6 +187,67 @@ class FakeCampaign360Source:
             {"tenant_id": tenant_id, "event_ids": list(event_ids), "limit": limit}
         )
         return self.signal_result
+
+
+class ConversionCampaign360Source(FakeCampaign360Source):
+    def __init__(self, conversion: ConversionRecordRead) -> None:
+        super().__init__()
+        self.conversion_result = conversion
+        self.conversion_calls: list[tuple[str, str]] = []
+
+    async def conversion_record(self, tenant_id: str, conversion_id: str) -> ConversionRecordRead:
+        self.conversion_calls.append((tenant_id, conversion_id))
+        return self.conversion_result
+
+
+class PerformanceCampaign360Source(ConversionCampaign360Source):
+    def __init__(
+        self,
+        *,
+        conversion: ConversionRecordRead,
+        credits: list[dict[str, object]],
+        spend: CampaignSpendRead,
+        data_quality: str = "complete",
+    ) -> None:
+        super().__init__(conversion)
+        self.attribution_result = AttributionRead(
+            credits=credits,
+            available=True,
+            data_quality=data_quality,
+        )
+        self.spend_result = spend
+        self.spend_calls: list[dict[str, object]] = []
+
+    async def campaign_spend(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        start: datetime | None,
+        end: datetime | None,
+        limit: int,
+    ) -> CampaignSpendRead:
+        self.spend_calls.append(
+            {
+                "tenant_id": tenant_id,
+                "campaign_id": campaign_id,
+                "start": start,
+                "end": end,
+                "limit": limit,
+            }
+        )
+        return self.spend_result
+
+
+class PopulationLinkCampaign360Source(FakeCampaign360Source):
+    def __init__(self, read: CampaignPopulationLinkRead) -> None:
+        super().__init__()
+        self.population_link_read = read
+        self.population_link_calls: list[tuple[str, str, int]] = []
+
+    async def campaign_population_links(self, tenant_id: str, campaign_id: str, *, limit: int):
+        self.population_link_calls.append((tenant_id, campaign_id, limit))
+        return self.population_link_read
 
 
 class ContextCampaign360Source(FakeCampaign360Source):
@@ -372,6 +439,307 @@ async def test_provider_emits_exact_sections_and_evidence_bound_slot_claims() ->
     assert _section(result, "outcomes").content["attribution"]["credits"][0]["credit"][
         "attributedNetRevenue"
     ] is None
+
+
+@pytest.mark.asyncio
+async def test_campaign_conversion_joins_exact_canonical_record_through_active_credit() -> None:
+    source = ConversionCampaign360Source(
+        ConversionRecordRead(
+            {
+                "tenant_id": "tenant-a",
+                "conversion_id": "conversion-1",
+                "conversion_type": "purchase",
+                "conversion_name": "Order complete",
+                "conversion_status": "confirmed",
+                "occurred_at": "2026-10-05T10:05:00Z",
+                "observed_at": "2026-10-05T10:05:01Z",
+                "currency": "USD",
+                "gross_value": "39.00",
+                "net_value": "35.00",
+                "quantity": 1,
+            },
+            available=True,
+        )
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    assert source.conversion_calls == [("tenant-a", "conversion-1")]
+    slot = _slot(result, "conversions")
+    assert slot["state"] == "available"
+    assert slot["joinCoverage"] == "active_attribution_credits_only"
+    outcomes = _section(result, "outcomes").content
+    assert outcomes["conversions"]["state"] == "available"
+    conversion = outcomes["conversions"]["items"][0]["conversion"]
+    assert conversion["conversionId"] == "conversion-1"
+    assert conversion["campaignAttribution"] == "exact_active_credit"
+    assert conversion["grossValue"] == "39.00"
+    # The canonical conversion record is distinct from the attribution credit's
+    # measured contribution fields.
+    assert "attributedGrossRevenue" not in conversion
+    refs = outcomes["conversions"]["items"][0]["evidenceRefs"]
+    assert {ref["source"] for ref in refs} >= {
+        "services/api/journeys/measurement/repositories/conversion_repo.py:canonical_conversions",
+        "services/api/journeys/measurement/repositories/attribution_run_repo.py:attribution_credits",
+    }
+
+
+@pytest.mark.asyncio
+async def test_campaign_conversion_rejects_cross_tenant_record() -> None:
+    source = ConversionCampaign360Source(
+        ConversionRecordRead(
+            {"tenant_id": "tenant-other", "conversion_id": "conversion-1"},
+            available=True,
+        )
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+    assert _slot(result, "conversions")["state"] == "unknown"
+    assert _slot(result, "conversions")["reason"] == "canonical_conversion_scope_mismatch"
+    assert _section(result, "outcomes").content["conversions"]["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_campaign_performance_joins_active_attributed_outcome_to_observed_spend_without_synthetic_roas() -> None:
+    conversion = ConversionRecordRead(
+        {
+            "tenant_id": "tenant-a",
+            "conversion_id": "conversion-1",
+            "conversion_type": "purchase",
+            "conversion_status": "confirmed",
+            "occurred_at": "2026-10-05T10:05:00Z",
+            "observed_at": "2026-10-05T10:05:01Z",
+            "currency": "USD",
+            "normalized_currency": "USD",
+            "gross_value": "39.00",
+            "net_value": "35.00",
+            "quantity": 1,
+        },
+        available=True,
+    )
+    credit = {
+        "credit_id": "credit-performance-1",
+        "tenant_id": "tenant-a",
+        "campaign_id": CAMPAIGN_ID,
+        "attribution_run_id": "run-performance-1",
+        "conversion_id": "conversion-1",
+        "touchpoint_id": "tp-1",
+        "credit_weight": "1.000000",
+        "attributed_conversion_count": "1.000000",
+        "attributed_gross_revenue": "39.00",
+        "attributed_net_revenue": "35.00",
+        "run_completed_at": "2026-10-06T10:05:00Z",
+    }
+    spend = CampaignSpendRead(
+        rows=[
+            {
+                "spend_record_id": "spend-1",
+                "tenant_id": "tenant-a",
+                "campaign_id": CAMPAIGN_ID,
+                "period_start": "2026-10-01T00:00:00Z",
+                "period_end": "2026-10-02T00:00:00Z",
+                "total_cost": "100.00",
+                "billing_currency": "USD",
+                "normalized_currency": "USD",
+            }
+        ],
+        available=True,
+        complete=False,
+        reason="campaign_spend_coverage_watermark_unavailable",
+    )
+    source = PerformanceCampaign360Source(
+        conversion=conversion,
+        credits=[credit],
+        spend=spend,
+    )
+
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    assert source.spend_calls == [
+        {
+            "tenant_id": "tenant-a",
+            "campaign_id": CAMPAIGN_ID,
+            "start": None,
+            "end": None,
+            "limit": 501,
+        }
+    ]
+    assert _slot(result, "performance")["state"] == "partial"
+    performance = _section(result, "state").content["domainContexts"]["performance"]
+    assert performance["attributedOutcome"]["state"] == "available"
+    assert performance["attributedOutcome"]["grossRevenue"]["byCurrency"] == {
+        "USD": "39.00"
+    }
+    assert performance["attributedOutcome"]["netRevenue"]["byCurrency"] == {
+        "USD": "35.00"
+    }
+    assert performance["spendObservations"]["state"] == "partial"
+    assert performance["spendObservations"]["records"][0]["amount"] == "100.00"
+    assert performance["spendObservations"]["coverage"] == "bounded_rows_without_coverage_attestation"
+    assert performance["roas"]["state"] == "unknown"
+    assert performance["roi"]["state"] == "unknown"
+    assert any(claim.kind == "campaign_attributed_gross_revenue" for claim in result.claims)
+    assert any(claim.kind == "campaign_spend_record" for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_campaign_performance_keeps_incomplete_amounts_unknown() -> None:
+    source = PerformanceCampaign360Source(
+        conversion=ConversionRecordRead(
+            {
+                "tenant_id": "tenant-a",
+                "conversion_id": "conversion-1",
+                "occurred_at": "2026-10-05T10:05:00Z",
+                "currency": "USD",
+                "normalized_currency": "USD",
+                "gross_value": "39.00",
+                "net_value": "35.00",
+            },
+            available=True,
+        ),
+        credits=[
+            {
+                "credit_id": "credit-incomplete-1",
+                "tenant_id": "tenant-a",
+                "campaign_id": CAMPAIGN_ID,
+                "attribution_run_id": "run-incomplete-1",
+                "conversion_id": "conversion-1",
+                "credit_weight": "1.000000",
+                "attributed_conversion_count": "1.000000",
+                "attributed_gross_revenue": None,
+                "attributed_net_revenue": None,
+                "run_completed_at": "2026-10-06T10:05:00Z",
+            }
+        ],
+        spend=CampaignSpendRead(
+            rows=[
+                {
+                    "spend_record_id": "spend-unknown",
+                    "tenant_id": "tenant-a",
+                    "campaign_id": CAMPAIGN_ID,
+                    "period_start": "2026-10-01T00:00:00Z",
+                    "period_end": "2026-10-02T00:00:00Z",
+                    "total_cost": None,
+                    "billing_currency": "USD",
+                    "normalized_currency": "USD",
+                }
+            ],
+            available=True,
+            complete=False,
+        ),
+    )
+
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    performance = _section(result, "state").content["domainContexts"]["performance"]
+    assert performance["attributedOutcome"]["grossRevenue"]["state"] == "unknown"
+    assert performance["attributedOutcome"]["netRevenue"]["state"] == "unknown"
+    assert performance["attributedOutcome"]["grossRevenue"]["byCurrency"] == {}
+    assert performance["spendObservations"]["records"][0]["amount"] is None
+    assert performance["spendObservations"]["records"][0]["amountState"] == "unknown"
+    assert performance["roas"]["state"] == "unknown"
+    assert not any(
+        claim.kind in {"campaign_attributed_gross_revenue", "campaign_attributed_net_revenue"}
+        for claim in result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_campaign_performance_drops_cross_tenant_spend_rows() -> None:
+    source = PerformanceCampaign360Source(
+        conversion=ConversionRecordRead(
+            {
+                "tenant_id": "tenant-a",
+                "conversion_id": "conversion-1",
+                "occurred_at": "2026-10-05T10:05:00Z",
+                "currency": "USD",
+                "normalized_currency": "USD",
+                "gross_value": "39.00",
+                "net_value": "35.00",
+            },
+            available=True,
+        ),
+        credits=[
+            {
+                "credit_id": "credit-cross-tenant-spend-1",
+                "tenant_id": "tenant-a",
+                "campaign_id": CAMPAIGN_ID,
+                "attribution_run_id": "run-cross-tenant-spend-1",
+                "conversion_id": "conversion-1",
+                "credit_weight": "1.000000",
+                "attributed_conversion_count": "1.000000",
+                "attributed_gross_revenue": "39.00",
+                "attributed_net_revenue": "35.00",
+                "run_completed_at": "2026-10-06T10:05:00Z",
+            }
+        ],
+        spend=CampaignSpendRead(
+            rows=[
+                {
+                    "spend_record_id": "foreign-spend-1",
+                    "tenant_id": "tenant-other",
+                    "campaign_id": CAMPAIGN_ID,
+                    "period_start": "2026-10-01T00:00:00Z",
+                    "period_end": "2026-10-02T00:00:00Z",
+                    "total_cost": "100.00",
+                    "billing_currency": "USD",
+                    "normalized_currency": "USD",
+                }
+            ],
+            available=True,
+            complete=True,
+        ),
+    )
+
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    performance = _section(result, "state").content["domainContexts"]["performance"]
+    assert performance["spendObservations"]["records"] == []
+    assert performance["spendObservations"]["invalidRowCount"] == 1
+    assert not any(claim.kind == "campaign_spend_record" for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_campaign_population_links_bind_exact_explicit_cohort_association():
+    row = {
+        "tenant_id": "tenant-a",
+        "campaign_id": CAMPAIGN_ID,
+        "population_id": "population-1",
+        "event_type": "linked",
+        "link_event_id": "link-event-1",
+        "source_id": "aether.operator:operator-1",
+        "source_record_id": "operator-record-1",
+        "source_revision_id": "revision-2",
+        "source_event_id": "operator-event-1",
+        "actor_id": "operator-1",
+        "actor_type": "tenant_user",
+        "source_observed_at": "2026-10-05T10:00:00Z",
+        "effective_at": "2026-10-05T10:00:00Z",
+        "evidence_refs": [
+            {
+                "id": CAMPAIGN_ID,
+                "type": "entity",
+                "source": "services/api/journeys/campaign/repository.py:campaigns",
+            },
+            {"id": "population-1", "type": "entity", "source": "identity_populations"},
+        ],
+    }
+    source = PopulationLinkCampaign360Source(
+        CampaignPopulationLinkRead("tenant-a", CAMPAIGN_ID, (row,), available=True)
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    assert source.population_link_calls == [("tenant-a", CAMPAIGN_ID, 101)]
+    slot = _slot(result, "cohorts_syndicates")
+    assert slot["state"] == "partial"
+    assert slot["explicitPopulationLinkCount"] == 1
+    assert slot["dimensionStates"] == {
+        "explicitPopulationLinks": "available",
+        "broaderCohortMembership": "unknown",
+        "syndicateMembership": "unknown",
+    }
+    context = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]
+    assert context["associations"][0]["populationId"] == "population-1"
+    assert context["associations"][0]["associationState"] == "explicitly_linked"
+    assert any(claim.kind == "campaign_population_link_observation" for claim in result.claims)
 
 
 @pytest.mark.asyncio
