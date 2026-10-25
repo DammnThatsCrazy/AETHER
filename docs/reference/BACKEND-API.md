@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:c76d4605ad4b2a3c96fdee6d73b17cdc825577e507b7f48f0ff50a8a87af2832"
+  "services/api/actions/": "sha256:a8f45b8c0623c186f0ab94c355c0c1b3d27fc645df4ad972f5091d08dd82119f"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
-  "services/api/connectors/": "sha256:8d3cf4489ee6a8ec59d84a8466f2f2e505b4715283de72970242997a43e3b2f6"
-  "services/api/governance/": "sha256:4deeed1e9d995ceec84770affc2dfb018f1acb191be3cbeb3b9f19eb9d537db9"
-  "services/api/graph/": "sha256:c4a96fb8c0a9d00c7f87f6fb72fac95e589710253f059c71c36c279c49e658da"
-  "services/api/identity/": "sha256:5fa73eaa767b2f8a34eb4eb12e226e6267b2659e8f87124707be9cffbb0515bc"
-  "services/api/ingestion/": "sha256:9a84a8c185865fecbf450f8a10e7f83a023d7be79679638006f44435cfa96c42"
-  "services/api/intelligence/": "sha256:d268f2e23a0f0b0451c2aa8734c8e8f6ebec4c485310fd789453752f68ad52dd"
-  "services/api/journeys/": "sha256:4642ebb6ce077181b6ebde22aa32fe136d7965a2f387c200e3281b76a9b12ea9"
+  "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
+  "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
+  "services/api/graph/": "sha256:a6731cc3742863724966de3087f5217827ce5105853a193201a4a4f03828f4aa"
+  "services/api/identity/": "sha256:cbb27b5635537a2aea0370aaa468032d138c56efdca39c29523d604910aa4318"
+  "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
+  "services/api/intelligence/": "sha256:96f37c0d6437433aaa367e762cf4b1fa897622846141e1eedfcdb6a298833bb1"
+  "services/api/journeys/": "sha256:fc390dfea30dfe1e760349392c538911f7d63a2c8db1143120756021675df6b5"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:c5a835de7e81e88d0313a3c09369f78e37c4aa9c154134b7b81a0c3e7ffcc634"
+  "services/api/value/": "sha256:b581ccc0719fd0cdc8e492a08ba0e5d5c6729500caa40e1f853f5cb786604891"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1892,6 +1892,23 @@ providers; it does not create a separate truth store or write graph state.
 | POST | `/v1/experience360/frames` | Compose a product 360 frame; tenant scope comes from authenticated request state and policy runs before provider reads |
 | GET | `/v1/experience360/catalog` | Return all catalogued surfaces and technical-provider registration state |
 
+The following authority writes feed partial 360 projections. They use the
+authenticated tenant and actor rather than caller-supplied identity:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/workflows/definitions` | Register an immutable Workflow360 definition revision with typed trigger and step configuration; write authorization required |
+| GET | `/v1/workflows/definitions/{workflow_id}` | Read the latest exact-tenant revision; incomplete or unavailable authority reads return 503 |
+| POST | `/v1/social360/evidence/trust-edges` | Record an operator trust assertion against exact canonical entity and event evidence; admin permission required |
+| POST | `/v1/social360/evidence/contagion` | Record source-asserted transmission evidence against an exact observed path and linked risk signals; write permission required |
+
+Workflow definitions do not certify run execution. Social assertions do not
+mutate graph relationships or prove contagion. Their frame reads retain
+source, policy, evidence, completeness, and freshness limitations.
+Workflow360 frame reads may select a historical definition only for an exact
+workflow ID and point-in-time `asOf` anchor from a complete bounded revision
+history. The HTTP definition route above returns the latest revision.
+
 Frame responses retain slot state, evidence/provenance, freshness, quality,
 policy, and actor/authority metadata where canonical sources support them.
 Unsupported subject/provider paths and unavailable evidence remain explicit
@@ -2043,8 +2060,13 @@ episode-recorded observation IDs against tenant-scoped active semantic Silver
 rows, Campaign360 `signal_sources` joins from exact touchpoint references to
 tenant-scoped canonical event metadata, and Memory360 `policy_state` evidence
 for historical write-time allow decisions. The joins preserve evidence and
-unknown or partial states. Episode source-namespace typing, full activity and
-session coverage, and policy/freshness remain unresolved; Campaign360
+unknown or partial states. Semantic SDK rows now carry a backend-stamped
+source namespace. When an EpisodeEngine caller explicitly supplies a semantic
+Silver observation ID and authority marker, the engine attempts an exact
+tenant, namespace, status, timestamp, and event-evidence link after persisting
+the episode. The live semantic pipeline does not yet supply the explicit
+episode association. Full activity and session coverage, policy, and freshness
+remain unresolved; Campaign360
 observation and source-fact dimensions, event completeness, and freshness remain
 unknown; Memory360 does not evaluate current consent or policy. These provider
 changes add no HTTP routes and do not complete any surface.
@@ -2074,8 +2096,8 @@ referenced by admitted run-linked AgentExecutions. AgentExecution stores the
 workflow run and invocation references only when a unique tenant-scoped AI
 invocation has `action_id` equal to the stable execution ID; the provider checks
 the exact tenant, run, action, and agent links before admitting a step. Workflow
-definitions, complete actor and step coverage, workflow-wide approval authority,
-policy, and freshness remain unknown. Workflow360 `triggers` exposes allowlisted
+definition-to-run linkage, complete actor and step coverage, workflow-wide
+approval authority, policy, and freshness remain unknown. Workflow360 `triggers` exposes allowlisted
 event metadata only for exact tenant analytics events referenced by admitted
 run-linked AgentExecutions; event rows returned with an unavailable or unread
 source state are suppressed. The stored reference does not prove event

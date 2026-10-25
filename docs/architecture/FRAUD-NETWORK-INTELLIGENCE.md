@@ -15,8 +15,8 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/api/intelligence/fraud_networks/": "sha256:07bdba9019053a0b624c232e43b96d9ef9fa4ff72c8b5a6c3ad45a9556a4c596"
-  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
+  "services/api/intelligence/fraud_networks/": "sha256:d5e8c0a0e46b89c971588b052c48eb357e6187f5d10b5863f902b1a5d77a4240"
+  "services/api/repositories/repos.py": "sha256:97da54692debeff715bd1129e264e4fc0b8801abeda5c52b288c96094e04a605"
 ---
 
 # Fraud Network Intelligence
@@ -74,6 +74,8 @@ proof of execution. The tenant-owned identity binding must have one consistent,
 valid timezone-aware `identity_bound_at` at or before the detector observation
 time; missing, malformed, conflicting, or future binding times are omitted to
 prevent retroactive attribution.
+The historical join accepts timezone-aware datetime values or ISO 8601 strings
+from the binding store and rejects naive values in either form.
 
 ---
 

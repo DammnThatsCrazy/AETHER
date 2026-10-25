@@ -13,10 +13,10 @@ source_files:
   - services/api/value/commerce/commerce360_provider.py
   - services/api/value/commerce/commerce_intents.py
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ecf5ef988f19d258a2e93d7e0f70f326aa42a8681751943675fe8ed0cc742060"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8477e46a435728ce897fd04bebb523052271895189ac5a836933b2c95f9efe24"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/tests/unit/test_commerce_intent_authority.py": "sha256:2f80185b0b0ae04a08b2342152b81a311b017ce2cf87ded2ca8aa615b08fad87"
-  "services/api/value/commerce/commerce360_provider.py": "sha256:10668ba10a1c2bab7f9261f839b76aaeaf3d28725abe173d2ad1ae64a00df012"
+  "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
   "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
 canonical_owner: commerce@aether
 estimated_read_minutes: 8

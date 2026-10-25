@@ -11,44 +11,41 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:54f522b079d351974f0528340ba4e016a93eeb129d42b03ee40a59b00ac18a4f"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8477e46a435728ce897fd04bebb523052271895189ac5a836933b2c95f9efe24"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
+  "services/api/actions/agent/": "sha256:13f0e0509590cbfc6775163e5e89ae0651d5ab9d02b3c94adef51fabcdf2633d"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
-  "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:d158801954e2c76f088f9a367cabc4e507f1d4b2e456e989b6e95c04a9db6237"
+  "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/connectors/integrations/providers/payment_rails/models.py": "sha256:fa63fb1a785b98a7ec322f0d06b13ed30ed722003daee53177ba13078a4c77ed"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
-  "services/api/identity/account360_provider.py": "sha256:73ebc9abdcdbd45ce00561cf36dc01d1668afc26a7899a27165d1834c6c2e8a0"
+  "services/api/identity/account360_provider.py": "sha256:dd2b32bc4eb3fec20094ef053dfe99de88e39ec43388dae73c41f9d4cdcab838"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
-  "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
-  "services/api/value/commerce/order_payment_reconciliation.py": "sha256:1bfb4e715fa255bd9c12956c71f4c2e48c49c65d84c7f6d2c0ca1e1bf9960ebe"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/": "sha256:595590d43ef5d1be824ad90e31c30018c023a431667a8165aaa4b008959220dc"
-  "services/api/journeys/communication360/provider.py": "sha256:103203807abc92ff1c262e358335e9697873c24706ab42d81a512af3c0cf1efc"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
-  "services/api/journeys/communication360/": "sha256:b865ff2c6794fe23299f0488ff1d9c863d8f87ae9098c5f9d666c53216d0c71b"
-  "services/api/journeys/support360/": "sha256:439c78c22d137cbadd7bf0f529999004c8b48f4312e54939469bd1c968ce4d2b"
-  "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:b132613b2e04c6ec22344558fe515fbe24bbec3cb9ec2425bbeb846a8e02dd44"
-  "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
-  "services/api/value/commerce/": "sha256:87f7c8dbb46fe2caf7ade5a7c64e439e7e48f7c357ec921f08a2302be4d5dc78"
+  "services/api/intelligence/risk360/": "sha256:cecdc0e38f2007d61bea124c53debe57eb755e3c2124c7be8973c723aa1c2fac"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:c81cbc59832a658aeba4ca53e8e6dccdaf07b4c587367f4556c653cbcba12b31"
+  "services/api/journeys/communication360/": "sha256:b1ab51f9a2019e27880befd1aec1a0651b9eb3faeb016ef68e992463ed9f1b22"
+  "services/api/journeys/support360/": "sha256:08b79bc15c183192946f991f66f94a9bcae25c3f1be073e7033c6f5369553734"
+  "services/api/repositories/repos.py": "sha256:97da54692debeff715bd1129e264e4fc0b8801abeda5c52b288c96094e04a605"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:e1d39238f595d91a69347c76418cb2e4d79e860c8e254cebb5720343be4928d4"
+  "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
+  "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:f2d453f576196d2092802eec18f6d67bb6f8e4b9a91cdff113ae24d1d019a980"
-  "services/api/value/economic/journey_operation_evidence.py": "sha256:7228e2c59ef3514877744e8f12e4c0fe91d2c139684b8a709e2691c34a06f3fd"
+  "services/api/value/economic/economic360_provider.py": "sha256:b44928e1f1bcd6ecec0cbb1be7c0613809887387fd242657bcf75ee8bc8c9342"
+  "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
+  "services/api/value/x402/": "sha256:a92283788ffc7dab83f99071da7dc9de7cd695eb5a46fb614afa5cbdbdadb708"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
 
@@ -201,8 +198,11 @@ behavior, and surface-level golden coverage remain follow-on work across the
 The 2026-10-23 provider wave adds three bounded joins without closing their
 product surfaces. Episode360 `timeline` resolves only observation IDs persisted
 on the tenant's episode records to exact, active semantic Silver observation
-rows and preserves evidence; broader activity/session inventory, source
-namespace typing, policy disposition, and freshness remain unknown.
+rows and preserves evidence. Semantic SDK rows now carry a backend-stamped
+source namespace; the EpisodeEngine can persist a typed link when a caller
+supplies an explicit semantic authority marker and episode association.
+No live semantic-to-episode producer supplies that association yet. Broader
+activity/session inventory, policy disposition, and freshness remain unknown.
 Campaign360 `signal_sources` resolves only exact canonical event IDs referenced
 by campaign touchpoints. It returns limited event metadata with touchpoint and
 event evidence; it does not infer campaign membership from labels or event
@@ -222,8 +222,9 @@ USER_ID aliases and joins exact x402 approvals referenced by run-linked
 AgentExecutions. The writer stores workflow and invocation references only when
 a unique tenant-scoped AI invocation has `action_id` equal to the stable
 execution ID; Workflow360 rechecks tenant, run, agent, and action equality.
-Workflow definitions, complete actor and step coverage, workflow-wide approval
-authority, policy, and freshness remain unknown. Workflow360 `triggers` now
+Workflow definition-to-run linkage, complete actor and step coverage,
+workflow-wide approval authority, policy, and freshness remain unknown.
+Workflow360 `triggers` now
 resolves allowlisted metadata only for exact tenant analytics events named by
 run-linked AgentExecution `triggered_by_event_id` references when the event
 source reports an available read. It suppresses any supplied rows when the
@@ -462,10 +463,12 @@ Risk360, or the full 18-surface contract.
 Execution360's `authority_check` now exposes the delegation-engine outcome
 stored in `agent_executions.policy_log.delegation_check` only when it joins to
 the same exact tenant-scoped lifecycle record with its action, resource, and
-lifecycle evidence. The separate policy decision timestamp is not persisted;
-the provider reports it as unknown and does not claim current or standing
-authority. Duplicate, malformed, or incomplete joins remain degraded, while
-x402 approvals and other authority sources remain separate or unknown.
+lifecycle evidence. The delegation engine now records a timezone-aware
+evaluation timestamp, and the provider accepts it only when it does not
+postdate the execution record. Legacy missing timestamps remain unknown; the
+recorded decision still does not claim current or standing authority.
+Duplicate, malformed, or incomplete joins remain degraded, while x402
+approvals and other authority sources remain separate or unknown.
 
 Support360's required `risk` slot now routes to Risk360 after policy. Risk360
 proves the canonical tenant/case pair before reading case-keyed RiskAssessment
@@ -473,6 +476,25 @@ and RiskSignal records and includes both risk and support-case evidence. If the
 case record is missing, expired, unavailable, or out of tenant scope, risk
 reads are suppressed. Case risk-history completeness, signal coverage,
 freshness, business outcome, and contagion authority remain unknown.
+
+The latest provider pass adds bounded standing-delegation observations to
+Agent360 only after exact canonical agent and party evidence; the provider
+continues to report effective authorization as unknown. Its communications
+read now requires one resolved canonical tenant Agent before admitting
+source-asserted inbox/message rows; a positive claim cites identity, inbox,
+and message evidence but does not prove provider conversation membership.
+Workflow360 has an append-only, authenticated definition authority with a
+bounded exact-workflow historical `asOf` read; configured triggers and steps
+are separate from observed runs and outcomes. Social360 has explicit
+trust and transmission assertions backed by exact tenant entity, source
+event, graph-path, and risk-signal references. Those assertions are not graph
+mutations or causal contagion proof. Risk360 can admit an anomaly alert when
+its exact RiskSignal and event evidence exist; no production detector or
+complete underlying anomaly-event authority follows from that admission.
+Episode semantic observations now carry a backend-stamped source namespace.
+EpisodeEngine's exact-link producer requires an explicitly associated
+semantic observation; live association and full timeline coverage are still
+required. These changes leave the 18 product surfaces partial.
 
 ## Bucket 6 — Profile360/graph gap
 

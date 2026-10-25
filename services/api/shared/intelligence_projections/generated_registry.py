@@ -3191,7 +3191,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("episode_facts", "episode_journey_authority_records", "evidence", "silver_semantic_observations", "temporal"),
                 "description": "Typed episode observation references joined by exact tenant, source namespace, observation ID, source event, association time, and semantic Silver evidence within bounded temporal context.",
                 "id": "timeline",
-                "partialImplementationReason": "Only explicitly authored typed observation references are resolved against exact semantic Silver event, namespace, timestamp, and evidence fields. Legacy Silver rows omit authenticated source namespace and remain unknown; automatic link production, broader activity/session completeness, source freshness, and policy remain unverified.",
+                "partialImplementationReason": "Only explicitly authored typed observation references are resolved against exact semantic Silver event, namespace, timestamp, and evidence fields. EpisodeEngine can produce the exact typed link when its caller supplies a semantic observation authority marker, but no live semantic-to-episode association caller is connected. Legacy Silver rows without authenticated source namespace remain unknown; broader activity/session completeness, source freshness, and policy remain unverified.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -6566,9 +6566,9 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             {
                 "authorityGapReason": "Execution facts are not joined to the registered workflow definition for this summary.",
                 "canonicalAuthorityRefs": ("execution_facts", "workflow_definition_revisions"),
-                "description": "Latest exact tenant workflow definition revision, with registration evidence and recorded actor reference.",
+                "description": "Latest or exact as-of tenant workflow definition revision, with registration evidence and recorded actor reference.",
                 "id": "workflow_summary",
-                "partialImplementationReason": "Registered definition revision is bounded to an exact tenant workflow; execution linkage, actor identity, historical revision replay, trigger or step completion, external effects, and freshness remain unknown.",
+                "partialImplementationReason": "Registered definition revision is bounded to an exact tenant workflow and a complete 200-revision as-of history read; execution linkage, actor identity, trigger or step completion, external effects, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "workflow360",

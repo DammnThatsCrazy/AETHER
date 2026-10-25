@@ -16,7 +16,7 @@ source_hashes:
   "services/api/governance/dsr_propagation/models.py": "sha256:c70143dd971ce7be836fa156a8902a51aa6cc5f3a4652567209647c146855933"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
-  "services/api/services/social360/evidence_authority.py": "sha256:6e608468da849bc6da6c369a084b4ec47d50a4e6d71b3c0d990eb99c0d949897"
+  "services/api/services/social360/evidence_authority.py": "sha256:0b4d377d5a8b0316e11f9cabc13f0fa69c62aac9fc4d7ac313e42d1b38647322"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
   "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
 ---

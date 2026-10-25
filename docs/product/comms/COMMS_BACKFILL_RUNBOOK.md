@@ -7,13 +7,16 @@ audience: [ops, dev-senior]
 status: experimental
 since_version: 0.1.0
 source_files: [services/api/connectors/integrations/connectors/klaviyo.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/alembic/versions/20260703_comms_intelligence.py]
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR Communication360 repository diff: atomic participant-roster writes and bounded exact-reference reads are additive; provider backfill cursor, dedupe, and replay procedure are unchanged."
 source_hashes:
   "services/api/alembic/versions/20260703_comms_intelligence.py": "sha256:651ee8f17a6e86e00d49d09cdbc0041d525682817851af1368576984c27fec76"
   "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
   "services/api/journeys/communication360/contracts.py": "sha256:f826cef4a2425cd8b8ad5beafb914794cbb45bd6db9e1dab3bc7d19fb9befa9f"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/repository.py": "sha256:2b8546b419505d92d74098f6167dc6bf0d9da3cd94f7bb68278e179986beb01a"
+  "services/api/journeys/communication360/repository.py": "sha256:e04eb5071d50f46e28ea795be1ebbb8d98006fb5ce186e962e18c55682f59f89"
 ---
 
 # Communications Backfill & Replay Runbook

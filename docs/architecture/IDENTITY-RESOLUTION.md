@@ -35,12 +35,12 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:4ec9d07c5fed6301d02577307d8fac82846805aca1e9d2497dfc1f39a7ec4f1c"
+  "services/api/identity/identity/": "sha256:02607b0fff37bba1e4fca57ca429312ec26631451fd125c2b9bfeef93e027425"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
-  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
+  "services/api/repositories/repos.py": "sha256:97da54692debeff715bd1129e264e4fc0b8801abeda5c52b288c96094e04a605"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
@@ -97,12 +97,15 @@ against tenant and requested-subject scope. Missing or incomplete joins remain
 unknown, degraded, or truncated, so Identity360 does not replace the resolver
 or turn an absent read into a negative identity decision.
 
-When the `wallets` slot is requested, Identity360 may expose exact
-`wallet_ownership_verified` evidence joined to the same tenant-owned entity.
-The evidence proves control only at its recorded time: it is partial evidence,
-not a wallet inventory or proof of current control. Wallet addresses and
-identifier hashes remain omitted, and no observed proof keeps wallet presence
-unknown rather than empty.
+When the `wallets` slot is requested, Identity360 reads bounded, exact
+tenant/entity links from the canonical `entity_wallets` registry and separately
+joins `wallet_ownership_verified` evidence for that same entity. A recorded
+link establishes an association, while verification proves control only at its
+recorded time; neither establishes current control or complete wallet
+ownership. The response distinguishes linked wallets from historical proofs,
+reports read coverage and truncation, and exposes opaque evidence references
+without wallet addresses, wallet identifiers, or identifier hashes. No rows in
+these authorities leaves wallet presence unknown rather than empty.
 
 The `devices_sessions` slot exposes identifier-type metadata only
 (`device_id`, `installation_id`, or `session_id`) from exact tenant-scoped

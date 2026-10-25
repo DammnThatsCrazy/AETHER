@@ -15,14 +15,17 @@ source_files:
   - services/api/journeys/support360/routes.py
   - services/api/tests/unit/test_support360_provider.py
   - services/api/tests/unit/test_support_callback_authority.py
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the current Support360 registry, callback authority, provider, routes, and focused tests. The callback slot contract remains as documented; later provider joins for other Support360 slots do not change callback schedule or event semantics."
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ecf5ef988f19d258a2e93d7e0f70f326aa42a8681751943675fe8ed0cc742060"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8477e46a435728ce897fd04bebb523052271895189ac5a836933b2c95f9efe24"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
-  "services/api/journeys/support360/callbacks.py": "sha256:ebef67295e285cdf71beee3990bcdfb8804aa78b23ee450193e6fa3732f91b84"
+  "services/api/journeys/support360/callbacks.py": "sha256:166e3f6c0092cf8e113ce7c89893290afa057f0ec89cbd48d6babb11b7debfe8"
   "services/api/journeys/support360/cases.py": "sha256:7ba654bcec070de5f707fc1c566cf07ec147ce2dab6b5771fec4edc555629c79"
-  "services/api/journeys/support360/provider.py": "sha256:46f9fa07f136c76d1539de7ef1ed17b449c9f52e4ce80e4dde56a8d541a08290"
-  "services/api/journeys/support360/routes.py": "sha256:eada10e0b663367781e76480b315d71d8557337d2031f661374616abf1c137f8"
-  "services/api/tests/unit/test_support360_provider.py": "sha256:4b91df59833c04f7866cfb8a4dbcc6dd2010ff19e70fb9983a43f16c79509b5a"
+  "services/api/journeys/support360/provider.py": "sha256:9a34ee6ecae44d0fb4b43dd513b2e0a129cc530ded24d16a7b0e0b2b0bd1bb01"
+  "services/api/journeys/support360/routes.py": "sha256:0c25c20156e1de76380c61c31d079f789891d247bf829e6088b4aeb39eb5aac0"
+  "services/api/tests/unit/test_support360_provider.py": "sha256:58c84ca0fd9bebc1c9359da2b1707d29fbea6af03bf8cb3489d7c1e2a973e865"
   "services/api/tests/unit/test_support_callback_authority.py": "sha256:01fd2b33c2a736aff0ae359dbb739ccd068e5afb00aaac12d6e2c23bbe0cf3d1"
 canonical_owner: support@aether
 estimated_read_minutes: 8
