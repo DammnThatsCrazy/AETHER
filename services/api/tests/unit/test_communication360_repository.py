@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -239,3 +240,59 @@ def test_exact_subject_reference_read_rejects_invalid_temporal_bound() -> None:
     )
     assert rows == []
     assert complete is False
+
+
+@pytest.mark.asyncio
+async def test_postgres_fact_writes_bind_typed_timestamps_for_roster_batches(monkeypatch):
+    class StrictTimestampConnection:
+        calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        def transaction(self):
+            return self
+
+        async def execute(self, sql, *params):
+            columns = sql.split("(", 1)[1].split(")", 1)[0].split(", ")
+            bound = dict(zip(columns, params))
+            for field in ("occurred_at", "received_at"):
+                assert isinstance(bound[field], datetime)
+                assert bound[field].tzinfo is not None
+                assert bound[field].utcoffset() is not None
+            self.calls += 1
+            return "INSERT 0 1"
+
+    connection = StrictTimestampConnection()
+
+    class Pool:
+        def acquire(self):
+            return connection
+
+    async def database_pool():
+        return Pool()
+
+    repo = Communication360FactsRepository()
+    monkeypatch.setattr(repo, "_pool", database_pool)
+    first = _row(
+        TENANT_A,
+        "roster-1",
+        kind="participant_binding",
+        received_at="2026-09-03T12:01:00Z",
+        payload={"role": "author"},
+    )
+    second = _row(
+        TENANT_A,
+        "roster-2",
+        kind="participant_binding",
+        received_at="2026-09-03T12:01:00Z",
+        payload={"role": "recipient"},
+    )
+
+    await repo.upsert(first)
+    await repo.upsert_many([first, second])
+
+    assert connection.calls == 3

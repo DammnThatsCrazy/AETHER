@@ -46,6 +46,10 @@ _SILVER_TABLES = (
     "workflow_definition_revisions",
 )
 _GOLD_TABLES = ("gold_entity_semantic_state", "gold_entity_sentiment_state")
+_TABLE_ACTIVE_STATUSES: dict[str, frozenset[str]] = {
+    "semantic_embedding_metadata": frozenset({"reported"}),
+    "workflow_definition_revisions": frozenset({"active"}),
+}
 
 _RETENTION_INTERVAL_S = int(os.getenv("SEMANTIC_RETENTION_INTERVAL_S", str(24 * 3600)))
 
@@ -65,7 +69,15 @@ async def sweep_tenant(tenant_id: str, *, now: Optional[datetime] = None) -> dic
         for retention_class, days in RETENTION_WINDOWS.items():
             cutoff = now - timedelta(days=days)
             count += await repo.tombstone_by_age(
-                tenant_id, cutoff, retention_class=retention_class, status=_EXPIRED_STATUS
+                tenant_id,
+                cutoff,
+                retention_class=retention_class,
+                status=_EXPIRED_STATUS,
+                **(
+                    {"eligible_statuses": _TABLE_ACTIVE_STATUSES[table]}
+                    if table in _TABLE_ACTIVE_STATUSES
+                    else {}
+                ),
             )
         if count:
             tombstoned[table] = count

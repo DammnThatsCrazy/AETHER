@@ -242,3 +242,47 @@ async def test_store_retries_same_source_event_idempotently(monkeypatch):
     )
     assert first["record_id"] == second["record_id"]
     assert first["recorded_at"] == second["recorded_at"]
+
+
+@pytest.mark.asyncio
+async def test_historical_assertions_require_effective_observed_and_recorded_visibility(monkeypatch):
+    import repositories.repos
+
+    async def no_database_pool():
+        return None
+
+    monkeypatch.setattr(repositories.repos, "get_pool", no_database_pool)
+    store = RepositorySocialEvidenceStore()
+    store._local_rows.clear()
+
+    def row(record_id: str, observed_at: str, recorded_at: str) -> dict:
+        return {
+            "tenant_id": TENANT,
+            "record_id": record_id,
+            "subject_entity_id": "entity-target",
+            "assertion_kind": "trust_edge",
+            "effective_at": "2026-10-01T00:00:00+00:00",
+            "observed_at": observed_at,
+            "recorded_at": recorded_at,
+        }
+
+    store._local_rows[(TENANT, "visible")] = row(
+        "visible", "2026-10-01T01:00:00+00:00", "2026-10-01T02:00:00+00:00"
+    )
+    store._local_rows[(TENANT, "late-observation")] = row(
+        "late-observation", "2026-10-24T01:00:00+00:00", "2026-10-24T02:00:00+00:00"
+    )
+    store._local_rows[(TENANT, "late-recording")] = row(
+        "late-recording", "2026-10-01T01:00:00+00:00", "2026-10-24T02:00:00+00:00"
+    )
+
+    rows, truncated = await store.list_for_subject(
+        TENANT,
+        "entity-target",
+        assertion_kind="trust_edge",
+        limit=10,
+        as_of=datetime(2026, 10, 2, tzinfo=timezone.utc),
+    )
+    assert [record["record_id"] for record in rows] == ["visible"]
+    assert truncated is False
+    store._local_rows.clear()

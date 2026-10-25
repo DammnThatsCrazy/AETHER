@@ -22,6 +22,8 @@ TENANT = "tenant_retain"
 
 _SILVER_TABLE = "silver_semantic_observations"
 _MEMORY_TABLE = "semantic_memory_records"
+_EMBEDDING_TABLE = "semantic_embedding_metadata"
+_WORKFLOW_TABLE = "workflow_definition_revisions"
 _GOLD_TABLE = "gold_entity_semantic_state"
 
 
@@ -137,3 +139,38 @@ async def test_unknown_retention_class_is_left_untouched():
     report = await sweep_tenant(TENANT)
     assert report["tombstoned_total"] == 0
     assert _status(_SILVER_TABLE, "aged_unknown") == "classified"
+
+
+async def test_sweep_uses_authority_statuses_without_overwriting_restrictions():
+    old = utc_now() - timedelta(days=100)
+    for table, statuses in (
+        (_EMBEDDING_TABLE, ("reported", "consent_restricted")),
+        (_WORKFLOW_TABLE, ("active", "retired")),
+    ):
+        repo = SemanticFactRepository(table)
+        for status in statuses:
+            record_id = f"{table}:{status}"
+            await repo.upsert(
+                {
+                    "id": record_id,
+                    "tenant_id": TENANT,
+                    "subject_ref": "subject-1",
+                    "occurred_at": old,
+                    "data": {
+                        "idempotency_key": record_id,
+                        "retention_class": "standard_90d",
+                        "status": status,
+                    },
+                }
+            )
+
+    report = await sweep_tenant(TENANT)
+
+    assert report["tombstoned"] == {
+        _EMBEDDING_TABLE: 1,
+        _WORKFLOW_TABLE: 1,
+    }
+    assert _status(_EMBEDDING_TABLE, f"{_EMBEDDING_TABLE}:reported") == "expired"
+    assert _status(_EMBEDDING_TABLE, f"{_EMBEDDING_TABLE}:consent_restricted") == "consent_restricted"
+    assert _status(_WORKFLOW_TABLE, f"{_WORKFLOW_TABLE}:active") == "expired"
+    assert _status(_WORKFLOW_TABLE, f"{_WORKFLOW_TABLE}:retired") == "retired"

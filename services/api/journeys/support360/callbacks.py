@@ -546,7 +546,7 @@ class SupportCallbackRepository:
                            event_count=event_count+1,
                            retention_expires_at=GREATEST(retention_expires_at,$11),
                            updated_at=now()
-                       WHERE tenant_id=$1 AND callback_id=$2""",
+                       WHERE tenant_id=$1 AND callback_id=$2 AND case_id=$3""",
                     tenant_id,
                     callback_id,
                     case_id,

@@ -73,10 +73,7 @@ class Communication360FactsRepository:
 
         cols = [c for c in _FACT_COLUMNS if c in row]
         placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
-        values = [
-            json.dumps(row[c]) if c in _JSON_COLUMNS and row[c] is not None else row[c]
-            for c in cols
-        ]
+        values = [_bind_fact_column(column, row[column]) for column in cols]
         async with pool.acquire() as conn:
             await conn.execute(
                 f"""
@@ -126,12 +123,7 @@ class Communication360FactsRepository:
         async with pool.acquire() as conn:
             async with conn.transaction():
                 for row in prepared:
-                    values = [
-                        json.dumps(row[column])
-                        if column in _JSON_COLUMNS and row[column] is not None
-                        else row[column]
-                        for column in columns
-                    ]
+                    values = [_bind_fact_column(column, row[column]) for column in columns]
                     await conn.execute(sql, *values)
         return prepared
 
@@ -422,4 +414,15 @@ def _parse_ts(value: Any) -> Any:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
             return None
+    return value
+
+
+def _bind_fact_column(column: str, value: Any) -> Any:
+    if column in {"occurred_at", "received_at"} and value is not None:
+        parsed = _parse_ts(value)
+        if not isinstance(parsed, datetime) or parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError(f"{column} must be a timezone-aware timestamp")
+        return parsed.astimezone(timezone.utc)
+    if column in _JSON_COLUMNS and value is not None:
+        return json.dumps(value)
     return value

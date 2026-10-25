@@ -249,6 +249,7 @@ class RepositorySocialEvidenceStore:
         from repositories.repos import get_pool
 
         bounded = min(max(int(limit), 1), MAX_SOCIAL_EVIDENCE_READ)
+        anchor = _utc(as_of) if as_of is not None else None
         pool = await get_pool()
         if pool is None:
             rows = [
@@ -258,9 +259,23 @@ class RepositorySocialEvidenceStore:
                 and record.get("tenant_id") == tenant_id
                 and record.get("subject_entity_id") == subject_entity_id
                 and record.get("assertion_kind") == assertion_kind
-                and (as_of is None or _as_datetime(record.get("effective_at")) <= as_of)
+                and (
+                    anchor is None
+                    or all(
+                        (timestamp := _as_datetime(record.get(field))) is not None
+                        and timestamp <= anchor
+                        for field in ("effective_at", "observed_at", "recorded_at")
+                    )
+                )
             ]
-            rows.sort(key=lambda row: (str(row.get("effective_at")), str(row.get("recorded_at")), row["record_id"]))
+            rows.sort(
+                key=lambda row: (
+                    str(row.get("effective_at")),
+                    str(row.get("recorded_at")),
+                    row["record_id"],
+                ),
+                reverse=True,
+            )
             return rows[:bounded], len(rows) > bounded
 
         async with pool.acquire() as connection:
@@ -268,13 +283,15 @@ class RepositorySocialEvidenceStore:
                 """SELECT payload FROM social_relationship_evidence_events
                    WHERE tenant_id = $1 AND subject_entity_id = $2
                      AND assertion_kind = $3
-                     AND ($4::timestamptz IS NULL OR effective_at <= $4)
+                     AND ($4::timestamptz IS NULL OR (
+                       effective_at <= $4 AND observed_at <= $4 AND recorded_at <= $4
+                     ))
                    ORDER BY effective_at DESC, recorded_at DESC, record_id DESC
                    LIMIT $5""",
                 tenant_id,
                 subject_entity_id,
                 assertion_kind,
-                as_of,
+                anchor,
                 bounded + 1,
             )
         records = [_decode_mapping(row["payload"]) for row in rows]
