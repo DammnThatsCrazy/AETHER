@@ -1275,6 +1275,17 @@ class Agent360Provider:
             if delegation_agent_id is not None
             else unresolved_delegation_read()
         )
+        async def unresolved_communication_read() -> Agent360ReadBatch:
+            # An observed inbox's agent_id is a source claim. Do not read or
+            # project its messages into an Agent frame until the requested
+            # source reference resolves to exactly one tenant-owned Agent.
+            return Agent360ReadBatch(rows=[], scope_known=False)
+
+        loaders["communications"] = lambda: (
+            self._source.communications(tenant_id, agent_id, limit)
+            if delegation_agent_id is not None
+            else unresolved_communication_read()
+        )
         async def not_applicable_capability_profile() -> Agent360ReadBatch:
             # Capability installations are keyed by the runtime agent reference.
             # An entity subject has no exact runtime-id join in this provider.
@@ -2699,8 +2710,10 @@ class Agent360Provider:
                     ),
                     "contentPolicy": "metadata_only; addresses_subjects_and_message_bodies_omitted",
                     "reason": (
-                        "agent messages are observed through exact tenant inbox agent_id references; this does not resolve a canonical Agent and is not a complete provider communication history"
+                        "agent messages are observed through exact tenant inbox agent_id references after the requested Agent reference resolves to a canonical tenant Agent; inbox ownership remains a source assertion and provider communication history is incomplete"
                         if communication_items
+                        else "requested Agent identity is unresolved; observed communication rows were not read"
+                        if resolved_canonical_actor is None
                         else "no linked agent message observation was admitted by the requested event-time window"
                         if request.timeRange is not None
                         else "no observed agent messages are linked through tenant-scoped inbox records"
@@ -4629,7 +4642,11 @@ class Agent360Provider:
             "messageObservationId": _first(row, "message_obs_id", "id"),
             "inboxObservationId": _first(row, "inbox_obs_id"),
             "threadObservationId": _first(row, "thread_obs_id"),
-            "direction": _first(row, "direction"),
+            "direction": (
+                _first(row, "direction")
+                if _first(row, "direction") in {"inbound", "outbound"}
+                else None
+            ),
             "hasAttachments": (
                 row.get("has_attachments") if isinstance(row.get("has_attachments"), bool) else None
             ),
@@ -5092,7 +5109,26 @@ class Agent360Provider:
                     claimState=EpistemicStatus.OBSERVED,
                 )
             )
+        communication_identity_refs = _dedupe_refs(
+            [
+                ref
+                for identity in agent_identity_rows
+                if (
+                    source := _first(identity, "identity_evidence_source")
+                ) in {"entities", "agent_deployment_identity_bindings"}
+                and (
+                    ref := self._ref_one(
+                        identity,
+                        source,
+                        ("identity_evidence_id",),
+                        ("identity_bound_at",),
+                    )
+                ) is not None
+            ]
+        )
         for row in communication_rows:
+            if not communication_identity_refs:
+                continue
             ref = self._ref_one(
                 row,
                 "obs_agent_messages",
@@ -5103,14 +5139,16 @@ class Agent360Provider:
                 continue
             inbox_ref = EvidenceRef.model_validate(row["inbox_evidence_ref"])
             direction = _first(row, "direction")
+            if direction not in {"inbound", "outbound"}:
+                direction = None
             claims.append(
                 ClaimEnvelope(
                     id=f"agent_message.{ref.id}",
                     kind="agent_communication_observation",
                     subject=subject,
-                    evidenceRefs=[inbox_ref, ref],
+                    evidenceRefs=[*communication_identity_refs, inbox_ref, ref],
                     claims=[
-                        "A tenant-scoped observed agent inbox is linked by exact inbox ID to an observed message record"
+                        "A requested Agent reference resolves to a tenant-owned canonical Agent; a tenant-scoped observed inbox names that reference and is linked by exact inbox ID to an observed message record"
                         + (f" with direction {direction}." if direction else ".")
                     ],
                     claimState=EpistemicStatus.OBSERVED,

@@ -4091,7 +4091,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Only explicitly authored typed observation references are resolved against exact semantic Silver event, namespace, timestamp, and evidence fields. Legacy Silver rows omit authenticated source namespace and remain unknown; automatic link production, broader activity/session completeness, source freshness, and policy remain unverified."
+          "partialImplementationReason": "Only explicitly authored typed observation references are resolved against exact semantic Silver event, namespace, timestamp, and evidence fields. EpisodeEngine can produce the exact typed link when its caller supplies a semantic observation authority marker, but no live semantic-to-episode association caller is connected. Legacy Silver rows without authenticated source namespace remain unknown; broader activity/session completeness, source freshness, and policy remain unverified."
         },
         {
           "id": "participants",
@@ -10143,7 +10143,7 @@
         {
           "id": "workflow_summary",
           "requirement": "required",
-          "description": "Latest exact tenant workflow definition revision, with registration evidence and recorded actor reference.",
+          "description": "Latest or exact as-of tenant workflow definition revision, with registration evidence and recorded actor reference.",
           "canonicalAuthorityRefs": [
             "execution_facts",
             "workflow_definition_revisions"
@@ -10161,7 +10161,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Registered definition revision is bounded to an exact tenant workflow; execution linkage, actor identity, historical revision replay, trigger or step completion, external effects, and freshness remain unknown.",
+          "partialImplementationReason": "Registered definition revision is bounded to an exact tenant workflow and a complete 200-revision as-of history read; execution linkage, actor identity, trigger or step completion, external effects, and freshness remain unknown.",
           "unboundCanonicalAuthorityRefs": [
             "execution_facts"
           ],

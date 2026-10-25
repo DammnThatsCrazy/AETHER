@@ -28,6 +28,7 @@ from shared.backend_interpretation.stores import EpisodeStore
 from graph.operational_intelligence.models import EntityRef, EvidenceRef
 
 _EPISODE_KEY_TTLED: dict[str, tuple[str, str, str]] = {}  # (episode_id) -> (tenant, kind, subject_key)
+_SEMANTIC_OBSERVATION_AUTHORITY = "semantic_intelligence.silver_semantic_observations"
 
 
 class EpisodeEngine:
@@ -67,6 +68,7 @@ class EpisodeEngine:
         kind: str,
         evidence: Optional[EvidenceRef] = None,
         observation_id: Optional[str] = None,
+        observation_authority: Optional[str] = None,
         journey_touchpoint_ids: Optional[Iterable[str]] = None,
         event_time: Optional[str] = None,
         source_event_id: Optional[str] = None,
@@ -79,6 +81,12 @@ class EpisodeEngine:
         subsequent ones append ``observation_id`` + ``evidence`` to it.
         ``completion_hint`` (a completion-kind observation or an explicit close
         event) closes the episode after the append.
+
+        A caller that explicitly identifies a semantic Silver observation also
+        produces its typed reference after the episode write. The reference
+        writer independently verifies the exact tenant-owned observation and
+        its backend-stamped namespace; this method never trusts the marker as
+        source evidence.
         """
         open_id = await self._open_episode_id(tenant_id, subject, kind)
         if open_id is None:
@@ -107,6 +115,9 @@ class EpisodeEngine:
             )
             await self._store.upsert(record)
             self._open_cache[self._cache_key(tenant_id, subject, kind)] = record.episode_id
+            await self._link_semantic_observation_reference(
+                record, observation_id, observation_authority
+            )
             if completion_hint:
                 return await self.close(tenant_id, record.episode_id)
             return record
@@ -120,6 +131,7 @@ class EpisodeEngine:
                 kind=kind,
                 evidence=evidence,
                 observation_id=observation_id,
+                observation_authority=observation_authority,
                 journey_touchpoint_ids=journey_touchpoint_ids,
                 event_time=event_time,
                 source_event_id=source_event_id,
@@ -130,6 +142,7 @@ class EpisodeEngine:
             record,
             evidence=evidence,
             observation_id=observation_id,
+            observation_authority=observation_authority,
             journey_touchpoint_ids=journey_touchpoint_ids,
             event_time=event_time,
             completion_hint=completion_hint,
@@ -141,6 +154,7 @@ class EpisodeEngine:
         *,
         evidence: Optional[EvidenceRef] = None,
         observation_id: Optional[str] = None,
+        observation_authority: Optional[str] = None,
         outcome_id: Optional[str] = None,
         journey_touchpoint_ids: Optional[Iterable[str]] = None,
         event_time: Optional[str] = None,
@@ -168,9 +182,33 @@ class EpisodeEngine:
             if record.occurred_to is None or event_time > record.occurred_to:
                 record.occurred_to = event_time
         await self._store.upsert(record)
+        await self._link_semantic_observation_reference(
+            record, observation_id, observation_authority
+        )
         if completion_hint:
             return await self.close(record.tenant_id, record.episode_id)
         return record
+
+    async def _link_semantic_observation_reference(
+        self,
+        record: EpisodeRecord,
+        observation_id: Optional[str],
+        observation_authority: Optional[str],
+    ) -> None:
+        if (
+            not observation_id
+            or observation_authority != _SEMANTIC_OBSERVATION_AUTHORITY
+        ):
+            return
+        from shared.backend_interpretation.flags import episode_engine_enabled
+
+        if episode_engine_enabled():
+            # The episode row already exists. Propagate a failed authority read
+            # or write so a replay retries this idempotent exact link; Episode360
+            # treats the row as unresolved until the typed link is present.
+            await self.link_observation_reference(
+                record.tenant_id, record.episode_id, observation_id
+            )
 
     async def link_outcome(
         self, tenant_id: str, episode_id: str, outcome_id: str

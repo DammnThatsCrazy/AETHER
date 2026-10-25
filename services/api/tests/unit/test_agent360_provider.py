@@ -2013,6 +2013,7 @@ async def test_agent360_communications_claim_cites_inbox_and_message_under_polic
     )
     assert communication_claim.domainSlotIds == ["communications"]
     assert {(ref.source, ref.id) for ref in communication_claim.evidenceRefs} == {
+        ("agent_deployment_identity_bindings", "binding-agent-a"),
         ("obs_agent_inboxes", "inbox-1"),
         ("obs_agent_messages", "message-1"),
     }
@@ -2056,6 +2057,71 @@ async def test_agent360_communications_claim_cites_inbox_and_message_under_polic
     assert denied.slots[0].content is None
     assert denied.slots[0].claims == []
     assert denied.slots[0].evidenceRefs == []
+
+
+@pytest.mark.asyncio
+async def test_agent360_communications_are_not_read_without_one_canonical_agent() -> None:
+    class UnresolvedSource(FakeSource):
+        def __init__(self):
+            super().__init__()
+            self.communication_reads = 0
+
+        async def actor_identity(self, tenant_id, agent_id):
+            return Agent360ReadBatch(rows=[])
+
+        async def communications(self, tenant_id, agent_id, limit):
+            self.communication_reads += 1
+            return await super().communications(tenant_id, agent_id, limit)
+
+    source = UnresolvedSource()
+    result = await Agent360Provider(source).project(_request(), _context())
+    communication = _sections(result)["interactions"].content["communications"]
+    assert source.communication_reads == 0
+    assert communication["state"] == "unknown"
+    assert communication["messages"] == []
+    assert communication["count"] is None
+    assert "identity is unresolved" in communication["reason"]
+    assert not any(
+        claim.kind == "agent_communication_observation" for claim in result.claims
+    )
+
+    class AmbiguousSource(UnresolvedSource):
+        async def actor_identity(self, tenant_id, agent_id):
+            first = (await FakeSource.actor_identity(self, tenant_id, agent_id)).rows[0]
+            return Agent360ReadBatch(
+                rows=[
+                    first,
+                    {**first, "canonical_agent_entity_id": "another-tenant-agent"},
+                ]
+            )
+
+    ambiguous = AmbiguousSource()
+    result = await Agent360Provider(ambiguous).project(_request(), _context())
+    assert ambiguous.communication_reads == 0
+    assert _sections(result)["interactions"].content["communications"]["messages"] == []
+    assert not any(
+        claim.kind == "agent_communication_observation" for claim in result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent360_communication_claim_does_not_repeat_untrusted_direction() -> None:
+    class UntrustedDirectionSource(FakeSource):
+        async def communications(self, tenant_id, agent_id, limit):
+            batch = await super().communications(tenant_id, agent_id, limit)
+            return Agent360ReadBatch(
+                rows=[{**row, "direction": "private message body"} for row in batch.rows]
+            )
+
+    result = await Agent360Provider(UntrustedDirectionSource()).project(
+        _request(), _context()
+    )
+    claim = next(
+        claim for claim in result.claims if claim.kind == "agent_communication_observation"
+    )
+    assert "private message body" not in str(claim.model_dump(mode="json"))
+    message = _sections(result)["interactions"].content["communications"]["messages"][0]
+    assert message["direction"] is None
 
 
 @pytest.mark.asyncio
@@ -2758,7 +2824,9 @@ async def test_agent360_keeps_unobserved_agent_unknown_and_reports_real_empty_re
     assert sections["summary"].content["identity"]["state"] == "unknown"
     assert sections["summary"].content["counts"]["executions"] == 0
     assert sections["summary"].content["counts"]["riskSignals"] is None
-    assert sections["summary"].content["counts"]["communicationMessages"] == 0
+    # The source Agent reference is unresolved, so the communication store is
+    # deliberately not read and an empty count would overstate coverage.
+    assert sections["summary"].content["counts"]["communicationMessages"] is None
     assert sections["timeline"].state == "empty"
     assert sections["timeline"].content["count"] == 0
     assert sections["outcomes"].state == "unknown"

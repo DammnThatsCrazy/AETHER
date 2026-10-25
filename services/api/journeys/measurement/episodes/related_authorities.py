@@ -354,7 +354,9 @@ class EpisodeJourneyAuthorityRepository:
             persisted = {key: value for key, value in existing.items() if key not in {
                 "idempotency_key", "record_id", "subject_ref"
             }}
-            expected = {key: value for key, value in payload.items() if key != "idempotency_key"}
+            expected = {key: value for key, value in payload.items() if key not in {
+                "idempotency_key", "record_id"
+            }}
             if isinstance(typed, EpisodeObservationReferenceRecord):
                 # A replay must keep the original association write time, not
                 # replace it with the retry's clock value.
@@ -393,7 +395,9 @@ class EpisodeJourneyAuthorityRepository:
             for key, value in persisted_rows[0].items()
             if key not in {"idempotency_key", "record_id", "subject_ref"}
         }
-        expected = {key: value for key, value in payload.items() if key != "idempotency_key"}
+        expected = {key: value for key, value in payload.items() if key not in {
+            "idempotency_key", "record_id"
+        }}
         if isinstance(typed, EpisodeObservationReferenceRecord):
             persisted_linked_at = persisted.pop("linked_at", None)
             expected.pop("linked_at", None)

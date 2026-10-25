@@ -177,6 +177,10 @@ class Workflow360Source(Protocol):
         self, *, tenant_id: str, workflow_id: str
     ) -> WorkflowDefinitionRead: ...
 
+    async def workflow_definition_as_of(
+        self, *, tenant_id: str, workflow_id: str, as_of: datetime
+    ) -> WorkflowDefinitionRead: ...
+
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
     ) -> WorkflowRunInvocationRead: ...
@@ -263,6 +267,17 @@ class RepositoryWorkflow360Source:
             return await repository.read_latest(tenant_id, workflow_id)
         except Exception:  # noqa: BLE001 - definition authority remains unknown
             return WorkflowDefinitionRead(reason="workflow_definition_read_unavailable")
+
+    async def workflow_definition_as_of(
+        self, *, tenant_id: str, workflow_id: str, as_of: datetime
+    ) -> WorkflowDefinitionRead:
+        if not tenant_id or not workflow_id:
+            return WorkflowDefinitionRead(reason="exact_tenant_workflow_as_of_required")
+        try:
+            repository = self._workflow_definition_repository or WorkflowDefinitionRepository()
+            return await repository.read_as_of(tenant_id, workflow_id, as_of)
+        except Exception:  # noqa: BLE001 - history authority remains unknown
+            return WorkflowDefinitionRead(reason="workflow_definition_history_read_unavailable")
 
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
@@ -1112,6 +1127,37 @@ class RepositoryWorkflow360Source:
         )
 
 
+def _definition_as_of_anchor(
+    request: ProjectionRequest, context: ProjectionContext
+) -> tuple[Optional[datetime], Optional[str]]:
+    """Accept only one unambiguous point-in-time definition request."""
+    historical = bool(
+        request.asOf is not None
+        or context.asOf is not None
+        or request.timeRange is not None
+        or request.temporalMode in {"as_of", "compare", "relative"}
+    )
+    if not historical:
+        return None, None
+    if request.timeRange is not None or request.temporalMode in {"compare", "relative"}:
+        return None, "workflow_definition_window_or_comparison_replay_not_supported"
+    raw_anchors = [value for value in (request.asOf, context.asOf) if value is not None]
+    if not raw_anchors:
+        return None, "workflow_definition_as_of_anchor_required"
+    parsed: list[datetime] = []
+    for value in raw_anchors:
+        try:
+            instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (AttributeError, ValueError):
+            return None, "workflow_definition_as_of_anchor_invalid"
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            return None, "workflow_definition_as_of_anchor_invalid"
+        parsed.append(instant.astimezone(timezone.utc))
+    if any(value != parsed[0] for value in parsed[1:]):
+        return None, "workflow_definition_as_of_anchor_mismatch"
+    return parsed[0], None
+
+
 class Workflow360Provider:
     """Tenant-safe projection for the current Workflow360 evidence contract."""
 
@@ -1142,30 +1188,42 @@ class Workflow360Provider:
             or request.timeRange is not None
             or request.temporalMode in {"as_of", "compare", "relative"}
         )
-        if summary_requested and not definition_historical and subject.kind in {
+        definition_anchor, definition_anchor_reason = _definition_as_of_anchor(
+            request, context
+        )
+        if summary_requested and subject.kind in {
             "workflow",
             "automation",
             "automation_id",
         }:
-            definition_reader = getattr(self._source, "workflow_definition", None)
-            if definition_reader is None:
+            if definition_historical and definition_anchor_reason:
                 definition_read = WorkflowDefinitionRead(
-                    reason="workflow_definition_source_unavailable"
+                    reason=definition_anchor_reason
                 )
             else:
-                try:
-                    definition_read = await definition_reader(
-                        tenant_id=tenant_id,
-                        workflow_id=subject.id,
-                    )
-                except Exception:  # noqa: BLE001 - definition source remains unknown
+                reader_name = (
+                    "workflow_definition_as_of"
+                    if definition_historical
+                    else "workflow_definition"
+                )
+                definition_reader = getattr(self._source, reader_name, None)
+                if definition_reader is None:
                     definition_read = WorkflowDefinitionRead(
                         reason="workflow_definition_source_unavailable"
                     )
-        elif summary_requested and definition_historical:
-            definition_read = WorkflowDefinitionRead(
-                reason="workflow_definition_historical_revision_read_not_supported"
-            )
+                else:
+                    try:
+                        reader_args: dict[str, Any] = {
+                            "tenant_id": tenant_id,
+                            "workflow_id": subject.id,
+                        }
+                        if definition_historical:
+                            reader_args["as_of"] = definition_anchor
+                        definition_read = await definition_reader(**reader_args)
+                    except Exception:  # noqa: BLE001 - definition source remains unknown
+                        definition_read = WorkflowDefinitionRead(
+                            reason="workflow_definition_source_unavailable"
+                        )
         elif summary_requested and subject.kind in _RUN_SUBJECT_KINDS:
             definition_read = WorkflowDefinitionRead(
                 reason="workflow_run_has_no_exact_workflow_definition_id_link"
@@ -1613,7 +1671,7 @@ class Workflow360Provider:
             tenant_id=tenant_id,
             read=definition_read,
             requested=summary_requested,
-            historical=definition_historical,
+            historical_anchor=definition_anchor if definition_historical else None,
         )
 
         if records and read_complete:
@@ -1724,6 +1782,16 @@ class Workflow360Provider:
             sections=sections,
             claims=claims,
             dependencyState=list(context.dependencyState),
+            asOf=(
+                request.asOf or context.asOf
+                if definition_historical
+                and definition_anchor is not None
+                and subject.kind in {"workflow", "automation", "automation_id"}
+                and definition_read.available
+                and definition_read.complete
+                and not definition_read.reason
+                else None
+            ),
             generatedAt=_utc_now_iso(),
             degradedReasons=[],
         )
@@ -1735,13 +1803,10 @@ def _workflow_summary_section(
     tenant_id: str,
     read: WorkflowDefinitionRead,
     requested: bool,
-    historical: bool,
+    historical_anchor: Optional[datetime],
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     if not requested:
         return _unknown_section("workflow_summary"), []
-    if historical:
-        reason = "workflow_definition_historical_revision_read_not_supported"
-        return _unknown_section_with_reason("workflow_summary", reason), []
     if subject.kind not in {"workflow", "automation", "automation_id"}:
         reason = (
             "workflow_run_has_no_exact_workflow_definition_id_link"
@@ -1764,9 +1829,22 @@ def _workflow_summary_section(
                     title="Registered workflow definition",
                     content={
                         "state": "empty",
-                        "coverage": "complete_for_exact_workflow_id_lookup",
-                        "reason": "no_registered_workflow_definition_for_exact_id",
+                        "coverage": (
+                            "complete_for_exact_workflow_id_as_of_lookup"
+                            if historical_anchor is not None
+                            else "complete_for_exact_workflow_id_lookup"
+                        ),
+                        "reason": (
+                            "no_registered_workflow_definition_at_as_of"
+                            if historical_anchor is not None
+                            else "no_registered_workflow_definition_for_exact_id"
+                        ),
                         "workflowId": subject.id,
+                        "asOf": (
+                            historical_anchor.isoformat()
+                            if historical_anchor is not None
+                            else None
+                        ),
                         "executionState": "unknown",
                     },
                     canonicalAuthorityRefs=["workflow_definition_revisions"],
@@ -1819,7 +1897,11 @@ def _workflow_summary_section(
     steps = [item.model_dump(mode="json") for item in definition.steps]
     content = {
         "state": "available",
-        "coverage": "complete_for_latest_registered_revision",
+        "coverage": (
+            "complete_for_exact_workflow_id_as_of_lookup"
+            if historical_anchor is not None
+            else "complete_for_latest_registered_revision"
+        ),
         "reason": "explicit_tenant_registered_workflow_definition_revision",
         "workflowId": definition.workflow_id,
         "revision": definition.revision,
@@ -1832,7 +1914,12 @@ def _workflow_summary_section(
         "effectiveAt": _safe_timestamp(definition.effective_at),
         "declaredTriggers": triggers,
         "declaredSteps": steps,
-        "definitionHistoryCoverage": "latest_revision_only",
+        "definitionHistoryCoverage": (
+            "bounded_as_of_revision_selection"
+            if historical_anchor is not None
+            else "latest_revision_only"
+        ),
+        "asOf": historical_anchor.isoformat() if historical_anchor is not None else None,
         "runLinkState": "unknown",
         "triggerExecutionState": "unknown",
         "stepExecutionState": "unknown",

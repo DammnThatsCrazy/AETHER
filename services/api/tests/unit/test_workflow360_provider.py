@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -214,6 +215,26 @@ class FakeWorkflowDefinitionFactStore:
                 "data": row["data"],
             }
             for row in rows[:2]
+        ]
+
+    async def revisions_for_subject(
+        self, tenant_id: str, workflow_id: str, *, limit: int
+    ) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self.rows.values()
+            if row["tenant_id"] == tenant_id and row["subject_ref"] == workflow_id
+        ]
+        rows.sort(key=lambda row: str(row["occurred_at"]), reverse=True)
+        return [
+            {
+                "id": row["id"],
+                "tenant_id": row["tenant_id"],
+                "subject_ref": row["subject_ref"],
+                "occurred_at": row["occurred_at"],
+                "data": row["data"],
+            }
+            for row in rows[:limit]
         ]
 
 
@@ -2147,3 +2168,147 @@ async def test_registered_workflow_definition_projects_latest_revision_without_r
     assert claim.claimState == EpistemicStatus.OBSERVED
     assert claim.evidenceRefs[0].id == second.record_id
     assert sections["runs"].state == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_registered_workflow_definition_as_of_uses_known_effective_revision_only() -> None:
+    fact_store = FakeWorkflowDefinitionFactStore()
+    repository = WorkflowDefinitionRepository(fact_store)
+    first = WorkflowDefinitionRevision(
+        workflow_id="workflow-historical",
+        tenant_id=TENANT_A,
+        revision=1,
+        name="Initial",
+        actor_ref="tenant-user-1",
+        created_at="2026-10-20T10:00:00Z",
+        effective_at="2026-10-20T11:00:00Z",
+    )
+    second = WorkflowDefinitionRevision.model_validate(
+        first.model_dump(mode="json")
+        | {
+            "revision": 2,
+            "name": "Later revision",
+            "created_at": "2026-10-21T10:00:00Z",
+            "effective_at": "2026-10-23T10:00:00Z",
+        }
+    )
+    await repository.register(first)
+    await repository.register(second)
+    provider = Workflow360Provider(
+        source=RepositoryWorkflow360Source(workflow_definition_repository=repository)
+    )
+
+    before_registration = await provider.project(
+        _request(
+            subject_kind="workflow",
+            subject_id=first.workflow_id,
+            as_of="2026-10-19T12:00:00Z",
+        ),
+        _context(),
+    )
+    empty = _sections(before_registration)["workflow_summary"]
+    assert before_registration.asOf == "2026-10-19T12:00:00Z", empty.content
+    assert empty.state == "empty"
+    assert empty.content["reason"] == "no_registered_workflow_definition_at_as_of"
+
+    before_effective = await provider.project(
+        _request(
+            subject_kind="workflow",
+            subject_id=first.workflow_id,
+            as_of="2026-10-22T12:00:00Z",
+        ),
+        _context(),
+    )
+    summary = _sections(before_effective)["workflow_summary"]
+    assert before_effective.asOf == "2026-10-22T12:00:00Z"
+    assert summary.state == "available"
+    assert summary.content["revision"] == 1
+    assert summary.content["definitionHistoryCoverage"] == "bounded_as_of_revision_selection"
+    assert summary.content["runLinkState"] == "unknown"
+    assert _sections(before_effective)["runs"].state == "unknown"
+    definition_claim = next(
+        claim
+        for claim in before_effective.claims
+        if claim.kind == "registered_workflow_definition_revision"
+    )
+    assert definition_claim.evidenceRefs[0].id == first.record_id
+
+    after_effective = await provider.project(
+        _request(
+            subject_kind="workflow",
+            subject_id=first.workflow_id,
+            as_of="2026-10-24T12:00:00Z",
+        ),
+        _context(),
+    )
+    assert _sections(after_effective)["workflow_summary"].content["revision"] == 2
+
+
+@pytest.mark.asyncio
+async def test_workflow_definition_historical_read_fails_closed_on_scope_and_anchor_errors() -> None:
+    fact_store = FakeWorkflowDefinitionFactStore()
+    repository = WorkflowDefinitionRepository(fact_store)
+    definition = WorkflowDefinitionRevision(
+        workflow_id="workflow-history-scope",
+        tenant_id=TENANT_A,
+        revision=1,
+        name="Scoped",
+        actor_ref="tenant-user-1",
+        created_at="2026-10-20T10:00:00Z",
+    )
+    await repository.register(definition)
+    provider = Workflow360Provider(
+        source=RepositoryWorkflow360Source(workflow_definition_repository=repository)
+    )
+    request = _request(
+        subject_kind="workflow",
+        subject_id=definition.workflow_id,
+        as_of="2026-10-21T12:00:00Z",
+    )
+    mismatch = await provider.project(
+        request,
+        _context().model_copy(update={"asOf": "2026-10-22T12:00:00Z"}),
+    )
+    assert _sections(mismatch)["workflow_summary"].state == "unknown"
+    assert _sections(mismatch)["workflow_summary"].content["reasonCode"] == (
+        "workflow_definition_as_of_anchor_mismatch"
+    )
+    assert mismatch.asOf is None
+
+    fact_store.rows[definition.record_id]["data"]["tenant_id"] = "other-tenant"
+    contaminated = await provider.project(request, _context())
+    assert _sections(contaminated)["workflow_summary"].state == "unknown"
+    assert _sections(contaminated)["workflow_summary"].content["reasonCode"] == (
+        "workflow_definition_history_evidence_invalid"
+    )
+    assert contaminated.asOf is None
+
+    fact_store.rows[definition.record_id]["data"]["tenant_id"] = TENANT_A
+    fact_store.rows[definition.record_id]["data"]["created_at"] = "2026-10-19T10:00:00Z"
+    timestamp_conflict = await provider.project(request, _context())
+    assert _sections(timestamp_conflict)["workflow_summary"].state == "unknown"
+    assert _sections(timestamp_conflict)["workflow_summary"].content["reasonCode"] == (
+        "workflow_definition_history_evidence_invalid"
+    )
+
+
+@pytest.mark.asyncio
+async def test_workflow_definition_historical_read_rejects_truncated_history() -> None:
+    class TruncatedFactStore(FakeWorkflowDefinitionFactStore):
+        async def revisions_for_subject(
+            self, tenant_id: str, workflow_id: str, *, limit: int
+        ) -> list[dict[str, Any]]:
+            assert tenant_id == TENANT_A
+            assert workflow_id == "workflow-many-revisions"
+            assert limit == 201
+            return [{} for _ in range(limit)]
+
+    repository = WorkflowDefinitionRepository(TruncatedFactStore())
+    result = await repository.read_as_of(
+        TENANT_A,
+        "workflow-many-revisions",
+        datetime.fromisoformat("2026-10-24T12:00:00+00:00"),
+    )
+    assert result.available is True
+    assert result.complete is False
+    assert result.reason == "workflow_definition_history_truncated_or_invalid"

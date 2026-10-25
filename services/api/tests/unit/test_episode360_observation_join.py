@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,11 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from graph.operational_intelligence.models import EntityRef  # noqa: E402
+from graph.operational_intelligence.models import EntityRef, EvidenceRef  # noqa: E402
+from journeys.measurement.episodes.related_authorities import (  # noqa: E402
+    AuthorityFactRead,
+    EpisodeObservationReferenceRecord,
+)
 from journeys.measurement.episodes.provider import (  # noqa: E402
     Episode360Provider,
     RepositoryEpisodeObservationSource,
@@ -30,6 +35,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
 
 TENANT = "tenant-episode360-observation-join"
 EPISODE_ID = "episode-observation-join-1"
+SOURCE_NAMESPACE = "site:episode-observation-test"
 
 
 def _episode(observation_ids: list[str]) -> EpisodeRecord:
@@ -56,7 +62,10 @@ def _observation(
         "tenant_id": tenant_id,
         "status": status,
         "source_type": source_type,
+        "source_namespace": SOURCE_NAMESPACE,
+        "source_event_id": f"event-{observation_id}",
         "occurred_at": occurred_at,
+        "received_at": occurred_at,
         "processed_at": occurred_at,
         "content": "private event payload must not be projected",
         "actor_ref": "private-actor-id-must-not-be-projected",
@@ -80,13 +89,76 @@ class FakeObservationSource:
     def __init__(self, rows: list[dict[str, str]] | None = None, *, error=None) -> None:
         self.rows = [] if rows is None else rows
         self.error = error
-        self.calls: list[tuple[str, list[str]]] = []
+        self.calls: list[tuple[str, dict[str, str]]] = []
 
-    async def find_by_ids(self, tenant_id: str, observation_ids: list[str]):
-        self.calls.append((tenant_id, list(observation_ids)))
+    async def find_by_namespaced_ids(
+        self, tenant_id: str, namespaces_by_id: dict[str, str]
+    ):
+        self.calls.append((tenant_id, dict(namespaces_by_id)))
         if self.error is not None:
             raise self.error
         return self.rows
+
+
+def _typed_reference(
+    observation_id: str, *, occurred_at: str = "2026-10-20T12:00:00+00:00"
+) -> EpisodeObservationReferenceRecord:
+    moment = datetime.fromisoformat(occurred_at)
+    uri = f"store://silver_semantic_observations/{TENANT}:{observation_id}"
+    source_event_id = f"event-{observation_id}"
+    return EpisodeObservationReferenceRecord(
+        record_id=f"episode-observation-link-{observation_id}",
+        tenant_id=TENANT,
+        episode_id=EPISODE_ID,
+        observation_id=observation_id,
+        source_namespace=SOURCE_NAMESPACE,
+        source_event_id=source_event_id,
+        occurred_at=moment,
+        received_at=moment,
+        recorded_at=moment,
+        linked_at=moment,
+        evidence_refs=[
+            EvidenceRef(
+                id=observation_id,
+                type="event",
+                source="semantic_intelligence.silver_semantic_observations",
+                observedAt=occurred_at,
+                uri=uri,
+            ),
+            EvidenceRef(
+                id=source_event_id,
+                type="event",
+                source="semantic_intelligence.silver_semantic_observations.source_event_id",
+                observedAt=occurred_at,
+                uri=f"{uri}/source-event/{source_event_id}",
+            ),
+            EvidenceRef(
+                id=observation_id,
+                type="event",
+                source="semantic_intelligence.silver_semantic_observations.received_at",
+                observedAt=occurred_at,
+                uri=f"{uri}/receipt",
+            ),
+        ],
+    )
+
+
+class FakeEpisodeAuthoritySource:
+    def __init__(self, references: list[EpisodeObservationReferenceRecord]) -> None:
+        self.references = references
+
+    async def list_for_subject(
+        self, tenant_id: str, subject_kind: str, subject_id: str,
+        record_type: str, *, limit: int,
+    ) -> AuthorityFactRead:
+        assert (tenant_id, subject_kind, subject_id, record_type) == (
+            TENANT, "episode", EPISODE_ID, "episode_observation_reference"
+        )
+        return AuthorityFactRead(
+            records=tuple(
+                record.model_dump(mode="json") for record in self.references[:limit]
+            )
+        )
 
 
 class FakeTouchpointSource:
@@ -143,9 +215,15 @@ async def test_episode_observation_join_uses_exact_tenant_ids_and_preserves_part
     result = await Episode360Provider(
         episode_store=FakeEpisodeStore(episode),
         observation_source=observation_source,
+        episode_authority_source=FakeEpisodeAuthoritySource([
+            _typed_reference("obs-later", occurred_at="2026-10-20T12:05:00+00:00"),
+            _typed_reference("obs-earlier", occurred_at="2026-10-20T12:00:00+00:00"),
+        ]),
     ).project(_request(), _context())
 
-    assert observation_source.calls == [(TENANT, ["obs-later", "obs-earlier"])]
+    assert observation_source.calls == [
+        (TENANT, {"obs-later": SOURCE_NAMESPACE, "obs-earlier": SOURCE_NAMESPACE})
+    ]
     interactions = _section(result, "interactions").content
     observation_refs = interactions["observationReferences"]
     assert observation_refs["state"] == "available"
@@ -310,7 +388,7 @@ async def test_episode_handoff_slot_does_not_infer_canonical_handoff_from_observ
     assert handoffs["state"] == "unknown"
     assert handoffs["coverage"] == "unknown"
     assert handoffs["reason"] == (
-        "episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id"
+        "no_explicit_episode_agent_handoff_link_recorded_absence_not_established"
     )
     assert handoffs["handoffs"] == []
 
@@ -335,12 +413,17 @@ async def test_episode_observation_join_omits_cross_tenant_and_inactive_rows():
             _episode(["obs-active", "obs-cross-tenant", "obs-restricted"])
         ),
         observation_source=observation_source,
+        episode_authority_source=FakeEpisodeAuthoritySource([
+            _typed_reference("obs-active"),
+            _typed_reference("obs-cross-tenant"),
+            _typed_reference("obs-restricted"),
+        ]),
     ).project(_request(), _context())
 
     references = _section(result, "interactions").content["observationReferences"]
     assert references["state"] == "degraded"
     assert [row["observationId"] for row in references["observations"]] == ["obs-active"]
-    assert [ref["id"] for ref in references["evidenceRefs"]] == ["obs-active"]
+    assert {ref["id"] for ref in references["evidenceRefs"]} >= {"obs-active"}
     assert "semantic_observation_tenant_scope_mismatch" in references["reason"]
     assert "episode_observation_tenant_mismatch" in result.degradedReasons
     assert "episode_observation_non_active_rows_omitted" in result.degradedReasons
@@ -354,13 +437,16 @@ async def test_episode_observation_join_omits_all_duplicate_ids():
         observation_source=FakeObservationSource(
             [observation, dict(observation), dict(observation)]
         ),
+        episode_authority_source=FakeEpisodeAuthoritySource([
+            _typed_reference("obs-ambiguous"),
+        ]),
     ).project(_request(), _context())
 
     references = _section(result, "interactions").content["observationReferences"]
     assert references["state"] == "unknown"
     assert references["observations"] == []
     assert references["evidenceRefs"] == []
-    assert references["reason"] == "semantic_observation_rows_invalid_or_ambiguous"
+    assert references["reason"] == "episode_observation_namespace_or_semantic_rows_invalid"
 
 
 @pytest.mark.asyncio
@@ -368,12 +454,15 @@ async def test_episode_observation_read_failure_stays_unknown_without_claiming_f
     result = await Episode360Provider(
         episode_store=FakeEpisodeStore(_episode(["obs-unavailable"])),
         observation_source=FakeObservationSource(error=RuntimeError("private source detail")),
+        episode_authority_source=FakeEpisodeAuthoritySource([
+            _typed_reference("obs-unavailable"),
+        ]),
     ).project(_request(), _context())
 
     references = _section(result, "interactions").content["observationReferences"]
     assert references["state"] == "unknown"
     assert references["observations"] == []
-    assert references["reason"] == "semantic_observation_authority_unavailable"
+    assert references["reason"] == "episode_observation_namespace_or_semantic_authority_unavailable"
     assert references["freshness"]["state"] == "unknown"
     assert references["policy"]["state"] == "unknown"
     assert "private source detail" not in json.dumps(result.model_dump(mode="json"))

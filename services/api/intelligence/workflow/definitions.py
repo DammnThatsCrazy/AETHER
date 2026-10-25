@@ -141,7 +141,7 @@ class WorkflowDefinitionRevision(BaseModel):
 
 
 class WorkflowDefinitionFactRepository(SemanticFactRepository):
-    """Generic semantic fact writer with an indexed latest-revision read."""
+    """Generic semantic fact writer with bounded exact-subject revision reads."""
 
     def __init__(self) -> None:
         super().__init__(_TABLE)
@@ -175,6 +175,39 @@ class WorkflowDefinitionFactRepository(SemanticFactRepository):
             for row in rows
         ]
 
+    async def revisions_for_subject(
+        self, tenant_id: str, workflow_id: str, *, limit: int
+    ) -> list[dict[str, Any]]:
+        """Read a bounded history, including malformed rows for fail-closed validation."""
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row
+                for row in self._store.values()
+                if row.get("tenant_id") == tenant_id and row.get("subject_ref") == workflow_id
+            ]
+            rows.sort(key=lambda row: str(row.get("occurred_at") or ""), reverse=True)
+            return rows[:limit]
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT id, tenant_id, subject_ref, occurred_at, data FROM {self.table_name} "
+                "WHERE tenant_id = $1 AND subject_ref = $2 "
+                "ORDER BY occurred_at DESC NULLS LAST, id DESC LIMIT $3",
+                tenant_id,
+                workflow_id,
+                limit,
+            )
+        return [
+            {
+                "id": row["id"],
+                "tenant_id": row["tenant_id"],
+                "subject_ref": row["subject_ref"],
+                "occurred_at": row["occurred_at"],
+                "data": _json_mapping(row["data"]),
+            }
+            for row in rows
+        ]
+
 
 class WorkflowDefinitionFactStore(Protocol):
     async def upsert(self, fact: dict[str, Any]) -> dict[str, Any]: ...
@@ -184,6 +217,10 @@ class WorkflowDefinitionFactStore(Protocol):
     ) -> list[dict[str, Any]]: ...
 
     async def latest_for_subject(self, tenant_id: str, workflow_id: str) -> list[dict[str, Any]]: ...
+
+    async def revisions_for_subject(
+        self, tenant_id: str, workflow_id: str, *, limit: int
+    ) -> list[dict[str, Any]]: ...
 
 
 @dataclass(frozen=True)
@@ -201,7 +238,7 @@ class ResolvedWorkflowDefinition:
 
 
 class WorkflowDefinitionRepository:
-    """Append-only writer and bounded exact latest-revision reader."""
+    """Append-only writer and bounded exact current or as-of revision reader."""
 
     def __init__(self, fact_store: Optional[WorkflowDefinitionFactStore] = None) -> None:
         self._facts = fact_store or WorkflowDefinitionFactRepository()
@@ -321,6 +358,83 @@ class WorkflowDefinitionRepository:
         normalized["tenant_id"] = tenant_id
         normalized["subject_ref"] = workflow_id
         return WorkflowDefinitionRead(rows=(normalized,), available=True, complete=True)
+
+    async def read_as_of(
+        self, tenant_id: str, workflow_id: str, as_of: datetime
+    ) -> WorkflowDefinitionRead:
+        """Select the highest revision known and effective at one exact UTC instant."""
+        if (
+            not tenant_id
+            or not workflow_id
+            or not isinstance(as_of, datetime)
+            or as_of.tzinfo is None
+            or as_of.utcoffset() is None
+        ):
+            return WorkflowDefinitionRead(reason="exact_tenant_workflow_as_of_required")
+        anchor = as_of.astimezone(timezone.utc)
+        try:
+            rows = await self._facts.revisions_for_subject(
+                tenant_id, workflow_id, limit=_MAX_DEFINITION_HISTORY + 1
+            )
+        except Exception:  # noqa: BLE001 - unavailable authority remains unknown
+            return WorkflowDefinitionRead(reason="workflow_definition_history_read_unavailable")
+        if not isinstance(rows, (list, tuple)) or len(rows) > _MAX_DEFINITION_HISTORY:
+            return WorkflowDefinitionRead(
+                available=True, reason="workflow_definition_history_truncated_or_invalid"
+            )
+
+        selected: list[tuple[int, dict[str, Any]]] = []
+        seen_revisions: set[int] = set()
+        for raw in rows:
+            row = _mapping(raw)
+            if (
+                row is None
+                or row.get("tenant_id") != tenant_id
+                or row.get("subject_ref") != workflow_id
+            ):
+                return WorkflowDefinitionRead(
+                    available=True, reason="workflow_definition_history_scope_invalid"
+                )
+            data = _row_data(row)
+            if data is None:
+                return WorkflowDefinitionRead(
+                    available=True, reason="workflow_definition_history_contract_invalid"
+                )
+            try:
+                definition = WorkflowDefinitionRevision.model_validate(
+                    _domain_payload(data)
+                )
+            except Exception:  # noqa: BLE001 - malformed history cannot be replayed
+                return WorkflowDefinitionRead(
+                    available=True, reason="workflow_definition_history_contract_invalid"
+                )
+            if (
+                definition.tenant_id != tenant_id
+                or definition.workflow_id != workflow_id
+                or row.get("id") != definition.record_id
+                or _timestamp(row.get("occurred_at"))
+                != _timestamp(definition.created_at)
+                or data.get("definition_digest") != definition.definition_digest
+                or definition.revision in seen_revisions
+            ):
+                return WorkflowDefinitionRead(
+                    available=True, reason="workflow_definition_history_evidence_invalid"
+                )
+            seen_revisions.add(definition.revision)
+            if definition.created_at <= anchor and (
+                definition.effective_at is None or definition.effective_at <= anchor
+            ):
+                normalized = dict(data)
+                normalized["record_id"] = definition.record_id
+                normalized["tenant_id"] = tenant_id
+                normalized["subject_ref"] = workflow_id
+                selected.append((definition.revision, normalized))
+        if not selected:
+            return WorkflowDefinitionRead(rows=(), available=True, complete=True)
+        selected.sort(key=lambda item: item[0], reverse=True)
+        return WorkflowDefinitionRead(
+            rows=(selected[0][1],), available=True, complete=True
+        )
 
 
 def workflow_definition_evidence(
