@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:4508e21aee8afb6414af479553081a15593e1e700a7fe4818a42e9f814787cc6"
+  "services/api/actions/": "sha256:c6b64a8e7bf5eee420ef0e1aa541d598c0c782c14d3206b0b7f69ade4d20acca"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:a6731cc3742863724966de3087f5217827ce5105853a193201a4a4f03828f4aa"
   "services/api/identity/": "sha256:cbb27b5635537a2aea0370aaa468032d138c56efdca39c29523d604910aa4318"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:7e109af4632f75955912d24e024d9b1f79d9c96175260be57f060904827ba772"
+  "services/api/intelligence/": "sha256:6aa493329c1683cf25f88f47a58f35b01185ebdce477deb4876d42e97fdb1929"
   "services/api/journeys/": "sha256:d340d57a3ed4517d790ef96c49eceea7b3545fe1b0f2feb9d88f1854addf90bf"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -2031,9 +2031,11 @@ authorization or delegation authority.
 Execution360's `authority_check` also surfaces a recorded delegation-engine
 decision only when `policy_log.delegation_check` joins to the same tenant-owned
 execution row and the exact requested action and resource are present. The
-claim cites lifecycle evidence for that row; the decision timestamp is not
-persisted, so current or standing authority, other authority sources, and a
-freshness threshold remain unknown.
+claim cites lifecycle evidence for that row. An exact persisted evaluation
+timestamp is exposed when present; legacy missing timestamps remain unknown.
+Conflicting persisted execution and policy delegation references suppress the
+decision and degrade the authority scope. Current or standing authority, other
+authority sources, and a freshness threshold remain unknown.
 Execution360's required `latency_cost` slot now joins canonical AI invocation
 facts only when tenant, execution `action_id`, and canonical Agent match an
 admitted execution. Invocation latency and evidence are preserved; known
@@ -2094,7 +2096,10 @@ the episode. The live semantic pipeline does not yet supply the explicit
 episode association. Full activity and session coverage, policy, and freshness
 remain unresolved; Campaign360
 observation and source-fact dimensions, event completeness, and freshness remain
-unknown; Memory360 does not evaluate current consent or policy. These provider
+unknown; Memory360 does not evaluate current consent or policy. Its record
+producer stamps explicitly required purposes from the verified write-time
+decision, and exact reads suppress a stamped record if that decision no longer
+matches. Legacy unstamped purposes remain unknown. These provider
 changes add no HTTP routes and do not complete any surface.
 
 Episode360 `touchpoints` now resolves only explicitly recorded

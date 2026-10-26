@@ -3854,6 +3854,40 @@ async def test_execution_authority_check_rejects_ambiguous_or_malformed_decision
         )
 
 
+async def test_execution_authority_conflicted_persisted_delegation_refs_cannot_emit_allow() -> None:
+    row = _server_row()
+    row["policy_log"]["delegation_check"]["delegation_id"] = "other-delegation"
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[row], available=True, scope_known=True, agent_ids=(AGENT,)
+            ),
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    assert authority["state"] == "degraded"
+    assert authority["joinedActionScopedDecisions"] == []
+    assert not any(
+        claim.kind == "server_recorded_delegation_decision" for claim in result.claims
+    )
+
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    decision = metadata["authority_envelope"].authorityDecision
+    assert decision is not None
+    assert decision.outcome == "unknown"
+    assert decision.actionRefs == []
+    assert decision.executionRefs == []
+
+
 async def test_execution_authority_window_uses_lifecycle_time_only() -> None:
     request = _request(
         timeRange=TimeRangeFilter(

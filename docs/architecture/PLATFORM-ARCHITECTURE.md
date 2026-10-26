@@ -71,7 +71,7 @@ source_hashes:
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
-  "services/api/actions/agent/execution360_provider.py": "sha256:d166db55e656eb508e84ec58945eee5fdae4da5fe487f27f87aa7e4b131b9810"
+  "services/api/actions/agent/execution360_provider.py": "sha256:9206827e764f0355b75ce853df3447a02bfc03a9134929f1a262299941b8da25"
   "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
@@ -745,6 +745,11 @@ policy/freshness remain unresolved; Campaign360 observation and source-fact
 dimensions, event coverage, and freshness remain unknown; Memory360 current
 consent and policy remain unevaluated. These are partial slot implementations,
 not completed 360 surfaces.
+The semantic memory producer now stamps an explicit nonempty list of required
+consent purposes from its exact verified write-time policy decision. Exact
+subject and ID reads suppress a stamped record if that historical decision no
+longer matches the stamp. Legacy unstamped purposes remain unknown; the stamp
+does not evaluate current consent.
 
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,
@@ -937,6 +942,11 @@ checking it against the execution record time. Missing legacy timestamps stay
 unknown; malformed or later-than-execution values degrade. This records when
 the action/resource-scoped evaluation was observed and does not establish
 current or standing authority.
+If the persisted AgentExecution delegation reference conflicts with the
+delegation reference in its stored policy decision, Execution360 degrades the
+authority scope and omits that decision and its observed authority claim. The
+frame consequently leaves the action outcome unknown. Missing grant records
+remain separate from a conflict between the two persisted references.
 
 Commerce360 `intent` now reads explicit human declarations against exact
 tenant-owned product or offer records, preserving actor, effective/observed

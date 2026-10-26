@@ -2547,6 +2547,11 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
             "delegation_check" in policy
             or (raw_policy is not None and not isinstance(raw_policy, dict))
         ),
+        "_delegationReferenceConflict": (
+            recorded_delegation_id is not None
+            and policy_delegation_id is not None
+            and recorded_delegation_id != policy_delegation_id
+        ),
         "recordedDelegationDecision": (
             decision.get("allowed") if isinstance(decision.get("allowed"), bool) else None
         ),
@@ -2577,8 +2582,8 @@ def _execution_authority_context(
     """Project stored policy outcomes without replaying the authority engine.
 
     The delegation check and its action/resource are co-recorded on one
-    tenant-scoped ``agent_executions`` row. The policy check has no independent
-    timestamp; time windows therefore select the parent lifecycle row only.
+    tenant-scoped ``agent_executions`` row. Time windows select the parent
+    lifecycle row only, even when the policy check has a recorded timestamp.
     """
     if temporal_unavailable:
         return ExecutionAuthorityContext(
@@ -2615,6 +2620,9 @@ def _execution_authority_context(
     for row in internal:
         execution_id = _safe_text(row.get("executionId"))
         if execution_id is None or execution_id in ambiguous:
+            continue
+        if row.get("_delegationReferenceConflict") is True:
+            invalid_record = True
             continue
         if not isinstance(row.get("recordedDelegationDecision"), bool):
             if row.get("_delegationDecisionPresent") is True:
@@ -3983,7 +3991,7 @@ class Execution360Provider:
                     subject=subject,
                     evidenceRefs=[evidence_ref],
                     claims=[
-                        f"AETHER's tenant-scoped agent_executions record stores a {outcome} delegation-engine decision for action {decision['action']} on resource {decision['resource']} in execution {decision['executionId']}. The policy decision has no separate timestamp, so lifecycle timestamps locate the parent execution record only; this request-time result does not establish current or standing authority or prove external execution."
+                        f"AETHER's tenant-scoped agent_executions record stores a {outcome} delegation-engine decision for action {decision['action']} on resource {decision['resource']} in execution {decision['executionId']}. The decision timestamp is reported separately when persisted; lifecycle timestamps locate the parent execution record. This request-time result does not establish current or standing authority or prove external execution."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=[
