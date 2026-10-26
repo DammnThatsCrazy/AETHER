@@ -27,6 +27,7 @@ from typing import Any, Optional, Protocol
 from urllib.parse import quote
 
 from graph.operational_intelligence.models import EvidenceRef
+from shared.backend_interpretation.primitives import EpisodeRecord
 from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
     ClaimEnvelope,
@@ -100,6 +101,13 @@ _REASON_CASE_COMMUNICATION_HISTORY_UNVERIFIED = (
     "support_case_communication_source_history_coverage_unverified"
 )
 _REASON_JOURNEY_JOIN_MISSING = "canonical_support_case_journey_join_unavailable"
+_REASON_JOURNEY_EPISODE_AUTHORITY_UNAVAILABLE = "support_case_journey_episode_authority_unavailable"
+_REASON_JOURNEY_EPISODE_RELATION_MISSING = "support_case_journey_episode_exact_relation_unavailable"
+_REASON_JOURNEY_EPISODE_READ_TRUNCATED = "support_case_journey_episode_read_truncated"
+_REASON_JOURNEY_EPISODE_TEMPORAL_UNAVAILABLE = "support_case_journey_episode_window_read_unavailable"
+_REASON_JOURNEY_EPISODE_POPULATION_UNVERIFIED = "support_case_journey_episode_population_unverified"
+_REASON_JOURNEY_EPISODE_FRESHNESS_UNKNOWN = "support_case_journey_episode_freshness_sla_unavailable"
+_REASON_JOURNEY_EPISODE_POLICY_UNVERIFIED = "support_case_journey_episode_policy_unverified"
 _REASON_OUTCOME_JOIN_MISSING = "canonical_support_outcome_join_unavailable"
 _REASON_CALLBACK_AUTHORITY_MISSING = "canonical_support_callback_authority_unavailable"
 _REASON_CALLBACK_AUTHORITY_UNAVAILABLE = "support_callback_authority_unavailable"
@@ -902,6 +910,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         canonical_agent_entity_repository: Any = None,
         case_context_repository: Optional[SupportCaseContextRepository] = None,
         canonical_journey_repository: Any = None,
+        canonical_episode_store: Any = None,
         risk_projection_registry: Any = None,
     ) -> None:
         self._source = source if source is not None else RepositorySupport360Source()
@@ -934,6 +943,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             else SupportCaseContextRepository()
         )
         self._canonical_journeys = canonical_journey_repository
+        self._canonical_episodes = canonical_episode_store
         self._risk_projection_registry = risk_projection_registry
 
     async def _support_case_risk_slot(
@@ -1559,6 +1569,30 @@ class Support360Provider(IntelligenceProjectionProvider):
                 case_record=record,
                 journey_repository=self._canonical_journeys,
             )
+            if journey_links_slot.get("links") and (
+                not context_reads["journey_links"].complete
+                or context_reads["journey_links"].truncated
+            ):
+                journey_links_slot["episodeFacts"] = {
+                    "state": "unknown",
+                    "reasonCode": "support_case_context_read_truncated",
+                    "relations": None,
+                }
+            elif journey_links_slot.get("links"):
+                episode_facts, episode_refs, episode_reasons = await _validated_case_journey_episodes(
+                    tenant_id=request.tenantId,
+                    links=journey_links_slot["links"],
+                    episode_store=self._canonical_episodes,
+                    windowed=request.timeRange is not None,
+                )
+                journey_links_slot["episodeFacts"] = episode_facts
+                journey_link_evidence_refs = _dedupe_evidence_refs(
+                    journey_link_evidence_refs + episode_refs
+                )
+                journey_link_reasons.extend(episode_reasons)
+                journey_links_slot["reasonCodes"] = sorted(
+                    set(journey_links_slot.get("reasonCodes", []) + episode_reasons)
+                )
         else:
             participants_slot = {
                 "state": "unknown",
@@ -1885,6 +1919,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 "state": journey_links_slot.get("state", "unknown"),
                 "reasonCode": journey_links_slot.get("reasonCode"),
                 "links": journey_links_slot.get("links"),
+                "episodeFacts": journey_links_slot.get("episodeFacts"),
             },
             "measuredOutcomes": {
                 "state": "unknown",
@@ -1982,6 +2017,20 @@ class Support360Provider(IntelligenceProjectionProvider):
         )
         claims.extend(
             ClaimEnvelope(
+                id=f"support360.episode_journey.{relation['canonicalEpisodeId']}.{relation['contextEventId']}",
+                kind="support_case_episode_journey_observation",
+                subject=request.subject,
+                evidenceRefs=relation["evidenceRefs"],
+                claims=[
+                    "The exact tenant EpisodeRecord references this verified support case journey-link event and names the same canonical journey."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["journey_links", "evidence_trace"],
+            )
+            for relation in ((journey_links_slot.get("episodeFacts") or {}).get("relations") or [])
+        )
+        claims.extend(
+            ClaimEnvelope(
                 id=f"support360.participant.{participant['sourceRosterId']}.{participant['sourceBindingId']}",
                 kind="communication_participant_binding_observation",
                 subject=request.subject,
@@ -2037,6 +2086,11 @@ class Support360Provider(IntelligenceProjectionProvider):
             )
             for reference in communication_refs
         )
+        episode_authority_refs = (
+            ["episode_facts"]
+            if (journey_links_slot.get("episodeFacts") or {}).get("relations")
+            else []
+        )
         sections = [
             ProjectionSection(
                 id="summary",
@@ -2078,7 +2132,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                     "measurement_contract",
                     "risk_outputs",
                     "evidence",
-                ],
+                ] + episode_authority_refs,
             ),
             ProjectionSection(
                 id="timeline",
@@ -2116,7 +2170,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                     "journey_versions",
                     "risk_outputs",
                     "evidence",
-                ],
+                ] + episode_authority_refs,
             ),
             ProjectionSection(
                 id="interactions",
@@ -3475,6 +3529,7 @@ async def _validated_support_journey_link_slot(
     active = [
         {
             "canonicalJourneyId": row["payload"]["journey_id"],
+            "contextEventId": row["contextEventId"],
             "journeyVersionId": current_journeys[str(row["payload"]["journey_id"])].get("journey_version_id"),
             "journeyState": current_journeys[str(row["payload"]["journey_id"])].get("journey_state"),
             "sourceLinkId": row["payload"]["source_link_id"],
@@ -3508,6 +3563,119 @@ async def _validated_support_journey_link_slot(
             "evidenceRefs": refs,
         },
         refs,
+        reasons,
+    )
+
+
+async def _validated_case_journey_episodes(
+    *,
+    tenant_id: str,
+    links: list[dict[str, Any]],
+    episode_store: Any,
+    windowed: bool,
+) -> tuple[dict[str, Any], list[EvidenceRef], list[str]]:
+    """Join only EpisodeRecords explicitly citing an exact case journey-link event.
+
+    Journey ID alone is shared by many cases and episodes. The verified context
+    event is the case-specific bridge; the episode must cite that exact event
+    and independently carry the same canonical journey ID. This bounded tenant
+    scan does not establish the complete episode population.
+    """
+    if windowed:
+        reason = _REASON_JOURNEY_EPISODE_TEMPORAL_UNAVAILABLE
+        return {"state": "unknown", "reasonCode": reason, "relations": None}, [], [reason]
+    try:
+        if episode_store is None:
+            from shared.backend_interpretation.stores import EpisodeStore
+
+            episode_store = EpisodeStore()
+        page = await episode_store.list_page_by_tenant(tenant_id, limit=100)
+    except Exception:  # noqa: BLE001 - no episode relation inference on source failure
+        reason = _REASON_JOURNEY_EPISODE_AUTHORITY_UNAVAILABLE
+        return {"state": "unknown", "reasonCode": reason, "relations": None}, [], [reason]
+
+    expected: dict[tuple[str, str], EvidenceRef] = {}
+    for link in links:
+        journey_id = _safe_reference(link.get("canonicalJourneyId"))
+        context_event_id = _safe_reference(link.get("contextEventId"))
+        if journey_id is None or context_event_id is None:
+            continue
+        expected_uri = f"store://support_case_context_events/{quote(context_event_id, safe='')}"
+        for ref in link.get("evidenceRefs", []):
+            if (
+                isinstance(ref, EvidenceRef)
+                and ref.id == context_event_id
+                and ref.type == "event"
+                and ref.source == "support_case_context_events"
+                and ref.uri == expected_uri
+                and _utc_timestamp(ref.observedAt) is not None
+            ):
+                expected[(journey_id, context_event_id)] = ref
+                break
+
+    relations: list[dict[str, Any]] = []
+    refs: list[EvidenceRef] = []
+    seen: set[tuple[str, str]] = set()
+    for episode in page.records:
+        if (
+            not isinstance(episode, EpisodeRecord)
+            or episode.tenant_id != tenant_id
+            or not _safe_reference(episode.episode_id)
+            or not _safe_reference(episode.journey_id)
+        ):
+            continue
+        episode_ref = _episode_evidence(episode)
+        if episode_ref is None:
+            continue
+        for (journey_id, context_event_id), context_ref in expected.items():
+            key = (episode.episode_id, context_event_id)
+            if key in seen or episode.journey_id != journey_id:
+                continue
+            if not any(
+                ref.id == context_ref.id
+                and ref.type == context_ref.type
+                and ref.source == context_ref.source
+                and ref.uri == context_ref.uri
+                and _utc_timestamp(ref.observedAt) == _utc_timestamp(context_ref.observedAt)
+                for ref in episode.evidence_refs
+            ):
+                continue
+            seen.add(key)
+            relation_refs = [episode_ref, context_ref]
+            refs.extend(relation_refs)
+            relations.append(
+                {
+                    "canonicalEpisodeId": episode.episode_id,
+                    "canonicalJourneyId": journey_id,
+                    "contextEventId": context_event_id,
+                    "subjectJoin": "episode_explicit_journey_and_case_context_event_evidence_exact_match",
+                    "evidenceRefs": relation_refs,
+                }
+            )
+
+    relations.sort(key=lambda relation: (relation["contextEventId"], relation["canonicalEpisodeId"]))
+    reasons = [
+        _REASON_JOURNEY_EPISODE_POPULATION_UNVERIFIED,
+        _REASON_JOURNEY_EPISODE_FRESHNESS_UNKNOWN,
+        _REASON_JOURNEY_EPISODE_POLICY_UNVERIFIED,
+    ]
+    if not relations:
+        reasons.append(_REASON_JOURNEY_EPISODE_RELATION_MISSING)
+    if page.truncated or page.next_cursor or page.invalid_records:
+        reasons.append(_REASON_JOURNEY_EPISODE_READ_TRUNCATED)
+    return (
+        {
+            "state": "degraded" if relations else "unknown",
+            "reasonCodes": reasons,
+            "relations": relations,
+            "sourceHistoryComplete": False,
+            "populationComplete": False,
+            "temporalState": "current_store_only",
+            "policy": {"state": "unknown", "reasonCode": _REASON_JOURNEY_EPISODE_POLICY_UNVERIFIED},
+            "freshness": {"state": "unknown", "reasonCode": _REASON_JOURNEY_EPISODE_FRESHNESS_UNKNOWN},
+            "evidenceRefs": _dedupe_evidence_refs(refs),
+        },
+        _dedupe_evidence_refs(refs),
         reasons,
     )
 

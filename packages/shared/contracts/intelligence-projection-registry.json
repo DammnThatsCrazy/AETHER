@@ -900,6 +900,7 @@
         "resources",
         "risk_assessments",
         "risk_signals",
+        "source_provenance",
         "temporal_kernel",
         "tools"
       ],
@@ -2270,6 +2271,7 @@
       "canonicalAuthorities": [
         "agent_entities",
         "communication_facts",
+        "episode_facts",
         "evidence",
         "identity",
         "journeys",
@@ -3880,7 +3882,7 @@
         {
           "id": "evidence_trace",
           "requirement": "required",
-          "description": "Required Execution 360 blueprint slot: evidence trace.",
+          "description": "Exact execution and invocation evidence, plus bounded Bronze ingress provenance for admitted external telemetry events.",
           "canonicalAuthorityRefs": [
             "evidence",
             "source_provenance",
@@ -3905,11 +3907,7 @@
           "implementationCrosswalk": [
             "evidence_and_lineage"
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "source_provenance"
-          ],
-          "authorityGapReason": "exact_subject_authority_join_not_implemented",
-          "partialImplementationReason": "Exact workflow_run execution references include matching invocation evidence; source provenance joins, source telemetry, complete workflow step coverage, and a freshness threshold remain unknown."
+          "partialImplementationReason": "Exact workflow_run execution references include matching invocation evidence. Admitted external telemetry joins unique same-tenant Bronze event/type/time envelopes for ingress provenance only; registered source identity, external execution receipts, complete source coverage, workflow step coverage, historical replay, and a freshness threshold remain unknown."
         }
       ],
       "projectionBindings": [
@@ -11429,11 +11427,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Append-only support case journey-link events join current exact tenant journey records; source authorship, historical journey state, complete links, and freshness remain unknown.",
-          "unboundCanonicalAuthorityRefs": [
-            "episode_facts"
-          ],
-          "authorityGapReason": "Append-only support case journey-link events join current exact tenant journey records; source authorship, historical journey state, complete links, and freshness remain unknown."
+          "partialImplementationReason": "Append-only support case journey-link events join current exact tenant journey records. An EpisodeRecord is linked only when it names the same journey and cites the exact verified case context event; no live producer populates that relation today, and source authorship, historical state, complete population, and freshness remain unknown."
         },
         {
           "id": "agents",

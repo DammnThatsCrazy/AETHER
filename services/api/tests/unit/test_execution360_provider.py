@@ -35,6 +35,7 @@ from actions.agent.execution360_provider import (  # noqa: E402
     _resolve_server_delegation_reference,
     register_provider,
 )
+from actions.agent.execution360_provenance import ExecutionSourceProvenanceRead  # noqa: E402
 from actions.agent.identity_resolution import (  # noqa: E402
     resolve_agent_identities,
 )
@@ -4687,3 +4688,83 @@ async def test_entity_observed_execution_read_exposes_owner_roster_truncation(
     assert result.scope_known is False
     assert result.truncated is True
     assert result.reason == "owner_agent_roster_read_truncated"
+
+
+@pytest.mark.asyncio
+async def test_execution_evidence_joins_only_admitted_telemetry_bronze_provenance() -> None:
+    source = FakeSource()
+    calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
+
+    async def provenance(*, tenant_id: str, events: tuple[tuple[str, str], ...]):
+        calls.append((tenant_id, events))
+        return ExecutionSourceProvenanceRead(
+            rows=[
+                {
+                    "tenantId": TENANT,
+                    "sourceEventId": "silver-event-1",
+                    "eventName": "agent_tool_call_observed",
+                    "bronzeSchemaVersion": "7.0",
+                    "sourceId": "source-1",
+                    "sourceTrust": "PUBLIC_CLIENT",
+                    "credentialClass": "PUBLIC_CLIENT",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                    "evidenceRef": EvidenceRef(
+                        id="silver-event-1",
+                        type="event",
+                        source="bronze_sdk_events",
+                        observedAt="2026-10-16T10:00:01+00:00",
+                        uri="store://bronze_sdk_events/bronze-row-1",
+                    ).model_dump(mode="json", by_alias=True),
+                    "payload": "must-not-leak",
+                    "externalExecutionVerified": True,
+                }
+            ],
+            available=True,
+            scope_known=True,
+        )
+
+    source.source_provenance = provenance  # type: ignore[attr-defined]
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    linked = evidence.content["sourceProvenance"]
+    assert calls == [(TENANT, (("silver-event-1", "agent_tool_call_observed"),))]
+    assert linked["state"] == "partial"
+    assert linked["records"][0]["sourceId"] == "source-1"
+    assert linked["records"][0]["externalExecutionVerified"] is False
+    assert any(ref["source"] == "bronze_sdk_events" for ref in evidence.content["evidence"])
+    assert "must-not-leak" not in str(result.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_execution_evidence_rejects_foreign_provenance_from_injected_reader() -> None:
+    source = FakeSource()
+
+    async def provenance(*, tenant_id: str, events: tuple[tuple[str, str], ...]):
+        return ExecutionSourceProvenanceRead(
+            rows=[
+                {
+                    "tenantId": "other-tenant",
+                    "sourceEventId": "silver-event-1",
+                    "eventName": "agent_tool_call_observed",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                    "evidenceRef": EvidenceRef(
+                        id="silver-event-1",
+                        type="event",
+                        source="bronze_sdk_events",
+                        observedAt="2026-10-16T10:00:01+00:00",
+                        uri="store://bronze_sdk_events/foreign",
+                    ).model_dump(mode="json", by_alias=True),
+                }
+            ],
+            available=True,
+            scope_known=True,
+        )
+
+    source.source_provenance = provenance  # type: ignore[attr-defined]
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.content["sourceProvenance"]["records"] == []
+    assert evidence.content["sourceProvenance"]["reason"] == "source_provenance_response_scope_mismatch"
+    assert all(ref["source"] != "bronze_sdk_events" for ref in evidence.content["evidence"])

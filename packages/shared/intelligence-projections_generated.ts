@@ -716,7 +716,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/execution360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'episode', 'execution', 'workflow_run'],
-    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_assessments', 'risk_signals', 'temporal_kernel', 'tools'],
+    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_assessments', 'risk_signals', 'source_provenance', 'temporal_kernel', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'temporal_kernel'],
     projectionDependencies: ['agent360', 'episode360', 'outcome360', 'temporal360'],
     optionalProjectionDependencies: [],
@@ -1496,7 +1496,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/support360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['callback', 'entity', 'support_case'],
-    canonicalAuthorities: ['agent_entities', 'communication_facts', 'evidence', 'identity', 'journeys', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_cases'],
+    canonicalAuthorities: ['agent_entities', 'communication_facts', 'episode_facts', 'evidence', 'identity', 'journeys', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_cases'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -3470,12 +3470,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'exact_subject_authority_join_not_implemented',
         canonicalAuthorityRefs: ['ai_execution_facts', 'evidence', 'source_provenance'],
-        description: 'Required Execution 360 blueprint slot: evidence trace.',
+        description: 'Exact execution and invocation evidence, plus bounded Bronze ingress provenance for admitted external telemetry events.',
         id: 'evidence_trace',
         implementationCrosswalk: ['evidence_and_lineage'],
-        partialImplementationReason: 'Exact workflow_run execution references include matching invocation evidence; source provenance joins, source telemetry, complete workflow step coverage, and a freshness threshold remain unknown.',
+        partialImplementationReason: 'Exact workflow_run execution references include matching invocation evidence. Admitted external telemetry joins unique same-tenant Bronze event/type/time envelopes for ingress provenance only; registered source identity, external execution receipts, complete source coverage, workflow step coverage, historical replay, and a freshness threshold remain unknown.',
         projectionBindings: [
           {
             projectionId: 'execution360',
@@ -3484,8 +3483,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['source_provenance']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['agent_executions', 'ai_execution_facts', 'execution_facts'],
@@ -5965,11 +5963,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'Append-only support case journey-link events join current exact tenant journey records; source authorship, historical journey state, complete links, and freshness remain unknown.',
         canonicalAuthorityRefs: ['episode_facts', 'journeys', 'support_case_context_events', 'support_cases'],
         description: 'Exact support case to journey relationships.',
         id: 'journey_links',
-        partialImplementationReason: 'Append-only support case journey-link events join current exact tenant journey records; source authorship, historical journey state, complete links, and freshness remain unknown.',
+        partialImplementationReason: 'Append-only support case journey-link events join current exact tenant journey records. An EpisodeRecord is linked only when it names the same journey and cites the exact verified case context event; no live producer populates that relation today, and source authorship, historical state, complete population, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'support360',
@@ -5978,8 +5975,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence', 'state']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['episode_facts']
+        requirement: 'required'
       },
       {
         id: 'measured_outcomes',

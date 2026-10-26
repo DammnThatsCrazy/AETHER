@@ -28,6 +28,7 @@ from journeys.support360.cases import (  # noqa: E402
 from journeys.support360.context_authorities import (  # noqa: E402
     SupportCaseContextAuthorityError,
     SupportCaseContextIngestionService,
+    SupportCaseContextRead,
     SupportCaseContextRepository,
     SupportJourneyLinkEventInput,
     SupportJourneyLinkEventType,
@@ -36,7 +37,14 @@ from journeys.support360.context_authorities import (  # noqa: E402
     SupportSLATimerKind,
     reset_local_support_case_context_store,
 )
-from journeys.support360.provider import Support360Provider, SupportFactsRead  # noqa: E402
+from journeys.support360.provider import (  # noqa: E402
+    Support360Provider,
+    SupportFactsRead,
+    _validated_case_journey_episodes,
+)
+from graph.operational_intelligence.models import EntityRef, EvidenceRef, TimeRangeFilter  # noqa: E402
+from shared.backend_interpretation.primitives import EpisodeRecord  # noqa: E402
+from shared.backend_interpretation.stores import EpisodePageRead  # noqa: E402
 from shared.intelligence_projections import (  # noqa: E402
     ProjectionContext,
     ProjectionRequest,
@@ -378,7 +386,7 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         actor_id=ACTOR,
         actor_type="tenant_user",
     )
-    await service.ingest(
+    link = await service.ingest(
         "journey_links",
         TENANT,
         CONNECTION,
@@ -395,6 +403,25 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         actor_id=ACTOR,
         actor_type="tenant_user",
     )
+    context_ref = next(
+        EvidenceRef.model_validate(ref)
+        for ref in link["evidence_refs"]
+        if ref["source"] == "support_case_context_events"
+    )
+    episode = EpisodeRecord(
+        episode_id="support-episode-exact-1",
+        tenant_id=TENANT,
+        subject=EntityRef(kind="user", id=ENTITY),
+        kind="support",
+        journey_id=journey_id,
+        evidence_refs=[context_ref],
+    )
+
+    class ExactEpisodeStore:
+        async def list_page_by_tenant(self, tenant_id, *, limit):
+            assert (tenant_id, limit) == (TENANT, 100)
+            return EpisodePageRead(records=(episode,), next_cursor=None, truncated=False)
+
     request = ProjectionRequest(
         projectionId="support360",
         tenantId=TENANT,
@@ -407,14 +434,16 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         dependencyState=[],
         warnings=[],
     )
-    result = await Support360Provider(
+    provider = Support360Provider(
         EmptyCaseFactsSource(),
         case_repository=cases,
         case_context_repository=context_repo,
         canonical_agent_entity_repository=entities,
         canonical_journey_repository=journeys,
+        canonical_episode_store=ExactEpisodeStore(),
         risk_projection_registry=RiskRegistry(),
-    ).project(request, context)
+    )
+    result = await provider.project(request, context)
     state = next(section.content for section in result.sections if section.id == "state")
     slots = state["requiredSlots"]
 
@@ -427,11 +456,148 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
     assert slots["sla"]["timers"][0]["sourceTimerState"] == "running"
     assert slots["sla"]["breachEvaluation"] == "source_reported_only_no_local_timer_inference"
     assert slots["journey_links"]["links"][0]["canonicalJourneyId"] == journey_id
+    episode_facts = slots["journey_links"]["episodeFacts"]
+    assert episode_facts["state"] == "degraded"
+    assert episode_facts["populationComplete"] is False
+    assert episode_facts["policy"]["state"] == "unknown"
+    assert episode_facts["freshness"]["state"] == "unknown"
+    assert episode_facts["relations"][0]["canonicalEpisodeId"] == episode.episode_id
+    assert episode_facts["relations"][0]["contextEventId"] == link["context_event_id"]
+    assert state["journeyLinkage"]["episodeFacts"] == episode_facts
+    assert "episode_facts" in next(
+        section.canonicalAuthorityRefs for section in result.sections if section.id == "state"
+    )
+    assert "episode_facts" in next(
+        section.canonicalAuthorityRefs for section in result.sections if section.id == "evidence"
+    )
+    assert any(
+        claim.kind == "support_case_episode_journey_observation"
+        and claim.evidenceRefs[0].id == episode.episode_id
+        for claim in result.claims
+    )
     assert slots["resolution"]["resolutionState"] == "open"
     assert slots["resolution"]["resolutionOccurred"] is False
     assert slots["risk"]["state"] == "ready"
     assert slots["evidence_trace"]["count"] > 0
     assert any(claim.domainSlotIds == ["participants", "evidence_trace"] for claim in result.claims)
+
+    windowed_request = request.model_copy(
+        update={
+            "timeRange": TimeRangeFilter(
+                from_="2026-10-24T15:00:00Z", to="2026-10-24T17:00:00Z"
+            ),
+            "temporalMode": "window",
+        }
+    )
+    windowed_result = await provider.project(windowed_request, context)
+    windowed_state = next(section for section in windowed_result.sections if section.id == "state")
+    assert windowed_state.content["requiredSlots"]["journey_links"]["episodeFacts"]["state"] == "unknown"
+    assert "episode_facts" not in windowed_state.canonicalAuthorityRefs
+    assert not any(
+        claim.kind == "support_case_episode_journey_observation"
+        for claim in windowed_result.claims
+    )
+
+    class TruncatedContextRepository:
+        async def list_for_case(self, *args, **kwargs):
+            read = await context_repo.list_for_case(*args, **kwargs)
+            if kwargs.get("kind") == "journey_links":
+                return SupportCaseContextRead(read.events, True, False, True)
+            return read
+
+    class EpisodeStoreMustNotRead:
+        async def list_page_by_tenant(self, *args, **kwargs):
+            raise AssertionError("a partial link ledger cannot prove the current relation")
+
+    partial_result = await Support360Provider(
+        EmptyCaseFactsSource(),
+        case_repository=cases,
+        case_context_repository=TruncatedContextRepository(),
+        canonical_agent_entity_repository=entities,
+        canonical_journey_repository=journeys,
+        canonical_episode_store=EpisodeStoreMustNotRead(),
+        risk_projection_registry=RiskRegistry(),
+    ).project(request, context)
+    partial_state = next(section for section in partial_result.sections if section.id == "state")
+    assert partial_state.content["requiredSlots"]["journey_links"]["episodeFacts"] == {
+        "state": "unknown",
+        "reasonCode": "support_case_context_read_truncated",
+        "relations": None,
+    }
+    assert "episode_facts" not in partial_state.canonicalAuthorityRefs
+
+
+@pytest.mark.asyncio
+async def test_support_case_episode_join_rejects_shared_journey_without_exact_event_evidence():
+    journey_id = str(uuid4())
+    event_id = "verified-case-journey-link-event"
+    context_ref = EvidenceRef(
+        id=event_id,
+        type="event",
+        source="support_case_context_events",
+        uri=f"store://support_case_context_events/{event_id}",
+        observedAt=NOW.isoformat(),
+    )
+    link = {
+        "canonicalJourneyId": journey_id,
+        "contextEventId": event_id,
+        "evidenceRefs": [context_ref],
+    }
+
+    def episode(episode_id, *, tenant_id=TENANT, linked_journey=journey_id, ref=None):
+        return EpisodeRecord(
+            episode_id=episode_id,
+            tenant_id=tenant_id,
+            subject=EntityRef(kind="user", id=ENTITY),
+            kind="support",
+            journey_id=linked_journey,
+            evidence_refs=[ref] if ref is not None else [],
+        )
+
+    class IncompleteEpisodeStore:
+        calls = 0
+
+        async def list_page_by_tenant(self, tenant_id, *, limit):
+            self.calls += 1
+            assert (tenant_id, limit) == (TENANT, 100)
+            return EpisodePageRead(
+                records=(
+                    episode("shared-journey-only"),
+                    episode("wrong-tenant", tenant_id="tenant-other", ref=context_ref),
+                    episode("wrong-journey", linked_journey=str(uuid4()), ref=context_ref),
+                    episode("wrong-source", ref=context_ref.model_copy(update={"source": "other"})),
+                    episode("other-case-event", ref=context_ref.model_copy(update={"id": "other-case-event"})),
+                    episode("wrong-uri", ref=context_ref.model_copy(update={"uri": "store://other"})),
+                    episode("wrong-time", ref=context_ref.model_copy(update={"observedAt": "2026-10-23T16:00:00Z"})),
+                ),
+                next_cursor="next-page",
+                truncated=True,
+            )
+
+    store = IncompleteEpisodeStore()
+    slot, refs, reasons = await _validated_case_journey_episodes(
+        tenant_id=TENANT,
+        links=[link],
+        episode_store=store,
+        windowed=False,
+    )
+    assert slot["state"] == "unknown"
+    assert slot["relations"] == []
+    assert refs == []
+    assert "support_case_journey_episode_exact_relation_unavailable" in reasons
+    assert "support_case_journey_episode_read_truncated" in reasons
+
+    windowed, refs, reasons = await _validated_case_journey_episodes(
+        tenant_id=TENANT,
+        links=[link],
+        episode_store=store,
+        windowed=True,
+    )
+    assert windowed["state"] == "unknown"
+    assert windowed["relations"] is None
+    assert reasons == ["support_case_journey_episode_window_read_unavailable"]
+    assert refs == []
+    assert store.calls == 1
 
 
 @pytest.mark.asyncio
