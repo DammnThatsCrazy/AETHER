@@ -34,10 +34,12 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     register_provider,
 )
 from intelligence.workflow.definitions import (  # noqa: E402
+    WorkflowDefinitionRead,
     WorkflowDefinitionRepository,
     WorkflowDefinitionRevision,
     WorkflowStepDefinition,
     WorkflowTriggerDefinition,
+    workflow_definition_evidence,
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from shared.intelligence_projections.contracts import (  # noqa: E402
@@ -2171,6 +2173,138 @@ async def test_registered_workflow_definition_projects_latest_revision_without_r
 
 
 @pytest.mark.asyncio
+async def test_workflow_definition_registrar_identity_requires_exact_current_human_proof() -> None:
+    definition = WorkflowDefinitionRevision(
+        workflow_id="workflow-registrar",
+        tenant_id=TENANT_A,
+        revision=1,
+        name="Registered workflow",
+        actor_ref="tenant-user-1",
+        created_at="2026-10-20T10:00:00Z",
+    )
+    repository = WorkflowDefinitionRepository(FakeWorkflowDefinitionFactStore())
+    await repository.register(definition)
+    definition_read = await repository.read_latest(TENANT_A, definition.workflow_id)
+
+    class DefinitionSource(FakeWorkflowSource):
+        def __init__(self, identities: WorkflowPrincipalIdentityRead) -> None:
+            super().__init__(
+                WorkflowRunInvocationRead((), True, True),
+                principal_identities=identities,
+            )
+
+        async def workflow_definition(self, *, tenant_id: str, workflow_id: str):
+            assert (tenant_id, workflow_id) == (TENANT_A, definition.workflow_id)
+            return definition_read
+
+        async def workflow_definition_as_of(
+            self, *, tenant_id: str, workflow_id: str, as_of: datetime
+        ):
+            assert (tenant_id, workflow_id) == (TENANT_A, definition.workflow_id)
+            return definition_read
+
+    request = _request(subject_kind="workflow", subject_id=definition.workflow_id)
+    request = request.model_copy(
+        update={
+            "subject": ProjectionSubject.model_construct(
+                kind="workflow", id=definition.workflow_id
+            )
+        }
+    )
+    source = DefinitionSource(
+        WorkflowPrincipalIdentityRead(
+            (_principal_identity("tenant-user-1"),), True, True
+        )
+    )
+    result = await Workflow360Provider(source=source).project(request, _context())
+    summary = _sections(result)["workflow_summary"]
+    assert source.principal_identity_calls == [
+        (TENANT_A, {"tenant-user-1"}, 1)
+    ]
+    assert summary.state == "available"
+    assert summary.content["registrarIdentityState"] == "resolved"
+    assert summary.canonicalAuthorityRefs == ["workflow_definition_revisions", "identity"]
+    assert summary.content["registeredByCanonicalHumanEntityId"] == "canonical-human-a"
+    assert {ref["source"] for ref in summary.content["registrarIdentityEvidenceRefs"]} == {
+        "identity_aliases",
+        "identity_subjects",
+    }
+    claim = next(
+        item
+        for item in result.claims
+        if item.kind == "registered_workflow_definition_registrar_identity"
+    )
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "workflow.workflow_definition_revisions",
+        "identity_aliases",
+        "identity_subjects",
+    }
+    assert "run initiator or approver" in claim.claims[0]
+
+    foreign_source = DefinitionSource(
+        WorkflowPrincipalIdentityRead(
+            (_principal_identity("tenant-user-1", tenant_id="tenant-other"),),
+            True,
+            True,
+        )
+    )
+    foreign = await Workflow360Provider(source=foreign_source).project(
+        request, _context()
+    )
+    foreign_summary = _sections(foreign)["workflow_summary"]
+    assert foreign_summary.state == "available"
+    assert foreign_summary.content["registrarIdentityState"] == "unknown"
+    assert foreign_summary.content["registeredByCanonicalHumanEntityId"] is None
+    assert foreign_summary.content["registrarIdentityEvidenceRefs"] == []
+    assert not any(
+        item.kind == "registered_workflow_definition_registrar_identity"
+        for item in foreign.claims
+    )
+
+    ambiguous_source = DefinitionSource(
+        WorkflowPrincipalIdentityRead(
+            (
+                _principal_identity("tenant-user-1"),
+                _principal_identity(
+                    "tenant-user-1", canonical_human_entity_id="another-human"
+                ),
+            ),
+            True,
+            True,
+        )
+    )
+    ambiguous = await Workflow360Provider(source=ambiguous_source).project(
+        request, _context()
+    )
+    assert (
+        _sections(ambiguous)["workflow_summary"].content["registrarIdentityState"]
+        == "ambiguous"
+    )
+    assert not any(
+        item.kind == "registered_workflow_definition_registrar_identity"
+        for item in ambiguous.claims
+    )
+
+    historical_source = DefinitionSource(
+        WorkflowPrincipalIdentityRead(
+            (_principal_identity("tenant-user-1"),), True, True
+        )
+    )
+    historical_request = request.model_copy(
+        update={"asOf": "2026-10-21T00:00:00+00:00"}
+    )
+    historical = await Workflow360Provider(source=historical_source).project(
+        historical_request, _context()
+    )
+    historical_summary = _sections(historical)["workflow_summary"]
+    assert historical_source.principal_identity_calls == []
+    assert historical_summary.content["registrarIdentityState"] == "unknown"
+    assert historical_summary.content["registrarIdentityReason"] == (
+        "historical_identity_replay_unavailable"
+    )
+
+
+@pytest.mark.asyncio
 async def test_registered_workflow_definition_as_of_uses_known_effective_revision_only() -> None:
     fact_store = FakeWorkflowDefinitionFactStore()
     repository = WorkflowDefinitionRepository(fact_store)
@@ -2312,3 +2446,149 @@ async def test_workflow_definition_historical_read_rejects_truncated_history() -
     assert result.available is True
     assert result.complete is False
     assert result.reason == "workflow_definition_history_truncated_or_invalid"
+
+
+def _reported_run_definition_source():
+    definition = WorkflowDefinitionRevision(
+        workflow_id="registered-run-workflow",
+        tenant_id=TENANT_A,
+        revision=2,
+        name="Registered run workflow",
+        actor_ref="tenant-registrar",
+        created_at="2026-10-17T10:00:00Z",
+        steps=[
+            WorkflowStepDefinition(
+                step_id="agent-step", kind="agent", label="Agent step",
+                agent_ref="canonical-agent-a",
+            )
+        ],
+    )
+    definition_row = definition.model_dump(mode="json") | {
+        "record_id": definition.record_id,
+        "subject_ref": definition.workflow_id,
+        "definition_digest": definition.definition_digest,
+    }
+    definition_evidence = workflow_definition_evidence(definition)
+    assert definition_evidence is not None
+    execution = _agent_execution_row("execution-definition")
+    execution["workflow_definition_link"] = {
+        "association_kind": "caller_reported_exact_definition_reference",
+        "workflow_run_id": RUN_ID,
+        "workflow_id": definition.workflow_id,
+        "revision": definition.revision,
+        "definition_record_id": definition.record_id,
+        "definition_digest": definition.definition_digest,
+        "definition_evidence_ref": definition_evidence.model_dump(mode="json"),
+        "reference_checked_at": "2026-10-18T09:59:59Z",
+    }
+
+    class DefinitionSource(FakeWorkflowSource):
+        def __init__(self) -> None:
+            super().__init__(
+                WorkflowRunInvocationRead(
+                    (_row("invocation-a", action_id="execution-definition", agent_id="canonical-agent-a"),),
+                    True,
+                    True,
+                ),
+                agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+            )
+            self.definition_read = WorkflowDefinitionRead(
+                rows=(definition_row,), available=True, complete=True
+            )
+            self.definition_calls: list[tuple[str, str, datetime]] = []
+
+        async def workflow_definition_as_of(
+            self, *, tenant_id: str, workflow_id: str, as_of: datetime
+        ) -> WorkflowDefinitionRead:
+            self.definition_calls.append((tenant_id, workflow_id, as_of))
+            return self.definition_read
+
+    return DefinitionSource(), definition, execution, definition_row
+
+
+@pytest.mark.asyncio
+async def test_workflow_run_projects_only_exact_reported_definition_association() -> None:
+    source, definition, _execution, _definition_row = _reported_run_definition_source()
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    summary = _sections(result)["workflow_summary"]
+    assert summary.state == "degraded"
+    assert summary.content["associationKind"] == "caller_reported_exact_definition_reference"
+    assert summary.content["workflowId"] == definition.workflow_id
+    assert summary.content["revision"] == definition.revision
+    assert summary.content["associatedExecutionIds"] == ["execution-definition"]
+    assert summary.content["triggerExecutionState"] == "unknown"
+    assert summary.content["stepExecutionState"] == "unknown"
+    assert summary.content["externalEffectState"] == "unknown"
+    assert {ref["source"] for ref in summary.content["evidenceRefs"]} == {
+        "workflow.workflow_definition_revisions",
+        "agent_executions",
+        "ai_execution_facts",
+    }
+    claim = next(
+        item for item in result.claims
+        if item.kind == "workflow_run_reported_definition_association"
+    )
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert "does not prove" in claim.claims[0]
+    assert source.definition_calls == [
+        (TENANT_A, definition.workflow_id, datetime.fromisoformat("2026-10-18T09:59:59+00:00"))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_workflow_run_definition_link_fails_closed_on_conflicts_and_incomplete_history() -> None:
+    source, definition, execution, definition_row = _reported_run_definition_source()
+    provider = Workflow360Provider(source=source)
+
+    execution["workflow_definition_link"]["definition_digest"] = "a" * 64
+    mismatch = await provider.project(_request(), _context())
+    assert _sections(mismatch)["workflow_summary"].state == "unknown"
+    assert not any(
+        item.kind == "workflow_run_reported_definition_association"
+        for item in mismatch.claims
+    )
+    execution["workflow_definition_link"]["definition_digest"] = definition.definition_digest
+
+    source.definition_read = WorkflowDefinitionRead(
+        rows=(definition_row,), available=True, complete=False,
+        reason="workflow_definition_history_truncated_or_invalid",
+    )
+    incomplete = await provider.project(_request(), _context())
+    assert _sections(incomplete)["workflow_summary"].content["reasonCode"] == (
+        "workflow_run_definition_history_incomplete"
+    )
+
+    source.definition_read = WorkflowDefinitionRead(
+        rows=(definition_row | {"tenant_id": "other-tenant"},),
+        available=True, complete=True,
+    )
+    foreign = await provider.project(_request(), _context())
+    assert _sections(foreign)["workflow_summary"].content["reasonCode"] == (
+        "workflow_run_definition_reference_mismatch"
+    )
+
+    source.definition_read = WorkflowDefinitionRead(
+        rows=(definition_row,), available=True, complete=True
+    )
+    execution["workflow_definition_link"]["reference_checked_at"] = "2026-10-18T10:00:01Z"
+    late = await provider.project(_request(), _context())
+    assert _sections(late)["workflow_summary"].content["reasonCode"] == (
+        "workflow_run_definition_link_invalid_or_missing"
+    )
+    execution["workflow_definition_link"]["reference_checked_at"] = "2026-10-18T09:59:59Z"
+
+    historical = await provider.project(
+        _request(as_of="2026-10-18T10:00:00Z"), _context()
+    )
+    assert _sections(historical)["workflow_summary"].content["reasonCode"] == (
+        "workflow_run_definition_historical_replay_unavailable"
+    )
+
+    execution["workflow_run_invocation_ids"] = []
+    missing_run_link = await provider.project(_request(), _context())
+    assert _sections(missing_run_link)["workflow_summary"].state == "unknown"
+    assert not any(
+        item.kind == "workflow_run_reported_definition_association"
+        for item in missing_run_link.claims
+    )

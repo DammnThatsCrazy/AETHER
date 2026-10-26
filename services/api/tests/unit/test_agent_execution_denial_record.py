@@ -19,7 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent import user_agents  # noqa: E402
 from actions.delegation.engine import DelegationDecision  # noqa: E402
-from shared.common.common import ForbiddenError  # noqa: E402
+from shared.common.common import BadRequestError, ForbiddenError  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -131,3 +131,40 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
     }
     assert len(published) == 1
     assert published[0].payload["execution_id"] == recorded["execution_id"]
+
+
+@pytest.mark.asyncio
+async def test_execute_refuses_reported_definition_without_exact_run_link(monkeypatch) -> None:
+    class ConfigRepository:
+        async def find_by_id(self, agent_id: str) -> dict[str, str]:
+            return {"agent_id": agent_id, "tenant_id": "tenant-run-link"}
+
+    class ExecutionRepository:
+        async def record(self, **kwargs: Any) -> dict[str, Any]:
+            pytest.fail("an unlinked definition reference must never be recorded")
+
+    async def no_workflow_link(**kwargs: Any) -> tuple[None, list[str]]:
+        return None, []
+
+    monkeypatch.setattr(user_agents, "_configs", ConfigRepository())
+    monkeypatch.setattr(user_agents, "_executions", ExecutionRepository())
+    monkeypatch.setattr(user_agents, "_canonical_workflow_run_link", no_workflow_link)
+    tenant = SimpleNamespace(
+        tenant_id="tenant-run-link",
+        user_id="authenticated-human-1",
+        require_permission=lambda permission: None,
+    )
+    body = user_agents.AgentExecute(
+        action="read",
+        resource="resource-1",
+        execution_id="execution-unlinked",
+        workflow_definition_id="workflow-1",
+        workflow_definition_revision=1,
+        workflow_definition_digest="a" * 64,
+    )
+
+    with pytest.raises(BadRequestError, match="exact run link"):
+        await user_agents.execute(
+            "agent-1", body, SimpleNamespace(state=SimpleNamespace(tenant=tenant)),
+            engine=None, graph=None, producer=None,
+        )

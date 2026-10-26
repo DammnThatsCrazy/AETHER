@@ -6,6 +6,7 @@ import asyncio
 import os
 import sys
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -18,8 +19,13 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent import user_agents  # noqa: E402
-from shared.common.common import ConflictError, ForbiddenError  # noqa: E402
+from shared.common.common import BadRequestError, ConflictError, ForbiddenError  # noqa: E402
 from repositories.repos import AgentExecutionRepository  # noqa: E402
+from intelligence.workflow.definitions import (  # noqa: E402
+    WorkflowDefinitionRead,
+    WorkflowDefinitionRevision,
+    WorkflowStepDefinition,
+)
 from value.x402 import commerce_store as commerce_store_module  # noqa: E402
 from value.x402.approvals import ApprovalService  # noqa: E402
 from value.x402.commerce_models import (  # noqa: E402
@@ -190,6 +196,138 @@ async def test_agent_execution_persists_exact_workflow_invocation_lineage() -> N
         "invocation-authority-a",
         "invocation-authority-b",
     ]
+
+
+async def test_caller_reported_definition_reference_requires_exact_run_and_revision() -> None:
+    anchor = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+    definition = WorkflowDefinitionRevision(
+        tenant_id=TENANT,
+        workflow_id="workflow-registered",
+        revision=2,
+        name="Registered workflow",
+        actor_ref="tenant-registrar",
+        created_at=anchor - timedelta(days=1),
+        steps=[
+            WorkflowStepDefinition(
+                step_id="agent-step", kind="agent", label="Agent step", agent_ref=AGENT
+            )
+        ],
+    )
+    raw = definition.model_dump(mode="json") | {
+        "record_id": definition.record_id,
+        "subject_ref": definition.workflow_id,
+        "definition_digest": definition.definition_digest,
+    }
+
+    class DefinitionRepo:
+        def __init__(self, read: WorkflowDefinitionRead) -> None:
+            self.read = read
+            self.calls: list[tuple[str, str, datetime]] = []
+
+        async def read_as_of(self, tenant_id: str, workflow_id: str, as_of: datetime):
+            self.calls.append((tenant_id, workflow_id, as_of))
+            return self.read
+
+    good_read = WorkflowDefinitionRead(rows=(raw,), available=True, complete=True)
+    repo = DefinitionRepo(good_read)
+    body = user_agents.AgentExecute(
+        action="read",
+        resource="resource-1",
+        workflow_definition_id=definition.workflow_id,
+        workflow_definition_revision=definition.revision,
+        workflow_definition_digest=definition.definition_digest,
+    )
+    link = await user_agents._validate_reported_workflow_definition_link(
+        tenant_id=TENANT,
+        agent_id=AGENT,
+        workflow_run_id="workflow-run-authority",
+        body=body,
+        anchor=anchor,
+        repository=repo,
+    )
+    assert link is not None
+    assert link["association_kind"] == "caller_reported_exact_definition_reference"
+    assert link["workflow_run_id"] == "workflow-run-authority"
+    assert link["definition_record_id"] == definition.record_id
+    assert link["definition_digest"] == definition.definition_digest
+    assert link["definition_evidence_ref"]["source"] == "workflow.workflow_definition_revisions"
+    assert repo.calls == [(TENANT, definition.workflow_id, anchor)]
+
+    with pytest.raises(BadRequestError, match="exact run link"):
+        await user_agents._validate_reported_workflow_definition_link(
+            tenant_id=TENANT, agent_id=AGENT, workflow_run_id=None,
+            body=body, anchor=anchor, repository=repo,
+        )
+    assert repo.calls == [(TENANT, definition.workflow_id, anchor)]
+
+    for mismatched in (
+        body.model_copy(update={"workflow_definition_revision": 1}),
+        body.model_copy(update={"workflow_definition_digest": "a" * 64}),
+    ):
+        with pytest.raises(BadRequestError, match="does not match"):
+            await user_agents._validate_reported_workflow_definition_link(
+                tenant_id=TENANT, agent_id=AGENT,
+                workflow_run_id="workflow-run-authority",
+                body=mismatched, anchor=anchor, repository=repo,
+            )
+
+    with pytest.raises(BadRequestError, match="does not match"):
+        await user_agents._validate_reported_workflow_definition_link(
+            tenant_id=TENANT, agent_id="another-agent",
+            workflow_run_id="workflow-run-authority",
+            body=body, anchor=anchor, repository=repo,
+        )
+
+    foreign = DefinitionRepo(
+        WorkflowDefinitionRead(
+            rows=(raw | {"tenant_id": "another-tenant"},), available=True, complete=True
+        )
+    )
+    with pytest.raises(BadRequestError, match="does not match"):
+        await user_agents._validate_reported_workflow_definition_link(
+            tenant_id=TENANT, agent_id=AGENT,
+            workflow_run_id="workflow-run-authority",
+            body=body, anchor=anchor, repository=foreign,
+        )
+
+    future = DefinitionRepo(
+        WorkflowDefinitionRead(
+            rows=(raw | {"effective_at": (anchor + timedelta(seconds=1)).isoformat()},),
+            available=True, complete=True,
+        )
+    )
+    with pytest.raises(BadRequestError, match="does not match"):
+        await user_agents._validate_reported_workflow_definition_link(
+            tenant_id=TENANT, agent_id=AGENT,
+            workflow_run_id="workflow-run-authority",
+            body=body, anchor=anchor, repository=future,
+        )
+
+    stale = DefinitionRepo(
+        WorkflowDefinitionRead(
+            rows=(raw,), available=True, complete=False,
+            reason="workflow_definition_history_truncated_or_invalid",
+        )
+    )
+    with pytest.raises(ConflictError, match="unavailable"):
+        await user_agents._validate_reported_workflow_definition_link(
+            tenant_id=TENANT, agent_id=AGENT,
+            workflow_run_id="workflow-run-authority",
+            body=body, anchor=anchor, repository=stale,
+        )
+
+    stored = await AgentExecutionRepository().record(
+        execution_id=f"definition-linked-{uuid.uuid4()}",
+        agent_id=AGENT,
+        tenant_id=TENANT,
+        delegation_id=None,
+        triggered_by_event_id=None,
+        status="running",
+        workflow_run_id="workflow-run-authority",
+        workflow_run_invocation_ids=["invocation-authority-a"],
+        workflow_definition_link=link,
+    )
+    assert stored["workflow_definition_link"] == link
 
 
 async def test_commerce_erasure_removes_subject_approval_decisions_without_cross_tenant_leak() -> None:

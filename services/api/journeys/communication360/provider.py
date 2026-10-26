@@ -931,6 +931,8 @@ def _canonical_communication_slot_ids(
     subject_kind: str,
     subject_id: str,
     row: dict[str, Any],
+    *,
+    allow_agent_authorship: bool = True,
 ) -> list[str]:
     """Attribute a canonical fact only to its exact catalog slots."""
     kind = str(row.get("kind") or "")
@@ -943,19 +945,11 @@ def _canonical_communication_slot_ids(
         supported.add("thread_summary")
     if kind == "participant_binding":
         supported.add("participants")
-        role = str(payload.get("role") or "").strip().lower()
-        entity_type = str(payload.get("entity_type") or "").strip().lower()
-        has_agent_identity = (
-            entity_type == "agent"
-            or bool(payload.get("agent_id"))
-            or bool(row.get("agent_id"))
-        )
-        has_author = bool(
-            payload.get("entity_id")
-            or payload.get("principal_entity_id")
-            or row.get("actor_id")
-        )
-        if subject_kind == "agent" and role == "author" and has_agent_identity and has_author:
+        if (
+            allow_agent_authorship
+            and subject_kind == "agent"
+            and _agent_author_binding_evidence(row, canonical_agent_id=subject_id)
+        ):
             supported.add("agent_authorship")
     if (
         kind == "communication_act"
@@ -1158,29 +1152,28 @@ def _communication_required_slot_coverage(
     author_rows = [
         row
         for row in participant_rows
-        if str(_payload_of(row).get("role") or "").strip().lower() == "author"
-        and (
-            str(_payload_of(row).get("entity_type") or "").strip().lower() == "agent"
-            or _payload_of(row).get("agent_id")
-            or row.get("agent_id")
-        )
-        and (
-            _payload_of(row).get("entity_id")
-            or _payload_of(row).get("principal_entity_id")
-            or row.get("actor_id")
+        if not _projection_requests_noncurrent_scope(request)
+        if scope.kind != "agent" or scope.participant_entity_id
+        if _agent_author_binding_evidence(
+            row,
+            canonical_agent_id=scope.participant_entity_id if scope.kind == "agent" else None,
         )
     ]
     author_refs = _dedupe_refs(
         [
             ref
             for row in author_rows
-            for ref in [
-                *([_row_evidence(row)] if _row_evidence(row) is not None else []),
-                *_trusted_participant_source_evidence(row),
-            ]
+            for ref in _agent_author_binding_evidence(
+                row,
+                canonical_agent_id=scope.participant_entity_id if scope.kind == "agent" else None,
+            )
         ]
     )
-    if scope.kind == "agent" and scope.identity_resolution_state == "resolved":
+    if (
+        not _projection_requests_noncurrent_scope(request)
+        and scope.kind == "agent"
+        and scope.identity_resolution_state == "resolved"
+    ):
         agent_message_refs = [
             ref
             for message in messages
@@ -1330,7 +1323,11 @@ def _communication_required_slot_coverage(
     delegation_refs = _dedupe_refs(
         [ref for read in author_delegations for ref in read.evidence]
     )
-    if author_refs:
+    if _projection_requests_noncurrent_scope(request):
+        author_slot = slot(
+            "unknown", "unknown", "historical_agent_authorship_replay_unavailable"
+        )
+    elif author_refs:
         author_slot = slot(
             "degraded",
             "partial",
@@ -1855,6 +1852,66 @@ def _trusted_participant_source_evidence(row: dict[str, Any]) -> list[EvidenceRe
     )
 
 
+def _agent_author_binding_evidence(
+    row: dict[str, Any], *, canonical_agent_id: Optional[str] = None
+) -> list[EvidenceRef]:
+    """Evidence for an exact Agent author role at the recorded event time.
+
+    The author is the participant's canonical entity, not a principal, event
+    actor, or source/runtime ``agent_id``. Provider role evidence is an
+    observed assertion; it does not establish canonical conversation
+    membership or current delegation authority.
+    """
+    if row.get("kind") != "participant_binding":
+        return []
+    payload = _payload_of(row)
+    entity_id = payload.get("entity_id")
+    if not (
+        isinstance(entity_id, str)
+        and entity_id
+        and (canonical_agent_id is None or entity_id == canonical_agent_id)
+        and payload.get("entity_type") == "agent"
+        and payload.get("role") == "author"
+        and payload.get("tenant_id") == row.get("tenant_id")
+        and isinstance(payload.get("provider_account_id"), str)
+        and payload.get("provider_account_id")
+        and isinstance(payload.get("provider_conversation_id"), str)
+        and payload.get("provider_conversation_id")
+    ):
+        return []
+    provenance = payload.get("source_provenance")
+    if not isinstance(provenance, dict):
+        return []
+
+    def instant(value: Any) -> Optional[datetime]:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None and parsed.utcoffset() is not None else None
+
+    occurred_at = instant(row.get("occurred_at"))
+    source_event_at = instant(provenance.get("event_occurred_at"))
+    valid_from = instant(payload.get("valid_from"))
+    valid_to = instant(payload.get("valid_to")) if payload.get("valid_to") is not None else None
+    if (
+        occurred_at is None
+        or source_event_at != occurred_at
+        or valid_from is None
+        or valid_from > occurred_at
+        or (payload.get("valid_to") is not None and valid_to is None)
+        or (valid_to is not None and occurred_at >= valid_to)
+    ):
+        return []
+    fact_ref = _row_evidence(row)
+    source_refs = _trusted_participant_source_evidence(row)
+    if fact_ref is None or not source_refs:
+        return []
+    return _dedupe_refs([fact_ref, *source_refs])
+
+
 def _dedupe_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
     """EvidenceRefs deduped by id, first occurrence order preserved."""
     seen: set[str] = set()
@@ -2173,7 +2230,8 @@ class Communication360Provider:
         author_delegations: list[AuthorDelegationRead] = []
         author_delegations_truncated = False
         if (
-            request.subject.kind == "agent"
+            not _projection_requests_noncurrent_scope(request)
+            and request.subject.kind == "agent"
             and scope.identity_resolution_state == "resolved"
             and scope.participant_entity_id
             and canonical_up
@@ -2181,7 +2239,13 @@ class Communication360Provider:
             author_delegations, author_delegations_truncated = await read_author_delegations(
                 tenant_id=tenant_id,
                 agent_entity_id=scope.participant_entity_id,
-                rows=in_scope_rows,
+                rows=[
+                    row
+                    for row in in_scope_rows
+                    if _agent_author_binding_evidence(
+                        row, canonical_agent_id=scope.participant_entity_id
+                    )
+                ],
                 repository=self._delegations,
             )
 
@@ -4433,8 +4497,14 @@ class Communication360Provider:
             if read.state not in {"allowed", "denied"} or not read.grant_id:
                 continue
             row = rows_by_id.get(read.fact_id)
-            binding_ref = _row_evidence(row) if isinstance(row, dict) else None
-            if binding_ref is None or not read.evidence:
+            author_refs = (
+                _agent_author_binding_evidence(
+                    row, canonical_agent_id=scope.participant_entity_id
+                )
+                if isinstance(row, dict)
+                else []
+            )
+            if not author_refs or not read.evidence:
                 continue
             claims.append(
                 ClaimEnvelope(
@@ -4442,7 +4512,7 @@ class Communication360Provider:
                     kind="communication_author_delegation_observation",
                     subject=ProjectionSubject(kind="agent", id=request.subject.id),
                     evidenceRefs=_dedupe_refs(
-                        [*scope.identity_evidence, binding_ref, *read.evidence]
+                        [*scope.identity_evidence, *author_refs, *read.evidence]
                     ),
                     claims=[
                         f"agent author delegation {read.state} for the recorded communication event",
@@ -4512,7 +4582,8 @@ class Communication360Provider:
                     f"message {message.message_id} has an exact identity-bound endpoint for this entity"
                 )
             is_agent_author = bool(
-                request.subject.kind == "agent"
+                not _projection_requests_noncurrent_scope(request)
+                and request.subject.kind == "agent"
                 and scope.identity_resolution_state == "resolved"
                 and message.sender_entity_id in scope.participant_identity_ids
                 and message.sender_identity_binding_id
@@ -4548,8 +4619,13 @@ class Communication360Provider:
             fact_kind = str(row.get("kind") or "unknown")
             domain_slot_ids = _canonical_communication_slot_ids(
                 request.subject.kind,
-                request.subject.id,
+                (
+                    scope.participant_entity_id or ""
+                    if request.subject.kind == "agent"
+                    else request.subject.id
+                ),
                 row,
+                allow_agent_authorship=not _projection_requests_noncurrent_scope(request),
             )
             payload = _payload_of(row)
             claim_text = [
@@ -4570,13 +4646,12 @@ class Communication360Provider:
                     claim_text.append(
                         "provider-authenticated participant role assertion and source evidence observed"
                     )
-                is_agent_author = (
-                    request.subject.kind == "agent"
-                    and str(payload.get("role") or "").strip().lower() == "author"
-                    and (
-                        str(payload.get("entity_type") or "").strip().lower() == "agent"
-                        or bool(payload.get("agent_id"))
-                        or bool(row.get("agent_id"))
+                is_agent_author = bool(
+                    not _projection_requests_noncurrent_scope(request)
+                    and request.subject.kind == "agent"
+                    and scope.participant_entity_id
+                    and _agent_author_binding_evidence(
+                        row, canonical_agent_id=scope.participant_entity_id
                     )
                 )
                 if is_agent_author:

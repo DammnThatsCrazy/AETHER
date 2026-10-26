@@ -1256,7 +1256,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/risk360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'cluster', 'contagion_path', 'entity', 'population', 'relationship', 'source', 'support_case'],
-    canonicalAuthorities: ['bronze_sdk_events', 'cluster_membership', 'computation', 'consent_policy_decisions', 'economic_facts', 'entity_graph', 'evidence', 'flow_trace_paths', 'flow_traces', 'graph', 'model_governance', 'relationship_facts', 'risk_assessments', 'risk_intervention_records', 'risk_outputs', 'risk_signals', 'social_relationship_evidence_events', 'source_provenance', 'support_cases', 'transfers'],
+    canonicalAuthorities: ['bronze_sdk_events', 'cluster_membership', 'computation', 'consent_policy_decisions', 'economic_facts', 'entity_graph', 'evidence', 'flow_trace_paths', 'flow_traces', 'graph', 'model_governance', 'observations', 'relationship_facts', 'risk_assessments', 'risk_intervention_records', 'risk_outputs', 'risk_signals', 'social_relationship_evidence_events', 'source_provenance', 'support_cases', 'transfers'],
     hardDependencies: ['computation_substrate', 'evidence_provenance', 'model_governance'],
     projectionDependencies: ['cluster360', 'economic360', 'profile360'],
     optionalProjectionDependencies: [],
@@ -1616,7 +1616,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['automation', 'run', 'trigger', 'workflow', 'workflow_run'],
-    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'evidence', 'graph_edges', 'identity', 'outcome_facts', 'risk_assessments', 'workflow_definition_revisions'],
+    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'evidence', 'execution_facts', 'graph_edges', 'identity', 'outcome_facts', 'risk_assessments', 'workflow_definition_revisions'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -5010,11 +5010,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        authorityGapReason: 'A matching event EvidenceRef does not verify the source observation record or establish automatic detector producer coverage.',
         canonicalAuthorityRefs: ['evidence', 'observations', 'risk_outputs', 'risk_signals'],
-        description: 'Exact tenant and typed-subject Gold anomaly alerts, with optional bounded RiskSignal and source-event evidence when the alert records explicit link identifiers.',
+        description: 'Exact tenant and typed-subject Gold anomaly alerts, with optional bounded RiskSignal, event evidence, and Bronze SDK event-record metadata when explicit identifiers match.',
         id: 'anomaly_events',
-        partialImplementationReason: 'Authenticated Gold alert materialization now verifies an exact tenant/subject RiskSignal and one selected event EvidenceRef before writing the link triplet; legacy alerts remain metadata only. This is a caller-selected alert path, not an automatic detector producer. The underlying event record, detector coverage, cause, severity, and source timestamp remain unverified.',
+        partialImplementationReason: 'Authenticated Gold alert materialization verifies an exact tenant/subject RiskSignal and one selected event EvidenceRef before writing the link triplet. For explicit bronze_sdk_events references, Risk360 also checks one exact tenant Bronze V1/V2 record without exposing payload; missing, duplicate, tombstoned, or quarantined records remain unverified. Legacy alerts remain metadata only. This is a caller-selected alert path, not an automatic detector producer; complete event coverage, detector coverage, cause, severity, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'risk360',
@@ -5023,8 +5022,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence', 'findings', 'health']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['observations']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['computation', 'evidence', 'risk_assessments', 'risk_intervention_records'],
@@ -6685,21 +6683,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'Execution facts are not joined to the registered workflow definition for this summary.',
-        canonicalAuthorityRefs: ['execution_facts', 'workflow_definition_revisions'],
-        description: 'Latest or exact as-of tenant workflow definition revision, with registration evidence and recorded actor reference.',
+        canonicalAuthorityRefs: ['execution_facts', 'identity', 'workflow_definition_revisions'],
+        description: 'Latest or exact as-of tenant workflow definition revision, with registration evidence, current registrar identity when proven, and bounded caller-reported run association when exact execution references match.',
         id: 'workflow_summary',
-        partialImplementationReason: 'Registered definition revision is bounded to an exact tenant workflow and a complete 200-revision as-of history read; execution linkage, actor identity, trigger or step completion, external effects, and freshness remain unknown.',
+        partialImplementationReason: 'Registered definition revision is bounded to an exact tenant workflow and a complete 200-revision as-of history read. The authenticated registrar can resolve through a current active tenant USER_ID alias with Human evidence. An exact run-linked AgentExecution may persist a caller-reported workflow id, revision, and digest only after tenant AI invocation and definition validation; Workflow360 rechecks the link and exposes it as a partial observation. Historical registrar identity and run-definition replay, unsupported external runs, complete run actors, trigger or step completion, external effects, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'workflow360',
             role: 'primary',
-            subjectKinds: ['automation', 'workflow'],
+            subjectKinds: ['automation', 'run', 'workflow', 'workflow_run'],
             sectionIds: ['workflow_summary']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['execution_facts']
+        requirement: 'required'
       }
     ],
     freshnessPolicy: {

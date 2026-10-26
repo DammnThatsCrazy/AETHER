@@ -1666,13 +1666,56 @@ class Workflow360Provider:
             requested=actions_requested,
             historical=historical_action_scope,
         )
-        workflow_summary_section, workflow_summary_claims = _workflow_summary_section(
-            subject,
-            tenant_id=tenant_id,
-            read=definition_read,
-            requested=summary_requested,
-            historical_anchor=definition_anchor if definition_historical else None,
+        registrar_identity_read = WorkflowPrincipalIdentityRead(
+            (), False, False, reason="definition_registrar_identity_not_read"
         )
+        if (
+            summary_requested
+            and subject.kind in {"workflow", "automation", "automation_id"}
+            and not definition_historical
+            and definition_read.available
+            and definition_read.complete
+            and not definition_read.reason
+            and len(definition_read.rows) == 1
+            and isinstance(definition_read.rows[0], dict)
+        ):
+            actor_ref = _safe_identifier(definition_read.rows[0].get("actor_ref"))
+            if actor_ref is not None:
+                reader = getattr(self._source, "principal_identities", None)
+                if reader is not None:
+                    try:
+                        registrar_identity_read = await reader(
+                            tenant_id=tenant_id,
+                            principal_user_ids={actor_ref},
+                            limit=1,
+                        )
+                    except Exception:  # noqa: BLE001 - identity outage stays unknown
+                        registrar_identity_read = WorkflowPrincipalIdentityRead(
+                            (), False, False, reason="definition_registrar_identity_unavailable"
+                        )
+        if subject.kind in _RUN_SUBJECT_KINDS:
+            workflow_summary_section, workflow_summary_claims = (
+                await _workflow_run_definition_summary(
+                    source=self._source,
+                    subject=subject,
+                    tenant_id=tenant_id,
+                    execution_rows=agent_execution_rows,
+                    invocation_rows=rows,
+                    invocation_read_complete=read_complete,
+                    execution_read_complete=agent_execution_read_complete,
+                    requested=summary_requested,
+                    historical=definition_historical,
+                )
+            )
+        else:
+            workflow_summary_section, workflow_summary_claims = _workflow_summary_section(
+                subject,
+                tenant_id=tenant_id,
+                read=definition_read,
+                requested=summary_requested,
+                historical_anchor=definition_anchor if definition_historical else None,
+                registrar_identity_read=registrar_identity_read,
+            )
 
         if records and read_complete:
             run_state = "available"
@@ -1797,6 +1840,197 @@ class Workflow360Provider:
         )
 
 
+async def _workflow_run_definition_summary(
+    *,
+    source: Workflow360Source,
+    subject: Any,
+    tenant_id: str,
+    execution_rows: list[dict[str, Any]],
+    invocation_rows: list[dict[str, Any]],
+    invocation_read_complete: bool,
+    execution_read_complete: bool,
+    requested: bool,
+    historical: bool,
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Validate only a caller-reported run association against exact authorities."""
+
+    def unknown(reason: str) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        return _unknown_section_with_reason("workflow_summary", reason), []
+
+    if not requested:
+        return unknown("workflow_summary_slot_not_requested")
+    if historical:
+        return unknown("workflow_run_definition_historical_replay_unavailable")
+    if not invocation_read_complete or not execution_read_complete:
+        return unknown("workflow_run_definition_execution_inventory_incomplete")
+    if not execution_rows:
+        return unknown("workflow_run_has_no_exact_workflow_definition_id_link")
+    if len(execution_rows) > 32:
+        return unknown("workflow_run_definition_join_bound_exceeded")
+    reader = getattr(source, "workflow_definition_as_of", None)
+    if reader is None:
+        return unknown("workflow_definition_history_source_unavailable")
+
+    invocation_by_id = {
+        row.get("invocation_id"): row
+        for row in invocation_rows
+        if isinstance(row, dict) and _safe_identifier(row.get("invocation_id")) is not None
+    }
+    signatures: set[tuple[str, int, str, str]] = set()
+    execution_ids: list[str] = []
+    refs: list[EvidenceRef] = []
+    definition: Optional[WorkflowDefinitionRevision] = None
+    definition_ref: Optional[EvidenceRef] = None
+    read_cache: dict[tuple[str, datetime], WorkflowDefinitionRead] = {}
+    for execution in execution_rows:
+        link = execution.get("workflow_definition_link")
+        execution_id = _safe_identifier(execution.get("execution_id"))
+        workflow_id = _safe_identifier(link.get("workflow_id")) if isinstance(link, dict) else None
+        record_id = _safe_identifier(link.get("definition_record_id")) if isinstance(link, dict) else None
+        digest = _safe_identifier(link.get("definition_digest")) if isinstance(link, dict) else None
+        revision = link.get("revision") if isinstance(link, dict) else None
+        checked_at = _parse_timestamp(link.get("reference_checked_at")) if isinstance(link, dict) else None
+        started_at = _parse_timestamp(execution.get("started_at"))
+        execution_ref = _agent_execution_evidence(execution)
+        linked_invocation_ids = execution.get("workflow_run_invocation_ids")
+        if (
+            not isinstance(link, dict)
+            or link.get("association_kind") != "caller_reported_exact_definition_reference"
+            or link.get("workflow_run_id") != subject.id
+            or execution.get("tenant_id") != tenant_id
+            or execution.get("workflow_run_id") != subject.id
+            or workflow_id is None
+            or record_id is None
+            or digest is None
+            or not isinstance(revision, int)
+            or isinstance(revision, bool)
+            or revision < 1
+            or checked_at is None
+            or started_at is None
+            or checked_at > started_at
+            or execution_id is None
+            or execution_ref is None
+            or not isinstance(linked_invocation_ids, list)
+            or not linked_invocation_ids
+        ):
+            return unknown("workflow_run_definition_link_invalid_or_missing")
+        invocation_refs: list[EvidenceRef] = []
+        for invocation_id in linked_invocation_ids:
+            invocation = invocation_by_id.get(invocation_id)
+            invocation_ref = _invocation_evidence(invocation) if isinstance(invocation, dict) else None
+            if invocation_ref is None:
+                return unknown("workflow_run_definition_invocation_evidence_missing")
+            invocation_refs.append(invocation_ref)
+        cache_key = (workflow_id, checked_at)
+        if cache_key not in read_cache:
+            try:
+                read_cache[cache_key] = await reader(
+                    tenant_id=tenant_id, workflow_id=workflow_id, as_of=checked_at
+                )
+            except Exception:  # noqa: BLE001 - definition source stays unknown
+                return unknown("workflow_definition_history_source_unavailable")
+        read = read_cache[cache_key]
+        if (
+            not isinstance(read, WorkflowDefinitionRead)
+            or not read.available
+            or not read.complete
+            or read.reason
+            or len(read.rows) != 1
+            or not isinstance(read.rows[0], dict)
+        ):
+            return unknown("workflow_run_definition_history_incomplete")
+        raw = read.rows[0]
+        try:
+            current = WorkflowDefinitionRevision.model_validate(
+                {key: raw[key] for key in WorkflowDefinitionRevision.model_fields if key in raw}
+            )
+            stored_ref = EvidenceRef.model_validate(link.get("definition_evidence_ref"))
+        except Exception:  # noqa: BLE001 - malformed evidence fails closed
+            return unknown("workflow_run_definition_evidence_invalid")
+        current_ref = workflow_definition_evidence(current)
+        if (
+            current.tenant_id != tenant_id
+            or current.workflow_id != workflow_id
+            or current.revision != revision
+            or current.record_id != record_id
+            or current.definition_digest != digest
+            or current.status != "active"
+            or current.created_at > checked_at
+            or (current.effective_at is not None and current.effective_at > checked_at)
+            or raw.get("tenant_id") != tenant_id
+            or raw.get("subject_ref") != workflow_id
+            or raw.get("record_id") != record_id
+            or raw.get("definition_digest") != digest
+            or current_ref is None
+            or stored_ref.id != current_ref.id
+            or stored_ref.type != current_ref.type
+            or stored_ref.source != current_ref.source
+            or stored_ref.uri != current_ref.uri
+            or _parse_timestamp(stored_ref.observedAt)
+            != _parse_timestamp(current_ref.observedAt)
+            or not any(
+                step.kind == "agent" and step.agent_ref == execution.get("agent_id")
+                for step in current.steps
+            )
+        ):
+            return unknown("workflow_run_definition_reference_mismatch")
+        signatures.add((workflow_id, revision, record_id, digest))
+        execution_ids.append(execution_id)
+        refs.extend([execution_ref, *invocation_refs])
+        definition = current
+        definition_ref = current_ref
+    if len(signatures) != 1 or definition is None or definition_ref is None:
+        return unknown("workflow_run_definition_association_conflicted")
+
+    evidence_refs = _dedupe_evidence_refs([definition_ref, *refs])
+    content = {
+        "state": "degraded",
+        "coverage": "partial",
+        "reason": "caller_reported_exact_definition_reference_validated",
+        "associationKind": "caller_reported_exact_definition_reference",
+        "workflowId": definition.workflow_id,
+        "revision": definition.revision,
+        "definitionRecordId": definition.record_id,
+        "definitionDigest": definition.definition_digest,
+        "associatedExecutionIds": sorted(execution_ids),
+        "declaredTriggers": [trigger.model_dump(mode="json") for trigger in definition.triggers],
+        "declaredSteps": [step.model_dump(mode="json") for step in definition.steps],
+        "triggerExecutionState": "unknown",
+        "stepExecutionState": "unknown",
+        "externalEffectState": "unknown",
+        "freshness": {
+            "state": "unknown",
+            "thresholdSeconds": None,
+            "reasonCode": "workflow_definition_freshness_threshold_not_configured",
+        },
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+    }
+    section = ProjectionSection(
+        id="workflow_summary",
+        state="degraded",
+        title="Reported workflow definition association",
+        content=content,
+        canonicalAuthorityRefs=[
+            "workflow_definition_revisions", "agent_executions", "ai_execution_facts"
+        ],
+        warnings=[
+            "The caller-reported association references a registered definition; trigger and step execution remain unknown."
+        ],
+    )
+    claim = ClaimEnvelope(
+        id=f"workflow360:reported_definition:{subject.id}:{definition.record_id}",
+        kind="workflow_run_reported_definition_association",
+        subject=subject,
+        evidenceRefs=evidence_refs,
+        claims=[
+            "A caller-reported workflow definition reference on exact tenant AgentExecution records matches a registered revision and AI invocation run link; this does not prove that its triggers or steps executed or caused an external effect."
+        ],
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["workflow_summary", "evidence_trace"],
+    )
+    return section, [claim]
+
+
 def _workflow_summary_section(
     subject: Any,
     *,
@@ -1804,6 +2038,7 @@ def _workflow_summary_section(
     read: WorkflowDefinitionRead,
     requested: bool,
     historical_anchor: Optional[datetime],
+    registrar_identity_read: WorkflowPrincipalIdentityRead,
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     if not requested:
         return _unknown_section("workflow_summary"), []
@@ -1895,6 +2130,48 @@ def _workflow_summary_section(
 
     triggers = [item.model_dump(mode="json") for item in definition.triggers]
     steps = [item.model_dump(mode="json") for item in definition.steps]
+    registrar_identity_state = "unknown"
+    registrar_identity_reason = "historical_identity_replay_unavailable" if historical_anchor else (
+        registrar_identity_read.reason or "definition_registrar_identity_unresolved"
+    )
+    registrar_canonical_human_id: Optional[str] = None
+    registrar_identity_refs: list[EvidenceRef] = []
+    if historical_anchor is None:
+        if not isinstance(registrar_identity_read, WorkflowPrincipalIdentityRead):
+            registrar_identity_read = WorkflowPrincipalIdentityRead(
+                (), False, False, reason="definition_registrar_identity_contract_invalid"
+            )
+        bindings, identity_complete = _principal_identity_bindings(
+            registrar_identity_read,
+            tenant_id=tenant_id,
+            principal_user_ids={definition.actor_ref},
+        )
+        binding = bindings.get(definition.actor_ref)
+        if binding and binding.get("state") == "resolved" and identity_complete:
+            registrar_identity_state = "resolved"
+            registrar_identity_reason = "active_tenant_user_id_alias"
+            registrar_canonical_human_id = binding["canonical_human_entity_id"]
+            registrar_identity_refs = binding["evidence_refs"]
+        elif (
+            registrar_identity_read.available
+            and registrar_identity_read.complete
+            and binding is not None
+        ):
+            registrar_identity_state = (
+                "ambiguous"
+                if binding and binding.get("state") == "ambiguous"
+                else "unresolved"
+            )
+            registrar_identity_reason = (
+                "definition_registrar_identity_ambiguous"
+                if registrar_identity_state == "ambiguous"
+                else "definition_registrar_identity_unresolved"
+            )
+        else:
+            registrar_identity_reason = (
+                registrar_identity_read.reason
+                or "definition_registrar_identity_scope_or_proof_incomplete"
+            )
     content = {
         "state": "available",
         "coverage": (
@@ -1910,6 +2187,12 @@ def _workflow_summary_section(
         "status": definition.status,
         "definitionDigest": raw.get("definition_digest"),
         "registeredByActorRef": definition.actor_ref,
+        "registeredByCanonicalHumanEntityId": registrar_canonical_human_id,
+        "registrarIdentityState": registrar_identity_state,
+        "registrarIdentityReason": registrar_identity_reason,
+        "registrarIdentityEvidenceRefs": [
+            ref.model_dump(mode="json") for ref in registrar_identity_refs
+        ],
         "registeredAt": _safe_timestamp(definition.created_at),
         "effectiveAt": _safe_timestamp(definition.effective_at),
         "declaredTriggers": triggers,
@@ -1924,14 +2207,19 @@ def _workflow_summary_section(
         "triggerExecutionState": "unknown",
         "stepExecutionState": "unknown",
         "externalEffectState": "unknown",
-        "evidenceRefs": [evidence.model_dump(mode="json")],
+        "evidenceRefs": [
+            ref.model_dump(mode="json") for ref in [evidence, *registrar_identity_refs]
+        ],
     }
     section = ProjectionSection(
         id="workflow_summary",
         state="available",
         title="Registered workflow definition",
         content=content,
-        canonicalAuthorityRefs=["workflow_definition_revisions"],
+        canonicalAuthorityRefs=[
+            "workflow_definition_revisions",
+            *(["identity"] if registrar_canonical_human_id and registrar_identity_refs else []),
+        ],
     )
     claim = ClaimEnvelope(
         id=f"workflow360:definition:{definition.record_id}",
@@ -1944,7 +2232,22 @@ def _workflow_summary_section(
         claimState=EpistemicStatus.OBSERVED,
         domainSlotIds=["workflow_summary", "evidence_trace"],
     )
-    return section, [claim]
+    claims = [claim]
+    if registrar_canonical_human_id is not None:
+        claims.append(
+            ClaimEnvelope(
+                id=f"workflow360:definition_registrar:{definition.record_id}",
+                kind="registered_workflow_definition_registrar_identity",
+                subject=subject,
+                evidenceRefs=[evidence, *registrar_identity_refs],
+                claims=[
+                    "The authenticated registrar reference on this workflow definition resolves through one active tenant USER_ID alias to a canonical Human entity at the current read time; this does not identify a workflow run initiator or approver."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["workflow_summary", "evidence_trace"],
+            )
+        )
+    return section, claims
 
 
 def _unknown_section_with_reason(slot_id: str, reason: str) -> ProjectionSection:

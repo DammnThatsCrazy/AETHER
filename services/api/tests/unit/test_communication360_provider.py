@@ -282,11 +282,18 @@ class FakeProfileLinkReader:
         return ProfileLinkRead(
             state="resolved",
             profile_id=profile_id,
+            canonical_entity_id=profile_id,
             evidence=(
                 EvidenceRef(
                     id=profile_id,
                     type="entity",
                     source="identity.profiles",
+                    observedAt="2026-10-22T12:00:00Z",
+                ),
+                EvidenceRef(
+                    id=profile_id,
+                    type="entity",
+                    source="entity_registry",
                     observedAt="2026-10-22T12:00:00Z",
                 ),
             ),
@@ -451,6 +458,78 @@ def _fact(
         "idempotency_key": f"key-{fact_id}",
         "payload": payload or {},
     }
+
+
+def _signed_agent_author_fact(
+    fact_id: str,
+    *,
+    canonical_agent_id: str = "agent-1",
+    occurred_at: str = "2026-09-03T11:00:00Z",
+    valid_from: str = "2026-09-03T10:00:00Z",
+    valid_to: str | None = None,
+    principal_entity_id: str | None = None,
+) -> dict:
+    fact = _fact(
+        TENANT_A,
+        fact_id,
+        kind="participant_binding",
+        actor_id="operator-user-1",
+        occurred_at=occurred_at,
+        payload={
+            "tenant_id": TENANT_A,
+            "binding_id": f"binding-{fact_id}",
+            "communication_scope": "provider-conversation-9",
+            "communication_scope_kind": "provider_conversation",
+            "provider_conversation_id": "provider-conversation-9",
+            "provider": "provider-a",
+            "provider_account_id": "account-7",
+            "entity_id": canonical_agent_id,
+            "entity_type": "agent",
+            "role": "author",
+            "valid_from": valid_from,
+            "valid_to": valid_to,
+            "principal_entity_id": principal_entity_id,
+            "claim_state": "observed",
+            "source_identity": {
+                "provider_recipient_id": f"source-{canonical_agent_id}",
+                "identity_binding_id": f"identity-{canonical_agent_id}",
+                "resolution_status": "resolved",
+            },
+            "role_evidence_refs": [
+                {
+                    "id": f"role-{fact_id}",
+                    "type": "event",
+                    "source": "provider-a",
+                    "observedAt": occurred_at,
+                }
+            ],
+            "roster_id": f"roster-{fact_id}",
+            "roster_completeness_state": "complete",
+            "roster_expected_binding_count": 1,
+            "roster_binding_count": 1,
+            "roster_completeness_evidence_refs": [
+                {
+                    "id": f"roster-evidence-{fact_id}",
+                    "type": "event",
+                    "source": "provider-a",
+                    "observedAt": occurred_at,
+                }
+            ],
+            "source_provenance": {
+                "namespace": "provider-a",
+                "provider_account_id": "account-7",
+                "event_id": f"evt-{fact_id}",
+                "event_occurred_at": occurred_at,
+                "authentication": {"method": "tenant_webhook_hmac", "verified": True},
+            },
+            "actor_attribution": {"actor_id": "operator-user-1"},
+            "policy": {
+                "ingress_consent_outcome": "allowed",
+                "sensitive_message_fields_redacted": True,
+            },
+        },
+    )
+    return fact
 
 
 def _request(tenant: str = TENANT_A, **overrides: object) -> ProjectionRequest:
@@ -1295,18 +1374,7 @@ async def test_communications_claims_use_exact_agent_authorship_and_response_slo
         }
     )
     facts = [
-        _fact(
-            TENANT_A,
-            "agent-author-binding",
-            kind="participant_binding",
-            actor_id="agent-1",
-            payload={
-                "role": "author",
-                "entity_id": "agent-1",
-                "entity_type": "agent",
-                "agent_id": "agent-1",
-            },
-        ),
+        _signed_agent_author_fact("agent-author-binding"),
         _fact(
             TENANT_A,
             "agent-response-act",
@@ -1374,6 +1442,39 @@ async def test_communications_claims_use_exact_agent_authorship_and_response_slo
              & set(claim.domainSlotIds or []))
         for claim in result.claims
     )
+
+
+async def test_agent_author_binding_is_not_claimed_for_noncurrent_frame() -> None:
+    class CanonicalAgentReader:
+        async def resolve(self, tenant_id: str, source_agent_ref: str):
+            assert (tenant_id, source_agent_ref) == (TENANT_A, "agent-1")
+            return AgentIdentityRead(
+                state="resolved",
+                canonical_agent_entity_id="agent-1",
+                evidence=(EvidenceRef(id="agent-1", type="entity", source="entities"),),
+            )
+
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[_signed_agent_author_fact("later-author-binding")]),
+        agent_identity_reader=CanonicalAgentReader(),
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="agent", id="agent-1"),
+        asOf="2026-09-02T00:00:00Z",
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["agent_authorship"]["state"] == "unknown"
+    assert coverage["agent_authorship"]["reason"] == (
+        "historical_agent_authorship_replay_unavailable"
+    )
+    assert coverage["agent_authorship"]["evidenceRefs"] == []
+    assert not any("agent_authorship" in (claim.domainSlotIds or []) for claim in result.claims)
 
 
 async def test_agent_source_alias_resolves_before_communication_reads() -> None:
@@ -1906,8 +2007,8 @@ async def test_communications_ssot_slots_report_supported_evidence_and_unknown_a
     assert profile_reader.calls == [(TENANT_A, "profile-1")]
     assert coverage["journey_links"]["state"] == "degraded"
     assert coverage["response_events"]["state"] == "degraded"
-    assert coverage["agent_authorship"]["state"] == "degraded"
-    assert coverage["agent_authorship"]["evidenceRefs"][0]["id"] == "author-binding-coverage"
+    assert coverage["agent_authorship"]["state"] == "unknown"
+    assert coverage["agent_authorship"]["evidenceRefs"] == []
     assert coverage["policy_state"]["state"] == "unknown"
     assert coverage["risk_flags"]["state"] == "unknown"
     assert coverage["evidence_trace"]["state"] == "degraded"
@@ -2083,9 +2184,24 @@ async def test_repository_profile_link_reader_requires_exact_tenant_and_profile(
             self.calls.append((tenant_id, profile_id))
             return self.record
 
+    class StubEntityRepository:
+        calls: list[tuple[dict[str, str], int]] = []
+
+        async def find_many(self, *, filters: dict[str, str], limit: int):
+            self.calls.append((filters, limit))
+            return [
+                {
+                    "tenant_id": TENANT_A,
+                    "entity_id": "profile-1",
+                    "entity_type": "human",
+                    "updated_at": "2026-10-22T12:00:00Z",
+                }
+            ]
+
     monkeypatch.setattr(providers, "get_graph", lambda: "graph")
     monkeypatch.setattr(providers, "get_cache", lambda: "cache")
     monkeypatch.setattr(repos, "IdentityRepository", StubIdentityRepository)
+    monkeypatch.setattr(repos, "EntityRepository", StubEntityRepository)
     reader = RepositoryProfileLinkReader()
 
     resolved = await reader.resolve(TENANT_A, "profile-1")
@@ -2094,7 +2210,11 @@ async def test_repository_profile_link_reader_requires_exact_tenant_and_profile(
     assert resolved.profile_id == "profile-1"
     assert resolved.evidence[0].source == "identity.profiles"
     assert resolved.evidence[0].uri == "store://profiles/tenant-a%3Aprofile-1"
+    assert resolved.evidence[1].source == "entity_registry"
     assert StubIdentityRepository.calls == [(TENANT_A, "profile-1")]
+    assert StubEntityRepository.calls == [
+        ({"tenant_id": TENANT_A, "entity_id": "profile-1"}, 2)
+    ]
 
     StubIdentityRepository.record = {"tenant_id": TENANT_B, "user_id": "profile-1"}
     mismatched = await reader.resolve(TENANT_A, "profile-1")

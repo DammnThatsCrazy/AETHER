@@ -749,7 +749,7 @@ class RepositoryRiskSourceReader:
         ]
         if len(matching_refs) != 1:
             return {"state": "degraded", "reason": "anomaly_event_evidence_reference_unverified"}
-        return {
+        joined = {
             "state": "verified_signal_evidence_reference",
             "risk_signal_id": signal_id,
             "detector_source": signal.source,
@@ -757,6 +757,118 @@ class RepositoryRiskSourceReader:
             "signal_claim_state": signal.claim_state.value,
             "evidence_ref": matching_refs[0],
             "source_event_record_read": "not_performed",
+        }
+        if event_source == "bronze_sdk_events":
+            joined.update(
+                await self._exact_bronze_anomaly_event(tenant_id=tenant_id, event_id=event_id)
+            )
+        return joined
+
+    @staticmethod
+    async def _exact_bronze_anomaly_event(*, tenant_id: str, event_id: str) -> dict[str, Any]:
+        """Corroborate one explicit Bronze pointer without reading event payloads.
+
+        Both typed V2 and legacy V1 SDK rows can carry the event. The two-row
+        bound detects duplicate schema versions or mixed V1/V2 records rather
+        than choosing one arbitrarily. A tombstoned, quarantined, or malformed
+        row never becomes event evidence for an alert.
+        """
+        from repositories.repos import _IN_MEMORY_STORES, get_pool
+
+        try:
+            pool = await get_pool()
+            if pool is None:
+                candidates = []
+                for row in _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {}).values():
+                    if not isinstance(row, dict) or row.get("tenant_id") != tenant_id:
+                        continue
+                    if row.get("event_id") == event_id or (
+                        row.get("event_id") is None
+                        and row.get("provider_record_id") == event_id
+                    ):
+                        candidates.append(row)
+                        if len(candidates) == 2:
+                            break
+            else:
+                async with pool.acquire() as conn:
+                    rows = await conn.fetch(
+                        """SELECT id, tenant_id, event_id, schema_version,
+                                  event_timestamp, received_at, source,
+                                  data->>'provider_record_id' AS provider_record_id,
+                                  data #>> '{payload,event_id}' AS legacy_event_id,
+                                  data->>'source' AS legacy_source,
+                                  data->>'ingested_at' AS ingested_at,
+                                  data->>'quarantine_status' AS quarantine_status,
+                                  data->>'tombstoned' AS tombstoned
+                           FROM bronze_sdk_events
+                           WHERE tenant_id = $1
+                             AND (event_id = $2 OR
+                                  (event_id IS NULL AND data->>'provider_record_id' = $2))
+                           ORDER BY created_at DESC, id ASC
+                           LIMIT 2""",
+                        tenant_id,
+                        event_id,
+                    )
+                candidates = [dict(row) for row in rows]
+        except Exception:  # noqa: BLE001 - a Gold alert remains independently readable
+            return {"source_event_record_read": "unavailable"}
+
+        if not candidates:
+            return {"source_event_record_read": "unavailable"}
+        if len(candidates) != 1:
+            return {"source_event_record_read": "ambiguous"}
+        row = candidates[0]
+        raw_data = _decode_mapping(row.get("data"))
+        bronze_id = row.get("id")
+        typed_event_id = row.get("event_id")
+        legacy_event_id = row.get("legacy_event_id") or _decode_mapping(
+            row.get("payload") if typed_event_id is None else raw_data.get("payload")
+        ).get("event_id")
+        legacy_id = row.get("provider_record_id") or raw_data.get("provider_record_id")
+        source = row.get("source") or row.get("legacy_source") or raw_data.get("source")
+        tombstoned = row.get("tombstoned") or raw_data.get("tombstoned")
+        quarantine_status = row.get("quarantine_status") or raw_data.get(
+            "quarantine_status"
+        )
+        if (
+            row.get("tenant_id") != tenant_id
+            or not isinstance(bronze_id, str)
+            or not bronze_id
+            or source != "sdk"
+            or tombstoned is True
+            or tombstoned == "true"
+            or quarantine_status == "quarantined"
+            or (
+                typed_event_id == event_id
+                and (
+                    not isinstance(row.get("schema_version"), str)
+                    or not row["schema_version"].strip()
+                )
+            )
+            or (
+                typed_event_id is None
+                and (legacy_id != event_id or legacy_event_id != event_id)
+            )
+            or (typed_event_id is not None and typed_event_id != event_id)
+        ):
+            return {"source_event_record_read": "invalid"}
+
+        event_time = _aware_datetime(row.get("event_timestamp"))
+        recorded_at = _aware_datetime(
+            row.get("received_at") or row.get("ingested_at") or raw_data.get("ingested_at")
+        )
+        return {
+            "source_event_record_read": "verified_exact_bronze_record",
+            "source_event_record_evidence_ref": EvidenceRef(
+                id=event_id,
+                type="event",
+                source="bronze_sdk_events",
+                observedAt=event_time.isoformat() if event_time is not None else None,
+                uri=f"store://bronze_sdk_events/{quote(bronze_id, safe='')}",
+            ),
+            "source_event_recorded_at": (
+                recorded_at.isoformat() if recorded_at is not None else None
+            ),
         }
 
     async def agent_policy_flag_observations(
@@ -2698,14 +2810,24 @@ class Risk360Provider:
         degraded: bool,
         reason: Optional[str],
     ) -> dict[str, Any]:
-        """Expose exact Gold alerts and independently bound signal evidence refs."""
+        """Expose exact Gold alerts and independently bound event evidence refs."""
         state = "degraded" if degraded else "partial" if events else "unknown"
+        verified_records = sum(
+            event.get("sourceEventJoin", {}).get("sourceEventRecordRead")
+            == "verified_exact_bronze_record"
+            for event in events
+        )
         verified_links = sum(
             event.get("sourceEventJoin", {}).get("state")
             == "verified_signal_evidence_reference"
             for event in events
         )
-        if verified_links:
+        if verified_records:
+            default_reason = (
+                "gold_anomaly_alerts_with_exact_bronze_event_records_"
+                "detector_coverage_and_cause_not_attested"
+            )
+        elif verified_links:
             default_reason = (
                 "gold_anomaly_alerts_with_exact_risk_signal_event_evidence_"
                 "references_detector_coverage_and_cause_not_attested"
@@ -2727,7 +2849,11 @@ class Risk360Provider:
                 {
                     key: value
                     for key, value in event.items()
-                    if key not in {"evidence_ref", "source_event_ref"}
+                    if key not in {
+                        "evidence_ref",
+                        "source_event_ref",
+                        "source_event_record_ref",
+                    }
                 }
                 | {
                     "evidenceRef": event["evidence_ref"].model_dump(mode="json")
@@ -2738,12 +2864,18 @@ class Risk360Provider:
                 "completeAlertRecordScan": not degraded and reason is None,
                 "detectorCoverage": "unattested",
                 "underlyingEventLineage": (
+                    "bounded_exact_bronze_event_record"
+                    if verified_records
+                    else
                     "bounded_exact_risk_signal_event_evidence_reference"
                     if verified_links
                     else "not_attested"
                 ),
                 "verifiedSourceEventEvidenceLinkCount": verified_links,
-                "sourceEventRecordVerification": "not_performed",
+                "verifiedSourceEventRecordCount": verified_records,
+                "sourceEventRecordVerification": (
+                    "bounded_exact_bronze_record" if verified_records else "not_attested"
+                ),
                 "negativeFindingInference": "prohibited",
                 "rawAlertPayload": "excluded",
             },
@@ -2962,6 +3094,11 @@ class Risk360Provider:
                 "reason": anomaly_events_reason or "gold_anomaly_alert_read_incomplete",
             }
         elif anomaly_events:
+            anomaly_record_links = any(
+                event.get("sourceEventJoin", {}).get("sourceEventRecordRead")
+                == "verified_exact_bronze_record"
+                for event in anomaly_events
+            )
             anomaly_source_links = any(
                 event.get("sourceEventJoin", {}).get("state")
                 == "verified_signal_evidence_reference"
@@ -2970,6 +3107,10 @@ class Risk360Provider:
             anomaly_coverage = {
                 "state": "partial",
                 "reason": (
+                    "gold_anomaly_alerts_with_exact_bronze_event_records_"
+                    "detector_coverage_and_cause_not_attested"
+                    if anomaly_record_links
+                    else
                     "gold_anomaly_alerts_with_exact_risk_signal_event_evidence_"
                     "references_detector_coverage_and_cause_not_attested"
                     if anomaly_source_links
@@ -3450,16 +3591,27 @@ class Risk360Provider:
             if not isinstance(evidence_ref, EvidenceRef):
                 continue
             source_event_ref = event.get("source_event_ref")
+            source_event_record_ref = event.get("source_event_record_ref")
             linked = isinstance(source_event_ref, EvidenceRef)
+            record_linked = isinstance(source_event_record_ref, EvidenceRef)
+            anomaly_evidence = [evidence_ref]
+            if linked:
+                anomaly_evidence.append(source_event_ref)
+            if record_linked:
+                anomaly_evidence.append(source_event_record_ref)
             claims.append(
                 ClaimEnvelope(
                     id=f"risk360.anomaly-alert.{event['alertRecordId']}",
                     kind="risk_anomaly_alert_recorded",
                     subject=subject,
-                    evidenceRefs=[evidence_ref, source_event_ref]
-                    if linked
-                    else [evidence_ref],
+                    evidenceRefs=anomaly_evidence,
                     claims=[
+                        "The tenant-scoped Gold identity authority contains an anomaly_alert "
+                        "materialization for this exact typed subject, with a matching "
+                        "RiskSignal event reference and an exact Bronze SDK event record. "
+                        "Cause, severity, and detector coverage are not verified here."
+                        if record_linked
+                        else
                         "The tenant-scoped Gold identity authority contains an anomaly_alert "
                         "materialization for this exact typed subject, with a matching "
                         "RiskSignal event evidence reference. Source event contents, cause, "
@@ -4615,6 +4767,7 @@ class Risk360Provider:
             materialized_at = _aware_datetime(raw.get("materialized_at"))
             raw_join = raw.get("source_event_join")
             source_event_ref: Optional[EvidenceRef] = None
+            source_event_record_ref: Optional[EvidenceRef] = None
             event_join: dict[str, Any] = {
                 "state": "unknown",
                 "reason": "explicit_anomaly_event_reference_unavailable",
@@ -4632,6 +4785,8 @@ class Risk360Provider:
                 signal_id = raw_join.get("risk_signal_id")
                 detector_source = raw_join.get("detector_source")
                 claim_state = raw_join.get("signal_claim_state")
+                record_read = raw_join.get("source_event_record_read")
+                record_ref = raw_join.get("source_event_record_evidence_ref")
                 if (
                     not isinstance(dimensions, dict)
                     or not isinstance(signal_id, str)
@@ -4646,7 +4801,27 @@ class Risk360Provider:
                     or not isinstance(detector_source, str)
                     or not detector_source.strip()
                     or claim_state not in {state.value for state in EpistemicStatus}
-                    or raw_join.get("source_event_record_read") != "not_performed"
+                    or not isinstance(record_read, str)
+                    or record_read not in {
+                        "not_performed",
+                        "unavailable",
+                        "ambiguous",
+                        "invalid",
+                        "verified_exact_bronze_record",
+                    }
+                    or (
+                        record_read == "verified_exact_bronze_record"
+                        and (
+                            ref.source != "bronze_sdk_events"
+                            or not isinstance(record_ref, EvidenceRef)
+                            or record_ref.type != "event"
+                            or record_ref.source != "bronze_sdk_events"
+                            or record_ref.id != ref.id
+                            or not isinstance(record_ref.uri, str)
+                            or not record_ref.uri.startswith("store://bronze_sdk_events/")
+                        )
+                    )
+                    or (record_read != "verified_exact_bronze_record" and record_ref is not None)
                 ):
                     degraded = True
                     reason = reason or "gold_anomaly_source_event_join_incomplete"
@@ -4656,6 +4831,8 @@ class Risk360Provider:
                     }
                 else:
                     source_event_ref = ref
+                    if record_read == "verified_exact_bronze_record":
+                        source_event_record_ref = record_ref
                     event_join = {
                         "state": "verified_signal_evidence_reference",
                         "riskSignalId": signal_id,
@@ -4664,9 +4841,19 @@ class Risk360Provider:
                         if isinstance(raw_join.get("detector_version"), str)
                         else None,
                         "signalClaimState": claim_state,
-                        "sourceEventRecordRead": "not_performed",
+                        "sourceEventRecordRead": record_read,
                         "sourceEventEvidenceRef": ref.model_dump(mode="json"),
                     }
+                    if source_event_record_ref is not None:
+                        event_join["sourceEventRecordEvidenceRef"] = (
+                            source_event_record_ref.model_dump(mode="json")
+                        )
+                        recorded_at = _aware_datetime(
+                            raw_join.get("source_event_recorded_at")
+                        )
+                        event_join["sourceEventRecordRecordedAt"] = (
+                            recorded_at.isoformat() if recorded_at is not None else None
+                        )
             elif raw_join is not None and (
                 not isinstance(raw_join, dict) or raw_join.get("state") != "unknown"
             ):
@@ -4694,8 +4881,13 @@ class Risk360Provider:
                     "payload": "excluded",
                     "evidence_ref": evidence_ref,
                     "source_event_ref": source_event_ref,
+                    "source_event_record_ref": source_event_record_ref,
                     "sourceEventJoin": event_join,
                     "semantics": (
+                        "tenant_scoped_gold_alert_with_exact_bronze_event_record_"
+                        "cause_and_detector_coverage_unattested"
+                        if source_event_record_ref is not None
+                        else
                         "tenant_scoped_gold_alert_with_exact_risk_signal_event_evidence_"
                         "reference_cause_and_detector_coverage_unattested"
                         if source_event_ref is not None

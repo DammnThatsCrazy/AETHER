@@ -25,7 +25,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from shared.common.common import APIResponse, BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from shared.events.events import Event, EventEnvelopeV2, EventProducer, Topic
@@ -90,12 +90,32 @@ class AgentExecute(BaseModel):
     # Optional stable execution ID. A workflow link is accepted only when the
     # canonical AI invocation fact explicitly carries this value as action_id.
     execution_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    # This is a caller-reported association with a registered definition,
+    # never evidence that the definition's triggers or steps executed.
+    workflow_definition_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    workflow_definition_revision: Optional[int] = Field(default=None, ge=1)
+    workflow_definition_digest: Optional[str] = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
     payload: dict[str, Any] = Field(default_factory=dict)
     triggered_by_event_id: Optional[str] = None
     # Optional: if the agent already produced reasoning/confidence at the
     # caller layer, pass it through so it lands on the execution record.
     reasoning: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def complete_workflow_definition_reference(self) -> "AgentExecute":
+        reference = (
+            self.workflow_definition_id,
+            self.workflow_definition_revision,
+            self.workflow_definition_digest,
+        )
+        if any(value is not None for value in reference) and not all(
+            value is not None for value in reference
+        ):
+            raise ValueError("workflow definition reference requires id, revision and digest")
+        return self
 
 
 async def _canonical_workflow_run_link(
@@ -148,6 +168,76 @@ async def _canonical_workflow_run_link(
     if not facts or len(workflow_run_ids) != 1 or not invocation_ids:
         return None, []
     return next(iter(workflow_run_ids)), sorted(invocation_ids)
+
+
+async def _validate_reported_workflow_definition_link(
+    *,
+    tenant_id: str,
+    agent_id: str,
+    workflow_run_id: Optional[str],
+    body: AgentExecute,
+    anchor: datetime,
+    repository: Any = None,
+) -> Optional[dict[str, Any]]:
+    """Bind a caller's exact definition reference to one registered revision.
+
+    The AI invocation run link and canonical definition are checked separately.
+    This still records only what the caller reported, not workflow execution.
+    """
+    if body.workflow_definition_id is None:
+        return None
+    if not workflow_run_id:
+        raise BadRequestError("Workflow definition reference requires an exact run link")
+    from intelligence.workflow.definitions import (
+        WorkflowDefinitionRepository,
+        WorkflowDefinitionRevision,
+        workflow_definition_evidence,
+    )
+
+    try:
+        read = await (repository or WorkflowDefinitionRepository()).read_as_of(
+            tenant_id, body.workflow_definition_id, anchor
+        )
+    except Exception as exc:  # noqa: BLE001 - unavailable definition fails closed
+        raise ConflictError("Workflow definition authority is unavailable") from exc
+    if not read.available or not read.complete or read.reason or len(read.rows) != 1:
+        raise ConflictError("Exact workflow definition revision is unavailable")
+    raw = read.rows[0]
+    if not isinstance(raw, dict):
+        raise ConflictError("Exact workflow definition revision is unavailable")
+    try:
+        definition = WorkflowDefinitionRevision.model_validate(
+            {key: raw[key] for key in WorkflowDefinitionRevision.model_fields if key in raw}
+        )
+    except Exception as exc:  # noqa: BLE001 - malformed authority fails closed
+        raise ConflictError("Exact workflow definition revision is invalid") from exc
+    evidence = workflow_definition_evidence(definition)
+    if (
+        definition.tenant_id != tenant_id
+        or definition.workflow_id != body.workflow_definition_id
+        or definition.revision != body.workflow_definition_revision
+        or definition.definition_digest != body.workflow_definition_digest
+        or definition.status != "active"
+        or definition.created_at > anchor
+        or (definition.effective_at is not None and definition.effective_at > anchor)
+        or raw.get("tenant_id") != tenant_id
+        or raw.get("subject_ref") != definition.workflow_id
+        or raw.get("record_id") != definition.record_id
+        or raw.get("definition_digest") != definition.definition_digest
+        or evidence is None
+        or not any(step.kind == "agent" and step.agent_ref == agent_id for step in definition.steps)
+    ):
+        raise BadRequestError("Workflow definition reference does not match this agent and run")
+    return {
+        "association_kind": "caller_reported_exact_definition_reference",
+        "workflow_run_id": workflow_run_id,
+        "workflow_id": definition.workflow_id,
+        "revision": definition.revision,
+        "definition_record_id": definition.record_id,
+        "definition_digest": definition.definition_digest,
+        "definition_evidence_ref": evidence.model_dump(mode="json"),
+        "reference_checked_at": anchor.isoformat(),
+    }
 
 
 async def _validate_execution_approval(
@@ -322,6 +412,13 @@ async def execute(
         agent_id=agent_id,
         execution_id=execution_id,
     )
+    definition_link = await _validate_reported_workflow_definition_link(
+        tenant_id=tenant.tenant_id,
+        agent_id=agent_id,
+        workflow_run_id=workflow_run_id,
+        body=body,
+        anchor=datetime.now(timezone.utc),
+    )
 
     decision = await engine.evaluate(
         grantee_entity_id=agent_id,
@@ -339,6 +436,7 @@ async def execute(
             initiating_principal_user_id=getattr(tenant, "user_id", None),
             workflow_run_id=workflow_run_id,
             workflow_run_invocation_ids=workflow_run_invocation_ids,
+            workflow_definition_link=definition_link,
             delegation_id=decision.delegation_id,
             triggered_by_event_id=body.triggered_by_event_id,
             status="revoked",
@@ -420,6 +518,7 @@ async def execute(
         initiating_principal_user_id=getattr(tenant, "user_id", None),
         workflow_run_id=workflow_run_id,
         workflow_run_invocation_ids=workflow_run_invocation_ids,
+        workflow_definition_link=definition_link,
         delegation_id=decision.delegation_id,
         triggered_by_event_id=body.triggered_by_event_id,
         status="running",

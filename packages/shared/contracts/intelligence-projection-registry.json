@@ -1826,6 +1826,7 @@
         "flow_traces",
         "graph",
         "model_governance",
+        "observations",
         "relationship_facts",
         "risk_assessments",
         "risk_intervention_records",
@@ -2798,6 +2799,7 @@
         "agent_entities",
         "agent_executions",
         "commerce",
+        "execution_facts",
         "identity",
         "outcome_facts",
         "evidence",
@@ -6464,7 +6466,7 @@
         {
           "id": "anomaly_events",
           "requirement": "required",
-          "description": "Exact tenant and typed-subject Gold anomaly alerts, with optional bounded RiskSignal and source-event evidence when the alert records explicit link identifiers.",
+          "description": "Exact tenant and typed-subject Gold anomaly alerts, with optional bounded RiskSignal, event evidence, and Bronze SDK event-record metadata when explicit identifiers match.",
           "canonicalAuthorityRefs": [
             "risk_outputs",
             "observations",
@@ -6490,11 +6492,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Authenticated Gold alert materialization now verifies an exact tenant/subject RiskSignal and one selected event EvidenceRef before writing the link triplet; legacy alerts remain metadata only. This is a caller-selected alert path, not an automatic detector producer. The underlying event record, detector coverage, cause, severity, and source timestamp remain unverified.",
-          "unboundCanonicalAuthorityRefs": [
-            "observations"
-          ],
-          "authorityGapReason": "A matching event EvidenceRef does not verify the source observation record or establish automatic detector producer coverage."
+          "partialImplementationReason": "Authenticated Gold alert materialization verifies an exact tenant/subject RiskSignal and one selected event EvidenceRef before writing the link triplet. For explicit bronze_sdk_events references, Risk360 also checks one exact tenant Bronze V1/V2 record without exposing payload; missing, duplicate, tombstoned, or quarantined records remain unverified. Legacy alerts remain metadata only. This is a caller-selected alert path, not an automatic detector producer; complete event coverage, detector coverage, cause, severity, and freshness remain unknown."
         },
         {
           "id": "policy_flags",
@@ -10143,10 +10141,11 @@
         {
           "id": "workflow_summary",
           "requirement": "required",
-          "description": "Latest or exact as-of tenant workflow definition revision, with registration evidence and recorded actor reference.",
+          "description": "Latest or exact as-of tenant workflow definition revision, with registration evidence, current registrar identity when proven, and bounded caller-reported run association when exact execution references match.",
           "canonicalAuthorityRefs": [
             "execution_facts",
-            "workflow_definition_revisions"
+            "workflow_definition_revisions",
+            "identity"
           ],
           "projectionBindings": [
             {
@@ -10157,15 +10156,13 @@
               ],
               "subjectKinds": [
                 "workflow",
-                "automation"
+                "automation",
+                "run",
+                "workflow_run"
               ]
             }
           ],
-          "partialImplementationReason": "Registered definition revision is bounded to an exact tenant workflow and a complete 200-revision as-of history read; execution linkage, actor identity, trigger or step completion, external effects, and freshness remain unknown.",
-          "unboundCanonicalAuthorityRefs": [
-            "execution_facts"
-          ],
-          "authorityGapReason": "Execution facts are not joined to the registered workflow definition for this summary."
+          "partialImplementationReason": "Registered definition revision is bounded to an exact tenant workflow and a complete 200-revision as-of history read. The authenticated registrar can resolve through a current active tenant USER_ID alias with Human evidence. An exact run-linked AgentExecution may persist a caller-reported workflow id, revision, and digest only after tenant AI invocation and definition validation; Workflow360 rechecks the link and exposes it as a partial observation. Historical registrar identity and run-definition replay, unsupported external runs, complete run actors, trigger or step completion, external effects, and freshness remain unknown."
         },
         {
           "id": "triggers",

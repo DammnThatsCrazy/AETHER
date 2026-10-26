@@ -416,6 +416,7 @@ class _FakeReader:
         self.poisoning_evidence_as_of: datetime | None = None
         self._financial_flow_path = financial_flow_path
         self.financial_flow_path_calls: list[tuple[str, str]] = []
+        self.financial_flow_path_detail_calls: list[tuple[str, str]] = []
         self._agent_policy_flags = list(agent_policy_flags or [])
         self._raise_agent_policy_flags = raise_agent_policy_flags
         self.agent_policy_flag_calls: list[tuple[str, str]] = []
@@ -513,9 +514,33 @@ class _FakeReader:
             ),
         )
 
-    async def financial_flow_path(self, *, tenant_id: str, path_id: str) -> dict | None:
+    async def financial_flow_path_subjects(self, *, tenant_id: str, path_id: str) -> dict | None:
         self.financial_flow_path_calls.append((tenant_id, path_id))
-        return self._financial_flow_path
+        path = self._financial_flow_path
+        if path is None:
+            return None
+        return {key: value for key, value in path.items() if key in {
+            "tenant_id", "path_id", "trace_id", "path_nodes", "hop_count",
+            "path_discovered_at", "linkage_reason",
+        }}
+
+    async def financial_flow_path_details(
+        self,
+        *,
+        tenant_id: str,
+        path_id: str,
+        trace_id: str,
+        path_nodes: list[str],
+        path_discovered_at: datetime,
+    ) -> dict | None:
+        self.financial_flow_path_detail_calls.append((tenant_id, path_id))
+        path = self._financial_flow_path
+        if path is None:
+            return None
+        assert path["trace_id"] == trace_id
+        assert path["path_nodes"] == path_nodes
+        assert datetime.fromisoformat(path["path_discovered_at"]) == path_discovered_at
+        return path
 
 
 class _SupportCaseReader:
@@ -1051,9 +1076,19 @@ async def test_repository_financial_path_rejoins_one_exact_tenant_transfer_per_h
         amount="12.50",
     )
 
-    read = await RepositoryRiskSourceReader().financial_flow_path(
+    reader = RepositoryRiskSourceReader()
+    subjects = await reader.financial_flow_path_subjects(
         tenant_id=TENANT_A,
         path_id="path-financial-1",
+    )
+    assert subjects is not None
+    assert subjects["path_nodes"] == ["entity-financial-a", "entity-financial-b"]
+    read = await reader.financial_flow_path_details(
+        tenant_id=TENANT_A,
+        path_id="path-financial-1",
+        trace_id=subjects["trace_id"],
+        path_nodes=subjects["path_nodes"],
+        path_discovered_at=datetime.fromisoformat(subjects["path_discovered_at"]),
     )
 
     assert read is not None
@@ -1088,7 +1123,8 @@ async def test_repository_financial_path_rejects_lossy_or_cross_tenant_paths() -
         }
     )
 
-    read = await RepositoryRiskSourceReader().financial_flow_path(
+    reader = RepositoryRiskSourceReader()
+    read = await reader.financial_flow_path_subjects(
         tenant_id=TENANT_A,
         path_id="path-financial-lossy",
     )
@@ -1116,9 +1152,17 @@ async def test_repository_financial_path_rejects_lossy_or_cross_tenant_paths() -
         }
     )
     with pytest.raises(RiskSourceReadIncomplete):
-        await RepositoryRiskSourceReader().financial_flow_path(
+        subjects = await reader.financial_flow_path_subjects(
             tenant_id=TENANT_A,
             path_id="path-financial-cross-tenant",
+        )
+        assert subjects is not None
+        await reader.financial_flow_path_details(
+            tenant_id=TENANT_A,
+            path_id="path-financial-cross-tenant",
+            trace_id=subjects["trace_id"],
+            path_nodes=subjects["path_nodes"],
+            path_discovered_at=datetime.fromisoformat(subjects["path_discovered_at"]),
         )
 
 
@@ -1388,6 +1432,19 @@ async def test_assessment_run_history_is_exact_partial_audit_evidence() -> None:
         "started_at": "2026-10-20T12:00:00+00:00",
         "completed_at": "2026-10-20T12:00:01+00:00",
         "supersedes_run_id": "run_risk_1",
+        "restatement_link": {
+            "state": "verified_direct_predecessor",
+            "prior_tenant_id": TENANT_A,
+            "prior_subject_kind": "entity",
+            "prior_subject_id": "usr_1",
+            "prior_run_id": "run_risk_1",
+            "prior_assessment_id": "assessment_risk_2",
+            "prior_definition_id": "risk360.standard",
+            "prior_definition_version": "1",
+            "prior_context_hash": "a" * 64,
+            "prior_status": "completed",
+            "prior_started_at": "2026-10-19T12:00:00+00:00",
+        },
         "claim_state": "derived",
         "dimensions": ["payment"],
     }
@@ -2465,7 +2522,9 @@ async def test_financial_contagion_stays_unknown_without_risk_on_every_path_enti
         subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
     )
 
-    result = await Risk360Provider(sources=reader).project(
+    result = await Risk360Provider(
+        sources=reader, consent_reader=_allow_social_analytics_consent
+    ).project(
         request, await _context(_available_registry())
     )
 
@@ -2827,6 +2886,115 @@ async def test_risk_anomaly_events_join_exact_gold_alert_records_metadata_only()
     assert "payload-must-not-render" not in result.model_dump_json()
     assert "cross-tenant-must-not-render" not in result.model_dump_json()
     assert "other-subject-must-not-render" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_risk_anomaly_alert_corroborates_exact_bronze_event_without_payload() -> None:
+    event_id = "anomaly-source-event-1"
+    _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})["bronze-event-1"] = {
+        "id": "bronze-event-1",
+        "tenant_id": TENANT_A,
+        "event_id": event_id,
+        "schema_version": "2.0",
+        "event_timestamp": "2026-10-19T12:00:00Z",
+        "received_at": "2026-10-19T12:00:02Z",
+        "source": "sdk",
+        "payload": {"secret": "bronze-payload-must-not-render"},
+    }
+    _IN_MEMORY_STORES["bronze_sdk_events"]["other-tenant-event"] = {
+        "id": "other-tenant-event",
+        "tenant_id": TENANT_B,
+        "event_id": event_id,
+        "schema_version": "2.0",
+        "source": "sdk",
+        "payload": {"secret": "cross-tenant-payload-must-not-render"},
+    }
+    signal = _signal("anomaly-signal-1", TENANT_A, subject_id="agent-1").model_copy(
+        update={
+            "subject_kind": "agent",
+            "evidence_refs": [
+                EvidenceRef(id=event_id, type="event", source="bronze_sdk_events")
+            ],
+        }
+    )
+    await _seed(None, [signal])
+    await gold_identity.materialize(
+        metric_name="anomaly_alert",
+        entity_id="agent-1",
+        entity_type="agent",
+        value={"secret": "gold-payload-must-not-render"},
+        tenant_id=TENANT_A,
+        dimensions={
+            "risk_signal_id": signal.signal_id,
+            "source_event_id": event_id,
+            "source_event_source": "bronze_sdk_events",
+        },
+    )
+
+    result = await Risk360Provider().project(
+        _request(subject=ProjectionSubject(kind="agent", id="agent-1")),
+        await _context(_available_registry()),
+    )
+    findings = next(section for section in result.sections if section.id == "findings")
+    events = findings.content["anomalyEvents"]
+    assert events["state"] == "partial"
+    assert events["coverage"]["verifiedSourceEventRecordCount"] == 1
+    assert events["coverage"]["detectorCoverage"] == "unattested"
+    join = events["records"][0]["sourceEventJoin"]
+    assert join["sourceEventRecordRead"] == "verified_exact_bronze_record"
+    assert join["sourceEventRecordEvidenceRef"]["uri"] == (
+        "store://bronze_sdk_events/bronze-event-1"
+    )
+    assert findings.content["requiredSlotCoverage"]["anomaly_events"]["state"] == "partial"
+    claim = next(claim for claim in result.claims if claim.kind == "risk_anomaly_alert_recorded")
+    assert len(claim.evidenceRefs) == 3
+    serialized = result.model_dump_json()
+    assert "bronze-payload-must-not-render" not in serialized
+    assert "cross-tenant-payload-must-not-render" not in serialized
+    assert "gold-payload-must-not-render" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_bronze_anomaly_event_join_rejects_ambiguous_and_tombstoned_rows() -> None:
+    store = _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})
+    store["event-a"] = {
+        "id": "event-a", "tenant_id": TENANT_A, "event_id": "same-event",
+        "schema_version": "1", "source": "sdk",
+    }
+    store["event-b"] = {
+        "id": "event-b", "tenant_id": TENANT_A, "event_id": "same-event",
+        "schema_version": "2", "source": "sdk",
+    }
+    reader = RepositoryRiskSourceReader()
+    assert (await reader._exact_bronze_anomaly_event(
+        tenant_id=TENANT_A, event_id="same-event"
+    ))["source_event_record_read"] == "ambiguous"
+    store.pop("event-b")
+    store["event-a"]["tombstoned"] = True
+    assert (await reader._exact_bronze_anomaly_event(
+        tenant_id=TENANT_A, event_id="same-event"
+    ))["source_event_record_read"] == "invalid"
+
+
+@pytest.mark.asyncio
+async def test_bronze_anomaly_event_join_accepts_exact_legacy_sdk_row() -> None:
+    _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})["legacy-event"] = {
+        "id": "legacy-event",
+        "tenant_id": TENANT_A,
+        "provider_record_id": "legacy-event-id",
+        "source": "sdk",
+        "payload": {"event_id": "legacy-event-id", "private": "excluded"},
+        "ingested_at": "2026-10-19T12:00:02Z",
+        "quarantine_status": "clear",
+    }
+    join = await RepositoryRiskSourceReader._exact_bronze_anomaly_event(
+        tenant_id=TENANT_A, event_id="legacy-event-id"
+    )
+    assert join["source_event_record_read"] == "verified_exact_bronze_record"
+    assert join["source_event_record_evidence_ref"].uri == (
+        "store://bronze_sdk_events/legacy-event"
+    )
+    assert "excluded" not in str(join)
 
 
 @pytest.mark.asyncio
