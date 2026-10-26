@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2cd610a330b27af909d6dc2adf781b2b453c781d1a44c392cd73c9b9aae064fd"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c56b0cc9ad48a888bc047d7c6c5b03c71bda316f20f12d186b30427209a4ac82"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:751b1fa4cb4c483454904359b3817fca3241b3ea39776e450f2dc1496f77b8e6"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -216,7 +216,7 @@ not surface completion or authority to execute actions.
 A follow-up provider slice adds partial Signals360 `classification` evidence
 for exact tenant SDK event types and families after gateway acceptance and
 canonical event registry validation. It does not join tenant source attribution,
-semantic classification, policy, or freshness. Workflow360 resolves human
+semantic model output, policy, or freshness in that slice. Workflow360 resolves human
 execution initiators and approval deciders through unique active tenant
 USER_ID aliases and joins exact x402 approvals referenced by run-linked
 AgentExecutions. The writer stores workflow and invocation references only when
@@ -335,6 +335,16 @@ Journey360 `episodes` joins only tenant-scoped EpisodeRecords that explicitly
 persist the exact `journey_id`, with record/source evidence. The bounded store
 scan cannot establish complete association coverage; legacy or unlinked
 records, freshness, policy, and historical replay remain unknown.
+
+The 2026-10-26 Signals360 follow-up joins a capped current Silver semantic
+observation read to the exact gateway-accepted SDK event only when tenant,
+event ID, backend-stamped source namespace, event type, occurrence time, and
+source evidence agree. It exposes status and model identity metadata without
+derived labels, actor references, or subject references. Missing, truncated,
+inactive, mismatched, and historical semantic reads remain unknown. Model
+correctness, consent disposition, producer coverage, source reliability, and
+freshness are still unverified; the event-type claim does not borrow semantic
+evidence.
 
 Value360 `financial_risk` now composes separate Economic360 and Risk360 claims
 only when both carry evidence for the exact same tenant and subject. The risk

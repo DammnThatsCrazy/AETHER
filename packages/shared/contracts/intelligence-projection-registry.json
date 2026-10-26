@@ -2485,7 +2485,8 @@
         "observations",
         "source_provenance",
         "source_schema",
-        "risk_outputs"
+        "risk_outputs",
+        "silver_semantic_observations"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -8876,7 +8877,8 @@
           "description": "Required signals360 slot: classification.",
           "canonicalAuthorityRefs": [
             "events",
-            "observations"
+            "observations",
+            "silver_semantic_observations"
           ],
           "projectionBindings": [
             {
@@ -8891,7 +8893,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown."
+          "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated. A bounded current Silver semantic read may expose model-output metadata only when tenant, event ID, stamped namespace, event type, time, and source evidence match. Derived labels remain suppressed; source attribution, semantic correctness, policy, producer coverage, and freshness remain unknown."
         },
         {
           "id": "quality",
@@ -9075,6 +9077,7 @@
           "ingestion_health",
           "observations",
           "risk_outputs",
+          "silver_semantic_observations",
           "source_facts",
           "source_provenance",
           "source_schema"

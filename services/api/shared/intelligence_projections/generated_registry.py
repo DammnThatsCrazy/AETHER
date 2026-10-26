@@ -1233,7 +1233,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "event", "observation", "signal", "source", "stream"),
-        "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "observations", "risk_outputs", "source_provenance", "source_schema"),
+        "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "observations", "risk_outputs", "silver_semantic_observations", "source_provenance", "source_schema"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -5250,10 +5250,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("events", "observations"),
+                "canonicalAuthorityRefs": ("events", "observations", "silver_semantic_observations"),
                 "description": "Required signals360 slot: classification.",
                 "id": "classification",
-                "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown.",
+                "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated. A bounded current Silver semantic read may expose model-output metadata only when tenant, event ID, stamped namespace, event type, time, and source evidence match. Derived labels remain suppressed; source attribution, semantic correctness, policy, producer coverage, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "signals360",
@@ -5417,7 +5417,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "ingestion_health", "observations", "risk_outputs", "source_facts", "source_provenance", "source_schema"),
+            "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "ingestion_health", "observations", "risk_outputs", "silver_semantic_observations", "source_facts", "source_provenance", "source_schema"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },

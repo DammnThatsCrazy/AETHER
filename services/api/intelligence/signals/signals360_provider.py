@@ -55,6 +55,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 _MAX_SIGNAL_RECORDS = 100
 _MAX_SIGNAL_CAMPAIGN_TOUCHPOINTS = 100
 _MAX_RISK_SIGNALS = 100
+_MAX_SEMANTIC_EVENT_OBSERVATIONS = 100
 _SUMMARY_SOURCE = "repositories.repos.SignalRepository:behavioral_signals"
 _RISK_SUBJECT_KINDS = frozenset({"event", "observation", "signal", "source", "stream"})
 
@@ -74,6 +75,18 @@ class ObservationQualityRead:
     """One exact tenant-scoped SDK Bronze event row, when available."""
 
     record: Optional[dict[str, Any]]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SemanticEventRead:
+    """Capped Silver model-output rows for one exact tenant SDK event."""
+
+    tenant_id: str
+    source_event_id: str
+    rows: tuple[dict[str, Any], ...]
     available: bool
     complete: bool
     reason: Optional[str] = None
@@ -201,6 +214,10 @@ class Signal360Source(Protocol):
         self, *, tenant_id: str, observation_id: str
     ) -> ObservationQualityRead: ...
 
+    async def semantic_observations_for_event(
+        self, *, tenant_id: str, event_id: str, limit: int
+    ) -> SemanticEventRead: ...
+
     async def observation_source_authority(
         self, *, tenant_id: str, observation_id: str, record: dict[str, Any]
     ) -> ObservationSourceAuthorityRead: ...
@@ -231,6 +248,7 @@ class RepositorySignal360Source:
         campaign_repository: Any = None,
         rights_lineage_repository: Any = None,
         source_authority_trace: Any = None,
+        semantic_observations: Any = None,
     ) -> None:
         self._bronze = bronze
         self._signals = signals
@@ -239,6 +257,43 @@ class RepositorySignal360Source:
         self._campaign_repository = campaign_repository
         self._rights_lineage_repository = rights_lineage_repository
         self._source_authority_trace = source_authority_trace
+        self._semantic_observations = semantic_observations
+
+    async def semantic_observations_for_event(
+        self, *, tenant_id: str, event_id: str, limit: int
+    ) -> SemanticEventRead:
+        if not _safe_identifier(tenant_id) or not _safe_identifier(event_id):
+            return SemanticEventRead(tenant_id, event_id, (), False, False, "exact_event_scope_required")
+        cap = min(max(int(limit), 1), _MAX_SEMANTIC_EVENT_OBSERVATIONS)
+        try:
+            if self._semantic_observations is None:
+                from intelligence.semantic_intelligence.repositories.base_fact_repo import (
+                    SemanticFactRepository,
+                )
+
+                self._semantic_observations = SemanticFactRepository(
+                    "silver_semantic_observations"
+                )
+            rows = await self._semantic_observations.find_by_source_event(
+                tenant_id, event_id, limit=cap + 1
+            )
+        except Exception:  # noqa: BLE001 - authority diagnostics stay private
+            return SemanticEventRead(
+                tenant_id, event_id, (), False, False, "semantic_event_authority_unavailable"
+            )
+        if not isinstance(rows, list):
+            return SemanticEventRead(
+                tenant_id, event_id, (), False, False, "semantic_event_read_invalid"
+            )
+        if len(rows) > cap:
+            return SemanticEventRead(
+                tenant_id, event_id, (), True, False, "semantic_event_read_truncated"
+            )
+        if not all(isinstance(row, dict) for row in rows):
+            return SemanticEventRead(
+                tenant_id, event_id, (), True, False, "semantic_event_row_invalid"
+            )
+        return SemanticEventRead(tenant_id, event_id, tuple(rows), True, True)
 
     async def entity_signals(
         self, *, tenant_id: str, entity_id: str, limit: int
@@ -1125,6 +1180,28 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         "sdk_observation_bronze_unavailable",
                     )
 
+        semantic_read: Optional[SemanticEventRead] = None
+        semantic_skip_reason: Optional[str] = None
+        if "classification" in requested_sections and request.subject.kind in {"event", "observation"}:
+            if request.asOf is not None or request.timeRange is not None:
+                semantic_skip_reason = "semantic_event_temporal_read_not_supported"
+            elif quality_read is not None and quality_read.available and quality_read.complete and quality_read.record is not None:
+                semantic_reader = getattr(self._source, "semantic_observations_for_event", None)
+                if callable(semantic_reader):
+                    try:
+                        semantic_read = await semantic_reader(
+                            tenant_id=tenant_id,
+                            event_id=request.subject.id,
+                            limit=_MAX_SEMANTIC_EVENT_OBSERVATIONS,
+                        )
+                        if not isinstance(semantic_read, SemanticEventRead):
+                            semantic_read = None
+                            semantic_skip_reason = "semantic_event_read_invalid"
+                    except Exception:  # noqa: BLE001 - authority diagnostics stay private
+                        semantic_skip_reason = "semantic_event_authority_unavailable"
+                else:
+                    semantic_skip_reason = "semantic_event_authority_not_joined"
+
         source_authority_read: Optional[ObservationSourceAuthorityRead] = None
         if (
             "source_inventory" in requested_sections
@@ -1351,6 +1428,8 @@ class Signals360Provider(IntelligenceProjectionProvider):
                     request.subject,
                     tenant_id=tenant_id,
                     read=quality_read,
+                    semantic_read=semantic_read,
+                    semantic_skip_reason=semantic_skip_reason,
                 )
                 sections.append(classification_section)
                 if classification_claim is not None:
@@ -1642,6 +1721,8 @@ def _classification_section(
     *,
     tenant_id: str,
     read: Optional[ObservationQualityRead],
+    semantic_read: Optional[SemanticEventRead] = None,
+    semantic_skip_reason: Optional[str] = None,
 ) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
     """Project the canonical event type/family for one exact SDK observation.
 
@@ -1776,6 +1857,7 @@ def _classification_section(
             "sourceClassificationState": "unknown",
             "sourceClassificationReason": "tenant_source_classification_authority_not_joined",
             "semanticSignalState": "unknown",
+            "semanticSignalReason": semantic_skip_reason or "semantic_event_authority_not_joined",
             "policyState": "not_evaluated_by_signals360_classification_read",
             "freshnessState": "unknown",
             "evidenceRefs": [
@@ -1801,7 +1883,142 @@ def _classification_section(
         claimState=EpistemicStatus.OBSERVED,
         domainSlotIds=["classification"],
     )
+    semantic_content, semantic_evidence = _exact_semantic_event_metadata(
+        tenant_id=tenant_id,
+        event_id=subject.id,
+        event_type=event_type,
+        envelope=envelope,
+        row=row,
+        read=semantic_read,
+        skip_reason=semantic_skip_reason,
+    )
+    section.content.update(semantic_content)
+    if semantic_evidence:
+        section.content["evidenceRefs"].extend(
+            ref.model_dump(mode="json") for ref in semantic_evidence
+        )
+        section.canonicalAuthorityRefs.append("silver_semantic_observations")
+        section.content["reasonCode"] = "event_registry_and_exact_semantic_model_output_metadata_only"
+        section.warnings = [
+            "Event type and family and stored semantic model-output metadata are observed; model correctness, source classification, policy, producer coverage, and freshness remain unknown."
+        ]
     return section, claim
+
+
+def _exact_semantic_event_metadata(
+    *,
+    tenant_id: str,
+    event_id: str,
+    event_type: str,
+    envelope: dict[str, Any],
+    row: dict[str, Any],
+    read: Optional[SemanticEventRead],
+    skip_reason: Optional[str],
+) -> tuple[dict[str, Any], list[EvidenceRef]]:
+    """Admit only active model-output metadata for the exact stamped SDK event.
+
+    This verifies association, not model correctness, consent, source trust,
+    complete producer coverage, or an as-of semantic state. Derived labels and
+    actor/subject references remain suppressed by this projection.
+    """
+    def unknown(reason: str) -> tuple[dict[str, Any], list[EvidenceRef]]:
+        return {"semanticSignalState": "unknown", "semanticSignalReason": reason}, []
+
+    if skip_reason is not None:
+        return unknown(skip_reason)
+    if read is None:
+        return unknown("semantic_event_authority_not_joined")
+    if read.tenant_id != tenant_id or read.source_event_id != event_id:
+        return unknown("semantic_event_read_scope_mismatch")
+    if not read.available or not read.complete:
+        return unknown(read.reason or "semantic_event_read_incomplete")
+    if len(read.rows) > _MAX_SEMANTIC_EVENT_OBSERVATIONS:
+        return unknown("semantic_event_read_truncated")
+    if not read.rows:
+        return unknown("semantic_event_producer_coverage_unknown")
+    payload = row.get("payload")
+    context = payload.get("context") if isinstance(payload, dict) else None
+    source = envelope.get("source")
+    observation = envelope.get("observation")
+    namespace = source.get("source_instance") if isinstance(source, dict) else None
+    event_at = _safe_timestamp(observation.get("occurred_at")) if isinstance(observation, dict) else None
+    if (
+        not isinstance(context, dict)
+        or not isinstance(namespace, str)
+        or namespace != context.get("identity_namespace")
+        or not (
+            namespace == f"tenant:{tenant_id}"
+            or (namespace.startswith("site:") and bool(namespace[5:].strip()))
+        )
+        or event_at is None
+    ):
+        return unknown("semantic_event_source_namespace_or_time_unverified")
+
+    records: list[dict[str, Any]] = []
+    evidence: list[EvidenceRef] = []
+    seen: set[str] = set()
+    for semantic in read.rows:
+        if not isinstance(semantic, dict):
+            return unknown("semantic_event_row_invalid")
+        if (
+            semantic.get("tenant_id") != tenant_id
+            or semantic.get("source_event_id") != event_id
+            or semantic.get("source_namespace") != namespace
+            or semantic.get("source_type") != event_type
+        ):
+            return unknown("semantic_event_row_scope_mismatch")
+        status = _safe_token(semantic.get("status"))
+        if status in {"deleted", "expired", "superseded", "failed", "quarantined", "consent_restricted"}:
+            continue
+        semantic_id = _safe_identifier(semantic.get("observation_id"))
+        model_id = _safe_identifier(semantic.get("model_id"))
+        model_version = _safe_identifier(semantic.get("model_version"))
+        supporting = semantic.get("evidence_refs")
+        if (
+            _safe_timestamp(semantic.get("occurred_at")) != event_at
+            or status not in {"classified", "partial", "abstained"}
+            or semantic_id is None
+            or semantic_id in seen
+            or model_id is None
+            or model_version is None
+            or not isinstance(supporting, list)
+            or not any(
+                isinstance(ref, dict)
+                and ref.get("source_ref") == event_id
+                and ref.get("source_type") == event_type
+                for ref in supporting
+            )
+        ):
+            return unknown("semantic_event_row_evidence_mismatch")
+        seen.add(semantic_id)
+        evidence.append(
+            EvidenceRef(
+                id=semantic_id,
+                type="model_output",
+                source="silver_semantic_observations",
+                observedAt=_safe_timestamp(semantic.get("processed_at")),
+            )
+        )
+        records.append(
+            {
+                "observationId": semantic_id,
+                "status": status,
+                "modelId": model_id,
+                "modelVersion": model_version,
+            }
+        )
+    if not records:
+        return unknown("no_active_semantic_event_model_output")
+    return (
+        {
+            "semanticSignalState": "stored_model_output_observed",
+            "semanticSignalReason": "exact_tenant_event_namespace_and_evidence_join",
+            "semanticObservations": records,
+            "semanticCorrectnessState": "unknown",
+            "semanticProducerCoverageState": "unknown",
+        },
+        evidence,
+    )
 
 
 def _linked_entities_section(

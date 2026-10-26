@@ -800,7 +800,7 @@ Governed view of risk, fraud, source, social, and outcome signals with evidence 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
 | `campaign_links` | required |  | `campaign_facts`, `campaign_touchpoints` | `signals360` (primary): subjects `event`, `observation`; `campaign_links` | — | Partial: `Only exact event or observation IDs linked by tenant-scoped campaign touchpoints and resolved to canonical tenant campaigns are available; entity, source, stream, missing-reference, and incomplete reads remain unknown or degraded.` | Exact tenant source-event links from campaign touchpoints, admitted only after the campaign owner resolves the referenced canonical campaign. |
-| `classification` | required |  | `events`, `observations` | `signals360` (primary): subjects `event`, `observation`; `classification` | — | Partial: `Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown.` | Required signals360 slot: classification. |
+| `classification` | required |  | `events`, `observations`, `silver_semantic_observations` | `signals360` (primary): subjects `event`, `observation`; `classification` | — | Partial: `Exact gateway-accepted SDK event type and family are registry-validated. A bounded current Silver semantic read may expose model-output metadata only when tenant, event ID, stamped namespace, event type, time, and source evidence match. Derived labels remain suppressed; source attribution, semantic correctness, policy, producer coverage, and freshness remain unknown.` | Required signals360 slot: classification. |
 | `evidence_trace` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `evidence_trace` | — | — | Evidence references for bounded derived signal records. |
 | `freshness` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `freshness` | — | — | Source timestamps retained from bounded derived signal records; freshness threshold remains unknown. |
 | `linked_entities` | required |  | `behavioral_signals`, `identity` | `signals360` (primary): subjects `signal`, `event`, `observation`; `linked_entities` | — | Partial: `Exact links are emitted for signal, event, and matching observation IDs; entity, source, stream, absent-link, and incomplete reads remain unknown or degraded.` | Exact tenant signal, event, or observation bindings to active canonical identity subjects; observation IDs join only when recorded as the matching source_event_id. |
@@ -824,7 +824,7 @@ Governed view of risk, fraud, source, social, and outcome signals with evidence 
 
 ### Authority and governance contract
 
-Canonical authorities: `behavioral_signals`, `campaign_facts`, `campaign_touchpoints`, `events`, `identity`, `ingestion_health`, `observations`, `risk_outputs`, `source_facts`, `source_provenance`, `source_schema`.
+Canonical authorities: `behavioral_signals`, `campaign_facts`, `campaign_touchpoints`, `events`, `identity`, `ingestion_health`, `observations`, `risk_outputs`, `silver_semantic_observations`, `source_facts`, `source_provenance`, `source_schema`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 

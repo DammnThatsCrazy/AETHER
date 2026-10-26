@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2cd610a330b27af909d6dc2adf781b2b453c781d1a44c392cd73c9b9aae064fd"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c56b0cc9ad48a888bc047d7c6c5b03c71bda316f20f12d186b30427209a4ac82"
 ---
 
 # 360 System Blueprint
@@ -67,7 +67,10 @@ those fields are the implementation checklist, not the table alone.
    typed subject, stable source ID, and evidence; bound the read and reject
    ambiguity. Journey360 attribution now resolves recorded conversion and
    touchpoint IDs only to eligible current rows, while run-time state, policy,
-   freshness, full coverage, and causality remain unknown.
+   freshness, full coverage, and causality remain unknown. Signals360 now
+   joins bounded Silver semantic model-output metadata only when the exact
+   tenant event, backend-stamped namespace, type, time, and evidence agree;
+   derived labels and semantic correctness remain unknown.
 2. **Build missing owning producers and immutable history.** Agent action and
    resource entitlement receipts, workflow-wide approval/action evidence,
    support episode association, campaign source facts, installation health,
