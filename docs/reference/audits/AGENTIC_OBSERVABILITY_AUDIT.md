@@ -11,9 +11,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8477e46a435728ce897fd04bebb523052271895189ac5a836933b2c95f9efe24"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff75aeac1c2388f93514bfbfba398a6fdbf29b7dce29df7ddf617a97c9256e81"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:13f0e0509590cbfc6775163e5e89ae0651d5ab9d02b3c94adef51fabcdf2633d"
+  "services/api/actions/agent/": "sha256:198eeb0e7848c1a6c3b3baa145d69d7f60ddac355ad914efd16fc53ee5c33355"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -32,11 +32,11 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/": "sha256:cecdc0e38f2007d61bea124c53debe57eb755e3c2124c7be8973c723aa1c2fac"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:c81cbc59832a658aeba4ca53e8e6dccdaf07b4c587367f4556c653cbcba12b31"
-  "services/api/journeys/communication360/": "sha256:b1ab51f9a2019e27880befd1aec1a0651b9eb3faeb016ef68e992463ed9f1b22"
+  "services/api/intelligence/risk360/": "sha256:762ef5ac5e30355229599b49959ca43ec25cc408dd2c041e58af69009ea9ff99"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
+  "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:08b79bc15c183192946f991f66f94a9bcae25c3f1be073e7033c6f5369553734"
-  "services/api/repositories/repos.py": "sha256:97da54692debeff715bd1129e264e4fc0b8801abeda5c52b288c96094e04a605"
+  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:e1d39238f595d91a69347c76418cb2e4d79e860c8e254cebb5720343be4928d4"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
@@ -246,10 +246,11 @@ spine coverage, completeness, freshness, and historical replay remain unknown.
 Risk360's required `policy_flags` slot also exposes exact tenant-and-Agent
 `obs_agent_risk_signals` as reported observations with evidence. It states that
 policy evaluation is unattested and the model-governance version is absent;
-non-Agent and historical requests remain unknown. No safe `anomaly_events` join
-is available because tenant-wide Gold anomaly alerts lack exact subject, event,
-and evidence lineage, while RiskSignals are assessment inputs rather than
-findings.
+non-Agent and historical requests remain unknown. `anomaly_events` now admits
+exact typed-subject Gold alerts with a matching RiskSignal event reference and
+can verify one explicitly referenced tenant Bronze SDK event record without
+reading payload. A RiskSignal alone remains an assessment input, not an anomaly
+finding; detector coverage, cause, event completeness, and freshness are open.
 Episode360 `agent_handoffs` remains unknown because episode records and
 observations do not reference a canonical execution or handoff ID. Event labels
 and agent metadata do not establish that relationship.
@@ -338,8 +339,9 @@ coordinated snapshot is unavailable, and current freshness remains unknown, so
 the slot stays degraded. Three required slots remain incomplete: Episode360
 touchpoints now resolve only explicitly recorded episode touchpoint IDs, with
 legacy records, complete link inventory, policy, freshness, and attribution
-links unknown; Risk360 anomaly events lack a typed subject-scoped event
-authority; and Memory360 cards/embedding metadata lack canonical records. Timing and
+links unknown; Risk360 anomaly events have only exact Gold alert and optional
+Bronze event evidence, without detector coverage or cause; and Memory360
+cards/embedding metadata lack canonical records. Timing and
 generic identifiers are not used to invent these links.
 The Value360 risk binding now requests only Risk360's narrow `financial_risk`
 section, excluding unrelated findings, poisoning evidence, policy flags, and
@@ -357,6 +359,14 @@ through exact tenant/provider/account bindings. The HMAC authenticates the
 source but does not verify participant identity or role, provider conversation
 membership is not canonicalized, and delegation references remain source
 claims. These new paths do not complete the affected surfaces.
+
+The Agent authorship read now requires the author participant's exact canonical
+Agent entity, tenant, provider account/conversation scope, a role interval
+covering the recorded event, and both canonical fact and trusted provider role
+evidence. Loose agent, principal, or actor references do not qualify.
+Historical requests keep authorship unknown until participant-role replay is
+available; signed provider rosters alone do not establish canonical
+Conversation membership or complete authorship.
 
 For Agent360 and Execution360, the delegation engine now records an explicit
 timezone-aware `evaluated_at` on the action/resource-scoped decision log. The
@@ -485,12 +495,22 @@ source-asserted inbox/message rows; a positive claim cites identity, inbox,
 and message evidence but does not prove provider conversation membership.
 Workflow360 has an append-only, authenticated definition authority with a
 bounded exact-workflow historical `asOf` read; configured triggers and steps
-are separate from observed runs and outcomes. Social360 has explicit
+are separate from observed runs and outcomes. For a current definition, the
+backend-stamped registrar reference can resolve through one active tenant
+`USER_ID` alias with canonical Human evidence. Historical registrar identity
+remains unknown because alias history is unavailable, and the registrar is not
+inferred to have initiated or approved any run. An authenticated AgentExecution
+can retain a caller-reported definition ID, revision, and digest only after an
+exact tenant AI invocation run link and active definition check; Workflow360
+revalidates the persisted reference before showing a partial run association.
+It does not establish trigger or step execution, causality, complete external
+run coverage, or historical replay. Social360 has explicit
 trust and transmission assertions backed by exact tenant entity, source
 event, graph-path, and risk-signal references. Those assertions are not graph
 mutations or causal contagion proof. Risk360 can admit an anomaly alert when
-its exact RiskSignal and event evidence exist; no production detector or
-complete underlying anomaly-event authority follows from that admission.
+its exact RiskSignal and event evidence exist. Explicit `bronze_sdk_events`
+references can now resolve one tenant Bronze record, but no production detector,
+complete event coverage, cause, or freshness follows from that admission.
 Episode semantic observations now carry a backend-stamped source namespace.
 EpisodeEngine's exact-link producer requires an explicitly associated
 semantic observation; live association and full timeline coverage are still

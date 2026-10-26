@@ -67,12 +67,12 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:7429b3d68eaebe692389a6311e9f3913a1542bc3357ec9d88aa07ddd3a6fac25"
+  "packages/shared/": "sha256:0c6e4302135fbebf875592215087bac0a38d323c7aed8274907c7be62c85b06a"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:b1e18247d9099deeceeb80bf3cf045d08a25dd0da6859495d3a0b4cd60b25abd"
-  "services/api/actions/agent/user_agents.py": "sha256:e00d936cb05ab3ba530c9208a98932e45dec4b1175330d8d24aa8d87a13cc81c"
+  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -92,14 +92,14 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/provider.py": "sha256:cfae68aa7049e116033847b6bcd08a1e8a76650b2dad0116aa71902156ec1d38"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:c81cbc59832a658aeba4ca53e8e6dccdaf07b4c587367f4556c653cbcba12b31"
+  "services/api/intelligence/risk360/provider.py": "sha256:4b133b60ba7a18037cd026481d712db6c55505b50806d8c2343d775e3c98daea"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/provider.py": "sha256:adcf4fdc7a32d47f7b9e73838c0ddb23377c67b79986a795cb941e48ffc00d09"
+  "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
   "services/api/journeys/support360/": "sha256:08b79bc15c183192946f991f66f94a9bcae25c3f1be073e7033c6f5369553734"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
-  "services/api/repositories/repos.py": "sha256:97da54692debeff715bd1129e264e4fc0b8801abeda5c52b288c96094e04a605"
+  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:e1d39238f595d91a69347c76418cb2e4d79e860c8e254cebb5720343be4928d4"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
@@ -720,8 +720,11 @@ Risk360's `policy_flags` slot now reads exact tenant-and-Agent records from
 `obs_agent_risk_signals` as reported observations with source evidence. The
 slot remains partial: policy evaluation is unattested, no policy version is
 present, and non-agent, historical, and complete-coverage behavior remains
-unknown. `anomaly_events` stays unbound because no exact subject-scoped anomaly
-event authority with evidence is available.
+unknown. `anomaly_events` now reads exact typed-subject Gold alert records and
+can corroborate an explicit RiskSignal event reference against one tenant
+Bronze SDK event record. It exposes metadata and evidence only; automatic
+detector coverage, cause, severity, complete event coverage, and freshness
+remain unknown.
 Additional partial paths include Identity360 device/session identifier-type
 metadata and an exact recorded `source_system_id` join to the provider runtime
 registry; provider-registry freshness is unknown. Other partial paths include
@@ -901,9 +904,10 @@ recorded by tenant-scoped EpisodeRecords against canonical tenant-scoped
 touchpoint rows with evidence. Legacy records, complete link inventory,
 policy, freshness, and attribution links remain unknown; Journey touchpoints,
 timing, labels, and attribution records do not create episode links. Risk360
-`anomaly_events` stays
-unknown because no typed subject-scoped anomaly event authority exists;
-RiskSignals and assessment dimensions are not events. Memory360 `cards` and
+`anomaly_events` remains partial: typed-subject Gold alerts and optional exact
+Bronze event records provide evidence, while detector coverage and cause are
+unattested. RiskSignals and assessment dimensions alone are not events.
+Memory360 `cards` and
 `embeddings_meta` stay unknown because semantic context pointers and optional
 vector references do not establish canonical card or embedding-metadata
 records. Each needs its own tenant-scoped authority, evidence, and applicable
@@ -939,12 +943,33 @@ still not canonical Conversation membership, and a provider delegation
 reference is not canonical authority. These paths remain partial and do not
 complete the 18 surfaces.
 
+The Communication360 Agent authorship slot now requires an exact canonical
+Agent entity in an author participant binding, the same tenant, explicit
+provider account and conversation IDs, a valid role window at the recorded
+event time, and both fact and trusted source-role evidence. A loose `agent_id`,
+principal reference, or event actor cannot establish the author. Noncurrent
+frames leave authorship unknown because participant-role history cannot be
+replayed yet. The signed roster remains a source assertion; canonical
+Conversation membership and complete author coverage are still missing.
+
 The next backend authority slice adds append-only, tenant-owned Workflow360
 definition revisions at `/v1/workflows/definitions`. Registration stamps the
 authenticated actor and tenant; the HTTP read returns the latest exact
 revision. The frame provider can select the highest revision both created
 and effective by an exact `asOf` instant after validating a bounded,
 complete 200-revision history. Truncated or malformed history remains unknown.
+For a current definition summary, the authenticated registrar reference can
+also resolve through one active tenant `USER_ID` alias and canonical Human
+identity evidence. The summary reports the registrar identity state and
+evidence separately from the recorded actor reference; historical `asOf`
+identity remains unknown because alias history cannot be replayed. Registrar
+identity does not identify a run initiator, approver, or authorized executor.
+An AgentExecution can additionally retain a caller-reported definition ID,
+revision, and digest after the authenticated execution route verifies one
+tenant AI invocation run link and the exact active definition revision. A
+Workflow360 run summary rechecks the stored link against its run, invocation,
+execution, and definition evidence and reports a partial association. This
+does not prove that the definition initiated the run or that its steps fired.
 Definitions describe configured triggers and steps and do not establish that
 a run fired, completed, or caused an outcome. Social360 now accepts explicit
 trust-edge and social-contagion evidence assertions at
@@ -952,8 +977,10 @@ trust-edge and social-contagion evidence assertions at
 and linked risk-signal references before preserving the source assertion;
 they do not write graph edges or prove causal transmission. Risk360's Gold
 anomaly-alert admission requires an exact persisted RiskSignal and event
-EvidenceRef, while automatic anomaly detection and source-event completeness
-remain open. Agent360 can show bounded observed delegation scopes after exact
+EvidenceRef; an explicit `bronze_sdk_events` reference can additionally resolve
+one tenant event record without disclosing its payload. Automatic anomaly
+detection, event coverage, cause, and freshness remain open. Agent360 can show
+bounded observed delegation scopes after exact
 identity and party joins, with `effectiveAuthorization=unknown`. Agent360
 also requires one resolved tenant-owned canonical Agent before reading
 source-asserted inbox/message observations into its communications slot.

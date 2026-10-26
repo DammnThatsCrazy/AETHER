@@ -19,7 +19,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:e00d936cb05ab3ba530c9208a98932e45dec4b1175330d8d24aa8d87a13cc81c"
+  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
   "services/api/value/x402/approvals.py": "sha256:f60a8c85658ee75ecfddd610ce1fa216c9a0561de899debb02f6b961d2589dbc"

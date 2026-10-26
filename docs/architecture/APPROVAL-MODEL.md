@@ -16,7 +16,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:e00d936cb05ab3ba530c9208a98932e45dec4b1175330d8d24aa8d87a13cc81c"
+  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
   "services/api/value/x402/approvals.py": "sha256:f60a8c85658ee75ecfddd610ce1fa216c9a0561de899debb02f6b961d2589dbc"
   "services/api/value/x402/commerce_models.py": "sha256:d7f9d68aa51eff1f92b358d695c0f745c38cb59ac3df390aad2afd06e2ebe383"
   "services/api/value/x402/commerce_routes.py": "sha256:448476ed6fb54119feba4e8dcee8f3f0356bb55e58fa14b27b052b259de77891"

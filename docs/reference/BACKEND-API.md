@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:a8f45b8c0623c186f0ab94c355c0c1b3d27fc645df4ad972f5091d08dd82119f"
+  "services/api/actions/": "sha256:61a66ab64af85c5f447768a0d4f4d976db352e835f5b3942623828896e7429a3"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,8 +33,8 @@ source_hashes:
   "services/api/graph/": "sha256:a6731cc3742863724966de3087f5217827ce5105853a193201a4a4f03828f4aa"
   "services/api/identity/": "sha256:cbb27b5635537a2aea0370aaa468032d138c56efdca39c29523d604910aa4318"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:96f37c0d6437433aaa367e762cf4b1fa897622846141e1eedfcdb6a298833bb1"
-  "services/api/journeys/": "sha256:fc390dfea30dfe1e760349392c538911f7d63a2c8db1143120756021675df6b5"
+  "services/api/intelligence/": "sha256:37a7160b9be14a060e67494196222915bcc4e5a0287ea048ec4278ed0f6e4c0a"
+  "services/api/journeys/": "sha256:9e1f8da265ef3387e5998162b59bdbf3001f6ce94f3a3330f2f91a4913130515"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:b581ccc0719fd0cdc8e492a08ba0e5d5c6729500caa40e1f853f5cb786604891"
@@ -1909,6 +1909,30 @@ Workflow360 frame reads may select a historical definition only for an exact
 workflow ID and point-in-time `asOf` anchor from a complete bounded revision
 history. The HTTP definition route above returns the latest revision.
 
+The current definition frame summary includes the backend-stamped
+`registeredByActorRef` and reports `registrarIdentityState`,
+`registrarIdentityReason`, `registeredByCanonicalHumanEntityId`, and
+`registrarIdentityEvidenceRefs`. The canonical Human ID is present only when
+one active tenant `USER_ID` alias and identity evidence resolve the registrar.
+Historical `asOf` frames leave that identity unknown; registration does not
+identify a workflow run initiator or approver.
+
+`POST /v1/agents/{agent_id}/execute` may include
+`workflow_definition_id`, `workflow_definition_revision`, and
+`workflow_definition_digest` together with an exact execution ID. The server
+requires a same-tenant AI invocation run link, a complete bounded as-of
+definition read, matching active revision/digest, and an Agent step before it
+persists the caller-reported association. Workflow360 run frames revalidate
+those records and show a degraded `workflow_summary` with the definition
+record and execution evidence. Trigger, step, and external-effect execution
+remain unknown; historical run-definition replay is unavailable.
+
+Communication360 Agent authorship requires an exact tenant-owned canonical
+Agent author binding with provider scope, event-time role validity, and trusted
+source evidence. Historical authorship remains unknown until participant-role
+replay is available, and provider conversation scope does not establish
+canonical Conversation membership.
+
 Frame responses retain slot state, evidence/provenance, freshness, quality,
 policy, and actor/authority metadata where canonical sources support them.
 Unsupported subject/provider paths and unavailable evidence remain explicit
@@ -2027,9 +2051,11 @@ Risk360's required `policy_flags` slot reads exact tenant-and-Agent
 `obs_agent_risk_signals` records as reported observations with evidence. It
 does not present them as evaluated decisions: policy evaluation is unattested,
 the model-governance policy version is absent, and non-Agent, historical, and
-complete-coverage behavior remains unknown. `anomaly_events` stays unbound
-because no exact subject-scoped anomaly-event authority with evidence is
-available.
+complete-coverage behavior remains unknown. `anomaly_events` admits exact
+typed-subject Gold alerts with an explicit RiskSignal event reference and,
+for `bronze_sdk_events`, a bounded tenant event-record join. It returns
+metadata and evidence references without payload; detector coverage, cause,
+severity, complete event coverage, and freshness remain unknown.
 Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
 findings with their targeting-observation and eligibility-snapshot evidence;
 general risk and source anomalies remain unresolved. Journey360's `stages` slot
@@ -2079,9 +2105,10 @@ Journey360 `episodes` also joins only tenant-scoped EpisodeRecords that
 explicitly persist the exact `journey_id`, with record/source evidence. Legacy
 or unlinked records, association completeness, store freshness, policy, and
 historical replay remain unknown; a missing link does not establish absence.
-Risk360 `anomaly_events` remains unknown
-because generic signals and assessment dimensions are not typed anomaly
-events. Memory360 `cards` and `embeddings_meta` remain unknown because the
+Risk360 `anomaly_events` remains partial: an exact Gold alert with matching
+RiskSignal evidence can resolve one explicitly referenced Bronze SDK record,
+but generic signals and assessment dimensions are not typed anomaly events or
+automatic detector output. Memory360 `cards` and `embeddings_meta` remain unknown because the
 repository has no canonical context-card or embedding-metadata records;
 optional vector references and semantic pointers do not provide that authority.
 These gaps need tenant-scoped source records with evidence and policy/freshness
