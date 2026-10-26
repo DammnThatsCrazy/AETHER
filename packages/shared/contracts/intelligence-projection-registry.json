@@ -629,7 +629,8 @@
         "outcome_facts",
         "risk_signals",
         "silver_semantic_observations",
-        "temporal"
+        "temporal",
+        "touchpoints"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -5753,7 +5754,9 @@
           "canonicalAuthorityRefs": [
             "journeys",
             "attribution_runs",
-            "attribution_credits"
+            "attribution_credits",
+            "canonical_conversions",
+            "touchpoints"
           ],
           "projectionBindings": [
             {
@@ -5767,7 +5770,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined; inactive and historical runs, conversion and touchpoint resolution, policy, freshness, and causal validity remain unknown."
+          "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined. Recorded conversion and touchpoint IDs resolve only to eligible current exact-tenant rows when their event times do not follow run completion; missing or conflicting rows stay unknown. Inactive and historical runs, subject state at run time, policy, freshness, complete coverage, and causal validity remain unknown."
         },
         {
           "id": "recommended_actions",
@@ -5906,7 +5909,8 @@
           "evidence",
           "graph",
           "identity",
-          "journeys"
+          "journeys",
+          "touchpoints"
         ],
         "ownsCanonicalTruth": false,
         "prohibitedOwnership": [

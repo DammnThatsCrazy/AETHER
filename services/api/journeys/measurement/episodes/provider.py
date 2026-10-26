@@ -109,6 +109,7 @@ _JOURNEY_STEP_CAP = 200
 _JOURNEY_TOUCHPOINT_CAP = 200
 _JOURNEY_CONVERSION_CAP = 100
 _JOURNEY_ATTRIBUTION_CREDIT_CAP = 100
+_JOURNEY_ATTRIBUTION_REFERENCE_READ_CONCURRENCY = 8
 _JOURNEY_EPISODE_CAP = 100
 _JOURNEY_AGENT_ACTIVITY_CAP = 200
 _JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
@@ -180,6 +181,8 @@ class JourneyAttributionCredit:
     record: dict[str, Any]
     run_ref: EvidenceRef
     credit_ref: EvidenceRef
+    conversion_ref: Optional[EvidenceRef] = None
+    touchpoint_ref: Optional[EvidenceRef] = None
 
 
 @dataclass(frozen=True)
@@ -2059,6 +2062,7 @@ class Episode360Provider:
                 )
             )
 
+        credits = await self._resolve_attribution_credit_subjects(tenant_id, credits)
         if scope_mismatch:
             warnings.append("journey_attribution_scope_mismatch")
         if invalid_records:
@@ -2080,6 +2084,144 @@ class Episode360Provider:
             warnings=tuple(dict.fromkeys(warnings)),
             truncated=truncated,
         )
+
+    async def _resolve_attribution_credit_subjects(
+        self, tenant_id: str, credits: list[JourneyAttributionCredit]
+    ) -> list[JourneyAttributionCredit]:
+        """Resolve recorded credit IDs to current canonical rows, never run-time state.
+
+        The bounded credit read has already proved tenant/run/journey/version
+        membership. Each distinct conversion and touchpoint is fetched once;
+        missing, deleted, invalid, or later-than-run rows remain independent
+        unknowns without suppressing the admitted model-output credit.
+        """
+        if not credits:
+            return credits
+        conversion_source = self._conversion_source or RepositoryJourneyConversionSource()
+        touchpoint_source = self._touchpoint_source or RepositoryJourneyTouchpointSource()
+        requested = {
+            ("conversion", credit.record["recordedConversionId"])
+            for credit in credits
+        } | {
+            ("touchpoint", touchpoint_id)
+            for credit in credits
+            if (touchpoint_id := credit.record.get("recordedTouchpointId")) is not None
+        }
+        semaphore = asyncio.Semaphore(_JOURNEY_ATTRIBUTION_REFERENCE_READ_CONCURRENCY)
+
+        async def read_one(kind: str, record_id: str) -> tuple[tuple[str, str], Optional[dict[str, Any]], bool]:
+            source = conversion_source if kind == "conversion" else touchpoint_source
+            try:
+                async with semaphore:
+                    raw = await source.get(tenant_id, record_id)
+            except Exception:  # noqa: BLE001 - optional exact authority remains unknown
+                return (kind, record_id), None, True
+            return (kind, record_id), _as_mapping(raw), False
+
+        resolved = dict(
+            (key, (row, failed))
+            for key, row, failed in await asyncio.gather(
+                *(read_one(kind, record_id) for kind, record_id in sorted(requested))
+            )
+        )
+        result: list[JourneyAttributionCredit] = []
+        for credit in credits:
+            record = credit.record
+            run_completed_at = _parse_utc_timestamp(credit.run_ref.observedAt)
+            conversion_id = record["recordedConversionId"]
+            conversion_row, conversion_failed = resolved[("conversion", conversion_id)]
+            conversion_ref: Optional[EvidenceRef] = None
+            if conversion_failed:
+                conversion_reason = "canonical_conversion_authority_unavailable"
+            elif conversion_row is None:
+                conversion_reason = "canonical_conversion_row_missing"
+            elif (
+                conversion_row.get("tenant_id") != tenant_id
+                or _journey_text(conversion_row.get("conversion_id")) != conversion_id
+            ):
+                conversion_reason = "canonical_conversion_scope_mismatch"
+            elif (
+                _journey_text(conversion_row.get("conversion_status"))
+                not in {"confirmed", "adjusted"}
+                or conversion_row.get("attribution_eligible") is False
+            ):
+                conversion_reason = "canonical_conversion_current_status_ineligible"
+            elif (
+                run_completed_at is None
+                or (occurred := _parse_utc_timestamp(conversion_row.get("occurred_at"))) is None
+                or occurred > run_completed_at
+            ):
+                conversion_reason = "canonical_conversion_run_time_conflict"
+            else:
+                conversion_ref = _journey_conversion_ref(conversion_row)
+                conversion_reason = (
+                    "current_exact_tenant_conversion_id"
+                    if conversion_ref is not None and conversion_ref.observedAt is not None
+                    else "canonical_conversion_evidence_missing"
+                )
+                if conversion_reason != "current_exact_tenant_conversion_id":
+                    conversion_ref = None
+            record["conversionResolutionState"] = (
+                "current_exact_id" if conversion_ref is not None else "unknown"
+            )
+            record["conversionResolutionReason"] = conversion_reason
+
+            touchpoint_ref: Optional[EvidenceRef] = None
+            touchpoint_id = record.get("recordedTouchpointId")
+            if touchpoint_id is not None:
+                touchpoint_row, touchpoint_failed = resolved[("touchpoint", touchpoint_id)]
+                if touchpoint_failed:
+                    touchpoint_reason = "canonical_touchpoint_authority_unavailable"
+                elif touchpoint_row is None:
+                    touchpoint_reason = "canonical_touchpoint_row_missing"
+                elif (
+                    touchpoint_row.get("tenant_id") != tenant_id
+                    or _journey_text(touchpoint_row.get("touchpoint_id")) != touchpoint_id
+                ):
+                    touchpoint_reason = "canonical_touchpoint_scope_mismatch"
+                elif (
+                    touchpoint_row.get("privacy_class") == "deleted"
+                    or touchpoint_row.get("attribution_eligible") is False
+                ):
+                    touchpoint_reason = "canonical_touchpoint_current_status_ineligible"
+                elif (
+                    record.get("campaignId") is not None
+                    and _journey_text(touchpoint_row.get("campaign_id")) != record["campaignId"]
+                ):
+                    touchpoint_reason = "canonical_touchpoint_campaign_conflict"
+                elif (
+                    run_completed_at is None
+                    or (occurred := _parse_utc_timestamp(touchpoint_row.get("occurred_at"))) is None
+                    or occurred > run_completed_at
+                ):
+                    touchpoint_reason = "canonical_touchpoint_run_time_conflict"
+                else:
+                    touchpoint_ref = _journey_touchpoint_ref(touchpoint_row)
+                    touchpoint_reason = (
+                        "current_exact_tenant_touchpoint_id"
+                        if touchpoint_ref is not None and touchpoint_ref.observedAt is not None
+                        else "canonical_touchpoint_evidence_missing"
+                    )
+                    if touchpoint_reason != "current_exact_tenant_touchpoint_id":
+                        touchpoint_ref = None
+                record["touchpointResolutionState"] = (
+                    "current_exact_id" if touchpoint_ref is not None else "unknown"
+                )
+                record["touchpointResolutionReason"] = touchpoint_reason
+            if conversion_ref is not None:
+                record["evidenceRefs"].append(conversion_ref.model_dump(mode="json", exclude_none=True))
+            if touchpoint_ref is not None:
+                record["evidenceRefs"].append(touchpoint_ref.model_dump(mode="json", exclude_none=True))
+            result.append(
+                JourneyAttributionCredit(
+                    record=record,
+                    run_ref=credit.run_ref,
+                    credit_ref=credit.credit_ref,
+                    conversion_ref=conversion_ref,
+                    touchpoint_ref=touchpoint_ref,
+                )
+            )
+        return result
 
     async def _load_communication_fact_links(
         self,
@@ -4338,7 +4480,13 @@ def _journey_attribution_context(read: JourneyAttributionRead) -> dict[str, Any]
     evidence_refs = [
         ref.model_dump(mode="json", exclude_none=True)
         for credit in read.credits
-        for ref in (credit.run_ref, credit.credit_ref)
+        for ref in (
+            credit.run_ref,
+            credit.credit_ref,
+            credit.conversion_ref,
+            credit.touchpoint_ref,
+        )
+        if ref is not None
     ]
     if read.state == "available":
         reason = "active_attribution_credits_resolved_through_exact_tenant_journey_runs"
@@ -4375,13 +4523,20 @@ def _journey_attribution_context(read: JourneyAttributionRead) -> dict[str, Any]
         },
         "limitations": [
             "credit_weights_are_canonical_model_outputs_not_independent_causal_proof",
-            "conversion_and_touchpoint_ids_are_recorded_refs_not_joined_subjects",
+            "current_exact_id_subject_reads_do_not_establish_state_at_run_time",
+            "unresolved_conversion_and_touchpoint_refs_remain_unknown",
             "inactive_and_historical_attribution_runs_are_not_loaded",
         ],
         "evidenceRefs": evidence_refs,
         "warnings": list(read.warnings),
         "claims": [
-            (credit.record["creditId"], credit.run_ref, credit.credit_ref)
+            (
+                credit.record["creditId"],
+                credit.run_ref,
+                credit.credit_ref,
+                credit.conversion_ref,
+                credit.touchpoint_ref,
+            )
             for credit in read.credits
         ],
     }
@@ -4992,7 +5147,26 @@ def _build_journey_sections(
             state=attribution_context["state"],
             title=_SECTION_TITLES["journey_attribution"],
             content=attribution_context,
-            canonicalAuthorityRefs=["attribution_runs", "attribution_credits"],
+            canonicalAuthorityRefs=[
+                "attribution_runs",
+                "attribution_credits",
+                *(
+                    ["canonical_conversions"]
+                    if any(
+                        credit.get("conversionResolutionState") == "current_exact_id"
+                        for credit in attribution_context["credits"]
+                    )
+                    else []
+                ),
+                *(
+                    ["touchpoints"]
+                    if any(
+                        credit.get("touchpointResolutionState") == "current_exact_id"
+                        for credit in attribution_context["credits"]
+                    )
+                    else []
+                ),
+            ],
             warnings=attribution_context["warnings"] or None,
         ),
         "risk_flags": ProjectionSection(
@@ -5460,7 +5634,15 @@ def _build_journey_claims(
     stage_context: dict[str, Any],
     touchpoint_claims: list[tuple[str, EvidenceRef]],
     conversion_claims: list[tuple[str, EvidenceRef]],
-    attribution_claims: list[tuple[str, EvidenceRef, EvidenceRef]],
+    attribution_claims: list[
+        tuple[
+            str,
+            EvidenceRef,
+            EvidenceRef,
+            Optional[EvidenceRef],
+            Optional[EvidenceRef],
+        ]
+    ],
     agent_intervention_claims: list[tuple[str, EvidenceRef]],
     episode_claims: list[tuple[str, EvidenceRef]],
     communication_claims: list[tuple[str, EvidenceRef]],
@@ -5619,7 +5801,7 @@ def _build_journey_claims(
                 domainSlotIds=["conversions"],
             )
         )
-    for credit_id, run_evidence, credit_evidence in attribution_claims:
+    for credit_id, run_evidence, credit_evidence, conversion_evidence, touchpoint_evidence in attribution_claims:
         if len(claims) >= 301:
             break
         claims.append(
@@ -5627,10 +5809,19 @@ def _build_journey_claims(
                 id=f"episode360:{journey_id}:{version_id}:attribution-credit:{credit_id}",
                 kind="journey_attribution_credit",
                 subject=request.subject,
-                evidenceRefs=[journey_ref, run_evidence, credit_evidence],
+                evidenceRefs=[
+                    journey_ref,
+                    run_evidence,
+                    credit_evidence,
+                    *(
+                        ref
+                        for ref in (conversion_evidence, touchpoint_evidence)
+                        if ref is not None
+                    ),
+                ],
                 claims=[
                     "A same-tenant completed active attribution run explicitly links this model-output credit to the canonical journey.",
-                    "The credit is not independent causal proof or evidence that its recorded conversion or touchpoint resolved.",
+                    "The credit is not independent causal proof; any exact canonical subject reads establish current references only, not their state at attribution-run time.",
                     "Inactive and historical run completeness, freshness, and policy disposition remain unknown.",
                 ],
                 claimState=EpistemicStatus.OBSERVED,

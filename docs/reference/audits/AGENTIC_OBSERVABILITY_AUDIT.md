@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:f86ad466463eba1f09400ba15ee70e608b0443c006f6476f3e2767ac96521305"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2cd610a330b27af909d6dc2adf781b2b453c781d1a44c392cd73c9b9aae064fd"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:751b1fa4cb4c483454904359b3817fca3241b3ea39776e450f2dc1496f77b8e6"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -243,6 +243,11 @@ coverage, and freshness remain unknown. Journey360's required `communications`
 slot now joins only tenant-scoped canonical facts with an exact typed journey
 ID; message endpoints and free-text references do not qualify, while message-
 spine coverage, completeness, freshness, and historical replay remain unknown.
+Journey360 `attribution` now also resolves each recorded conversion and
+touchpoint ID through an exact tenant-scoped canonical read. Eligible current
+rows with event times no later than the completed run contribute evidence;
+missing, conflicting, deleted, or unavailable rows remain unknown. The credit
+still records model output, not causal proof or the subject's state at run time.
 Risk360's required `policy_flags` slot also exposes exact tenant-and-Agent
 `obs_agent_risk_signals` as reported observations with evidence. It states that
 policy evaluation is unattested and the model-governance version is absent;

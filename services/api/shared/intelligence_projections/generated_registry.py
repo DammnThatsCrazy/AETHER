@@ -566,7 +566,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/episode360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal"),
+        "canonicalAuthorities": ("agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
         "hardDependencies": ("contract_spine", "journey_continuity", "temporal_kernel"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
@@ -3766,10 +3766,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("attribution_credits", "attribution_runs", "journeys"),
+                "canonicalAuthorityRefs": ("attribution_credits", "attribution_runs", "canonical_conversions", "journeys", "touchpoints"),
                 "description": "Active completed attribution credits linked through a same-tenant run for the exact current JourneyVersion.",
                 "id": "attribution",
-                "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined; inactive and historical runs, conversion and touchpoint resolution, policy, freshness, and causal validity remain unknown.",
+                "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined. Recorded conversion and touchpoint IDs resolve only to eligible current exact-tenant rows when their event times do not follow run completion; missing or conflicting rows stay unknown. Inactive and historical runs, subject state at run time, policy, freshness, complete coverage, and causal validity remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -3987,7 +3987,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "communication_facts", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "identity", "journeys"),
+            "canonicalAuthorities": ("actions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "communication_facts", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "identity", "journeys", "touchpoints"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
