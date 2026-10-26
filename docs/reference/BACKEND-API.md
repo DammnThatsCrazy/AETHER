@@ -31,10 +31,10 @@ source_hashes:
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
   "services/api/graph/": "sha256:a6731cc3742863724966de3087f5217827ce5105853a193201a4a4f03828f4aa"
-  "services/api/identity/": "sha256:cbb27b5635537a2aea0370aaa468032d138c56efdca39c29523d604910aa4318"
+  "services/api/identity/": "sha256:ae487fffb48a5848a612e34bf8b8074b500fb4f6e62111a8af403f14487fdd64"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:6aa493329c1683cf25f88f47a58f35b01185ebdce477deb4876d42e97fdb1929"
-  "services/api/journeys/": "sha256:d340d57a3ed4517d790ef96c49eceea7b3545fe1b0f2feb9d88f1854addf90bf"
+  "services/api/intelligence/": "sha256:c15dbfa0325d810e6f96ab6fc0a246e27e321f50cd661212241fb7785a871beb"
+  "services/api/journeys/": "sha256:ccf2265191982d4e12b1a7e51b44c9a19500c4f269ac21e81c44a6ffb98d1b6c"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:b581ccc0719fd0cdc8e492a08ba0e5d5c6729500caa40e1f853f5cb786604891"
@@ -1952,6 +1952,10 @@ without claiming surface completion. Account360's `members` slot treats
 tenant-scoped `MEMBER_OF` graph edges as candidates, requires exact live
 graph-mutation-ledger evidence, and joins the exact tenant member entity; the
 bounded scans do not establish complete roster coverage or freshness.
+Account360 contract evidence requires an explicit `contract_profile_id` from
+the exact tenant and account billing record; a generic repository `id` is not
+treated as contract identity. Contract obligation, history, and freshness
+coverage remain partial.
 Account360's `profiles` slot follows
 tenant-scoped `MEMBER_OF` edges to exact entity-registry members and requests
 each member's Profile360 frame under that member's own policy; incomplete
@@ -2060,7 +2064,10 @@ metadata and evidence references without payload; detector coverage, cause,
 severity, complete event coverage, and freshness remain unknown.
 Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
 findings with their targeting-observation and eligibility-snapshot evidence;
-general risk and source anomalies remain unresolved. Journey360's `stages` slot
+it separately reads bounded canonical Risk360 assessments for the exact tenant
+and campaign subject, preserving assessment claim state and evidence. Campaign
+risk producer coverage, source anomalies, history, policy, and freshness remain
+unknown. Journey360's `stages` slot
 exposes only explicit `journey_role` markers from the exact current journey
 version's steps, with stage taxonomy and completeness unknown. Location360's
 `normalization` slot exposes canonical location-fact source/evidence links but
@@ -2099,7 +2106,9 @@ observation and source-fact dimensions, event completeness, and freshness remain
 unknown; Memory360 does not evaluate current consent or policy. Its record
 producer stamps explicitly required purposes from the verified write-time
 decision, and exact reads suppress a stamped record if that decision no longer
-matches. Legacy unstamped purposes remain unknown. These provider
+matches. The Memory360 memory item and historical policy decision now expose
+the verified write-time purpose list; legacy unstamped purposes remain unknown.
+These provider
 changes add no HTTP routes and do not complete any surface.
 
 Episode360 `touchpoints` now resolves only explicitly recorded

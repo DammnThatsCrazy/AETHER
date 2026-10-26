@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:83cbd7a8653a9f6ab2a19e6e0fa4a711089b248d0fca7157c0381a0ccbc3c7b6"
+  "packages/shared/": "sha256:97e103a9fe9b9fb91823f962755abd90d97df73ea1109888a7347047bb80f0d9"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -87,7 +87,7 @@ source_hashes:
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
-  "services/api/identity/account360_provider.py": "sha256:dd2b32bc4eb3fec20094ef053dfe99de88e39ec43388dae73c41f9d4cdcab838"
+  "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
@@ -642,10 +642,18 @@ policy behavior, freshness, API reachability, or surface-level verification.
 Recent backend slices bind Account360 profiles through exact tenant membership
 and policy-scoped Profile360 reads, Campaign360 targeting-leakage findings,
 Journey360 explicit role markers, and Location360 source/evidence lineage.
+Campaign360 also reads bounded Risk360 assessments for the exact tenant and
+campaign subject as a separate anomaly dimension. Assessment output is not
+inferred from RiskSignals; campaign producer coverage, source anomalies,
+policy, historical completeness, and freshness remain unknown.
 Account360 `members` accepts a graph membership edge only when its exact tenant
 graph-mutation-ledger aggregate proves the edge is live and the member resolves
 to a canonical tenant entity; the bounded scans do not establish full roster
 coverage or freshness.
+Account360 contract evidence requires the billing authority's explicit
+`contract_profile_id` on an exact tenant and account row; a generic storage
+`id` is not promoted to contract identity. Obligations, history, and freshness
+remain partial.
 Profile360's required `risk_summary` slot now binds to Risk360 assessments and
 evidence for exact tenant-scoped entity and Agent subjects; it remains degraded
 while a Profile-specific freshness threshold is unknown.
@@ -749,7 +757,9 @@ The semantic memory producer now stamps an explicit nonempty list of required
 consent purposes from its exact verified write-time policy decision. Exact
 subject and ID reads suppress a stamped record if that historical decision no
 longer matches the stamp. Legacy unstamped purposes remain unknown; the stamp
-does not evaluate current consent.
+does not evaluate current consent. Memory360 now carries this verified
+historical purpose list into its memory items and `policy_state` decisions;
+unavailable legacy purpose provenance stays explicitly unknown.
 
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,

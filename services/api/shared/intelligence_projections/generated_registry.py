@@ -199,7 +199,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/campaign360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "population", "source"),
-        "canonicalAuthorities": ("attribution_credits", "campaign_facts", "campaign_population_link_events", "campaign_touchpoints", "canonical_conversions", "communication", "economic", "events", "evidence", "journeys", "outcomes", "population", "population_definitions", "source_provenance", "spend_records", "targeting_leakage_findings", "touchpoints"),
+        "canonicalAuthorities": ("attribution_credits", "campaign_facts", "campaign_population_link_events", "campaign_touchpoints", "canonical_conversions", "communication", "economic", "events", "evidence", "journeys", "outcomes", "population", "population_definitions", "risk_outputs", "source_provenance", "spend_records", "targeting_leakage_findings", "touchpoints"),
         "hardDependencies": ("attribution_architecture", "contract_spine", "measurement_outcome_contract"),
         "projectionDependencies": ("communication360", "economic360", "episode360", "outcome360", "population360"),
         "optionalProjectionDependencies": [],
@@ -2327,11 +2327,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Campaign 360",
         "domainSlots": [
             {
-                "authorityGapReason": "General campaign risk outputs are not joined by this targeting leakage finding provider.",
                 "canonicalAuthorityRefs": ("risk_outputs", "source_provenance", "targeting_leakage_findings"),
-                "description": "Tenant-scoped targeting leakage findings backed by source observation and eligibility-snapshot evidence; broader risk and source anomalies stay unknown.",
+                "description": "Tenant-scoped targeting leakage findings backed by source observation and eligibility-snapshot evidence, alongside exact campaign Risk360 assessment output; producer coverage and source anomalies stay unknown.",
                 "id": "anomalies",
-                "partialImplementationReason": "Exact targeting leakage findings are joined with a bounded evidence chain; general risk outputs and source anomalies remain unknown.",
+                "partialImplementationReason": "Exact targeting leakage findings and bounded exact-tenant campaign Risk360 assessments are read as separate dimensions with their own evidence. Campaign-specific risk production, complete risk and source-anomaly coverage, history, policy, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "campaign360",
@@ -2340,8 +2339,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("anomalies",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("risk_outputs",)
+                "requirement": "required"
             },
             {
                 "id": "attribution",
@@ -4398,7 +4396,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("consent_policy_decisions", "evidence", "semantic_memory_records"),
                 "description": "Required memory360 slot: policy state.",
                 "id": "policy_state",
-                "partialImplementationReason": "Exact tenant and subject historical allow decisions are rendered with timestamped canonical consent-policy evidence. Current consent and policy are not evaluated, so present authorization remains unknown.",
+                "partialImplementationReason": "Exact tenant and subject historical allow decisions are rendered with timestamped canonical consent-policy evidence. Explicit nonempty required purposes stamped from that verified write-time decision are surfaced; legacy unstamped purposes remain unknown. Current consent and policy are not evaluated, so present authorization remains unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "memory360",

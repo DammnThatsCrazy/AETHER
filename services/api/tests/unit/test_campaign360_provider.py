@@ -21,6 +21,7 @@ os.environ.setdefault("JWT_SECRET", "campaign360-test-secret")
 from journeys.campaign.campaign360_provider import (  # noqa: E402
     AttributionRead,
     CampaignAnomalyRead,
+    CampaignRiskAssessmentRead,
     Campaign360Provider,
     CampaignRead,
     CampaignSpendRead,
@@ -957,6 +958,127 @@ def _targeting_leakage_finding(
     }
 
 
+def _campaign_risk_assessment(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "assessment_id": "campaign-risk-assessment-1",
+        "tenant_id": "tenant-a",
+        "subject_kind": "campaign",
+        "subject_id": CAMPAIGN_ID,
+        "dimensions": ["economic"],
+        "vector": {"components": []},
+        "claim_state": "derived",
+        "policy_id": "policy-risk-1",
+        "assessed_at": "2026-10-05T10:10:00Z",
+        "evidence_refs": [
+            {
+                "id": "risk-source-event-1",
+                "type": "event",
+                "source": "campaign_risk_detector",
+                "observedAt": "2026-10-05T10:00:00Z",
+            }
+        ],
+    }
+    row.update(overrides)
+    return row
+
+
+class RiskAssessmentCampaign360Source(FakeCampaign360Source):
+    def __init__(self, read: CampaignRiskAssessmentRead) -> None:
+        super().__init__()
+        self.risk_read = read
+        self.risk_calls: list[tuple[str, str, int]] = []
+
+    async def campaign_risk_assessments(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignRiskAssessmentRead:
+        self.risk_calls.append((tenant_id, campaign_id, limit))
+        return self.risk_read
+
+
+@pytest.mark.asyncio
+async def test_campaign_risk_assessment_exact_subject_is_independent_partial_output() -> None:
+    source = RiskAssessmentCampaign360Source(
+        CampaignRiskAssessmentRead([_campaign_risk_assessment()], True, True)
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    assert source.risk_calls == [("tenant-a", CAMPAIGN_ID, 101)]
+    context = _section(result, "state").content["domainContexts"]["anomalies"]
+    assert context["dimensionStates"] == {
+        "targetingLeakageFindings": "empty",
+        "riskOutputs": "available",
+        "sourceAnomalies": "unknown",
+    }
+    assert context["state"] == "partial"
+    assert context["riskAssessmentRead"]["producerCoverageState"] == "unknown"
+    assert context["riskAssessments"][0]["assessmentId"] == "campaign-risk-assessment-1"
+    assert context["riskAssessments"][0]["claimState"] == "derived"
+    assert context["riskAssessments"][0]["policyState"] == "unknown"
+    assert "policy-risk-1" not in str(context)
+    claim = next(
+        item for item in result.claims
+        if item.kind == "campaign_risk_assessment_exact_subject"
+    )
+    assert claim.claimState.value == "derived"
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        "campaign-risk-assessment-1", "risk-source-event-1"
+    }
+    assert _slot(result, "anomalies")["state"] == "partial"
+
+
+@pytest.mark.parametrize(
+    ("rows", "reason"),
+    [
+        ([_campaign_risk_assessment(tenant_id="tenant-other")], "campaign_risk_assessment_scope_mismatch"),
+        ([_campaign_risk_assessment(subject_id="other-campaign")], "campaign_risk_assessment_scope_mismatch"),
+        ([_campaign_risk_assessment(), _campaign_risk_assessment()], "campaign_risk_assessment_id_ambiguous"),
+        ([_campaign_risk_assessment(evidence_refs=[])], "campaign_risk_assessment_time_or_evidence_missing"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_campaign_risk_assessment_bad_scope_or_evidence_is_not_exposed(
+    rows: list[dict[str, object]], reason: str
+) -> None:
+    source = RiskAssessmentCampaign360Source(CampaignRiskAssessmentRead(rows, True, True))
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    context = _section(result, "state").content["domainContexts"]["anomalies"]
+    assert context["riskAssessments"] == []
+    assert context["riskAssessmentRead"]["reason"] == reason
+    assert not any(
+        item.kind == "campaign_risk_assessment_exact_subject" for item in result.claims
+    )
+    assert "risk-source-event-1" not in str(_section(result, "evidence").content)
+
+
+@pytest.mark.asyncio
+async def test_campaign_risk_assessment_truncation_and_half_open_time_scope() -> None:
+    source = RiskAssessmentCampaign360Source(
+        CampaignRiskAssessmentRead(
+            [
+                _campaign_risk_assessment(),
+                _campaign_risk_assessment(
+                    assessment_id="campaign-risk-assessment-2",
+                    assessed_at="2026-10-11T00:00:00Z",
+                ),
+            ],
+            True,
+            False,
+        )
+    )
+    result = await Campaign360Provider(source).project(
+        _request(time_range={"from": "2026-10-01T00:00:00Z", "to": "2026-10-11T00:00:00Z"}),
+        _context(),
+    )
+
+    context = _section(result, "state").content["domainContexts"]["anomalies"]
+    assert context["dimensionStates"]["riskOutputs"] == "truncated"
+    assert [item["assessmentId"] for item in context["riskAssessments"]] == [
+        "campaign-risk-assessment-1"
+    ]
+    assert context["riskAssessmentRead"]["readCompleteForExactSubject"] is False
+
+
 @pytest.mark.asyncio
 async def test_targeting_anomalies_join_exact_campaign_and_preserve_evidence_chain() -> None:
     source = FakeCampaign360Source(
@@ -1132,6 +1254,32 @@ async def test_repository_campaign_anomaly_source_uses_exact_tenant_and_campaign
     assert read.available is True
     assert read.complete is True
     assert read.rows[0]["campaignId"] == CAMPAIGN_ID
+
+
+@pytest.mark.asyncio
+async def test_repository_campaign_risk_assessments_read_exact_campaign_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class _RiskAssessments:
+        async def list_by_subject(
+            self, tenant_id: str, subject_kind: str, subject_id: str, limit: int
+        ) -> list[dict[str, object]]:
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [_campaign_risk_assessment()]
+
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", _RiskAssessments)
+    read = await RepositoryCampaign360Source().campaign_risk_assessments(
+        "tenant-a", CAMPAIGN_ID, limit=101
+    )
+
+    assert calls == [("tenant-a", "campaign", CAMPAIGN_ID, 101)]
+    assert read.available is True
+    assert read.complete is True
+    assert read.rows[0]["assessment_id"] == "campaign-risk-assessment-1"
 
 
 @pytest.mark.asyncio

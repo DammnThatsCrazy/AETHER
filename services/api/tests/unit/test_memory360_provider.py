@@ -443,10 +443,14 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
         policy_decision_ref="cpd-memory-foreign-1",
         summary="must-not-leak-foreign-memory",
     )
-    record_repo = FakeFactRepository([_memory_record(), denied_memory, foreign_memory])
+    record_repo = FakeFactRepository([
+        _memory_record(required_consent_purposes_at_write=["analytics", "personalization"]),
+        denied_memory,
+        foreign_memory,
+    ])
     policy_repo = FakePolicyRepository(
         [
-            _policy_decision(),
+            _policy_decision(required_purposes=["personalization", "analytics"]),
             _policy_decision(
                 policy_decision_id="cpd-memory-denied-1",
                 resource_id="mem-record-denied-0001",
@@ -483,6 +487,7 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
     assert item["subjectType"] == "profile"
     assert item["policyDecisionRef"] == "cpd-memory-0001"
     assert item["policyDecisionOutcomeAtWrite"] == "historical_allow"
+    assert item["requiredConsentPurposesAtWrite"] == ["analytics", "personalization"]
     assert memories.content["freshness"] == {
         "state": "unknown",
         "latestMemoryCreatedAt": "2026-10-19T12:00:00+00:00",
@@ -512,6 +517,7 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
             "memoryId": "mem-record-0001",
             "policyDecisionId": "cpd-memory-0001",
             "outcomeAtWrite": "allowed",
+            "requiredConsentPurposesAtWrite": ["analytics", "personalization"],
             "decidedAt": "2026-10-19T11:59:00+00:00",
             "evidenceRefs": [
                 {

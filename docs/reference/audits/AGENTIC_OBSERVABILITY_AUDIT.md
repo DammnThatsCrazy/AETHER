@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c56b0cc9ad48a888bc047d7c6c5b03c71bda316f20f12d186b30427209a4ac82"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:4059f74de9d88250d4a2e361b73112dbfd9770aff11220e46a57bccfacef1f0b"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:9814c0d73b972c14b4109faa4dce261851591705040222e0e28555a4a2123f18"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -26,7 +26,7 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/models.py": "sha256:fa63fb1a785b98a7ec322f0d06b13ed30ed722003daee53177ba13078a4c77ed"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
-  "services/api/identity/account360_provider.py": "sha256:dd2b32bc4eb3fec20094ef053dfe99de88e39ec43388dae73c41f9d4cdcab838"
+  "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
@@ -234,7 +234,10 @@ this current-state read. Account360 adds bounded member
 Risk360 frames only after the `MEMBER_OF` candidate resolves to a live exact
 tenant graph-mutation-ledger aggregate and canonical tenant entity, followed by
 account-slot and per-member policy checks. Roster completeness, temporal reads,
-related-account aggregation, and freshness remain unknown. Communications360 reads
+related-account aggregation, and freshness remain unknown.
+Account360 contract evidence now requires the billing authority's explicit
+`contract_profile_id`; a generic repository row ID cannot stand in for it.
+Obligation execution, history, and freshness remain partial. Communications360 reads
 exact-subject RiskSignals for mapped recipients and resolved sources under
 current analytics consent; the resolved-agent path now also requires an exact
 canonical identity and current analytics-consent receipt before reading

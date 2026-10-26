@@ -150,6 +150,7 @@ _TARGETING_ANOMALY_SOURCE = (
 _TARGETING_ANOMALY_EVIDENCE_SOURCES = frozenset(
     {"targeting_observation", "eligibility_snapshot"}
 )
+_CAMPAIGN_RISK_ASSESSMENT_SOURCE = "risk_assessments"
 
 
 @dataclass(frozen=True)
@@ -192,6 +193,16 @@ class ConversionRecordRead:
 @dataclass(frozen=True)
 class CampaignAnomalyRead:
     """Exact campaign-scoped targeting findings with explicit completeness."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CampaignRiskAssessmentRead:
+    """Exact campaign Risk360 assessments; producer coverage is unverified."""
 
     rows: list[dict[str, Any]]
     available: bool
@@ -255,6 +266,10 @@ class Campaign360Source(Protocol):
     async def campaign_anomalies(
         self, tenant_id: str, campaign_id: str, *, limit: int
     ) -> CampaignAnomalyRead: ...
+
+    async def campaign_risk_assessments(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignRiskAssessmentRead: ...
 
     async def signal_events(
         self, tenant_id: str, event_ids: list[str], *, limit: int
@@ -473,6 +488,22 @@ class RepositoryCampaign360Source:
             rows=list(rows),
             available=True,
             complete=len(rows) < limit,
+        )
+
+    async def campaign_risk_assessments(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignRiskAssessmentRead:
+        """Read only Risk360 assessments for the exact tenant/campaign subject."""
+        try:
+            from intelligence.risk360.store import RiskAssessmentRepository
+
+            rows = await RiskAssessmentRepository().list_by_subject(
+                tenant_id, "campaign", campaign_id, limit=limit
+            )
+        except Exception:  # noqa: BLE001 - independent risk output remains unknown
+            return CampaignRiskAssessmentRead([], False, False, "campaign_risk_assessment_read_unavailable")
+        return CampaignRiskAssessmentRead(
+            rows=list(rows), available=True, complete=len(rows) < limit
         )
 
     async def signal_events(
@@ -1751,7 +1782,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         "conversion records are joined only through exact active campaign attribution credits; unattributed conversions remain outside this view",
                         "explicit campaign-population links are operator asserted; broader cohort and syndicate membership remains unknown",
                         "campaign spend coverage is not attested, so full-period totals and ROAS remain unknown",
-                        "targeting leakage findings are a partial anomaly source; broader risk outputs and source anomalies remain unresolved",
+                        "exact campaign Risk360 assessments and targeting leakage findings have separate partial coverage; source anomalies and campaign risk producer completeness remain unresolved",
                         "actor attribution, delegation, and authority are not resolved by this provider",
                         "current campaign state is not a historical snapshot",
                     ],
@@ -1845,6 +1876,147 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             degradation=degradation,
         )
 
+    async def _read_campaign_risk_assessments(
+        self,
+        *,
+        request: ProjectionRequest,
+        campaign_id: str,
+        temporal: _TemporalScope,
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, Any]:
+        """Expose exact Risk360 output as assessments, not inferred anomalies."""
+        source_read = getattr(self._source, "campaign_risk_assessments", None)
+        if not callable(source_read):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_binding_unavailable", "items": []}
+        try:
+            read = await source_read(
+                request.tenantId, campaign_id, limit=MAX_CAMPAIGN_ANOMALIES + 1
+            )
+        except Exception:  # noqa: BLE001 - risk authority failure is dimension-local
+            read = None
+        if not isinstance(read, CampaignRiskAssessmentRead) or not read.available:
+            return {"state": "unavailable", "reason": "campaign_risk_assessment_authority_unavailable", "items": []}
+        if not isinstance(read.rows, list) or any(not isinstance(row, dict) for row in read.rows):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_result_invalid", "items": []}
+        if any(
+            row.get("tenant_id") != request.tenantId
+            or row.get("subject_kind") != "campaign"
+            or row.get("subject_id") != campaign_id
+            for row in read.rows
+        ):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_scope_mismatch", "items": []}
+        try:
+            from intelligence.risk360.contracts import RiskAssessment
+
+            assessments = [RiskAssessment.model_validate(row) for row in read.rows]
+        except Exception:  # noqa: BLE001 - malformed canonical output cannot be projected
+            return {"state": "unknown", "reason": "campaign_risk_assessment_contract_invalid", "items": []}
+        assessment_ids = [assessment.assessment_id for assessment in assessments]
+        if len(assessment_ids) != len(set(assessment_ids)) or any(
+            not _safe_campaign_source_id(value) for value in assessment_ids
+        ):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_id_ambiguous", "items": []}
+
+        truncated = not read.complete or len(assessments) > MAX_CAMPAIGN_ANOMALIES
+        items: list[dict[str, Any]] = []
+        pending_refs: list[EvidenceRef] = []
+        pending_claims: list[ClaimEnvelope] = []
+        missing_time_or_evidence = False
+        for assessment in assessments[:MAX_CAMPAIGN_ANOMALIES]:
+            assessed_at = _scalar(assessment.assessed_at)
+            try:
+                at = _parse_instant(assessed_at) if isinstance(assessed_at, str) else None
+            except ValueError:
+                at = None
+            if at is None:
+                missing_time_or_evidence = True
+                continue
+            if (temporal.start is not None and at < temporal.start) or (
+                temporal.end is not None and at >= temporal.end
+            ):
+                continue
+            source_refs: list[EvidenceRef] = []
+            for ref in assessment.evidence_refs:
+                if (
+                    not _safe_campaign_source_id(ref.id)
+                    or not _safe_campaign_source_id(ref.source)
+                    or ref.observedAt is None
+                ):
+                    break
+                try:
+                    _parse_instant(ref.observedAt)
+                except ValueError:
+                    break
+                source_refs.append(
+                    EvidenceRef(
+                        id=ref.id,
+                        type=ref.type,
+                        source=ref.source,
+                        observedAt=ref.observedAt,
+                    )
+                )
+            else:
+                if source_refs:
+                    assessment_ref = EvidenceRef(
+                        id=assessment.assessment_id,
+                        type="model_output",
+                        source=_CAMPAIGN_RISK_ASSESSMENT_SOURCE,
+                        observedAt=at.isoformat(),
+                        uri=(
+                            "store://risk_assessments/"
+                            f"{quote(request.tenantId, safe='')}:{quote(assessment.assessment_id, safe='')}"
+                        ),
+                    )
+                    refs = [assessment_ref, *source_refs]
+                    pending_refs.extend(refs)
+                    items.append(
+                        {
+                            "assessmentId": assessment.assessment_id,
+                            "assessedAt": at.isoformat(),
+                            "dimensionsEvaluated": list(assessment.dimensions),
+                            "claimState": assessment.claim_state.value,
+                            "policyState": "unknown",
+                            "evidenceRefs": [
+                                ref.model_dump(by_alias=True, exclude_none=True) for ref in refs
+                            ],
+                            "domainSlotIds": [SLOT_ANOMALIES],
+                        }
+                    )
+                    pending_claims.append(
+                        ClaimEnvelope(
+                            id=f"campaign360:{campaign_id}:risk-assessment:{assessment.assessment_id}",
+                            kind="campaign_risk_assessment_exact_subject",
+                            subject=request.subject,
+                            evidenceRefs=refs,
+                            claims=[
+                                "A canonical Risk360 assessment names this exact tenant and campaign; this does not establish complete risk producer coverage, an anomaly finding, or current policy authorization."
+                            ],
+                            claimState=assessment.claim_state,
+                            domainSlotIds=[SLOT_ANOMALIES],
+                        )
+                    )
+                    continue
+            missing_time_or_evidence = True
+        for ref in pending_refs:
+            _add_evidence(evidence_by_key, ref)
+        claims.extend(pending_claims)
+        state = (
+            "truncated" if truncated else "partial" if missing_time_or_evidence
+            else "available" if items else "empty"
+        )
+        return {
+            "state": state,
+            "reason": (
+                "campaign_risk_assessment_read_truncated" if truncated
+                else "campaign_risk_assessment_time_or_evidence_missing" if missing_time_or_evidence
+                else "exact_campaign_risk_assessments_producer_coverage_unknown"
+            ),
+            "items": items,
+            "readCompleteForExactSubject": not truncated and not missing_time_or_evidence,
+            "producerCoverageState": "unknown",
+        }
+
     async def _read_campaign_anomalies(
         self,
         *,
@@ -1856,12 +2028,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         claims: list[ClaimEnvelope],
         degraded_reasons: list[str],
     ) -> dict[str, Any]:
-        """Project exact campaign-targeting leakage findings as partial anomalies.
+        """Project exact targeting findings and separate campaign risk assessments.
 
-        This joins one existing canonical finding authority by its exact
-        ``(tenantId, campaignId)`` key. It does not turn the absence of targeting
-        leakage into an all-risk clear state: general risk outputs and source
-        anomalies remain explicit unknown dimensions.
+        Both reads use the exact tenant/campaign key. A Risk360 assessment is
+        its own output, never inferred from a signal or targeting finding. An
+        empty read cannot establish all-risk clear or complete producer coverage.
         """
         base: dict[str, Any] = {
             "subject": {"kind": request.subject.kind, "id": request.subject.id},
@@ -1880,6 +2051,18 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 "toExclusive": True,
             },
         }
+        risk_output = await self._read_campaign_risk_assessments(
+            request=request,
+            campaign_id=campaign_id,
+            temporal=temporal,
+            evidence_by_key=evidence_by_key,
+            claims=claims,
+        )
+        base["riskAssessments"] = risk_output["items"]
+        base["riskAssessmentRead"] = {
+            key: value for key, value in risk_output.items() if key != "items"
+        }
+        base["dimensionStates"]["riskOutputs"] = risk_output["state"]
         source_read = getattr(self._source, "campaign_anomalies", None)
         if not callable(source_read):
             reason = "targeting_anomaly_authority_binding_unavailable"
@@ -2092,6 +2275,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             reason = (
                 "campaign_targeting_leakage_findings_have_unplaced_timestamps"
                 if missing_window_timestamps
+                else "exact_campaign_risk_assessments_and_targeting_findings_partial_coverage"
+                if risk_output["items"]
                 else "targeting_leakage_findings_only_other_anomaly_authorities_unresolved"
             )
             targeting_state = (
@@ -2109,7 +2294,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         source_timestamp = max(timestamps, key=lambda pair: pair[0])[1] if timestamps else None
         dimension_states = {
             "targetingLeakageFindings": targeting_state,
-            "riskOutputs": "unknown",
+            "riskOutputs": risk_output["state"],
             "sourceAnomalies": "unknown",
         }
         slot_states[SLOT_ANOMALIES].update(
@@ -2122,6 +2307,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             ],
             dimensionStates=dimension_states,
             findingCount=len(anomaly_items),
+            riskAssessmentCount=len(risk_output["items"]),
             freshnessState=freshness_state,
             sourceTimestamp=source_timestamp,
             findingsTruncated=truncated,
@@ -2140,7 +2326,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 "missingTimestamp": "unknown",
             },
             "reason": reason,
-            "coverage": "targeting_leakage_findings_only",
+            "coverage": (
+                "exact_targeting_findings_and_campaign_risk_assessments_partial"
+                if risk_output["items"]
+                else "targeting_leakage_findings_only"
+            ),
             "findingsTruncated": truncated,
         }
 

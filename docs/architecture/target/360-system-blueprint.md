@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:c56b0cc9ad48a888bc047d7c6c5b03c71bda316f20f12d186b30427209a4ac82"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:4059f74de9d88250d4a2e361b73112dbfd9770aff11220e46a57bccfacef1f0b"
 ---
 
 # 360 System Blueprint
@@ -57,7 +57,9 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Sixteen slots declare at least one unbound canonical authority. Their exact
+Fifteen slots declare at least one unbound canonical authority. Campaign360
+`anomalies` now binds an exact tenant/campaign Risk360 assessment read, while
+its producer coverage and whole-slot completeness remain unknown. Their exact
 authority names and the limitation of every partial slot live in the registry;
 those fields are the implementation checklist, not the table alone.
 
