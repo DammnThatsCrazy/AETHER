@@ -155,6 +155,7 @@ async def test_exact_semantic_row_exposes_only_model_metadata_and_evidence() -> 
         ({"source_namespace": "site:other"}, "semantic_event_row_scope_mismatch"),
         ({"source_type": "page_view"}, "semantic_event_row_scope_mismatch"),
         ({"occurred_at": "2026-10-20T10:03:00Z"}, "semantic_event_row_evidence_mismatch"),
+        ({"processed_at": None}, "semantic_event_row_evidence_mismatch"),
         ({"evidence_refs": []}, "semantic_event_row_evidence_mismatch"),
         ({"status": "deleted"}, "no_active_semantic_event_model_output"),
     ],

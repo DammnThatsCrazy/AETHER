@@ -1973,6 +1973,7 @@ def _exact_semantic_event_metadata(
         semantic_id = _safe_identifier(semantic.get("observation_id"))
         model_id = _safe_identifier(semantic.get("model_id"))
         model_version = _safe_identifier(semantic.get("model_version"))
+        processed_at = _safe_timestamp(semantic.get("processed_at"))
         supporting = semantic.get("evidence_refs")
         if (
             _safe_timestamp(semantic.get("occurred_at")) != event_at
@@ -1981,6 +1982,7 @@ def _exact_semantic_event_metadata(
             or semantic_id in seen
             or model_id is None
             or model_version is None
+            or processed_at is None
             or not isinstance(supporting, list)
             or not any(
                 isinstance(ref, dict)
@@ -1996,7 +1998,7 @@ def _exact_semantic_event_metadata(
                 id=semantic_id,
                 type="model_output",
                 source="silver_semantic_observations",
-                observedAt=_safe_timestamp(semantic.get("processed_at")),
+                observedAt=processed_at,
             )
         )
         records.append(
