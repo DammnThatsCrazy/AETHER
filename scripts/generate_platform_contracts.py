@@ -2903,6 +2903,7 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
     lines.append("  canonicalAuthorityRefs: readonly string[];")
     lines.append("  projectionBindings: readonly Product360SlotProjectionBinding[];")
     lines.append("  requiredFrameMetadata?: readonly Product360RequiredFrameMetadata[];")
+    lines.append("  requiredClaimProjectionIds?: readonly IntelligenceProjectionId[];")
     lines.append("  unboundReason?: string;")
     lines.append("  unboundCanonicalAuthorityRefs?: readonly string[];")
     lines.append("  implementationCrosswalk?: readonly string[];")

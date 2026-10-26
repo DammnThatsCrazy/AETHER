@@ -6,12 +6,21 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/x402/commerce_routes.py]
+source_files:
+  - services/api/value/x402/commerce_routes.py
+  - services/api/value/x402/commerce_models.py
+  - services/api/value/x402/approvals.py
+  - services/api/value/x402/commerce_store.py
+  - services/api/actions/agent/user_agents.py
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/api/value/x402/commerce_routes.py": "sha256:73a9f03a50f3a43b6d17cc2f9e118aec853f6a5d6d2a3c29c1348f66d94d00c4"
+  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
+  "services/api/value/x402/approvals.py": "sha256:f60a8c85658ee75ecfddd610ce1fa216c9a0561de899debb02f6b961d2589dbc"
+  "services/api/value/x402/commerce_models.py": "sha256:d7f9d68aa51eff1f92b358d695c0f745c38cb59ac3df390aad2afd06e2ebe383"
+  "services/api/value/x402/commerce_routes.py": "sha256:448476ed6fb54119feba4e8dcee8f3f0356bb55e58fa14b27b052b259de77891"
+  "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
 ---
 # Agentic Commerce — Approval Model
 
@@ -98,3 +107,20 @@ Returned by `GET /v1/approvals/{id}/evidence`:
 - Payment requirement (challenge)
 
 Used by Kyber Review → Commerce Approvals tab for operator inspection before decision.
+
+## Agent execution approval linkage
+
+An x402 approval can be bound to one exact agent run with an `execution_id` and
+`execution_action`. `POST /v1/x402/approval/request` accepts the action and the
+server creates the execution ID. The approver must review the exact agent,
+action, resource, and approved amount shown by the request. For a bound
+approval, the decision route records the authenticated tenant user as the
+decision actor; caller-supplied actor text is not accepted as attribution.
+
+Each decision is retained as a typed commerce decision record and the approval
+keeps a pointer to its latest decision. `POST /v1/agents/{agent_id}/execute`
+with `approval_id` rechecks tenant, agent, action, resource, amount, current
+approval status, and the exact latest decision before it records the run. A
+revoked or mismatched approval is rejected. This linkage currently covers the
+x402 commerce approval path; it does not make every agent action approval-bound
+or prove that an external action occurred.

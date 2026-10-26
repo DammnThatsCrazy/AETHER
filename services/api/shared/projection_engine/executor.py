@@ -20,6 +20,7 @@ from typing import Optional
 from shared.intelligence_projections.contracts import (
     ProjectionDependencyState,
     ProjectionRequest,
+    ProjectionReadAuthorization,
     ProjectionResult,
 )
 from shared.intelligence_projections.generated_registry import (
@@ -67,6 +68,9 @@ class ProjectionExecutor:
         lens_set: Optional[LensSet] = None,
         temporal_mode: Optional[TemporalMode] = None,
         operators: Optional[list[OperatorSpec]] = None,
+        experience360_read_authorizations: Optional[
+            list[ProjectionReadAuthorization]
+        ] = None,
     ) -> ProjectionResult:
         """Run one projection with the engine's composition + degradation.
 
@@ -88,9 +92,21 @@ class ProjectionExecutor:
         results: dict[str, ProjectionResult] = {}
         for node in plan.nodes:
             sub_request = self._build_request(ir, node)
-            results[node.projection_id] = await self._registry.project(
-                node.projection_id, sub_request
-            )
+            node_authorizations = [
+                authorization
+                for authorization in experience360_read_authorizations or []
+                if authorization.consumerProjectionId == node.projection_id
+            ]
+            if node_authorizations:
+                results[node.projection_id] = await self._registry.project(
+                    node.projection_id,
+                    sub_request,
+                    experience360_read_authorizations=node_authorizations,
+                )
+            else:
+                results[node.projection_id] = await self._registry.project(
+                    node.projection_id, sub_request
+                )
 
         target = results.get(ir.projection_id)
         if target is None:

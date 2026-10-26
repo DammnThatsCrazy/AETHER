@@ -26,7 +26,8 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import _IN_MEMORY_STORES, reset_in_memory_stores  # noqa: E402
+from repositories.lake import gold_identity  # noqa: E402
 from graph.operational_intelligence.models import EvidenceRef as _OI_EvidenceRef  # noqa: E402
 from intelligence.risk360 import router as _package_router  # noqa: E402  (re-export smoke)
 from intelligence.risk360.contracts import (  # noqa: E402
@@ -52,6 +54,9 @@ from intelligence.risk360.contracts import (  # noqa: E402
     MonetaryAmount,
     RiskAssessment,
     RiskComponent,
+    RiskInterventionRecord,
+    RiskPoisoningEvidence,
+    RiskPoisoningLifecycleEvent,
     RiskSignal,
     RiskVector,
     ValueState,
@@ -68,8 +73,18 @@ from intelligence.risk360.provider import (  # noqa: E402
     register_provider,
 )
 from intelligence.risk360.routes import SERVED_SUBJECT_KINDS, create_router  # noqa: E402
+from journeys.support360.cases import SupportCaseAuthorityRead  # noqa: E402
+from services.social360.provider import (  # noqa: E402
+    SocialGraphPathRead,
+    SocialObservedPath,
+)
+from services.social360.evidence_authority import SocialEvidenceRead  # noqa: E402
 from intelligence.risk360.store import (  # noqa: E402
     RiskAssessmentRepository,
+    RiskInterventionRead,
+    RiskInterventionRepository,
+    RiskPoisoningEvidenceRead,
+    RiskPoisoningEvidenceRepository,
     RiskSignalRepository,
 )
 from shared.intelligence_projections import (  # noqa: E402
@@ -221,6 +236,40 @@ def _financial_risk_records(
     """One exact economic RiskSignal and its policy-versioned assessment."""
     evidence = _evidence(f"financial-risk-evidence-{index}")
     observed_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    signal = RiskSignal(
+        signal_id=f"financial-signal-{index}",
+        tenant_id=TENANT_A,
+        subject_kind="entity",
+        subject_id=entity_id,
+        risk_dimension="economic",
+        claim_state=EpistemicStatus.INFERRED,
+        confidence=0.7,
+        evidence_refs=[evidence],
+        source="economic.risk.detector",
+        detector_version="3",
+        observed_at=observed_at,
+        score=0.35,
+    )
+    exposure = ExposureAssessment(
+        tenant_id=TENANT_A,
+        subject_kind="entity",
+        subject_id=entity_id,
+        exposed_asset_labels=["payment_balance"],
+        exposed_outcome_labels=["settlement_obligation"],
+        economic_value=MonetaryAmount(
+            amount=Decimal("125.00"),
+            currency="USD",
+            usd_value=Decimal("125.00"),
+        ),
+        claim_state=EpistemicStatus.DERIVED,
+        evidence_refs=[
+            EvidenceRef(
+                id=f"financial-exposure-evidence-{index}",
+                type="transaction",
+                source="economic.safe_rollup",
+            )
+        ],
+    )
     assessment = RiskAssessment(
         assessment_id=f"financial-assessment-{index}",
         tenant_id=TENANT_A,
@@ -241,23 +290,10 @@ def _financial_risk_records(
                 )
             ]
         ),
+        exposure=exposure,
         claim_state=EpistemicStatus.DERIVED,
         evidence_refs=[evidence],
         assessed_at=datetime(2026, 10, 20, 12, 2, tzinfo=timezone.utc),
-    )
-    signal = RiskSignal(
-        signal_id=f"financial-signal-{index}",
-        tenant_id=TENANT_A,
-        subject_kind="entity",
-        subject_id=entity_id,
-        risk_dimension="economic",
-        claim_state=EpistemicStatus.INFERRED,
-        confidence=0.7,
-        evidence_refs=[evidence],
-        source="economic.risk.detector",
-        detector_version="3",
-        observed_at=observed_at,
-        score=0.35,
     )
     return assessment.model_dump(mode="json"), signal.model_dump(mode="json")
 
@@ -345,7 +381,20 @@ class _FakeReader:
         source_provenance: list[dict] | None = None,
         source_provenance_truncated: bool = False,
         raise_source_provenance: bool = False,
+        poisoning_evidence: list[object] | None = None,
+        poisoning_evidence_complete: bool = True,
+        poisoning_evidence_reason: str | None = None,
+        raise_poisoning_evidence: bool = False,
         financial_flow_path: dict | None = None,
+        agent_policy_flags: list[dict] | None = None,
+        raise_agent_policy_flags: bool = False,
+        assessment_history_rows: list[dict] | None = None,
+        assessment_history_complete: bool = True,
+        raise_assessment_history: bool = False,
+        interventions: list[RiskInterventionRecord] | None = None,
+        interventions_complete: bool = True,
+        interventions_reason: str | None = None,
+        raise_interventions: bool = False,
     ) -> None:
         self._assessment = assessment
         self._signals = list(signals or [])
@@ -353,25 +402,85 @@ class _FakeReader:
         self._signals_by_subject = signals_by_subject
         self._raise_assessment = raise_assessment
         self._raise_signals = raise_signals
+        self.assessment_calls: list[tuple[str, str, str]] = []
+        self.signal_calls: list[tuple[str, str, str]] = []
         self._source_provenance = list(source_provenance or [])
         self._source_provenance_truncated = source_provenance_truncated
         self._raise_source_provenance = raise_source_provenance
         self.source_provenance_calls = 0
+        self._poisoning_evidence = list(poisoning_evidence or [])
+        self._poisoning_evidence_complete = poisoning_evidence_complete
+        self._poisoning_evidence_reason = poisoning_evidence_reason
+        self._raise_poisoning_evidence = raise_poisoning_evidence
+        self.poisoning_evidence_calls = 0
+        self.poisoning_evidence_as_of: datetime | None = None
         self._financial_flow_path = financial_flow_path
+        self.financial_flow_path_calls: list[tuple[str, str]] = []
+        self.financial_flow_path_detail_calls: list[tuple[str, str]] = []
+        self._agent_policy_flags = list(agent_policy_flags or [])
+        self._raise_agent_policy_flags = raise_agent_policy_flags
+        self.agent_policy_flag_calls: list[tuple[str, str]] = []
+        self._assessment_history_rows = list(assessment_history_rows or [])
+        self._assessment_history_complete = assessment_history_complete
+        self._raise_assessment_history = raise_assessment_history
+        self.assessment_history_calls: list[tuple[str, str, datetime | None]] = []
+        self._interventions = list(interventions or [])
+        self._interventions_complete = interventions_complete
+        self._interventions_reason = interventions_reason
+        self._raise_interventions = raise_interventions
+        self.intervention_calls: list[tuple[str, str, str, datetime | None]] = []
 
     async def latest_assessment(self, *, tenant_id: str, subject: object) -> dict | None:
+        self.assessment_calls.append((tenant_id, subject.kind, subject.id))
         if self._raise_assessment:
             raise RuntimeError("boom: secret-detail")
         if self._assessments_by_subject is not None:
             return self._assessments_by_subject.get((subject.kind, subject.id))
         return self._assessment
 
+    async def assessment_history(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: datetime | None,
+    ) -> tuple[list[dict], bool]:
+        self.assessment_history_calls.append((tenant_id, subject.id, as_of))
+        if self._raise_assessment_history:
+            raise RuntimeError("boom: secret-detail")
+        return list(self._assessment_history_rows), self._assessment_history_complete
+
+    async def interventions(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: datetime | None,
+    ) -> RiskInterventionRead:
+        self.intervention_calls.append((tenant_id, subject.kind, subject.id, as_of))
+        if self._raise_interventions:
+            raise RuntimeError("boom: secret-detail")
+        return RiskInterventionRead(
+            records=list(self._interventions),
+            complete=self._interventions_complete,
+            reason=self._interventions_reason,
+        )
+
     async def signals(self, *, tenant_id: str, subject: object) -> list[dict]:
+        self.signal_calls.append((tenant_id, subject.kind, subject.id))
         if self._raise_signals:
             raise RuntimeError("boom: secret-detail")
         if self._signals_by_subject is not None:
             return list(self._signals_by_subject.get((subject.kind, subject.id), []))
         return list(self._signals)
+
+    async def agent_policy_flag_observations(
+        self, *, tenant_id: str, agent_id: str
+    ) -> list[dict]:
+        self.agent_policy_flag_calls.append((tenant_id, agent_id))
+        if self._raise_agent_policy_flags:
+            raise RuntimeError("boom: secret-detail")
+        return list(self._agent_policy_flags)
 
     async def source_provenance_observations(
         self, *, tenant_id: str, source_id: str
@@ -381,8 +490,235 @@ class _FakeReader:
             raise RuntimeError("boom: secret-detail")
         return list(self._source_provenance), self._source_provenance_truncated
 
-    async def financial_flow_path(self, *, tenant_id: str, path_id: str) -> dict | None:
-        return self._financial_flow_path
+    async def poisoning_evidence(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: datetime | None,
+    ) -> RiskPoisoningEvidenceRead:
+        self.poisoning_evidence_calls += 1
+        self.poisoning_evidence_as_of = as_of
+        if self._raise_poisoning_evidence:
+            raise RuntimeError("boom: secret-detail")
+        return RiskPoisoningEvidenceRead(
+            records=list(self._poisoning_evidence),  # type: ignore[arg-type]
+            complete=self._poisoning_evidence_complete,
+            reason=(
+                self._poisoning_evidence_reason
+                or (
+                    "poisoning_evidence_scan_truncated"
+                    if not self._poisoning_evidence_complete
+                    else None
+                )
+            ),
+        )
+
+    async def financial_flow_path_subjects(self, *, tenant_id: str, path_id: str) -> dict | None:
+        self.financial_flow_path_calls.append((tenant_id, path_id))
+        path = self._financial_flow_path
+        if path is None:
+            return None
+        return {key: value for key, value in path.items() if key in {
+            "tenant_id", "path_id", "trace_id", "path_nodes", "hop_count",
+            "path_discovered_at", "linkage_reason",
+        }}
+
+    async def financial_flow_path_details(
+        self,
+        *,
+        tenant_id: str,
+        path_id: str,
+        trace_id: str,
+        path_nodes: list[str],
+        path_discovered_at: datetime,
+    ) -> dict | None:
+        self.financial_flow_path_detail_calls.append((tenant_id, path_id))
+        path = self._financial_flow_path
+        if path is None:
+            return None
+        assert path["trace_id"] == trace_id
+        assert path["path_nodes"] == path_nodes
+        assert datetime.fromisoformat(path["path_discovered_at"]) == path_discovered_at
+        return path
+
+
+class _SupportCaseReader:
+    def __init__(self, read: SupportCaseAuthorityRead) -> None:
+        self.read = read
+        self.calls: list[tuple[str, str]] = []
+
+    async def get_case(self, tenant_id: str, case_id: str) -> SupportCaseAuthorityRead:
+        self.calls.append((tenant_id, case_id))
+        return self.read
+
+
+class _FakeSocialGraphPathReader:
+    def __init__(self, result: SocialGraphPathRead) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str]] = []
+
+    async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead:
+        self.calls.append((tenant_id, start_entity_id))
+        return self.result
+
+
+class _FakeSocialEvidenceAuthority:
+    def __init__(self, result: SocialEvidenceRead) -> None:
+        self.result = result
+        self.calls: list[dict[str, object]] = []
+
+    async def read_social_contagion_evidence(
+        self,
+        tenant_id: str,
+        subject_entity_id: str,
+        *,
+        start: datetime | None,
+        end: datetime | None,
+        as_of: datetime | None,
+        limit: int,
+    ) -> SocialEvidenceRead:
+        self.calls.append(
+            {
+                "tenant_id": tenant_id,
+                "subject_entity_id": subject_entity_id,
+                "start": start,
+                "end": end,
+                "as_of": as_of,
+                "limit": limit,
+            }
+        )
+        return self.result
+
+
+def _social_contagion_evidence_record(
+    *, tenant_id: str = TENANT_A, subject_id: str = "usr_1", suffix: str = ""
+) -> dict[str, object]:
+    observed_at = datetime.now(timezone.utc) - timedelta(minutes=2)
+    ref_time = observed_at.isoformat()
+    return {
+        "record_id": f"social-record{suffix}",
+        "tenant_id": tenant_id,
+        "assertion_kind": "social_contagion",
+        "subject_entity_id": subject_id,
+        "source_entity_id": f"entity-a{suffix}",
+        "target_entity_id": subject_id,
+        "path_entity_ids": [f"entity-a{suffix}", f"entity-b{suffix}", subject_id],
+        "source_id": "provider:crm",
+        "source_observation_id": f"observation{suffix}",
+        "source_revision_id": f"revision{suffix}",
+        "source_revision_status": "source_reported_revision_unverified",
+        "source_event_id": f"source-event{suffix}",
+        "observed_at": ref_time,
+        "effective_at": ref_time,
+        "recorded_at": (observed_at + timedelta(seconds=1)).isoformat(),
+        "actor_id": "risk-source-service",
+        "actor_type": "service",
+        "source_trust_classification": "partner_api",
+        "risk_signal_ids": [f"risk-signal{suffix}"],
+        "assertion_state": "source_reported",
+        "claim_state": EpistemicStatus.CORRELATED.value,
+        "causal_status": "unverified",
+        "policy_state": "unknown",
+        "source_evidence_refs": [
+            EvidenceRef(
+                id=f"source-event{suffix}", type="event", source="bronze_sdk_events"
+            ).model_dump(mode="json")
+        ],
+        "path_evidence_refs": [
+            EvidenceRef(
+                id=f"graph-edge-1{suffix}", type="relationship", source="entity_graph"
+            ).model_dump(mode="json"),
+            EvidenceRef(
+                id=f"relationship-fact-1{suffix}", type="event", source="relationship_facts"
+            ).model_dump(mode="json"),
+            EvidenceRef(
+                id=f"graph-edge-2{suffix}", type="relationship", source="entity_graph"
+            ).model_dump(mode="json"),
+            EvidenceRef(
+                id=f"relationship-fact-2{suffix}", type="event", source="relationship_facts"
+            ).model_dump(mode="json"),
+        ],
+        "risk_evidence_refs": [
+            EvidenceRef(
+                id=f"risk-signal{suffix}",
+                type="model_output",
+                source="risk_signals:unit_test",
+                observedAt=ref_time,
+            ).model_dump(mode="json")
+        ],
+    }
+
+
+async def _allow_social_analytics_consent(
+    tenant_id: str,
+    subject_id: str | None,
+    anonymous_id: str | None,
+    purpose: str,
+) -> tuple[bool, str | None]:
+    assert tenant_id == TENANT_A
+    assert anonymous_id is None
+    assert purpose == "analytics"
+    return subject_id is not None, None
+
+
+async def _deny_social_analytics_consent(
+    tenant_id: str,
+    subject_id: str | None,
+    anonymous_id: str | None,
+    purpose: str,
+) -> tuple[bool, str | None]:
+    del tenant_id, subject_id, anonymous_id, purpose
+    return False, "consent_unknown"
+
+
+def _observed_social_path(
+    *, tenant_id: str = TENANT_A, start_id: str = "usr_1", suffix: str = ""
+) -> SocialObservedPath:
+    entity_ids = (start_id, f"entity-b{suffix}", f"entity-c{suffix}")
+    observed_times = ("2026-10-20T10:00:00+00:00", "2026-10-20T10:01:00+00:00")
+    graph_edges = []
+    edge_evidence_refs = []
+    for index, (from_id, to_id) in enumerate(zip(entity_ids, entity_ids[1:])):
+        relationship_id = f"follow:{from_id}:{to_id}"
+        fact_id = f"observation-{index + 1}{suffix}"
+        graph_edges.append(
+            {
+                "edge_type": "FOLLOWS_SOCIAL",
+                "from_vertex_id": from_id,
+                "to_vertex_id": to_id,
+                "properties": {
+                    "tenant_id": tenant_id,
+                    "relationship_predicate": "FOLLOWS",
+                    "idempotency_key": relationship_id,
+                    "evidence_refs": [fact_id],
+                    "valid_from": "2026-10-20T09:00:00Z",
+                    "observed_at": observed_times[index],
+                },
+            }
+        )
+        edge_evidence_refs.append(
+            (
+                _OI_EvidenceRef(
+                    id=relationship_id,
+                    type="relationship",
+                    source="entity_graph",
+                    observedAt="2026-10-20T09:00:00Z",
+                ),
+                _OI_EvidenceRef(
+                    id=fact_id,
+                    type="event",
+                    source="relationship_facts",
+                    observedAt=observed_times[index],
+                ),
+            )
+        )
+    return SocialObservedPath(
+        entity_ids=entity_ids,
+        edge_evidence_refs=tuple(edge_evidence_refs),
+        graph_edges=tuple(graph_edges),
+        edge_observed_at=observed_times,
+    )
 
 
 def _bronze_source_row(
@@ -446,6 +782,104 @@ def _source_provenance_claim_row(
             "uri": f"store://bronze_sdk_events/bronze-{event_id}",
         },
     }
+
+
+def _poisoning_evidence_record(
+    *,
+    evidence_id: str = "poison-1",
+    tenant_id: str = TENANT_A,
+    source_id: str = "provider:crm",
+    subject_kind: str = "source",
+    subject_id: str = "provider:crm",
+    status: str = "open",
+    recorded_at: datetime | None = None,
+    lifecycle_events: list[RiskPoisoningLifecycleEvent] | None = None,
+    superseded_by_evidence_id: str | None = None,
+) -> RiskPoisoningEvidence:
+    seen = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    return RiskPoisoningEvidence(
+        evidence_id=evidence_id,
+        tenant_id=tenant_id,
+        source_id=source_id,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        poisoning_type="communication_injection",
+        signal_strength=0.76,
+        confidence="high",
+        claim_state=EpistemicStatus.INFERRED,
+        detector_id="comm-injection-detector",
+        detector_version="3.1.0",
+        source_record_id="message-record-17",
+        evidence_refs=[
+            EvidenceRef(
+                id="message-evidence-17",
+                type="event",
+                source="message-security",
+                uri="store://message-security/evidence-17",
+            )
+        ],
+        first_seen_at=seen,
+        last_seen_at=seen,
+        recorded_at=recorded_at or seen,
+        status=status,  # type: ignore[arg-type]
+        superseded_by_evidence_id=superseded_by_evidence_id,
+        lifecycle_events=list(lifecycle_events or []),
+    )
+
+
+def _risk_intervention_record(
+    record_id: str,
+    *,
+    record_kind: str = "decision",
+    decision_record_id: str | None = None,
+    tenant_id: str = TENANT_A,
+    subject_kind: str = "agent",
+    subject_id: str = "agent-1",
+    observed_at: datetime | None = None,
+    recorded_at: datetime | None = None,
+) -> RiskInterventionRecord:
+    observed = observed_at or datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    recorded = recorded_at or observed
+    return RiskInterventionRecord(
+        record_id=record_id,
+        intervention_id="intervention-17",
+        tenant_id=tenant_id,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        intervention_type="disable_agent_action",
+        label="Pause the reported action",
+        record_kind=record_kind,  # type: ignore[arg-type]
+        decision_state="approved" if record_kind == "decision" else None,
+        reported_outcome="reported_applied" if record_kind == "outcome" else None,
+        decision_record_id=decision_record_id,
+        requires_confirmation=True,
+        reversible=True,
+        actor_kind="human",
+        actor_id="operator-7",
+        actor_evidence_refs=[
+            EvidenceRef(
+                id="actor-proof-7",
+                type="event",
+                source="identity.authority",
+                uri="store://identity.authority/actor-proof-7",
+            )
+        ],
+        evidence_refs=[
+            EvidenceRef(
+                id=f"intervention-evidence-{record_id}",
+                type="event",
+                source="risk.operations",
+                uri=f"store://risk.operations/{record_id}",
+            )
+        ],
+        policy_decision_id="policy-decision-91",
+        observed_at=observed,
+        effective_at=observed,
+        recorded_at=recorded,
+        claim_state=EpistemicStatus.OBSERVED,
+        source_system="risk-operations",
+        source_record_id=f"ops-{record_id}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -561,6 +995,53 @@ async def test_repository_source_provenance_reports_bounded_partial_scan() -> No
 
 
 @pytest.mark.asyncio
+async def test_repository_agent_policy_flags_reads_exact_tenant_and_agent() -> None:
+    from repositories.agentic_observability_repos import AgentRiskSignalRepository
+
+    repository = AgentRiskSignalRepository()
+    await repository.insert(
+        "agent-risk-a-1",
+        {
+            "signal_id": "agent-risk-a-1",
+            "tenant_id": TENANT_A,
+            "agent_id": "agent-a",
+            "risk_level": "high",
+            "reason_codes": ["review"],
+            "policy_flags": ["rate_limit_review"],
+            "detected_at": "2026-10-20T12:00:00+00:00",
+        },
+    )
+    await repository.insert(
+        "agent-risk-other-agent",
+        {
+            "signal_id": "agent-risk-other-agent",
+            "tenant_id": TENANT_A,
+            "agent_id": "agent-b",
+            "policy_flags": ["must-not-leak"],
+        },
+    )
+    await repository.insert(
+        "agent-risk-other-tenant",
+        {
+            "signal_id": "agent-risk-other-tenant",
+            "tenant_id": TENANT_B,
+            "agent_id": "agent-a",
+            "policy_flags": ["must-not-leak"],
+        },
+    )
+
+    rows = await RepositoryRiskSourceReader().agent_policy_flag_observations(
+        tenant_id=TENANT_A,
+        agent_id="agent-a",
+    )
+
+    assert [row["signal_id"] for row in rows] == ["agent-risk-a-1"]
+    assert rows[0]["tenant_id"] == TENANT_A
+    assert rows[0]["agent_id"] == "agent-a"
+    assert "must-not-leak" not in str(rows)
+
+
+@pytest.mark.asyncio
 async def test_repository_financial_path_rejoins_one_exact_tenant_transfer_per_hop() -> None:
     from repositories.repos import (
         FlowTracePathRepository,
@@ -595,9 +1076,19 @@ async def test_repository_financial_path_rejoins_one_exact_tenant_transfer_per_h
         amount="12.50",
     )
 
-    read = await RepositoryRiskSourceReader().financial_flow_path(
+    reader = RepositoryRiskSourceReader()
+    subjects = await reader.financial_flow_path_subjects(
         tenant_id=TENANT_A,
         path_id="path-financial-1",
+    )
+    assert subjects is not None
+    assert subjects["path_nodes"] == ["entity-financial-a", "entity-financial-b"]
+    read = await reader.financial_flow_path_details(
+        tenant_id=TENANT_A,
+        path_id="path-financial-1",
+        trace_id=subjects["trace_id"],
+        path_nodes=subjects["path_nodes"],
+        path_discovered_at=datetime.fromisoformat(subjects["path_discovered_at"]),
     )
 
     assert read is not None
@@ -632,7 +1123,8 @@ async def test_repository_financial_path_rejects_lossy_or_cross_tenant_paths() -
         }
     )
 
-    read = await RepositoryRiskSourceReader().financial_flow_path(
+    reader = RepositoryRiskSourceReader()
+    read = await reader.financial_flow_path_subjects(
         tenant_id=TENANT_A,
         path_id="path-financial-lossy",
     )
@@ -660,9 +1152,17 @@ async def test_repository_financial_path_rejects_lossy_or_cross_tenant_paths() -
         }
     )
     with pytest.raises(RiskSourceReadIncomplete):
-        await RepositoryRiskSourceReader().financial_flow_path(
+        subjects = await reader.financial_flow_path_subjects(
             tenant_id=TENANT_A,
             path_id="path-financial-cross-tenant",
+        )
+        assert subjects is not None
+        await reader.financial_flow_path_details(
+            tenant_id=TENANT_A,
+            path_id="path-financial-cross-tenant",
+            trace_id=subjects["trace_id"],
+            path_nodes=subjects["path_nodes"],
+            path_discovered_at=datetime.fromisoformat(subjects["path_discovered_at"]),
         )
 
 
@@ -708,6 +1208,651 @@ async def test_source_trust_projects_only_ingress_classification_and_marks_other
 
 
 @pytest.mark.asyncio
+async def test_support_case_risk_joins_exact_case_assessment_and_skips_contagion_reads() -> None:
+    case_id = "case-risk-exact"
+    assessment = _assessment("assessment-case-risk", subject_id=case_id).model_dump(
+        mode="json"
+    )
+    assessment.update(
+        subject_kind="support_case",
+        subject_id=case_id,
+        subject_ref=None,
+        exposure=None,
+    )
+    signal = _signal("signal-case-risk", TENANT_A, subject_id=case_id).model_dump(
+        mode="json"
+    )
+    signal.update(subject_kind="support_case", subject_id=case_id)
+    source = _FakeReader(
+        assessments_by_subject={("support_case", case_id): assessment},
+        signals_by_subject={("support_case", case_id): [signal]},
+    )
+    case_repository = _SupportCaseReader(
+        SupportCaseAuthorityRead(
+            record={
+                "tenant_id": TENANT_A,
+                "case_id": case_id,
+                "last_observed_at": "2026-10-23T12:00:00+00:00",
+            },
+            events=[],
+            available=True,
+            complete=True,
+        )
+    )
+    social_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(tenant_id=TENANT_A, start_entity_id=case_id)
+    )
+    request = _request(subject=ProjectionSubject(kind="support_case", id=case_id))
+
+    result = await Risk360Provider(
+        sources=source,
+        support_case_repository=case_repository,
+        social_graph_path_reader=social_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(request, await _context(_available_registry()))
+
+    assert case_repository.calls == [(TENANT_A, case_id)]
+    assert source.assessment_calls == [(TENANT_A, "support_case", case_id)]
+    assert source.signal_calls == [(TENANT_A, "support_case", case_id)]
+    assert source.financial_flow_path_calls == []
+    assert social_reader.calls == []
+
+    assessment_claim = next(claim for claim in result.claims if claim.kind == "risk_assessment")
+    assert "risk" in assessment_claim.domainSlotIds
+    assert {ref.source for ref in assessment_claim.evidenceRefs} >= {
+        "ledger",
+        "support_cases",
+    }
+    findings = next(section for section in result.sections if section.id == "findings")
+    scope = findings.content["supportCaseScope"]
+    assert scope["state"] == "available"
+    assert scope["riskRead"]["binding"] == "exact_tenant_subject_kind_and_subject_id"
+    assert scope["riskRead"]["freshnessSla"] == "unavailable"
+    assert findings.content["propagationPaths"]["state"] == "unknown"
+    assert (
+        findings.content["propagationPaths"]["reason"]
+        == "support_case_contagion_authority_not_connected"
+    )
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(ref["source"] == "support_cases" and ref["id"] == case_id
+               for ref in evidence.content["evidence"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case_read",
+    [
+        SupportCaseAuthorityRead(None, [], available=True, complete=True),
+        SupportCaseAuthorityRead(
+            {"tenant_id": TENANT_B, "case_id": "case-risk-untrusted"},
+            [],
+            available=True,
+            complete=True,
+        ),
+        SupportCaseAuthorityRead(
+            {"tenant_id": TENANT_A, "case_id": "case-risk-untrusted"},
+            [],
+            available=True,
+            complete=True,
+            expired=True,
+        ),
+        SupportCaseAuthorityRead(None, [], available=False, complete=False),
+    ],
+    ids=["missing", "foreign-tenant", "expired", "unavailable"],
+)
+async def test_support_case_risk_suppresses_reads_without_exact_case_authority(
+    case_read: SupportCaseAuthorityRead,
+) -> None:
+    case_id = "case-risk-untrusted"
+    source = _FakeReader(
+        assessments_by_subject={("support_case", case_id): {"must_not_read": True}},
+        signals_by_subject={("support_case", case_id): [{"must_not_read": True}]},
+    )
+    case_repository = _SupportCaseReader(case_read)
+    request = _request(subject=ProjectionSubject(kind="support_case", id=case_id))
+
+    result = await Risk360Provider(
+        sources=source,
+        support_case_repository=case_repository,
+    ).project(request, await _context(_available_registry()))
+
+    assert case_repository.calls == [(TENANT_A, case_id)]
+    assert source.assessment_calls == []
+    assert source.signal_calls == []
+    assert result.claims == []
+    assert "must_not_read" not in result.model_dump_json()
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.state == "unknown"
+    assert findings.content["supportCaseScope"]["riskRead"]["state"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_support_case_risk_context_tenant_mismatch_skips_all_authority_reads() -> None:
+    case_id = "case-risk-context-mismatch"
+    source = _FakeReader()
+    case_repository = _SupportCaseReader(
+        SupportCaseAuthorityRead(
+            {"tenant_id": TENANT_A, "case_id": case_id},
+            [],
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(subject=ProjectionSubject(kind="support_case", id=case_id))
+    context = (await _context(_available_registry())).model_copy(
+        update={"tenantId": TENANT_B}
+    )
+
+    result = await Risk360Provider(
+        sources=source,
+        support_case_repository=case_repository,
+    ).project(request, context)
+
+    assert case_repository.calls == []
+    assert source.assessment_calls == []
+    assert source.signal_calls == []
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["supportCaseScope"]["reason"] == (
+        "support_case_tenant_context_mismatch"
+    )
+
+
+@pytest.mark.asyncio
+async def test_risk_policy_flags_are_partial_exact_agent_reports_with_evidence() -> None:
+    signal = {
+        "signal_id": "agent-risk-1",
+        "tenant_id": TENANT_A,
+        "agent_id": "agent-1",
+        "policy_flags": ["rate_limit_review", "human_review_required"],
+        "detected_at": "2026-10-20T12:00:00+00:00",
+        "policy_version": "must-not-be-trusted-from-observation",
+    }
+    reader = _FakeReader(agent_policy_flags=[signal])
+    request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    result = await Risk360Provider(sources=reader).project(
+        request,
+        await _context(_available_registry()),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    policy_flags = findings.content["policyFlags"]
+    assert policy_flags["state"] == "partial"
+    assert policy_flags["reason"] == "agent_observed_flags_lack_model_governance_policy_version"
+    assert policy_flags["semantics"] == "exact_agent_risk_signal_reports_only"
+    assert policy_flags["policyEvaluation"] == "not_attested"
+    assert policy_flags["policyVersion"] is None
+    assert policy_flags["observations"] == [
+        {
+            "signalId": "agent-risk-1",
+            "agentId": "agent-1",
+            "policyFlags": ["rate_limit_review", "human_review_required"],
+            "detectedAt": "2026-10-20T12:00:00+00:00",
+            "evidenceRefs": [
+                {
+                    "id": "agent-risk-1",
+                    "type": "event",
+                    "source": "obs_agent_risk_signals",
+                    "observedAt": "2026-10-20T12:00:00+00:00",
+                    "confidence": None,
+                    "uri": "store://obs_agent_risk_signals/agent-risk-1",
+                }
+            ],
+        }
+    ]
+    assert findings.content["requiredSlotCoverage"]["policy_flags"] == {
+        "state": "partial",
+        "reason": "agent_observed_flags_lack_model_governance_policy_version",
+    }
+
+    claim = next(claim for claim in result.claims if claim.kind == "agent_policy_flags_reported")
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert claim.domainSlotIds == ["policy_flags", "evidence_trace"]
+    assert claim.evidenceRefs[0].id == "agent-risk-1"
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        row["id"] == "agent-risk-1" and row["source"] == "obs_agent_risk_signals"
+        for row in evidence.content["evidence"]
+    )
+    assert reader.agent_policy_flag_calls == [(TENANT_A, "agent-1")]
+
+
+@pytest.mark.asyncio
+async def test_assessment_run_history_is_exact_partial_audit_evidence() -> None:
+    as_of = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    run = {
+        "tenant_id": TENANT_A,
+        "subject_kind": "entity",
+        "subject_id": "usr_1",
+        "run_id": "run_risk_2",
+        "assessment_id": "assessment_risk_2",
+        "definition_id": "risk360.standard",
+        "definition_version": "1",
+        "context_hash": "a" * 64,
+        "status": "completed",
+        "started_at": "2026-10-20T12:00:00+00:00",
+        "completed_at": "2026-10-20T12:00:01+00:00",
+        "supersedes_run_id": "run_risk_1",
+        "restatement_link": {
+            "state": "verified_direct_predecessor",
+            "prior_tenant_id": TENANT_A,
+            "prior_subject_kind": "entity",
+            "prior_subject_id": "usr_1",
+            "prior_run_id": "run_risk_1",
+            "prior_assessment_id": "assessment_risk_2",
+            "prior_definition_id": "risk360.standard",
+            "prior_definition_version": "1",
+            "prior_context_hash": "a" * 64,
+            "prior_status": "completed",
+            "prior_started_at": "2026-10-19T12:00:00+00:00",
+        },
+        "claim_state": "derived",
+        "dimensions": ["payment"],
+    }
+    reader = _FakeReader(
+        assessment=_assessment().model_dump(mode="json"),
+        assessment_history_rows=[run],
+    )
+    request = _request(temporalMode="as_of", asOf=as_of.isoformat())
+    registry = _available_registry()
+    result = await Risk360Provider(sources=reader).project(
+        request,
+        await registry.build_context("risk360", request),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    history = findings.content["auditHistory"]
+    assert history["state"] == "partial"
+    assert history["assessmentRuns"][0]["runId"] == "run_risk_2"
+    assert history["assessmentRuns"][0]["supersedesRunId"] == "run_risk_1"
+    assert history["interventions"]["state"] == "unknown"
+    assert history["interventions"]["records"] == []
+    assert history["interventions"]["reason"] == "risk_intervention_producer_coverage_not_attested"
+    assert findings.content["requiredSlotCoverage"]["audit_history"]["state"] == "partial"
+    assert reader.assessment_history_calls == [(TENANT_A, "usr_1", as_of)]
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        item["id"] == "run_risk_2" and item["source"] == "computation_runs"
+        for item in evidence.content["evidence"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_risk_intervention_authority_projects_decisions_and_reported_outcomes_without_inference() -> None:
+    repository = RiskInterventionRepository()
+    observed = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    decision = _risk_intervention_record("decision-17", observed_at=observed)
+    outcome = _risk_intervention_record(
+        "outcome-17",
+        record_kind="outcome",
+        decision_record_id=decision.record_id,
+        observed_at=observed + timedelta(seconds=1),
+        recorded_at=observed + timedelta(seconds=2),
+    )
+    await repository.create(decision)
+    await repository.create(outcome)
+
+    request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    result = await Risk360Provider().project(request, await _context(_available_registry()))
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    interventions = findings.content["interventions"]
+    assert interventions["state"] == "partial"
+    assert [row["recordId"] for row in interventions["records"]] == [
+        "outcome-17",
+        "decision-17",
+    ]
+    decision_row, outcome_row = interventions["records"][1], interventions["records"][0]
+    assert decision_row["decisionState"] == "approved"
+    assert decision_row["reportedOutcome"] is None
+    assert decision_row["semantics"] == (
+        "decision_record_only_not_proof_of_actor_authority_or_execution"
+    )
+    assert outcome_row["reportedOutcome"] == "reported_applied"
+    assert outcome_row["decisionRecordId"] == "decision-17"
+    assert outcome_row["semantics"] == "source_reported_outcome_not_independently_verified"
+    assert outcome_row["actor"]["attributionState"] == "source_reported_unverified"
+    assert outcome_row["actor"]["evidenceRefs"][0]["id"] == "actor-proof-7"
+    assert outcome_row["policyDecisionId"] == "policy-decision-91"
+    assert outcome_row["policyEvaluation"] == "reference_only_not_replayed"
+    assert interventions["semantics"]["decisionProvesExecution"] is False
+    assert interventions["semantics"]["reportedOutcomeProvesExternalEffect"] is False
+    assert findings.content["requiredSlotCoverage"]["interventions"] == {
+        "state": "partial",
+        "reason": "risk_intervention_records_available_actor_authority_and_outcome_verification_not_attested",
+    }
+    assert findings.content["requiredSlotCoverage"]["audit_history"]["state"] == "partial"
+    claims = [claim for claim in result.claims if claim.kind.startswith("risk_intervention_")]
+    assert {claim.kind for claim in claims} == {
+        "risk_intervention_decision_recorded",
+        "risk_intervention_outcome_reported",
+    }
+    assert all("does not establish actor authority or execution" in claim.claims[0] for claim in claims if claim.kind == "risk_intervention_decision_recorded")
+    assert all("not independently verified" in claim.claims[0] for claim in claims if claim.kind == "risk_intervention_outcome_reported")
+    assert all("actor-proof-7" in {ref.id for ref in claim.evidenceRefs} for claim in claims)
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert {row["id"] for row in evidence.content["evidence"]} >= {
+        "actor-proof-7",
+        "intervention-evidence-decision-17",
+        "intervention-evidence-outcome-17",
+    }
+
+
+@pytest.mark.asyncio
+async def test_risk_interventions_degrade_on_scope_mismatch_and_suppress_historical_claims() -> None:
+    mismatched = _risk_intervention_record("foreign-record", tenant_id=TENANT_B)
+    reader = _FakeReader(interventions=[mismatched])
+    request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    leaked = await Risk360Provider(sources=reader).project(
+        request, await _context(_available_registry())
+    )
+    findings = next(section for section in leaked.sections if section.id == "findings")
+    assert findings.content["interventions"]["state"] == "degraded"
+    assert findings.content["interventions"]["records"] == []
+    assert findings.content["requiredSlotCoverage"]["interventions"]["state"] == "degraded"
+    assert "foreign-record" not in leaked.model_dump_json()
+
+    valid = _risk_intervention_record("historical-record")
+    await RiskInterventionRepository().create(valid)
+    historical_request = _request(
+        subject=ProjectionSubject(kind="agent", id="agent-1"),
+        temporalMode="as_of",
+        asOf="2026-10-19T00:00:00+00:00",
+    )
+    historical = await Risk360Provider().project(
+        historical_request,
+        await _context(_available_registry()),
+    )
+    historical_findings = next(
+        section for section in historical.sections if section.id == "findings"
+    )
+    assert historical_findings.content["interventions"]["records"] == []
+    assert historical_findings.content["requiredSlotCoverage"]["interventions"] == {
+        "state": "unknown",
+        "reason": "risk_intervention_producer_coverage_not_attested",
+    }
+    assert not any("intervention" in claim.kind for claim in historical.claims)
+
+
+@pytest.mark.asyncio
+async def test_assessment_run_history_rejects_cross_subject_rows() -> None:
+    reader = _FakeReader(
+        assessment_history_rows=[
+            {
+                "tenant_id": TENANT_A,
+                "subject_kind": "entity",
+                "subject_id": "different-entity",
+                "run_id": "run_wrong_subject",
+                "assessment_id": "assessment_wrong_subject",
+                "definition_id": "risk360.standard",
+                "started_at": "2026-10-20T12:00:00+00:00",
+                "dimensions": [],
+            }
+        ]
+    )
+    result = await Risk360Provider(sources=reader).project(
+        _request(),
+        await _context(_available_registry()),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["auditHistory"]["state"] == "degraded"
+    assert findings.content["auditHistory"]["assessmentRuns"] == []
+    assert findings.content["requiredSlotCoverage"]["audit_history"] == {
+        "state": "degraded",
+        "reason": "risk_assessment_history_exact_binding_mismatch",
+    }
+
+
+@pytest.mark.asyncio
+async def test_risk_policy_flags_suppress_unscoped_and_historical_reads() -> None:
+    rows = [
+        {
+            "signal_id": "cross-tenant",
+            "tenant_id": TENANT_B,
+            "agent_id": "agent-1",
+            "policy_flags": ["must-not-leak"],
+        }
+    ]
+    reader = _FakeReader(agent_policy_flags=rows)
+    entity_result = await Risk360Provider(sources=reader).project(
+        _request(),
+        await _context(_available_registry()),
+    )
+    entity_findings = next(
+        section for section in entity_result.sections if section.id == "findings"
+    )
+    assert entity_findings.content["policyFlags"]["state"] == "unknown"
+    assert entity_findings.content["policyFlags"]["reason"] == "exact_agent_subject_required"
+    assert reader.agent_policy_flag_calls == []
+
+    historical = _request(
+        subject=ProjectionSubject(kind="agent", id="agent-1"),
+        asOf="2026-10-19T00:00:00+00:00",
+        temporalMode="as_of",
+    )
+    historical_result = await Risk360Provider(sources=reader).project(
+        historical,
+        await _context(_available_registry()),
+    )
+    historical_findings = next(
+        section for section in historical_result.sections if section.id == "findings"
+    )
+    assert historical_findings.content["policyFlags"]["state"] == "unknown"
+    assert historical_findings.content["policyFlags"]["reason"] == (
+        "agent_policy_flag_bitemporal_history_unavailable"
+    )
+    assert historical_findings.content["policyFlags"]["observations"] == []
+    assert reader.agent_policy_flag_calls == []
+
+    agent_request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    leaky_result = await Risk360Provider(sources=reader).project(
+        agent_request,
+        await _context(_available_registry()),
+    )
+    leaky_findings = next(section for section in leaky_result.sections if section.id == "findings")
+    assert leaky_findings.content["policyFlags"]["state"] == "degraded"
+    assert leaky_findings.content["policyFlags"]["reason"] == (
+        "agent_policy_flag_record_invalid_or_scope_incomplete"
+    )
+    assert leaky_findings.content["policyFlags"]["observations"] == []
+    assert "must-not-leak" not in leaky_result.model_dump_json()
+    assert reader.agent_policy_flag_calls == [(TENANT_A, "agent-1")]
+
+    failing_result = await Risk360Provider(
+        sources=_FakeReader(raise_agent_policy_flags=True)
+    ).project(agent_request, await _context(_available_registry()))
+    failing_findings = next(
+        section for section in failing_result.sections if section.id == "findings"
+    )
+    assert failing_findings.content["policyFlags"]["state"] == "degraded"
+    assert failing_findings.content["policyFlags"]["reason"] == "agent_policy_flag_read_incomplete"
+    assert "secret-detail" not in failing_result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_poisoning_evidence_projects_exact_detector_record_without_escalating_claim() -> None:
+    source_id = "provider:crm"
+    record = _poisoning_evidence_record(source_id=source_id, subject_id=source_id)
+    result = await Risk360Provider(
+        sources=_FakeReader(poisoning_evidence=[record])
+    ).project(
+        _request(subject=ProjectionSubject(kind="source", id=source_id)),
+        await _context(_available_registry()),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    payload = findings.content["poisoningEvidence"]
+    assert payload["state"] == "partial"
+    assert payload["records"][0]["sourceId"] == source_id
+    assert payload["records"][0]["subject"] == {"kind": "source", "id": source_id}
+    assert payload["records"][0]["detectorVersion"] == "3.1.0"
+    assert payload["records"][0]["evidenceRefs"][0]["id"] == "message-evidence-17"
+    assert payload["coverage"] == {
+        "completeEvidenceScan": True,
+        "detectorCoverage": "unattested",
+        "negativeFindingInference": "prohibited",
+    }
+    assert payload["freshness"]["threshold"] == "unconfigured"
+    assert payload["policy"] == {
+        "scope": "tenant_read_gated",
+        "projection": "metadata_only",
+        "rawPayload": "excluded",
+    }
+    assert findings.content["requiredSlotCoverage"]["poisoning_evidence"] == {
+        "state": "partial",
+        "reason": "poisoning_detector_coverage_not_attested",
+    }
+    assert findings.content["requiredSlotCoverage"]["source_trust"] == {
+        "state": "degraded",
+        "reason": "open_poisoning_evidence_requires_source_review",
+    }
+    claim = next(
+        claim for claim in result.claims if claim.kind == "source_poisoning_detector_evidence"
+    )
+    assert claim.id == "risk360.poisoning.poison-1.v1"
+    assert claim.claimState is EpistemicStatus.INFERRED
+    assert claim.confidence is None
+    assert claim.domainSlotIds == ["poisoning_evidence", "evidence_trace", "source_trust"]
+    assert "does not by itself verify" in claim.claims[0]
+    serialized = result.model_dump_json()
+    assert "suspected_payload_hash" not in serialized
+    assert "payload_hash" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_poisoning_evidence_rejects_tenant_and_source_subject_mismatches() -> None:
+    source_id = "provider:crm"
+    wrong_tenant = _poisoning_evidence_record(
+        source_id=source_id,
+        subject_id=source_id,
+        tenant_id=TENANT_B,
+    )
+    wrong_source = _poisoning_evidence_record(
+        evidence_id="poison-2",
+        source_id="provider:other",
+        subject_id=source_id,
+    )
+    for record in (wrong_tenant, wrong_source):
+        result = await Risk360Provider(
+            sources=_FakeReader(poisoning_evidence=[record])
+        ).project(
+            _request(subject=ProjectionSubject(kind="source", id=source_id)),
+            await _context(_available_registry()),
+        )
+        findings = next(section for section in result.sections if section.id == "findings")
+        coverage = findings.content["requiredSlotCoverage"]["poisoning_evidence"]
+        assert coverage["state"] == "degraded"
+        assert not findings.content["poisoningEvidence"]["records"]
+        assert not [
+            claim for claim in result.claims if claim.kind == "source_poisoning_detector_evidence"
+        ]
+
+
+@pytest.mark.asyncio
+async def test_empty_and_incomplete_poisoning_reads_have_honest_states() -> None:
+    empty = await Risk360Provider(sources=_FakeReader()).project(
+        _request(), await _context(_available_registry())
+    )
+    empty_findings = next(section for section in empty.sections if section.id == "findings")
+    assert empty_findings.content["poisoningEvidence"]["state"] == "unknown"
+    assert empty_findings.content["poisoningEvidence"]["coverage"]["completeEvidenceScan"] is True
+    assert empty_findings.content["requiredSlotCoverage"]["poisoning_evidence"] == {
+        "state": "unknown",
+        "reason": "poisoning_detector_coverage_not_attested",
+    }
+
+    partial = await Risk360Provider(
+        sources=_FakeReader(
+            poisoning_evidence=[_poisoning_evidence_record(subject_kind="entity", subject_id="usr_1")],
+            poisoning_evidence_complete=False,
+        )
+    ).project(_request(), await _context(_available_registry()))
+    partial_findings = next(section for section in partial.sections if section.id == "findings")
+    assert partial_findings.content["poisoningEvidence"]["state"] == "degraded"
+    assert partial_findings.content["requiredSlotCoverage"]["poisoning_evidence"]["state"] == "degraded"
+    assert next(section for section in partial.sections if section.id == "health").state == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_poisoning_read_reason_degrades_even_when_authority_marks_it_complete() -> None:
+    result = await Risk360Provider(
+        sources=_FakeReader(
+            poisoning_evidence_complete=True,
+            poisoning_evidence_reason="poisoning_evidence_partial_authority_read",
+        )
+    ).project(_request(), await _context(_available_registry()))
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["poisoningEvidence"]["state"] == "degraded"
+    assert findings.content["requiredSlotCoverage"]["poisoning_evidence"] == {
+        "state": "degraded",
+        "reason": "poisoning_evidence_partial_authority_read",
+    }
+    assert next(section for section in result.sections if section.id == "health").state == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_poisoning_evidence_reconstructs_point_in_time_lifecycle() -> None:
+    recorded_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    acknowledged_at = recorded_at + timedelta(seconds=30)
+    superseded_at = recorded_at + timedelta(minutes=2)
+    events = [
+        RiskPoisoningLifecycleEvent(
+            event_id="life-1",
+            from_status="open",
+            to_status="acknowledged",
+            occurred_at=acknowledged_at,
+            actor_id="operator-1",
+            reason="review started",
+        ),
+        RiskPoisoningLifecycleEvent(
+            event_id="life-2",
+            from_status="acknowledged",
+            to_status="superseded",
+            occurred_at=superseded_at,
+            actor_id="detector-release-2",
+            reason="new detector result",
+        ),
+    ]
+    record = _poisoning_evidence_record(
+        status="superseded",
+        recorded_at=recorded_at,
+        lifecycle_events=events,
+        superseded_by_evidence_id="poison-2",
+    )
+    reader = _FakeReader(poisoning_evidence=[record])
+    anchor = acknowledged_at + timedelta(seconds=1)
+    result = await Risk360Provider(sources=reader).project(
+        _request(
+            subject=ProjectionSubject(kind="source", id="provider:crm"),
+            asOf=anchor.isoformat(),
+            temporalMode="as_of",
+        ),
+        await _context(_available_registry()),
+    )
+    assert reader.poisoning_evidence_as_of == anchor
+    findings = next(section for section in result.sections if section.id == "findings")
+    historical = findings.content["poisoningEvidence"]["records"][0]
+    assert historical["status"] == "acknowledged"
+    assert historical["supersededByEvidenceId"] is None
+    assert [event["eventId"] for event in historical["lifecycle"]] == ["life-1"]
+
+
+@pytest.mark.asyncio
+async def test_repository_reader_joins_canonical_poisoning_authority() -> None:
+    source_id = "provider:crm"
+    await RiskPoisoningEvidenceRepository().create(
+        _poisoning_evidence_record(source_id=source_id, subject_id=source_id)
+    )
+    result = await Risk360Provider().project(
+        _request(subject=ProjectionSubject(kind="source", id=source_id)),
+        await _context(_available_registry()),
+    )
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["poisoningEvidence"]["records"][0]["evidenceId"] == "poison-1"
+
+
+@pytest.mark.asyncio
 async def test_as_of_source_trust_stays_unknown_without_bitemporal_bronze_reader() -> None:
     source_id = "provider:crm"
     reader = _FakeReader(source_provenance=[_source_provenance_claim_row(source_id=source_id)])
@@ -740,6 +1885,56 @@ async def test_as_of_source_trust_stays_unknown_without_bitemporal_bronze_reader
 
 
 @pytest.mark.asyncio
+async def test_assessed_financial_dimension_routes_to_value360_financial_risk_only() -> None:
+    assessment, signal = _financial_risk_records(entity_id="entity-value-risk", index=3)
+    result = await Risk360Provider(
+        sources=_FakeReader(
+            assessment=assessment,
+            signals=[signal],
+        )
+    ).project(
+        _request(subject=ProjectionSubject(kind="entity", id="entity-value-risk")),
+        await _context(_available_registry()),
+    )
+
+    dimension_claim = next(
+        claim for claim in result.claims if claim.kind == "risk_dimension_state"
+    )
+    signal_claim = next(
+        claim for claim in result.claims if claim.kind == "risk_signal_context"
+    )
+    assert dimension_claim.domainSlotIds is not None
+    assert "financial_risk" in dimension_claim.domainSlotIds
+    assert signal_claim.domainSlotIds is not None
+    assert "financial_risk" not in signal_claim.domainSlotIds
+
+
+@pytest.mark.asyncio
+async def test_financial_risk_claim_is_not_emitted_for_historical_anchor() -> None:
+    assessment, signal = _financial_risk_records(entity_id="entity-value-risk", index=4)
+    result = await Risk360Provider(
+        sources=_FakeReader(assessment=assessment, signals=[signal])
+    ).project(
+        _request(
+            subject=ProjectionSubject(kind="entity", id="entity-value-risk"),
+            asOf="2026-10-20T12:00:00Z",
+        ),
+        await _context(_available_registry()),
+    )
+
+    dimension_claim = next(
+        claim for claim in result.claims if claim.kind == "risk_dimension_state"
+    )
+    assert dimension_claim.domainSlotIds is not None
+    assert "financial_risk" not in dimension_claim.domainSlotIds
+    section = next(s for s in result.sections if s.id == "financial_risk")
+    assert section.state == "unknown"
+    assert section.content["dimensions"] == []
+    assert section.content["evidenceRefs"] == []
+    assert "assessment" not in section.content
+
+
+@pytest.mark.asyncio
 async def test_financial_contagion_emits_only_exact_partial_value_risk_link() -> None:
     assessment_a, signal_a = _financial_risk_records(entity_id="entity-financial-a", index=1)
     assessment_b, signal_b = _financial_risk_records(entity_id="entity-financial-b", index=2)
@@ -758,7 +1953,9 @@ async def test_financial_contagion_emits_only_exact_partial_value_risk_link() ->
         subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
     )
 
-    result = await Risk360Provider(sources=reader).project(
+    result = await Risk360Provider(
+        sources=reader, consent_reader=_allow_social_analytics_consent
+    ).project(
         request, await _context(_available_registry())
     )
 
@@ -772,23 +1969,444 @@ async def test_financial_contagion_emits_only_exact_partial_value_risk_link() ->
     assert coverage["propagation_paths"]["state"] == "unknown"
 
     claim = next(claim for claim in result.claims if claim.kind == "financial_flow_risk_link")
-    assert claim.claimState == EpistemicStatus.DERIVED
+    assert claim.claimState == EpistemicStatus.CORRELATED
     assert claim.domainSlotIds == ["financial_contagion", "evidence_trace"]
     assert {ref.id for ref in claim.evidenceRefs} == {
         "transfer-financial-1",
         "financial-risk-evidence-1",
         "financial-risk-evidence-2",
+        "financial-exposure-evidence-1",
+        "financial-exposure-evidence-2",
     }
     assert "economic-risk-policy v5" in claim.claims[0]
     assert "does not establish contagion, causal transmission" in claim.claims[0]
+    assert "are not attributed to transfer edges" in claim.claims[0]
     assert "freshness against an SLA" in claim.claims[0]
 
+    financial_contagion = findings.content["financialContagion"]
+    assert financial_contagion["state"] == "partial"
+    assert financial_contagion["claimState"] == EpistemicStatus.CORRELATED.value
+    assert financial_contagion["causalStatus"] == "unverified"
+    assert financial_contagion["contagionAttribution"] == "not_established"
+    assert financial_contagion["exposureAttribution"] == "not_established"
+    assert financial_contagion["lossAttribution"] == "not_established"
+    assert financial_contagion["exposureState"] == "partial"
+    assert all(
+        row["exposure"]["economicValue"]["usdValue"] == "125.00"
+        for row in financial_contagion["riskContexts"]
+    )
+
     evidence = next(section for section in result.sections if section.id == "evidence")
-    assert evidence.content["count"] == 3
+    assert evidence.content["count"] == 5
     assert {row["source"] for row in evidence.content["evidence"]} == {
         "transfers",
         "ledger",
+        "economic.safe_rollup",
     }
+
+
+@pytest.mark.asyncio
+async def test_risk_propagation_paths_expose_observed_graph_only_not_social_contagion() -> None:
+    path = _observed_social_path()
+    reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(path,))
+    )
+    evidence_authority = _FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT_A, "usr_1", records=())
+    )
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=reader,
+        social_evidence_authority=evidence_authority,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    coverage = findings.content["requiredSlotCoverage"]
+    assert coverage["propagation_paths"] == {
+        "state": "partial",
+        "reason": "observed_social_graph_paths_do_not_establish_causal_risk_propagation",
+    }
+    assert coverage["social_contagion"] == {
+        "state": "unknown",
+        "reason": "social_contagion_evidence_not_observed",
+    }
+    projected = findings.content["propagationPaths"]
+    assert projected["state"] == "partial"
+    assert projected["freshness"] == "unknown"
+    assert projected["causalRiskPropagationEstablished"] is False
+    assert projected["paths"][0]["entityPath"] == ["usr_1", "entity-b", "entity-c"]
+    assert projected["paths"][0]["timeOrderState"] == "ordered"
+    assert projected["paths"][0]["semantics"] == {
+        "observedDirectedGraphEdges": True,
+        "riskPropagationEstablished": False,
+        "socialContagionEstablished": False,
+        "causalityEstablished": False,
+    }
+
+    path_claims = [claim for claim in result.claims if claim.kind == "risk_social_graph_path_observation"]
+    assert len(path_claims) == 1
+    assert path_claims[0].claimState == EpistemicStatus.OBSERVED
+    assert path_claims[0].domainSlotIds == ["propagation_paths", "evidence_trace"]
+    assert {ref.id for ref in path_claims[0].evidenceRefs} == {
+        "follow:usr_1:entity-b",
+        "observation-1",
+        "follow:entity-b:entity-c",
+        "observation-2",
+    }
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert {row["id"] for row in evidence.content["evidence"]} >= {
+        "follow:usr_1:entity-b",
+        "observation-1",
+        "follow:entity-b:entity-c",
+        "observation-2",
+    }
+    assert reader.calls == [(TENANT_A, "usr_1")]
+
+
+@pytest.mark.asyncio
+async def test_risk_social_contagion_uses_exact_bounded_evidence_with_unverified_causality() -> None:
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(minutes=10)
+    end = now + timedelta(minutes=1)
+    record = _social_contagion_evidence_record()
+    authority = _FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT_A, "usr_1", records=(record,))
+    )
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=_FakeSocialGraphPathReader(
+            SocialGraphPathRead(TENANT_A, "usr_1")
+        ),
+        social_evidence_authority=authority,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(
+        _request(
+            timeRange={"from": start.isoformat(), "to": end.isoformat()},
+        ),
+        await _context(_available_registry()),
+    )
+
+    assert len(authority.calls) == 1
+    call = authority.calls[0]
+    assert call["tenant_id"] == TENANT_A
+    assert call["subject_entity_id"] == "usr_1"
+    assert call["start"] == start
+    assert call["end"] == end
+    assert isinstance(call["as_of"], datetime)
+    assert isinstance(call["limit"], int) and 1 <= call["limit"] <= 100
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    projected = findings.content["socialContagion"]
+    assert projected["state"] == "partial"
+    assert projected["claimState"] == EpistemicStatus.CORRELATED.value
+    assert projected["causalStatus"] == "unverified"
+    assert projected["policyState"] == "unknown"
+    assert projected["causalRiskPropagationEstablished"] is False
+    assert projected["records"][0]["actorId"] == "risk-source-service"
+    assert projected["records"][0]["pathEntityIds"] == ["entity-a", "entity-b", "usr_1"]
+    assert findings.content["requiredSlotCoverage"]["social_contagion"] == {
+        "state": "partial",
+        "reason": "source_reported_correlated_evidence_causality_unverified_policy_unknown",
+    }
+
+    claims = [claim for claim in result.claims if claim.kind == "risk_social_contagion_source_assertion"]
+    assert len(claims) == 1
+    assert claims[0].claimState == EpistemicStatus.CORRELATED
+    assert claims[0].domainSlotIds == ["social_contagion", "evidence_trace"]
+    assert "causality and policy outcome remain unverified" in claims[0].claims[0]
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert {row["id"] for row in evidence.content["evidence"]} >= {
+        "source-event",
+        "graph-edge-1",
+        "relationship-fact-1",
+        "risk-signal",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("read", "consent_reader", "expected_state", "expected_reason"),
+    [
+        (
+            SocialEvidenceRead(
+                TENANT_A,
+                "usr_1",
+                available=False,
+                reason="social_evidence_authority_unavailable",
+            ),
+            _allow_social_analytics_consent,
+            "degraded",
+            "social_evidence_authority_unavailable",
+        ),
+        (
+            SocialEvidenceRead(
+                TENANT_A,
+                "usr_1",
+                records=(_social_contagion_evidence_record(),),
+                truncated=True,
+                reason="social_evidence_read_truncated",
+            ),
+            _allow_social_analytics_consent,
+            "degraded",
+            "social_evidence_read_truncated",
+        ),
+        (
+            SocialEvidenceRead(
+                TENANT_A,
+                "another-entity",
+                records=(_social_contagion_evidence_record(),),
+            ),
+            _allow_social_analytics_consent,
+            "degraded",
+            "social_contagion_evidence_scope_mismatch",
+        ),
+        (
+            SocialEvidenceRead(TENANT_A, "usr_1", records=(_social_contagion_evidence_record(),)),
+            _deny_social_analytics_consent,
+            "unknown",
+            "social_contagion_subject_consent_restricted",
+        ),
+    ],
+)
+async def test_risk_social_contagion_suppresses_unavailable_truncated_or_disallowed_reads(
+    read: SocialEvidenceRead,
+    consent_reader: object,
+    expected_state: str,
+    expected_reason: str,
+) -> None:
+    authority = _FakeSocialEvidenceAuthority(read)
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=_FakeSocialGraphPathReader(
+            SocialGraphPathRead(TENANT_A, "usr_1")
+        ),
+        social_evidence_authority=authority,
+        consent_reader=consent_reader,
+    ).project(_request(), await _context(_available_registry()))
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["socialContagion"]["state"] == expected_state
+    assert findings.content["socialContagion"]["reason"] == expected_reason
+    assert findings.content["socialContagion"]["records"] == []
+    assert findings.content["requiredSlotCoverage"]["social_contagion"] == {
+        "state": expected_state,
+        "reason": expected_reason,
+    }
+    assert not [claim for claim in result.claims if claim.kind == "risk_social_contagion_source_assertion"]
+    if consent_reader is _deny_social_analytics_consent:
+        assert authority.calls == []
+
+
+@pytest.mark.asyncio
+async def test_risk_social_contagion_fails_closed_when_path_evidence_is_incomplete() -> None:
+    record = _social_contagion_evidence_record()
+    record["path_evidence_refs"] = []
+    authority = _FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT_A, "usr_1", records=(record,))
+    )
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=_FakeSocialGraphPathReader(
+            SocialGraphPathRead(TENANT_A, "usr_1")
+        ),
+        social_evidence_authority=authority,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["socialContagion"]["state"] == "degraded"
+    assert findings.content["socialContagion"]["reason"] == "social_contagion_evidence_join_invalid"
+    assert findings.content["socialContagion"]["records"] == []
+
+
+@pytest.mark.asyncio
+async def test_risk_social_contagion_requires_exact_entity_subject_before_read() -> None:
+    authority = _FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT_A, "not-a-source", records=())
+    )
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=_FakeSocialGraphPathReader(
+            SocialGraphPathRead(TENANT_A, "source-1")
+        ),
+        social_evidence_authority=authority,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(
+        _request(subject=ProjectionSubject(kind="source", id="source-1")),
+        await _context(_available_registry()),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["socialContagion"]["state"] == "unknown"
+    assert findings.content["socialContagion"]["reason"] == "exact_entity_subject_required"
+    assert authority.calls == []
+
+
+@pytest.mark.asyncio
+async def test_risk_social_paths_fail_closed_on_tenant_mismatch_and_future_observation() -> None:
+    mismatched_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead("tenant-other", "usr_1", paths=(_observed_social_path(),))
+    )
+    mismatched = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=mismatched_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+    mismatch_coverage = next(
+        section for section in mismatched.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert mismatch_coverage == {
+        "state": "degraded",
+        "reason": "canonical_social_path_scope_mismatch",
+    }
+    assert not any(claim.kind == "risk_social_graph_path_observation" for claim in mismatched.claims)
+
+    future_path = _observed_social_path()
+    future_edges = [dict(edge) for edge in future_path.graph_edges]
+    future_edges[0]["properties"] = {
+        **future_edges[0]["properties"],
+        "observed_at": "2026-10-24T10:00:00+00:00",
+    }
+    future_path = SocialObservedPath(
+        entity_ids=future_path.entity_ids,
+        edge_evidence_refs=future_path.edge_evidence_refs,
+        graph_edges=tuple(future_edges),
+        edge_observed_at=future_path.edge_observed_at,
+    )
+    future_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(future_path,))
+    )
+    future_result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=future_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+    future_coverage = next(
+        section for section in future_result.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert future_coverage == {
+        "state": "degraded",
+        "reason": "canonical_social_path_evidence_incomplete",
+    }
+    assert not any(
+        claim.kind == "risk_social_graph_path_observation" for claim in future_result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_risk_social_paths_reject_cross_tenant_edges_and_unjoined_fact_refs() -> None:
+    valid_path = _observed_social_path()
+    cases = []
+    cross_tenant_edges = [dict(edge) for edge in valid_path.graph_edges]
+    cross_tenant_edges[0]["properties"] = {
+        **cross_tenant_edges[0]["properties"],
+        "tenant_id": TENANT_B,
+    }
+    cases.append(
+        SocialObservedPath(
+            entity_ids=valid_path.entity_ids,
+            edge_evidence_refs=valid_path.edge_evidence_refs,
+            graph_edges=tuple(cross_tenant_edges),
+            edge_observed_at=valid_path.edge_observed_at,
+        )
+    )
+    unjoined_fact_edges = [dict(edge) for edge in valid_path.graph_edges]
+    unjoined_fact_edges[0]["properties"] = {
+        **unjoined_fact_edges[0]["properties"],
+        "evidence_refs": ["unjoined-observation"],
+    }
+    cases.append(
+        SocialObservedPath(
+            entity_ids=valid_path.entity_ids,
+            edge_evidence_refs=valid_path.edge_evidence_refs,
+            graph_edges=tuple(unjoined_fact_edges),
+            edge_observed_at=valid_path.edge_observed_at,
+        )
+    )
+
+    for invalid_path in cases:
+        reader = _FakeSocialGraphPathReader(
+            SocialGraphPathRead(TENANT_A, "usr_1", paths=(invalid_path,))
+        )
+        result = await Risk360Provider(
+            sources=_FakeReader(),  # type: ignore[arg-type]
+            social_graph_path_reader=reader,
+            consent_reader=_allow_social_analytics_consent,
+        ).project(_request(), await _context(_available_registry()))
+        coverage = next(
+            section for section in result.sections if section.id == "findings"
+        ).content["requiredSlotCoverage"]["propagation_paths"]
+        assert coverage == {
+            "state": "degraded",
+            "reason": "canonical_social_path_evidence_incomplete",
+        }
+        assert not any(
+            claim.kind == "risk_social_graph_path_observation" for claim in result.claims
+        )
+
+
+@pytest.mark.asyncio
+async def test_risk_social_path_read_suppresses_temporal_and_unconsented_requests() -> None:
+    path_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(_observed_social_path(),))
+    )
+    temporal = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=path_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(
+        _request(asOf="2026-10-20T12:00:00Z"),
+        await _context(_available_registry()),
+    )
+    temporal_coverage = next(
+        section for section in temporal.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert temporal_coverage == {
+        "state": "unknown",
+        "reason": "social_graph_path_bitemporal_history_unavailable",
+    }
+    assert path_reader.calls == []
+
+    denied_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(_observed_social_path(),))
+    )
+    denied = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=denied_reader,
+        consent_reader=_deny_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+    denied_coverage = next(
+        section for section in denied.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert denied_coverage == {
+        "state": "unknown",
+        "reason": "social_path_subject_consent_restricted",
+    }
+    assert denied_reader.calls == []
+    assert not any(claim.kind == "risk_social_graph_path_observation" for claim in denied.claims)
+
+
+@pytest.mark.asyncio
+async def test_risk_social_path_local_cap_marks_completeness_unknown() -> None:
+    paths = tuple(_observed_social_path(suffix=f"-{index}") for index in range(51))
+    reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=paths)
+    )
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+
+    propagation = next(
+        section for section in result.sections if section.id == "findings"
+    ).content["propagationPaths"]
+    assert propagation["state"] == "degraded"
+    assert propagation["reason"] == "canonical_social_path_evidence_incomplete"
+    assert propagation["completeness"] == "unknown"
+    assert propagation["reasonCodes"] == ["canonical_social_path_result_capped"]
+    assert len(propagation["paths"]) == 50
 
 
 @pytest.mark.asyncio
@@ -799,9 +2417,10 @@ async def test_financial_contagion_degrades_when_transfer_evidence_timestamp_dis
         subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
     )
 
-    result = await Risk360Provider(sources=_FakeReader(financial_flow_path=path)).project(
-        request, await _context(_available_registry())
-    )
+    result = await Risk360Provider(
+        sources=_FakeReader(financial_flow_path=path),
+        consent_reader=_allow_social_analytics_consent,
+    ).project(request, await _context(_available_registry()))
 
     findings = next(section for section in result.sections if section.id == "findings")
     assert findings.content["requiredSlotCoverage"]["financial_contagion"] == {
@@ -852,9 +2471,10 @@ async def test_financial_contagion_degrades_when_path_transfers_are_not_chronolo
         subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
     )
 
-    result = await Risk360Provider(sources=_FakeReader(financial_flow_path=path)).project(
-        request, await _context(_available_registry())
-    )
+    result = await Risk360Provider(
+        sources=_FakeReader(financial_flow_path=path),
+        consent_reader=_allow_social_analytics_consent,
+    ).project(request, await _context(_available_registry()))
 
     findings = next(section for section in result.sections if section.id == "findings")
     assert findings.content["requiredSlotCoverage"]["financial_contagion"] == {
@@ -877,9 +2497,9 @@ async def test_financial_contagion_stays_unknown_for_historical_path_request() -
         temporalMode="as_of",
     )
 
-    result = await Risk360Provider(sources=reader).project(
-        request, await _context(_available_registry())
-    )
+    result = await Risk360Provider(
+        sources=reader, consent_reader=_allow_social_analytics_consent
+    ).project(request, await _context(_available_registry()))
 
     findings = next(section for section in result.sections if section.id == "findings")
     assert findings.content["requiredSlotCoverage"]["financial_contagion"] == {
@@ -902,7 +2522,9 @@ async def test_financial_contagion_stays_unknown_without_risk_on_every_path_enti
         subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
     )
 
-    result = await Risk360Provider(sources=reader).project(
+    result = await Risk360Provider(
+        sources=reader, consent_reader=_allow_social_analytics_consent
+    ).project(
         request, await _context(_available_registry())
     )
 
@@ -947,6 +2569,7 @@ def test_surface_constants_align_with_registry_row() -> None:
     assert set(OUTPUT_SECTIONS) == set(definition["outputSections"])
     assert PROJECTION_ID == "risk360"
     assert set(SERVED_SUBJECT_KINDS) == set(definition["subjectKinds"])
+    assert "support_case" in SERVED_SUBJECT_KINDS
     assert READ_CAPABILITY in PROJECTION_CAPABILITY_MAP["risk360"]
     assert EXPLORE_CAPABILITY in PROJECTION_CAPABILITY_MAP["risk360"]
     # Dependency map keys are sections we emit; values are registered projections.
@@ -975,7 +2598,14 @@ async def test_project_returns_valid_result_from_repositories() -> None:
     assert result.generatedAt  # ISO-8601 UTC
     assert result.degradedReasons == []
     assert [s.id for s in result.sections] == list(OUTPUT_SECTIONS)
-    assert OUTPUT_SECTIONS == ("summary", "state", "evidence", "findings", "health")
+    assert OUTPUT_SECTIONS == (
+        "summary",
+        "state",
+        "financial_risk",
+        "evidence",
+        "findings",
+        "health",
+    )
     # dependencyState is echoed verbatim from the registry-computed context.
     assert result.dependencyState == context.dependencyState
     assert {d.projectionId for d in result.dependencyState} == {
@@ -999,6 +2629,7 @@ async def test_section_states_are_typed_section_state_vocabulary() -> None:
         "degraded",
         "empty",
         "missing",
+        "unknown",
     }
 
 
@@ -1044,6 +2675,25 @@ async def test_state_section_honors_per_dimension_honesty() -> None:
             assert row["score"] is None, row
     # No invented traffic-light badge in the section content.
     assert "badge" not in state.content
+
+
+@pytest.mark.asyncio
+async def test_financial_risk_section_is_narrow_and_evidence_backed() -> None:
+    await _seed(_assessment(), [_signal("sig-1", TENANT_A)])
+    result = await Risk360Provider().project(
+        _request(), await _context(_available_registry())
+    )
+
+    section = next(s for s in result.sections if s.id == "financial_risk")
+    assert section.state == "available"
+    assert section.canonicalAuthorityRefs == ["risk_outputs"]
+    assert [row["dimension"] for row in section.content["dimensions"]] == ["economic"]
+    assert section.content["assessment"]["assessmentId"] == "a-1"
+    assert {ref["id"] for ref in section.content["evidenceRefs"]} == {"ev-economic-a-1"}
+    assert "findings" not in section.content
+    assert "poisoningEvidence" not in section.content
+    assert "policyFlags" not in section.content
+    assert "propagationPaths" not in section.content
 
 
 @pytest.mark.asyncio
@@ -1157,6 +2807,218 @@ async def test_assessment_with_zero_recorded_components_is_honest_empty() -> Non
     # Every dimension is typed as an honest absence, none fabricated a score.
     rows = {row["dimension"]: row for row in state.content["dimensionStates"]}
     assert rows["identity"]["score"] is None
+
+
+@pytest.mark.asyncio
+async def test_risk_signals_and_assessment_dimensions_are_not_anomaly_events() -> None:
+    """Generic risk inputs must not impersonate the separate anomaly event authority."""
+    reader = _FakeReader(
+        assessment=_assessment().model_dump(mode="json"),
+        signals=[_signal("signal-not-an-event", TENANT_A).model_dump(mode="json")],
+    )
+    result = await Risk360Provider(sources=reader).project(
+        _request(), await _context(_available_registry())
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    coverage = findings.content["requiredSlotCoverage"]
+    assert coverage["risk_summary"] == {"state": "available"}
+    assert coverage["evidence_trace"] == {"state": "available"}
+    assert coverage["anomaly_events"] == {
+        "state": "unknown",
+        "reason": "canonical_anomaly_event_authority_unavailable",
+    }
+    assert findings.content["findings"] == []
+    assert findings.content["anomalyEvents"]["records"] == []
+    assert not any("anomaly_events" in claim.domainSlotIds for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_risk_anomaly_events_join_exact_gold_alert_records_metadata_only() -> None:
+    await gold_identity.materialize(
+        metric_name="anomaly_alert",
+        entity_id="agent-1",
+        entity_type="agent",
+        value={"private": "payload-must-not-render", "score": 91},
+        tenant_id=TENANT_A,
+        lineage_id="gold-lineage-1",
+        source_manifest_ids=["manifest-1"],
+    )
+    await gold_identity.materialize(
+        metric_name="anomaly_alert",
+        entity_id="agent-1",
+        entity_type="agent",
+        value={"private": "cross-tenant-must-not-render"},
+        tenant_id=TENANT_B,
+    )
+    await gold_identity.materialize(
+        metric_name="anomaly_alert",
+        entity_id="agent-2",
+        entity_type="agent",
+        value={"private": "other-subject-must-not-render"},
+        tenant_id=TENANT_A,
+    )
+
+    request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    result = await Risk360Provider().project(request, await _context(_available_registry()))
+    findings = next(section for section in result.sections if section.id == "findings")
+    anomaly_events = findings.content["anomalyEvents"]
+    assert anomaly_events["state"] == "partial"
+    assert len(anomaly_events["records"]) == 1
+    row = anomaly_events["records"][0]
+    assert row["subject"] == {"kind": "agent", "id": "agent-1"}
+    assert row["timestampSemantics"] == "gold_materialization_time_not_source_event_time"
+    assert row["payload"] == "excluded"
+    assert row["evidenceRef"]["source"] == "gold_identity.anomaly_alert"
+    assert row["evidenceRef"]["id"] == gold_identity.compute_record_id(
+        TENANT_A, "anomaly_alert", "agent-1", "agent"
+    )
+    assert anomaly_events["coverage"]["detectorCoverage"] == "unattested"
+    assert anomaly_events["coverage"]["negativeFindingInference"] == "prohibited"
+    assert findings.content["requiredSlotCoverage"]["anomaly_events"] == {
+        "state": "partial",
+        "reason": "gold_anomaly_alerts_only_underlying_event_and_detector_coverage_not_attested",
+    }
+    claim = next(claim for claim in result.claims if claim.kind == "risk_anomaly_alert_recorded")
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert claim.domainSlotIds == ["anomaly_events", "evidence_trace"]
+    assert claim.evidenceRefs[0].source == "gold_identity.anomaly_alert"
+    assert "payload-must-not-render" not in result.model_dump_json()
+    assert "cross-tenant-must-not-render" not in result.model_dump_json()
+    assert "other-subject-must-not-render" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_risk_anomaly_alert_corroborates_exact_bronze_event_without_payload() -> None:
+    event_id = "anomaly-source-event-1"
+    _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})["bronze-event-1"] = {
+        "id": "bronze-event-1",
+        "tenant_id": TENANT_A,
+        "event_id": event_id,
+        "schema_version": "2.0",
+        "event_timestamp": "2026-10-19T12:00:00Z",
+        "received_at": "2026-10-19T12:00:02Z",
+        "source": "sdk",
+        "payload": {"secret": "bronze-payload-must-not-render"},
+    }
+    _IN_MEMORY_STORES["bronze_sdk_events"]["other-tenant-event"] = {
+        "id": "other-tenant-event",
+        "tenant_id": TENANT_B,
+        "event_id": event_id,
+        "schema_version": "2.0",
+        "source": "sdk",
+        "payload": {"secret": "cross-tenant-payload-must-not-render"},
+    }
+    signal = _signal("anomaly-signal-1", TENANT_A, subject_id="agent-1").model_copy(
+        update={
+            "subject_kind": "agent",
+            "evidence_refs": [
+                EvidenceRef(id=event_id, type="event", source="bronze_sdk_events")
+            ],
+        }
+    )
+    await _seed(None, [signal])
+    await gold_identity.materialize(
+        metric_name="anomaly_alert",
+        entity_id="agent-1",
+        entity_type="agent",
+        value={"secret": "gold-payload-must-not-render"},
+        tenant_id=TENANT_A,
+        dimensions={
+            "risk_signal_id": signal.signal_id,
+            "source_event_id": event_id,
+            "source_event_source": "bronze_sdk_events",
+        },
+    )
+
+    result = await Risk360Provider().project(
+        _request(subject=ProjectionSubject(kind="agent", id="agent-1")),
+        await _context(_available_registry()),
+    )
+    findings = next(section for section in result.sections if section.id == "findings")
+    events = findings.content["anomalyEvents"]
+    assert events["state"] == "partial"
+    assert events["coverage"]["verifiedSourceEventRecordCount"] == 1
+    assert events["coverage"]["detectorCoverage"] == "unattested"
+    join = events["records"][0]["sourceEventJoin"]
+    assert join["sourceEventRecordRead"] == "verified_exact_bronze_record"
+    assert join["sourceEventRecordEvidenceRef"]["uri"] == (
+        "store://bronze_sdk_events/bronze-event-1"
+    )
+    assert findings.content["requiredSlotCoverage"]["anomaly_events"]["state"] == "partial"
+    claim = next(claim for claim in result.claims if claim.kind == "risk_anomaly_alert_recorded")
+    assert len(claim.evidenceRefs) == 3
+    serialized = result.model_dump_json()
+    assert "bronze-payload-must-not-render" not in serialized
+    assert "cross-tenant-payload-must-not-render" not in serialized
+    assert "gold-payload-must-not-render" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_bronze_anomaly_event_join_rejects_ambiguous_and_tombstoned_rows() -> None:
+    store = _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})
+    store["event-a"] = {
+        "id": "event-a", "tenant_id": TENANT_A, "event_id": "same-event",
+        "schema_version": "1", "source": "sdk",
+    }
+    store["event-b"] = {
+        "id": "event-b", "tenant_id": TENANT_A, "event_id": "same-event",
+        "schema_version": "2", "source": "sdk",
+    }
+    reader = RepositoryRiskSourceReader()
+    assert (await reader._exact_bronze_anomaly_event(
+        tenant_id=TENANT_A, event_id="same-event"
+    ))["source_event_record_read"] == "ambiguous"
+    store.pop("event-b")
+    store["event-a"]["tombstoned"] = True
+    assert (await reader._exact_bronze_anomaly_event(
+        tenant_id=TENANT_A, event_id="same-event"
+    ))["source_event_record_read"] == "invalid"
+
+
+@pytest.mark.asyncio
+async def test_bronze_anomaly_event_join_accepts_exact_legacy_sdk_row() -> None:
+    _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})["legacy-event"] = {
+        "id": "legacy-event",
+        "tenant_id": TENANT_A,
+        "provider_record_id": "legacy-event-id",
+        "source": "sdk",
+        "payload": {"event_id": "legacy-event-id", "private": "excluded"},
+        "ingested_at": "2026-10-19T12:00:02Z",
+        "quarantine_status": "clear",
+    }
+    join = await RepositoryRiskSourceReader._exact_bronze_anomaly_event(
+        tenant_id=TENANT_A, event_id="legacy-event-id"
+    )
+    assert join["source_event_record_read"] == "verified_exact_bronze_record"
+    assert join["source_event_record_evidence_ref"].uri == (
+        "store://bronze_sdk_events/legacy-event"
+    )
+    assert "excluded" not in str(join)
+
+
+@pytest.mark.asyncio
+async def test_risk_gold_anomaly_alerts_are_suppressed_for_historical_reads() -> None:
+    await gold_identity.materialize(
+        metric_name="anomaly_alert",
+        entity_id="agent-1",
+        entity_type="agent",
+        value={"score": 91},
+        tenant_id=TENANT_A,
+    )
+    request = _request(
+        subject=ProjectionSubject(kind="agent", id="agent-1"),
+        temporalMode="as_of",
+        asOf="2026-10-19T00:00:00+00:00",
+    )
+    result = await Risk360Provider().project(request, await _context(_available_registry()))
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["anomalyEvents"]["records"] == []
+    assert findings.content["requiredSlotCoverage"]["anomaly_events"] == {
+        "state": "unknown",
+        "reason": "gold_anomaly_alert_bitemporal_history_unavailable",
+    }
+    assert not any(claim.kind == "risk_anomaly_alert_recorded" for claim in result.claims)
 
 
 # ---------------------------------------------------------------------------
@@ -1436,7 +3298,7 @@ async def test_result_never_raises_projection_error_from_backing_source() -> Non
     )
     result = await provider.project(_request(), await _context(ProviderRegistry()))
     assert isinstance(result, ProjectionResult)
-    assert len(result.sections) == 5
+    assert len(result.sections) == 6
 
 
 # ---------------------------------------------------------------------------

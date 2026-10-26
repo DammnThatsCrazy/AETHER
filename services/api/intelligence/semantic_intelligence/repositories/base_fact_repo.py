@@ -343,6 +343,7 @@ class SemanticFactRepository:
         *,
         retention_class: Optional[str] = None,
         status: str = "expired",
+        eligible_statuses: frozenset[str] = _ACTIVE_STATUS_VALUES,
     ) -> int:
         """Retention age-out: mark rows with occurred_at <= cutoff as ``status``.
 
@@ -352,13 +353,15 @@ class SemanticFactRepository:
         (mirrors the consent-restriction primitives above).
         """
         pool = await self._pool()
-        # Only age rows that are still ACTIVE — never overwrite a consent_restricted
-        # (or deleted/superseded) status, which would erase the retraction signal.
+        # Only age table-appropriate active rows. Never overwrite a restricted,
+        # deleted, or superseded status, which would erase the retraction signal.
+        if not eligible_statuses:
+            return 0
         if pool is None:
             count = 0
             for rid in self._age_victims_inmem(tenant_id, cutoff, retention_class):
                 current = (self._store[rid].get("data") or {}).get("status")
-                if current is not None and current not in _ACTIVE_STATUS_VALUES:
+                if current is not None and current not in eligible_statuses:
                     continue
                 self._store[rid].setdefault("data", {})["status"] = status
                 count += 1
@@ -367,9 +370,9 @@ class SemanticFactRepository:
             "tenant_id = $1",
             "occurred_at IS NOT NULL",
             "occurred_at <= $2",
-            "(data->>'status' IS NULL OR data->>'status' IN ('classified', 'partial'))",
+            "(data->>'status' IS NULL OR data->>'status' = ANY($3::text[]))",
         ]
-        params: list[Any] = [tenant_id, cutoff]
+        params: list[Any] = [tenant_id, cutoff, sorted(eligible_statuses)]
         if retention_class is not None:
             params.append(retention_class)
             conditions.append(f"data->>'retention_class' = ${len(params)}")

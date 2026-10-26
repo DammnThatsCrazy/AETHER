@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -17,12 +18,20 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent.execution360_provider import (  # noqa: E402
+    ExecutionApprovalRead,
+    ExecutionCostRead,
     ExecutionEpisodeContextRead,
+    ExecutionPrincipalIdentityRead,
+    ExecutionRiskAssessmentRead,
+    ExecutionRiskEventRead,
+    ExecutionToolCallRead,
+    ExecutionWorkflowRunInvocationRead,
     OUTPUT_SECTIONS,
     Execution360Provider,
     ExecutionRead,
     RepositoryExecution360Source,
     _read_agent_episode_context,
+    _read_execution_principal_identities,
     _resolve_server_delegation_reference,
     register_provider,
 )
@@ -314,6 +323,80 @@ def _task_decomposition_row(
     }
 
 
+def _execution_risk_signal_row(
+    *,
+    signal_id: str = "risk-exec-1",
+    tenant_id: str = TENANT,
+    subject_kind: str = "execution",
+    subject_id: str = "exec-1",
+    observed_at: str | None = "2026-10-16T10:00:01+00:00",
+) -> dict:
+    return {
+        "signal_id": signal_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+        "subject_id": subject_id,
+        "risk_dimension": "agentic",
+        "claim_state": "inferred",
+        "confidence": 0.82,
+        "evidence_refs": [
+            {
+                "id": f"evidence-{signal_id}",
+                "type": "model_output",
+                "source": "aether.fraud.detector.agentic",
+                "observedAt": observed_at,
+            }
+        ],
+        "source": "aether.fraud.detector.agentic",
+        "detector_version": "agentic-risk-v2",
+        "observed_at": observed_at,
+        "score": 0.64,
+    }
+
+
+def _execution_risk_assessment_row(
+    *,
+    assessment_id: str = "assessment-exec-1",
+    tenant_id: str = TENANT,
+    subject_kind: str = "execution",
+    subject_id: str = "exec-1",
+    assessed_at: str | None = "2026-10-16T10:00:02+00:00",
+) -> dict:
+    return {
+        "assessment_id": assessment_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+        "subject_id": subject_id,
+        "policy_id": "risk-policy-v2",
+        "policy_version": "2",
+        "dimensions": ["agentic"],
+        "vector": {
+            "components": [
+                {
+                    "dimension": "agentic",
+                    "state": "observed",
+                    "score": 0.61,
+                    "claim_state": "inferred",
+                    "confidence": 0.84,
+                    "evidence_refs": [
+                        {
+                            "id": f"evidence-{assessment_id}",
+                            "type": "model_output",
+                            "source": "aether.risk.assessment.agentic",
+                            "observedAt": assessed_at,
+                        }
+                    ],
+                }
+            ]
+        },
+        "claim_state": "inferred",
+        "confidence": 0.81,
+        "evidence_refs": [],
+        "run_id": "risk-run-1",
+        "assessed_at": assessed_at,
+    }
+
+
 class FakeSource:
     def __init__(
         self,
@@ -321,6 +404,9 @@ class FakeSource:
         observed: ExecutionRead | None = None,
         *,
         error: Exception | None = None,
+        cost_facts: ExecutionCostRead | None = None,
+        risk_events: ExecutionRiskEventRead | None = None,
+        approval_decisions: ExecutionApprovalRead | None = None,
     ) -> None:
         self.server = server or ExecutionRead(
             rows=[_server_row()],
@@ -335,6 +421,18 @@ class FakeSource:
             agent_ids=(AGENT,),
         )
         self.error = error
+        self.cost_fact_read = cost_facts or ExecutionCostRead(
+            rows=[], available=True, scope_known=True
+        )
+        self.risk_event_read = risk_events or ExecutionRiskEventRead(
+            rows=[], available=True, scope_known=True
+        )
+        self.approval_decision_read = approval_decisions or ExecutionApprovalRead(
+            rows=[], available=True, scope_known=True
+        )
+        self.risk_event_calls: list[tuple[str, tuple[str, ...], int]] = []
+        self.approval_decision_calls: list[tuple[str, tuple[str, ...], int]] = []
+        self.cost_fact_calls: list[tuple[str, tuple[tuple[str, str], ...], int]] = []
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -349,6 +447,34 @@ class FakeSource:
         if self.error:
             raise self.error
         return self.observed
+
+    async def execution_risk_events(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionRiskEventRead:
+        if self.error:
+            raise self.error
+        self.risk_event_calls.append((tenant_id, execution_ids, limit))
+        return self.risk_event_read
+
+    async def execution_approval_decisions(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionApprovalRead:
+        if self.error:
+            raise self.error
+        self.approval_decision_calls.append((tenant_id, execution_ids, limit))
+        return self.approval_decision_read
+
+    async def execution_cost_facts(
+        self,
+        *,
+        tenant_id: str,
+        executions: tuple[tuple[str, str], ...],
+        limit: int,
+    ) -> ExecutionCostRead:
+        if self.error:
+            raise self.error
+        self.cost_fact_calls.append((tenant_id, executions, limit))
+        return self.cost_fact_read
 
 
 async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claims() -> None:
@@ -377,6 +503,7 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
             "tool_calls",
             "actor_attribution",
             "authority_check",
+            "approval_chain",
             "authority_envelope",
             "evidence_trace",
             "execution_history",
@@ -447,10 +574,13 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
     assert latency_cost["latency"]["sampleCount"] == 1
     assert latency_cost["latency"]["samples"][0]["elapsedMs"] == 2000.0
     assert latency_cost["latency"]["samples"][0]["evidenceRefs"][0]["id"] == "exec-1"
-    assert latency_cost["cost"] == {
-        "state": "unknown",
-        "reason": "no_execution_cost_authority_is_joined_by_execution360",
-    }
+    assert latency_cost["cost"]["state"] == "unknown"
+    assert latency_cost["cost"]["reason"] == (
+        "no_ai_execution_invocation_linked_to_admitted_execution"
+    )
+    assert latency_cost["cost"]["byCurrency"] == []
+    assert latency_cost["cost"]["unknownCostInvocationCount"] is None
+    assert latency_cost["latency"]["aiInvocationTelemetry"]["state"] == "unknown"
 
     outcomes = next(section for section in result.sections if section.id == "outcomes")
     assert outcomes.state == "unknown"
@@ -460,6 +590,231 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
     serialized = result.model_dump_json()
     assert "must-not-appear" not in serialized
     assert "workerRunLinkage" in serialized
+
+
+async def test_workflow_run_subject_admits_only_exact_lifecycle_rows() -> None:
+    matching = _server_row()
+    matching["workflow_run_id"] = "workflow-run-1"
+    matching["workflow_run_invocation_evidence_refs"] = [
+        EvidenceRef(
+            id="invocation-workflow-1",
+            type="event",
+            source="ai_execution_facts",
+            observedAt="2026-10-16T10:00:00Z",
+        ).model_dump(mode="json", by_alias=True)
+    ]
+    other_run = _server_row()
+    other_run["execution_id"] = "exec-other-run"
+    other_run["workflow_run_id"] = "workflow-run-2"
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[matching, other_run],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead(
+            rows=[],
+            available=True,
+            scope_known=False,
+            reason="source_reported_run_id_not_canonically_linked_to_workflow_run",
+        ),
+    )
+    request = _request(
+        subject=ProjectionSubject(kind="workflow_run", id="workflow-run-1")
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    executions = state.content["serverRecordedExecutions"]
+    assert [row["executionId"] for row in executions] == ["exec-1"]
+    assert executions[0]["workflowRunId"] == "workflow-run-1"
+    linkage_claims = [
+        claim
+        for claim in result.claims
+        if claim.kind == "server_recorded_workflow_run_execution_reference"
+    ]
+    assert [claim.evidenceRefs[0].id for claim in linkage_claims] == ["exec-1"]
+    assert {ref.source for ref in linkage_claims[0].evidenceRefs} == {
+        "agent_executions",
+        "ai_execution_facts",
+    }
+    assert "workflow_run_execution_scope_mismatch" in result.degradedReasons
+    assert "exec-other-run" not in result.model_dump_json()
+
+
+async def test_latency_cost_joins_exact_canonical_ai_invocation_facts() -> None:
+    source = FakeSource(
+        cost_facts=ExecutionCostRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "action_id": "exec-1",
+                    "agent_id": AGENT,
+                    "invocation_id": "invocation-1",
+                    "observed_at": "2026-10-16T10:00:01+00:00",
+                    "latency_ms": 340,
+                    "selected_cost": "0.125",
+                    "cost_basis": "billed",
+                    "currency": "usd",
+                }
+            ],
+            available=True,
+            scope_known=True,
+        )
+    )
+    request = _request()
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    latency_cost = summary.content["latencyCost"]
+    assert source.cost_fact_calls == [(TENANT, (("exec-1", AGENT),), 50)]
+    assert latency_cost["cost"]["state"] == "available"
+    assert latency_cost["cost"]["linkage"] == (
+        "exact_tenant_execution_action_id_and_agent_id"
+    )
+    assert latency_cost["cost"]["knownCostInvocationCount"] == 1
+    assert latency_cost["cost"]["byCurrency"] == [
+        {
+            "currency": "USD",
+            "total": 0.125,
+            "factCount": 1,
+            "evidenceRefs": [
+                {
+                    "id": "invocation-1",
+                    "type": "event",
+                    "source": "ai_execution_facts",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                    "uri": "store://ai_execution_facts/tenant-execution360%3Ainvocation-1",
+                }
+            ],
+        }
+    ]
+    invocation_latency = latency_cost["latency"]["aiInvocationTelemetry"]
+    assert invocation_latency["state"] == "available"
+    assert invocation_latency["samples"][0]["latencyMs"] == 340.0
+    assert invocation_latency["freshness"]["state"] == "unknown"
+    cost_claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "source_reported_execution_invocation_cost_total"
+    )
+    assert cost_claim.claimState == EpistemicStatus.OBSERVED
+    assert cost_claim.domainSlotIds == ["latency_cost", "evidence_trace"]
+    assert cost_claim.evidenceRefs[0].source == "ai_execution_facts"
+    evidence_section = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        ref["source"] == "ai_execution_facts" and ref["id"] == "invocation-1"
+        for ref in evidence_section.content["evidence"]
+    )
+
+
+async def test_execution_cost_source_queries_exact_tenant_action_and_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import config.settings
+
+    monkeypatch.setattr(
+        config.settings,
+        "settings",
+        SimpleNamespace(ai_economics=SimpleNamespace(execution_facts_enabled=True)),
+    )
+    observed_calls: list[tuple[str, dict[str, object]]] = []
+
+    async def list_exact_facts(tenant_id: str, **filters: object) -> list[dict[str, object]]:
+        observed_calls.append((tenant_id, filters))
+        return [
+            {
+                "tenant_id": tenant_id,
+                "action_id": filters["action_id"],
+                "agent_id": AGENT,
+                "invocation_id": "invocation-1",
+                "observed_at": "2026-10-16T10:00:01+00:00",
+                "latency_ms": 340,
+                "selected_cost": 0.125,
+                "cost_basis": "billed",
+                "currency": "USD",
+            }
+        ]
+
+    source = RepositoryExecution360Source(ai_execution_facts_reader=list_exact_facts)
+    read = await source.execution_cost_facts(
+        tenant_id=TENANT,
+        executions=(("exec-1", AGENT),),
+        limit=50,
+    )
+
+    assert observed_calls == [(TENANT, {"action_id": "exec-1", "limit": 201})]
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.rows[0]["execution_id"] == "exec-1"
+    assert read.rows[0]["action_id"] == "exec-1"
+    assert read.rows[0]["agent_id"] == AGENT
+
+
+async def test_execution_cost_keeps_unknown_cost_unknown_and_drops_mismatched_fact() -> None:
+    source = FakeSource(
+        cost_facts=ExecutionCostRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "action_id": "exec-1",
+                    "agent_id": AGENT,
+                    "invocation_id": "unknown-cost-invocation",
+                    "observed_at": "2026-10-16T10:00:01+00:00",
+                    "latency_ms": None,
+                    # A malformed/corrupt source row may carry an amount while
+                    # declaring its basis unknown; do not expose it as a cost.
+                    "selected_cost": "9.99",
+                    "cost_basis": "unknown",
+                    "currency": "USD",
+                },
+                {
+                    "tenant_id": "foreign-tenant",
+                    "execution_id": "exec-1",
+                    "action_id": "exec-1",
+                    "agent_id": AGENT,
+                    "invocation_id": "foreign-invocation",
+                    "observed_at": "2026-10-16T10:00:01+00:00",
+                    "latency_ms": 12,
+                    "selected_cost": 1000,
+                    "cost_basis": "billed",
+                    "currency": "USD",
+                },
+            ],
+            available=True,
+            scope_known=True,
+        )
+    )
+    request = _request()
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    cost = summary.content["latencyCost"]["cost"]
+    assert cost["state"] == "degraded"
+    assert cost["byCurrency"] == []
+    assert cost["knownCostInvocationCount"] == 0
+    assert cost["unknownCostInvocationCount"] == 1
+    assert [item["invocationId"] for item in cost["invocations"]] == [
+        "unknown-cost-invocation"
+    ]
+    assert cost["invocations"][0]["selectedCost"] is None
+
+
+async def test_latency_cost_read_is_skipped_when_bound_sections_are_not_requested() -> None:
+    request = _request(includeSections=["timeline"])
+    source = FakeSource()
+
+    await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.cost_fact_calls == []
 
 
 async def test_exact_execution_subject_reads_only_tenant_execution_record() -> None:
@@ -838,11 +1193,13 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     interactions = next(section for section in result.sections if section.id == "interactions")
     assert interactions.content["toolInvocationLinkage"] == {
         "state": "unknown",
-        "reason": "tool_observations_do_not_carry_a_canonical_agent_execution_id",
-        "sourceReadState": "available",
+        "reason": "execution_tool_call_exact_join_not_available",
+        "sourceReadState": "unavailable",
+        "completeness": "unknown",
         "sourceReportedToolRelatedFactCount": 1,
         "joinedExecutionToolCalls": [],
-        "evidenceRefs": [
+        "evidenceRefs": [],
+        "sourceReportedEvidenceRefs": [
             {
                 "id": "silver-event-1",
                 "type": "event",
@@ -853,9 +1210,58 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
         ],
     }
     assert interactions.content["riskEventLinkage"] == {
-        "state": "unknown",
-        "reason": "agent_risk_records_do_not_carry_a_canonical_agent_execution_id",
+        "state": "empty",
+        "reason": "no_recorded_canonical_risk_signals_or_assessments_for_execution_subjects",
+        "sourceReadState": "available",
+        "completeness": "bounded_recorded_execution_subject_signals_and_assessments",
+        "scopeKnown": True,
+        "producerCoverage": {
+            "state": "unknown",
+            "reason": "execution_risk_signal_producer_inventory_not_connected",
+        },
+        "riskAssessmentCoverage": {
+            "state": "not_read",
+            "sourceReadState": "not_read",
+            "authority": "risk_assessments",
+            "reason": None,
+            "scopeKnown": False,
+            "completeness": "exact_execution_subject_snapshots_only_history_and_producer_coverage_unknown",
+            "assessmentCount": None,
+            "joinedExecutionRiskAssessments": [],
+            "evidenceRefs": [],
+            "truncated": False,
+        },
         "joinedExecutionRiskEvents": [],
+        "evidenceRefs": [],
+        "freshness": {
+            "state": "unknown",
+            "latestObservedAt": None,
+            "reason": "no_execution_risk_freshness_threshold_is_configured",
+        },
+        "truncated": False,
+    }
+    assert interactions.content["approvalChainLinkage"] == {
+        "state": "unknown",
+        "reason": "no_linked_commerce_approval_non_commerce_authority_coverage_unknown",
+        "sourceReadState": "available",
+        "completeness": "x402_commerce_approval_requests_and_decisions_only",
+        "scopeKnown": True,
+        "truncated": False,
+        "effectiveAuthorization": {
+            "state": "unknown",
+            "reason": "commerce_approval_evidence_does_not_evaluate_effective_agent_action_authority",
+        },
+        "freshness": {
+            "state": "unknown",
+            "latestObservedAt": None,
+            "reason": "no_execution_approval_freshness_threshold_is_configured",
+        },
+        "otherApprovalAuthorityCoverage": {
+            "state": "unknown",
+            "reason": "non_commerce_approval_authorities_are_not_joined",
+        },
+        "joinedExecutionApprovalRequests": [],
+        "joinedExecutionApprovals": [],
         "evidenceRefs": [],
     }
     source_reported = next(
@@ -866,6 +1272,435 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     assert source_reported["toolName"] == "payments.send"
     assert source_reported["runId"] == "source-run-1"
     assert "executionId" not in source_reported
+
+
+async def test_commerce_approval_decision_joins_exact_tenant_execution_and_lifecycle_ref() -> None:
+    server = _server_row()
+    server.update(
+        {
+            "approval_id": "approval-1",
+            "approval_decision_id": "decision-1",
+        }
+    )
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        approval_decisions=ExecutionApprovalRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "decision_id": "decision-1",
+                    "action": "approve",
+                    "decided_by": "human-1",
+                    "decided_at": "2026-10-16T09:59:00+00:00",
+                    "is_override": False,
+                }
+            ],
+            available=True,
+            scope_known=True,
+            approval_requests=(
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "execution_action": "transfer",
+                    "resource_id": "account:4",
+                    "created_at": "2026-10-16T09:58:00+00:00",
+                },
+            ),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(_request(), await _context(_request()))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["approvalChainLinkage"]
+    assert linkage["state"] == "partial"
+    assert linkage["sourceReadState"] == "available"
+    assert linkage["scopeKnown"] is True
+    request_record = linkage["joinedExecutionApprovalRequests"][0]
+    assert request_record["executionId"] == "exec-1"
+    assert request_record["approvalId"] == "approval-1"
+    assert request_record["action"] == "transfer"
+    assert request_record["resourceId"] == "account:4"
+    assert request_record["lifecycleRequestMatch"] == "matched"
+    assert request_record["evidenceRef"]["source"] == "commerce_approvals"
+    assert linkage["effectiveAuthorization"]["state"] == "unknown"
+    assert linkage["freshness"] == {
+        "state": "unknown",
+        "latestObservedAt": "2026-10-16T09:59:00+00:00",
+        "reason": "no_execution_approval_freshness_threshold_is_configured",
+    }
+    assert linkage["otherApprovalAuthorityCoverage"]["state"] == "unknown"
+    assert linkage["joinedExecutionApprovals"][0]["executionId"] == "exec-1"
+    assert linkage["joinedExecutionApprovals"][0]["decisionId"] == "decision-1"
+    assert linkage["joinedExecutionApprovals"][0]["authorizedExecutionDecision"] is True
+    assert linkage["evidenceRefs"][0]["source"] == "commerce_approval_decisions"
+    claim = next(
+        claim for claim in result.claims if claim.kind == "canonically_linked_commerce_approval_decision"
+    )
+    assert claim.domainSlotIds == ["approval_chain", "evidence_trace"]
+    request_claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "canonically_linked_commerce_approval_request"
+    )
+    assert request_claim.evidenceRefs[0].source == "commerce_approvals"
+    assert request_claim.domainSlotIds == ["approval_chain", "evidence_trace"]
+
+
+@pytest.mark.parametrize(
+    "approval_request",
+    [
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-1",
+            "approval_id": "approval-1",
+            "execution_action": "transfer",
+            "resource_id": "account:other",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+        {
+            "tenant_id": "tenant-other",
+            "execution_id": "exec-1",
+            "approval_id": "approval-1",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-1",
+            "approval_id": "approval-other",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-other",
+            "approval_id": "approval-1",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+    ],
+    ids=[
+        "lifecycle_resource_conflict",
+        "foreign_tenant_request",
+        "approval_id_conflict",
+        "execution_id_conflict",
+    ],
+)
+async def test_execution_approval_request_conflict_is_degraded_and_not_joined(
+    approval_request: dict[str, str],
+) -> None:
+    server = _server_row()
+    server.update({"approval_id": "approval-1", "approval_decision_id": "decision-1"})
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        approval_decisions=ExecutionApprovalRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "decision_id": "decision-1",
+                    "action": "approve",
+                    "decided_by": "human-1",
+                    "decided_at": "2026-10-16T09:59:00+00:00",
+                    "is_override": False,
+                }
+            ],
+            available=True,
+            scope_known=True,
+            approval_requests=(approval_request,),
+        ),
+    )
+
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["approvalChainLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["scopeKnown"] is False
+    assert linkage["joinedExecutionApprovalRequests"] == []
+    assert not [
+        claim
+        for claim in result.claims
+        if claim.kind == "canonically_linked_commerce_approval_request"
+    ]
+    if approval_request["resource_id"] == "account:other":
+        assert linkage["joinedExecutionApprovals"] == []
+        assert not [
+            claim
+            for claim in result.claims
+            if claim.kind == "canonically_linked_commerce_approval_decision"
+        ]
+
+
+async def test_repository_approval_request_read_is_bounded_and_exactly_scoped() -> None:
+    from types import SimpleNamespace
+
+    approval = {
+        "tenant_id": TENANT,
+        "execution_id": "exec-1",
+        "approval_id": "approval-1",
+        "execution_action": "transfer",
+        "resource_id": "account:4",
+        "created_at": "2026-10-16T09:58:00+00:00",
+    }
+
+    class Commerce:
+        async def list_approval_decisions_for_executions(
+            self, tenant_id: str, execution_ids: list[str], limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_ids == ["exec-1"]
+            assert 0 < limit <= 5000
+            return []
+
+        async def list_approvals_for_execution(
+            self, tenant_id: str, execution_id: str, limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_id == "exec-1"
+            assert 0 < limit <= 500
+            return [SimpleNamespace(model_dump=lambda **_: approval)]
+
+    read = await RepositoryExecution360Source(commerce_store=Commerce()).execution_approval_decisions(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is False
+    assert read.approval_requests == (approval,)
+
+
+async def test_repository_approval_request_sentinel_marks_bounded_read_truncated() -> None:
+    from types import SimpleNamespace
+
+    approvals = [
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-1",
+            "approval_id": f"approval-{index}",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        }
+        for index in range(5)
+    ]
+
+    class Commerce:
+        async def list_approval_decisions_for_executions(
+            self, tenant_id: str, execution_ids: list[str], limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_ids == ["exec-1"]
+            return []
+
+        async def list_approvals_for_execution(
+            self, tenant_id: str, execution_id: str, limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_id == "exec-1"
+            assert limit == 5
+            return [SimpleNamespace(model_dump=lambda row=row, **_: row) for row in approvals]
+
+    read = await RepositoryExecution360Source(commerce_store=Commerce()).execution_approval_decisions(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=1,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is True
+    assert len(read.approval_requests) == 4
+    assert read.reason == "execution_approval_decision_read_truncated"
+
+
+async def test_execution_approval_scope_or_lifecycle_reference_conflict_is_degraded() -> None:
+    server = _server_row()
+    server.update(
+        {
+            "approval_id": "approval-1",
+            "approval_decision_id": "decision-1",
+        }
+    )
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        approval_decisions=ExecutionApprovalRead(
+            rows=[
+                {
+                    "tenant_id": "other-tenant",
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "decision_id": "decision-1",
+                    "action": "approve",
+                    "decided_by": "human-1",
+                    "decided_at": "2026-10-16T09:59:00+00:00",
+                    "is_override": False,
+                }
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["approvalChainLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["joinedExecutionApprovals"] == []
+    assert linkage["scopeKnown"] is False
+
+
+async def test_canonical_tool_call_edge_joins_exact_execution_and_remains_partial() -> None:
+    from types import SimpleNamespace
+
+    class Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            assert tenant_id == TENANT
+            assert limit == 10_000
+            assert edge_types == ["CALLED_TOOL"]
+            return (
+                [
+                    SimpleNamespace(
+                        edge_type="CALLED_TOOL",
+                        from_vertex_id=f"{TENANT}:agent:runtime-agent-1",
+                        to_vertex_id=f"{TENANT}:tool:payments.send",
+                        properties={
+                            "tenant_id": TENANT,
+                            "execution_id": "exec-1",
+                            "called_at": "2026-10-16T10:00:01+00:00",
+                            "idempotency_key": "lifecycle-edge-idempotency-1",
+                        },
+                    )
+                ],
+                False,
+            )
+
+        async def get_vertex_for_tenant(self, tenant_id, vertex_id):
+            assert tenant_id == TENANT
+            assert vertex_id == f"{TENANT}:tool:payments.send"
+            return SimpleNamespace(
+                vertex_type="Tool",
+                vertex_id=vertex_id,
+                properties={"tenant_id": TENANT, "tool_id": "payments.send"},
+            )
+
+    source_read = await RepositoryExecution360Source(graph_client=Graph())._read_execution_tool_calls(
+        TENANT,
+        [
+            {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-1",
+                "execution_id": "exec-1",
+                "event_type": None,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": AGENT,
+            }
+        ],
+    )
+    assert source_read.available is True
+    assert source_read.scope_known is True
+    assert source_read.truncated is False
+    assert source_read.rows[0]["executionId"] == "exec-1"
+    assert source_read.rows[0]["toolId"] == "payments.send"
+    assert source_read.rows[0]["externalExecutionReceipt"] == "unknown"
+
+    server_row = {
+        **_server_row(agent_id="runtime-agent-1"),
+        "canonical_agent_identity": True,
+        "canonical_agent_entity_id": AGENT,
+    }
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[server_row],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+                tool_calls=source_read,
+            ),
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["toolInvocationLinkage"]
+    assert linkage["state"] == "partial"
+    assert linkage["completeness"] == "unknown"
+    assert linkage["joinedExecutionToolCalls"][0]["executionId"] == "exec-1"
+    assert linkage["joinedExecutionToolCalls"][0]["toolId"] == "payments.send"
+    assert linkage["joinedExecutionToolCalls"][0]["authorityDecision"] == (
+        "not_established_by_tool_call_edge"
+    )
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "server_recorded_execution_tool_call_observation"
+    )
+    assert claim.domainSlotIds == ["tool_calls", "evidence_trace"]
+    assert claim.evidenceRefs[0].id == "lifecycle-edge-idempotency-1"
+    assert not [claim for claim in result.claims if "approval_chain" in claim.domainSlotIds]
+    assert not [claim for claim in result.claims if "risk_events" in claim.domainSlotIds]
+
+
+async def test_ambiguous_execution_actor_binding_does_not_join_tool_edges() -> None:
+    read = await RepositoryExecution360Source()._read_execution_tool_calls(
+        TENANT,
+        [
+            {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-1",
+                "execution_id": "exec-ambiguous",
+                "event_type": None,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": AGENT,
+            },
+            {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-2",
+                "execution_id": "exec-ambiguous",
+                "event_type": None,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": "agent-entity-2",
+            },
+        ],
+    )
+
+    assert read.available is True
+    assert read.scope_known is False
+    assert read.rows == []
+    assert read.reason == "execution_identity_ambiguous_for_tool_join"
 
 
 async def test_untrusted_tool_and_risk_ids_do_not_complete_execution_slots() -> None:
@@ -890,7 +1725,7 @@ async def test_untrusted_tool_and_risk_ids_do_not_complete_execution_slots() -> 
     interactions = next(section for section in result.sections if section.id == "interactions")
     assert interactions.content["toolInvocationLinkage"]["state"] == "unknown"
     assert interactions.content["toolInvocationLinkage"]["joinedExecutionToolCalls"] == []
-    assert interactions.content["riskEventLinkage"]["state"] == "unknown"
+    assert interactions.content["riskEventLinkage"]["state"] == "empty"
     assert interactions.content["riskEventLinkage"]["joinedExecutionRiskEvents"] == []
     serialized = str(result.model_dump(mode="json"))
     assert "spoofed-execution-join" not in serialized
@@ -1373,6 +2208,120 @@ async def test_repository_execution_adapter_joins_source_ids_to_canonical_agents
     assert foreign_execution.reason == "execution_subject_scope_unresolved"
 
 
+async def test_repository_execution_adapter_reads_exact_workflow_run_execution_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import actions.agent.execution360_provider as provider_module
+    import repositories.repos as repos_module
+
+    source_agent_id = "runtime-agent-workflow"
+    canonical_agent_id = "canonical-agent-workflow"
+    workflow_run_id = "workflow-run-exact"
+    execution_row = _server_row(agent_id=source_agent_id)
+    execution_row.update(
+        execution_id="execution-workflow-exact",
+        workflow_run_id=workflow_run_id,
+        workflow_run_invocation_ids=["invocation-workflow-exact"],
+        delegation_id=None,
+    )
+    invocation_fact = {
+        "tenant_id": TENANT,
+        "workflow_run_id": workflow_run_id,
+        "invocation_id": "invocation-workflow-exact",
+        "action_id": "execution-workflow-exact",
+        "agent_id": source_agent_id,
+        "observed_at": "2026-10-16T10:00:00+00:00",
+    }
+
+    class AgentConfigs:
+        async def find_by_id(self, agent_id):
+            assert agent_id == source_agent_id
+            return {
+                "tenant_id": TENANT,
+                "agent_id": source_agent_id,
+                "owner_entity_id": "owner-workflow",
+            }
+
+    class AgentExecutions:
+        async def find_many(self, *, filters, limit):
+            assert filters == {
+                "tenant_id": TENANT,
+                "workflow_run_id": workflow_run_id,
+            }
+            assert limit == 11
+            return [execution_row]
+
+    class Delegations:
+        async def find_by_id(self, delegation_id):
+            raise AssertionError("row has no delegation reference")
+
+    class Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            assert tenant_id == TENANT
+            return [], False
+
+    async def resolve_identity_map(tenant_id, source_agent_ids):
+        assert tenant_id == TENANT
+        if not source_agent_ids:
+            return {}, False, False
+        assert source_agent_ids == {source_agent_id}
+        return (
+            {
+                source_agent_id: {
+                    "agent_id": source_agent_id,
+                    "canonical_agent_entity_id": canonical_agent_id,
+                }
+            },
+            False,
+            False,
+        )
+
+    async def read_invocation_facts(tenant_id, requested_run_id, limit):
+        assert tenant_id == TENANT
+        assert requested_run_id == workflow_run_id
+        assert limit == 200
+        return ExecutionWorkflowRunInvocationRead(
+            rows=[invocation_fact], available=True, scope_known=True
+        )
+
+    monkeypatch.setattr(repos_module, "AgentConfigRepository", AgentConfigs)
+    monkeypatch.setattr(repos_module, "AgentExecutionRepository", AgentExecutions)
+    monkeypatch.setattr(repos_module, "DelegationRepository", Delegations)
+    monkeypatch.setattr(provider_module, "_resolve_agent_identity_map", resolve_identity_map)
+    monkeypatch.setattr(
+        provider_module,
+        "_read_workflow_run_invocation_facts",
+        read_invocation_facts,
+    )
+
+    source = RepositoryExecution360Source(graph_client=Graph())
+    read = await source.server_executions(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="workflow_run", id=workflow_run_id),
+        limit=10,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.agent_ids == (canonical_agent_id,)
+    assert [row["execution_id"] for row in read.rows] == ["execution-workflow-exact"]
+    assert read.rows[0]["workflow_run_id"] == workflow_run_id
+    assert read.rows[0]["canonical_agent_entity_id"] == canonical_agent_id
+    assert read.rows[0]["workflow_run_invocation_evidence_refs"][0]["id"] == (
+        "invocation-workflow-exact"
+    )
+
+    invocation_fact["action_id"] = "execution-from-another-action"
+    mismatched_link = await source.server_executions(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="workflow_run", id=workflow_run_id),
+        limit=10,
+    )
+    assert mismatched_link.rows == []
+    assert mismatched_link.scope_known is False
+    assert mismatched_link.reason == "workflow_run_execution_scope_mismatch"
+
+
 async def test_server_delegation_reference_joins_policy_log_to_tenant_grantee() -> None:
     row = _server_row()
     grant = {
@@ -1516,6 +2465,271 @@ async def test_authenticated_execution_principal_is_carried_into_frame_metadata(
     assert actor.executionPrincipal.kind == "human"
     assert actor.executionPrincipal.id == "human-principal-1"
     assert any(ref.source == "agent_executions" for ref in actor.evidenceRefs)
+
+
+async def test_execution_principal_resolves_only_through_active_tenant_human_identity() -> None:
+    from identity.identity.hashing import hash_value
+
+    principal_id = "human-principal-1"
+    canonical_human_id = "human-entity-1"
+    expected_hash = hash_value(principal_id, scope=f"user:{TENANT}")
+
+    class IdentityRepository:
+        async def find_aliases_by_signal(self, tenant_id, alias_type, alias_value_hash, *, limit):
+            assert tenant_id == TENANT
+            assert alias_value_hash == expected_hash
+            assert limit == 51
+            return [
+                {
+                    "id": "user-alias-1",
+                    "tenant_id": TENANT,
+                    "alias_type": "user_id",
+                    "alias_value_hash": expected_hash,
+                    "canonical_entity_id": "pre-merge-human-1",
+                    "confidence_tier": "deterministic",
+                    "last_seen_at": "2026-10-16T09:00:00+00:00",
+                }
+            ]
+
+        async def resolve_surviving_canonical_entity_id(
+            self, tenant_id, canonical_entity_id
+        ):
+            assert tenant_id == TENANT
+            assert canonical_entity_id == "pre-merge-human-1"
+            return canonical_human_id
+
+        async def get_subject_by_canonical_entity_id(self, tenant_id, canonical_entity_id):
+            assert tenant_id == TENANT
+            assert canonical_entity_id == canonical_human_id
+            return {
+                "id": "human-subject-1",
+                "tenant_id": TENANT,
+                "canonical_entity_id": canonical_human_id,
+                "entity_type": "human",
+                "status": "active",
+                "last_seen_at": "2026-10-16T09:01:00+00:00",
+            }
+
+    read = await _read_execution_principal_identities(
+        TENANT,
+        {principal_id},
+        repository=IdentityRepository(),
+    )
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is False
+    assert read.rows[0]["canonical_human_entity_id"] == canonical_human_id
+    assert {ref["source"] for ref in read.rows[0]["identity_evidence_refs"]} == {
+        "identity_aliases",
+        "identity_subjects",
+    }
+
+    server = ExecutionRead(
+        rows=[{**_server_row(), "initiating_principal_user_id": principal_id}],
+        available=True,
+        scope_known=True,
+        agent_ids=(AGENT,),
+        principal_identity_read=read,
+    )
+    source = FakeSource(
+        server=server,
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "canonically_resolved_execution_principal_identity"
+    )
+    assert claim.claimState == EpistemicStatus.RESOLVED
+    assert claim.domainSlotIds == ["actor_attribution", "evidence_trace"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "agent_executions",
+        "identity_aliases",
+        "identity_subjects",
+    }
+    state = next(section for section in result.sections if section.id == "state")
+    record = state.content["serverRecordedExecutions"][0]
+    assert record["canonicalInitiatingPrincipalHumanEntityId"] == canonical_human_id
+    assert record["initiatingPrincipalIdentityState"] == "resolved"
+
+
+@pytest.mark.parametrize("case", ["foreign_alias", "wrong_alias_hash", "inactive_subject", "non_human_subject"])
+async def test_principal_identity_reader_rejects_scope_and_subject_mismatches(case: str) -> None:
+    from identity.identity.hashing import hash_value
+
+    principal_id = "human-principal-1"
+    alias_hash = hash_value(principal_id, scope=f"user:{TENANT}")
+
+    class IdentityRepository:
+        async def find_aliases_by_signal(self, tenant_id, alias_type, alias_value_hash, *, limit):
+            alias_tenant = "foreign-tenant" if case == "foreign_alias" else TENANT
+            stored_hash = "different-hash" if case == "wrong_alias_hash" else alias_hash
+            return [
+                {
+                    "id": "user-alias-1",
+                    "tenant_id": alias_tenant,
+                    "alias_type": "user_id",
+                    "alias_value_hash": stored_hash,
+                    "canonical_entity_id": "human-entity-1",
+                    "confidence_tier": "deterministic",
+                }
+            ]
+
+        async def resolve_surviving_canonical_entity_id(self, tenant_id, canonical_entity_id):
+            return canonical_entity_id
+
+        async def get_subject_by_canonical_entity_id(self, tenant_id, canonical_entity_id):
+            return {
+                "id": "human-subject-1",
+                "tenant_id": TENANT,
+                "canonical_entity_id": canonical_entity_id,
+                "entity_type": "agent" if case == "non_human_subject" else "human",
+                "status": "inactive" if case == "inactive_subject" else "active",
+            }
+
+    read = await _read_execution_principal_identities(
+        TENANT,
+        {principal_id},
+        repository=IdentityRepository(),
+    )
+
+    assert read.available is True
+    assert read.scope_known is False
+    assert read.rows == []
+    assert read.reason == "principal_identity_scope_or_subject_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("identity_read", "expected_state", "expected_reason"),
+    [
+        (
+            ExecutionPrincipalIdentityRead(rows=[], available=True, scope_known=True),
+            "unresolved",
+            None,
+        ),
+        (
+            ExecutionPrincipalIdentityRead(
+                rows=[
+                    {
+                        "tenant_id": "foreign-tenant",
+                        "principal_user_id": "human-principal-1",
+                        "canonical_human_entity_id": "foreign-human",
+                        "identity_evidence_refs": [
+                            EvidenceRef(
+                                id="foreign-alias",
+                                type="entity",
+                                source="identity_aliases",
+                            ).model_dump(mode="json"),
+                            EvidenceRef(
+                                id="foreign-subject",
+                                type="entity",
+                                source="identity_subjects",
+                            ).model_dump(mode="json"),
+                        ],
+                    }
+                ],
+                available=True,
+                scope_known=True,
+            ),
+            "unknown",
+            "principal_identity_scope_or_evidence_mismatch",
+        ),
+        (
+            ExecutionPrincipalIdentityRead(
+                rows=[], available=False, scope_known=False, reason="identity_store_unavailable"
+            ),
+            "unknown",
+            "identity_store_unavailable",
+        ),
+    ],
+)
+async def test_execution_principal_identity_absence_mismatch_or_outage_fails_closed(
+    identity_read: ExecutionPrincipalIdentityRead,
+    expected_state: str,
+    expected_reason: str | None,
+) -> None:
+    principal_id = "human-principal-1"
+    server = ExecutionRead(
+        rows=[{**_server_row(), "initiating_principal_user_id": principal_id}],
+        available=True,
+        scope_known=True,
+        agent_ids=(AGENT,),
+        principal_identity_read=identity_read,
+    )
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=server,
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    record = state.content["serverRecordedExecutions"][0]
+    assert record["initiatingPrincipalIdentityState"] == expected_state
+    assert record["canonicalInitiatingPrincipalHumanEntityId"] is None
+    assert not any(
+        claim.kind == "canonically_resolved_execution_principal_identity"
+        for claim in result.claims
+    )
+    if expected_reason:
+        assert expected_reason in result.degradedReasons
+
+
+async def test_execution_principal_identity_ambiguity_does_not_select_a_human() -> None:
+    def _identity_row(alias_id: str, canonical_human_id: str) -> dict:
+        return {
+            "tenant_id": TENANT,
+            "principal_user_id": "human-principal-1",
+            "canonical_human_entity_id": canonical_human_id,
+            "identity_evidence_refs": [
+                EvidenceRef(
+                    id=alias_id,
+                    type="entity",
+                    source="identity_aliases",
+                ).model_dump(mode="json"),
+                EvidenceRef(
+                    id=f"subject-{canonical_human_id}",
+                    type="entity",
+                    source="identity_subjects",
+                ).model_dump(mode="json"),
+            ],
+        }
+
+    server = ExecutionRead(
+        rows=[{**_server_row(), "initiating_principal_user_id": "human-principal-1"}],
+        available=True,
+        scope_known=True,
+        agent_ids=(AGENT,),
+        principal_identity_read=ExecutionPrincipalIdentityRead(
+            rows=[
+                _identity_row("alias-human-1", "human-entity-1"),
+                _identity_row("alias-human-2", "human-entity-2"),
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=server,
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    record = state.content["serverRecordedExecutions"][0]
+    assert record["initiatingPrincipalIdentityState"] == "ambiguous"
+    assert record["canonicalInitiatingPrincipalHumanEntityId"] is None
+    assert "principal_identity_ambiguous" in result.degradedReasons
+    assert not any(
+        claim.kind == "canonically_resolved_execution_principal_identity"
+        for claim in result.claims
+    )
 
 
 async def test_principal_stays_unknown_when_any_complete_execution_lacks_attribution() -> None:
@@ -1702,6 +2916,542 @@ async def test_provider_drops_cross_tenant_rows_and_unresolved_authority() -> No
     )
 
 
+async def test_execution_subject_joins_canonical_risk_signal_with_evidence() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[_execution_risk_signal_row()],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.risk_event_calls == [(TENANT, ("exec-1",), 50)]
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "partial"
+    assert linkage["completeness"] == "bounded_recorded_execution_subject_signals_and_assessments"
+    assert linkage["producerCoverage"] == {
+        "state": "unknown",
+        "reason": "execution_risk_signal_producer_inventory_not_connected",
+    }
+    assert linkage["riskAssessmentCoverage"] == {
+        "state": "not_read",
+        "sourceReadState": "not_read",
+        "authority": "risk_assessments",
+        "reason": None,
+        "scopeKnown": False,
+        "completeness": "exact_execution_subject_snapshots_only_history_and_producer_coverage_unknown",
+        "assessmentCount": None,
+        "joinedExecutionRiskAssessments": [],
+        "evidenceRefs": [],
+        "truncated": False,
+    }
+    assert linkage["joinedExecutionRiskEvents"] == [
+        {
+            "executionId": "exec-1",
+            "signalId": "risk-exec-1",
+            "riskDimension": "agentic",
+            "source": "aether.fraud.detector.agentic",
+            "detectorVersion": "agentic-risk-v2",
+            "claimState": "inferred",
+            "confidence": 0.82,
+            "score": 0.64,
+            "value": None,
+            "observedAt": "2026-10-16T10:00:01+00:00",
+            "evidenceRefs": [
+                {
+                    "id": "evidence-risk-exec-1",
+                    "type": "model_output",
+                    "source": "aether.fraud.detector.agentic",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                }
+            ],
+        }
+    ]
+    assert linkage["freshness"] == {
+        "state": "unknown",
+        "latestObservedAt": "2026-10-16T10:00:01+00:00",
+        "reason": "no_execution_risk_freshness_threshold_is_configured",
+    }
+    assert linkage["evidenceRefs"][0]["id"] == "evidence-risk-exec-1"
+    assert any(
+        ref["id"] == "evidence-risk-exec-1"
+        for ref in result.sections[0].content["evidence"]
+    )
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "execution_subject_risk_signal_context"
+    )
+    assert claim.subject == request.subject
+    assert claim.claimState == EpistemicStatus.INFERRED
+    assert claim.domainSlotIds == ["risk_events", "evidence_trace"]
+    assert claim.evidenceRefs[0].id == "evidence-risk-exec-1"
+
+
+async def test_execution_risk_assessment_snapshot_join_has_record_evidence() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[],
+            available=True,
+            scope_known=True,
+            assessment_read=ExecutionRiskAssessmentRead(
+                rows=[_execution_risk_assessment_row()],
+                available=True,
+                scope_known=True,
+            ),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assessment_coverage = linkage["riskAssessmentCoverage"]
+    assert linkage["state"] == "partial"
+    assert assessment_coverage["state"] == "partial"
+    assert assessment_coverage["sourceReadState"] == "available"
+    assert assessment_coverage["scopeKnown"] is True
+    assert assessment_coverage["assessmentCount"] == 1
+    assessment = assessment_coverage["joinedExecutionRiskAssessments"][0]
+    assert assessment["executionId"] == "exec-1"
+    assert assessment["assessmentId"] == "assessment-exec-1"
+    assert assessment["policyId"] == "risk-policy-v2"
+    assert assessment["claimState"] == "inferred"
+    assert assessment["components"] == [
+        {
+            "dimension": "agentic",
+            "state": "observed",
+            "score": 0.61,
+            "claimState": "inferred",
+            "confidence": 0.84,
+            "evidenceRefs": [
+                {
+                    "id": "evidence-assessment-exec-1",
+                    "type": "model_output",
+                    "source": "aether.risk.assessment.agentic",
+                    "observedAt": "2026-10-16T10:00:02+00:00",
+                }
+            ],
+        }
+    ]
+    assert assessment["evidenceRefs"][0] == {
+        "id": "assessment-exec-1",
+        "type": "model_output",
+        "source": "risk_assessments",
+        "observedAt": "2026-10-16T10:00:02+00:00",
+        "uri": "store://risk_assessments/tenant-execution360%3Aassessment-exec-1",
+    }
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "execution_subject_risk_assessment_snapshot"
+    )
+    assert claim.subject == request.subject
+    assert claim.claimState == EpistemicStatus.INFERRED
+    assert claim.domainSlotIds == ["risk_events", "evidence_trace"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "risk_assessments",
+        "aether.risk.assessment.agentic",
+    }
+    evidence_section = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        ref["source"] == "risk_assessments" and ref["id"] == "assessment-exec-1"
+        for ref in evidence_section.content["evidence"]
+    )
+
+
+async def test_execution_risk_assessment_is_retained_when_signal_read_fails() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[],
+            available=False,
+            scope_known=False,
+            reason="execution_risk_signal_source_unavailable",
+            assessment_read=ExecutionRiskAssessmentRead(
+                rows=[_execution_risk_assessment_row()],
+                available=True,
+                scope_known=True,
+            ),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["sourceReadState"] == "unavailable"
+    assessment_coverage = linkage["riskAssessmentCoverage"]
+    assert assessment_coverage["state"] == "partial"
+    assert assessment_coverage["assessmentCount"] == 1
+    assert assessment_coverage["joinedExecutionRiskAssessments"][0]["assessmentId"] == (
+        "assessment-exec-1"
+    )
+
+
+async def test_agent_subject_joins_risk_signals_only_to_admitted_execution_ids() -> None:
+    request = _request()
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row(), {**_server_row(), "execution_id": "exec-2"}],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[
+                _execution_risk_signal_row(),
+                _execution_risk_signal_row(signal_id="risk-exec-2", subject_id="exec-2"),
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.risk_event_calls == [(TENANT, ("exec-1", "exec-2"), 50)]
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "partial"
+    assert [row["executionId"] for row in linkage["joinedExecutionRiskEvents"]] == [
+        "exec-1",
+        "exec-2",
+    ]
+    risk_claims = [
+        claim
+        for claim in result.claims
+        if claim.kind == "execution_subject_risk_signal_context"
+    ]
+    assert all(claim.subject == request.subject for claim in risk_claims)
+    assert all(
+        "exec-1" in claim.claims[0] or "exec-2" in claim.claims[0]
+        for claim in risk_claims
+    )
+
+
+async def test_execution_risk_event_reader_drops_wrong_tenant_or_subject_and_degrades() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[
+                _execution_risk_signal_row(),
+                _execution_risk_signal_row(signal_id="wrong-subject", subject_id="exec-other"),
+                _execution_risk_signal_row(signal_id="wrong-tenant", tenant_id="tenant-other"),
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["joinedExecutionRiskEvents"][0]["signalId"] == "risk-exec-1"
+    serialized = result.model_dump_json()
+    assert "wrong-subject" not in serialized
+    assert "wrong-tenant" not in serialized
+    assert not any(
+        "risk_events" in claim.domainSlotIds
+        for claim in result.claims
+        if claim.kind != "execution_subject_risk_signal_context"
+    )
+
+
+async def test_execution_risk_signal_requires_evidence_and_aware_time_for_window() -> None:
+    request = _request(
+        subject=ProjectionSubject(kind="execution", id="exec-1"),
+        timeRange=TimeRangeFilter(
+            from_="2026-10-16T10:00:00+00:00",
+            to="2026-10-16T10:00:03+00:00",
+        ),
+    )
+    no_evidence = _execution_risk_signal_row(signal_id="no-evidence")
+    no_evidence["evidence_refs"] = []
+    naive_time = _execution_risk_signal_row(signal_id="naive-time", observed_at="2026-10-16T10:00:01")
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[no_evidence, naive_time],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["joinedExecutionRiskEvents"] == []
+    assert linkage["evidenceRefs"] == []
+    serialized = result.model_dump_json()
+    assert "no-evidence" not in serialized
+    assert "naive-time" not in serialized
+
+
+async def test_as_of_execution_projection_does_not_read_current_risk_signals() -> None:
+    request = _request(
+        subject=ProjectionSubject(kind="execution", id="exec-1"),
+        asOf="2026-10-16T10:00:00+00:00",
+    )
+    source = FakeSource()
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.risk_event_calls == []
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "unknown"
+    assert linkage["sourceReadState"] == "not_read"
+    assert linkage["joinedExecutionRiskEvents"] == []
+    assert linkage["reason"] == "temporal_anchor_not_reconstructable_from_current_sources"
+
+
+async def test_repository_risk_reader_uses_canonical_exact_tenant_execution_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [
+                _execution_risk_signal_row(),
+                _execution_risk_signal_row(signal_id="other-subject", subject_id="exec-2"),
+            ]
+
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert calls == [(TENANT, "execution", "exec-1", 11)]
+    assert result.available is True
+    assert result.scope_known is False
+    assert [row["signal_id"] for row in result.rows] == ["risk-exec-1"]
+    assert result.reason == "execution_risk_signal_scope_mismatch"
+
+
+async def test_repository_risk_reader_uses_exact_tenant_execution_subjects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            signal = (
+                _execution_risk_signal_row()
+                if subject_id == "exec-1"
+                else _execution_risk_signal_row(signal_id="risk-exec-2", subject_id="exec-2")
+            )
+            return [
+                {
+                    **signal,
+                    "id": f"{tenant_id}:{signal['signal_id']}",
+                    "created_at": "2026-10-16T10:00:00+00:00",
+                    "updated_at": "2026-10-16T10:00:00+00:00",
+                }
+            ]
+
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1", "exec-2"),
+        limit=10,
+    )
+
+    assert calls == [
+        (TENANT, "execution", "exec-1", 11),
+        (TENANT, "execution", "exec-2", 11),
+    ]
+    assert result.available is True
+    assert result.scope_known is True
+    assert [row["signal_id"] for row in result.rows] == ["risk-exec-1", "risk-exec-2"]
+    assert all("id" not in row and "created_at" not in row for row in result.rows)
+    assert result.truncated is False
+    assert result.reason is None
+
+
+async def test_repository_risk_assessment_reader_uses_exact_tenant_execution_subjects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [
+                _execution_risk_assessment_row(),
+                _execution_risk_assessment_row(
+                    assessment_id="wrong-subject",
+                    subject_id="exec-other",
+                ),
+                _execution_risk_assessment_row(
+                    assessment_id="wrong-tenant",
+                    tenant_id="tenant-other",
+                ),
+            ]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert calls == [(TENANT, "execution", "exec-1", 11)]
+    assert result.available is True
+    assert result.assessment_read is not None
+    assert result.assessment_read.available is True
+    assert result.assessment_read.scope_known is False
+    assert [row["assessment_id"] for row in result.assessment_read.rows] == ["assessment-exec-1"]
+    assert result.assessment_read.reason == "execution_risk_assessment_scope_mismatch"
+
+
+async def test_repository_risk_assessment_read_survives_signal_source_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            raise RuntimeError("signal table unavailable")
+
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return [_execution_risk_assessment_row()]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert result.available is False
+    assert result.reason == "execution_risk_signal_source_unavailable"
+    assert result.rows == []
+    assert result.assessment_read is not None
+    assert result.assessment_read.available is True
+    assert result.assessment_read.scope_known is True
+    assert [row["assessment_id"] for row in result.assessment_read.rows] == [
+        "assessment-exec-1"
+    ]
+
+
+async def test_repository_risk_reader_bounds_execution_subject_fanout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+    assessment_calls: list[tuple[str, str, str, int]] = []
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return []
+
+    class RiskAssessmentRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            assessment_calls.append((tenant_id, subject_kind, subject_id, limit))
+            return []
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", RiskAssessmentRepo)
+    execution_ids = tuple(f"exec-{index}" for index in range(501))
+
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=execution_ids,
+        limit=50,
+    )
+
+    assert len(calls) == 500
+    assert [subject_id for _, _, subject_id, _ in calls] == sorted(execution_ids)[:500]
+    assert all(limit == 2 for _, _, _, limit in calls)
+    assert all(tenant_id == TENANT and kind == "execution" for tenant_id, kind, _, _ in calls)
+    assert result.available is True
+    assert result.scope_known is True
+    assert result.truncated is True
+    assert result.reason == "execution_risk_signal_read_truncated"
+    assert result.rows == []
+    assert len(assessment_calls) == 500
+    assert [subject_id for _, _, subject_id, _ in assessment_calls] == sorted(execution_ids)[:500]
+    assert all(limit == 2 for _, _, _, limit in assessment_calls)
+    assert result.assessment_read is not None
+    assert result.assessment_read.truncated is True
+
+
 async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None:
     request = _request()
     result = await Execution360Provider(
@@ -1809,8 +3559,22 @@ async def test_window_mode_is_supported_and_applies_explicit_event_time_bounds()
 
 
 async def test_frame_actor_metadata_uses_execution_evidence_and_keeps_decision_scoped() -> None:
+    row = _server_row()
+    row["created_at"] = "2026-10-16T10:00:00.500000+00:00"
+    row["policy_log"]["delegation_check"]["evaluated_at"] = (
+        "2026-10-16T10:00:00.250000+00:00"
+    )
     projection_request = _request()
-    result = await Execution360Provider(FakeSource()).project(
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[row],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            )
+        )
+    ).project(
         projection_request,
         await _context(projection_request),
     )
@@ -1831,6 +3595,7 @@ async def test_frame_actor_metadata_uses_execution_evidence_and_keeps_decision_s
     assert authority is not None
     assert authority.outcome == "allow"
     assert authority.delegationRefs == ["deleg-1"]
+    assert authority.decidedAt == "2026-10-16T10:00:00.250000+00:00"
     assert authority.reasonCodes == ["recorded_execution_scoped_decision_not_standing_authority"]
     assert authority.evidenceRefs
     assert metadata["actor_attribution"].delegator is not None
@@ -1903,6 +3668,214 @@ async def test_recorded_denial_without_matching_grant_reaches_agent_frame() -> N
     assert authority.executionRefs == ["exec-1"]
     assert authority.evidenceRefs[0].id == "exec-1"
     assert authority.reasonCodes == ["recorded_delegation_denial_without_matching_grant"]
+
+
+async def test_execution_authority_check_exposes_exact_recorded_decision_with_unknown_freshness() -> None:
+    row = {
+        **_server_row(),
+        "created_at": "2026-10-16T10:00:00.500000+00:00",
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[row],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    assert authority["state"] == "partial"
+    assert authority["scopeKnown"] is True
+    assert authority["coverage"] == "recorded_delegation_engine_decisions_only"
+    assert len(authority["joinedActionScopedDecisions"]) == 1
+    decision = authority["joinedActionScopedDecisions"][0]
+    assert decision["tenantId"] == TENANT
+    assert decision["executionId"] == "exec-1"
+    assert decision["action"] == "transfer"
+    assert decision["resource"] == "account:4"
+    assert decision["decision"] == "allow"
+    assert decision["delegationId"] == "deleg-1"
+    assert decision["authority"] == "agent_executions.policy_log.delegation_check"
+    assert decision["lifecycleTimestamps"]["recordCreatedAt"] == (
+        "2026-10-16T10:00:00.500000+00:00"
+    )
+    assert decision["decisionTime"] == {
+        "state": "unknown",
+        "reason": "delegation_decision_timestamp_not_persisted",
+    }
+    assert decision["evidenceRef"]["source"] == "agent_executions"
+    assert decision["evidenceRef"]["id"] == "exec-1"
+    assert authority["effectiveAuthorization"]["state"] == "unknown"
+    assert authority["freshness"]["state"] == "unknown"
+    assert authority["temporalScope"]["decisionTimestamp"] == "not_persisted"
+
+    claim = next(
+        claim for claim in result.claims if claim.kind == "server_recorded_delegation_decision"
+    )
+    assert claim.domainSlotIds is not None
+    assert {"authority_check", "authority_envelope"} <= set(claim.domainSlotIds)
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        ref["id"] == "exec-1" and ref["source"] == "agent_executions"
+        for ref in evidence.content["evidence"]
+    )
+
+
+async def test_execution_authority_check_exposes_persisted_evaluation_timestamp() -> None:
+    row = {
+        **_server_row(),
+        "created_at": "2026-10-16T10:00:03+00:00",
+        "policy_log": {
+            "delegation_check": {
+                "allowed": True,
+                "delegation_id": "deleg-1",
+                "evaluated_at": "2026-10-16T09:59:59.750000Z",
+            }
+        },
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[row],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    decision = authority["joinedActionScopedDecisions"][0]
+    assert decision["decisionTime"] == {
+        "state": "recorded",
+        "evaluatedAt": "2026-10-16T09:59:59.750000+00:00",
+        "source": "agent_executions.policy_log.delegation_check.evaluated_at",
+    }
+    assert authority["temporalScope"]["decisionTimestamp"] == "persisted"
+    assert authority["freshness"]["state"] == "unknown"
+    assert authority["effectiveAuthorization"]["state"] == "unknown"
+
+
+async def test_execution_authority_check_rejects_decision_timestamp_after_record_creation() -> None:
+    row = {
+        **_server_row(),
+        "created_at": "2026-10-16T10:00:03+00:00",
+        "policy_log": {
+            "delegation_check": {
+                "allowed": True,
+                "delegation_id": "deleg-1",
+                "evaluated_at": "2026-10-16T10:00:04+00:00",
+            }
+        },
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[row],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    decision = authority["joinedActionScopedDecisions"][0]
+    assert authority["state"] == "degraded"
+    assert decision["decisionTime"] == {
+        "state": "unknown",
+        "reason": "delegation_decision_timestamp_after_execution_record",
+    }
+    assert authority["temporalScope"]["decisionTimestamp"] == "not_persisted"
+
+
+async def test_execution_authority_check_rejects_ambiguous_or_malformed_decision_rows() -> None:
+    duplicate = {**_server_row(), "execution_id": "exec-1"}
+    duplicate_source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row(), duplicate],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    duplicate_result = await Execution360Provider(duplicate_source).project(
+        request, await _context(request)
+    )
+    duplicate_state = next(
+        section for section in duplicate_result.sections if section.id == "state"
+    )
+    duplicate_authority = duplicate_state.content["authorityCheck"]
+    assert duplicate_authority["state"] == "degraded"
+    assert duplicate_authority["ambiguousExecutionIds"] == ["exec-1"]
+    assert duplicate_authority["joinedActionScopedDecisions"] == []
+
+    malformed_rows = []
+    malformed_decision = _server_row()
+    malformed_decision["policy_log"]["delegation_check"]["allowed"] = "true"
+    malformed_rows.append(malformed_decision)
+    malformed_policy_log = _server_row()
+    malformed_policy_log["policy_log"] = "must-not-be-treated-as-an-empty-decision"
+    malformed_rows.append(malformed_policy_log)
+
+    for malformed in malformed_rows:
+        malformed_source = FakeSource(
+            server=ExecutionRead(
+                rows=[malformed],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            ),
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+        malformed_result = await Execution360Provider(malformed_source).project(
+            request, await _context(request)
+        )
+        malformed_state = next(
+            section for section in malformed_result.sections if section.id == "state"
+        )
+        malformed_authority = malformed_state.content["authorityCheck"]
+        assert malformed_authority["state"] == "degraded"
+        assert malformed_authority["joinedActionScopedDecisions"] == []
+        assert malformed_authority["reason"] == (
+            "execution_authority_record_scope_or_evidence_ambiguous"
+        )
+
+
+async def test_execution_authority_window_uses_lifecycle_time_only() -> None:
+    request = _request(
+        timeRange=TimeRangeFilter(
+            from_="2026-10-16T10:00:01+00:00",
+            to="2026-10-16T10:00:03+00:00",
+        )
+    )
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    assert authority["temporalScope"]["selection"] == "execution_lifecycle_time_window"
+    assert authority["temporalScope"]["decisionTimestamp"] == "not_persisted"
+    assert authority["joinedActionScopedDecisions"][0]["decisionTime"]["state"] == "unknown"
 
 
 async def test_frame_keeps_same_outcome_decisions_separate_by_action_and_resource() -> None:
@@ -1987,9 +3960,12 @@ async def test_frame_does_not_emit_allow_when_recorded_action_scope_is_missing()
     assert authority is not None
     assert authority.outcome == "unknown"
     assert authority.actionRefs == []
-    assert authority.resourceRefs == ["account:4"]
-    assert authority.executionRefs == ["exec-1"]
-    assert authority.reasonCodes == ["recorded_execution_decision_missing_action_scope"]
+    assert authority.resourceRefs == []
+    assert authority.executionRefs == []
+    assert authority.reasonCodes == ["no_action_scoped_decision_available"]
+    state = next(section for section in result.sections if section.id == "state")
+    assert state.content["authorityCheck"]["state"] == "degraded"
+    assert state.content["authorityCheck"]["joinedActionScopedDecisions"] == []
 
 
 async def test_frame_delegation_chain_requires_aware_validity_and_nonempty_scope() -> None:
@@ -2646,3 +4622,68 @@ async def test_execution_provider_surfaces_agent_episode_context_and_historical_
     assert historical_section.content["reason"] == (
         "temporal_anchor_not_reconstructable_from_current_sources"
     )
+
+
+@pytest.mark.asyncio
+async def test_entity_observed_execution_read_exposes_owner_roster_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import actions.agent.deployments as deployment_module
+    import actions.agent.identity_resolution as identity_module
+    import actions.agent_marketplace.authority as authority_module
+    import actions.agent_marketplace.identity_binding as binding_module
+    import dependencies.providers as providers_module
+    import repositories.repos as repos_module
+
+    owner_id = "owner-with-many-agents"
+    agent_ids = [f"agent-{index}" for index in range(201)]
+
+    class AgentConfigs:
+        async def list_for_owner(self, owner_entity_id, *, limit, tenant_id):
+            assert owner_entity_id == owner_id
+            assert limit == 201
+            assert tenant_id == TENANT
+            return [
+                {"tenant_id": TENANT, "owner_entity_id": owner_id, "agent_id": agent_id}
+                for agent_id in agent_ids
+            ]
+
+    class Analytics:
+        def __init__(self, cache):
+            pass
+
+        async def query_silver(self, table, filters, *, limit):
+            assert filters == {"tenant_id": TENANT}
+            return []
+
+    async def resolve(tenant_id, source_agent_ids, **kwargs):
+        assert tenant_id == TENANT
+        assert len(source_agent_ids) == 200
+        return SimpleNamespace(
+            rows=[
+                {"agent_id": agent_id, "canonical_agent_entity_id": agent_id}
+                for agent_id in source_agent_ids
+            ],
+            scope_mismatch=False,
+            truncated=False,
+        )
+
+    monkeypatch.setattr(repos_module, "AgentConfigRepository", AgentConfigs)
+    monkeypatch.setattr(repos_module, "AnalyticsRepository", Analytics)
+    monkeypatch.setattr(identity_module, "resolve_agent_identities", resolve)
+    monkeypatch.setattr(deployment_module, "get_deployment_repository", lambda: object())
+    monkeypatch.setattr(binding_module, "AgentDeploymentIdentityBindingRepository", object)
+    monkeypatch.setattr(repos_module, "EntityRepository", object)
+    monkeypatch.setattr(authority_module, "AgentRunAuthorityResolver", object)
+    monkeypatch.setattr(providers_module, "get_cache", lambda: object())
+
+    result = await RepositoryExecution360Source().observed_facts(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="entity", id=owner_id),
+        limit=10,
+    )
+
+    assert result.available is True
+    assert result.scope_known is False
+    assert result.truncated is True
+    assert result.reason == "owner_agent_roster_read_truncated"

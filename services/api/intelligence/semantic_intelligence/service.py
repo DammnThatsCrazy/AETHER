@@ -414,6 +414,7 @@ class SemanticIntelligenceService:
             source_event_id=str(
                 payload.get("source_event_id") or payload.get("event_id") or "event_unknown"
             ),
+            source_namespace=payload.get("source_namespace"),
             source_type=str(payload.get("source_type") or payload.get("event_type") or "event"),
             actor_ref=actor_ref,
             actor_type=SubjectType.PROFILE,

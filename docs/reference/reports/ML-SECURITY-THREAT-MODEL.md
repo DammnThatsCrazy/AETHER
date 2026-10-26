@@ -14,7 +14,7 @@ source_hashes:
   "services/api/governance/model_extraction_defense/__init__.py": "sha256:0c26347a6e4f591d1d55cb315b0543fb89854b98acaf4ac8bf3f729bf2d0b8c1"
   "services/api/governance/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
   "services/api/governance/model_extraction_defense/rate_limiter.py": "sha256:a2429c3ad4dd0198764124b8a4c5e1d7a9046eca740b9fe983564b4c6d80c7a8"
-  "services/api/intelligence/ml_serving/routes.py": "sha256:b5c5842465c2a11827c297c27dc3f154af4a09669ca199e1eab8aaa12ae1252d"
+  "services/api/intelligence/ml_serving/routes.py": "sha256:603a29cc3b129a03ea6a1906b76c9a6b778f52ff6f2fc715733fd8522b58a5f5"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/serving/src/api.py": "sha256:6f4245be3d28dd75a1ba1495252ec6418cd66e28b13d7f2de9c1e26fe6443147"
 ---
@@ -243,6 +243,7 @@ Additive controls that harden the data-provenance surface (see
 | **TrainingDataGate** — consent-scoped admission: quarantines data collected under non-trainable purposes, purposes requiring a separate training opt-in, and unconsented identity-derived labels | T6 Data Poisoning / unlawful training data |
 | **Promotion governance gate** — `artifact_registry.promote_artifact` blocks staging/promotion when a required governance artifact (model card, dataset card, privacy review, training manifest, bias audit) is missing, and honors `production_promotion_allowed` | T2 / T6 (unreviewed model reaching production) |
 | **InferencePolicyGate** — every inference records a `serve_inference` consent PolicyDecision in the shared audit ledger; fail-closed under `ML_INFERENCE_POLICY_ENFORCE` or a `fail_closed_required` model | Unconsented inference / missing audit evidence |
+| **Profile360 future-state admission** — the backend persists a model output only with an approved artifact, allowed policy decision, explicit versioned state and validity interval, and exact source-event evidence; ordinary inference results remain unpromoted | Unsupported forecast promotion / missing provenance |
 
 Enforced in CI by `scripts/validate_model_governance.py` and
 `scripts/validate_ml_registry.py`.

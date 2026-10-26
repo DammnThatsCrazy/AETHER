@@ -16,8 +16,10 @@ authenticate → verify → validate → dedupe → durable write → acknowledg
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any, Optional
 
+from shared.common.common import BadRequestError
 from shared.logger.logger import get_logger, metrics
 from journeys.comms.contracts import COMMUNICATION_EVENT_TYPES
 
@@ -253,6 +255,71 @@ async def _ingest_communication(
         "schema_version": "1.0.0",
         "source": "connector",
     }
+    participant_roster = data.get("participant_roster")
+    participant_roster_authoring = data.get("participant_roster_authoring")
+    participant_authoring_context = None
+    if participant_roster is not None:
+        from journeys.communication360.contracts import ParticipantRosterAssertion
+        from journeys.communication360.participant_writer import ParticipantBindingAuthoringContext
+
+        try:
+            participant_roster = ParticipantRosterAssertion.model_validate(participant_roster)
+        except Exception as exc:  # noqa: BLE001 - contract failures do not reach Bronze
+            raise BadRequestError("participant roster does not match the typed contract") from exc
+        raw_event_id = data.get("external_id")
+        raw_occurred_at = data.get("occurred_at")
+        if not isinstance(raw_event_id, str) or not raw_event_id.strip():
+            raise BadRequestError("participant roster events require external_id")
+        if (
+            not isinstance(raw_occurred_at, str)
+            or not raw_occurred_at.strip()
+        ):
+            raise BadRequestError("participant roster events require occurred_at")
+        try:
+            parsed_occurred_at = datetime.fromisoformat(
+                raw_occurred_at.strip().replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise BadRequestError("participant roster occurred_at must include an ISO timestamp") from exc
+        if parsed_occurred_at.tzinfo is None or parsed_occurred_at.utcoffset() is None:
+            raise BadRequestError("participant roster occurred_at must include a timezone")
+        if data.get("source") and str(data["source"]).strip() != str(provider).strip():
+            raise BadRequestError("participant roster provider namespace does not match source")
+        if participant_roster.provider_account_id != str(provider_account_id).strip():
+            raise BadRequestError("participant roster provider account does not match event account")
+        if not isinstance(participant_roster_authoring, dict):
+            raise BadRequestError("participant roster lacks verified authoring context")
+        try:
+            participant_authoring_context = ParticipantBindingAuthoringContext(
+                actor_id=str(participant_roster_authoring["actor_id"]),
+                credential_class=str(participant_roster_authoring["credential_class"]),
+                signature_verified=participant_roster_authoring["signature_verified"] is True,
+                authentication_method=str(
+                    participant_roster_authoring["authentication_method"]
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise BadRequestError("participant roster lacks verified authoring context") from exc
+        if (
+            not participant_authoring_context.signature_verified
+            or participant_authoring_context.authentication_method != "tenant_webhook_hmac"
+            or not participant_authoring_context.actor_id.strip()
+            or not participant_authoring_context.credential_class.strip()
+        ):
+            raise BadRequestError("participant roster lacks verified authoring context")
+        # Retain the typed assertion and route-created source-authentication
+        # envelope in Bronze so a retry can reproduce the same authoring
+        # decision. The roster contract contains metadata-only identifiers;
+        # message content remains outside this fact path.
+        normalized["participantRoster"] = participant_roster.model_dump(
+            mode="json", exclude_none=True
+        )
+        normalized["participantRosterAuthoring"] = {
+            "actor_id": participant_authoring_context.actor_id,
+            "credential_class": participant_authoring_context.credential_class,
+            "signature_verified": True,
+            "authentication_method": "tenant_webhook_hmac",
+        }
 
     from repositories.lake import BronzeRepository
 
@@ -267,6 +334,29 @@ async def _ingest_communication(
         entity_type="user",
         tenant_id=tenant_id,
     )
+
+    if participant_roster is not None:
+        # The route only adds this authoring envelope after verifying the
+        # tenant webhook HMAC. Missing or malformed context fails closed. The
+        # roster write follows consent and durable Bronze, but precedes bus
+        # publication; deterministic fact keys make client retries idempotent.
+        from journeys.communication360.participant_writer import ParticipantBindingWriter
+
+        await ParticipantBindingWriter().write_roster(
+            tenant_id=tenant_id,
+            provider=str(provider),
+            event_id=event_id,
+            event_type=event_type,
+            occurred_at=str(data.get("occurred_at") or ""),
+            roster=participant_roster,
+            authoring_context=participant_authoring_context,
+            policy_context={
+                "consent_receipt_id": receipt_id if consent_recorded else None,
+                "consent_authority": (
+                    "server_consent_authority" if consent_recorded else None
+                ),
+            },
+        )
 
     try:
         from dependencies.providers import get_registry

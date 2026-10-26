@@ -22,8 +22,8 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
   "services/api/graph/risk_overlay/": "sha256:0e4fa40ecad53abcac06d3d843d1044efff9226aa78ccef901ea0af44684a9a3"
-  "services/api/intelligence/fraud_networks/": "sha256:07bdba9019053a0b624c232e43b96d9ef9fa4ff72c8b5a6c3ad45a9556a4c596"
-  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
+  "services/api/intelligence/fraud_networks/": "sha256:d5e8c0a0e46b89c971588b052c48eb357e6187f5d10b5863f902b1a5d77a4240"
+  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
   "services/api/value/flow_trace/": "sha256:e91b3edfb7d6e7a8a0f89951a87f01491a52a155fe5fca8911abc7b5aa94279f"
 ---
 
@@ -106,6 +106,12 @@ both network and identity-binding evidence. Unresolved, ambiguous, truncated,
 or cross-tenant agent mappings are omitted. The handoff adds risk observability;
 it does not establish delegation authority, causal contagion, or verified
 execution, and a Risk360 write failure does not fail the fraud-network build.
+The identity binding must also have one consistent, valid timezone-aware
+`identity_bound_at` no later than the detector observation time. Missing,
+malformed, conflicting, or future binding times are omitted so a current
+identity binding cannot retroactively attribute an earlier detector result.
+Persisted binding timestamps may be timezone-aware datetime values or ISO 8601
+strings; naive values in either form cannot establish the historical join.
 
 ---
 

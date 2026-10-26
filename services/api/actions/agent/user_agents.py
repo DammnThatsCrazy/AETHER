@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from shared.common.common import APIResponse, BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from shared.events.events import Event, EventEnvelopeV2, EventProducer, Topic
@@ -85,12 +86,208 @@ class AgentExecute(BaseModel):
     action: str = Field(..., min_length=1)
     resource: str = Field(..., min_length=1)
     amount: Optional[str] = None
+    approval_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    # Optional stable execution ID. A workflow link is accepted only when the
+    # canonical AI invocation fact explicitly carries this value as action_id.
+    execution_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    # This is a caller-reported association with a registered definition,
+    # never evidence that the definition's triggers or steps executed.
+    workflow_definition_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    workflow_definition_revision: Optional[int] = Field(default=None, ge=1)
+    workflow_definition_digest: Optional[str] = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
     payload: dict[str, Any] = Field(default_factory=dict)
     triggered_by_event_id: Optional[str] = None
     # Optional: if the agent already produced reasoning/confidence at the
     # caller layer, pass it through so it lands on the execution record.
     reasoning: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def complete_workflow_definition_reference(self) -> "AgentExecute":
+        reference = (
+            self.workflow_definition_id,
+            self.workflow_definition_revision,
+            self.workflow_definition_digest,
+        )
+        if any(value is not None for value in reference) and not all(
+            value is not None for value in reference
+        ):
+            raise ValueError("workflow definition reference requires id, revision and digest")
+        return self
+
+
+async def _canonical_workflow_run_link(
+    *, tenant_id: str, agent_id: str, execution_id: str
+) -> tuple[Optional[str], list[str]]:
+    """Resolve only an explicit canonical invocation action_id → execution ID link.
+
+    The caller-provided execution ID is only a lookup key. It is never used as
+    workflow evidence by itself. Every returned invocation must match the exact
+    tenant, agent, action ID and one unambiguous workflow run.
+    """
+    if not tenant_id or not agent_id or not execution_id:
+        return None, []
+    try:
+        from config.settings import settings
+        from value.economic.ai_aggregation import list_facts
+
+        if not settings.ai_economics.execution_facts_enabled:
+            return None, []
+        facts = await list_facts(tenant_id, action_id=execution_id, limit=201)
+    except Exception:  # noqa: BLE001 - optional telemetry cannot block execution
+        logger.debug("workflow execution linkage unavailable", exc_info=True)
+        return None, []
+
+    if not isinstance(facts, list) or len(facts) > 200:
+        return None, []
+    workflow_run_ids: set[str] = set()
+    invocation_ids: set[str] = set()
+    for fact in facts:
+        if (
+            not isinstance(fact, dict)
+            or fact.get("tenant_id") != tenant_id
+            or fact.get("action_id") != execution_id
+            or fact.get("agent_id") != agent_id
+        ):
+            return None, []
+        workflow_run_id = fact.get("workflow_run_id")
+        invocation_id = fact.get("invocation_id")
+        if (
+            not isinstance(workflow_run_id, str)
+            or not workflow_run_id.strip()
+            or len(workflow_run_id) > 256
+            or not isinstance(invocation_id, str)
+            or not invocation_id.strip()
+            or len(invocation_id) > 256
+        ):
+            return None, []
+        workflow_run_ids.add(workflow_run_id)
+        invocation_ids.add(invocation_id)
+    if not facts or len(workflow_run_ids) != 1 or not invocation_ids:
+        return None, []
+    return next(iter(workflow_run_ids)), sorted(invocation_ids)
+
+
+async def _validate_reported_workflow_definition_link(
+    *,
+    tenant_id: str,
+    agent_id: str,
+    workflow_run_id: Optional[str],
+    body: AgentExecute,
+    anchor: datetime,
+    repository: Any = None,
+) -> Optional[dict[str, Any]]:
+    """Bind a caller's exact definition reference to one registered revision.
+
+    The AI invocation run link and canonical definition are checked separately.
+    This still records only what the caller reported, not workflow execution.
+    """
+    if body.workflow_definition_id is None:
+        return None
+    if not workflow_run_id:
+        raise BadRequestError("Workflow definition reference requires an exact run link")
+    from intelligence.workflow.definitions import (
+        WorkflowDefinitionRepository,
+        WorkflowDefinitionRevision,
+        workflow_definition_evidence,
+    )
+
+    try:
+        read = await (repository or WorkflowDefinitionRepository()).read_as_of(
+            tenant_id, body.workflow_definition_id, anchor
+        )
+    except Exception as exc:  # noqa: BLE001 - unavailable definition fails closed
+        raise ConflictError("Workflow definition authority is unavailable") from exc
+    if not read.available or not read.complete or read.reason or len(read.rows) != 1:
+        raise ConflictError("Exact workflow definition revision is unavailable")
+    raw = read.rows[0]
+    if not isinstance(raw, dict):
+        raise ConflictError("Exact workflow definition revision is unavailable")
+    try:
+        definition = WorkflowDefinitionRevision.model_validate(
+            {key: raw[key] for key in WorkflowDefinitionRevision.model_fields if key in raw}
+        )
+    except Exception as exc:  # noqa: BLE001 - malformed authority fails closed
+        raise ConflictError("Exact workflow definition revision is invalid") from exc
+    evidence = workflow_definition_evidence(definition)
+    if (
+        definition.tenant_id != tenant_id
+        or definition.workflow_id != body.workflow_definition_id
+        or definition.revision != body.workflow_definition_revision
+        or definition.definition_digest != body.workflow_definition_digest
+        or definition.status != "active"
+        or definition.created_at > anchor
+        or (definition.effective_at is not None and definition.effective_at > anchor)
+        or raw.get("tenant_id") != tenant_id
+        or raw.get("subject_ref") != definition.workflow_id
+        or raw.get("record_id") != definition.record_id
+        or raw.get("definition_digest") != definition.definition_digest
+        or evidence is None
+        or not any(step.kind == "agent" and step.agent_ref == agent_id for step in definition.steps)
+    ):
+        raise BadRequestError("Workflow definition reference does not match this agent and run")
+    return {
+        "association_kind": "caller_reported_exact_definition_reference",
+        "workflow_run_id": workflow_run_id,
+        "workflow_id": definition.workflow_id,
+        "revision": definition.revision,
+        "definition_record_id": definition.record_id,
+        "definition_digest": definition.definition_digest,
+        "definition_evidence_ref": evidence.model_dump(mode="json"),
+        "reference_checked_at": anchor.isoformat(),
+    }
+
+
+async def _validate_execution_approval(
+    *, tenant_id: str, agent_id: str, body: AgentExecute
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve an exact current x402 approval before recording a linked run."""
+    if body.approval_id is None:
+        return None, None
+
+    from value.x402.commerce_models import ApprovalStatus
+    from value.x402.commerce_store import get_commerce_store
+
+    store = get_commerce_store()
+    approval = await store.get_approval(tenant_id, body.approval_id)
+    if (
+        approval is None
+        or approval.tenant_id != tenant_id
+        or approval.execution_id is None
+        or approval.execution_action != body.action
+        or approval.resource_id != body.resource
+        or approval.requester_type != "agent"
+        or approval.requester_id != agent_id
+        or approval.status != ApprovalStatus.APPROVED
+        or not approval.last_decision_id
+    ):
+        raise ForbiddenError("Approval is not valid for this exact agent execution")
+
+    try:
+        requested_amount = Decimal(body.amount) if body.amount is not None else None
+        approved_amount = Decimal(str(approval.amount_usd))
+    except (InvalidOperation, ValueError):
+        raise BadRequestError("A numeric amount matching the approval is required")
+    if requested_amount is None or not requested_amount.is_finite() or requested_amount != approved_amount:
+        raise ForbiddenError("Execution amount does not match the approved amount")
+
+    decision = await store.get_approval_decision(tenant_id, approval.last_decision_id)
+    if (
+        decision is None
+        or decision.tenant_id != tenant_id
+        or decision.approval_id != approval.approval_id
+        or decision.execution_id != approval.execution_id
+        or decision.action != "approve"
+        or decision.decision_id != approval.last_decision_id
+    ):
+        raise ForbiddenError("Canonical approval decision evidence is unavailable or conflicted")
+
+    existing = await _executions.find_by_id(approval.execution_id)
+    if existing is not None:
+        raise ConflictError("This approved execution ID has already been recorded")
+    return approval.execution_id, decision.decision_id
 
 
 class AgentExecutionOutcome(BaseModel):
@@ -198,6 +395,31 @@ async def execute(
     if config is None or config.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Agent")
 
+    approval_execution_id, approval_decision_id = await _validate_execution_approval(
+        tenant_id=tenant.tenant_id,
+        agent_id=agent_id,
+        body=body,
+    )
+    if (
+        approval_execution_id is not None
+        and body.execution_id is not None
+        and body.execution_id != approval_execution_id
+    ):
+        raise BadRequestError("Execution ID does not match the approved execution")
+    execution_id = approval_execution_id or body.execution_id or str(uuid.uuid4())
+    workflow_run_id, workflow_run_invocation_ids = await _canonical_workflow_run_link(
+        tenant_id=tenant.tenant_id,
+        agent_id=agent_id,
+        execution_id=execution_id,
+    )
+    definition_link = await _validate_reported_workflow_definition_link(
+        tenant_id=tenant.tenant_id,
+        agent_id=agent_id,
+        workflow_run_id=workflow_run_id,
+        body=body,
+        anchor=datetime.now(timezone.utc),
+    )
+
     decision = await engine.evaluate(
         grantee_entity_id=agent_id,
         action=body.action,
@@ -206,12 +428,15 @@ async def execute(
     )
     if not decision.allowed:
         # Reject is recorded as a failed execution row so the timeline is complete.
-        rejected_id = str(uuid.uuid4())
+        rejected_id = execution_id
         await _executions.record(
             execution_id=rejected_id,
             agent_id=agent_id,
             tenant_id=tenant.tenant_id,
             initiating_principal_user_id=getattr(tenant, "user_id", None),
+            workflow_run_id=workflow_run_id,
+            workflow_run_invocation_ids=workflow_run_invocation_ids,
+            workflow_definition_link=definition_link,
             delegation_id=decision.delegation_id,
             triggered_by_event_id=body.triggered_by_event_id,
             status="revoked",
@@ -227,6 +452,9 @@ async def execute(
                 "amount": body.amount,
             },
             error={"code": decision.reason},
+            approval_id=body.approval_id,
+            approval_decision_id=approval_decision_id,
+            create_only=approval_execution_id is not None or body.execution_id is not None,
         )
         await producer.publish(Event(
             topic=Topic.AGENT_EXECUTION_FAILED,
@@ -235,6 +463,8 @@ async def execute(
             payload={
                 "agent_id": agent_id,
                 "execution_id": rejected_id,
+                "approval_id": body.approval_id,
+                "approval_decision_id": approval_decision_id,
                 "reason": decision.reason,
                 "action": body.action,
                 "resource": body.resource,
@@ -245,7 +475,6 @@ async def execute(
             f"reason={decision.reason}"
         )
 
-    execution_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc).isoformat()
 
     # Execution started — emit event with v2 envelope so consumers see the full context.
@@ -256,6 +485,8 @@ async def execute(
         payload={
             "agent_id": agent_id,
             "execution_id": execution_id,
+            "approval_id": body.approval_id,
+            "approval_decision_id": approval_decision_id,
             "action": body.action,
             "resource": body.resource,
         },
@@ -275,8 +506,6 @@ async def execute(
         },
         causality={"triggered_by_event_id": body.triggered_by_event_id},
     ))
-    await producer.publish(started)
-
     # The actual execution runtime is out of scope for this layer — Profile 360
     # only owns the bookkeeping. Callers may follow up with `/executions/{id}`
     # PATCH-style updates as the runtime progresses; v1 here records the
@@ -287,6 +516,9 @@ async def execute(
         agent_id=agent_id,
         tenant_id=tenant.tenant_id,
         initiating_principal_user_id=getattr(tenant, "user_id", None),
+        workflow_run_id=workflow_run_id,
+        workflow_run_invocation_ids=workflow_run_invocation_ids,
+        workflow_definition_link=definition_link,
         delegation_id=decision.delegation_id,
         triggered_by_event_id=body.triggered_by_event_id,
         status="running",
@@ -303,7 +535,12 @@ async def execute(
             "payload": body.payload,
         },
         started_at=started_at,
+        approval_id=body.approval_id,
+        approval_decision_id=approval_decision_id,
+        create_only=approval_execution_id is not None or body.execution_id is not None,
     )
+
+    await producer.publish(started)
 
     try:
         await GraphMutationGateway(graph_client=graph).apply(edge_intent(

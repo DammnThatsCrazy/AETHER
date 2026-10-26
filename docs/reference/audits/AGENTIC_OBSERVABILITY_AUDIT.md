@@ -6,30 +6,46 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/agentic-observability.ts]
-reviewed_source_commits:
-  - commit: "482948261"
-    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
+source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/delegation/engine.py, services/api/actions/agentic_observability/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/alembic/versions/20261022_risk_poisoning_evidence.py, services/api/alembic/versions/20261023_commerce_intent_authority.py, services/api/alembic/versions/20261023_support_callback_authority.py, services/api/value/commerce/, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/value/economic/journey_operation_evidence.py, services/api/value/economic/economic360_provider.py, services/api/value/economic/ai_aggregation.py, services/api/journeys/communication360/, services/api/journeys/support360/, services/api/intelligence/workflow/workflow360_provider.py, services/api/identity/account360_provider.py, services/api/shared/intelligence_projections/frame_runtime.py, services/api/repositories/repos.py, services/api/intelligence/fraud_networks/risk360_projection.py, services/api/connectors/integrations/providers/payment_rails/models.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/intelligence/risk360/, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/contracts/intelligence-projection-registry.json, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff75aeac1c2388f93514bfbfba398a6fdbf29b7dce29df7ddf617a97c9256e81"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
+  "services/api/actions/agent/": "sha256:198eeb0e7848c1a6c3b3baa145d69d7f60ddac355ad914efd16fc53ee5c33355"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
+  "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
+  "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
-  "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
+  "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
+  "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
+  "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
+  "services/api/connectors/integrations/providers/payment_rails/models.py": "sha256:fa63fb1a785b98a7ec322f0d06b13ed30ed722003daee53177ba13078a4c77ed"
+  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
+  "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
+  "services/api/identity/account360_provider.py": "sha256:dd2b32bc4eb3fec20094ef053dfe99de88e39ec43388dae73c41f9d4cdcab838"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
+  "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
+  "services/api/intelligence/risk360/": "sha256:762ef5ac5e30355229599b49959ca43ec25cc408dd2c041e58af69009ea9ff99"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
+  "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
+  "services/api/journeys/support360/": "sha256:08b79bc15c183192946f991f66f94a9bcae25c3f1be073e7033c6f5369553734"
+  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:e1d39238f595d91a69347c76418cb2e4d79e860c8e254cebb5720343be4928d4"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
-  "services/api/value/commerce/order_payment_reconciliation.py": "sha256:1bfb4e715fa255bd9c12956c71f4c2e48c49c65d84c7f6d2c0ca1e1bf9960ebe"
+  "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
+  "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
+  "services/api/value/economic/economic360_provider.py": "sha256:b44928e1f1bcd6ecec0cbb1be7c0613809887387fd242657bcf75ee8bc8c9342"
+  "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
+  "services/api/value/x402/": "sha256:a92283788ffc7dab83f99071da7dc9de7cd695eb5a46fb614afa5cbdbdadb708"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
 
@@ -83,7 +99,7 @@ The historical gap matrices below retain their original audit date and should
 not be read as a current inventory without this addendum and the linked
 source-of-truth documents.
 
-## 360 provider addendum (2026-10-18)
+## 360 provider addendum (2026-10-23)
 
 The backend mounts `POST /v1/experience360/frames` and
 `GET /v1/experience360/catalog` for the exact 18-surface backend contract in
@@ -105,31 +121,259 @@ request is authorized. Its
 `policy_boundary` section now carries historical, action-scoped server
 decisions when observed while keeping effective policy unknown; it does not
 expose a standing policy snapshot. Its `risk_summary` composes canonical
-Risk360 evidence with exact slot attribution and does not compute a local risk
-score. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
+Risk360 evidence under the product frame's risk-summary binding and does not
+compute a local risk score. Agent360 no longer reads raw `obs_agent_risk_signals`
+for this slot. Its provider-level nested Risk360 reader requires exact Agent
+identity, a current analytics-consent receipt, evidence lineage, and an
+explicit `risk_summary` plus `risk360.read` authorization decision. The frame
+runtime now forwards a request-scoped server-derived envelope only after the
+exact slot was requested and allowed, the binding targets Risk360, and the
+projection declares the required capability. The envelope carries the exact
+tenant, surface, subject, slot, consumer, target, capability, and policy result.
+An independent actor-granted `risk360.read` authority remains unrepresented.
+Agent-specific freshness, historical replay, and causal contagion remain
+unknown. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
 ledger evidence through Relationship360. No observed edge is unknown rather
 than empty, and any observed edge remains degraded because the ledger has no
-completeness watermark. Communications and economic/value context remain
-partial joins.
+completeness watermark. Account360's `communications` slot can now consume
+Communication360 evidence only for an exact tenant-owned entity subject with
+matching endpoint identity bindings; account/workspace aliases, membership
+fanout, source freshness, and historical consent coverage remain unresolved.
+Value360's `confidence` slot now carries Economic360 model confidence only when
+the score and model type/version are present. It remains model-reported and
+uncalibrated for realized value or ROI, with model-governance calibration
+evidence unbound.
 
-Execution360 now derives server-recorded lifecycle elapsed time from valid,
+Execution360 derives server-recorded lifecycle elapsed time from valid,
 timezone-aware start and end timestamps and carries the lifecycle evidence
-into `latency_cost`. This is not provider/tool latency or cost. It still lacks
-a general server-owned external effect receipt, canonical plan-step evidence,
-approval-chain evidence, complete input/output capture, detailed failures,
-and risk-event coverage.
+into `latency_cost`. A new bounded join also admits canonical AI invocation
+facts only when tenant, action ID, and canonical agent ID match an admitted
+execution, preserving invocation evidence and reporting cost by currency only
+for known selected costs with a known cost basis. This remains invocation
+telemetry, not tool latency or business value; unknown or estimated source
+semantics stay explicit. It still lacks a general server-owned external effect
+receipt, canonical plan-step evidence, complete input/output capture, and
+detailed failures. Its approval-chain join covers current x402 decisions only;
+other approval authorities and historical run links remain unknown. For
+`workflow_run` subjects it admits stored tenant-scoped AgentExecution references
+only when each invocation ID matches a current tenant AI fact with the same
+run, action, and agent. This does not establish full workflow step coverage,
+completion, or a source telemetry crosswalk.
+Execution360 actor attribution now records the authenticated initiating user
+separately from the acting agent. A principal resolves to a canonical Human
+only through an exact tenant-scoped active `USER_ID` alias and active surviving
+identity subject, with both identity evidence references. Missing, conflicting,
+or unavailable identity reads remain unknown, and the link does not establish
+action authorization or delegation authority.
+Its `risk_events` slot now joins bounded canonical RiskSignals and RiskAssessment
+snapshots to exact execution IDs admitted by tenant server lifecycle records.
+These records provide risk context, not proof that the execution caused a
+signal or assessment. Producer coverage, assessment history, and freshness
+thresholds remain unknown. The agentic risk-signal
+compute/store producer described in Bucket 4 is still missing. Agentic
+fraud-network detections are separately persisted to Risk360
+only after a unique tenant-owned Agent binding is resolved and its valid,
+timezone-aware binding timestamp is no later than the detector observation;
+missing, conflicting, malformed, or future timestamps cause omission. This
+prevents retrospective attribution but does not establish execution causality
+or contagion. Its `tool_calls` slot also joins `CALLED_TOOL`
+lifecycle edges only to exact tenant execution records with a canonical agent
+binding, validates the tenant-owned Tool vertex, and requires timestamp and
+edge-idempotency evidence. An observed edge proves only that AETHER recorded a
+tool-call lifecycle fact; graph completeness, tool outcome, action authority,
+and external effect remain unknown.
 
 The frame runtime joins available provider output to communication, risk,
 economic, and outcome projections. Tenant policy runs before provider reads.
 Delegation parties resolve only through exact tenant-scoped canonical entity
 rows; a missing or duplicate party binding leaves the authority slot unknown
 or conflicted. Event-time delegation evidence remains separate from verified
-external execution. All 20 technical providers register at app startup (9
-`implemented`, 11 `in_flight`), but registration does not prove required-slot
+external execution. All 24 technical providers register at app startup (9
+`implemented`, 15 `in_flight`), but registration does not prove required-slot
 conformance. Unknown, missing, and degraded states are preserved. Complete
 episode-to-payment references, complete source evidence, policy and freshness
 behavior, and surface-level golden coverage remain follow-on work across the
 18 surfaces; none is claimed by the mounted route or catalog.
+
+The 2026-10-23 provider wave adds three bounded joins without closing their
+product surfaces. Episode360 `timeline` resolves only observation IDs persisted
+on the tenant's episode records to exact, active semantic Silver observation
+rows and preserves evidence. Semantic SDK rows now carry a backend-stamped
+source namespace; the EpisodeEngine can persist a typed link when a caller
+supplies an explicit semantic authority marker and episode association.
+No live semantic-to-episode producer supplies that association yet. Broader
+activity/session inventory, policy disposition, and freshness remain unknown.
+Campaign360 `signal_sources` resolves only exact canonical event IDs referenced
+by campaign touchpoints. It returns limited event metadata with touchpoint and
+event evidence; it does not infer campaign membership from labels or event
+properties, and the observation/source-fact dimensions, complete event coverage,
+and freshness remain unknown. Memory360 `policy_state` renders exact
+tenant-and-subject historical allow decisions with timestamped consent-policy
+evidence; this records the decision made at memory write time and does not
+evaluate current consent or policy. These joins are partial slot capabilities,
+not surface completion or authority to execute actions.
+
+A follow-up provider slice adds partial Signals360 `classification` evidence
+for exact tenant SDK event types and families after gateway acceptance and
+canonical event registry validation. It does not join tenant source attribution,
+semantic classification, policy, or freshness. Workflow360 resolves human
+execution initiators and approval deciders through unique active tenant
+USER_ID aliases and joins exact x402 approvals referenced by run-linked
+AgentExecutions. The writer stores workflow and invocation references only when
+a unique tenant-scoped AI invocation has `action_id` equal to the stable
+execution ID; Workflow360 rechecks tenant, run, agent, and action equality.
+Workflow definition-to-run linkage, complete actor and step coverage,
+workflow-wide approval authority, policy, and freshness remain unknown.
+Workflow360 `triggers` now
+resolves allowlisted metadata only for exact tenant analytics events named by
+run-linked AgentExecution `triggered_by_event_id` references when the event
+source reports an available read. It suppresses any supplied rows when the
+source reports unavailable or not-read. The output proves the stored reference,
+not event causation or complete trigger coverage; temporal requests suppress
+this current-state read. Account360 adds bounded member
+Risk360 frames only after the `MEMBER_OF` candidate resolves to a live exact
+tenant graph-mutation-ledger aggregate and canonical tenant entity, followed by
+account-slot and per-member policy checks. Roster completeness, temporal reads,
+related-account aggregation, and freshness remain unknown. Communications360 reads
+exact-subject RiskSignals for mapped recipients and resolved sources under
+current analytics consent; the resolved-agent path now also requires an exact
+canonical identity and current analytics-consent receipt before reading
+RiskSignals. Composite Risk360 output, message-edge transfer, complete identity
+coverage, and freshness remain unknown. Journey360's required `communications`
+slot now joins only tenant-scoped canonical facts with an exact typed journey
+ID; message endpoints and free-text references do not qualify, while message-
+spine coverage, completeness, freshness, and historical replay remain unknown.
+Risk360's required `policy_flags` slot also exposes exact tenant-and-Agent
+`obs_agent_risk_signals` as reported observations with evidence. It states that
+policy evaluation is unattested and the model-governance version is absent;
+non-Agent and historical requests remain unknown. `anomaly_events` now admits
+exact typed-subject Gold alerts with a matching RiskSignal event reference and
+can verify one explicitly referenced tenant Bronze SDK event record without
+reading payload. A RiskSignal alone remains an assessment input, not an anomaly
+finding; detector coverage, cause, event completeness, and freshness are open.
+Episode360 `agent_handoffs` remains unknown because episode records and
+observations do not reference a canonical execution or handoff ID. Event labels
+and agent metadata do not establish that relationship.
+
+The next provider slice adds bounded Communications360 `policy_state`, Risk360
+`propagation_paths`, and Value360 `reconciliation` evidence. Communications360
+checks current server consent only for exact recipient-entity and purpose pairs
+and keeps historical outcomes separate; non-consent policy and durable current
+decision evidence remain unavailable. Risk360 exposes consent-gated observed
+FOLLOWS paths with relationship evidence, but leaves causal social contagion
+unknown. Value360 preserves separate economic and commerce observations and
+resolves only explicit settlement-to-payment references within the same order;
+it does not match economic rows across sources or calculate reconciled totals.
+All three are partial slot paths and do not complete their product surfaces.
+
+A further slice adds partial Profile360 `syndicates` and Commerce360
+`availability_price` paths. Profile360 verifies exact current
+`MEMBER_OF:<entity>:<population>` ledger edges only for explicitly opted-in,
+tenant-owned Syndicates populations and cites the live mutation ID. Historical
+membership, roster completeness, and freshness remain unknown. Commerce360
+exposes product/offer catalog lifecycle evidence only; inventory availability,
+current offer price, and freshness remain unknown. Location360 `timezone`
+remains unknown because no exact tenant-scoped geographic timezone mapping is
+connected; coordinates and place names are not used to infer it. None of these
+changes completes a product surface or adds agent execution authority.
+
+The current 2026-10-23 provider wave adds evidence-backed Identity360 source
+identifier, namespace, and alias rows; namespace/provider-registry linkage
+uses the exact recorded `source_system_id` to resolve allowlisted metadata
+from the loaded provider runtime registry, while registry freshness remains
+unknown. Social360 now exposes opted-in Syndicates membership only
+after an exact tenant `MEMBER_OF` graph-ledger join, with roster completeness,
+history, and freshness unknown. Value360 attribution credits now rejoin exact
+conversion and campaign-touchpoint records, but historical attribution is not
+available and the credit repository read remains unbounded.
+
+Actor metadata in Agent360 and Execution360 now separates the authenticated
+initiator from the action driver and carries independent driver scores for
+human, agent, system, and unknown. Only an exact canonical server execution actor
+claim currently supports an Agent driver score; source-reported telemetry alone
+does not. Agent360's typed two-edge delegation view requires one complete,
+continuous path with exact records and canonical party evidence. The view does
+not establish transitive authority, effective authorization, or permission to
+execute. These are partial backend paths and do not complete the 18 surfaces.
+
+The 2026-10-23 provider slice also adds Value360 `ltv` evidence over exact
+subject-linked canonical conversions. Only confirmed or adjusted rows with
+occurred-at values inside the requested strict window contribute to native
+currency subtotals; every row must retain canonical conversion evidence. The
+slot never reports a scalar LTV amount because lifetime completeness, outcome
+attribution, and freshness are unproved. Missing net values reduce reported
+coverage, and absent rows remain empty rather than being treated as zero.
+
+Value360 `web2_value` and `web3_value` now receive partial claims from the
+exact order-linked commerce payment path. Web2 claims require a completed
+payment with an explicit card, ACH, wire, SEPA, or bank-transfer rail. Web3
+claims require a canonical crypto flow or on-chain rail, a complete source or
+destination amount/asset/chain leg, and a transaction-hash EvidenceRef whose ID
+exactly matches the source hash. Stripe onramp joins only when the verified
+session carries an exact order reference and source amount/currency; unknown or
+ambiguous PaymentIntent methods remain unclassified. Native values are not
+aggregated or normalized, and wallet identity, source coverage, policy, and
+freshness remain unknown.
+
+The latest 2026-10-23 slice adds four partial provider joins. Signals360
+`campaign_links` follows exact tenant/source-event touchpoints and exposes a
+campaign only after a same-tenant canonical campaign lookup. Episode360
+`conversion_events` joins only outcome IDs recorded on exact tenant episode
+rows and admits registered conversion definitions with canonical evidence.
+Workflow360 `outcomes` follows outcome IDs referenced by exact tenant/run AI
+invocation facts through `OutcomeTruthStore`, without claiming workflow
+causality; historical reads are suppressed. These paths preserve incomplete
+coverage and unknown policy/freshness. They do not complete any of the 18
+product surfaces or add action authority.
+
+Journey360 `episodes` joins only tenant-scoped EpisodeRecords that explicitly
+persist the exact `journey_id`, with record/source evidence. The bounded store
+scan cannot establish complete association coverage; legacy or unlinked
+records, freshness, policy, and historical replay remain unknown.
+
+Value360 `financial_risk` now composes separate Economic360 and Risk360 claims
+only when both carry evidence for the exact same tenant and subject. The risk
+claim must be an assessed economic, payment, or transaction dimension; generic
+RiskSignals do not qualify. Historical or explicitly ranged reads remain unknown because a
+coordinated snapshot is unavailable, and current freshness remains unknown, so
+the slot stays degraded. Three required slots remain incomplete: Episode360
+touchpoints now resolve only explicitly recorded episode touchpoint IDs, with
+legacy records, complete link inventory, policy, freshness, and attribution
+links unknown; Risk360 anomaly events have only exact Gold alert and optional
+Bronze event evidence, without detector coverage or cause; and Memory360
+cards/embedding metadata lack canonical records. Timing and
+generic identifiers are not used to invent these links.
+The Value360 risk binding now requests only Risk360's narrow `financial_risk`
+section, excluding unrelated findings, poisoning evidence, policy flags, and
+social propagation from the composed value slot.
+
+The latest backend slice adds partial Commerce360 `intent` evidence for
+explicit human declarations against exact tenant-owned product/offer records;
+views, carts, checkout, and payments are not treated as intent, while agent
+writers and freshness remain unsupported. Support360 `callbacks` reads typed,
+idempotent callback schedule/execution events bound to an exact case and
+verified provider connection; provider signature, writer identity, source
+history, and freshness remain unproved. Communication360 `participants` now
+accepts source-authenticated typed role rosters and resolves identities only
+through exact tenant/provider/account bindings. The HMAC authenticates the
+source but does not verify participant identity or role, provider conversation
+membership is not canonicalized, and delegation references remain source
+claims. These new paths do not complete the affected surfaces.
+
+The Agent authorship read now requires the author participant's exact canonical
+Agent entity, tenant, provider account/conversation scope, a role interval
+covering the recorded event, and both canonical fact and trusted provider role
+evidence. Loose agent, principal, or actor references do not qualify.
+Historical requests keep authorship unknown until participant-role replay is
+available; signed provider rosters alone do not establish canonical
+Conversation membership or complete authorship.
+
+For Agent360 and Execution360, the delegation engine now records an explicit
+timezone-aware `evaluated_at` on the action/resource-scoped decision log. The
+providers use only that exact decision timestamp, keep legacy missing values
+unknown, and degrade malformed or after-execution timestamps. This improves
+decision-time evidence but does not establish current or standing authority,
+historical replay, or additional authority scopes.
 
 ## Bucket 1 — Correctly observation-only
 
@@ -194,6 +438,83 @@ No files in this bucket. The existing x402 and agent infrastructure is correctly
 | No Kyber module for external brokerage account observations |
 | No Kyber module for agent risk signals and drift detection |
 | Missing: `GET /v1/admin/kyber/agentic-observability/*` routes |
+
+## 2026-10-23 — Canonical evidence and authority joins
+
+The current backend now writes an exact reciprocal link between supported
+agent activity/tool/risk compatibility rows and their canonical Bronze event.
+Agent360 verifies tenant, agent, evidence table and row ID, Bronze event ID,
+schema, type, and timestamp before returning the provenance. It does not infer
+links by matching provider names or nearby timestamps. Provider identity and
+trust remain unresolved without a Rights `source_id`; freshness remains
+unassessed because no source SLA is configured. Historical compatibility rows
+without an explicit canonical link therefore remain degraded.
+
+Agent360's required `owner_delegator` slot resolves the configured
+`owner_entity_id` through an exact tenant-scoped entity lookup and joins it to
+the resolved canonical Agent only when a bounded tenant graph read observes an
+exact `OWNS` or `OWNS_AGENT` edge. Claims cite the graph edge, configuration,
+and Agent identity evidence. A stored edge does not establish legal or effective
+ownership, historical validity, freshness, or action authorization; truncation
+and scope uncertainty remain explicit.
+
+Execution360 joins AETHER-owned execution rows to typed x402 approval requests
+and decisions by exact tenant, admitted execution ID, lifecycle approval ID,
+and stored action/resource references where available. An action or resource
+conflict suppresses the linked request and decision evidence. The view retains
+the latest decision pointer and supported decision history, but covers x402
+commerce only; effective authorization, other approval systems, historical run
+replay, and a freshness threshold remain unknown. Risk360 can read
+typed, tenant-scoped poisoning evidence with lifecycle and restatement history,
+but no production detector currently writes those records. These additions
+close evidence-path pieces; they do not complete Agent360, Execution360,
+Risk360, or the full 18-surface contract.
+
+Execution360's `authority_check` now exposes the delegation-engine outcome
+stored in `agent_executions.policy_log.delegation_check` only when it joins to
+the same exact tenant-scoped lifecycle record with its action, resource, and
+lifecycle evidence. The delegation engine now records a timezone-aware
+evaluation timestamp, and the provider accepts it only when it does not
+postdate the execution record. Legacy missing timestamps remain unknown; the
+recorded decision still does not claim current or standing authority.
+Duplicate, malformed, or incomplete joins remain degraded, while x402
+approvals and other authority sources remain separate or unknown.
+
+Support360's required `risk` slot now routes to Risk360 after policy. Risk360
+proves the canonical tenant/case pair before reading case-keyed RiskAssessment
+and RiskSignal records and includes both risk and support-case evidence. If the
+case record is missing, expired, unavailable, or out of tenant scope, risk
+reads are suppressed. Case risk-history completeness, signal coverage,
+freshness, business outcome, and contagion authority remain unknown.
+
+The latest provider pass adds bounded standing-delegation observations to
+Agent360 only after exact canonical agent and party evidence; the provider
+continues to report effective authorization as unknown. Its communications
+read now requires one resolved canonical tenant Agent before admitting
+source-asserted inbox/message rows; a positive claim cites identity, inbox,
+and message evidence but does not prove provider conversation membership.
+Workflow360 has an append-only, authenticated definition authority with a
+bounded exact-workflow historical `asOf` read; configured triggers and steps
+are separate from observed runs and outcomes. For a current definition, the
+backend-stamped registrar reference can resolve through one active tenant
+`USER_ID` alias with canonical Human evidence. Historical registrar identity
+remains unknown because alias history is unavailable, and the registrar is not
+inferred to have initiated or approved any run. An authenticated AgentExecution
+can retain a caller-reported definition ID, revision, and digest only after an
+exact tenant AI invocation run link and active definition check; Workflow360
+revalidates the persisted reference before showing a partial run association.
+It does not establish trigger or step execution, causality, complete external
+run coverage, or historical replay. Social360 has explicit
+trust and transmission assertions backed by exact tenant entity, source
+event, graph-path, and risk-signal references. Those assertions are not graph
+mutations or causal contagion proof. Risk360 can admit an anomaly alert when
+its exact RiskSignal and event evidence exist. Explicit `bronze_sdk_events`
+references can now resolve one tenant Bronze record, but no production detector,
+complete event coverage, cause, or freshness follows from that admission.
+Episode semantic observations now carry a backend-stamped source namespace.
+EpisodeEngine's exact-link producer requires an explicitly associated
+semantic observation; live association and full timeline coverage are still
+required. These changes leave the 18 product surfaces partial.
 
 ## Bucket 6 — Profile360/graph gap
 

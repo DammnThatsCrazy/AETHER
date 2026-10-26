@@ -33,6 +33,8 @@ canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
 reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR repository diff: new AgentExecution workflow/approval metadata and create-only insertion do not alter GraphMutationGateway, graph projection, or traversal behavior described here."
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
   - {'commit': 'af851e21c', 'reason': 'Reviewed the CSV import shadow-ledger recovery contract: import success requires durable Rights ancestry, and retry repairs a verified same-commit projection without duplicating the edge.'}
   - commit: "482948261"
@@ -55,7 +57,7 @@ source_hashes:
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
-  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
+  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
   "services/api/shared/graph/": "sha256:d546cc1d95ecc2a8ef5eb8d79d7accde685e354aabe41d148130903651b86ec7"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"

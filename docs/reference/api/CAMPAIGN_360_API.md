@@ -9,16 +9,17 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-source_files: [services/api/journeys/campaign/routes.py, services/api/journeys/campaign/exploration.py, services/api/journeys/measurement/repositories/touchpoint_repo.py]
+source_files: [services/api/journeys/campaign/routes.py, services/api/journeys/campaign/campaign_population_links.py, services/api/journeys/campaign/exploration.py, services/api/journeys/measurement/repositories/touchpoint_repo.py]
 source_hashes:
+  "services/api/journeys/campaign/campaign_population_links.py": "sha256:edb58c750b362e6a0441c88225007acd563e9f9fb105b31629cd8653a6dea894"
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
-  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:fe9b5f6c7f24fa33a0288533013677fe2741b36b86e71308579d08cc4e2a68f0"
+  "services/api/journeys/campaign/routes.py": "sha256:43cafac0205f69a989aa26ba63b89075b9d4acbacfdeb672f5768099c19a4bd9"
+  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:d08121dd99500425f59f0ea5d283a271e4769d5c60bf303868e6b23dc4565f31"
 ---
 
 # Campaign 360 API Reference
 
-> All endpoints require a valid tenant session with `campaign:read` permission.
+> Read endpoints require a valid tenant session with `campaign:read` permission.
 > Base path: `/v1/campaigns/{campaign_id}/`
 
 ---
@@ -28,6 +29,7 @@ source_hashes:
 | Permission | Required for |
 |------------|-------------|
 | `campaign:read` | All Campaign 360 endpoints including `POST /{campaign_id}/graph` |
+| `campaign:manage` | `POST /{campaign_id}/population-links` |
 
 Requests without a valid session return `401 Unauthorized`.
 Requests for campaigns belonging to another tenant return `404 Not Found`
@@ -63,6 +65,17 @@ All list endpoints support keyset cursor pagination:
 ---
 
 ## Endpoints
+
+### POST `/{campaign_id}/population-links`
+
+Records an explicit link or unlink assertion for an existing same-tenant
+campaign and population. Requires `campaign:manage`. The body includes
+`population_id`, `event_type` (`linked` or `unlinked`),
+`source_record_id`, `source_revision_id`, `source_event_id`,
+`source_observed_at`, and `effective_at`. Both timestamps require
+timezones. Tenant and actor come from the authenticated request; neither can
+be supplied in the body. The response returns the accepted event ID and
+association identifiers. A conflicting replay returns a conflict error.
 
 ### GET `/{campaign_id}/overview`
 
@@ -165,6 +178,14 @@ population tier and returned with attribution economics.
 ### GET `/{campaign_id}/touchpoints`
 
 Paginated touchpoint list for the campaign.
+
+The backend also exposes an internal exact source-event read to Signals360:
+`TouchpointRepository.list_by_source_event(tenant_id, source_event_id)` queries
+the tenant-owned `silver_campaign_touchpoint_facts` rows by both keys. A
+resulting campaign link is emitted only when the canonical campaign repository
+resolves that ID in the same tenant. This is a projection dependency, not a
+public Campaign 360 route, and it does not infer links from names or source
+labels.
 
 **Query parameters:**
 

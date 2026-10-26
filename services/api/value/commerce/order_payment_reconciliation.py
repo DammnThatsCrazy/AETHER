@@ -23,6 +23,19 @@ def _key(tenant_id: str, ref: str) -> str:
     return f"{tenant_id}:{digest}"
 
 
+_PAYMENT_SOURCE_DETAIL_FIELDS = (
+    "paymentRail",
+    "flowType",
+    "sourceAmount",
+    "sourceAsset",
+    "sourceChain",
+    "destinationAmount",
+    "destinationAsset",
+    "destinationChain",
+    "txHash",
+)
+
+
 class CommerceOrderPaymentLedger:
     """Replay-safe ledger for exact-reference commerce reconciliation."""
 
@@ -118,6 +131,15 @@ class CommerceOrderPaymentLedger:
         currency: str,
         status: str,
         occurred_at: str,
+        payment_rail: str | None = None,
+        flow_type: str | None = None,
+        source_amount: str | None = None,
+        source_asset: str | None = None,
+        source_chain: str | None = None,
+        destination_amount: str | None = None,
+        destination_asset: str | None = None,
+        destination_chain: str | None = None,
+        tx_hash: str | None = None,
     ) -> dict[str, Any]:
         """Record a provider payment only when its payload explicitly supplies
         the commerce reference. Callers must enforce their provider signature
@@ -126,7 +148,7 @@ class CommerceOrderPaymentLedger:
         ref = _required(commerce_order_ref, "commerce_order_ref")
         payment_id = _required(provider_payment_id, "provider_payment_id")
         payment_provider = _required(provider, "provider").lower()
-        payment = {
+        payment: dict[str, Any] = {
             "provider": payment_provider,
             "providerPaymentId": payment_id,
             "amount": _decimal_text(amount),
@@ -135,6 +157,38 @@ class CommerceOrderPaymentLedger:
             "occurredAt": occurred_at,
             "observedAt": utc_now().isoformat(),
         }
+        from connectors.integrations.providers.payment_rails.models import (
+            FUNDING_FLOW_TYPES,
+            PAYMENT_RAIL_VALUES,
+        )
+
+        if payment_rail is not None:
+            rail = _required(payment_rail, "payment_rail")
+            if rail not in PAYMENT_RAIL_VALUES:
+                raise ValueError("payment_rail must use the canonical payment-rail vocabulary")
+            payment["paymentRail"] = rail
+        if flow_type is not None:
+            flow = _required(flow_type, "flow_type")
+            if flow not in FUNDING_FLOW_TYPES:
+                raise ValueError("flow_type must use the canonical funding-flow vocabulary")
+            payment["flowType"] = flow
+
+        for field_name, value in (
+            ("sourceAmount", source_amount),
+            ("destinationAmount", destination_amount),
+        ):
+            if value is not None:
+                payment[field_name] = _decimal_text(value)
+        for field_name, value in (
+            ("sourceAsset", source_asset),
+            ("sourceChain", source_chain),
+            ("destinationAsset", destination_asset),
+            ("destinationChain", destination_chain),
+            ("txHash", tx_hash),
+        ):
+            if value is not None:
+                payment[field_name] = _required(value, field_name)
+
         key = _key(tenant_id, ref)
         def _apply(existing: dict | None) -> dict[str, Any]:
             record = existing or {
@@ -162,6 +216,11 @@ class CommerceOrderPaymentLedger:
             elif any(
                 prior_payment.get(field) != payment.get(field)
                 for field in ("provider", "providerPaymentId", "amount", "currency", "status")
+            ) or any(
+                prior_payment.get(field) is not None
+                and payment.get(field) is not None
+                and prior_payment.get(field) != payment.get(field)
+                for field in _PAYMENT_SOURCE_DETAIL_FIELDS
             ):
                 record["state"] = "conflict"
                 record["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
@@ -169,10 +228,29 @@ class CommerceOrderPaymentLedger:
                     all(prior.get(field) == payment.get(field) for field in (
                         "provider", "providerPaymentId", "amount", "currency", "status", "occurredAt"
                     ))
+                    and all(
+                        prior.get(field) == payment.get(field)
+                        for field in _PAYMENT_SOURCE_DETAIL_FIELDS
+                        if payment.get(field) is not None
+                    )
                     for prior in observations
                     if isinstance(prior, dict)
                 ):
                     observations.append(payment.copy())
+            else:
+                # Later exact provider evidence may add source-native payment
+                # details. Preserve the earlier observation and expose enrichment
+                # only from its own observation time onward.
+                merged_payment = dict(prior_payment)
+                enriched = False
+                for field in _PAYMENT_SOURCE_DETAIL_FIELDS:
+                    if merged_payment.get(field) is None and payment.get(field) is not None:
+                        merged_payment[field] = payment[field]
+                        enriched = True
+                if enriched:
+                    merged_payment["observedAt"] = payment["observedAt"]
+                    payments[payment_key] = merged_payment
+                    observations.append(merged_payment.copy())
             record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
             self._reconcile(record)
             return record
@@ -432,6 +510,12 @@ class CommerceOrderPaymentLedger:
                 "provider", "providerPaymentId", "amount", "currency", "status"
             )) for row in group}) > 1
             for group in payment_groups.values()
+        ):
+            snapshot["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
+        if any(
+            len({row.get(field) for row in group if row.get(field) is not None}) > 1
+            for group in payment_groups.values()
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS
         ):
             snapshot["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
         snapshot["paymentObservations"] = known_payments

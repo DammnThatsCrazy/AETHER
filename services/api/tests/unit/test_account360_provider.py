@@ -17,10 +17,16 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from identity.account360_provider import (  # noqa: E402
+    ACCOUNT_CONTRACTS_SLOT,
     ACCOUNT_AGENTS_SLOT,
+    ACCOUNT_JOURNEYS_SLOT,
     ACCOUNT_MEMBERS_SLOT,
+    ACCOUNT_PROFILES_SLOT,
+    ACCOUNT_RISK_SLOT,
     ACCOUNT_IDENTITY_SLOT,
     Account360Provider,
+    AccountContractRecord,
+    AccountContractsRead,
     AccountIdentityRead,
     AccountMember,
     AccountMembersRead,
@@ -29,9 +35,11 @@ from identity.account360_provider import (  # noqa: E402
 )
 from shared.intelligence_projections.composition import (  # noqa: E402
     PRODUCT_360_SURFACE_DEFINITIONS,
+    compose_experience360_frame,
 )
 from shared.intelligence_projections.contracts import (  # noqa: E402
     ClaimEnvelope,
+    Experience360Frame,
     Experience360FrameRequest,
     Experience360PolicyDisposition,
     ProjectionResult,
@@ -87,6 +95,198 @@ class _MembersSource(_Source):
     ) -> AccountMembersRead:
         self.member_calls.append((tenant_id, organization_entity_id))
         return self.members_response
+
+
+class _ContractsSource(_Source):
+    def __init__(
+        self,
+        identity: AccountIdentityRead,
+        contracts: AccountContractsRead,
+    ) -> None:
+        super().__init__(identity)
+        self.contracts_response = contracts
+        self.contract_calls: list[tuple[str, str, int]] = []
+
+    async def account_contracts(
+        self, tenant_id: str, account_entity_id: str, *, limit: int
+    ) -> AccountContractsRead:
+        self.contract_calls.append((tenant_id, account_entity_id, limit))
+        return self.contracts_response
+
+
+class _RiskProvider:
+    def __init__(self, response: ProjectionResult) -> None:
+        self.response = response
+        self.calls: list[tuple[object, object]] = []
+
+    async def project(self, request, context) -> ProjectionResult:
+        self.calls.append((request, context))
+        return self.response
+
+
+def _risk_result(
+    *,
+    tenant_id: str = TENANT_ID,
+    subject: ProjectionSubject = SUBJECT,
+    with_evidence: bool = True,
+    risk_id: str = "risk-assessment-1",
+) -> ProjectionResult:
+    risk_evidence = EvidenceRef(
+        id=risk_id,
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-17T09:55:00Z",
+    )
+    return ProjectionResult(
+        projectionId="risk360",
+        tenantId=tenant_id,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="summary",
+                state="degraded",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "assessment": {
+                        "assessmentId": risk_id,
+                        "evidenceRefs": (
+                            [risk_evidence.model_dump(mode="json", by_alias=True)]
+                            if with_evidence
+                            else []
+                        ),
+                    },
+                },
+                warnings=["profile context is unavailable"],
+            ),
+            ProjectionSection(
+                id="state",
+                state="degraded",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "dimensionStates": [],
+                },
+                warnings=["cluster context is unavailable"],
+            ),
+        ],
+        claims=(
+            [
+                ClaimEnvelope(
+                    id=f"risk360.assessment.{risk_id}",
+                    kind="risk_assessment",
+                    subject=subject,
+                    evidenceRefs=[risk_evidence],
+                    claims=["A canonical risk assessment was observed."],
+                    claimState="observed",
+                    domainSlotIds=["risk_summary", "evidence_trace"],
+                )
+            ]
+            if with_evidence
+            else []
+        ),
+        dependencyState=[],
+        generatedAt="2026-10-17T10:01:00Z",
+        degradedReasons=[],
+    )
+
+
+def _member_risk_frame(
+    member: AccountMember,
+    *,
+    tenant_id: str = TENANT_ID,
+    policy_state: str = "allowed",
+    frame_policy_state: str = "allowed",
+) -> Experience360Frame:
+    subject = ProjectionSubject(
+        kind="agent" if member.entity_type == "agent" else "entity",
+        id=member.entity_id,
+    )
+    request = Experience360FrameRequest(
+        surfaceId="risk360",
+        tenantId=tenant_id,
+        subject=subject,
+        includeEvidence=True,
+        requestedSlotIds=["risk_summary"],
+    )
+    disposition = Experience360PolicyDisposition(state=policy_state)
+    return compose_experience360_frame(
+        request,
+        [_risk_result(tenant_id=tenant_id, subject=subject, risk_id=f"risk-{member.entity_id}")],
+        frame_policy=Experience360PolicyDisposition(state=frame_policy_state),
+        policy_by_slot={"risk_summary": disposition},
+    )
+
+
+def _member_journey_frame(
+    member: AccountMember,
+    *,
+    tenant_id: str = TENANT_ID,
+    policy_state: str = "allowed",
+) -> Experience360Frame:
+    evidence = EvidenceRef(
+        id=f"journey-version-{member.entity_id}",
+        type="document",
+        source="journey_versions",
+        observedAt="2026-10-17T09:40:00Z",
+    )
+    subject = ProjectionSubject(kind="entity", id=member.entity_id)
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId=tenant_id,
+        subject=subject,
+        includeEvidence=True,
+        requestedSlotIds=["journey_participation"],
+    )
+    result = ProjectionResult(
+        projectionId="profile360",
+        tenantId=tenant_id,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="journeys",
+                state="available",
+                content={
+                    "currentOnly": True,
+                    "complete": True,
+                    "count": 1,
+                    "items": [
+                        {
+                            "journeyId": f"journey-{member.entity_id}",
+                            "versionId": evidence.id,
+                            "journeyState": "open",
+                            "computedAt": evidence.observedAt,
+                            "evidenceRef": evidence.model_dump(
+                                mode="json", by_alias=True
+                            ),
+                        }
+                    ],
+                },
+                canonicalAuthorityRefs=["journeys"],
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id=f"profile360.journey.{evidence.id}",
+                kind="current_profile_journey_version",
+                subject=subject,
+                evidenceRefs=[evidence],
+                claims=["A current tenant-scoped journey version records this exact profile ID."],
+                claimState="observed",
+                domainSlotIds=["journey_participation"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-17T10:01:00Z",
+        degradedReasons=[],
+    )
+    disposition = Experience360PolicyDisposition(state=policy_state)
+    return compose_experience360_frame(
+        request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot={"journey_participation": disposition},
+    )
 
 
 def _request(
@@ -255,9 +455,8 @@ def _account_member(
         membership_evidence_ref=EvidenceRef(
             id=edge_id,
             type="relationship",
-            source="graph",
+            source="graph_mutation_ledger",
             observedAt="2026-10-17T09:50:00Z",
-            uri=f"graph://edges/{edge_id}",
         ),
         entity_evidence_ref=EvidenceRef(
             id=entity_id,
@@ -266,6 +465,41 @@ def _account_member(
             observedAt="2026-10-17T09:45:00Z",
         ),
     )
+
+
+def _member_edge_ledger_row(
+    member_id: str,
+    *,
+    mutation_id: str,
+    ledger_offset: int,
+    role: str | None,
+    idempotency_key: str,
+    kind: str = "edge",
+) -> dict:
+    from shared.graph.graph import EdgeType
+
+    row = {
+        "tenant_id": TENANT_ID,
+        "aggregate_type": "edge",
+        "aggregate_id": f"{EdgeType.MEMBER_OF}:{member_id}:{SUBJECT.id}",
+        "mutation_id": mutation_id,
+        "ledger_offset": ledger_offset,
+        "recorded_at": f"2026-10-17T09:{50 + ledger_offset % 10:02d}:00Z",
+        "idempotency_key": idempotency_key,
+        "payload": {
+            "kind": kind,
+            "edge_type": EdgeType.MEMBER_OF,
+            "from_vertex_id": member_id,
+            "to_vertex_id": SUBJECT.id,
+        },
+    }
+    if kind == "edge":
+        row["payload"]["properties"] = {
+            "tenant_id": TENANT_ID,
+            "role": role,
+            "idempotency_key": idempotency_key,
+        }
+    return row
 
 
 @pytest.mark.asyncio
@@ -385,11 +619,10 @@ async def test_members_slot_projects_only_evidenced_tenant_member_of_facts(
 ):
     _ensure_members_slot(monkeypatch)
     member_edge = EvidenceRef(
-        id="member-edge-key",
+        id="member-mutation-id",
         type="relationship",
-        source="graph",
+        source="graph_mutation_ledger",
         observedAt="2026-10-17T09:50:00Z",
-        uri="graph://edges/member-edge-key",
     )
     member_entity = EvidenceRef(
         id="human-member-1",
@@ -445,7 +678,7 @@ async def test_members_slot_projects_only_evidenced_tenant_member_of_facts(
                     "entityType": "human",
                 },
                 "role": "billing_admin",
-                "evidenceRefIds": ["member-edge-key", "human-member-1"],
+                "evidenceRefIds": ["member-mutation-id", "human-member-1"],
             }
         ],
         "coverage": {
@@ -482,10 +715,18 @@ async def test_members_slot_does_not_read_when_slot_policy_is_denied(
     policy = _allowed_slots()
     policy[ACCOUNT_MEMBERS_SLOT] = Experience360PolicyDisposition(state="denied")
     policy[ACCOUNT_AGENTS_SLOT] = Experience360PolicyDisposition(state="denied")
+    policy[ACCOUNT_PROFILES_SLOT] = Experience360PolicyDisposition(state="denied")
 
     frame = await Account360Provider(source).compose(
-        _request(),
-        _results(),
+        _request(
+            requested_slot_ids=[
+                ACCOUNT_MEMBERS_SLOT,
+                ACCOUNT_AGENTS_SLOT,
+                ACCOUNT_PROFILES_SLOT,
+                ACCOUNT_IDENTITY_SLOT,
+            ]
+        ),
+        [],
         frame_policy=Experience360PolicyDisposition(state="allowed"),
         policy_by_slot=policy,
     )
@@ -675,6 +916,47 @@ async def test_agents_without_validated_agent_members_remain_unknown_not_empty(
 
 
 @pytest.mark.asyncio
+async def test_account_profiles_policy_denial_skips_membership_and_profile_reads(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _ensure_members_slot(monkeypatch)
+    member = _account_member("member-profile-denied", "human", "member-edge-denied")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountMembersRead(
+            "degraded", TENANT_ID, SUBJECT.id, members=(member,)
+        ),
+    )
+    profile_reader_calls: list[str] = []
+
+    async def profile_reader(member, _request):
+        profile_reader_calls.append(member.entity_id)
+        raise AssertionError("denied Account360 profile slot must not read profiles")
+
+    policy = _allowed_slots()
+    policy[ACCOUNT_PROFILES_SLOT] = Experience360PolicyDisposition(state="denied")
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_PROFILES_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=policy,
+        member_profile_reader=profile_reader,
+    )
+
+    assert source.member_calls == []
+    assert profile_reader_calls == []
+    slot = next(slot for slot in frame.slots if slot.id == ACCOUNT_PROFILES_SLOT)
+    assert slot.policyDisposition.state == "denied"
+    assert slot.content is None
+
+
+@pytest.mark.asyncio
 async def test_repository_member_read_uses_tenant_edges_and_exact_entity_joins(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -735,6 +1017,32 @@ async def test_repository_member_read_uses_tenant_edges_and_exact_entity_joins(
             ], False
 
     graph = _Graph()
+
+    class _Ledger:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, int]] = []
+            self.rows = [
+                _member_edge_ledger_row(
+                    "human-member-1",
+                    mutation_id="member-mutation-id",
+                    ledger_offset=11,
+                    role="billing_admin",
+                    idempotency_key="member-edge-key",
+                ),
+                _member_edge_ledger_row(
+                    "agent-member-1",
+                    mutation_id="agent-mutation-id",
+                    ledger_offset=12,
+                    role="operator",
+                    idempotency_key="agent-edge-key",
+                ),
+            ]
+
+        async def list_records(self, tenant_id, aggregate_id=None, limit=1000):
+            self.calls.append((tenant_id, limit))
+            return self.rows
+
+    ledger = _Ledger()
     entity_calls: list[tuple[str, set[str]]] = []
 
     async def find_many_for_tenant_entity_ids(self, tenant_id, entity_ids):
@@ -762,12 +1070,13 @@ async def test_repository_member_read_uses_tenant_edges_and_exact_entity_joins(
         "find_many_for_tenant_entity_ids",
         find_many_for_tenant_entity_ids,
     )
-    result = await RepositoryAccount360Source(graph=graph).account_members(
+    result = await RepositoryAccount360Source(graph=graph, ledger=ledger).account_members(
         TENANT_ID,
         SUBJECT.id,
     )
 
     assert graph.calls == [(TENANT_ID, 10_000, [EdgeType.MEMBER_OF])]
+    assert ledger.calls == [(TENANT_ID, 100_001)]
     assert entity_calls == [(TENANT_ID, {"human-member-1", "agent-member-1"})]
     assert result.state == "degraded"
     assert len(result.members) == 2
@@ -776,17 +1085,118 @@ async def test_repository_member_read_uses_tenant_edges_and_exact_entity_joins(
     assert member.entity_id == "human-member-1"
     assert member.entity_type == "human"
     assert member.role == "billing_admin"
-    assert member.membership_evidence_ref.id == "member-edge-key"
+    assert member.membership_evidence_ref.id == "member-mutation-id"
+    assert member.membership_evidence_ref.source == "graph_mutation_ledger"
     assert member.entity_evidence_ref.id == "human-member-1"
     agent_member = members_by_id["agent-member-1"]
     assert agent_member.entity_type == "agent"
     assert agent_member.role == "operator"
-    assert agent_member.membership_evidence_ref.id == "agent-edge-key"
+    assert agent_member.membership_evidence_ref.id == "agent-mutation-id"
     assert agent_member.entity_evidence_ref.id == "agent-member-1"
     assert "account_member_graph_scope_mismatch" in result.reason_codes
     assert "Private member name" not in str(member)
     assert "Private agent name" not in str(agent_member)
     assert "private@example.test" not in str(member)
+
+
+@pytest.mark.asyncio
+async def test_repository_member_read_rejects_graph_edge_after_ledger_revocation(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from repositories.repos import EntityRepository
+    from shared.graph.graph import Edge, EdgeType
+
+    class _Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            return [
+                Edge(
+                    EdgeType.MEMBER_OF,
+                    "revoked-member",
+                    SUBJECT.id,
+                    {
+                        "tenant_id": TENANT_ID,
+                        "idempotency_key": "revoked-member-edge",
+                    },
+                )
+            ], False
+
+    class _Ledger:
+        async def list_records(self, tenant_id, aggregate_id=None, limit=1000):
+            return [
+                _member_edge_ledger_row(
+                    "revoked-member",
+                    mutation_id="member-add-mutation",
+                    ledger_offset=21,
+                    role="owner",
+                    idempotency_key="revoked-member-edge",
+                ),
+                _member_edge_ledger_row(
+                    "revoked-member",
+                    mutation_id="member-revoke-mutation",
+                    ledger_offset=22,
+                    role=None,
+                    idempotency_key="revoked-member-edge",
+                    kind="edge_revocation",
+                ),
+            ]
+
+    async def entity_lookup_must_not_run(self, tenant_id, entity_ids):
+        raise AssertionError("revoked membership must not join a member entity")
+
+    monkeypatch.setattr(
+        EntityRepository,
+        "find_many_for_tenant_entity_ids",
+        entity_lookup_must_not_run,
+    )
+    result = await RepositoryAccount360Source(graph=_Graph(), ledger=_Ledger()).account_members(
+        TENANT_ID,
+        SUBJECT.id,
+    )
+
+    assert result.state == "unknown"
+    assert result.members == ()
+    assert "account_member_graph_ledger_membership_not_live" in result.reason_codes
+
+
+@pytest.mark.asyncio
+async def test_repository_member_read_withholds_members_when_ledger_window_is_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from repositories.repos import EntityRepository
+    from shared.graph.graph import Edge, EdgeType
+
+    class _Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            return [
+                Edge(
+                    EdgeType.MEMBER_OF,
+                    "member-in-large-tenant",
+                    SUBJECT.id,
+                    {"tenant_id": TENANT_ID, "idempotency_key": "membership-edge"},
+                )
+            ], False
+
+    class _Ledger:
+        async def list_records(self, tenant_id, aggregate_id=None, limit=1000):
+            assert limit == 100_001
+            return [{}] * limit
+
+    async def entity_lookup_must_not_run(self, tenant_id, entity_ids):
+        raise AssertionError("truncated ledger state cannot establish membership")
+
+    monkeypatch.setattr(
+        EntityRepository,
+        "find_many_for_tenant_entity_ids",
+        entity_lookup_must_not_run,
+    )
+    result = await RepositoryAccount360Source(graph=_Graph(), ledger=_Ledger()).account_members(
+        TENANT_ID,
+        SUBJECT.id,
+    )
+
+    assert result.state == "truncated"
+    assert result.members == ()
+    assert "account_member_graph_ledger_scan_truncated" in result.reason_codes
 
 
 @pytest.mark.asyncio
@@ -1125,3 +1535,628 @@ async def test_same_tenant_non_account_entity_cannot_expose_account_projection_d
     assert all(slot.content is None for slot in frame.slots)
     assert all(slot.evidenceRefs == [] for slot in frame.slots)
     assert "Private agent profile" not in str(frame.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_account_risk_reuses_exact_entity_risk_provider_under_slot_policy():
+    risk_provider = _RiskProvider(_risk_result())
+    source = _Source(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        )
+    )
+
+    frame = await Account360Provider(
+        source,
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    assert source.calls == [(TENANT_ID, SUBJECT.id)]
+    assert len(risk_provider.calls) == 1
+    projection_request, projection_context = risk_provider.calls[0]
+    assert projection_request.projectionId == "risk360"
+    assert projection_request.tenantId == TENANT_ID
+    assert projection_request.subject == ProjectionSubject(kind="entity", id=SUBJECT.id)
+    assert projection_request.temporalMode == "window"
+    assert projection_context.tenantId == TENANT_ID
+    assert {
+        item.projectionId: item.state for item in projection_context.dependencyState
+    } == {"profile360": "unknown", "cluster360": "unknown"}
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    risk_evidence = EvidenceRef(
+        id="risk-assessment-1",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-17T09:55:00Z",
+    )
+    assert slot.state == "degraded"
+    assert slot.content["scope"] == "direct_account_entity_only"
+    assert slot.content["coverage"] == {
+        "state": "partial",
+        "reason": "account_risk_related_entity_join_not_available",
+    }
+    assert risk_evidence in slot.evidenceRefs
+    assert slot.claims[0].domainSlotIds == [ACCOUNT_RISK_SLOT]
+    assert any(
+        provenance.projectionId == "risk360"
+        and provenance.canonicalAuthorityRefs == ["risk_outputs"]
+        for provenance in slot.provenance
+    )
+    assert slot.freshness.state == "unknown"
+    assert "account_risk_freshness_sla_unconfigured" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_risk_composes_exact_member_risk_only_after_member_policy_allows():
+    allowed_member = _account_member("member-risk-allowed", "human", "edge-risk-allowed")
+    denied_member = _account_member("member-risk-denied", "agent", "edge-risk-denied")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        ),
+        AccountMembersRead(
+            "degraded",
+            TENANT_ID,
+            SUBJECT.id,
+            members=(allowed_member, denied_member),
+            reason_codes=("account_member_edge_completeness_unproven",),
+            source_as_of="2026-10-17T09:50:00Z",
+        ),
+    )
+    risk_provider = _RiskProvider(_risk_result())
+    member_reader_calls: list[str] = []
+
+    async def read_member_risk(member, _request):
+        member_reader_calls.append(member.entity_id)
+        return _member_risk_frame(
+            member,
+            policy_state=("allowed" if member.entity_id == allowed_member.entity_id else "denied"),
+        )
+
+    frame = await Account360Provider(
+        source,
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        member_risk_reader=read_member_risk,
+    )
+
+    assert source.member_calls == [(TENANT_ID, SUBJECT.id)]
+    assert member_reader_calls == ["member-risk-allowed", "member-risk-denied"]
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    entries = slot.content["memberRiskContext"]
+    assert [entry["member"]["id"] for entry in entries] == ["member-risk-allowed"]
+    nested_frame = entries[0]["riskFrame"]
+    assert nested_frame["surfaceId"] == "risk360"
+    assert nested_frame["tenantId"] == TENANT_ID
+    assert nested_frame["subject"] == {"kind": "entity", "id": "member-risk-allowed"}
+    assert nested_frame["policyDisposition"]["state"] == "allowed"
+    assert {ref.id for ref in slot.evidenceRefs} == {
+        "risk-assessment-1",
+        "risk-member-risk-allowed",
+        "edge-risk-allowed",
+        "member-risk-allowed",
+    }
+    assert any(
+        provenance.canonicalAuthorityRefs == ["graph", "entity_registry"]
+        and any(ref.id == "edge-risk-allowed" for ref in provenance.evidenceRefs)
+        for provenance in slot.provenance
+    )
+    assert "account_risk_member_roster_completeness_unknown" in slot.reasonCodes
+    assert "account_risk_member_freshness_sla_unconfigured" in slot.reasonCodes
+    assert slot.content["memberCoverage"]["state"] == "unknown"
+    assert slot.freshness.state == "unknown"
+    assert "member-risk-denied" not in str(entries)
+
+
+@pytest.mark.asyncio
+async def test_account_member_risk_fanout_deduplicates_and_obeys_local_cap(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from identity import account360_provider as account360_provider_module
+
+    monkeypatch.setattr(
+        account360_provider_module, "_MAX_ACCOUNT_MEMBER_RISK_FRAMES", 2
+    )
+    first = _account_member("member-risk-a", "human", "edge-risk-a")
+    second = _account_member("member-risk-b", "human", "edge-risk-b")
+    third = _account_member("member-risk-c", "human", "edge-risk-c")
+    members_read = AccountMembersRead(
+        "degraded",
+        TENANT_ID,
+        SUBJECT.id,
+        members=(first, first, second, third),
+        source_as_of="2026-10-17T09:50:00Z",
+    )
+    calls: list[str] = []
+
+    async def read_member_risk(member, _request):
+        calls.append(member.entity_id)
+        return _member_risk_frame(member)
+
+    result = await Account360Provider._read_member_risks(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        members_read,
+        member_risk_reader=read_member_risk,
+    )
+
+    assert result.state == "degraded"
+    assert calls == ["member-risk-a", "member-risk-b"]
+    assert len(result.risks) == 2
+    assert result.truncated is True
+    assert "account_member_risk_duplicate_members_deduplicated" in result.reason_codes
+    assert "account_member_risk_fanout_truncated" in result.reason_codes
+    assert len({ref.id for ref in result.evidence_refs}) == len(result.evidence_refs)
+    assert result.source_as_of == "2026-10-17T09:50:00Z"
+
+
+@pytest.mark.asyncio
+async def test_account_risk_read_is_skipped_when_slot_policy_denies_it():
+    risk_provider = _RiskProvider(_risk_result())
+    policy = _allowed_slots()
+    policy[ACCOUNT_RISK_SLOT] = Experience360PolicyDisposition(state="denied")
+
+    frame = await Account360Provider(
+        _Source(
+            AccountIdentityRead(
+                "resolved",
+                evidence_refs=(IDENTITY_EVIDENCE,),
+                entity_type="organization",
+            )
+        ),
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=policy,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    assert risk_provider.calls == []
+    assert slot.state == "suppressed"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("as_of", "include_evidence", "expected_reason"),
+    [
+        (
+            "2026-10-01T00:00:00Z",
+            True,
+            "account_entity_temporal_identity_unavailable",
+        ),
+        (None, False, "account_risk_evidence_not_requested"),
+    ],
+)
+async def test_account_risk_read_stays_unknown_when_time_or_evidence_is_unsupported(
+    as_of: str | None,
+    include_evidence: bool,
+    expected_reason: str,
+):
+    risk_provider = _RiskProvider(_risk_result())
+
+    frame = await Account360Provider(
+        _Source(
+            AccountIdentityRead(
+                "resolved",
+                evidence_refs=(IDENTITY_EVIDENCE,),
+                entity_type="organization",
+            )
+        ),
+        risk_provider=risk_provider,
+    ).compose(
+        _request(
+            as_of=as_of,
+            include_evidence=include_evidence,
+            requested_slot_ids=[ACCOUNT_RISK_SLOT],
+        ),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    assert risk_provider.calls == []
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert expected_reason in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_risk_result_without_evidenced_claims_remains_unknown():
+    risk_provider = _RiskProvider(_risk_result(with_evidence=False))
+
+    frame = await Account360Provider(
+        _Source(
+            AccountIdentityRead(
+                "resolved",
+                evidence_refs=(IDENTITY_EVIDENCE,),
+                entity_type="organization",
+            )
+        ),
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+    assert "account_risk_evidence_missing" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_journeys_join_exact_human_member_frames_with_graph_evidence():
+    human = _account_member("member-journey-human", "human", "membership-human")
+    agent = _account_member("member-journey-agent", "agent", "membership-agent")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountMembersRead(
+            "degraded",
+            TENANT_ID,
+            SUBJECT.id,
+            members=(human, agent),
+            reason_codes=("account_member_edge_completeness_unproven",),
+            source_as_of="2026-10-17T09:50:00Z",
+        ),
+    )
+    reader_calls: list[str] = []
+
+    async def read_member_journey(member, _request):
+        reader_calls.append(member.entity_id)
+        return _member_journey_frame(member)
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_JOURNEYS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        member_journey_reader=read_member_journey,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_JOURNEYS_SLOT)
+    assert source.member_calls == [(TENANT_ID, SUBJECT.id)]
+    assert reader_calls == [human.entity_id]
+    assert slot.state == "degraded"
+    assert slot.content["association"] == "current_member_to_current_journey_participation"
+    assert [item["member"]["id"] for item in slot.content["journeys"]] == [human.entity_id]
+    assert slot.content["journeys"][0]["journeys"][0]["journeyId"] == "journey-member-journey-human"
+    assert {ref.id for ref in slot.evidenceRefs} == {
+        "membership-human",
+        human.entity_id,
+        f"journey-version-{human.entity_id}",
+    }
+    assert "account_member_journey_membership_temporal_scope_unproven" in slot.reasonCodes
+    assert "account_member_journey_roster_completeness_unknown" in slot.reasonCodes
+    assert slot.freshness.state == "unknown"
+    assert "member-journey-agent" not in str(slot.content)
+
+
+@pytest.mark.asyncio
+async def test_account_journeys_withheld_when_nested_profile_policy_denies():
+    member = _account_member("member-journey-denied", "human", "membership-denied")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        ),
+        AccountMembersRead("degraded", TENANT_ID, SUBJECT.id, members=(member,)),
+    )
+
+    async def read_member_journey(member, _request):
+        return _member_journey_frame(member, policy_state="denied")
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_JOURNEYS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        member_journey_reader=read_member_journey,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_JOURNEYS_SLOT)
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+    assert "account_member_journey_profile_policy_withheld_or_unknown" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_journeys_policy_denial_skips_membership_and_member_reads():
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        ),
+        AccountMembersRead("degraded", TENANT_ID, SUBJECT.id),
+    )
+    reader_calls: list[str] = []
+
+    async def read_member_journey(member, _request):
+        reader_calls.append(member.entity_id)
+        raise AssertionError("denied Account360 journeys slot must not read members")
+
+    policy = _allowed_slots()
+    policy[ACCOUNT_JOURNEYS_SLOT] = Experience360PolicyDisposition(state="denied")
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_JOURNEYS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=policy,
+        member_journey_reader=read_member_journey,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_JOURNEYS_SLOT)
+    assert source.member_calls == []
+    assert reader_calls == []
+    assert slot.policyDisposition.state == "denied"
+    assert slot.content is None
+
+
+@pytest.mark.asyncio
+async def test_account_contracts_join_only_exact_account_bound_commerce_records():
+    evidence = EvidenceRef(
+        id="contract-profile-1",
+        type="document",
+        source="tenant_contract_profiles",
+        observedAt="2026-10-17T09:00:00Z",
+    )
+    contract = AccountContractRecord(
+        tenant_id=TENANT_ID,
+        account_id=SUBJECT.id,
+        contract_profile_id=evidence.id,
+        contract_status="active",
+        billing_model="enterprise_contract",
+        package_id="enterprise",
+        plan_tier="enterprise",
+        billing_period="annual",
+        currency="USD",
+        contract_start_date="2026-01-01",
+        contract_end_date="2026-12-31",
+        renewal_date="2027-01-01",
+        evidence_ref=evidence,
+    )
+    source = _ContractsSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountContractsRead(
+            "available",
+            TENANT_ID,
+            SUBJECT.id,
+            records=(contract,),
+            source_as_of=evidence.observedAt,
+        ),
+    )
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    assert source.contract_calls == [(TENANT_ID, SUBJECT.id, 100)]
+    assert slot.policyDisposition.state == "allowed"
+    assert slot.state == "degraded"
+    assert slot.content["records"][0]["contractProfileId"] == "contract-profile-1"
+    assert slot.content["records"][0]["status"] == "active"
+    assert slot.content["records"][0]["contractEndDate"] == "2026-12-31"
+    assert [(ref.source, ref.id) for ref in slot.evidenceRefs] == [
+        ("tenant_contract_profiles", "contract-profile-1")
+    ]
+    assert "account_contract_freshness_sla_unconfigured" in slot.reasonCodes
+    assert "internal_notes" not in str(slot.content)
+
+
+@pytest.mark.asyncio
+async def test_account_contracts_do_not_join_without_exact_account_scope():
+    evidence = EvidenceRef(
+        id="contract-profile-foreign",
+        type="document",
+        source="tenant_contract_profiles",
+        observedAt="2026-10-17T09:00:00Z",
+    )
+    source = _ContractsSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountContractsRead(
+            "available",
+            "tenant-foreign",
+            SUBJECT.id,
+            records=(
+                AccountContractRecord(
+                    tenant_id="tenant-foreign",
+                    account_id=SUBJECT.id,
+                    contract_profile_id=evidence.id,
+                    contract_status="active",
+                    billing_model="enterprise_contract",
+                    package_id=None,
+                    plan_tier=None,
+                    billing_period="annual",
+                    currency="USD",
+                    contract_start_date=None,
+                    contract_end_date=None,
+                    renewal_date=None,
+                    evidence_ref=evidence,
+                ),
+            ),
+        ),
+    )
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+    assert "account_contract_scope_or_state_invalid" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_contracts_respect_policy_and_temporal_boundaries():
+    source = _ContractsSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountContractsRead("empty", TENANT_ID, SUBJECT.id),
+    )
+    provider = Account360Provider(source)
+    denied_policy = _allowed_slots()
+    denied_policy[ACCOUNT_CONTRACTS_SLOT] = Experience360PolicyDisposition(state="denied")
+    denied = await provider.compose(
+        _request(requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=denied_policy,
+    )
+    historical = await provider.compose(
+        _request(as_of="2026-10-16T00:00:00Z", requested_slot_ids=[ACCOUNT_CONTRACTS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        identity_read=source.response,
+    )
+
+    denied_slot = next(item for item in denied.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    historical_slot = next(item for item in historical.slots if item.id == ACCOUNT_CONTRACTS_SLOT)
+    assert denied_slot.policyDisposition.state == "denied"
+    assert denied_slot.content is None
+    assert historical_slot.state == "unknown"
+    assert historical_slot.content is None
+    assert "account_contract_temporal_replay_unavailable" in historical_slot.reasonCodes
+    assert source.contract_calls == []
+
+
+@pytest.mark.asyncio
+async def test_repository_account_contract_source_uses_tenant_and_exact_account_id(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from billing.billing.revops import TenantContractProfileRepository
+
+    calls: list[tuple[dict[str, str], int]] = []
+
+    async def find_many(self, *, filters, limit=50, **_kwargs):
+        calls.append((filters, limit))
+        return [
+            {
+                "contract_profile_id": "contract-profile-exact",
+                "tenant_id": TENANT_ID,
+                "account_id": SUBJECT.id,
+                "contract_status": "active",
+                "billing_model": "enterprise_contract",
+                "package_id": "enterprise",
+                "plan_tier": "enterprise",
+                "billing_period": "annual",
+                "currency": "USD",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-10-17T09:00:00Z",
+                "internal_notes": "must-not-project",
+                "payment_terms": "must-not-project",
+            }
+        ]
+
+    monkeypatch.setattr(TenantContractProfileRepository, "find_many", find_many)
+    result = await RepositoryAccount360Source().account_contracts(
+        TENANT_ID, SUBJECT.id, limit=7
+    )
+
+    assert calls == [({"tenant_id": TENANT_ID, "account_id": SUBJECT.id}, 8)]
+    assert result.state == "available"
+    assert result.records[0].contract_profile_id == "contract-profile-exact"
+    assert result.records[0].evidence_ref.source == "tenant_contract_profiles"
+    assert result.source_as_of == "2026-10-17T09:00:00Z"
+    assert "must-not-project" not in str(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("contract_status", "guess_active"),
+        ("billing_model", "free_form"),
+        ("billing_period", "weekly"),
+        ("contract_start_date", "2026-02-30"),
+        ("contract_end_date", "2026-12-31T00:00:00Z"),
+        ("renewal_date", "not-a-date"),
+        ("currency", "US dollars"),
+    ],
+)
+async def test_repository_account_contract_source_fails_closed_on_invalid_typed_values(
+    monkeypatch: pytest.MonkeyPatch, field: str, value: str
+):
+    from billing.billing.revops import TenantContractProfileRepository
+
+    row = {
+        "contract_profile_id": "contract-profile-invalid",
+        "tenant_id": TENANT_ID,
+        "account_id": SUBJECT.id,
+        "contract_status": "active",
+        "billing_model": "enterprise_contract",
+        "billing_period": "annual",
+        "currency": "USD",
+        "contract_start_date": "2026-01-01",
+        "contract_end_date": "2026-12-31",
+        "renewal_date": "2027-01-01",
+        "updated_at": "2026-10-17T09:00:00Z",
+    }
+    row[field] = value
+
+    async def find_many(self, *, filters, limit=50, **_kwargs):
+        return [row]
+
+    monkeypatch.setattr(TenantContractProfileRepository, "find_many", find_many)
+    result = await RepositoryAccount360Source().account_contracts(
+        TENANT_ID, SUBJECT.id, limit=7
+    )
+
+    assert result.state == "unknown"
+    assert result.records == ()
+    assert result.reason_codes == ("account_contract_record_typed_value_invalid",)

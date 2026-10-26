@@ -6,13 +6,19 @@ visibility: P
 audience: [dev-senior, dev-junior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py]
+source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py]
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR Communication360 repository diff: bounded participant and exact-reference reads do not change webhook signature validation, endpoint ownership, or ingestion procedure."
 source_hashes:
   "services/api/connectors/integrations/connectors/routes.py": "sha256:d537cd13e0607f0d8e9c9db85797bdfcf42cb450815883dee6a44c8cca987a5e"
   "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
-  "services/api/journeys/comms/ingest.py": "sha256:ec0bcf7c4e6b9fe903ca9f85cc08bf6b07feb40ff762cd7bad0e72aedcb27892"
-  "services/api/journeys/comms/routes.py": "sha256:c82539c0f35ba7c15a8c1a517a7ce26f1b20da5e16eba019ed9771fcd73259e8"
+  "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
+  "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
+  "services/api/journeys/communication360/contracts.py": "sha256:f826cef4a2425cd8b8ad5beafb914794cbb45bd6db9e1dab3bc7d19fb9befa9f"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
+  "services/api/journeys/communication360/repository.py": "sha256:e04eb5071d50f46e28ea795be1ebbb8d98006fb5ce186e962e18c55682f59f89"
 ---
 
 # Generic Signed Communications Webhook
@@ -118,6 +124,21 @@ rejected and counted (`comms_webhook_signature_failures_total`).
 - `recipient_email` transits in memory only: it is hashed to a tenant-scoped
   alias before any storage (ADR-C10). Prefer sending `recipient_alias_id`
   (a hash you obtained from Aether) when possible.
+- An event may include a typed `participant_roster` assertion containing an
+  opaque `conversation_id`, `provider_account_id`, explicit completeness
+  state/evidence, and participant `bindings`. Each binding carries a provider
+  recipient/profile ID, role, validity interval, and metadata-only evidence;
+  optional principal identities and provider delegation references remain
+  source claims. A complete roster must include an expected binding count,
+  completeness evidence, and a validity start for every binding.
+- Participant rosters are accepted only when a tenant webhook secret is
+  configured and the request HMAC verifies. The server creates the authoring
+  actor context; caller JSON cannot supply it. Every provider identity must
+  resolve through the exact tenant/provider/account identity mapping before
+  role facts are written. HMAC authenticates the submitting source; it does
+  not independently verify participant identity or role. Provider conversation
+  IDs are not canonical Conversation IDs, so the participant slot remains
+  partial until membership and message coverage are joined.
 - For connector-originated events, canonical sender/recipient identities and
   consent receipts are resolved by server-side authorities. Provider payload
   fields cannot set canonical entity IDs or consent state. Missing identity

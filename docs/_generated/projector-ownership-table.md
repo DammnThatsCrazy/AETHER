@@ -13,26 +13,27 @@ Projectors in EXACT dispatcher order (ADR-C3). Activity ownership is ADR-C4: one
 | 2 | `IdentityEvidenceProjector` | `silver_identity_evidence_facts` | fact_emitter | `identity_lc` | 15 | 15 |
 | 3 | `TouchpointProjector` | `silver_campaign_touchpoint_facts` | touchpoint_owner | `comms`, `core`, `ecommerce`, `exposure`, `journey`, `outcome` | 27 | 21 |
 | 4 | `ExposureProjector` | `silver_exposure_facts` | fact_emitter | `exposure` | 8 | 4 |
-| 5 | `OutcomeProjector` | `silver_outcome_facts` | fact_emitter | `outcome` | 9 | 8 |
-| 6 | `RevenueProjector` | `silver_revenue_facts` | fact_emitter | `commerce`, `ecommerce` | 17 | 17 |
-| 7 | `FrictionProjector` | `silver_friction_facts` | no_activity | `friction` | 12 | 0 |
-| 8 | `AccountActivityProjector` | `silver_account_activity_facts` | fact_emitter | `b2b` | 20 | 20 |
-| 9 | `ServerOperationProjector` | `silver_server_operation_facts` | no_activity | `server` | 11 | 0 |
-| 10 | `AgentExecutionProjector` | `silver_agent_execution_facts` | fact_emitter | `agent` | 60 | 60 |
-| 11 | `AIInvocationProjector` | `ai_execution_facts` | no_activity | `agent` | 1 | 0 |
-| 12 | `Web3TransactionProjector` | `silver_web3_transaction_facts` | fact_emitter | `wallet`, `web3_lc` | 17 | 17 |
-| 13 | `X402FlowProjector` | `silver_x402_flow_facts` | fact_emitter | — | 6 | 6 |
-| 14 | `StablecoinProjector` | `silver_stablecoin_facts` | no_activity | `stablecoin` | 26 | 0 |
-| 15 | `DerivativesProjector` | `silver_derivatives_facts` | no_activity | `derivatives` | 33 | 0 |
-| 16 | `InteropProjector` | `silver_interop_facts` | no_activity | `interop` | 31 | 0 |
-| 17 | `ConversionProjector` | `canonical_conversions` | fact_emitter | `ecommerce`, `identity_lc` | 10 | 6 |
-| 18 | `CardLinkedProjector` | `card_linked_flow_facts` | no_activity | `commerce`, `reward`, `wallet` | 6 | 0 |
-| 19 | `SocialIdentityProjector` | `silver_social_identity_facts` | no_activity | — | 1 | 0 |
-| 20 | `SocialConnectionProjector` | `silver_social_connection_facts` | no_activity | — | 1 | 0 |
-| 21 | `SocialInteractionProjector` | `silver_social_interaction_facts` | no_activity | — | 1 | 0 |
-| 22 | `SocialContentProjector` | `silver_social_content_facts` | no_activity | — | 1 | 0 |
-| 23 | `SocialCommunityMembershipProjector` | `silver_social_community_facts` | no_activity | — | 1 | 0 |
-| 24 | `SocialMetricProjector` | `silver_social_metric_facts` | no_activity | — | 1 | 0 |
+| 5 | `CommerceFlowProjector` | `silver_commerce_flow_facts` | no_activity | `ecommerce` | 5 | 0 |
+| 6 | `OutcomeProjector` | `silver_outcome_facts` | fact_emitter | `outcome` | 9 | 8 |
+| 7 | `RevenueProjector` | `silver_revenue_facts` | fact_emitter | `commerce`, `ecommerce` | 17 | 17 |
+| 8 | `FrictionProjector` | `silver_friction_facts` | no_activity | `friction` | 12 | 0 |
+| 9 | `AccountActivityProjector` | `silver_account_activity_facts` | fact_emitter | `b2b` | 20 | 20 |
+| 10 | `ServerOperationProjector` | `silver_server_operation_facts` | no_activity | `server` | 11 | 0 |
+| 11 | `AgentExecutionProjector` | `silver_agent_execution_facts` | fact_emitter | `agent` | 60 | 60 |
+| 12 | `AIInvocationProjector` | `ai_execution_facts` | no_activity | `agent` | 1 | 0 |
+| 13 | `Web3TransactionProjector` | `silver_web3_transaction_facts` | fact_emitter | `wallet`, `web3_lc` | 17 | 17 |
+| 14 | `X402FlowProjector` | `silver_x402_flow_facts` | fact_emitter | — | 6 | 6 |
+| 15 | `StablecoinProjector` | `silver_stablecoin_facts` | no_activity | `stablecoin` | 26 | 0 |
+| 16 | `DerivativesProjector` | `silver_derivatives_facts` | no_activity | `derivatives` | 33 | 0 |
+| 17 | `InteropProjector` | `silver_interop_facts` | no_activity | `interop` | 31 | 0 |
+| 18 | `ConversionProjector` | `canonical_conversions` | fact_emitter | `ecommerce`, `identity_lc` | 10 | 6 |
+| 19 | `CardLinkedProjector` | `card_linked_flow_facts` | no_activity | `commerce`, `reward`, `wallet` | 6 | 0 |
+| 20 | `SocialIdentityProjector` | `silver_social_identity_facts` | no_activity | — | 1 | 0 |
+| 21 | `SocialConnectionProjector` | `silver_social_connection_facts` | no_activity | — | 1 | 0 |
+| 22 | `SocialInteractionProjector` | `silver_social_interaction_facts` | no_activity | — | 1 | 0 |
+| 23 | `SocialContentProjector` | `silver_social_content_facts` | no_activity | — | 1 | 0 |
+| 24 | `SocialCommunityMembershipProjector` | `silver_social_community_facts` | no_activity | — | 1 | 0 |
+| 25 | `SocialMetricProjector` | `silver_social_metric_facts` | no_activity | — | 1 | 0 |
 
 ## Convergent activity emitters
 

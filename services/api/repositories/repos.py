@@ -2776,9 +2776,14 @@ class AgentConfigRepository(BaseRepository):
             "policy_version": 1,
         })
 
-    async def list_for_owner(self, owner_entity_id: str) -> list[dict]:
+    async def list_for_owner(
+        self, owner_entity_id: str, *, limit: int = 200, tenant_id: Optional[str] = None
+    ) -> list[dict]:
+        filters = {"owner_entity_id": owner_entity_id}
+        if tenant_id is not None:
+            filters["tenant_id"] = tenant_id
         return await self.find_many(
-            filters={"owner_entity_id": owner_entity_id}, limit=200,
+            filters=filters, limit=min(max(1, limit), 201),
         )
 
 
@@ -2805,13 +2810,24 @@ class AgentExecutionRepository(BaseRepository):
         started_at: Optional[str] = None,
         ended_at: Optional[str] = None,
         initiating_principal_user_id: Optional[str] = None,
+        workflow_run_id: Optional[str] = None,
+        workflow_run_invocation_ids: Optional[list[str]] = None,
+        workflow_definition_link: Optional[dict] = None,
+        approval_id: Optional[str] = None,
+        approval_decision_id: Optional[str] = None,
+        create_only: bool = False,
     ) -> dict:
         now = utc_now().isoformat()
-        return await self.insert(execution_id, {
+        record = {
             "execution_id": execution_id,
             "agent_id": agent_id,
             "tenant_id": tenant_id,
             "initiating_principal_user_id": initiating_principal_user_id,
+            "workflow_run_id": workflow_run_id,
+            "workflow_run_invocation_ids": list(workflow_run_invocation_ids or []),
+            "workflow_definition_link": dict(workflow_definition_link) if workflow_definition_link else None,
+            "approval_id": approval_id,
+            "approval_decision_id": approval_decision_id,
             "delegation_id": delegation_id,
             "triggered_by_event_id": triggered_by_event_id,
             "status": status,
@@ -2823,7 +2839,42 @@ class AgentExecutionRepository(BaseRepository):
             "error": error,
             "started_at": started_at or now,
             "ended_at": ended_at,
-        })
+        }
+        if create_only:
+            return await self._insert_once(execution_id, record)
+        return await self.insert(execution_id, record)
+
+    async def _insert_once(self, record_id: str, data: dict) -> dict:
+        """Atomically claim an approved execution ID without overwriting it."""
+        now = utc_now().isoformat()
+        data["id"] = record_id
+        data["created_at"] = now
+        data["updated_at"] = now
+        tenant_id = _row_tenant(data)
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            if record_id in self._store:
+                raise ConflictError()
+            self._store[record_id] = data
+            logger.info(f"INSERT {self.table_name} id={record_id} (in-memory)")
+            return data
+
+        await self._ensure_table()
+        if not self._jsonb_mode:
+            raise RuntimeError("agent_executions must use the JSONB repository schema")
+        status = await pool.execute(
+            f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING""",
+            record_id,
+            json.dumps(data, default=str),
+            tenant_id,
+        )
+        if _no_rows(status):
+            raise ConflictError()
+        logger.info(f"INSERT {self.table_name} id={record_id}")
+        return data
 
     async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 50) -> list[dict]:
         return await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)

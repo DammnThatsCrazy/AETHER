@@ -26,6 +26,7 @@ from shared.intelligence_projections.contracts import (
     Experience360ActorParty,
     Experience360AuthorityDecision,
     Experience360Delegation,
+    Experience360DriverScore,
     Experience360Frame,
     Experience360FrameRequest,
     Experience360Freshness,
@@ -35,9 +36,11 @@ from shared.intelligence_projections.contracts import (
     Experience360Quality,
     EvidenceRef,
     ProjectionDegradation,
+    ProjectionReadAuthorization,
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
+    ProjectionSubject,
 )
 from shared.intelligence_projections.errors import ProjectionError, ProjectionNotFound
 from shared.intelligence_projections.generated_registry import (
@@ -45,6 +48,7 @@ from shared.intelligence_projections.generated_registry import (
 )
 from shared.projection_engine.runtime import ProjectionRuntime, runtime as default_runtime
 from shared.projection_engine.temporal_modes import TemporalMode
+from shared.temporal.instant import try_parse_instant
 
 
 class Experience360PolicyEvaluator(Protocol):
@@ -295,15 +299,129 @@ async def build_experience360_frame(
             lensIds=request.lensIds,
             temporalMode=temporal_surface_mode,
         )
+        read_authorizations: list[ProjectionReadAuthorization] = []
+        if request.surfaceId == "agent360" and projection_id == "agent360":
+            # Agent360 can make a nested current Risk360 read while assembling
+            # its broader state section. Carry the exact outer slot decision
+            # only when that slot was requested, allowed by policy, and bound
+            # to a projection that declares the required read capability.
+            # The public frame body cannot provide this server-derived envelope.
+            risk_slot_id = "risk_summary"
+            risk_slot = surface.get("domainSlots", [])
+            risk_slot_definition = next(
+                (
+                    item
+                    for item in risk_slot
+                    if isinstance(item, Mapping) and item.get("id") == risk_slot_id
+                ),
+                None,
+            )
+            risk_disposition = selected_policy.get(risk_slot_id)
+            risk_bindings = (
+                risk_slot_definition.get("projectionBindings", [])
+                if isinstance(risk_slot_definition, Mapping)
+                else []
+            )
+            risk_binding = next(
+                (
+                    binding
+                    for binding in risk_bindings
+                    if isinstance(binding, Mapping)
+                    and binding.get("projectionId") == "risk360"
+                    and request.subject.kind in binding.get("subjectKinds", [])
+                ),
+                None,
+            )
+            risk_definition = INTELLIGENCE_PROJECTION_DEFINITIONS.get("risk360", {})
+            capability_keys = risk_definition.get("capabilityKeys", [])
+            if (
+                risk_slot_id in requested_slot_ids
+                and risk_disposition is not None
+                and risk_disposition.state == "allowed"
+                and isinstance(risk_binding, Mapping)
+                and isinstance(capability_keys, (list, tuple))
+                and "risk360.read" in capability_keys
+            ):
+                read_authorizations.append(
+                    ProjectionReadAuthorization(
+                        tenantId=request.tenantId,
+                        sourceSurfaceId=request.surfaceId,
+                        sourceSubject=request.subject,
+                        sourceSlotId=risk_slot_id,
+                        consumerProjectionId="agent360",
+                        targetProjectionId="risk360",
+                        capabilityKey="risk360.read",
+                        policyState=risk_disposition.state,
+                        policyIds=list(risk_disposition.policyIds),
+                        policyEvaluatedAt=risk_disposition.evaluatedAt,
+                    )
+                )
+        if request.surfaceId == "profile360" and projection_id == "profile360":
+            # Profile360 can read Relationship360 only for the exact entity
+            # subject of an explicitly allowed relationships slot. The
+            # provider still proves the current tenant profile/entity join
+            # before the nested ledger read; this envelope grants no alias or
+            # historical identity resolution.
+            relationship_slot_id = "relationships"
+            relationship_slot = slot_definitions.get(relationship_slot_id)
+            relationship_disposition = selected_policy.get(relationship_slot_id)
+            relationship_bindings = (
+                relationship_slot.get("projectionBindings", [])
+                if isinstance(relationship_slot, Mapping)
+                else []
+            )
+            profile_binding = next(
+                (
+                    binding
+                    for binding in relationship_bindings
+                    if isinstance(binding, Mapping)
+                    and binding.get("projectionId") == "profile360"
+                    and isinstance(binding.get("sectionIds"), (list, tuple))
+                    and "relationships" in binding["sectionIds"]
+                    and isinstance(binding.get("subjectKinds"), (list, tuple))
+                    and request.subject.kind in binding["subjectKinds"]
+                ),
+                None,
+            )
+            relationship_definition = INTELLIGENCE_PROJECTION_DEFINITIONS.get(
+                "relationship360", {}
+            )
+            relationship_capabilities = relationship_definition.get("capabilityKeys", [])
+            if (
+                relationship_slot_id in readable_slot_ids
+                and relationship_disposition is not None
+                and relationship_disposition.state == "allowed"
+                and isinstance(profile_binding, Mapping)
+                and request.subject.kind == "entity"
+                and isinstance(relationship_capabilities, (list, tuple))
+                and "relationship360.read" in relationship_capabilities
+                and relationship_definition.get("graphMutationPolicy") == "read_only"
+            ):
+                read_authorizations.append(
+                    ProjectionReadAuthorization(
+                        tenantId=request.tenantId,
+                        sourceSurfaceId=request.surfaceId,
+                        sourceSubject=request.subject,
+                        sourceSlotId=relationship_slot_id,
+                        consumerProjectionId="profile360",
+                        targetProjectionId="relationship360",
+                        capabilityKey="relationship360.read",
+                        policyState=relationship_disposition.state,
+                        policyIds=list(relationship_disposition.policyIds),
+                        policyEvaluatedAt=relationship_disposition.evaluatedAt,
+                    )
+                )
         async with semaphore:
             try:
-                result = await runner.execute_projection(
-                    projection_request,
-                    lens_ids=request.lensIds,
-                    temporal_mode=(
+                execution_kwargs = {
+                    "lens_ids": request.lensIds,
+                    "temporal_mode": (
                         TemporalMode.AS_OF if request.asOf is not None else TemporalMode.LIVE
                     ),
-                )
+                }
+                if read_authorizations:
+                    execution_kwargs["experience360_read_authorizations"] = read_authorizations
+                result = await runner.execute_projection(projection_request, **execution_kwargs)
             except Exception:  # noqa: BLE001 - fail-isolated projection boundary
                 result = _unavailable_result(
                     projection_id,
@@ -326,6 +444,137 @@ async def build_experience360_frame(
     if actor_attribution_by_slot:
         resolved_actor_metadata.update(actor_attribution_by_slot)
     if request.surfaceId == "account360" and account_identity_read is not None:
+        async def read_account_member_profile(
+            member: Any, account_request: Experience360FrameRequest
+        ) -> Experience360Frame:
+            """Build each member's profile through the governed Profile360 runtime."""
+
+            profile_surface = PRODUCT_360_SURFACE_DEFINITIONS.get("profile360", {})
+            profile_lens_contract = profile_surface.get("lensContract", {})
+            profile_lens_ids = profile_lens_contract.get("lensIds", [])
+            if account_request.lensIds is None:
+                profile_lens_ids_for_request = None
+            else:
+                allowed_profile_lenses = {
+                    lens_id for lens_id in profile_lens_ids if isinstance(lens_id, str)
+                }
+                profile_lens_ids_for_request = [
+                    lens_id
+                    for lens_id in account_request.lensIds
+                    if lens_id in allowed_profile_lenses
+                ] or None
+
+            profile_request = Experience360FrameRequest(
+                surfaceId="profile360",
+                tenantId=account_request.tenantId,
+                subject=ProjectionSubject(
+                    kind="agent" if member.entity_type == "agent" else "entity",
+                    id=member.entity_id,
+                ),
+                asOf=account_request.asOf,
+                timeRange=account_request.timeRange,
+                includeEvidence=account_request.includeEvidence,
+                lensIds=profile_lens_ids_for_request,
+                requestedBy=account_request.requestedBy,
+                purpose=account_request.purpose,
+                authorizationContextRef=account_request.authorizationContextRef,
+            )
+            return await build_experience360_frame(
+                profile_request,
+                policy_evaluator=evaluator,
+                projection_runtime=runner,
+                actor_attribution=actor_attribution,
+                generated_at=generated_timestamp,
+                max_concurrency=1,
+            )
+
+        async def read_account_member_journey(
+            member: Any, account_request: Experience360FrameRequest
+        ) -> Experience360Frame:
+            """Read one member's journey slot under Profile360 policy."""
+
+            profile_surface = PRODUCT_360_SURFACE_DEFINITIONS.get("profile360", {})
+            profile_lens_contract = profile_surface.get("lensContract", {})
+            profile_lens_ids = profile_lens_contract.get("lensIds", [])
+            if account_request.lensIds is None:
+                profile_lens_ids_for_request = None
+            else:
+                allowed_profile_lenses = {
+                    lens_id for lens_id in profile_lens_ids if isinstance(lens_id, str)
+                }
+                profile_lens_ids_for_request = [
+                    lens_id
+                    for lens_id in account_request.lensIds
+                    if lens_id in allowed_profile_lenses
+                ] or None
+
+            profile_request = Experience360FrameRequest(
+                surfaceId="profile360",
+                tenantId=account_request.tenantId,
+                subject=ProjectionSubject(kind="entity", id=member.entity_id),
+                requestedSlotIds=["journey_participation"],
+                asOf=account_request.asOf,
+                timeRange=account_request.timeRange,
+                includeEvidence=account_request.includeEvidence,
+                lensIds=profile_lens_ids_for_request,
+                requestedBy=account_request.requestedBy,
+                purpose=account_request.purpose,
+                authorizationContextRef=account_request.authorizationContextRef,
+            )
+            return await build_experience360_frame(
+                profile_request,
+                policy_evaluator=evaluator,
+                projection_runtime=runner,
+                actor_attribution=actor_attribution,
+                generated_at=generated_timestamp,
+                max_concurrency=1,
+            )
+
+        async def read_account_member_risk(
+            member: Any, account_request: Experience360FrameRequest
+        ) -> Experience360Frame:
+            """Build each member's Risk360 frame through its own policy gate."""
+
+            risk_surface = PRODUCT_360_SURFACE_DEFINITIONS.get("risk360", {})
+            risk_lens_contract = risk_surface.get("lensContract", {})
+            risk_lens_ids = risk_lens_contract.get("lensIds", [])
+            if account_request.lensIds is None:
+                risk_lens_ids_for_request = None
+            else:
+                allowed_risk_lenses = {
+                    lens_id for lens_id in risk_lens_ids if isinstance(lens_id, str)
+                }
+                risk_lens_ids_for_request = [
+                    lens_id
+                    for lens_id in account_request.lensIds
+                    if lens_id in allowed_risk_lenses
+                ] or None
+
+            risk_request = Experience360FrameRequest(
+                surfaceId="risk360",
+                tenantId=account_request.tenantId,
+                subject=ProjectionSubject(
+                    kind="agent" if member.entity_type == "agent" else "entity",
+                    id=member.entity_id,
+                ),
+                asOf=account_request.asOf,
+                timeRange=account_request.timeRange,
+                includeEvidence=account_request.includeEvidence,
+                lensIds=risk_lens_ids_for_request,
+                requestedSlotIds=["risk_summary"],
+                requestedBy=account_request.requestedBy,
+                purpose=account_request.purpose,
+                authorizationContextRef=account_request.authorizationContextRef,
+            )
+            return await build_experience360_frame(
+                risk_request,
+                policy_evaluator=evaluator,
+                projection_runtime=runner,
+                actor_attribution=actor_attribution,
+                generated_at=generated_timestamp,
+                max_concurrency=1,
+            )
+
         return await account_provider.compose(
             request,
             results,
@@ -336,6 +585,9 @@ async def build_experience360_frame(
             quality_by_slot=quality_by_slot,
             actor_attribution=actor_attribution,
             actor_attribution_by_slot=resolved_actor_metadata,
+            member_profile_reader=read_account_member_profile,
+            member_journey_reader=read_account_member_journey,
+            member_risk_reader=read_account_member_risk,
             generated_at=generated_timestamp,
         )
     frame = compose_experience360_frame(
@@ -413,18 +665,47 @@ def _derive_agent_actor_metadata(
         None,
     )
     actor_evidence: dict[str, dict[tuple[str, str], EvidenceRef]] = {}
+    execution_actor_ids: set[str] = set()
     execution_principal_evidence: dict[str, dict[tuple[str, str], EvidenceRef]] = {}
     execution_ids_with_principal_evidence: set[str] = set()
     server_execution_ids: set[str] = set()
     server_execution_row_count = 0
     all_server_rows_have_principal_evidence = True
-    decisions: list[tuple[str, Optional[str], Optional[str], Optional[str], str, EvidenceRef]] = []
+    decisions: list[
+        tuple[
+            str,
+            Optional[str],
+            Optional[str],
+            Optional[str],
+            str,
+            EvidenceRef,
+            Optional[str],
+        ]
+    ] = []
     interaction_content: dict[str, Any] = {}
     server_lifecycle_complete = False
     source_telemetry_complete = False
     claims: list[Any] = []
+    agent_delegation_chain: list[Experience360Delegation] = []
+    agent_delegator: Optional[Experience360ActorParty] = None
+    agent_delegatee: Optional[Experience360ActorParty] = None
+    agent360_authority_result_present = False
+    agent_subject_identity_ids: set[str] = set()
     execution_principal_canonical_identity: Optional[Experience360ActorParty] = None
     execution_principal_identity_evidence: dict[tuple[str, str], EvidenceRef] = {}
+
+    def recorded_decision_time(value: Any, record_created_at: Any = None) -> Optional[str]:
+        if not isinstance(value, str):
+            return None
+        parsed, error = try_parse_instant(value)
+        if error is not None or parsed is None:
+            return None
+        if isinstance(record_created_at, str):
+            created, _ = try_parse_instant(record_created_at)
+            if created is not None and parsed > created:
+                return None
+        return parsed.isoformat()
+
     if execution_result is not None and execution_result.tenantId == request.tenantId:
         sections = {section.id: section for section in execution_result.sections}
         state = sections.get("state")
@@ -477,12 +758,22 @@ def _derive_agent_actor_metadata(
                 and agent_id
                 and isinstance(execution_id, str)
             ):
-                for evidence in evidence_for(
-                    "canonically_resolved_server_agent_actor", execution_id
-                ):
+                execution_actor_refs = _exact_actor_claim_evidence(
+                    claims,
+                    claim_id=f"execution360:server-actor:{execution_id}",
+                    claim_kind="canonically_resolved_server_agent_actor",
+                    claim_state="resolved",
+                    subject=request.subject,
+                    evidence_id=execution_id,
+                    evidence_source="agent_executions",
+                    domain_slot_id="actor_attribution",
+                )
+                for evidence in execution_actor_refs:
                     actor_evidence.setdefault(agent_id, {})[(evidence.source, evidence.id)] = (
                         evidence
                     )
+                if execution_actor_refs:
+                    execution_actor_ids.add(agent_id)
 
             principal_user_id = row.get("initiatingPrincipalUserId")
             row_has_principal_evidence = False
@@ -518,6 +809,10 @@ def _derive_agent_actor_metadata(
                             else None,
                             execution_id,
                             evidence,
+                            recorded_decision_time(
+                                row.get("recordedDelegationDecisionEvaluatedAt"),
+                                row.get("recordCreatedAt"),
+                            ),
                         )
                     )
 
@@ -540,6 +835,7 @@ def _derive_agent_actor_metadata(
             None,
         )
         if agent_result is not None and agent_result.tenantId == request.tenantId:
+            agent360_authority_result_present = True
             sections = {section.id: section for section in agent_result.sections}
             state = sections.get("state")
             state_content = (
@@ -647,6 +943,7 @@ def _derive_agent_actor_metadata(
                             else None,
                             execution_id.strip(),
                             decision_evidence,
+                            recorded_decision_time(decision.get("decisionAt")),
                         )
                     )
 
@@ -769,6 +1066,17 @@ def _derive_agent_actor_metadata(
 
             canonical_agent_id = actor_content.get("resolvedCanonicalActor")
             if isinstance(canonical_agent_id, str) and canonical_agent_id:
+                (
+                    agent_delegation_chain,
+                    agent_delegator,
+                    agent_delegatee,
+                ) = _agent360_observed_delegation_chain(
+                    tenant_id=request.tenantId,
+                    subject=request.subject,
+                    canonical_agent_id=canonical_agent_id,
+                    authority_content=authority_content,
+                    claims=agent_result.claims,
+                )
                 for claim in agent_result.claims:
                     claim_state = getattr(claim.claimState, "value", claim.claimState)
                     if (
@@ -784,6 +1092,7 @@ def _derive_agent_actor_metadata(
                         actor_evidence.setdefault(canonical_agent_id, {})[
                             (evidence.source, evidence.id)
                         ] = evidence
+                    agent_subject_identity_ids.add(canonical_agent_id)
 
     delegation_candidates: dict[str, dict[str, Any]] = {}
     conflicted_delegations: set[str] = set()
@@ -794,13 +1103,20 @@ def _derive_agent_actor_metadata(
             actor_id = row.get("actorAgentId")
             source_event_id = row.get("sourceEventId")
             if isinstance(actor_id, str) and actor_id and isinstance(source_event_id, str):
-                for evidence in evidence_for(
-                    "canonically_resolved_execution_actor", source_event_id
-                ):
+                execution_actor_refs = _exact_actor_claim_evidence(
+                    claims,
+                    claim_id=f"execution360:actor:{source_event_id}",
+                    claim_kind="canonically_resolved_execution_actor",
+                    claim_state="resolved",
+                    subject=request.subject,
+                    evidence_id=source_event_id,
+                    evidence_source=None,
+                    domain_slot_id="actor_attribution",
+                )
+                for evidence in execution_actor_refs:
                     actor_evidence.setdefault(actor_id, {})[(evidence.source, evidence.id)] = (
                         evidence
                     )
-
             delegation_id = row.get("delegationId")
             if (
                 row.get("delegationPartyBindingStatus") != "matched"
@@ -947,6 +1263,14 @@ def _derive_agent_actor_metadata(
                 # remain omitted from the typed chain rather than guessed.
                 delegation_chain = []
 
+    if request.surfaceId == "agent360" and agent360_authority_result_present:
+        # Agent360's chain is backed by exact tenant delegation rows and
+        # canonical party resolutions. Execution telemetry remains a separate
+        # event-time input and cannot replace the Agent authority read.
+        delegation_chain = agent_delegation_chain
+        delegator = agent_delegator
+        delegatee = agent_delegatee
+
     attribution_evidence = {(evidence.source, evidence.id): evidence for evidence in all_actor_refs}
     if execution_principal_complete and len(principal_ids) == 1:
         attribution_evidence.update(execution_principal_evidence[principal_ids[0]])
@@ -957,18 +1281,29 @@ def _derive_agent_actor_metadata(
 
     unique_decisions = {
         (outcome, delegation_id, action_ref, resource_ref)
-        for outcome, delegation_id, action_ref, resource_ref, _, _ in decisions
+        for outcome, delegation_id, action_ref, resource_ref, _, _, _ in decisions
     }
     decision_refs = {
-        (evidence.source, evidence.id): evidence for _, _, _, _, _, evidence in decisions
+        (evidence.source, evidence.id): evidence
+        for _, _, _, _, _, evidence, _ in decisions
     }
     decision_action_refs = sorted(
-        {action_ref for _, _, action_ref, _, _, _ in decisions if action_ref is not None}
+        {
+            action_ref
+            for _, _, action_ref, _, _, _, _ in decisions
+            if action_ref is not None
+        }
     )
     decision_resource_refs = sorted(
-        {resource_ref for _, _, _, resource_ref, _, _ in decisions if resource_ref is not None}
+        {
+            resource_ref
+            for _, _, _, resource_ref, _, _, _ in decisions
+            if resource_ref is not None
+        }
     )
-    decision_execution_refs = sorted({execution_id for _, _, _, _, execution_id, _ in decisions})
+    decision_execution_refs = sorted(
+        {execution_id for _, _, _, _, execution_id, _, _ in decisions}
+    )
     if len(unique_decisions) == 1:
         outcome, delegation_id, action_ref, resource_ref = next(iter(unique_decisions))
         action_scope_known = action_ref is not None
@@ -976,6 +1311,7 @@ def _derive_agent_actor_metadata(
             tenantId=request.tenantId,
             outcome=outcome if action_scope_known else "unknown",
             authorityRef="aether.agent_delegation_engine" if action_scope_known else None,
+            decidedAt=decisions[0][6] if action_scope_known and len(decisions) == 1 else None,
             delegationRefs=[delegation_id] if delegation_id is not None else [],
             actionRefs=[action_ref] if action_ref is not None else [],
             resourceRefs=[resource_ref] if resource_ref is not None else [],
@@ -996,7 +1332,7 @@ def _derive_agent_actor_metadata(
             delegationRefs=sorted(
                 {
                     delegation_id
-                    for _, delegation_id, _, _, _, _ in decisions
+                    for _, delegation_id, _, _, _, _, _ in decisions
                     if delegation_id is not None
                 }
             ),
@@ -1011,8 +1347,65 @@ def _derive_agent_actor_metadata(
             ],
         )
 
+    agent_actor_is_execution_driver = (
+        canonical_actor is not None
+        and len(execution_actor_ids) == 1
+        and execution_actor_ids == {canonical_actor.id}
+    )
+    agent_subject_identity_only = (
+        request.surfaceId == "agent360"
+        and canonical_actor is not None
+        and canonical_actor.id in agent_subject_identity_ids
+        and not execution_actor_ids
+    )
+    if agent_actor_is_execution_driver or agent_subject_identity_only:
+        actor_kind = "agent"
+        actor_subject_id = canonical_actor.id
+        attributed_agent_id = canonical_actor.id
+        driver_score = Experience360DriverScore(
+            agentDriven=1.0 if agent_actor_is_execution_driver else 0.0,
+            unknown=0.0 if agent_actor_is_execution_driver else 1.0,
+        )
+        confidence = "high" if agent_actor_is_execution_driver else "medium"
+        explanation = (
+            "Exact tenant-scoped execution evidence resolves one canonical Agent actor; "
+            "the authenticated initiating principal remains a separate role."
+            if agent_actor_is_execution_driver
+            else "The Agent subject identity is resolved, but no execution-specific actor "
+            "evidence establishes who drove an action."
+        )
+    else:
+        actor_kind = "unknown"
+        actor_subject_id = None
+        attributed_agent_id = None
+        driver_score = Experience360DriverScore(unknown=1.0)
+        confidence = "low"
+        explanation = (
+            "Multiple canonical actor candidates remain; the action driver is unknown."
+            if attribution_state == "ambiguous"
+            else "No exact tenant-scoped action-driver evidence was available. An authenticated "
+            "initiating principal is retained separately and is not treated as the actor."
+        )
+
+    authority_edge_ids = sorted(
+        {
+            *[step.id for step in delegation_chain],
+            *authority_decision.delegationRefs,
+        }
+    )
     attribution = Experience360ActorAttribution(
         tenantId=request.tenantId,
+        actorKind=actor_kind,
+        actorSubjectId=actor_subject_id,
+        representedSubjectId=request.subject.id,
+        agentId=attributed_agent_id,
+        humanPrincipalId=(
+            execution_principal.id if execution_principal is not None else None
+        ),
+        authorityEdgeIds=authority_edge_ids,
+        driverScore=driver_score,
+        confidence=confidence,
+        explanation=explanation,
         resolutionState=attribution_state,
         resolvedCanonicalActor=canonical_actor,
         executionPrincipal=execution_principal,
@@ -1024,6 +1417,272 @@ def _derive_agent_actor_metadata(
         evidenceRefs=list(attribution_evidence.values()),
     )
     return {slot_id: attribution for slot_id in metadata_slots}
+
+
+def _exact_actor_claim_evidence(
+    claims: list[Any],
+    *,
+    claim_id: str,
+    claim_kind: str,
+    claim_state: str,
+    subject: ProjectionSubject,
+    evidence_id: str,
+    evidence_source: Optional[str],
+    domain_slot_id: str,
+) -> list[EvidenceRef]:
+    """Return one exact action-event ref from a unique, slot-bound actor claim."""
+
+    matches = [claim for claim in claims if getattr(claim, "id", None) == claim_id]
+    if len(matches) != 1:
+        return []
+    claim = matches[0]
+    state = getattr(claim.claimState, "value", claim.claimState)
+    if (
+        claim.kind != claim_kind
+        or state != claim_state
+        or claim.subject != subject
+        or domain_slot_id not in (claim.domainSlotIds or [])
+    ):
+        return []
+    evidence = [
+        ref
+        for ref in claim.evidenceRefs
+        if ref.id == evidence_id
+        and ref.type == "event"
+        and (evidence_source is None or ref.source == evidence_source)
+        and bool(ref.source.strip())
+    ]
+    unique = {(ref.source, ref.id): ref for ref in evidence}
+    return list(unique.values()) if len(unique) == 1 else []
+
+
+def _agent360_observed_delegation_chain(
+    *,
+    tenant_id: str,
+    subject: ProjectionSubject,
+    canonical_agent_id: str,
+    authority_content: dict[str, Any],
+    claims: list[Any],
+) -> tuple[list[Experience360Delegation], Optional[Experience360ActorParty], Optional[Experience360ActorParty]]:
+    """Type one exact Agent360 two-edge observation without inferring authority.
+
+    The source path must be complete, continuous, tenant-bound, and supported by
+    unique record and canonical-party claims. Any ambiguity or malformed edge
+    suppresses the entire typed path.
+    """
+
+    empty: tuple[
+        list[Experience360Delegation],
+        Optional[Experience360ActorParty],
+        Optional[Experience360ActorParty],
+    ] = ([], None, None)
+    chain = authority_content.get("delegationChain")
+    records = authority_content.get("delegationRecords")
+    if (
+        not isinstance(chain, dict)
+        or not isinstance(records, list)
+        or chain.get("state") != "partial"
+        or chain.get("boundedReadComplete") is not True
+        or chain.get("intermediateCanonicalAgentEntityId") != canonical_agent_id
+        or chain.get("transitiveAuthority") != "unknown"
+        or chain.get("effectiveAuthorizationDecision") != "unknown"
+    ):
+        return empty
+
+    paths = chain.get("observedAdjacentPaths")
+    if not isinstance(paths, list) or len(paths) != 1:
+        return empty
+    path = paths[0]
+    if not isinstance(path, dict) or path.get("kind") != "observed_adjacent_delegation_records":
+        return empty
+
+    delegation_ids = path.get("delegationRecordIds")
+    party_ids = path.get("partyEntityIds")
+    party_identities = path.get("partyIdentities")
+    if (
+        not isinstance(delegation_ids, list)
+        or len(delegation_ids) != 2
+        or any(not isinstance(value, str) or not value.strip() for value in delegation_ids)
+        or delegation_ids[0] == delegation_ids[1]
+        or not isinstance(party_ids, list)
+        or len(party_ids) != 3
+        or any(not isinstance(value, str) or not value.strip() for value in party_ids)
+        or party_ids[1] != canonical_agent_id
+        or not isinstance(party_identities, list)
+        or len(party_identities) != 3
+    ):
+        return empty
+
+    resolved_parties: list[Experience360ActorParty] = []
+    for entity_id, raw_party in zip(party_ids, party_identities):
+        if (
+            not isinstance(raw_party, dict)
+            or raw_party.get("entityId") != entity_id
+            or raw_party.get("state") != "resolved"
+            or not isinstance(raw_party.get("party"), dict)
+            or raw_party["party"].get("id") != entity_id
+        ):
+            return empty
+        try:
+            resolved_parties.append(Experience360ActorParty.model_validate(raw_party["party"]))
+        except (TypeError, ValueError):
+            return empty
+    if resolved_parties[1].kind != "agent":
+        return empty
+
+    records_by_id: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        record_id = record.get("delegationId")
+        if isinstance(record_id, str) and record_id:
+            records_by_id.setdefault(record_id, []).append(record)
+    edge_records: list[dict[str, Any]] = []
+    record_evidence: list[EvidenceRef] = []
+    for delegation_id in delegation_ids:
+        matching_records = records_by_id.get(delegation_id, [])
+        if len(matching_records) != 1:
+            return empty
+        record = matching_records[0]
+        if (
+            record.get("recordState") == "conflicted"
+            or record.get("authorizationDecision") != "unknown"
+        ):
+            return empty
+        try:
+            evidence_ref = EvidenceRef.model_validate(record.get("evidenceRef"))
+        except Exception:  # noqa: BLE001 - malformed repository evidence fails closed
+            return empty
+        if evidence_ref.source != "delegations" or evidence_ref.id != delegation_id:
+            return empty
+        matching_claims = [
+            claim for claim in claims if getattr(claim, "id", None) == f"delegation.{delegation_id}"
+        ]
+        if len(matching_claims) != 1:
+            return empty
+        record_claim = matching_claims[0]
+        if (
+            record_claim.kind != "agent_delegation_record"
+            or getattr(record_claim.claimState, "value", record_claim.claimState) != "observed"
+            or record_claim.subject != subject
+            or not any(
+                ref.source == "delegations" and ref.id == delegation_id
+                for ref in record_claim.evidenceRefs
+            )
+        ):
+            return empty
+        edge_records.append(record)
+        record_evidence.append(evidence_ref)
+
+    # Prove that each stored edge points to the exact resolved party IDs in
+    # the path, including both sides of the shared intermediate Agent.
+    expected_party_edges = (
+        (delegation_ids[0], "grantor", party_ids[0]),
+        (delegation_ids[0], "grantee", party_ids[1]),
+        (delegation_ids[1], "grantor", party_ids[1]),
+        (delegation_ids[1], "grantee", party_ids[2]),
+    )
+    party_evidence_by_edge: dict[tuple[str, str], list[EvidenceRef]] = {}
+    for edge_id, side, party_id in expected_party_edges:
+        record = edge_records[delegation_ids.index(edge_id)]
+        field = "grantorEntityId" if side == "grantor" else "granteeEntityId"
+        if record.get(field) != party_id:
+            return empty
+        matching_claims = [
+            claim
+            for claim in claims
+            if getattr(claim, "id", None) == f"delegation_party.{edge_id}.{side}"
+        ]
+        if len(matching_claims) != 1:
+            return empty
+        party_claim = matching_claims[0]
+        if (
+            party_claim.kind != "canonically_resolved_delegation_party"
+            or getattr(party_claim.claimState, "value", party_claim.claimState) != "resolved"
+            or party_claim.subject != subject
+            or not {"delegation_chain", "actor_attribution"}.issubset(
+                set(party_claim.domainSlotIds or [])
+            )
+        ):
+            return empty
+        refs = list(party_claim.evidenceRefs)
+        if not any(ref.source == "delegations" and ref.id == edge_id for ref in refs):
+            return empty
+        if not any(
+            ref.source == "entities" and ref.type == "entity" and ref.id == party_id
+            for ref in refs
+        ):
+            return empty
+        party_evidence_by_edge[(edge_id, side)] = refs
+
+    try:
+        path_refs = [EvidenceRef.model_validate(ref) for ref in path.get("evidenceRefs", [])]
+    except Exception:  # noqa: BLE001 - malformed path provenance fails closed
+        return empty
+    path_ref_keys = {(ref.source, ref.id) for ref in path_refs}
+    required_path_refs = {
+        (ref.source, ref.id)
+        for refs in party_evidence_by_edge.values()
+        for ref in refs
+    }
+    required_path_refs.update((ref.source, ref.id) for ref in record_evidence)
+    if not required_path_refs.issubset(path_ref_keys):
+        return empty
+
+    typed_edges: list[Experience360Delegation] = []
+    for index, record in enumerate(edge_records):
+        start = record.get("startsAt")
+        end = record.get("endsAt")
+        scope = record.get("scope")
+        if (
+            not isinstance(start, str)
+            or not _has_timezone(start)
+            or (end is not None and (not isinstance(end, str) or not _has_timezone(end)))
+            or not isinstance(scope, dict)
+            or not isinstance(scope.get("actions"), list)
+            or not isinstance(scope.get("resources"), list)
+        ):
+            return empty
+        actions = scope["actions"]
+        resources = scope["resources"]
+        if any(not isinstance(value, str) or not value.strip() for value in actions + resources):
+            return empty
+        scope_values = [*(f"action:{value}" for value in actions), *(f"resource:{value}" for value in resources)]
+        if not scope_values or len(scope_values) != len(set(scope_values)):
+            return empty
+        delegation_id = delegation_ids[index]
+        state = record.get("recordState")
+        if state not in {"active_as_reported_by_repository", "not_evaluated"}:
+            return empty
+        if state == "active_as_reported_by_repository" and record.get("revokedAt") is not None:
+            return empty
+        edge_refs = [record_evidence[index]]
+        edge_refs.extend(party_evidence_by_edge[(delegation_id, side)])
+        unique_edge_refs = {
+            (ref.source, ref.id): ref for ref in edge_refs
+        }
+        try:
+            typed_edges.append(
+                Experience360Delegation(
+                    id=delegation_id,
+                    tenantId=tenant_id,
+                    delegator=resolved_parties[index],
+                    delegatee=resolved_parties[index + 1],
+                    scope=scope_values,
+                    validFrom=start,
+                    validUntil=end,
+                    status=(
+                        "granted"
+                        if state == "active_as_reported_by_repository"
+                        else "unknown"
+                    ),
+                    evidenceRefs=list(unique_edge_refs.values()),
+                )
+            )
+        except (TypeError, ValueError):
+            return empty
+
+    return typed_edges, resolved_parties[0], resolved_parties[-1]
 
 
 def _has_timezone(value: str) -> bool:
@@ -1069,6 +1728,10 @@ def _merge_identity360_authority_result(
         direct_state = direct.state
         if direct_state == "truncated":
             provenance_state = "degraded"
+        elif direct_state == "partial":
+            # The provider returned usable source evidence, while the frame
+            # slot retains the broader partial-completeness state.
+            provenance_state = "available"
         elif direct_state in {
             "available",
             "empty",
@@ -1118,6 +1781,7 @@ def _merge_identity360_authority_result(
         useful_direct_states = {
             "available",
             "empty",
+            "partial",
             "degraded",
             "truncated",
             "suppressed",
@@ -1126,7 +1790,7 @@ def _merge_identity360_authority_result(
             state = direct_state
         if direct_state not in {"unknown", "suppressed", "missing"} or slot.content is not None:
             content["identityAuthorityRead"] = payload
-        if state in {"available", "degraded"} and not (
+        if state in {"available", "partial", "degraded"} and not (
             evidence_refs or any(item.evidenceRefs for item in slot.provenance)
         ):
             state = "unknown" if state == "available" else "degraded"
@@ -1136,7 +1800,7 @@ def _merge_identity360_authority_result(
         reason_codes = set(slot.reasonCodes)
         if direct.reason:
             reason_codes.add(direct.reason)
-        if direct_state in {"available", "empty", "degraded", "truncated"}:
+        if direct_state in {"available", "empty", "partial", "degraded", "truncated"}:
             reason_codes.add("identity360_direct_freshness_threshold_unknown")
         freshness = Experience360Freshness(
             state="unknown",

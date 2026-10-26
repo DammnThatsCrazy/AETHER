@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,10 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from journeys.measurement.episodes.provider import (  # noqa: E402
     Episode360Provider,
     EpisodeSubjectGraphRead,
+    RepositoryJourneyAttributionSource,
     RepositoryJourney360Source,
 )
+from journeys.traffic.classifier import SOURCE_CLASSIFIER_VERSION  # noqa: E402
 from graph.operational_intelligence.models import EntityRef, EvidenceRef  # noqa: E402
 from graph.temporal360.history_replay import SubjectEvent  # noqa: E402
 from shared.intelligence_projections.composition import (  # noqa: E402
@@ -38,6 +41,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTION_DEFINITIONS,
 )
+from uuid import uuid4
 
 TENANT = "tenant-journey-episode360"
 JOURNEY_ID = "journey-1"
@@ -141,12 +145,14 @@ def _episode(
     tenant_id: str = TENANT,
     subject_kind: str = "agent",
     subject_id: str = AGENT_ID,
+    journey_id: str | None = None,
 ) -> EpisodeRecord:
     return EpisodeRecord(
         episode_id=episode_id,
         tenant_id=tenant_id,
         subject=EntityRef(kind=subject_kind, id=subject_id),
         kind="agent_execution",
+        journey_id=journey_id,
         observation_ids=[f"observation-{episode_id}"],
         evidence_refs=[
             EvidenceRef(
@@ -261,6 +267,108 @@ class FakeJourneyConversionSource:
     async def get(self, tenant_id: str, conversion_id: str):
         self.calls.append((tenant_id, conversion_id))
         return self.rows.get(conversion_id)
+
+
+class FakeJourneyAttributionSource:
+    def __init__(self, rows: list[dict] | None = None, *, raises: Exception | None = None) -> None:
+        self.rows = [] if rows is None else rows
+        self.raises = raises
+        self.calls: list[tuple[str, str, str, int]] = []
+
+    async def list_active_credits_for_journey(
+        self,
+        tenant_id: str,
+        journey_id: str,
+        journey_version_id: str,
+        *,
+        limit: int,
+    ):
+        self.calls.append((tenant_id, journey_id, journey_version_id, limit))
+        if self.raises is not None:
+            raise self.raises
+        return self.rows
+
+
+class FakeCommunicationFactReferenceSource:
+    def __init__(self, rows: list[dict] | None = None, *, complete: bool = True) -> None:
+        self.rows = [] if rows is None else rows
+        self.complete = complete
+        self.calls: list[dict[str, object]] = []
+
+    async def list_for_reference(
+        self,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        *,
+        after,
+        before,
+        received_before,
+        limit: int,
+    ):
+        self.calls.append(
+            {
+                "tenant_id": tenant_id,
+                "subject_kind": subject_kind,
+                "subject_id": subject_id,
+                "after": after,
+                "before": before,
+                "received_before": received_before,
+                "limit": limit,
+            }
+        )
+        return self.rows, self.complete
+
+
+def _communication_fact(
+    fact_id: str,
+    *,
+    tenant_id: str = TENANT,
+    occurred_at: str = "2026-10-16T09:59:00+00:00",
+    received_at: str = "2026-10-16T09:59:30+00:00",
+    payload: dict | None = None,
+) -> dict:
+    return {
+        "fact_id": fact_id,
+        "tenant_id": tenant_id,
+        "kind": "communication_act",
+        "source_event_id": f"source-{fact_id}",
+        "occurred_at": occurred_at,
+        "received_at": received_at,
+        "payload": {} if payload is None else payload,
+    }
+
+
+def _journey_attribution_credit(**overrides: object) -> dict:
+    row = {
+        "tenant_id": TENANT,
+        "linked_tenant_id": TENANT,
+        "linked_journey_id": JOURNEY_ID,
+        "linked_journey_version_id": VERSION_ID,
+        "linked_conversion_id": "conversion-recorded",
+        "attribution_run_status": "complete",
+        "attribution_run_is_active": True,
+        "attribution_run_id": "attribution-run-1",
+        "attribution_run_completed_at": "2026-10-16T10:00:00+00:00",
+        "attribution_run_created_at": "2026-10-16T09:59:00+00:00",
+        "attribution_model_type": "last_touch",
+        "attribution_model_version": "v1",
+        "attribution_data_watermark": "2026-10-16T09:58:00+00:00",
+        "credit_id": "attribution-credit-1",
+        "conversion_id": "conversion-recorded",
+        "touchpoint_id": "touchpoint-recorded",
+        "campaign_id": "campaign-1",
+        "channel": "web",
+        "source": "owned",
+        "credit_weight": "0.7500",
+        "attributed_conversion_count": "1",
+        "attributed_gross_revenue": "42.50",
+        "attributed_net_revenue": "38.00",
+        "attributed_contribution_value": "12.25",
+        "created_at": "2026-10-16T10:01:00+00:00",
+    }
+    row.update(overrides)
+    return row
 
 
 def _section(result: object, section_id: str):
@@ -877,11 +985,18 @@ async def test_invalid_or_cross_tenant_episode_page_stays_unknown() -> None:
 
 
 async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> None:
+    assert SOURCE_CLASSIFIER_VERSION == "3.0"
     source = FakeJourneySource(
+        journey=_journey(agent_activity_ids=["activity-step-1"]),
         steps=[
-            _step(agent_id=AGENT_ID, actor_type="agent"),
-            _step(step_id="step-2", position=2),
-        ]
+            _step(
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="agent",
+                source_classifier_version="3.0",
+            ),
+            _step(step_id="step-2", position=2, source_classifier_version="3.0"),
+        ],
     )
     result = await Episode360Provider(
         journey_source=source,
@@ -913,13 +1028,85 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
     }
     assert slot_coverage["journey_summary"]["state"] == "available"
     assert slot_coverage["journey_summary"]["evidenceRefs"][0]["id"] == VERSION_ID
-    assert slot_coverage["stages"]["state"] == "unknown"
+    assert slot_coverage["stages"]["state"] == "partial"
+    assert slot_coverage["stages"]["coverage"] == "typed_source_role_markers"
+    assert slot_coverage["stages"]["roleTaxonomyState"] == "available"
+    assert slot_coverage["stages"]["roleTaxonomyVersion"] == "3.0"
+    assert slot_coverage["stages"]["stageTaxonomyState"] == "unknown"
+    assert slot_coverage["stages"]["stageCompletenessState"] == "unknown"
+    assert slot_coverage["stages"]["roleMarkerInventory"]["state"] == "complete"
+    assert slot_coverage["stages"]["roleMarkerInventory"]["stepCount"] == 2
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_observations["stageTaxonomyState"] == "unknown"
+    assert [item["journeyRole"] for item in stage_observations["stageObservations"]] == [
+        "entry",
+        "entry",
+    ]
+    assert [item["stepId"] for item in stage_observations["stageObservations"]] == [
+        "step-1",
+        "step-2",
+    ]
+    assert [item["typedRole"] for item in stage_observations["stageObservations"]] == [
+        "entry",
+        "entry",
+    ]
+    assert [item["activityId"] for item in stage_observations["stageObservations"]] == [
+        "activity-step-1",
+        "activity-step-2",
+    ]
+    assert all(
+        item["roleTaxonomy"]["version"] == "3.0"
+        for item in stage_observations["stageObservations"]
+    )
+    assert all(item["evidenceRefs"] for item in stage_observations["stageObservations"])
+    stage_claims = [
+        claim for claim in result.claims if "stages" in (claim.domainSlotIds or [])
+    ]
+    assert [claim.kind for claim in stage_claims] == [
+        "explicit_journey_role_marker",
+        "explicit_journey_role_marker",
+    ]
+
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="journey360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="journey", id=JOURNEY_ID),
+            requestedSlotIds=["stages"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        generated_at="2026-10-22T10:01:00+00:00",
+    )
+    frame_stage_slot = frame.slots[0]
+    assert frame_stage_slot.state == "degraded"
+    assert {ref.id for ref in frame_stage_slot.evidenceRefs} == {"step-1", "step-2"}
+    assert all(
+        "does not define business-stage boundaries or establish stage completeness"
+        in claim.claims[0]
+        for claim in frame_stage_slot.claims
+    )
     assert slot_coverage["episodes"]["reason"] == (
-        "episode_record_contract_has_no_typed_journey_subject_reference"
+        "episode_journey_association_not_recorded_or_not_observed"
     )
     assert slot_coverage["touchpoints"]["state"] == "unknown"
     assert slot_coverage["agent_interventions"]["state"] == "degraded"
-    assert slot_coverage["agent_interventions"]["evidenceRefs"][0]["id"] == "step-1"
+    assert slot_coverage["agent_interventions"]["coverage"] == (
+        "exact_activity_id_references_resolved"
+    )
+    assert slot_coverage["agent_interventions"]["recordedActivityIds"] == ["activity-step-1"]
+    assert slot_coverage["agent_interventions"]["resolvedActivityIds"] == ["activity-step-1"]
+    assert {ref["id"] for ref in slot_coverage["agent_interventions"]["evidenceRefs"]} == {
+        VERSION_ID,
+        "step-1",
+    }
+    agent_claims = [
+        claim for claim in result.claims if claim.kind == "journey_agent_activity_reference"
+    ]
+    assert len(agent_claims) == 1
+    assert agent_claims[0].domainSlotIds == ["agent_interventions"]
+    assert {ref.id for ref in agent_claims[0].evidenceRefs} == {VERSION_ID, "step-1"}
     assert slot_coverage["communications"]["state"] == "unknown"
     assert slot_coverage["dropoffs"]["state"] == "unknown"
     assert slot_coverage["conversions"]["state"] == "unknown"
@@ -964,10 +1151,94 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
         "agent_interventions",
         "evidence_trace",
         "journey_summary",
+        "stages",
         "touchpoints",
     } == {slot_id for claim in result.claims for slot_id in claim.domainSlotIds}
     serialized = json.dumps(result.model_dump(mode="json"))
     assert "must-not-appear" not in serialized
+
+
+async def test_journey_agent_label_requires_exact_reference() -> None:
+    source = FakeJourneySource(
+        steps=[_step(agent_id=AGENT_ID, actor_type="agent", activity_family="agent")]
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    slot = _section(result, "summary").content["requiredSlotCoverage"]["agent_interventions"]
+    assert slot["state"] == "unknown"
+    assert slot["reason"] == "journey_version_agent_activity_reference_list_unavailable"
+    assert slot["evidenceRefs"] == []
+    assert _section(result, "interactions").content["agentActivities"] == []
+    assert not [
+        claim for claim in result.claims if claim.kind == "journey_agent_activity_reference"
+    ]
+
+
+async def test_journey_agent_activity_reference_rejects_non_agent_and_restricted_steps() -> None:
+    source = FakeJourneySource(
+        journey=_journey(agent_activity_ids=["activity-step-1", "activity-step-2"]),
+        steps=[
+            _step(
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="web",
+            ),
+            _step(
+                step_id="step-2",
+                position=2,
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="agent",
+                activity_status="consent_restricted",
+            ),
+        ],
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    slot = _section(result, "summary").content["requiredSlotCoverage"]["agent_interventions"]
+    assert slot["state"] == "unknown"
+    assert slot["resolvedActivityIds"] == []
+    assert slot["unresolvedActivityIds"] == ["activity-step-1", "activity-step-2"]
+    assert "journey_agent_activity_step_family_mismatch" in result.degradedReasons
+    assert "journey_agent_activity_step_restricted" in result.degradedReasons
+    assert _section(result, "interactions").content["agentActivities"] == []
+
+
+async def test_journey_agent_activity_reference_in_time_window_stays_partial() -> None:
+    source = FakeJourneySource(
+        journey=_journey(agent_activity_ids=["activity-step-1"]),
+        steps=[
+            _step(
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="agent",
+            )
+        ],
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(
+        _request(
+            timeRange={
+                "from": "2026-10-16T09:00:00+00:00",
+                "to": "2026-10-16T10:00:00+00:00",
+            }
+        ),
+        _context(),
+    )
+
+    slot = _section(result, "summary").content["requiredSlotCoverage"]["agent_interventions"]
+    assert slot["state"] == "degraded"
+    assert slot["coverage"] == "partial_exact_activity_id_references_resolved"
+    assert slot["resolvedActivityIds"] == ["activity-step-1"]
+    assert "journey_agent_activity_step_inventory_incomplete" in result.degradedReasons
 
 
 @pytest.mark.parametrize("is_current", [False, None])
@@ -985,6 +1256,99 @@ async def test_journey_subject_requires_explicit_current_version_marker(is_curre
     assert source.step_calls == []
     assert result.claims == []
     assert result.degradedReasons == ["journey_current_version_not_proven"]
+
+
+async def test_journey_stage_slot_reports_empty_only_for_complete_unmarked_step_inventory() -> None:
+    source = FakeJourneySource(steps=[_step(journey_role=None)])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "empty"
+    assert stage_slot["coverage"] == "complete_for_explicit_role_markers"
+    assert stage_slot["reason"] == (
+        "complete_current_journey_step_inventory_has_no_explicit_role_markers"
+    )
+    assert stage_observations["stageObservations"] == []
+    assert [ref["id"] for ref in stage_observations["evidenceRefs"]] == ["step-1"]
+
+
+async def test_journey_stage_slot_keeps_unmarked_bounded_window_unknown() -> None:
+    source = FakeJourneySource(steps=[_step(journey_role=None)])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(
+        _request(timeRange={"from": "2026-10-16T09:00:00+00:00", "to": "2026-10-16T10:00:00+00:00"}),
+        _context(),
+    )
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "unknown"
+    assert stage_slot["coverage"] == "unknown"
+    assert stage_slot["reason"] == (
+        "incomplete_journey_step_inventory_cannot_establish_role_marker_absence"
+    )
+    assert stage_observations["inventoryComplete"] is False
+    assert stage_observations["stageObservations"] == []
+    assert stage_observations["evidenceRefs"] == []
+
+
+async def test_journey_stage_marker_without_step_evidence_is_degraded() -> None:
+    source = FakeJourneySource(steps=[_step(step_id=None, journey_role="handoff")])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "degraded"
+    assert stage_slot["reason"] == "journey_role_marker_invalid_or_missing_exact_step_evidence"
+    assert stage_observations["stageObservations"] == []
+    assert stage_observations["evidenceRefs"] == []
+
+
+async def test_journey_stage_role_taxonomy_requires_known_role_and_exact_classifier_version() -> None:
+    source = FakeJourneySource(
+        steps=[
+            _step(step_id="unversioned-role", journey_role="entry"),
+            _step(
+                step_id="unknown-role",
+                position=2,
+                journey_role="exit",
+                source_classifier_version="3.0",
+            ),
+        ]
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "degraded"
+    assert stage_slot["coverage"] == "untyped_source_role_markers"
+    assert stage_slot["roleTaxonomyState"] == "unknown"
+    assert stage_slot["stageTaxonomyState"] == "unknown"
+    assert stage_slot["stageCompletenessState"] == "unknown"
+    assert stage_slot["roleMarkerInventory"]["state"] == "complete"
+    assert stage_slot["roleMarkerInventory"]["observedRoleMarkerCount"] == 2
+    assert stage_slot["roleMarkerInventory"]["typedRoleMarkerCount"] == 0
+    assert stage_slot["roleMarkerInventory"]["untypedRoleMarkerCount"] == 2
+    assert [item["typedRole"] for item in stage_observations["stageObservations"]] == [
+        None,
+        None,
+    ]
+    assert {ref["id"] for ref in stage_slot["roleMarkerInventory"]["evidenceRefs"]} == {
+        "unversioned-role",
+        "unknown-role",
+    }
 
 
 async def test_journey_conversion_and_touchpoint_references_do_not_claim_outcome_or_attribution() -> (
@@ -1005,7 +1369,7 @@ async def test_journey_conversion_and_touchpoint_references_do_not_claim_outcome
     assert outcomes.state == "unknown"
     assert outcomes.content["recordedConversionIds"] == ["conversion-recorded"]
     assert outcomes.content["conversionTruthState"] == "unknown"
-    assert outcomes.content["attributionState"] == "unknown"
+    assert _section(result, "journey_attribution").content["state"] == "unknown"
     assert outcomes.content["journeyVersionEvidenceRefs"][0]["id"] == VERSION_ID
     touchpoints = _section(result, "timeline").content["touchpointReferences"]
     assert touchpoints["touchpointIds"] == ["touchpoint-recorded"]
@@ -1045,11 +1409,218 @@ async def test_journey_conversion_joins_exact_canonical_row_with_evidence() -> N
     assert outcomes.state == "available"
     assert outcomes.content["conversionTruthState"] == "available"
     assert outcomes.content["conversions"][0]["conversionType"] == "purchase"
-    assert outcomes.content["attributionState"] == "unknown"
+    assert _section(result, "journey_attribution").content["state"] == "unknown"
     claim = next(item for item in result.claims if item.kind == "canonical_journey_conversion")
     assert claim.domainSlotIds == ["conversions"]
     assert {ref.id for ref in claim.evidenceRefs} == {VERSION_ID, "conversion-1"}
     assert "private-profile-id" not in json.dumps(result.model_dump(mode="json"))
+
+
+async def test_journey_attribution_uses_exact_tenant_journey_run_and_evidence() -> None:
+    source = FakeJourneySource(journey=_journey(conversion_ids=[]), steps=[])
+    attribution = FakeJourneyAttributionSource([_journey_attribution_credit()])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        conversion_source=FakeJourneyConversionSource({}),
+        attribution_source=attribution,
+    ).project(_request(), _context())
+
+    assert attribution.calls == [(TENANT, JOURNEY_ID, VERSION_ID, 101)]
+    summary = _section(result, "summary").content
+    coverage = summary["requiredSlotCoverage"]["attribution"]
+    assert coverage["state"] == "available"
+    assert coverage["coverage"] == "active_completed_run_links_only"
+    assert {ref["id"] for ref in coverage["evidenceRefs"]} == {
+        "attribution-run-1",
+        "attribution-credit-1",
+    }
+    attribution_content = _section(result, "journey_attribution").content
+    assert "attribution" not in _section(result, "outcomes").content
+    assert attribution_content["credits"][0]["creditWeight"] == "0.7500"
+    assert attribution_content["credits"][0]["conversionResolutionState"] == "unknown"
+    assert attribution_content["credits"][0]["touchpointResolutionState"] == "unknown"
+    assert attribution_content["history"]["state"] == "unknown"
+    assert attribution_content["freshness"]["state"] == "unknown"
+    assert attribution_content["policy"]["state"] == "unknown"
+    claim = next(item for item in result.claims if item.kind == "journey_attribution_credit")
+    assert claim.domainSlotIds == ["attribution"]
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        VERSION_ID,
+        "attribution-run-1",
+        "attribution-credit-1",
+    }
+    assert any("not independent causal proof" in item for item in claim.claims)
+
+
+async def test_journey_attribution_is_not_read_or_exposed_when_slot_is_not_requested() -> None:
+    source = FakeJourneySource(journey=_journey(conversion_ids=[]), steps=[])
+    attribution = FakeJourneyAttributionSource([_journey_attribution_credit()])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        conversion_source=FakeJourneyConversionSource({}),
+        attribution_source=attribution,
+    ).project(_request(includeSections=["outcomes"]), _context())
+
+    assert attribution.calls == []
+    assert all(section.id != "journey_attribution" for section in result.sections)
+    outcomes = _section(result, "outcomes").content
+    assert "attribution" not in outcomes
+    assert "attributionState" not in outcomes
+
+
+async def test_journey_attribution_rejects_foreign_tenant_and_journey_rows() -> None:
+    source = FakeJourneySource(journey=_journey(conversion_ids=[]), steps=[])
+    attribution = FakeJourneyAttributionSource(
+        [
+            _journey_attribution_credit(
+                credit_id="foreign-tenant-credit", tenant_id="foreign-tenant"
+            ),
+            _journey_attribution_credit(
+                credit_id="foreign-journey-credit", linked_journey_id="another-journey"
+            ),
+            _journey_attribution_credit(
+                credit_id="old-version-credit",
+                linked_journey_version_id="older-version",
+            ),
+        ]
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        conversion_source=FakeJourneyConversionSource({}),
+        attribution_source=attribution,
+    ).project(_request(), _context())
+
+    coverage = _section(result, "summary").content["requiredSlotCoverage"]["attribution"]
+    assert coverage["state"] == "unknown"
+    assert coverage["reason"] == "journey_attribution_scope_mismatch"
+    assert coverage["evidenceRefs"] == []
+    assert not any(item.kind == "journey_attribution_credit" for item in result.claims)
+    payload = json.dumps(result.model_dump(mode="json"))
+    assert "foreign-tenant-credit" not in payload
+    assert "foreign-journey-credit" not in payload
+    assert "old-version-credit" not in payload
+
+
+async def test_journey_attribution_repository_joins_same_tenant_active_run_by_exact_current_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from journeys.measurement.repositories import attribution_run_repo
+    from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+
+    attribution_run_repo._reset_local_attribution()
+    repository = AttributionRunRepository()
+
+    async def no_pool():
+        return None
+
+    monkeypatch.setattr(repository, "_pool", no_pool)
+    journey_id = str(uuid4())
+    version_id = str(uuid4())
+    exact_conversion_id = str(uuid4())
+
+    async def add_credit_run(
+        tenant_id: str,
+        run_journey_id: str,
+        conversion_id: str,
+        run_version_id: str = version_id,
+    ) -> None:
+        run_id = str(uuid4())
+        await repository.create_run(
+            {
+                "attribution_run_id": run_id,
+                "tenant_id": tenant_id,
+                "conversion_id": conversion_id,
+                "journey_id": run_journey_id,
+                "journey_version_id": run_version_id,
+                "status": "pending",
+                "is_active": False,
+            }
+        )
+        await repository.complete_run_atomically(
+            run_id,
+            tenant_id,
+            conversion_id,
+            [{"credit_id": str(uuid4()), "credit_weight": "0.5"}],
+            {
+                "journey_id": run_journey_id,
+                "journey_version_id": run_version_id,
+                "completed_at": "2026-10-16T10:00:00+00:00",
+            },
+        )
+
+    try:
+        await add_credit_run(TENANT, journey_id, exact_conversion_id)
+        await add_credit_run(TENANT, journey_id, str(uuid4()), str(uuid4()))
+        await add_credit_run(TENANT, str(uuid4()), str(uuid4()))
+        await add_credit_run("foreign-tenant", journey_id, str(uuid4()))
+        rows = await RepositoryJourneyAttributionSource(repository=repository).list_active_credits_for_journey(
+            TENANT,
+            journey_id,
+            version_id,
+            limit=101,
+        )
+    finally:
+        attribution_run_repo._reset_local_attribution()
+
+    assert len(rows) == 1
+    assert rows[0]["tenant_id"] == TENANT
+    assert rows[0]["linked_tenant_id"] == TENANT
+    assert rows[0]["linked_journey_id"] == journey_id
+    assert rows[0]["attribution_run_status"] == "complete"
+    assert rows[0]["attribution_run_is_active"] is True
+
+
+async def test_journey_attribution_repository_sql_binds_current_version_and_limit_separately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+
+    class Connection:
+        query = ""
+        args: tuple[object, ...] = ()
+
+        async def fetch(self, query: str, *args: object) -> list[dict]:
+            self.query = query
+            self.args = args
+            return []
+
+    connection = Connection()
+
+    class Acquire:
+        async def __aenter__(self) -> Connection:
+            return connection
+
+        async def __aexit__(self, *_: object) -> bool:
+            return False
+
+    class Pool:
+        def acquire(self) -> Acquire:
+            return Acquire()
+
+    repository = AttributionRunRepository()
+
+    async def database_pool() -> Pool:
+        return Pool()
+
+    monkeypatch.setattr(repository, "_pool", database_pool)
+    journey_id = str(uuid4())
+    version_id = str(uuid4())
+
+    rows = await repository.list_active_credits_for_journey(
+        TENANT,
+        journey_id,
+        version_id,
+        limit=23,
+    )
+
+    assert rows == []
+    assert tuple(map(str, connection.args[:3])) == (TENANT, journey_id, version_id)
+    assert connection.args[3] == 23
+    assert "ar.journey_version_id = $3" in connection.query
+    assert "LIMIT $4" in connection.query
 
 
 async def test_journey_conversion_rejects_foreign_tenant_row() -> None:
@@ -1301,7 +1872,7 @@ async def test_journey_touchpoint_list_disagreement_degrades_completeness() -> N
     assert "journey_touchpoint_endpoint_reference_not_in_list" in touchpoints["warnings"]
 
 
-async def test_journey_episode_context_stays_unknown_without_typed_episode_join() -> None:
+async def test_journey_episode_context_does_not_join_by_coincident_subject_id() -> None:
     coincident_profile_episode = _episode(
         episode_id="same-id-user-episode",
         subject_kind="user",
@@ -1325,10 +1896,85 @@ async def test_journey_episode_context_stays_unknown_without_typed_episode_join(
     assert episode_context.content["episodes"] == []
     assert (
         episode_context.content["reason"]
-        == "episode_record_contract_has_no_typed_journey_subject_reference"
+        == "episode_journey_association_not_recorded_or_not_observed"
     )
-    assert store.page_calls == []
+    assert store.page_calls == [{"tenant_id": TENANT, "limit": 100, "cursor": None}]
     assert _section(result, "evidence").content["coverage"] == "partial"
+
+
+async def test_journey_episode_context_joins_only_exact_tenant_episode_references() -> None:
+    linked = _episode(episode_id="episode-linked", journey_id=JOURNEY_ID)
+    wrong_journey = _episode(episode_id="episode-other", journey_id="journey-other")
+    store = FakeEpisodeStore(
+        EpisodePageRead(
+            records=(wrong_journey, linked),
+            next_cursor=None,
+            truncated=False,
+        )
+    )
+    result = await Episode360Provider(
+        episode_store=store,
+        journey_source=FakeJourneySource(),
+    ).project(_request(), _context())
+
+    episode_context = _section(result, "episode_context")
+    assert episode_context.state == "degraded"
+    assert episode_context.content["observedEpisodeCount"] == 1
+    assert episode_context.content["episodeCount"] is None
+    assert episode_context.content["associationCompleteness"] == "unknown"
+    assert [row["episodeId"] for row in episode_context.content["episodes"]] == [
+        "episode-linked"
+    ]
+    assert episode_context.content["evidenceRefs"]
+    assert (
+        _section(result, "summary")
+        .content["requiredSlotCoverage"]["episodes"]["state"]
+        == "degraded"
+    )
+    assert any(claim.kind == "explicit_journey_episode_reference" for claim in result.claims)
+
+
+async def test_journey_episode_context_drops_tenant_mismatched_rows() -> None:
+    foreign = _episode(
+        episode_id="episode-foreign",
+        tenant_id="tenant-other",
+        journey_id=JOURNEY_ID,
+    )
+    store = FakeEpisodeStore(
+        EpisodePageRead(records=(foreign,), next_cursor=None, truncated=False)
+    )
+    result = await Episode360Provider(
+        episode_store=store,
+        journey_source=FakeJourneySource(),
+    ).project(_request(), _context())
+
+    episode_context = _section(result, "episode_context")
+    assert episode_context.state == "unknown"
+    assert episode_context.content["episodes"] == []
+    assert episode_context.content["reason"] == "journey_episode_tenant_scope_mismatch"
+    assert episode_context.content["evidenceRefs"] == []
+
+
+async def test_journey_episode_context_keeps_truncated_scan_incomplete() -> None:
+    linked = _episode(episode_id="episode-linked", journey_id=JOURNEY_ID)
+    store = FakeEpisodeStore(
+        EpisodePageRead(
+            records=(linked,),
+            next_cursor="next-page",
+            truncated=True,
+        )
+    )
+    result = await Episode360Provider(
+        episode_store=store,
+        journey_source=FakeJourneySource(),
+    ).project(_request(), _context())
+
+    episode_context = _section(result, "episode_context")
+    assert episode_context.state == "degraded"
+    assert episode_context.content["episodeStoreScanComplete"] is False
+    assert episode_context.content["reason"] == "journey_episode_scan_truncated"
+    assert episode_context.content["observedEpisodeCount"] == 1
+    assert episode_context.content["episodeCount"] is None
 
 
 async def test_journey_step_evidence_missing_degrades_and_does_not_misattribute_claims() -> None:
@@ -1347,6 +1993,7 @@ async def test_journey_step_evidence_missing_degrades_and_does_not_misattribute_
     assert [claim.id for claim in result.claims] == [
         f"episode360:{JOURNEY_ID}:{VERSION_ID}:journey-version",
         f"episode360:{JOURNEY_ID}:{VERSION_ID}:step:step-2",
+        f"episode360:{JOURNEY_ID}:{VERSION_ID}:stage-marker:step-2",
     ]
     assert result.claims[1].evidenceRefs[0].id == "step-2"
 
@@ -1382,6 +2029,148 @@ async def test_journey_projection_drops_rows_outside_tenant_or_version_scope() -
     assert [row["stepId"] for row in timeline.content["timeline"]] == ["step-1"]
     assert "unscoped_journey_step_rows_dropped" in result.degradedReasons
     assert result.claims == []
+
+
+async def test_episode_communications_join_exact_typed_facts_and_honor_both_as_of_clocks() -> None:
+    episode_id = "episode-communication-link"
+    episode = _episode(episode_id=episode_id)
+    anchor = "2026-10-16T10:00:00+00:00"
+    source = FakeCommunicationFactReferenceSource(
+        [
+            _communication_fact(
+                "comm-exact",
+                payload={
+                    "episode_id": episode_id,
+                    "message_body": "private message text must not project",
+                    "conversation_id": "conversation-1",
+                },
+            ),
+            _communication_fact(
+                "comm-received-late",
+                occurred_at="2026-10-16T09:58:00+00:00",
+                received_at="2026-10-16T10:01:00+00:00",
+                payload={"episode_id": episode_id},
+            ),
+            _communication_fact(
+                "comm-event-future",
+                occurred_at="2026-10-16T10:01:00+00:00",
+                received_at="2026-10-16T10:01:00+00:00",
+                payload={"episode_id": episode_id},
+            ),
+            _communication_fact(
+                "comm-wrong-reference",
+                payload={"episode_id": f"{episode_id}-other"},
+            ),
+            _communication_fact(
+                "comm-cross-tenant",
+                tenant_id="tenant-other",
+                payload={"episode_id": episode_id},
+            ),
+            _communication_fact(
+                "comm-free-text",
+                payload={"description": episode_id},
+            ),
+        ]
+    )
+    request = _episode_request(
+        subject=ProjectionSubject(kind="episode", id=episode_id),
+        asOf=anchor,
+        temporalMode="as_of",
+    )
+    result = await Episode360Provider(
+        episode_store=FakeEpisodeStore(
+            EpisodePageRead(records=(), next_cursor=None, truncated=False),
+            direct_record=episode,
+        ),
+        communication_fact_source=source,
+    ).project(request, _context())
+
+    assert source.calls == [
+        {
+            "tenant_id": TENANT,
+            "subject_kind": "episode",
+            "subject_id": episode_id,
+            "after": None,
+            "before": datetime.fromisoformat(anchor) + timedelta(microseconds=1),
+            "received_before": datetime.fromisoformat(anchor),
+            "limit": 201,
+        }
+    ]
+    summary = _section(result, "summary").content
+    communication_slot = summary["requiredSlotCoverage"]["communications"]
+    assert communication_slot["state"] == "degraded"
+    assert communication_slot["reason"] == (
+        "communication_fact_tenant_scope_mismatch"
+    )
+    assert [ref["id"] for ref in communication_slot["evidenceRefs"]] == ["comm-exact"]
+    assert communication_slot["temporal"]["state"] == "as_of_event_and_receipt_time_applied"
+    communication_context = _section(result, "interactions").content["communicationContext"]
+    assert [row["factId"] for row in communication_context["communications"]] == [
+        "comm-exact"
+    ]
+    assert "conversationIds" not in communication_context["communications"][0]
+    assert "conversation-1" not in str(result.model_dump())
+    assert "private message text must not project" not in str(result.model_dump())
+    communication_claims = [
+        claim for claim in result.claims if claim.kind == "explicit_episode_communication_reference"
+    ]
+    assert len(communication_claims) == 1
+    assert communication_claims[0].domainSlotIds == ["communications", "evidence_trace"]
+    assert {ref.id for ref in communication_claims[0].evidenceRefs} == {
+        episode_id,
+        "comm-exact",
+    }
+
+
+async def test_journey_communications_join_only_exact_tenant_fact_references() -> None:
+    source = FakeCommunicationFactReferenceSource(
+        [
+            _communication_fact(
+                "journey-comm-exact",
+                payload={"journey_id": JOURNEY_ID, "message_body": "private"},
+            ),
+            _communication_fact(
+                "journey-comm-wrong",
+                payload={"journey_id": f"{JOURNEY_ID}-other"},
+            ),
+            _communication_fact(
+                "journey-comm-cross-tenant",
+                tenant_id="tenant-other",
+                payload={"journey_id": JOURNEY_ID},
+            ),
+            _communication_fact(
+                "journey-comm-free-text",
+                payload={"description": JOURNEY_ID},
+            ),
+        ]
+    )
+    result = await Episode360Provider(
+        journey_source=FakeJourneySource(),
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+        communication_fact_source=source,
+    ).project(_request(), _context())
+
+    assert source.calls[0]["tenant_id"] == TENANT
+    assert source.calls[0]["subject_kind"] == "journey"
+    assert source.calls[0]["subject_id"] == JOURNEY_ID
+    coverage = _section(result, "summary").content["requiredSlotCoverage"]
+    communication_slot = coverage["communications"]
+    assert communication_slot["state"] == "degraded"
+    assert communication_slot["coverage"] == "exact_reference_facts_only"
+    assert [ref["id"] for ref in communication_slot["evidenceRefs"]] == [
+        "journey-comm-exact"
+    ]
+    interactions = _section(result, "interactions").content["communications"]
+    assert [row["factId"] for row in interactions["communications"]] == [
+        "journey-comm-exact"
+    ]
+    assert "private" not in str(result.model_dump())
+    claims = [
+        claim for claim in result.claims if claim.kind == "explicit_journey_communication_reference"
+    ]
+    assert len(claims) == 1
+    assert claims[0].domainSlotIds == ["communications", "evidence_trace"]
+    assert {ref.id for ref in claims[0].evidenceRefs} == {VERSION_ID, "journey-comm-exact"}
 
 
 async def test_journey_point_in_time_request_is_unknown_until_history_read_is_supported() -> None:

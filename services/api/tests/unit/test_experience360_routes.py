@@ -31,14 +31,14 @@ class _PolicyEvaluator:
 @pytest.mark.asyncio
 async def test_frame_route_passes_server_freshness_and_quality_to_runtime(monkeypatch) -> None:
     freshness = {
-        "agent_identity": Experience360Freshness(
+        "identity": Experience360Freshness(
             state="fresh",
             sourceAsOf="2026-10-18T11:59:00Z",
             evaluatedAt="2026-10-18T12:00:00Z",
         )
     }
     quality = {
-        "agent_identity": Experience360Quality(
+        "identity": Experience360Quality(
             state="adequate",
             reasonCodes=[],
         )
@@ -70,7 +70,7 @@ async def test_frame_route_passes_server_freshness_and_quality_to_runtime(monkey
     body = Experience360FrameBody(
         surfaceId="agent360",
         subject={"kind": "agent", "id": "agent-route-test"},
-        requestedSlotIds=["agent_identity"],
+        requestedSlotIds=["identity"],
     )
 
     response = await post_experience360_frame(body, request)

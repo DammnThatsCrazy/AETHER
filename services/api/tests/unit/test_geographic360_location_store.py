@@ -36,8 +36,14 @@ from graph.geo.location_facts import (  # noqa: E402
     location_fact_repo,
 )
 from graph.geographic360.provider import (  # noqa: E402
+    Geographic360Provider,
     GeographicLocationReader,
 )
+from shared.intelligence_projections.contracts import (  # noqa: E402
+    ProjectionRequest,
+    ProjectionSubject,
+)
+from shared.intelligence_projections.registry import ProviderRegistry  # noqa: E402
 
 from shared.geo.models import (  # noqa: E402
     Jurisdiction,
@@ -286,3 +292,56 @@ async def test_default_reader_reports_out_of_kind_subjects():
     )
     assert view.posture is None
     assert "not a geographic360 subject" in (view.missing_reason or "")
+
+
+async def test_location_fact_source_lineage_reaches_geographic360_normalization_slot():
+    repo = LocationFactRepository()
+    fact = _fact("loc-lineage", provider="context_capsule").model_copy(
+        update={
+            "source_observation_id": "capsule-observation-21",
+            "evidence_refs": ["evidence:source-21"],
+            "schema_version": "2.1.0",
+            "normalization_version": "context_capsule_location_fact.v1",
+        }
+    )
+    stored = await repo.record(fact)
+    reader = GeographicLocationReader(repository=repo)
+    provider = Geographic360Provider(reader=reader)
+    request = ProjectionRequest(
+        projectionId="geographic360",
+        tenantId=TENANT_A,
+        subject=ProjectionSubject(kind="entity", id="ent-portland"),
+        temporalMode="window",
+    )
+    context = await ProviderRegistry().build_context("geographic360", request)
+
+    result = await provider.project(request, context)
+
+    state = next(section for section in result.sections if section.id == "state")
+    normalization = state.content["requiredSlots"]["normalization"]
+    assert normalization["state"] == "degraded"
+    assert normalization["content"]["entries"] == [
+        {
+            "locationFactId": "loc-lineage",
+            "sourceLinkState": "linked",
+            "sourceObservationId": "capsule-observation-21",
+            "sourceProvider": "context_capsule",
+            "sourceEvidenceRefs": ["evidence:source-21"],
+            "sourceEvidenceRefsTruncated": False,
+            "locationFactSchemaVersion": "2.1.0",
+            "sourceObservedAt": fact.model_dump(mode="json")["observed_at"],
+            "normalizationVersion": "context_capsule_location_fact.v1",
+            "normalizationTimestamp": stored["normalization_timestamp"],
+        }
+    ]
+    assert normalization["content"]["unavailableLineageFields"] == [
+        "validationVersion",
+        "rawRecordRef",
+    ]
+    assert normalization["content"]["transformationVersionedFactCount"] == 1
+    assert normalization["content"]["rawRecordLinkedFactCount"] == 0
+    assert normalization["freshness"]["state"] == "available"
+    assert normalization["freshness"]["latestNormalizationAt"] == stored[
+        "normalization_timestamp"
+    ]
+    assert "Portland" not in str(normalization)

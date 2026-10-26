@@ -21,6 +21,8 @@ from repositories.agentic_observability_repos import (
 from actions.agentic_observability.event_normalizer import normalize, resolve_provider
 from actions.agentic_observability.graph_mutations import build_mutations, build_account_mutations
 from actions.agentic_observability.pipeline import ingest_observation
+from actions.agentic_observability.provenance import AgentEvidenceReference
+from ingestion.ingestion.validation import SCHEMA_VERSION
 from actions.agentic_observability.models import (
     AgenticObservationRecord, MCPConnectionObserved,
     AgentToolInvocationObserved, AgentRiskSignalRecord,
@@ -76,6 +78,9 @@ async def _delegate_to_spine(
     integration_id: str | None = None,
     environment_id: str | None = None,
     observed_at: str | None = None,
+    agentic_evidence_reference: AgentEvidenceReference | None = None,
+    evidence_repository: Any | None = None,
+    evidence_record_id: str | None = None,
 ) -> ObservationResponse:
     """Delegate to the canonical spine and report an HONEST queued projection.
 
@@ -93,8 +98,24 @@ async def _delegate_to_spine(
         actor_id=actor_id,
         agent_id=agent_id,
         observed_at=observed_at,
+        agentic_evidence_reference=agentic_evidence_reference,
         properties=_prune_none(properties),
     )
+    if agentic_evidence_reference is not None:
+        if evidence_repository is None or not evidence_record_id:
+            raise ValueError("agentic provenance requires its exact compatibility row")
+        if ingest.accepted:
+            # The Bronze payload is the durable reciprocal link. This pointer
+            # makes the compatibility row a bounded direct lookup into Bronze;
+            # the provider revalidates both sides before returning provenance.
+            await evidence_repository.update(
+                evidence_record_id,
+                {
+                    "tenant_id": tenant_id,
+                    "canonical_event_id": ingest.event_id,
+                    "canonical_event_schema_version": SCHEMA_VERSION,
+                },
+            )
     return ObservationResponse(
         observation_id=ingest.event_id,
         received_at=_utc_now(),
@@ -141,11 +162,21 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
         record.risk = computed_risk
 
     # Legacy compat store (Kyber "activities" count) — written on BOTH paths.
-    await AgentActivityRepository().insert(record.observation_id, record.model_dump(mode="json"))
+    # Keep the source agent reference as a first-class tenant-filterable field
+    # for Agent360; it is still a source ID, not a canonical Agent identity.
+    agent_id = (
+        req.agent.agent_id
+        if req.agent and req.agent.agent_id
+        else req.actor.actor_id
+        if req.actor.actor_type.value == "agent"
+        else None
+    )
+    activity_record = record.model_dump(mode="json")
+    activity_record["agent_id"] = agent_id
+    await AgentActivityRepository().insert(record.observation_id, activity_record)
 
     if _use_canonical_spine(tenant_id):
         provider_id = resolve_provider(raw)
-        agent_id = (req.agent.agent_id if req.agent and req.agent.agent_id else None) or req.actor.actor_id
         props: dict = {
             "agentId": agent_id,
             "objectType": req.object.object_type,
@@ -163,6 +194,18 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
             props["currency"] = req.economics.currency
             props["asset"] = req.economics.asset
             props["direction"] = req.economics.direction
+        evidence_reference = (
+            AgentEvidenceReference(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                source="obs_agent_activities",
+                id=record.observation_id,
+                observed_at=record.observed_at,
+                event_type=req.event_name,
+            )
+            if agent_id
+            else None
+        )
         return await _delegate_to_spine(
             tenant_id=tenant_id,
             event_name=req.event_name,
@@ -172,7 +215,10 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
             actor_id=req.actor.actor_id,
             provider_event_id=(req.source.provider_event_id if req.source else None),
             integration_id=(req.source.integration_id if req.source else None),
-            observed_at=req.observed_at,
+            observed_at=record.observed_at,
+            agentic_evidence_reference=evidence_reference,
+            evidence_repository=AgentActivityRepository() if evidence_reference else None,
+            evidence_record_id=record.observation_id if evidence_reference else None,
         )
 
     mutations = build_mutations(record)
@@ -234,6 +280,18 @@ async def observe_agent_tool(req: AgentToolRequest, request: Request) -> Observa
 
     if _use_canonical_spine(tenant_id):
         provider_id = resolve_provider(req.model_dump())
+        evidence_reference = (
+            AgentEvidenceReference(
+                tenant_id=tenant_id,
+                agent_id=req.agent_id,
+                source="obs_agent_tools",
+                id=obs_id,
+                observed_at=req.observed_at,
+                event_type="agent_tool_invocation_observed",
+            )
+            if req.agent_id
+            else None
+        )
         return await _delegate_to_spine(
             tenant_id=tenant_id,
             event_name="agent_tool_invocation_observed",
@@ -250,6 +308,9 @@ async def observe_agent_tool(req: AgentToolRequest, request: Request) -> Observa
             agent_id=req.agent_id,
             provider_event_id=obs_id,
             observed_at=req.observed_at,
+            agentic_evidence_reference=evidence_reference,
+            evidence_repository=AgentToolRepository() if evidence_reference else None,
+            evidence_record_id=obs_id if evidence_reference else None,
         )
 
     return ObservationResponse(
@@ -325,6 +386,18 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
 
     if _use_canonical_spine(tenant_id):
         provider_id = resolve_provider(req.model_dump())
+        evidence_reference = (
+            AgentEvidenceReference(
+                tenant_id=tenant_id,
+                agent_id=req.agent_id,
+                source="obs_agent_risk_signals",
+                id=signal.signal_id,
+                observed_at=signal.detected_at,
+                event_type="agent_risk_signal_observed",
+            )
+            if req.agent_id
+            else None
+        )
         return await _delegate_to_spine(
             tenant_id=tenant_id,
             event_name="agent_risk_signal_observed",
@@ -339,6 +412,10 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
             },
             agent_id=req.agent_id,
             provider_event_id=signal.signal_id,
+            observed_at=signal.detected_at,
+            agentic_evidence_reference=evidence_reference,
+            evidence_repository=AgentRiskSignalRepository() if evidence_reference else None,
+            evidence_record_id=signal.signal_id if evidence_reference else None,
         )
 
     return ObservationResponse(

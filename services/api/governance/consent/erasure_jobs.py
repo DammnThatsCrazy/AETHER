@@ -60,15 +60,17 @@ keyed on ``user_id`` and the request's ``anonymous_id`` when present, recomputes
 other identities' session rollups that counted the subject's events, and drops
 the tenant's cached analytics query results.
 
-The ``web3_observations`` and ``x402_commerce`` components also erase exact
-tenant-scoped subject references from raw Web3 observations and x402 lifecycle
-records, while honoring their storage-policy legal holds.
+The ``web3_observations``, ``x402_commerce``, and
+``risk_poisoning_evidence`` components also erase exact tenant-scoped
+references from raw Web3 observations, x402 lifecycle records, and risk-owned
+poisoning evidence, while honoring their storage-policy legal holds.
 
-The entity-keyed stores add ``web3_observations`` and ``x402_commerce``: the
-first deletes raw tenant observations whose structured fields contain an exact
-subject reference; the second removes tenant commerce lifecycle rows that
-directly name the subject. Both run through isolated entity planes and return
-their own durable row receipts.
+The entity-keyed stores add ``web3_observations``,
+``x402_commerce``, ``risk_poisoning_evidence``,
+``risk_intervention_records``, and ``social_relationship_evidence_events``: these planes delete
+tenant rows with exact subject/source references, and x402 approval decisions
+are also removed when their approval is erased. Each plane returns its own row
+receipt.
 """
 
 from __future__ import annotations
@@ -192,7 +194,8 @@ def _kyber_device_eraser(repo_cls: type) -> Any:
 # now erases the semantic plane and marks each component with its OWN real
 # erased-row receipt, derived from the privacy handler's per-table counts:
 #   semantic_observations → silver_semantic_observations + semantic memories
-#                           + entity_mentions + subject_links + claims
+#                           + context cards + embedding metadata
+#                           + workflow definitions + entity_mentions + subject_links + claims
 #                           + shadow_divergences
 #   sentiment_observations → silver_sentiment_observations
 #   semantic_gold_state    → gold_entity_semantic_state + gold_entity_sentiment_state
@@ -215,6 +218,9 @@ def _semantic_component_receipts(deleted: dict) -> dict[str, int]:
         SEMANTIC_OBSERVATIONS_COMPONENT: (
             _n("silver_semantic_observations")
             + _n("semantic_memory_records")
+            + _n("semantic_context_cards")
+            + _n("semantic_embedding_metadata")
+            + _n("workflow_definition_revisions")
             + _n("silver_semantic_entity_mentions")
             + _n("silver_semantic_subject_links")
             + _n("silver_semantic_claims")
@@ -495,7 +501,13 @@ async def _run_completeness_planes(
         + planes.IDENTITY_COMPONENTS
         # Keep explicit names here as well as in ENTITY_PLANES so static
         # coverage proves both newly connected stores are job-owned.
-        + ("web3_observations", "x402_commerce")
+        + (
+            "web3_observations",
+            "x402_commerce",
+            "risk_poisoning_evidence",
+            "risk_intervention_records",
+            "social_relationship_evidence_events",
+        )
     ))
     try:
         subject = await planes.resolve_subject(tenant_id, user_id, anonymous_id)

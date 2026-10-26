@@ -206,6 +206,22 @@
       ]
     },
     {
+      "name": "CommerceFlowProjector",
+      "table": "silver_commerce_flow_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [
+        "ecommerce"
+      ],
+      "eventTypes": [
+        "cart_item_added",
+        "cart_item_removed",
+        "cart_updated",
+        "checkout_started",
+        "checkout_step_completed"
+      ],
+      "ownedActivityEventTypes": []
+    },
+    {
       "name": "OutcomeProjector",
       "table": "silver_outcome_facts",
       "activityRole": "fact_emitter",

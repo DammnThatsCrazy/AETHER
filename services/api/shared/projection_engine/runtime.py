@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from shared.intelligence_projections.contracts import ProjectionRequest, ProjectionResult
+from shared.intelligence_projections.contracts import (
+    ProjectionReadAuthorization,
+    ProjectionRequest,
+    ProjectionResult,
+)
 from shared.projection_engine.executor import ProjectionExecutor
 from shared.projection_engine.lens_registry import lens_registry as default_lens_registry
 from shared.projection_engine.lens_set import LensSet
@@ -39,6 +43,9 @@ class ProjectionRuntime:
         lens_ids: Optional[list[str]] = None,
         temporal_mode: Optional[TemporalMode | str] = None,
         operators: Optional[list[OperatorSpec]] = None,
+        experience360_read_authorizations: Optional[
+            list[ProjectionReadAuthorization]
+        ] = None,
     ) -> ProjectionResult:
         """Run one projection.
 
@@ -55,6 +62,7 @@ class ProjectionRuntime:
             lens_set=lens_set,
             temporal_mode=mode or TemporalMode.LIVE,
             operators=operators,
+            experience360_read_authorizations=experience360_read_authorizations,
         )
 
     # ── Introspection helpers ───────────────────────────────────────────────

@@ -191,8 +191,10 @@ externally-verified score from inside CI.
 ### Externally blocked
 
 Recorded as blocked, never counted as done, and covered by the time-bounded
-grants `DR-EX-NO-CLOUD-ACCOUNT` and `DR-EX-NO-BILLING-HISTORY` (both expiring
-2026-10-23; an expired grant is a hard failure, not a silent lapse):
+grants `DR-EX-NO-CLOUD-ACCOUNT` and `DR-EX-NO-BILLING-HISTORY` (renewed on
+2026-10-25 through 2027-01-23; an expired grant is a hard failure, not a
+silent lapse). These grants record the external dependency and do not earn
+control weight:
 
 - credentialed `terraform plan` and `terraform apply` against the real backend
   and state key;

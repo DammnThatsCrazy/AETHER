@@ -41,6 +41,11 @@ from shared.intelligence_projections.registry import ProviderRegistry
 from graph.operational_intelligence.models import EvidenceRef
 from shared.contracts_models.epistemic import EpistemicStatus
 from shared.temporal.instant import try_parse_instant
+from actions.agentic_observability.provenance import (
+    AgentEvidenceReference,
+    AgenticProvenanceQuery,
+    read_agentic_provenance_records,
+)
 
 
 OUTPUT_SECTIONS: tuple[str, ...] = (
@@ -60,6 +65,7 @@ DEFAULT_READ_LIMIT = 100
 ACTIVE_DELEGATION_REPOSITORY_LIMIT = 200
 CAPABILITY_AUTHORIZATION_SCAN_LIMIT = 2000
 CAPABILITY_AUTHORIZATION_READ_LIMIT = CAPABILITY_AUTHORIZATION_SCAN_LIMIT + 1
+MAX_AGENT_OWNER_EDGE_SCAN = 2000
 
 REASON_CONFIG_UNAVAILABLE = "agent_config_source_unavailable"
 REASON_EXECUTION_UNAVAILABLE = "agent_execution_source_unavailable"
@@ -69,6 +75,7 @@ REASON_TOOL_UNAVAILABLE = "agent_tool_source_unavailable"
 REASON_RISK_UNAVAILABLE = "agent_risk_source_unavailable"
 REASON_COMMUNICATION_UNAVAILABLE = "agent_communication_source_unavailable"
 REASON_TEMPORAL_REPLAY_UNAVAILABLE = "agent_temporal_replay_unavailable"
+REASON_EVIDENCE_PROVENANCE_UNAVAILABLE = "agent_evidence_provenance_source_unavailable"
 
 
 @dataclass(frozen=True)
@@ -117,6 +124,10 @@ class Agent360Source(Protocol):
         self, tenant_id: str, party_entity_ids: set[str]
     ) -> Agent360ReadBatch: ...
 
+    async def owner_relationships(
+        self, tenant_id: str, owner_entity_id: str, canonical_agent_entity_id: str
+    ) -> Agent360ReadBatch: ...
+
     async def activities(
         self, tenant_id: str, agent_id: str, limit: int
     ) -> list[dict[str, Any]]: ...
@@ -131,6 +142,22 @@ class Agent360Source(Protocol):
         self, tenant_id: str, agent_id: str, limit: int
     ) -> list[dict[str, Any]]: ...
 
+    async def canonical_risk_summary(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        canonical_agent_entity_id: str,
+        limit: int,
+    ) -> Agent360ReadBatch: ...
+
+    async def agentic_provenance(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        queries: list[AgenticProvenanceQuery],
+        limit: int,
+    ) -> Agent360ReadBatch: ...
+
     async def communications(
         self, tenant_id: str, agent_id: str, limit: int
     ) -> Agent360ReadBatch: ...
@@ -143,7 +170,7 @@ class RepositoryAgent360Source:
     not invoke graph mutation, policy evaluation, or agent runtime operations.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, risk_provider: Any = None, consent_reader: Any = None) -> None:
         # Imported here so importing the provider module itself stays light and
         # does not initialize repository clients or application services.
         from actions.agent.deployments import get_deployment_repository
@@ -176,6 +203,8 @@ class RepositoryAgent360Source:
         self._inboxes = AgentInboxRepository()
         self._messages = AgentMessageRepository()
         self._principal_identity_repository: Any = None
+        self._risk360_provider = risk_provider
+        self._risk_consent_reader = consent_reader
 
     async def agent_configs(self, tenant_id: str, agent_id: str) -> list[dict[str, Any]]:
         return await self._configs.find_many(
@@ -209,7 +238,7 @@ class RepositoryAgent360Source:
     async def delegation_party_identities(
         self, tenant_id: str, party_entity_ids: set[str]
     ) -> Agent360ReadBatch:
-        """Resolve delegation party references only through tenant-owned entities."""
+        """Resolve owner/delegation party IDs through tenant-owned entity rows."""
         if not tenant_id:
             return Agent360ReadBatch(rows=[], scope_known=False)
         requested = {
@@ -242,6 +271,89 @@ class RepositoryAgent360Source:
                     "identity_evidence_id": entity_id,
                     "identity_evidence_source": "entities",
                     "identity_observed_at": _first(row, "updated_at", "created_at"),
+                }
+            )
+        return Agent360ReadBatch(
+            rows=rows,
+            truncated=truncated,
+            scope_mismatch=scope_mismatch,
+        )
+
+    async def owner_relationships(
+        self, tenant_id: str, owner_entity_id: str, canonical_agent_entity_id: str
+    ) -> Agent360ReadBatch:
+        """Read exact tenant ``OWNS`` edges for one resolved owner/Agent pair.
+
+        A graph edge is relationship evidence, not legal title, current
+        effective ownership, or action authorization. The tenant-wide scan is
+        bounded and reports truncation so absence cannot be mistaken for a
+        complete ownership inventory.
+        """
+        if not tenant_id or not owner_entity_id or not canonical_agent_entity_id:
+            return Agent360ReadBatch(rows=[], scope_known=False)
+
+        from dependencies.providers import get_graph
+        from shared.graph.graph import EdgeType, tenant_of
+
+        edge_types = [EdgeType.OWNS, EdgeType.OWNS_AGENT]
+        edges, truncated = await get_graph().get_edges_for_tenant(
+            tenant_id,
+            limit=MAX_AGENT_OWNER_EDGE_SCAN,
+            edge_types=edge_types,
+        )
+        if not isinstance(edges, list) or not isinstance(truncated, bool):
+            raise TypeError("tenant graph owner edge source returned an invalid contract")
+
+        rows: list[dict[str, Any]] = []
+        scope_mismatch = False
+        for edge in edges:
+            properties = getattr(edge, "properties", None)
+            edge_type = getattr(edge, "edge_type", None)
+            source_id = getattr(edge, "from_vertex_id", None)
+            target_id = getattr(edge, "to_vertex_id", None)
+            if (
+                not isinstance(properties, dict)
+                or edge_type not in edge_types
+                or not isinstance(source_id, str)
+                or not isinstance(target_id, str)
+            ):
+                scope_mismatch = True
+                continue
+            try:
+                edge_tenant_id = tenant_of(properties)
+            except Exception:  # noqa: BLE001 - malformed tenant tags fail closed
+                edge_tenant_id = None
+            if edge_tenant_id != tenant_id:
+                scope_mismatch = True
+                continue
+            if (source_id, target_id) != (owner_entity_id, canonical_agent_entity_id):
+                continue
+
+            edge_id = properties.get("idempotency_key")
+            if not isinstance(edge_id, str) or not edge_id.strip():
+                scope_mismatch = True
+                continue
+            observed_at = (
+                properties.get("recorded_at")
+                or properties.get("valid_from")
+                or getattr(edge, "created_at", None)
+            )
+            evidence = EvidenceRef(
+                id=edge_id,
+                type="relationship",
+                source="graph",
+                observedAt=(observed_at if isinstance(observed_at, str) and observed_at else None),
+                uri=f"graph://edges/{edge_id}",
+            )
+            rows.append(
+                {
+                    "tenant_id": tenant_id,
+                    "owner_entity_id": owner_entity_id,
+                    "canonical_agent_entity_id": canonical_agent_entity_id,
+                    "relationship_type": edge_type,
+                    "valid_from": properties.get("valid_from"),
+                    "valid_to": properties.get("valid_to"),
+                    "evidence_ref": evidence.model_dump(mode="json"),
                 }
             )
         return Agent360ReadBatch(
@@ -444,6 +556,211 @@ class RepositoryAgent360Source:
             filters={"tenant_id": tenant_id, "agent_id": agent_id}, limit=limit + 1
         )
 
+    async def canonical_risk_summary(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        canonical_agent_entity_id: str,
+        limit: int,
+    ) -> Agent360ReadBatch:
+        """Read current Risk360 for one resolved Agent after affirmative consent.
+
+        Raw ``obs_agent_risk_signals`` are deliberately not used here. Risk
+        facts enter Agent360 only from the canonical tenant + typed-subject
+        Risk360 reader, and only after current analytics consent returns its
+        authoritative receipt for the same canonical Agent subject.
+        """
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (tenant_id, agent_id, canonical_agent_entity_id)
+        ):
+            return Agent360ReadBatch(rows=[], scope_known=False)
+
+        consent_reader = self._risk_consent_reader
+        if consent_reader is None:
+            from governance.consent.authority import evaluate_consent_with_receipt
+
+            consent_reader = evaluate_consent_with_receipt
+            self._risk_consent_reader = consent_reader
+        consent = await consent_reader(
+            tenant_id=tenant_id,
+            subject_id=canonical_agent_entity_id,
+            anonymous_id=None,
+            purpose="analytics",
+        )
+        receipt_id = getattr(consent, "receipt_id", None)
+        if getattr(consent, "allowed", False) is not True or not (
+            isinstance(receipt_id, str)
+            and receipt_id.strip()
+            and receipt_id == receipt_id.strip()
+        ):
+            return Agent360ReadBatch(
+                rows=[
+                    {
+                        "tenant_id": tenant_id,
+                        "agent_id": agent_id,
+                        "canonical_agent_entity_id": canonical_agent_entity_id,
+                        "subject_kind": "agent",
+                        "subject_id": canonical_agent_entity_id,
+                        "state": "suppressed",
+                        "reason": "agent_analytics_consent_not_established",
+                    }
+                ]
+            )
+
+        from urllib.parse import quote
+
+        consent_ref = EvidenceRef(
+            id=receipt_id,
+            type="event",
+            source="governance.consent.authority",
+            observedAt=_utc_now_iso(),
+            uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+        )
+        risk_provider = self._risk360_provider
+        if risk_provider is None:
+            from intelligence.risk360.provider import Risk360Provider
+
+            risk_provider = Risk360Provider()
+            self._risk360_provider = risk_provider
+        risk_request = ProjectionRequest(
+            projectionId="risk360",
+            tenantId=tenant_id,
+            subject=ProjectionSubject(kind="agent", id=canonical_agent_entity_id),
+            page={"limit": min(max(limit, 1), MAX_READ_LIMIT)},
+            includeSections=["summary", "state", "evidence", "findings"],
+            includeClaims=True,
+        )
+        risk_context = ProjectionContext(
+            projectionId="risk360",
+            tenantId=tenant_id,
+            registryState="in_flight",
+            dependencyState=[],
+            warnings=[],
+        )
+        result = await risk_provider.project(risk_request, risk_context)
+        if result.projectionId != "risk360" or result.tenantId != tenant_id:
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+
+        sections = {section.id: section for section in result.sections}
+        if len(sections) != len(result.sections):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        summary = sections.get("summary")
+        risk_state = sections.get("state")
+        evidence = sections.get("evidence")
+        findings = sections.get("findings")
+        expected_subject = {"kind": "agent", "id": canonical_agent_entity_id}
+        for section in (summary, risk_state, evidence, findings):
+            if section is None or not isinstance(section.content, dict):
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            if section.content.get("tenantId") != tenant_id:
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            if section.id != "evidence" and section.content.get("subject") != expected_subject:
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+
+        risk_claims: list[ClaimEnvelope] = []
+        for claim in result.claims:
+            if "risk_summary" not in (claim.domainSlotIds or []):
+                continue
+            if claim.subject.kind != "agent" or claim.subject.id != canonical_agent_entity_id:
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            if not claim.evidenceRefs:
+                continue
+            if any(not ref.id.strip() or not ref.source.strip() for ref in claim.evidenceRefs):
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            risk_claims.append(claim)
+
+        raw_evidence = evidence.content.get("evidence")
+        if not isinstance(raw_evidence, list):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        try:
+            evidence_refs = [EvidenceRef.model_validate(ref) for ref in raw_evidence]
+        except Exception:  # noqa: BLE001 - malformed canonical evidence fails closed
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        if any(not ref.id.strip() or not ref.source.strip() for ref in evidence_refs):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+
+        coverage = findings.content.get("requiredSlotCoverage")
+        coverage = coverage.get("risk_summary") if isinstance(coverage, dict) else None
+        coverage = coverage if isinstance(coverage, dict) else {"state": "unknown"}
+        if coverage.get("state") == "degraded":
+            state = "degraded"
+            reason = str(coverage.get("reason") or "canonical_risk_summary_read_incomplete")
+        elif risk_claims:
+            # Risk360 does not attest an Agent-specific freshness SLA, so its
+            # exact evidence is useful but never presented as full coverage.
+            state = "partial"
+            reason = "canonical_risk360_evidence_available_agent_freshness_unassessed"
+        else:
+            state = "unknown"
+            reason = str(
+                coverage.get("reason") or "canonical_risk_summary_evidence_unavailable"
+            )
+
+        summary_content = summary.content
+        state_content = risk_state.content
+        if not isinstance(state_content.get("dimensionStates", []), list):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        evidence_refs = _dedupe_refs(evidence_refs)
+        row = {
+            "tenant_id": tenant_id,
+            "agent_id": agent_id,
+            "canonical_agent_entity_id": canonical_agent_entity_id,
+            "subject_kind": "agent",
+            "subject_id": canonical_agent_entity_id,
+            "state": state,
+            "reason": reason,
+            "summary": summary_content,
+            "dimension_states": state_content.get("dimensionStates", []),
+            "assessment_coverage": coverage,
+            "assessment_section_state": summary.state,
+            "risk_state_section_state": risk_state.state,
+            "freshness": {
+                "state": "not_assessed",
+                "slaSeconds": None,
+                "reason": "agent_risk_freshness_sla_not_configured",
+            },
+            "evidence_refs": [ref.model_dump(mode="json") for ref in evidence_refs],
+            "consent_evidence_ref": consent_ref.model_dump(mode="json"),
+            "claims": risk_claims[: min(max(limit, 1), MAX_READ_LIMIT)],
+            "contagion_state": "unknown",
+            "contagion_reason": (
+                "Risk360 does not establish causal social or financial contagion"
+            ),
+            "canonical_authorities": ["risk_assessments", "risk_signals"],
+        }
+        return Agent360ReadBatch(
+            rows=[row],
+            truncated=len(risk_claims) > min(max(limit, 1), MAX_READ_LIMIT),
+        )
+
+    async def agentic_provenance(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        queries: list[AgenticProvenanceQuery],
+        limit: int,
+    ) -> Agent360ReadBatch:
+        if not tenant_id or not agent_id:
+            return Agent360ReadBatch(rows=[], scope_known=False)
+        foreign = [
+            query
+            for query in queries
+            if query.evidence_ref.tenant_id != tenant_id
+            or query.evidence_ref.agent_id != agent_id
+        ]
+        scoped_queries = [query for query in queries if query not in foreign]
+        batch = await read_agentic_provenance_records(
+            tenant_id=tenant_id,
+            queries=scoped_queries[:limit],
+        )
+        return Agent360ReadBatch(
+            rows=batch.rows,
+            truncated=batch.truncated or len(scoped_queries) > limit,
+            scope_mismatch=batch.scope_mismatch or bool(foreign),
+            scope_known=batch.scope_known,
+        )
+
     async def communications(self, tenant_id: str, agent_id: str, limit: int) -> Agent360ReadBatch:
         """Join observed messages to an agent only through its tenant inbox rows.
 
@@ -627,12 +944,14 @@ def _safe_delegation(
         time_keys=("starts_at",),
     )
     scope = row.get("scope")
-    scope_view: Optional[dict[str, list[str]]] = None
+    scope_view: Optional[dict[str, Any]] = None
     if isinstance(scope, dict):
         scope_view = {
             "actions": _safe_strings(scope.get("actions")),
             "resources": _safe_strings(scope.get("resources")),
         }
+        if (max_amount := _first(scope, "max_amount")) is not None:
+            scope_view["maxAmount"] = max_amount
     return {
         "delegationId": _first(row, "delegation_id", "id"),
         "evidenceRef": evidence_ref.model_dump(mode="json") if evidence_ref else None,
@@ -751,6 +1070,82 @@ def _temporal_slice(
     return _TemporalSlice(rows=selected, omitted_undated=omitted_undated)
 
 
+def _agentic_provenance_queries(
+    *,
+    tenant_id: str,
+    agent_id: str,
+    activities: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    risks: list[dict[str, Any]],
+) -> tuple[list[AgenticProvenanceQuery], int, int]:
+    """Build exact Bronze lookups from admitted compatibility rows only."""
+    groups = (
+        (
+            activities,
+            "obs_agent_activities",
+            ("observation_id", "activity_id", "id"),
+            ("observed_at", "occurred_at"),
+            None,
+        ),
+        (
+            tools,
+            "obs_agent_tools",
+            ("invocation_id", "tool_id", "id"),
+            ("observed_at", "occurred_at"),
+            "agent_tool_invocation_observed",
+        ),
+        (
+            risks,
+            "obs_agent_risk_signals",
+            ("signal_id", "id"),
+            ("detected_at", "observed_at"),
+            "agent_risk_signal_observed",
+        ),
+    )
+    queries: list[AgenticProvenanceQuery] = []
+    unlinked = 0
+    mismatched = 0
+    for rows, source, id_keys, time_keys, fixed_event_type in groups:
+        for row in rows:
+            evidence_id = _first(row, *id_keys)
+            event_id = row.get("canonical_event_id")
+            schema_version = row.get("canonical_event_schema_version")
+            event_type = fixed_event_type or _first(row, "event_name")
+            if not event_id or not schema_version:
+                unlinked += 1
+                continue
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("agent_id") != agent_id
+                or not isinstance(evidence_id, str)
+                or not isinstance(event_id, str)
+                or not isinstance(schema_version, str)
+                or not isinstance(event_type, str)
+            ):
+                mismatched += 1
+                continue
+            try:
+                reference = AgentEvidenceReference(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    source=source,
+                    id=evidence_id,
+                    observed_at=_timestamp(row, time_keys),
+                    event_type=event_type,
+                )
+            except Exception:  # noqa: BLE001 - invalid refs cannot back an evidence claim
+                mismatched += 1
+                continue
+            queries.append(
+                AgenticProvenanceQuery(
+                    bronze_event_id=event_id,
+                    bronze_schema_version=schema_version,
+                    evidence_ref=reference,
+                )
+            )
+    return queries, unlinked, mismatched
+
+
 class Agent360Provider:
     """Read-only, tenant-scoped IntelligenceProjectionProvider for ``agent360``."""
 
@@ -758,8 +1153,17 @@ class Agent360Provider:
     contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
     graph_mutation_policy = "read_only"
 
-    def __init__(self, source: Optional[Agent360Source] = None) -> None:
+    def __init__(
+        self,
+        source: Optional[Agent360Source] = None,
+        *,
+        risk_slot_authorizer: Optional[Any] = None,
+    ) -> None:
         self._source = source if source is not None else RepositoryAgent360Source()
+        # ProjectionContext contains no outer slot-policy or capability
+        # decision. A nested Risk360 read therefore requires an explicit
+        # caller-supplied authorization seam and fails closed by default.
+        self._risk_slot_authorizer = risk_slot_authorizer
 
     async def project(
         self,
@@ -788,7 +1192,6 @@ class Agent360Provider:
             "activities",
             "tools",
             "capability_access_profile",
-            "risk_signals",
             "communications",
         )
         loaders = {
@@ -809,7 +1212,6 @@ class Agent360Provider:
             "capability_access_profile": lambda: self._source.capability_access_profile(
                 tenant_id, agent_id, delegation_agent_id or ""
             ),
-            "risk_signals": lambda: self._source.risk_signals(tenant_id, agent_id, limit),
             "communications": lambda: self._source.communications(tenant_id, agent_id, limit),
         }
         # Resolve identity before delegation reads. Agent executions/configs
@@ -873,6 +1275,17 @@ class Agent360Provider:
             if delegation_agent_id is not None
             else unresolved_delegation_read()
         )
+        async def unresolved_communication_read() -> Agent360ReadBatch:
+            # An observed inbox's agent_id is a source claim. Do not read or
+            # project its messages into an Agent frame until the requested
+            # source reference resolves to exactly one tenant-owned Agent.
+            return Agent360ReadBatch(rows=[], scope_known=False)
+
+        loaders["communications"] = lambda: (
+            self._source.communications(tenant_id, agent_id, limit)
+            if delegation_agent_id is not None
+            else unresolved_communication_read()
+        )
         async def not_applicable_capability_profile() -> Agent360ReadBatch:
             # Capability installations are keyed by the runtime agent reference.
             # An entity subject has no exact runtime-id join in this provider.
@@ -895,6 +1308,67 @@ class Agent360Provider:
 
             loaders["capability_access_profile"] = unresolved_capability_profile
 
+        risk_summary_loader = getattr(self._source, "canonical_risk_summary", None)
+        risk_policy_allowed = (
+            await self._risk_slot_authorized(
+                tenant_id=tenant_id,
+                request_subject=request.subject,
+                canonical_agent_entity_id=delegation_agent_id,
+                context=context,
+            )
+            if delegation_agent_id is not None
+            and request.asOf is None
+            and context.asOf is None
+            and request.timeRange is None
+            else False
+        )
+        if (
+            delegation_agent_id is not None
+            and request.asOf is None
+            and context.asOf is None
+            and request.timeRange is None
+            and risk_policy_allowed
+            and callable(risk_summary_loader)
+        ):
+            risk_summary_read = await self._safe_read(
+                "risk_summary",
+                lambda: risk_summary_loader(
+                    tenant_id,
+                    agent_id,
+                    delegation_agent_id,
+                    limit,
+                ),
+                1,
+            )
+        elif (
+            delegation_agent_id is None
+            or request.timeRange is not None
+            or request.asOf is not None
+            or context.asOf is not None
+        ):
+            # Do not join current risk to an unresolved identity or historical
+            # request. Risk360 does not expose bitemporal Agent replay.
+            risk_summary_read = _Read(rows=[], available=True, scope_known=False)
+        elif not risk_policy_allowed:
+            # No current slot-policy/capability decision is available in the
+            # projection request/context, so do not perform a nested read.
+            risk_summary_read = _Read(
+                rows=[
+                    {
+                        "tenant_id": tenant_id,
+                        "agent_id": agent_id,
+                        "canonical_agent_entity_id": delegation_agent_id,
+                        "subject_kind": "agent",
+                        "subject_id": delegation_agent_id,
+                        "state": "suppressed",
+                        "reason": "agent_risk_slot_policy_or_capability_not_established",
+                    }
+                ],
+                available=True,
+            )
+        else:
+            risk_summary_read = _Read(rows=None, available=False)
+
         names_to_read = tuple(name for name in names if name != "actor_identity")
         reads = await asyncio.gather(
             *(self._safe_read(name, loaders[name], limit) for name in names_to_read)
@@ -902,6 +1376,11 @@ class Agent360Provider:
         data = dict(zip(names_to_read, reads))
         if identity_prefetched is not None:
             data["actor_identity"] = identity_prefetched
+        # Legacy raw observations are intentionally not read: they have no
+        # demonstrated canonical identity/evidence/policy join here. The
+        # canonical Risk360 read is the only risk content source.
+        data["risk_signals"] = _Read(rows=[], available=True)
+        data["risk_summary"] = risk_summary_read
         execution_rows_for_identity, _ = self._tenant_agent_rows(
             data["executions"], tenant_id, agent_id
         )
@@ -964,6 +1443,105 @@ class Agent360Provider:
                 )
             )
         ]
+        risk_summary_rows, risk_summary_mismatch = self._tenant_agent_risk_summary(
+            data["risk_summary"],
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            canonical_agent_entity_id=resolved_canonical_actor,
+        )
+        if risk_summary_mismatch:
+            data["risk_summary"] = replace(data["risk_summary"], scope_mismatch=True)
+            risk_summary_rows = []
+        risk_summary_row = risk_summary_rows[0] if risk_summary_rows else None
+        if not data["risk_summary"].available:
+            risk_summary_state = "degraded"
+            risk_summary_reason = REASON_RISK_UNAVAILABLE
+        elif data["risk_summary"].scope_mismatch or risk_summary_mismatch:
+            risk_summary_state = "degraded"
+            risk_summary_reason = "agent_risk_summary_scope_mismatch"
+        elif data["risk_summary"].truncated:
+            risk_summary_state = "degraded"
+            risk_summary_reason = "agent_risk_summary_read_truncated"
+        elif risk_summary_row is not None:
+            risk_summary_state = risk_summary_row["state"]
+            risk_summary_reason = risk_summary_row["reason"]
+        elif not data["risk_summary"].scope_known:
+            risk_summary_state = "unknown"
+            risk_summary_reason = (
+                "agent_identity_or_current_risk_scope_unavailable"
+                if resolved_canonical_actor is None
+                else "agent_risk_historical_replay_unavailable"
+            )
+        else:
+            risk_summary_state = "unknown"
+            risk_summary_reason = "canonical_risk_summary_not_available"
+
+        canonical_risk_evidence: list[EvidenceRef] = []
+        canonical_risk_claims: list[ClaimEnvelope] = []
+        consent_evidence: Optional[EvidenceRef] = None
+        if risk_summary_row is not None and risk_summary_state == "partial":
+            canonical_risk_evidence = [
+                EvidenceRef.model_validate(ref)
+                for ref in risk_summary_row["evidence_refs"]
+            ]
+            consent_evidence = EvidenceRef.model_validate(
+                risk_summary_row["consent_evidence_ref"]
+            )
+            canonical_risk_claims = list(risk_summary_row["claims"])
+        risk_evidence_refs = _dedupe_refs(
+            [
+                *(EvidenceRef.model_validate(ref) for ref in actor_identity_refs),
+                *canonical_risk_evidence,
+                *([consent_evidence] if consent_evidence is not None else []),
+            ]
+        )
+        risk_summary_content: dict[str, Any] = {
+            "state": risk_summary_state,
+            "tenantId": tenant_id,
+            "subject": (
+                {"kind": "agent", "id": resolved_canonical_actor}
+                if resolved_canonical_actor is not None
+                else None
+            ),
+            "reason": risk_summary_reason,
+            "freshness": (
+                risk_summary_row.get("freshness")
+                if risk_summary_row is not None
+                else {
+                    "state": "unknown",
+                    "slaSeconds": None,
+                    "reason": "agent_risk_freshness_sla_not_configured",
+                }
+            ),
+            "evidenceRefs": [
+                ref.model_dump(mode="json") for ref in risk_evidence_refs
+            ],
+            "contagion": {
+                "state": "unknown",
+                "reason": (
+                    risk_summary_row.get("contagion_reason")
+                    if risk_summary_row is not None
+                    else "risk_slot_authority_not_available"
+                ),
+            },
+        }
+        if risk_summary_row is not None and risk_summary_state == "partial":
+            risk_summary_content.update(
+                {
+                    "summary": risk_summary_row["summary"],
+                    "dimensionStates": risk_summary_row["dimension_states"],
+                    "assessmentCoverage": risk_summary_row["assessment_coverage"],
+                    "assessmentSectionState": risk_summary_row[
+                        "assessment_section_state"
+                    ],
+                    "riskStateSectionState": risk_summary_row["risk_state_section_state"],
+                    "canonicalAuthorities": risk_summary_row["canonical_authorities"],
+                }
+            )
+        if risk_summary_row is not None and risk_summary_state == "suppressed":
+            # Denial metadata is generic and contains no risk result or receipt.
+            risk_summary_content["reason"] = "agent_risk_summary_access_not_authorized"
+
         execution_rows, execution_mismatch = self._tenant_agent_rows(
             data["executions"], tenant_id, agent_id
         )
@@ -1022,6 +1600,7 @@ class Agent360Provider:
             "activities": activity_mismatch,
             "tools": tool_mismatch,
             "risk_signals": risk_mismatch,
+            "risk_summary": risk_summary_mismatch,
             "communications": communication_mismatch,
             "incoming_delegations": incoming_mismatch,
             "outgoing_delegations": outgoing_mismatch,
@@ -1053,6 +1632,11 @@ class Agent360Provider:
 
         config = config_rows[0] if len(config_rows) == 1 else None
         config_conflict = len(config_rows) > 1
+        config_ref = (
+            self._ref_one(config, "agent_configs", ("agent_id",), ("created_at",))
+            if config
+            else None
+        )
         if config_conflict:
             degraded_reasons.append("agent_config_identity_conflict")
         if actor_identity_conflict:
@@ -1157,6 +1741,12 @@ class Agent360Provider:
             for field in ("grantor_entity_id", "grantee_entity_id")
             if (entity_id := _first(row, field)) is not None
         }
+        # A configured owner is a stored config reference, not proof of an
+        # owner relationship. Resolve it only through the same exact,
+        # tenant-scoped canonical entity authority used for delegation parties.
+        configured_owner_entity_id = _first(config, "owner_entity_id") if config else None
+        if configured_owner_entity_id is not None:
+            delegation_party_entity_ids.add(configured_owner_entity_id)
         if delegation_party_entity_ids:
             party_identity_read = await self._safe_read(
                 "delegation_parties",
@@ -1191,6 +1781,79 @@ class Agent360Provider:
             entity_id = _first(row, "party_entity_id")
             if entity_id is not None:
                 party_identity_rows_by_id.setdefault(entity_id, []).append(row)
+
+        configured_owner_identity_view = self._delegation_party_identity_view(
+            configured_owner_entity_id,
+            read=party_identity_read,
+            identity_rows_by_id=party_identity_rows_by_id,
+            delegation_evidence_ref=config_ref,
+        )
+        configured_owner_identity_state = configured_owner_identity_view["state"]
+        if configured_owner_entity_id is None:
+            configured_owner_identity_view = {
+                **configured_owner_identity_view,
+                "reason": (
+                    "no unique tenant-scoped agent configuration supplied owner_entity_id"
+                    if config is None and (config_conflict or not data["config"].available)
+                    else "agent configuration has no owner_entity_id reference"
+                ),
+            }
+        if configured_owner_identity_state != "resolved":
+            authority_unresolved_reason = (
+                "agent_owner_identity_conflicted"
+                if configured_owner_identity_state == "conflicted"
+                else "agent_owner_identity_unresolved"
+            )
+            degraded_reasons.append(authority_unresolved_reason)
+
+        owner_relationship_loader = getattr(self._source, "owner_relationships", None)
+        if (
+            callable(owner_relationship_loader)
+            and configured_owner_identity_state == "resolved"
+            and configured_owner_entity_id is not None
+            and resolved_canonical_actor is not None
+        ):
+            owner_relationship_read = await self._safe_read(
+                "owner_relationships",
+                lambda: owner_relationship_loader(
+                    tenant_id,
+                    configured_owner_entity_id,
+                    resolved_canonical_actor,
+                ),
+                MAX_AGENT_OWNER_EDGE_SCAN,
+            )
+        else:
+            # A source reference or unresolved identity cannot authorize a
+            # relationship lookup against a guessed graph subject.
+            owner_relationship_read = _Read(rows=[], available=True, scope_known=False)
+        owner_relationship_rows, owner_relationship_mismatch = (
+            self._tenant_owner_relationship_rows(
+                owner_relationship_read,
+                tenant_id,
+                configured_owner_entity_id,
+                resolved_canonical_actor,
+            )
+        )
+        owner_relationship_read = replace(
+            owner_relationship_read,
+            scope_mismatch=(
+                owner_relationship_read.scope_mismatch or owner_relationship_mismatch
+            ),
+        )
+        data["owner_relationships"] = owner_relationship_read
+        scope_mismatch = scope_mismatch or owner_relationship_read.scope_mismatch
+        if not owner_relationship_read.available:
+            degraded_reasons.append("agent_owner_relationship_source_unavailable")
+        if owner_relationship_read.truncated:
+            degraded_reasons.append("agent_owner_relationship_read_truncated")
+        if not owner_relationship_read.scope_known:
+            degraded_reasons.append("agent_owner_relationship_scope_unknown")
+        if owner_relationship_read.scope_mismatch:
+            degraded_reasons.append("agent_owner_relationship_scope_mismatch")
+        owner_relationship_refs = [
+            EvidenceRef.model_validate(row["evidence_ref"])
+            for row in owner_relationship_rows
+        ]
 
         timeline_exec = _temporal_slice(
             execution_rows, request=request, time_keys=("started_at", "created_at")
@@ -1242,6 +1905,57 @@ class Agent360Provider:
         if invalid_window:
             degraded_reasons.append("agent_temporal_window_invalid")
 
+        provenance_queries, unlinked_provenance_rows, invalid_provenance_rows = (
+            _agentic_provenance_queries(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                activities=timeline_activity.rows,
+                tools=timeline_tools.rows,
+                risks=timeline_risks.rows,
+            )
+        )
+        provenance_loader = getattr(self._source, "agentic_provenance", None)
+        if not provenance_queries:
+            provenance_read = _Read(rows=[], available=True)
+        elif callable(provenance_loader):
+            provenance_read = await self._safe_read(
+                "agentic_provenance",
+                lambda: provenance_loader(
+                    tenant_id,
+                    agent_id,
+                    provenance_queries,
+                    min(len(provenance_queries), 3 * MAX_READ_LIMIT),
+                ),
+                min(len(provenance_queries), 3 * MAX_READ_LIMIT),
+            )
+        else:
+            provenance_read = _Read(rows=None, available=False)
+        data["agentic_provenance"] = provenance_read
+        provenance_rows = provenance_read.rows or []
+        provenance_by_event = {
+            row.get("bronze_event_id"): row
+            for row in provenance_rows
+            if isinstance(row.get("bronze_event_id"), str)
+        }
+        exact_provenance_count = sum(
+            1
+            for query in provenance_queries
+            if query.bronze_event_id in provenance_by_event
+        )
+        unresolved_provenance_links = max(0, len(provenance_queries) - exact_provenance_count)
+        provenance_scope_mismatch = (
+            invalid_provenance_rows > 0 or provenance_read.scope_mismatch
+        )
+        scope_mismatch = scope_mismatch or provenance_scope_mismatch
+        if not provenance_read.available:
+            degraded_reasons.append(REASON_EVIDENCE_PROVENANCE_UNAVAILABLE)
+        if provenance_read.truncated:
+            degraded_reasons.append("agent_evidence_provenance_read_truncated")
+        if provenance_scope_mismatch:
+            degraded_reasons.append("agent_evidence_provenance_scope_mismatch")
+        if unlinked_provenance_rows or unresolved_provenance_links:
+            degraded_reasons.append("agent_evidence_provenance_links_incomplete")
+
         evidence_refs, evidence_rows_missing = self._collect_evidence(
             config_rows=config_rows,
             agent_identities=actor_identity_rows,
@@ -1254,6 +1968,8 @@ class Agent360Provider:
             communications=timeline_communications.rows,
             principal_identities=principal_identity_rows,
         )
+        evidence_refs = _dedupe_refs([*evidence_refs, *owner_relationship_refs])
+        evidence_refs = _dedupe_refs([*evidence_refs, *risk_evidence_refs])
         if historical_unavailable or invalid_window:
             claim_evidence_refs: list[EvidenceRef] = []
         elif request.timeRange is not None:
@@ -1275,12 +1991,80 @@ class Agent360Provider:
         else:
             claim_evidence_refs = evidence_refs
 
-        source_states = {name: self._read_state(read) for name, read in data.items()}
-        config_ref = (
-            self._ref_one(config, "agent_configs", ("agent_id",), ("created_at",))
-            if config
-            else None
+        bronze_evidence_refs: list[EvidenceRef] = []
+        for row in provenance_rows:
+            try:
+                bronze_evidence_refs.append(
+                    EvidenceRef.model_validate(row.get("bronze_evidence_ref"))
+                )
+            except Exception:  # noqa: BLE001 - malformed refs cannot back an evidence claim
+                provenance_scope_mismatch = True
+                degraded_reasons.append("agent_evidence_provenance_scope_mismatch")
+        if provenance_scope_mismatch:
+            scope_mismatch = True
+            data["agentic_provenance"] = replace(
+                data["agentic_provenance"], scope_mismatch=True
+            )
+            provenance_read = data["agentic_provenance"]
+        evidence_refs = _dedupe_refs(evidence_refs + bronze_evidence_refs)
+        if claim_evidence_refs:
+            claim_evidence_refs = _dedupe_refs(claim_evidence_refs + bronze_evidence_refs)
+
+        agentic_provenance_state = (
+            "empty"
+            if not (timeline_activity.rows or timeline_tools.rows or timeline_risks.rows)
+            and provenance_read.available
+            else "partial"
         )
+        record_freshness_states = {
+            row.get("freshness_state")
+            for row in provenance_rows
+            if row.get("freshness_state") in {"not_assessed", "undated"}
+        }
+        freshness_state = (
+            "not_assessed"
+            if "not_assessed" in record_freshness_states
+            else "undated"
+            if record_freshness_states
+            else "not_assessed"
+        )
+        agentic_provenance_content = {
+            "state": agentic_provenance_state,
+            "lineageState": (
+                "verified"
+                if provenance_queries
+                and exact_provenance_count == len(provenance_queries)
+                and not provenance_scope_mismatch
+                and not provenance_read.truncated
+                else "partial"
+                if timeline_activity.rows or timeline_tools.rows or timeline_risks.rows
+                else "unknown"
+            ),
+            "records": provenance_rows,
+            "exactBronzeLinks": exact_provenance_count,
+            "unlinkedCompatibilityRows": unlinked_provenance_rows,
+            "unresolvedLinks": unresolved_provenance_links + invalid_provenance_rows,
+            "sourceIdentityState": "unresolved",
+            "sourceTrust": "unknown",
+            "freshness": {
+                "state": freshness_state,
+                "slaSeconds": None,
+                "reason": "agentic_source_freshness_sla_not_configured",
+            },
+            "reason": (
+                "Bronze links are exact tenant, event, schema, agent, source-row, and event-time references. The provider claim is not joined to a registered Rights source, and no source freshness SLA is configured."
+            ),
+        }
+
+        source_states = {
+            name: self._read_state(read)
+            for name, read in data.items()
+            if name != "risk_signals"
+        }
+        # Raw agent risk observations are omitted. Their lack of a verified
+        # canonical identity/evidence/policy join is not a zero-risk result.
+        source_states["risk_signals"] = "unknown"
+        source_states["risk_summary"] = risk_summary_state
         identity_state = (
             "conflicted"
             if config_conflict or actor_identity_conflict
@@ -1312,14 +2096,109 @@ class Agent360Provider:
             ),
         }
 
+        owner_relationship_complete = (
+            owner_relationship_read.available
+            and owner_relationship_read.scope_known
+            and not owner_relationship_read.truncated
+            and not owner_relationship_read.scope_mismatch
+        )
+        owner_relationship_state = (
+            "unavailable"
+            if not owner_relationship_read.available
+            else "degraded"
+            if not owner_relationship_complete and owner_relationship_rows
+            else "unknown"
+            if not owner_relationship_complete or not owner_relationship_rows
+            else "observed"
+        )
+        owner_relationship_view = {
+            "state": owner_relationship_state,
+            "relationshipState": (
+                "stored_edge_observed" if owner_relationship_rows else "unknown"
+            ),
+            "ownerEntityId": configured_owner_entity_id,
+            "canonicalAgentEntityId": resolved_canonical_actor,
+            "relationships": [
+                {
+                    "relationshipType": row["relationship_type"],
+                    "validFrom": row.get("valid_from"),
+                    "validTo": row.get("valid_to"),
+                    "evidenceRef": row["evidence_ref"],
+                    "temporalValidity": (
+                        "valid_to_recorded_not_replayed"
+                        if row.get("valid_to") not in (None, "")
+                        else "not_assessed"
+                    ),
+                }
+                for row in owner_relationship_rows
+            ],
+            "count": (
+                len(owner_relationship_rows) if owner_relationship_complete else None
+            ),
+            "effectiveOwnership": "unknown",
+            "effectiveAuthorization": "unknown",
+            "temporalSemantics": (
+                "current_graph_edge_read; historical validity is not reconstructed"
+            ),
+            "freshness": {
+                "state": (
+                    "not_assessed"
+                    if any(ref.observedAt for ref in owner_relationship_refs)
+                    else "undated"
+                    if owner_relationship_rows
+                    else "not_assessed"
+                ),
+                "slaSeconds": None,
+                "reason": "owner_relationship_freshness_sla_not_configured",
+            },
+            "reason": (
+                None
+                if owner_relationship_rows and owner_relationship_complete
+                else "tenant graph owner-edge scan is incomplete"
+                if owner_relationship_read.truncated
+                or owner_relationship_read.scope_mismatch
+                or not owner_relationship_read.scope_known
+                else "no exact OWNS or OWNS_AGENT edge was observed for the resolved owner and Agent"
+                if owner_relationship_read.available
+                else "tenant graph owner-edge source is unavailable"
+            ),
+        }
+
         actor_attribution = {
             "state": actor_identity_state,
             "assertedSourceActor": agent_id,
-            "configuredOwnerEntityId": (
-                str(config.get("owner_entity_id"))
-                if config is not None and config.get("owner_entity_id")
-                else None
-            ),
+            "configuredOwnerEntityId": configured_owner_entity_id,
+            "configuredOwnerIdentity": {
+                "state": configured_owner_identity_state,
+                "canonicalParty": configured_owner_identity_view.get("party"),
+                "relationshipState": (
+                    "configured_reference_only"
+                    if configured_owner_entity_id is not None
+                    else "unknown"
+                ),
+                "effectiveOwnership": "unknown",
+                "effectiveAuthorization": "unknown",
+                "temporalSemantics": (
+                    "current_agent_configuration_and_tenant_entity_state; "
+                    "not_reconstructed_for_requested_event_time"
+                ),
+                "freshness": {
+                    "state": (
+                        "undated"
+                        if configured_owner_identity_state == "resolved"
+                        and not any(
+                            ref.get("source") == "entities" and ref.get("observedAt")
+                            for ref in configured_owner_identity_view["evidenceRefs"]
+                        )
+                        else "not_assessed"
+                    ),
+                    "slaSeconds": None,
+                    "reason": "owner_entity_freshness_sla_not_configured",
+                },
+                "evidenceRefs": configured_owner_identity_view["evidenceRefs"],
+                "reason": configured_owner_identity_view["reason"],
+            },
+            "configuredOwnerRelationship": owner_relationship_view,
             "resolvedCanonicalActor": resolved_canonical_actor,
             "executionPrincipal": execution_principals["executionPrincipal"],
             "executionPrincipalState": execution_principals["state"],
@@ -1334,6 +2213,8 @@ class Agent360Provider:
             "evidenceRefs": _dedupe_json_refs(
                 actor_identity_refs
                 + ([config_ref.model_dump(mode="json")] if config_ref else [])
+                + configured_owner_identity_view["evidenceRefs"]
+                + [ref.model_dump(mode="json") for ref in owner_relationship_refs]
                 + execution_principals["evidenceRefs"]
                 + execution_principal_identity["evidenceRefs"]
             ),
@@ -1388,6 +2269,16 @@ class Agent360Provider:
             item["granteeParty"] = side_views["grantee"]
             if len(delegation_items) < limit:
                 delegation_items.append(item)
+        delegation_chain_context = self._observed_adjacent_delegation_paths(
+            resolved_canonical_actor=resolved_canonical_actor,
+            delegation_records=delegation_records,
+            party_identity_views=delegation_party_views,
+            actor_identity_evidence_refs=actor_identity_refs,
+            incoming_read=data["incoming_delegations"],
+            outgoing_read=data["outgoing_delegations"],
+            party_identity_read=data["delegation_parties"],
+            limit=limit,
+        )
         action_scoped_decisions = [
             decision
             for row in execution_rows[:limit]
@@ -1398,6 +2289,11 @@ class Agent360Provider:
             )
             is not None
         ]
+        if any(
+            decision.get("decisionTimestampState") == "invalid"
+            for decision in action_scoped_decisions
+        ):
+            degraded_reasons.append("agent_execution_decision_timestamp_invalid")
         authority_state = self._aggregate_read_state(
             [
                 data["incoming_delegations"],
@@ -1410,6 +2306,7 @@ class Agent360Provider:
             has_rows=bool(
                 delegation_items
                 or action_scoped_decisions
+                or configured_owner_identity_state == "resolved"
                 or (
                     capability_profile_complete
                     and capability_profile_rows
@@ -1417,6 +2314,11 @@ class Agent360Provider:
                 )
             ),
         )
+        if configured_owner_identity_state != "resolved" and authority_state in {
+            "available",
+            "empty",
+        }:
+            authority_state = "degraded"
         if active_delegation_conflicts:
             authority_state = "degraded"
             degraded_reasons.append("agent_delegation_active_record_conflict")
@@ -1455,7 +2357,9 @@ class Agent360Provider:
         )
         authority_content = {
             "state": authority_state,
+            "configuredOwnerIdentity": actor_attribution["configuredOwnerIdentity"],
             "delegationRecords": delegation_items,
+            "delegationChain": delegation_chain_context,
             "delegationReadConflicts": list(active_delegation_conflicts.values()),
             "actionScopedDecisions": action_scoped_decisions,
             "actionScopedDecisionState": self._aggregate_read_state(
@@ -1494,6 +2398,7 @@ class Agent360Provider:
                     )
                 )
             ]
+            + configured_owner_identity_view["evidenceRefs"]
             + [
                 ref.model_dump(mode="json")
                 for row in party_identity_rows
@@ -1518,13 +2423,13 @@ class Agent360Provider:
                 "evidenceRef": (
                     self._ref_one(
                         row,
-                        "agent_risk_signals",
+                        "obs_agent_risk_signals",
                         ("signal_id", "id"),
                         ("detected_at", "observed_at"),
                     ).model_dump(mode="json")
                     if self._ref_one(
                         row,
-                        "agent_risk_signals",
+                        "obs_agent_risk_signals",
                         ("signal_id", "id"),
                         ("detected_at", "observed_at"),
                     )
@@ -1604,7 +2509,8 @@ class Agent360Provider:
                     ),
                     "activities": self._count(data["activities"], activity_rows),
                     "toolInvocations": self._count(data["tools"], tool_rows),
-                    "riskSignals": self._count(data["risk_signals"], risk_rows),
+                    "riskSignals": None,
+                    "riskSummary": risk_summary_state,
                     "communicationMessages": self._count(
                         data["communications"], communication_rows
                     ),
@@ -1650,14 +2556,16 @@ class Agent360Provider:
                     },
                     {
                         "id": "risk_and_contagion",
-                        "state": self._aggregate_read_state(
-                            [data["risk_signals"]], has_rows=bool(risk_rows)
-                        ),
+                        "state": risk_summary_state,
                         "content": {
-                            "riskSignals": risk_items,
-                            "riskAssessment": "not_computed",
+                            "riskSignals": {
+                                "state": "unknown",
+                                "signals": [],
+                                "reason": "raw obs_agent_risk_signals are omitted without exact canonical identity, evidence, and policy joins",
+                            },
+                            "riskAssessment": risk_summary_content,
                             "contagionState": "unknown",
-                            "reason": "contagion requires risk/social/relationship authority projections",
+                            "reason": risk_summary_reason,
                         },
                     },
                 ],
@@ -1746,6 +2654,7 @@ class Agent360Provider:
                 "evidence": [ref.model_dump(mode="json") for ref in evidence_refs],
                 "evidenceMissingRows": evidence_rows_missing or None,
                 "sourceStates": source_states,
+                "sourceProvenance": agentic_provenance_content,
             },
             warnings=self._warnings(data, scope_mismatch, evidence_rows_missing),
         )
@@ -1801,8 +2710,10 @@ class Agent360Provider:
                     ),
                     "contentPolicy": "metadata_only; addresses_subjects_and_message_bodies_omitted",
                     "reason": (
-                        "agent messages are observed through exact tenant inbox agent_id references; this does not resolve a canonical Agent and is not a complete provider communication history"
+                        "agent messages are observed through exact tenant inbox agent_id references after the requested Agent reference resolves to a canonical tenant Agent; inbox ownership remains a source assertion and provider communication history is incomplete"
                         if communication_items
+                        else "requested Agent identity is unresolved; observed communication rows were not read"
+                        if resolved_canonical_actor is None
                         else "no linked agent message observation was admitted by the requested event-time window"
                         if request.timeRange is not None
                         else "no observed agent messages are linked through tenant-scoped inbox records"
@@ -1883,6 +2794,14 @@ class Agent360Provider:
                 ],
                 config=config if request.timeRange is None else None,
                 config_ref=config_ref if request.timeRange is None else None,
+                configured_owner_identity=(
+                    actor_attribution["configuredOwnerIdentity"]
+                    if request.timeRange is None
+                    else None
+                ),
+                owner_relationship_rows=(
+                    owner_relationship_rows if request.timeRange is None else []
+                ),
                 agent_identity_rows=(
                     actor_identity_rows if resolved_canonical_actor is not None else []
                 ),
@@ -1898,6 +2817,8 @@ class Agent360Provider:
                 communication_rows=timeline_communications.rows,
             )
         )
+        if not invalid_window:
+            claims.extend(canonical_risk_claims)
         if claim_evidence_refs:
             claims.append(
                 ClaimEnvelope(
@@ -1906,7 +2827,7 @@ class Agent360Provider:
                     subject=request.subject,
                     evidenceRefs=claim_evidence_refs[:MAX_READ_LIMIT],
                     claims=[
-                        "Tenant-scoped Agent360 source rows contributed the cited stable evidence references; this bounded trace does not establish complete source coverage or an authorization decision."
+                        "Tenant-scoped Agent360 source rows contributed the cited stable evidence references. Canonical Bronze lineage is included only for exact joined records; the bounded trace does not establish complete source coverage, verified source identity, freshness, or an authorization decision."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=["evidence_trace"],
@@ -1943,32 +2864,137 @@ class Agent360Provider:
             and "policy_boundary" in (claim.domainSlotIds or [])
         ]
         execution_read = data["executions"]
-        policy_boundary_warnings = ["standing_policy_boundary_not_exposed"]
+        incoming_delegation_ids = {
+            row_id
+            for row in incoming_rows
+            if (row_id := _first(row, "delegation_id", "id")) is not None
+        }
+        active_read_has_unmatched_record = any(
+            (row_id := _first(row, "delegation_id", "id")) is None
+            or row_id not in incoming_delegation_ids
+            for row in active_rows
+        )
+        standing_scope_records: list[dict[str, Any]] = []
+        standing_scope_identity_incomplete = False
+        if not invalid_window and request.timeRange is None:
+            for record in delegation_items:
+                if (
+                    record["relationToSubject"] != "incoming"
+                    or record["recordState"] != "active_as_reported_by_repository"
+                    or record["granteeEntityId"] != resolved_canonical_actor
+                ):
+                    continue
+                grantor = record["grantorParty"]
+                grantee = record["granteeParty"]
+                if (
+                    grantor["state"] != "resolved"
+                    or grantee["state"] != "resolved"
+                    or record["scope"] is None
+                    or record["evidenceRef"] is None
+                ):
+                    standing_scope_identity_incomplete = True
+                    continue
+                evidence_refs = _dedupe_json_refs(
+                    [
+                        record["evidenceRef"],
+                        *grantor.get("evidenceRefs", []),
+                        *grantee.get("evidenceRefs", []),
+                        *actor_identity_refs,
+                    ]
+                )
+                if not evidence_refs:
+                    standing_scope_identity_incomplete = True
+                    continue
+                standing_scope_records.append(
+                    {
+                        "delegationId": record["delegationId"],
+                        "grantorParty": grantor["party"],
+                        "granteeParty": grantee["party"],
+                        "scope": record["scope"],
+                        "authorizationKind": record["authorizationKind"],
+                        "startsAt": record["startsAt"],
+                        "endsAt": record["endsAt"],
+                        "recordState": "active_as_reported_by_repository",
+                        "effectiveAuthorization": "unknown",
+                        "evidenceRefs": evidence_refs,
+                    }
+                )
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"agent_standing_delegation_scope.{record['delegationId']}",
+                        kind="observed_standing_delegation_scope",
+                        subject=request.subject,
+                        evidenceRefs=[EvidenceRef.model_validate(ref) for ref in evidence_refs],
+                        claims=[
+                            "The tenant-scoped repository reports this delegation grant active and stores the cited scope. The record does not establish current action/resource authorization or complete standing policy."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["policy_boundary", "authority_envelope"],
+                    )
+                )
+        standing_scope_read_complete = (
+            resolved_canonical_actor is not None
+            and request.timeRange is None
+            and not invalid_window
+            and len(delegation_records) <= limit
+            and not standing_scope_identity_incomplete
+            and not active_read_has_unmatched_record
+            and not active_delegation_conflicts
+            and all(
+                read.available
+                and not read.truncated
+                and not read.scope_mismatch
+                and read.scope_known
+                for read in (
+                    data["incoming_delegations"],
+                    data["active_delegations"],
+                    data["delegation_parties"],
+                )
+            )
+        )
+        policy_boundary_warnings = [
+            "standing_policy_boundary_incomplete"
+            if standing_scope_records
+            else "standing_policy_boundary_not_exposed"
+        ]
+        if standing_scope_records and not standing_scope_read_complete:
+            policy_boundary_warnings.append("standing_delegation_scope_read_incomplete")
         if execution_read.truncated:
             policy_boundary_warnings.append("action_scoped_policy_decision_read_truncated")
         if execution_read.scope_mismatch or not execution_read.scope_known:
             policy_boundary_warnings.append("action_scoped_policy_decision_read_scope_incomplete")
         if invalid_window:
             policy_boundary_warnings.append("action_scoped_policy_decision_window_invalid")
-        if policy_boundary_claims:
+        if policy_boundary_claims or standing_scope_records:
             policy_boundary_section = ProjectionSection(
                 id="policy_boundary",
                 state="degraded",
-                title="Observed action-scoped policy decisions",
+                title="Observed delegation scopes and action-scoped decisions",
                 content={
                     "state": "partial",
                     "effectivePolicyState": "unknown",
-                    "decisionScope": "historical_action_scoped_only",
+                    "decisionScope": (
+                        "historical_action_scoped_only"
+                        if policy_boundary_claims
+                        else "no_action_scoped_decision_observed"
+                    ),
                     "decisions": [
                         claim.model_dump(mode="json", by_alias=True, exclude_none=True)
                         for claim in policy_boundary_claims
                     ],
+                    "standingDelegationScopes": standing_scope_records,
+                    "standingDelegationReadComplete": standing_scope_read_complete,
                     "limitations": [
-                        "A recorded decision is evidence about one request at its recorded time; it does not establish standing policy or current authorization."
+                        "Stored delegation scopes are repository observations and may lag revocation; they do not establish the full standing policy or authorize a new action.",
+                        "A recorded decision is evidence about one request at its recorded time; it does not establish current authorization.",
                     ],
                 },
                 warnings=policy_boundary_warnings,
-                canonicalAuthorityRefs=["agent_executions"],
+                canonicalAuthorityRefs=(
+                    ["agent_executions", "delegations", "entities"]
+                    if standing_scope_records
+                    else ["agent_executions"]
+                ),
             )
         elif not execution_read.available:
             policy_boundary_section = ProjectionSection(
@@ -2049,6 +3075,58 @@ class Agent360Provider:
         except Exception:  # fail-isolate with a content-free source state
             return _Read(rows=None, available=False)
 
+    async def _risk_slot_authorized(
+        self,
+        *,
+        tenant_id: str,
+        request_subject: ProjectionSubject,
+        canonical_agent_entity_id: str,
+        context: ProjectionContext,
+    ) -> bool:
+        """Require the outer slot and capability decision before nested reads.
+
+        The frame runtime passes a per-call, server-derived authorization
+        envelope only after the outer ``risk_summary`` slot is explicitly
+        allowed and bound to a projection declaring ``risk360.read``. A test or
+        alternate runtime may inject an equivalent exact-scope gate. Unknown,
+        malformed, or failing decisions deny the Risk360 read.
+        """
+        gate = self._risk_slot_authorizer
+        if callable(gate):
+            try:
+                decision = gate(
+                    tenant_id=tenant_id,
+                    request_subject=request_subject,
+                    canonical_agent_entity_id=canonical_agent_entity_id,
+                    slot_id="risk_summary",
+                    capability="risk360.read",
+                )
+                if hasattr(decision, "__await__"):
+                    decision = await decision
+                return decision is True
+            except Exception:  # noqa: BLE001 - authorization failures deny by default
+                return False
+
+        if context.projectionId != self.projection_id or context.tenantId != tenant_id:
+            return False
+        for authorization in context.experience360ReadAuthorizations:
+            if (
+                authorization.tenantId == tenant_id
+                and authorization.sourceSurfaceId == "agent360"
+                and authorization.sourceSubject == request_subject
+                and authorization.sourceSlotId == "risk_summary"
+                and authorization.consumerProjectionId == self.projection_id
+                and authorization.targetProjectionId == "risk360"
+                and authorization.capabilityKey == "risk360.read"
+                and authorization.policyState == "allowed"
+                and bool(authorization.policyIds)
+                and bool(authorization.policyEvaluatedAt)
+            ):
+                # canonical_agent_entity_id was resolved by this provider from
+                # the same tenant-scoped subject before this gate is reached.
+                return bool(canonical_agent_entity_id)
+        return False
+
     @staticmethod
     def _reason_for(name: str) -> str:
         return {
@@ -2059,10 +3137,12 @@ class Agent360Provider:
             "incoming_delegations": REASON_DELEGATION_UNAVAILABLE,
             "outgoing_delegations": REASON_DELEGATION_UNAVAILABLE,
             "active_delegations": REASON_DELEGATION_UNAVAILABLE,
+            "owner_relationships": "agent_owner_relationship_source_unavailable",
             "activities": REASON_ACTIVITY_UNAVAILABLE,
             "tools": REASON_TOOL_UNAVAILABLE,
             "capability_access_profile": "agent_capability_access_profile_unavailable",
             "risk_signals": REASON_RISK_UNAVAILABLE,
+            "risk_summary": REASON_RISK_UNAVAILABLE,
             "communications": REASON_COMMUNICATION_UNAVAILABLE,
         }.get(name, "agent_source_unavailable")
 
@@ -2087,6 +3167,120 @@ class Agent360Provider:
         return rows, mismatch
 
     @staticmethod
+    def _tenant_agent_risk_summary(
+        read: _Read,
+        *,
+        tenant_id: str,
+        agent_id: str,
+        canonical_agent_entity_id: Optional[str],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Admit only a consented, evidence-backed Risk360 row for this Agent."""
+        if not read.available or read.rows is None:
+            return [], read.scope_mismatch
+        mismatch = read.scope_mismatch
+        if not canonical_agent_entity_id:
+            return [], mismatch or bool(read.rows)
+        if len(read.rows) > 1:
+            return [], True
+        if not read.rows:
+            return [], mismatch
+
+        row = read.rows[0]
+        if (
+            row.get("tenant_id") != tenant_id
+            or row.get("agent_id") != agent_id
+            or row.get("canonical_agent_entity_id") != canonical_agent_entity_id
+            or row.get("subject_kind") != "agent"
+            or row.get("subject_id") != canonical_agent_entity_id
+        ):
+            return [], True
+
+        state = row.get("state")
+        allowed_states = {"suppressed", "unknown", "partial", "degraded"}
+        reason = row.get("reason")
+        if state not in allowed_states or not isinstance(reason, str) or not reason.strip():
+            return [], True
+
+        claims = row.get("claims", [])
+        if not isinstance(claims, list):
+            return [], True
+        if state != "partial" and claims:
+            # No claim may survive an unknown, denied, or degraded assessment.
+            return [], True
+        if state == "partial" and not claims:
+            return [], True
+
+        normalized_claims: list[ClaimEnvelope] = []
+        for claim_value in claims:
+            try:
+                claim = (
+                    claim_value
+                    if isinstance(claim_value, ClaimEnvelope)
+                    else ClaimEnvelope.model_validate(claim_value)
+                )
+            except Exception:  # noqa: BLE001 - malformed claims fail closed
+                return [], True
+            if (
+                claim.subject.kind != "agent"
+                or claim.subject.id != canonical_agent_entity_id
+                or "risk_summary" not in (claim.domainSlotIds or [])
+                or not claim.evidenceRefs
+                or any(not ref.id.strip() or not ref.source.strip() for ref in claim.evidenceRefs)
+            ):
+                return [], True
+            normalized_claims.append(claim)
+
+        if state == "partial":
+            summary = row.get("summary")
+            if (
+                not isinstance(summary, dict)
+                or summary.get("tenantId") != tenant_id
+                or summary.get("subject")
+                != {"kind": "agent", "id": canonical_agent_entity_id}
+                or not isinstance(row.get("dimension_states"), list)
+                or not isinstance(row.get("assessment_coverage"), dict)
+                or not isinstance(row.get("canonical_authorities"), list)
+            ):
+                return [], True
+            try:
+                evidence_refs = [
+                    EvidenceRef.model_validate(ref) for ref in row.get("evidence_refs", [])
+                ]
+                consent_ref = EvidenceRef.model_validate(row.get("consent_evidence_ref"))
+            except Exception:  # noqa: BLE001 - invalid evidence fails closed
+                return [], True
+            if (
+                not evidence_refs
+                or any(not ref.id.strip() or not ref.source.strip() for ref in evidence_refs)
+                or consent_ref.type != "event"
+                or consent_ref.source != "governance.consent.authority"
+                or not consent_ref.id.strip()
+            ):
+                return [], True
+            evidence_keys = {(ref.source, ref.id) for ref in evidence_refs}
+            if any(
+                (ref.source, ref.id) not in evidence_keys
+                for claim in normalized_claims
+                for ref in claim.evidenceRefs
+            ):
+                return [], True
+            # Consent receipt URIs are generated from the actual authoritative
+            # receipt id and must bind back to it exactly.
+            from urllib.parse import quote
+
+            if consent_ref.uri != f"store://consent_receipts/{quote(consent_ref.id, safe='')}":
+                return [], True
+            row = {
+                **row,
+                "evidence_refs": [ref.model_dump(mode="json") for ref in _dedupe_refs(evidence_refs)],
+                "consent_evidence_ref": consent_ref.model_dump(mode="json"),
+                "claims": normalized_claims,
+            }
+        else:
+            row = {**row, "claims": []}
+        return [row], mismatch
+
+    @staticmethod
     def _tenant_agent_identity(
         read: _Read, tenant_id: str, agent_id: str
     ) -> tuple[list[dict[str, Any]], bool]:
@@ -2105,6 +3299,51 @@ class Agent360Provider:
                 mismatch = True
                 continue
             rows.append(row)
+        return rows, mismatch
+
+    @staticmethod
+    def _tenant_owner_relationship_rows(
+        read: _Read,
+        tenant_id: str,
+        owner_entity_id: Optional[str],
+        canonical_agent_entity_id: Optional[str],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Admit only exact tenant graph ownership edges for the resolved pair."""
+        if not read.available or read.rows is None:
+            return [], read.scope_mismatch
+        if not owner_entity_id or not canonical_agent_entity_id:
+            return [], read.scope_mismatch
+        rows: list[dict[str, Any]] = []
+        mismatch = read.scope_mismatch
+        seen_edge_refs: set[tuple[str, str]] = set()
+        for row in read.rows:
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("owner_entity_id") != owner_entity_id
+                or row.get("canonical_agent_entity_id") != canonical_agent_entity_id
+                or row.get("relationship_type") not in {"OWNS", "OWNS_AGENT"}
+            ):
+                mismatch = True
+                continue
+            try:
+                ref = EvidenceRef.model_validate(row.get("evidence_ref"))
+            except Exception:  # noqa: BLE001 - invalid graph evidence is not projected
+                mismatch = True
+                continue
+            if ref.source != "graph" or ref.type != "relationship" or not ref.id.strip():
+                mismatch = True
+                continue
+            ref_key = (ref.source, ref.id)
+            if ref_key in seen_edge_refs:
+                mismatch = True
+                continue
+            seen_edge_refs.add(ref_key)
+            rows.append(
+                {
+                    **row,
+                    "evidence_ref": ref.model_dump(mode="json"),
+                }
+            )
         return rows, mismatch
 
     @staticmethod
@@ -2842,6 +4081,203 @@ class Agent360Provider:
         }
 
     @staticmethod
+    def _observed_adjacent_delegation_paths(
+        *,
+        resolved_canonical_actor: Optional[str],
+        delegation_records: list[tuple[dict[str, Any], str, bool]],
+        party_identity_views: dict[tuple[str, str], dict[str, Any]],
+        actor_identity_evidence_refs: list[dict[str, Any]],
+        incoming_read: _Read,
+        outgoing_read: _Read,
+        party_identity_read: _Read,
+        limit: int,
+    ) -> dict[str, Any]:
+        """Join stored incoming/outgoing records at one resolved Agent entity.
+
+        These paths describe adjacent tenant-scoped records only. They do not
+        assert that delegation is transitive, combine scopes, or establish an
+        effective authorization decision.
+        """
+        if resolved_canonical_actor is None:
+            return {
+                "state": "unknown",
+                "intermediateCanonicalAgentEntityId": None,
+                "observedAdjacentPaths": [],
+                "observedAdjacentPathCount": None,
+                "boundedReadComplete": False,
+                "transitiveAuthority": "unknown",
+                "effectiveAuthorizationDecision": "unknown",
+                "temporalSemantics": "current_bounded_repository_records; no historical replay",
+                "reason": "a unique tenant-owned canonical Agent identity is required to join the records",
+            }
+
+        reads_complete = all(
+            read.available
+            and not read.truncated
+            and not read.scope_mismatch
+            and read.scope_known
+            for read in (incoming_read, outgoing_read, party_identity_read)
+        )
+        incoming = [
+            row
+            for row, relation, _ in delegation_records
+            if relation == "incoming" and row.get("grantee_entity_id") == resolved_canonical_actor
+        ]
+        outgoing = [
+            row
+            for row, relation, _ in delegation_records
+            if relation == "outgoing" and row.get("grantor_entity_id") == resolved_canonical_actor
+        ]
+        record_shape_complete = all(
+            _first(row, "delegation_id", "id") and _first(row, "grantor_entity_id")
+            for row in incoming_read.rows or []
+        ) and all(
+            _first(row, "delegation_id", "id") and _first(row, "grantee_entity_id")
+            for row in outgoing_read.rows or []
+        )
+
+        paths: list[dict[str, Any]] = []
+        paths_truncated = False
+        for incoming_row in incoming:
+            incoming_id = _first(incoming_row, "delegation_id", "id")
+            incoming_ref = Agent360Provider._ref_one(
+                incoming_row,
+                "delegations",
+                ("delegation_id", "id"),
+                ("starts_at",),
+            )
+            incoming_party_id = _first(incoming_row, "grantor_entity_id")
+            if incoming_id is None or incoming_ref is None or incoming_party_id is None:
+                continue
+            for outgoing_row in outgoing:
+                outgoing_id = _first(outgoing_row, "delegation_id", "id")
+                outgoing_ref = Agent360Provider._ref_one(
+                    outgoing_row,
+                    "delegations",
+                    ("delegation_id", "id"),
+                    ("starts_at",),
+                )
+                outgoing_party_id = _first(outgoing_row, "grantee_entity_id")
+                if (
+                    outgoing_id is None
+                    or outgoing_id == incoming_id
+                    or outgoing_ref is None
+                    or outgoing_party_id is None
+                ):
+                    continue
+                if len(paths) >= max(1, limit):
+                    paths_truncated = True
+                    break
+
+                incoming_party = party_identity_views.get((incoming_id, "grantor"), {})
+                intermediary_party = party_identity_views.get((incoming_id, "grantee"), {})
+                outgoing_intermediary = party_identity_views.get(
+                    (outgoing_id, "grantor"), {}
+                )
+                outgoing_party = party_identity_views.get((outgoing_id, "grantee"), {})
+                path_party_views = (
+                    incoming_party,
+                    intermediary_party,
+                    outgoing_intermediary,
+                    outgoing_party,
+                )
+                identity_refs = [
+                    ref
+                    for view in path_party_views
+                    for ref in view.get("evidenceRefs", [])
+                    if isinstance(ref, dict)
+                ]
+                identity_refs.extend(actor_identity_evidence_refs)
+                evidence_refs = _dedupe_json_refs(
+                    [
+                        incoming_ref.model_dump(mode="json"),
+                        outgoing_ref.model_dump(mode="json"),
+                        *identity_refs,
+                    ]
+                )
+                paths.append(
+                    {
+                        "kind": "observed_adjacent_delegation_records",
+                        "delegationRecordIds": [incoming_id, outgoing_id],
+                        "partyEntityIds": [
+                            incoming_party_id,
+                            resolved_canonical_actor,
+                            outgoing_party_id,
+                        ],
+                        "partyIdentities": [
+                            {
+                                "entityId": incoming_party_id,
+                                **incoming_party,
+                            },
+                            {
+                                "entityId": resolved_canonical_actor,
+                                "state": "resolved",
+                                "party": {"kind": "agent", "id": resolved_canonical_actor},
+                                "evidenceRefs": _dedupe_json_refs(
+                                    [
+                                        *intermediary_party.get("evidenceRefs", []),
+                                        *outgoing_intermediary.get("evidenceRefs", []),
+                                        *actor_identity_evidence_refs,
+                                    ]
+                                ),
+                                "reason": None,
+                            },
+                            {
+                                "entityId": outgoing_party_id,
+                                **outgoing_party,
+                            },
+                        ],
+                        "evidenceRefs": evidence_refs,
+                        "interpretation": (
+                            "Two distinct tenant-scoped delegation records share this resolved "
+                            "canonical Agent as an intermediate party; no transitive scope or "
+                            "effective authorization is inferred."
+                        ),
+                    }
+                )
+            if paths_truncated:
+                break
+
+        endpoint_identity_complete = all(
+            path["partyIdentities"][index].get("state") == "resolved"
+            for path in paths
+            for index in (0, 2)
+        )
+        bounded_read_complete = reads_complete and record_shape_complete and not paths_truncated
+        if paths:
+            state = (
+                "partial"
+                if bounded_read_complete and endpoint_identity_complete
+                else "degraded"
+            )
+        elif reads_complete and record_shape_complete:
+            state = "empty"
+        else:
+            state = "unknown"
+        return {
+            "state": state,
+            "intermediateCanonicalAgentEntityId": resolved_canonical_actor,
+            "observedAdjacentPaths": paths,
+            "observedAdjacentPathCount": (
+                len(paths) if bounded_read_complete else None
+            ),
+            "boundedReadComplete": bounded_read_complete,
+            "transitiveAuthority": "unknown",
+            "effectiveAuthorizationDecision": "unknown",
+            "temporalSemantics": "current_bounded_repository_records; no historical replay",
+            "reason": (
+                "stored adjacent records do not establish transitive delegation, combined scope, "
+                "or effective authorization"
+                if state == "partial"
+                else "delegation path evidence or endpoint identity is incomplete"
+                if state == "degraded"
+                else "no adjacent incoming and outgoing records were observed in the complete bounded read"
+                if state == "empty"
+                else "tenant-scoped delegation inputs are incomplete"
+            ),
+        }
+
+    @staticmethod
     def _read_state(read: _Read) -> str:
         if not read.available:
             return "unavailable"
@@ -3028,6 +4464,34 @@ class Agent360Provider:
         execution_id = _first(row, "execution_id", "id")
         if evidence is None or execution_id is None:
             return None
+        raw_decision_at = decision.get("evaluated_at")
+        parsed_decision_at, decision_at_error = (
+            try_parse_instant(raw_decision_at)
+            if isinstance(raw_decision_at, str)
+            else (None, "timestamp_invalid")
+        )
+        record_created_at = _first(row, "created_at")
+        parsed_record_created_at, _ = (
+            try_parse_instant(record_created_at)
+            if record_created_at is not None
+            else (None, "timestamp_invalid")
+        )
+        if raw_decision_at is None:
+            decision_at = None
+            decision_timestamp_state = "unknown"
+        elif (
+            decision_at_error is not None
+            or parsed_decision_at is None
+            or (
+                parsed_record_created_at is not None
+                and parsed_decision_at > parsed_record_created_at
+            )
+        ):
+            decision_at = None
+            decision_timestamp_state = "invalid"
+        else:
+            decision_at = parsed_decision_at.isoformat()
+            decision_timestamp_state = "recorded"
         snapshot = row.get("input_snapshot")
         snapshot = snapshot if isinstance(snapshot, dict) else {}
         asserted_delegation_id = _first(row, "delegation_id")
@@ -3073,7 +4537,8 @@ class Agent360Provider:
             "action": _first(snapshot, "action"),
             "resource": _first(snapshot, "resource"),
             "reason": _first(decision, "reason"),
-            "decisionAt": _first(row, "started_at", "created_at"),
+            "decisionAt": decision_at,
+            "decisionTimestampState": decision_timestamp_state,
             "scope": "action_scoped_request_time_only",
             "evidenceRef": evidence.model_dump(mode="json"),
         }
@@ -3177,7 +4642,11 @@ class Agent360Provider:
             "messageObservationId": _first(row, "message_obs_id", "id"),
             "inboxObservationId": _first(row, "inbox_obs_id"),
             "threadObservationId": _first(row, "thread_obs_id"),
-            "direction": _first(row, "direction"),
+            "direction": (
+                _first(row, "direction")
+                if _first(row, "direction") in {"inbound", "outbound"}
+                else None
+            ),
             "hasAttachments": (
                 row.get("has_attachments") if isinstance(row.get("has_attachments"), bool) else None
             ),
@@ -3230,6 +4699,8 @@ class Agent360Provider:
         principal_identity_by_user_id: dict[str, dict[str, Any]],
         config: Optional[dict[str, Any]],
         config_ref: Optional[EvidenceRef],
+        configured_owner_identity: Optional[dict[str, Any]],
+        owner_relationship_rows: list[dict[str, Any]],
         agent_identity_rows: list[dict[str, Any]],
         execution_rows: list[dict[str, Any]],
         delegation_records: list[tuple[dict[str, Any], str, bool]],
@@ -3284,6 +4755,102 @@ class Agent360Provider:
                     evidenceRefs=[config_ref],
                     claims=["A tenant-scoped agent configuration record is present."],
                     claimState=EpistemicStatus.OBSERVED,
+                )
+            )
+        if config is not None and config_ref is not None and configured_owner_identity is not None:
+            owner_entity_id = _first(config, "owner_entity_id")
+            identity_state = configured_owner_identity.get("state")
+            owner_refs: list[EvidenceRef] = [config_ref]
+            raw_owner_refs = configured_owner_identity.get("evidenceRefs")
+            if isinstance(raw_owner_refs, list):
+                for raw_ref in raw_owner_refs:
+                    try:
+                        owner_refs.append(EvidenceRef.model_validate(raw_ref))
+                    except Exception:  # noqa: BLE001 - malformed identity evidence is omitted
+                        continue
+            owner_refs = _dedupe_refs(owner_refs)
+            resolved_party = configured_owner_identity.get("canonicalParty")
+            owner_kind = (
+                resolved_party.get("kind")
+                if isinstance(resolved_party, dict)
+                else "canonical"
+            )
+            if identity_state == "resolved" and isinstance(resolved_party, dict):
+                claim_text = (
+                    f"The tenant-scoped agent configuration stores owner reference "
+                    f"{owner_entity_id}, which resolves by exact tenant entity ID to "
+                    f"canonical {owner_kind} entity {resolved_party.get('id')}; the "
+                    "configuration reference does not independently establish legal "
+                    "ownership, historical validity, or effective action authorization."
+                )
+                claim_state = EpistemicStatus.RESOLVED
+                claim_kind = "configured_agent_owner_identity"
+            else:
+                claim_text = (
+                    f"The tenant-scoped agent configuration owner reference "
+                    f"{owner_entity_id or 'is absent'} was not resolved to one tenant-owned "
+                    f"canonical entity: {configured_owner_identity.get('reason') or 'identity is unknown'}."
+                )
+                claim_state = (
+                    EpistemicStatus.DISPUTED
+                    if identity_state == "conflicted"
+                    else EpistemicStatus.UNKNOWN
+                )
+                claim_kind = "agent_owner_identity_resolution"
+            claims.append(
+                ClaimEnvelope(
+                    id=f"agent_owner_identity.{request.subject.id}",
+                    kind=claim_kind,
+                    subject=subject,
+                    evidenceRefs=owner_refs,
+                    claims=[claim_text],
+                    claimState=claim_state,
+                    domainSlotIds=["owner_delegator", "actor_attribution"],
+                )
+            )
+        for row in owner_relationship_rows:
+            try:
+                relationship_ref = EvidenceRef.model_validate(row["evidence_ref"])
+            except Exception:  # noqa: BLE001 - malformed graph refs cannot back a claim
+                continue
+            owner_refs = [relationship_ref]
+            if config_ref is not None:
+                owner_refs.append(config_ref)
+            if configured_owner_identity is not None:
+                configured_owner_refs = configured_owner_identity.get("evidenceRefs")
+                if isinstance(configured_owner_refs, list):
+                    for raw_ref in configured_owner_refs:
+                        try:
+                            owner_refs.append(EvidenceRef.model_validate(raw_ref))
+                        except Exception:  # noqa: BLE001 - malformed identity refs cannot back a claim
+                            continue
+            owner_refs.extend(
+                ref
+                for identity_row in agent_identity_rows
+                if _first(identity_row, "canonical_agent_entity_id")
+                == row.get("canonical_agent_entity_id")
+                and (
+                    ref := self._ref_one(
+                        identity_row,
+                        _first(identity_row, "identity_evidence_source") or "",
+                        ("identity_evidence_id",),
+                        ("identity_bound_at",),
+                    )
+                )
+                is not None
+            )
+            owner_refs = _dedupe_refs(owner_refs)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"agent_owner_relationship.{relationship_ref.id}",
+                    kind="observed_agent_owner_relationship",
+                    subject=subject,
+                    evidenceRefs=owner_refs,
+                    claims=[
+                        f"The tenant-scoped graph stores {row['relationship_type']} from configured owner entity {row['owner_entity_id']} to resolved canonical Agent {row['canonical_agent_entity_id']}; this stored relationship does not establish legal or effective ownership, historical validity, freshness, or action authorization."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["owner_delegator", "actor_attribution"],
                 )
             )
         for row in execution_rows:
@@ -3542,7 +5109,26 @@ class Agent360Provider:
                     claimState=EpistemicStatus.OBSERVED,
                 )
             )
+        communication_identity_refs = _dedupe_refs(
+            [
+                ref
+                for identity in agent_identity_rows
+                if (
+                    source := _first(identity, "identity_evidence_source")
+                ) in {"entities", "agent_deployment_identity_bindings"}
+                and (
+                    ref := self._ref_one(
+                        identity,
+                        source,
+                        ("identity_evidence_id",),
+                        ("identity_bound_at",),
+                    )
+                ) is not None
+            ]
+        )
         for row in communication_rows:
+            if not communication_identity_refs:
+                continue
             ref = self._ref_one(
                 row,
                 "obs_agent_messages",
@@ -3553,14 +5139,16 @@ class Agent360Provider:
                 continue
             inbox_ref = EvidenceRef.model_validate(row["inbox_evidence_ref"])
             direction = _first(row, "direction")
+            if direction not in {"inbound", "outbound"}:
+                direction = None
             claims.append(
                 ClaimEnvelope(
                     id=f"agent_message.{ref.id}",
                     kind="agent_communication_observation",
                     subject=subject,
-                    evidenceRefs=[inbox_ref, ref],
+                    evidenceRefs=[*communication_identity_refs, inbox_ref, ref],
                     claims=[
-                        "A tenant-scoped observed agent inbox is linked by exact inbox ID to an observed message record"
+                        "A requested Agent reference resolves to a tenant-owned canonical Agent; a tenant-scoped observed inbox names that reference and is linked by exact inbox ID to an observed message record"
                         + (f" with direction {direction}." if direction else ".")
                     ],
                     claimState=EpistemicStatus.OBSERVED,
@@ -3581,6 +5169,11 @@ class Agent360Provider:
                 "slot": "authority_envelope",
                 "state": "unknown",
                 "reason": "stored grants and historical action-scoped decisions do not establish a current standing authority envelope",
+            },
+            {
+                "slot": "delegation_chain",
+                "state": "partial",
+                "reason": "exact incoming/outgoing records may be linked through a canonical Agent; transitive delegation and combined authority remain unknown",
             },
             {
                 "slot": "policy_boundary",
@@ -3605,7 +5198,7 @@ class Agent360Provider:
             {
                 "slot": "risk_summary",
                 "state": "partial",
-                "reason": "risk, social, and relationship assessments are composed by their canonical projections; this provider's stored signals are observations, not a composite score",
+                "reason": "current canonical Risk360 summaries require an explicit outer risk_summary policy and risk360.read capability decision, resolved Agent identity, and affirmative analytics consent; freshness and causal contagion remain unknown",
             },
             {
                 "slot": "spawned_agents",

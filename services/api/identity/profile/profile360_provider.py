@@ -33,6 +33,7 @@ from shared.intelligence_projections.contracts import (
 )
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+    PROJECTION_SECTION_STATES,
 )
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
@@ -44,15 +45,19 @@ from journeys.communication360.contracts import CommunicationMessage
 
 PROJECTION_ID = "profile360"
 
-# Exact generated-registry outputSections order for profile360.
+# Canonical registry section order for provider result sorting.
 OUTPUT_SECTIONS: tuple[str, ...] = (
+    "agent_delegations",
     "evidence",
     "findings",
     "interactions",
     "journeys",
+    "likely_next_states",
+    "relationships",
     "sessions",
     "state",
     "summary",
+    "syndicates",
     "timeline",
 )
 
@@ -62,12 +67,26 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 SLOT_ENTITY_IDENTITY = "identity_spine"
 SLOT_KNOWN_UNKNOWN_RESOLUTION = "known_unknown_resolution"
 SLOT_EVIDENCE_LIMITATIONS = "evidence_trace"
+SLOT_AGENT_DELEGATIONS = "agent_delegations"
+SLOT_LIKELY_NEXT_STATES = "likely_next_states"
+SLOT_RELATIONSHIPS = "relationships"
+RELATIONSHIP_AUTHORITIES = ("graph", "relationship_facts")
+MAX_RELATIONSHIP_EDGES = 500
+MAX_RELATIONSHIP_REFS = 100
+MAX_RELATIONSHIP_CLAIMS = 50
+AGENT_DELEGATION_AUTHORITIES = ("agent_access", "agent_executions", "identity")
+SLOT_SYNDICATES = "syndicates"
+SYNDICATE_AUTHORITIES = ("cohort_membership", "evidence", "population_definitions")
 
 DEFAULT_EVENT_LIMIT = 200
 MAX_EVENT_LIMIT = 500
 MAX_JOURNEY_LIMIT = 100
 MAX_SESSION_IDENTITY_LIMIT = 100
+MAX_CANONICAL_SESSION_EVENT_LINKS = 10_000
 MAX_COMMUNICATION_LIMIT = 100
+MAX_SYNDICATE_MEMBERSHIPS = 100
+MAX_SYNDICATE_LEDGER_ROWS = 1_000
+MAX_PROFILE_PREDICTION_READ = 100
 
 
 @dataclass(frozen=True)
@@ -99,6 +118,7 @@ class EventRead:
     scope_known: bool
     truncated: bool = False
     reason: Optional[str] = None
+    canonical_subject_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -124,10 +144,55 @@ class SessionIdentityRead:
 
 
 @dataclass(frozen=True)
+class SessionRollupRead:
+    """Exact reads from the canonical tenant-scoped analytics session store."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class CommunicationRead:
     """Exact tenant/profile recipient messages with an explicit source boundary."""
 
     rows: list[CommunicationMessage]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SyndicateMembership:
+    """Exact current membership in an explicitly opted-in Syndicates group."""
+
+    tenant_id: str
+    entity_id: str
+    population_id: str
+    population_type: str
+    joined_at: Optional[str]
+    evidence_ref: EvidenceRef
+
+
+@dataclass(frozen=True)
+class SyndicateMembershipRead:
+    """Bounded read of current, tenant-owned Syndicates memberships."""
+
+    rows: list[SyndicateMembership]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PredictionOutputRead:
+    """Exact tenant/entity future-state reads with explicit source coverage."""
+
+    rows: list[dict[str, Any]]
     available: bool
     scope_known: bool
     truncated: bool = False
@@ -222,6 +287,17 @@ class Profile360Source(Protocol):
         end: Optional[str],
     ) -> EventRead: ...
 
+    async def session_events(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        session_ids: list[str],
+        *,
+        limit: int,
+        start: Optional[str],
+        end: Optional[str],
+    ) -> EventRead: ...
+
     async def current_journeys(
         self, tenant_id: str, subject: ProjectionSubject, *, limit: int
     ) -> JourneyRead: ...
@@ -229,6 +305,14 @@ class Profile360Source(Protocol):
     async def resolved_session_identities(
         self, tenant_id: str, subject: ProjectionSubject, *, limit: int
     ) -> SessionIdentityRead: ...
+
+    async def analytics_session_rollups(
+        self,
+        tenant_id: str,
+        session_ids: list[str],
+        *,
+        limit: int,
+    ) -> SessionRollupRead: ...
 
     async def communications_for_profile(
         self,
@@ -238,6 +322,23 @@ class Profile360Source(Protocol):
         limit: int,
         start: Optional[str],
     ) -> CommunicationRead: ...
+
+    async def syndicate_memberships(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        limit: int,
+    ) -> SyndicateMembershipRead: ...
+
+    async def prediction_outputs(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: datetime,
+        limit: int,
+    ) -> PredictionOutputRead: ...
 
     async def subject_history(
         self,
@@ -431,6 +532,95 @@ class RepositoryProfile360Source:
             truncated=len(rows) > limit,
         )
 
+    async def analytics_session_rollups(
+        self,
+        tenant_id: str,
+        session_ids: list[str],
+        *,
+        limit: int,
+    ) -> SessionRollupRead:
+        """Read exact, bounded session rollups for resolved session IDs only.
+
+        The identity authority establishes which source session identifiers are
+        linked to a profile. This reader does not discover sessions from event
+        absence or widen the lookup to a user identifier.
+        """
+        if not tenant_id or not isinstance(session_ids, list):
+            return SessionRollupRead(
+                [], available=True, scope_known=False,
+                reason="profile_session_rollup_scope_invalid",
+            )
+        exact_ids = list(dict.fromkeys(
+            value for value in session_ids if isinstance(value, str) and value
+        ))
+        try:
+            bounded_limit = min(max(int(limit), 1), MAX_SESSION_IDENTITY_LIMIT)
+        except (TypeError, ValueError):
+            return SessionRollupRead(
+                [], available=True, scope_known=False,
+                reason="profile_session_rollup_limit_invalid",
+            )
+        truncated = len(exact_ids) > bounded_limit
+        exact_ids = exact_ids[:bounded_limit]
+        try:
+            from dependencies.providers import get_cache
+            from repositories.repos import AnalyticsRepository
+
+            analytics = AnalyticsRepository(get_cache())
+            rows: list[dict[str, Any]] = []
+            for session_id in exact_ids:
+                matches = await analytics.query_sessions(
+                    tenant_id,
+                    {"session_id": session_id},
+                    limit=2,
+                )
+                if not isinstance(matches, list):
+                    return SessionRollupRead(
+                        [], available=True, scope_known=False,
+                        reason="profile_session_rollup_invalid_response",
+                    )
+                if len(matches) > 1:
+                    return SessionRollupRead(
+                        [], available=True, scope_known=False,
+                        reason="profile_session_rollup_identity_ambiguous",
+                    )
+                if not matches:
+                    continue
+                row = matches[0]
+                if (
+                    not isinstance(row, dict)
+                    or row.get("tenant_id") != tenant_id
+                    or row.get("session_id") != session_id
+                    or row.get("record_type") != "analytics_session"
+                ):
+                    return SessionRollupRead(
+                        [], available=True, scope_known=False,
+                        reason="profile_session_rollup_scope_mismatch",
+                    )
+                # Return only fields owned by the analytics session authority.
+                rows.append({
+                    "tenant_id": tenant_id,
+                    "session_id": session_id,
+                    "record_type": "analytics_session",
+                    "id": row.get("id"),
+                    "first_seen_at": row.get("first_seen_at"),
+                    "last_seen_at": row.get("last_seen_at"),
+                    "event_count": row.get("event_count"),
+                    "page_views": row.get("page_views"),
+                    "last_event_type": row.get("last_event_type"),
+                })
+        except Exception as exc:  # noqa: BLE001 - typed provider degradation
+            return SessionRollupRead(
+                [], available=False, scope_known=False,
+                reason=f"profile_session_rollup_source_{type(exc).__name__}",
+            )
+        return SessionRollupRead(
+            rows=rows,
+            available=True,
+            scope_known=True,
+            truncated=truncated,
+        )
+
     async def communications_for_profile(
         self,
         tenant_id: str,
@@ -483,6 +673,318 @@ class RepositoryProfile360Source:
             available=True,
             scope_known=True,
             truncated=len(rows) > limit,
+        )
+
+    async def syndicate_memberships(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        limit: int,
+    ) -> SyndicateMembershipRead:
+        """Verify exact current candidates against bounded edge-ledger slices.
+
+        The membership materialization only enumerates candidate population IDs.
+        A positive fact requires replaying the exact tenant-owned
+        ``MEMBER_OF:<entity>:<population>`` ledger aggregate and finding that
+        directed edge live. The population registry supplies the exact target's
+        type and explicit Syndicates opt-in. No labels, similarity, generic
+        cluster edges, or membership-row evidence IDs establish a fact.
+        """
+        if subject.kind != "entity" or not tenant_id or not subject.id:
+            return SyndicateMembershipRead(
+                [],
+                available=True,
+                scope_known=False,
+                reason="profile_syndicate_subject_kind_unsupported",
+            )
+
+        bounded_limit = min(max(limit, 1), MAX_SYNDICATE_MEMBERSHIPS)
+        try:
+            from identity.population.models import PopulationType
+            from identity.population.registry import membership_repo, population_repo
+            from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+            from replay.projections.syndicates_restatement_capability import (
+                is_syndicates_group,
+            )
+            from shared.graph.graph import EdgeType
+
+            membership_rows = await membership_repo.find_many(
+                filters={"tenant_id": tenant_id, "entity_id": subject.id},
+                limit=bounded_limit + 1,
+            )
+            if (
+                not isinstance(membership_rows, list)
+                or any(
+                    not isinstance(row, dict)
+                    or row.get("tenant_id") != tenant_id
+                    or str(row.get("entity_id") or "") != subject.id
+                    for row in membership_rows
+                )
+            ):
+                return SyndicateMembershipRead(
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason="profile_syndicate_membership_scope_mismatch",
+                )
+
+            candidate_truncated = len(membership_rows) > bounded_limit
+            memberships: list[SyndicateMembership] = []
+            reasons: list[str] = []
+            truncated = candidate_truncated
+            seen_population_ids: set[str] = set()
+            known_population_types = {item.value for item in PopulationType}
+            ledger = GraphMutationLedgerRepository()
+            for membership_row in membership_rows[:bounded_limit]:
+                membership_state = (
+                    membership_row.get("membership_state")
+                    or membership_row.get("status")
+                    or "active"
+                )
+                if membership_state in {"left", "expired"}:
+                    continue
+                if membership_state != "active":
+                    reasons.append("profile_syndicate_membership_state_unrecognized")
+                    continue
+                population_id = membership_row.get("population_id")
+                if not isinstance(population_id, str) or not population_id.strip():
+                    return SyndicateMembershipRead(
+                        [],
+                        available=True,
+                        scope_known=False,
+                        truncated=truncated,
+                        reason="profile_syndicate_population_id_invalid",
+                    )
+                if population_id in seen_population_ids:
+                    continue
+                seen_population_ids.add(population_id)
+
+                population = await population_repo.find_by_id(population_id)
+                if (
+                    not isinstance(population, dict)
+                    or population.get("tenant_id") != tenant_id
+                    or str(population.get("id") or "") != population_id
+                ):
+                    return SyndicateMembershipRead(
+                        [],
+                        available=True,
+                        scope_known=False,
+                        truncated=truncated,
+                        reason="profile_syndicate_population_scope_unverified",
+                    )
+                population_type = population.get("population_type")
+                if population_type not in known_population_types:
+                    reasons.append("profile_syndicate_population_type_unavailable")
+                    continue
+                if not is_syndicates_group(population):
+                    continue
+
+                aggregate_id = f"{EdgeType.MEMBER_OF}:{subject.id}:{population_id}"
+                ledger_rows = await ledger.list_records(
+                    tenant_id,
+                    aggregate_id=aggregate_id,
+                    limit=MAX_SYNDICATE_LEDGER_ROWS + 1,
+                )
+                if not isinstance(ledger_rows, list):
+                    return SyndicateMembershipRead(
+                        [],
+                        available=False,
+                        scope_known=False,
+                        truncated=truncated,
+                        reason="profile_syndicate_ledger_invalid_response",
+                    )
+                if len(ledger_rows) > MAX_SYNDICATE_LEDGER_ROWS:
+                    truncated = True
+                    reasons.append("profile_syndicate_edge_ledger_scan_truncated")
+                    continue
+
+                valid_ledger_rows: list[dict[str, Any]] = []
+                for ledger_row in ledger_rows:
+                    payload = ledger_row.get("payload") if isinstance(ledger_row, dict) else None
+                    if (
+                        not isinstance(ledger_row, dict)
+                        or ledger_row.get("tenant_id") != tenant_id
+                        or ledger_row.get("aggregate_type") != "edge"
+                        or ledger_row.get("aggregate_id") != aggregate_id
+                        or not isinstance(payload, dict)
+                        or payload.get("kind") not in {"edge", "edge_revocation"}
+                        or payload.get("edge_type") != EdgeType.MEMBER_OF
+                        or payload.get("from_vertex_id") != subject.id
+                        or payload.get("to_vertex_id") != population_id
+                    ):
+                        return SyndicateMembershipRead(
+                            [],
+                            available=True,
+                            scope_known=False,
+                            truncated=truncated,
+                            reason="profile_syndicate_ledger_scope_mismatch",
+                        )
+                    if payload.get("kind") == "edge":
+                        properties = payload.get("properties")
+                        if not isinstance(properties, dict) or properties.get("tenant_id") != tenant_id:
+                            return SyndicateMembershipRead(
+                                [],
+                                available=True,
+                                scope_known=False,
+                                truncated=truncated,
+                                reason="profile_syndicate_ledger_edge_tenant_mismatch",
+                            )
+                    valid_ledger_rows.append(ledger_row)
+
+                history = GraphHistoryReplay._history_from_rows(
+                    subject.id, None, valid_ledger_rows
+                )
+                edge_key = (EdgeType.MEMBER_OF, subject.id, population_id)
+                if edge_key not in set(history.live_edges):
+                    reasons.append("profile_syndicate_candidate_edge_not_live")
+                    continue
+
+                live_adds = [
+                    event
+                    for event in history.events
+                    if event.kind == "edge_added"
+                    and (event.edge_type, event.from_vertex_id, event.to_vertex_id)
+                    == edge_key
+                ]
+                if not live_adds:
+                    reasons.append("profile_syndicate_live_edge_evidence_unavailable")
+                    continue
+                latest_add = max(live_adds, key=lambda event: event.ledger_offset)
+                if not latest_add.mutation_id.strip():
+                    reasons.append("profile_syndicate_live_edge_evidence_unavailable")
+                    continue
+                latest_row = next(
+                    (
+                        ledger_row
+                        for ledger_row in valid_ledger_rows
+                        if ledger_row.get("mutation_id") == latest_add.mutation_id
+                        and int(ledger_row.get("ledger_offset") or 0)
+                        == latest_add.ledger_offset
+                    ),
+                    None,
+                )
+                latest_payload = (
+                    latest_row.get("payload") if isinstance(latest_row, dict) else None
+                )
+                if not isinstance(latest_payload, dict):
+                    reasons.append("profile_syndicate_live_edge_evidence_unavailable")
+                    continue
+                latest_properties = latest_payload.get("properties")
+                if (
+                    isinstance(latest_properties, dict)
+                    and latest_properties.get("membership_state")
+                    not in (None, "", "active")
+                ):
+                    reasons.append("profile_syndicate_edge_membership_inactive")
+                    continue
+
+                evidence_ref = EvidenceRef(
+                    id=latest_add.mutation_id,
+                    type="relationship",
+                    source="graph_mutation_ledger",
+                    observedAt=latest_add.recorded_at or None,
+                )
+                if not evidence_ref.id.strip():
+                    return SyndicateMembershipRead(
+                        [],
+                        available=True,
+                        scope_known=True,
+                        truncated=truncated,
+                        reason="profile_syndicate_live_edge_evidence_unavailable",
+                    )
+                seen_population_ids.add(population_id)
+                joined_at = (
+                    latest_properties.get("valid_from")
+                    if isinstance(latest_properties, dict)
+                    else None
+                ) or evidence_ref.observedAt
+                memberships.append(
+                    SyndicateMembership(
+                        tenant_id=tenant_id,
+                        entity_id=subject.id,
+                        population_id=population_id,
+                        population_type=str(population_type),
+                        joined_at=joined_at if isinstance(joined_at, str) else None,
+                        evidence_ref=evidence_ref,
+                    )
+                )
+        except Exception:  # noqa: BLE001 - fail closed at the membership boundary
+            return SyndicateMembershipRead(
+                [],
+                available=False,
+                scope_known=False,
+                reason="profile_syndicate_membership_authority_unavailable",
+            )
+
+        return SyndicateMembershipRead(
+            memberships,
+            available=True,
+            scope_known=True,
+            truncated=truncated,
+            reason="|".join(sorted(set(reasons))) or None,
+        )
+
+    async def prediction_outputs(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: datetime,
+        limit: int,
+    ) -> PredictionOutputRead:
+        """Read only approved future-state records for one exact entity/time."""
+        if subject.kind != "entity" or not tenant_id or not subject.id:
+            return PredictionOutputRead(
+                [],
+                available=True,
+                scope_known=False,
+                reason="profile_prediction_subject_kind_unsupported",
+            )
+        try:
+            from identity.profile.prediction_authority import (
+                MAX_PROFILE_PREDICTION_READ,
+                ProfilePredictionOutputRepository,
+            )
+
+            bounded_limit = min(max(limit, 1), MAX_PROFILE_PREDICTION_READ)
+            rows, truncated = await ProfilePredictionOutputRepository().read_valid_for_subject(
+                tenant_id,
+                subject.id,
+                as_of=as_of,
+                limit=bounded_limit,
+            )
+        except Exception as exc:  # noqa: BLE001 - typed provider degradation
+            return PredictionOutputRead(
+                [],
+                available=False,
+                scope_known=False,
+                reason=f"profile_prediction_output_authority_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list):
+            return PredictionOutputRead(
+                [],
+                available=True,
+                scope_known=False,
+                reason="profile_prediction_output_authority_invalid_response",
+            )
+        if any(
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or str(row.get("entity_id") or "") != subject.id
+            for row in rows
+        ):
+            return PredictionOutputRead(
+                [],
+                available=True,
+                scope_known=False,
+                reason="profile_prediction_output_scope_mismatch",
+            )
+        return PredictionOutputRead(
+            rows=rows,
+            available=True,
+            scope_known=True,
+            truncated=truncated,
         )
 
     async def identity_binding(
@@ -610,6 +1112,11 @@ class RepositoryProfile360Source:
         start: Optional[str],
         end: Optional[str],
     ) -> EventRead:
+        if subject.kind != "entity" or not tenant_id or not subject.id:
+            return EventRead(
+                rows=[], available=True, scope_known=False,
+                reason="profile_event_subject_scope_unsupported",
+            )
         try:
             from dependencies.providers import get_cache
             from repositories.repos import AnalyticsRepository
@@ -647,6 +1154,120 @@ class RepositoryProfile360Source:
             available=True,
             scope_known=True,
             truncated=len(scoped) > limit,
+            canonical_subject_id=subject.id,
+        )
+
+    async def session_events(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        session_ids: list[str],
+        *,
+        limit: int,
+        start: Optional[str],
+        end: Optional[str],
+    ) -> EventRead:
+        """Join events only when identity resolution owns their exact event ID."""
+        if (
+            subject.kind != "entity"
+            or not tenant_id
+            or not subject.id
+            or not isinstance(session_ids, list)
+        ):
+            return EventRead(
+                [], available=True, scope_known=False,
+                reason="profile_session_event_scope_invalid",
+            )
+        bounded_limit = min(max(int(limit), 1), MAX_EVENT_LIMIT)
+        exact_sessions = list(dict.fromkeys(
+            value for value in session_ids if isinstance(value, str) and value
+        ))
+        session_truncated = len(exact_sessions) > MAX_SESSION_IDENTITY_LIMIT
+        exact_sessions = exact_sessions[:MAX_SESSION_IDENTITY_LIMIT]
+        if not exact_sessions:
+            return EventRead(
+                [], available=True, scope_known=True, canonical_subject_id=subject.id
+            )
+        per_session_limit = max(1, bounded_limit // len(exact_sessions))
+        try:
+            from dependencies.providers import get_cache
+            from identity.identity.repository import IdentityResolutionRepository
+            from repositories.repos import AnalyticsRepository
+
+            canonical_event_ids = await IdentityResolutionRepository().get_event_ids_for_canonical_entity(
+                tenant_id,
+                subject.id,
+                limit=MAX_CANONICAL_SESSION_EVENT_LINKS,
+            )
+            if not isinstance(canonical_event_ids, list):
+                return EventRead(
+                    [], available=True, scope_known=False,
+                    reason="profile_session_event_identity_source_invalid_response",
+                )
+            exact_event_ids = {
+                value for value in canonical_event_ids
+                if isinstance(value, str) and value
+            }
+            truncated = session_truncated or len(canonical_event_ids) >= MAX_CANONICAL_SESSION_EVENT_LINKS
+            analytics = AnalyticsRepository(get_cache())
+            joined: list[dict[str, Any]] = []
+            seen_event_ids: set[str] = set()
+            for session_id in exact_sessions:
+                query: dict[str, Any] = {"session_id": session_id}
+                if start is not None:
+                    query["start_date"] = start
+                if end is not None:
+                    query["end_date"] = end
+                rows = await analytics.query_events(
+                    tenant_id,
+                    query,
+                    limit=per_session_limit + 1,
+                )
+                if not isinstance(rows, list):
+                    return EventRead(
+                        [], available=True, scope_known=False,
+                        reason="profile_session_event_source_invalid_response",
+                    )
+                if len(rows) > per_session_limit:
+                    truncated = True
+                for row in rows[:per_session_limit]:
+                    if (
+                        not isinstance(row, dict)
+                        or row.get("tenant_id") != tenant_id
+                        or row.get("session_id") != session_id
+                    ):
+                        return EventRead(
+                            [], available=True, scope_known=False,
+                            reason="profile_session_event_tenant_or_session_mismatch",
+                        )
+                    event_id = _safe_text(row.get("event_id"))
+                    if event_id is None or event_id not in exact_event_ids:
+                        continue
+                    if event_id in seen_event_ids:
+                        return EventRead(
+                            [], available=True, scope_known=False,
+                            reason="profile_session_event_duplicate_id",
+                        )
+                    seen_event_ids.add(event_id)
+                    joined.append(row)
+            joined.sort(
+                key=lambda row: _safe_instant(row.get("occurred_at")) or "",
+                reverse=True,
+            )
+            if len(joined) > bounded_limit:
+                joined = joined[:bounded_limit]
+                truncated = True
+        except Exception as exc:  # noqa: BLE001 - typed provider degradation
+            return EventRead(
+                [], available=False, scope_known=False,
+                reason=f"profile_session_event_source_{type(exc).__name__}",
+            )
+        return EventRead(
+            rows=joined,
+            available=True,
+            scope_known=True,
+            truncated=truncated,
+            canonical_subject_id=subject.id,
         )
 
     async def subject_history(
@@ -923,8 +1544,16 @@ class Profile360Provider:
     contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
     graph_mutation_policy = "read_only"
 
-    def __init__(self, source: Optional[Profile360Source] = None) -> None:
+    def __init__(
+        self,
+        source: Optional[Profile360Source] = None,
+        *,
+        agent_provider: Optional[IntelligenceProjectionProvider] = None,
+        relationship_provider: Optional[IntelligenceProjectionProvider] = None,
+    ) -> None:
         self._source = source if source is not None else RepositoryProfile360Source()
+        self._agent_provider = agent_provider
+        self._relationship_provider = relationship_provider
 
     async def project(
         self,
@@ -936,10 +1565,17 @@ class Profile360Provider:
         requested_sections = set(request.includeSections or OUTPUT_SECTIONS)
         needs_journeys = "journeys" in requested_sections
         needs_sessions = "sessions" in requested_sections
+        needs_agent_delegations = SLOT_AGENT_DELEGATIONS in requested_sections
+        needs_likely_next_states = SLOT_LIKELY_NEXT_STATES in requested_sections
+        needs_relationships = SLOT_RELATIONSHIPS in requested_sections
+        relationship_authorized = (
+            needs_relationships and self._relationship_slot_authorized(request, context)
+        )
+        needs_syndicates = SLOT_SYNDICATES in requested_sections
         needs_identity = bool(
             {"summary", "state", "evidence", "journeys", "sessions", "interactions"}
             & requested_sections
-        )
+        ) or relationship_authorized
         needs_entity = bool(
             {
                 "summary",
@@ -948,8 +1584,11 @@ class Profile360Provider:
                 "journeys",
                 "sessions",
                 "interactions",
+                SLOT_AGENT_DELEGATIONS,
             }
             & requested_sections
+            or relationship_authorized
+            or (needs_syndicates and request.subject.kind == "entity")
             or ("timeline" in requested_sections and request.subject.kind == "entity")
         )
         needs_events = bool({"timeline", "evidence"} & requested_sections)
@@ -1069,6 +1708,53 @@ class Profile360Provider:
             history,
             limit=limit,
         )
+        if needs_agent_delegations:
+            agent_delegation_section, agent_delegation_claims = (
+                await self._agent_delegations(request, temporal, canonical_entity)
+            )
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, agent_delegation_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*result.claims, *agent_delegation_claims],
+                }
+            )
+        if needs_relationships:
+            relationship_section, relationship_claims = await self._relationships(
+                request, context, temporal, identity, canonical_entity
+            )
+            base_claims = (
+                result.claims if requested_sections != {SLOT_RELATIONSHIPS} else []
+            )
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, relationship_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*base_claims, *relationship_claims],
+                }
+            )
+        if needs_syndicates:
+            syndicates_section, syndicates_claims = await self._syndicates(
+                request, temporal, canonical_entity
+            )
+            base_claims = (
+                result.claims
+                if requested_sections != {SLOT_SYNDICATES}
+                else []
+            )
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, syndicates_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*base_claims, *syndicates_claims],
+                }
+            )
         if needs_journeys:
             journey_section, journey_claims = await self._journey_participation(
                 request, temporal, identity, canonical_entity
@@ -1116,7 +1802,1019 @@ class Profile360Provider:
                     "claims": [*base_claims, *communication_claims],
                 }
             )
+        if needs_likely_next_states:
+            prediction_section, prediction_claims = await self._likely_next_states(
+                request, temporal
+            )
+            base_claims = (
+                result.claims
+                if requested_sections != {SLOT_LIKELY_NEXT_STATES}
+                else []
+            )
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, prediction_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*base_claims, *prediction_claims],
+                }
+            )
         return _filter_projection_result(result, request)
+
+    @staticmethod
+    def _relationship_slot_authorized(
+        request: ProjectionRequest, context: ProjectionContext
+    ) -> bool:
+        """Require the server-derived, exact Profile relationships slot decision."""
+        if context.projectionId != PROJECTION_ID or context.tenantId != request.tenantId:
+            return False
+        return any(
+            authorization.tenantId == request.tenantId
+            and authorization.sourceSurfaceId == "profile360"
+            and authorization.sourceSubject == request.subject
+            and authorization.sourceSlotId == SLOT_RELATIONSHIPS
+            and authorization.consumerProjectionId == PROJECTION_ID
+            and authorization.targetProjectionId == "relationship360"
+            and authorization.capabilityKey == "relationship360.read"
+            and authorization.policyState == "allowed"
+            and bool(authorization.policyIds)
+            and bool(authorization.policyEvaluatedAt)
+            for authorization in context.experience360ReadAuthorizations
+        )
+
+    async def _relationships(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        temporal: _TemporalRequest,
+        identity: ProfileRead,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Join one exact tenant profile and human entity before ledger replay.
+
+        Relationship360 remains the relationship authority. This section
+        preserves its observed mutation evidence, current replayed edge prefix,
+        and unknown completeness without interpreting graph topology itself.
+        """
+
+        def unknown(
+            reason: str, *, state: str = "unknown"
+        ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=SLOT_RELATIONSHIPS,
+                    state=state,  # type: ignore[arg-type]
+                    title="Profile relationships",
+                    content={
+                        "state": state,
+                        "reasonCode": reason,
+                        "subject": request.subject.model_dump(mode="json"),
+                        "coverage": "unknown",
+                        "complete": False,
+                        "edges": [],
+                        "evidenceRefs": [],
+                        "freshness": {"state": "unknown", "observedAt": None},
+                    },
+                    warnings=[reason],
+                ),
+                [],
+            )
+
+        if not self._relationship_slot_authorized(request, context):
+            return unknown("profile_relationship_slot_authorization_unavailable")
+        if request.subject.kind != "entity":
+            return unknown("profile_relationship_subject_kind_unsupported")
+        if temporal.error is not None:
+            return unknown(temporal.error, state="degraded")
+        if (
+            temporal.as_of is not None
+            or temporal.mode != "window"
+            or temporal.start is not None
+            or temporal.end is not None
+        ):
+            # Both identity records are current-only. A current join cannot
+            # establish who owned an entity at a past knowledge/valid instant.
+            return unknown("profile_relationship_identity_valid_time_unavailable")
+
+        if not identity.available or not canonical_entity.available:
+            return unknown("profile_relationship_identity_authority_unavailable", state="degraded")
+        profile = identity.record if identity.scope_known else None
+        entity = canonical_entity.record if canonical_entity.scope_known else None
+        if not isinstance(profile, dict) or not isinstance(entity, dict):
+            return unknown("profile_relationship_exact_identity_binding_unavailable")
+        profile_id = _safe_text(profile.get("user_id"))
+        entity_id = _safe_text(entity.get("entity_id"))
+        explicit_profile_entity_id = _safe_text(profile.get("canonical_entity_id"))
+        if (
+            profile.get("tenant_id") != request.tenantId
+            or entity.get("tenant_id") != request.tenantId
+            or profile_id != request.subject.id
+            or entity_id != request.subject.id
+            or entity.get("entity_type") != "human"
+            or (
+                explicit_profile_entity_id is not None
+                and explicit_profile_entity_id != entity_id
+            )
+        ):
+            return unknown("profile_relationship_exact_identity_binding_mismatch")
+        profile_ref = _profile_evidence(profile)
+        entity_ref = _entity_evidence(entity)
+        if profile_ref is None or entity_ref is None:
+            return unknown("profile_relationship_identity_evidence_unavailable")
+
+        try:
+            if self._relationship_provider is None:
+                from identity.relationship_intelligence.relationship360_provider import (
+                    Relationship360Provider,
+                )
+
+                self._relationship_provider = Relationship360Provider()
+            relationship_request = ProjectionRequest(
+                projectionId="relationship360",
+                tenantId=request.tenantId,
+                subject=request.subject,
+                page=request.page,
+                includeSections=["evidence", "interactions", "summary"],
+                includeClaims=True,
+                temporalMode="window",
+            )
+            relationship_context = await ProviderRegistry().build_context(
+                "relationship360", relationship_request
+            )
+            relationship_result = await self._relationship_provider.project(
+                relationship_request, relationship_context
+            )
+        except Exception:  # noqa: BLE001 - nested provider failure remains content-free
+            return unknown("relationship360_provider_unavailable", state="degraded")
+
+        if (
+            not isinstance(relationship_result, ProjectionResult)
+            or relationship_result.projectionId != "relationship360"
+            or relationship_result.tenantId != request.tenantId
+            or relationship_result.contractVersion != self.contract_version
+            or relationship_result.degradedReasons
+        ):
+            return unknown("relationship360_result_unavailable_or_scope_mismatch", state="degraded")
+        sections = {section.id: section for section in relationship_result.sections}
+        if len(sections) != len(relationship_result.sections):
+            return unknown("relationship360_duplicate_section", state="degraded")
+        summary = sections.get("summary")
+        interactions = sections.get("interactions")
+        evidence = sections.get("evidence")
+        summary_content = summary.content if summary is not None else None
+        interaction_content = interactions.content if interactions is not None else None
+        evidence_content = evidence.content if evidence is not None else None
+        if (
+            not isinstance(summary_content, dict)
+            or not isinstance(interaction_content, dict)
+            or not isinstance(evidence_content, dict)
+            or summary_content.get("subject")
+            != {"kind": request.subject.kind, "id": request.subject.id}
+            or summary_content.get("readAuthority") != "graph_history_replay"
+            or summary_content.get("coverage") != "unknown"
+            or interaction_content.get("coverage") != "unknown"
+            or not isinstance(interaction_content.get("edges"), list)
+            or not isinstance(evidence_content.get("items"), list)
+        ):
+            return unknown("relationship360_exact_ledger_evidence_unavailable")
+
+        raw_refs = evidence_content["items"]
+        raw_edges = interaction_content["edges"]
+        if len(raw_refs) > MAX_RELATIONSHIP_REFS or len(raw_edges) > MAX_RELATIONSHIP_EDGES:
+            return unknown("relationship360_evidence_limit_exceeded", state="degraded")
+        ledger_refs: dict[str, EvidenceRef] = {}
+        for raw in raw_refs:
+            try:
+                ref = EvidenceRef.model_validate(raw)
+            except Exception:  # noqa: BLE001 - malformed evidence cannot prove a relation
+                return unknown("relationship360_evidence_invalid", state="degraded")
+            if (
+                ref.type != "relationship"
+                or ref.source != "graph_mutation_ledger"
+                or not ref.id.strip()
+                or ref.id in ledger_refs
+            ):
+                return unknown("relationship360_evidence_scope_invalid", state="degraded")
+            ledger_refs[ref.id] = ref
+
+        edges: list[dict[str, Any]] = []
+        for raw in raw_edges:
+            if not isinstance(raw, dict):
+                return unknown("relationship360_edge_invalid", state="degraded")
+            from_id = _safe_text(raw.get("from"))
+            to_id = _safe_text(raw.get("to"))
+            mutation_id = _safe_text(raw.get("lastMutationId"))
+            edge_type = _safe_text(raw.get("edgeType"))
+            predicates = raw.get("registeredPredicates")
+            if (
+                request.subject.id not in {from_id, to_id}
+                or mutation_id not in ledger_refs
+                or edge_type is None
+                or raw.get("replayedState") != "present_in_replayed_prefix"
+                or raw.get("coverage") != "unknown"
+                or not isinstance(predicates, list)
+                or len(predicates) > 32
+                or not all(isinstance(value, str) and value for value in predicates)
+            ):
+                return unknown("relationship360_edge_scope_or_provenance_invalid", state="degraded")
+            edges.append(
+                {
+                    "edgeType": edge_type,
+                    "from": from_id,
+                    "to": to_id,
+                    "registeredPredicates": list(predicates),
+                    "predicateRegistrationState": raw.get("predicateRegistrationState"),
+                    "replayedState": "present_in_replayed_prefix",
+                    "lastMutationId": mutation_id,
+                    "recordedAt": _safe_instant(raw.get("recordedAt")),
+                    "validFrom": _safe_instant(raw.get("validFrom")),
+                    "evidenceRef": ledger_refs[mutation_id].model_dump(mode="json"),
+                }
+            )
+
+        claims: list[ClaimEnvelope] = []
+        seen_claim_refs: set[str] = set()
+        for claim in relationship_result.claims[:MAX_RELATIONSHIP_CLAIMS]:
+            if (
+                claim.kind != "relationship_graph_event"
+                or claim.subject != request.subject
+                or len(claim.evidenceRefs) != 1
+            ):
+                continue
+            ledger_ref = claim.evidenceRefs[0]
+            if ledger_ref.id not in ledger_refs or ledger_ref != ledger_refs[ledger_ref.id]:
+                continue
+            if ledger_ref.id in seen_claim_refs:
+                continue
+            seen_claim_refs.add(ledger_ref.id)
+            claims.append(
+                claim.model_copy(
+                    update={
+                        "id": f"profile360.relationship_event.{ledger_ref.id}",
+                        "evidenceRefs": [profile_ref, entity_ref, ledger_ref],
+                        "domainSlotIds": [SLOT_RELATIONSHIPS],
+                    }
+                )
+            )
+        if not claims:
+            return unknown("profile_relationship_ledger_events_not_observed")
+
+        freshest = summary_content.get("freshness")
+        latest_recorded = (
+            _safe_instant(freshest.get("latestRecordedAt"))
+            if isinstance(freshest, dict)
+            else None
+        )
+        return (
+            ProjectionSection(
+                id=SLOT_RELATIONSHIPS,
+                state="available",
+                title="Observed profile relationships",
+                content={
+                    "state": "observed_prefix",
+                    "subject": request.subject.model_dump(mode="json"),
+                    "identityBinding": {
+                        "state": "matched",
+                        "basis": "exact_tenant_profile_id_and_canonical_human_entity_id",
+                        "evidenceRefs": [
+                            profile_ref.model_dump(mode="json"),
+                            entity_ref.model_dump(mode="json"),
+                        ],
+                    },
+                    "relationship360": {
+                        "readAuthority": "graph_history_replay",
+                        "graphSubjectId": entity_id,
+                        "edges": edges,
+                        "renderedEdgeCount": len(edges),
+                        "replayedLiveEdgeCount": summary_content.get("replayedLiveEdgeCount"),
+                        "observedMutationCount": summary_content.get("relationshipEventCount"),
+                        "evidenceRefs": [
+                            ref.model_dump(mode="json") for ref in ledger_refs.values()
+                        ],
+                        "edgeReadTruncated": bool(interaction_content.get("truncated")),
+                        "coverage": "unknown",
+                        "complete": False,
+                    },
+                    "freshness": {
+                        "state": "unknown",
+                        "observedAt": latest_recorded,
+                        "reason": "no relationship freshness SLA or ledger completeness watermark",
+                    },
+                    "temporalSemantics": "current_identity_join_and_known_now_ledger_prefix",
+                    "coverage": "unknown",
+                    "complete": False,
+                },
+                warnings=["ledger_replay_completeness_is_unknown"],
+                canonicalAuthorityRefs=list(RELATIONSHIP_AUTHORITIES),
+            ),
+            claims,
+        )
+
+    async def _likely_next_states(
+        self,
+        request: ProjectionRequest,
+        temporal: _TemporalRequest,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Project only persisted, governed future-state model outputs."""
+
+        def unavailable(
+            reason: str, *, state: str = "unknown"
+        ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=SLOT_LIKELY_NEXT_STATES,
+                    state=state,  # type: ignore[arg-type]
+                    title="Likely next states",
+                    content={
+                        "items": [],
+                        "asOf": temporal.as_of or temporal.end,
+                        "coverage": "unknown",
+                        "complete": False,
+                        "reasonCode": reason,
+                        "freshness": {
+                            "state": "unknown",
+                            "observedAt": None,
+                            "maxAgeSeconds": 86400,
+                            "reason": "Predictions older than the 24-hour Profile360 freshness threshold are suppressed.",
+                        },
+                    },
+                    canonicalAuthorityRefs=(
+                        ["profile_prediction_outputs", "model_artifact_registry",
+                         "consent_policy_decisions", "analytics_events"]
+                        if state == "degraded"
+                        else None
+                    ),
+                ),
+                [],
+            )
+
+        if request.subject.kind != "entity" or not request.tenantId or not request.subject.id:
+            return unavailable("profile_prediction_subject_scope_unsupported")
+        if temporal.error is not None:
+            return unavailable("profile_prediction_temporal_anchor_invalid", state="degraded")
+
+        raw_anchor = temporal.as_of or temporal.end
+        try:
+            anchor = (
+                parse_instant_strict(raw_anchor)
+                if raw_anchor is not None
+                else datetime.now(timezone.utc)
+            )
+        except ValueError:
+            return unavailable("profile_prediction_temporal_anchor_invalid", state="degraded")
+
+        try:
+            source_read = await self._source.prediction_outputs(
+                request.tenantId,
+                request.subject,
+                as_of=anchor,
+                limit=min(
+                    max(request.page.limit if request.page is not None else MAX_PROFILE_PREDICTION_READ, 1),
+                    MAX_PROFILE_PREDICTION_READ,
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - provider boundary remains typed
+            return unavailable(
+                f"profile_prediction_output_source_{type(exc).__name__}",
+                state="degraded",
+            )
+        if not source_read.available:
+            return unavailable(
+                source_read.reason or "profile_prediction_output_source_unavailable",
+                state="degraded",
+            )
+        if not source_read.scope_known:
+            return unavailable(
+                source_read.reason or "profile_prediction_output_scope_unknown",
+                state="degraded",
+            )
+        if not source_read.rows:
+            return unavailable("no_fresh_approved_prediction_valid_at_anchor")
+
+        from identity.profile.prediction_authority import (
+            MAX_PROFILE_PREDICTION_AGE,
+            ProfilePredictionOutput,
+            approved_production_artifact,
+        )
+
+        valid_outputs: list[ProfilePredictionOutput] = []
+        invalid_rows = False
+        stale_rows = False
+        artifact_approval_cache: dict[tuple[str, str], Any | None] = {}
+        for raw in source_read.rows:
+            try:
+                output = ProfilePredictionOutput.model_validate(raw)
+            except Exception:  # noqa: BLE001 - malformed output cannot be projected
+                invalid_rows = True
+                continue
+            if (
+                output.tenant_id != request.tenantId
+                or output.entity_id != request.subject.id
+                or output.artifact_approval_state != "promoted"
+                or not output.policy_decision_id
+                or not output.policy_version
+                or output.generated_at > anchor
+                or output.valid_from > anchor
+                or output.valid_until < anchor
+            ):
+                invalid_rows = True
+                continue
+            if anchor - output.generated_at > MAX_PROFILE_PREDICTION_AGE:
+                stale_rows = True
+                continue
+            artifact_key = (output.model_id, output.artifact_version)
+            if artifact_key not in artifact_approval_cache:
+                try:
+                    artifact_approval_cache[artifact_key] = approved_production_artifact(
+                        output.model_id, output.artifact_version
+                    )
+                except Exception:  # noqa: BLE001 - artifact policy is fail-closed
+                    artifact_approval_cache[artifact_key] = None
+            artifact = artifact_approval_cache[artifact_key]
+            if (
+                artifact is None
+                or getattr(artifact, "model_id", None) != output.model_id
+                or getattr(artifact, "artifact_version", None) != output.artifact_version
+                or getattr(artifact, "promotion_state", None) != "promoted"
+                or bool(getattr(artifact, "disabled", True))
+                or bool(getattr(artifact, "synthetic_data", True))
+                or not bool(getattr(artifact, "threshold_passed", False))
+                or not bool(getattr(artifact, "production_allowed", False))
+                or getattr(artifact, "checksum_sha256", None)
+                != output.artifact_checksum_sha256
+            ):
+                invalid_rows = True
+                continue
+            valid_outputs.append(output)
+
+        if not valid_outputs:
+            return unavailable(
+                "profile_prediction_records_invalid" if invalid_rows
+                else "profile_prediction_outputs_stale" if stale_rows
+                else "no_fresh_approved_prediction_valid_at_anchor",
+                state="degraded" if invalid_rows or stale_rows or source_read.truncated else "unknown",
+            )
+
+        items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        for output in valid_outputs:
+            evidence_refs = [
+                EvidenceRef(
+                    id=ref.id,
+                    type=ref.type,
+                    source=ref.source,
+                    observedAt=(
+                        to_iso_utc(ref.observed_at)
+                        if ref.observed_at is not None
+                        else None
+                    ),
+                )
+                for ref in output.evidence_refs
+            ]
+            output_ref = EvidenceRef(
+                id=output.prediction_id,
+                type="model_output",
+                source="profile_prediction_outputs",
+                observedAt=to_iso_utc(output.generated_at),
+            )
+            claim_refs = [output_ref, *evidence_refs]
+            item = {
+                "predictionId": output.prediction_id,
+                "states": [state.model_dump(mode="json") for state in output.states],
+                "modelId": output.model_id,
+                "artifactVersion": output.artifact_version,
+                "artifactChecksumSha256": output.artifact_checksum_sha256,
+                "policyDecisionId": output.policy_decision_id,
+                "policyVersion": output.policy_version,
+                "actorId": output.actor_id,
+                "generatedAt": to_iso_utc(output.generated_at),
+                "validFrom": to_iso_utc(output.valid_from),
+                "validUntil": to_iso_utc(output.valid_until),
+                "featureSchemaHash": output.feature_schema_hash,
+                "featureDigest": output.feature_digest,
+                "stateSchemaVersion": output.state_schema_version,
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in claim_refs],
+                "epistemicStatus": EpistemicStatus.PREDICTED.value,
+            }
+            items.append(item)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"profile360.prediction.{output.prediction_id}",
+                    kind="likely_next_states_prediction",
+                    subject=request.subject,
+                    evidenceRefs=claim_refs,
+                    claims=[
+                        f"Model {output.model_id} predicted the listed future states for this entity "
+                        f"during {to_iso_utc(output.valid_from)} through {to_iso_utc(output.valid_until)}; "
+                        "these are predictions, not observed states."
+                    ],
+                    claimState=EpistemicStatus.PREDICTED,
+                    domainSlotIds=[SLOT_LIKELY_NEXT_STATES],
+                )
+            )
+
+        degraded = invalid_rows or stale_rows or source_read.truncated
+        section = ProjectionSection(
+            id=SLOT_LIKELY_NEXT_STATES,
+            state="degraded" if degraded else "available",
+            title="Likely next states",
+            content={
+                "items": items,
+                "asOf": to_iso_utc(anchor),
+                "coverage": "partial" if degraded else "bounded_exact_subject",
+                "complete": not degraded,
+                "truncated": source_read.truncated,
+                "reasonCode": (
+                    "profile_prediction_records_invalid" if invalid_rows
+                    else "profile_prediction_outputs_stale" if stale_rows
+                    else "profile_prediction_read_truncated" if source_read.truncated
+                    else None
+                ),
+                "freshness": {
+                    "state": "valid_at_anchor",
+                    "observedAt": max(item["generatedAt"] for item in items),
+                    "maxAgeSeconds": 86400,
+                    "reason": "Every projected prediction is within its recorded validity interval and the 24-hour Profile360 freshness threshold.",
+                },
+            },
+            canonicalAuthorityRefs=[
+                "profile_prediction_outputs",
+                "model_artifact_registry",
+                "consent_policy_decisions",
+                "analytics_events",
+            ],
+        )
+        return section, claims
+
+    async def _syndicates(
+        self,
+        request: ProjectionRequest,
+        temporal: _TemporalRequest,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Project only explicit, current, tenant-owned Syndicates membership.
+
+        This intentionally uses the Population 360 Syndicates opt-in contract;
+        labels, profile resemblance, generic populations, and Cluster360 groups
+        do not establish Syndicates membership. The membership materialization
+        enumerates candidates only; each positive row is checked against its
+        exact current graph-ledger aggregate. The reader has no historical
+        replay, roster completeness watermark, or freshness SLA.
+        """
+
+        def unknown(
+            reason: str, *, state: str = "unknown"
+        ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=SLOT_SYNDICATES,
+                    state=state,  # type: ignore[arg-type]
+                    title="Syndicate and cohort memberships",
+                    content={
+                        "state": state,
+                        "memberships": [],
+                        "observedMembershipCount": None,
+                        "coverage": "unknown",
+                        "complete": False,
+                        "temporalInterpretation": "current_membership_candidates_verified_against_graph_ledger",
+                        "freshness": {
+                            "state": "unknown",
+                            "observedAt": None,
+                            "reason": "Profile360 has no membership freshness threshold.",
+                        },
+                        "reasonCode": reason,
+                        "limitations": [
+                            "historical membership replay is unavailable",
+                            "membership roster completeness is unknown",
+                            "only explicitly opted-in Syndicates groups are eligible",
+                        ],
+                    },
+                    canonicalAuthorityRefs=(
+                        list(SYNDICATE_AUTHORITIES) if state == "degraded" else None
+                    ),
+                ),
+                [],
+            )
+
+        if request.subject.kind != "entity":
+            return unknown("profile_syndicate_subject_kind_unsupported")
+        if temporal.error is not None:
+            return unknown("profile_syndicate_temporal_request_unavailable", state="degraded")
+        if temporal.as_of is not None or temporal.start is not None or temporal.end is not None:
+            return unknown("profile_syndicate_historical_replay_unavailable")
+        entity = (
+            canonical_entity.record
+            if canonical_entity.available and canonical_entity.scope_known
+            else None
+        )
+        if (
+            entity is None
+            or entity.get("tenant_id") != request.tenantId
+            or str(entity.get("entity_id") or "") != request.subject.id
+        ):
+            return unknown("profile_syndicate_exact_entity_unavailable")
+
+        try:
+            read = await self._source.syndicate_memberships(
+                request.tenantId,
+                request.subject,
+                limit=MAX_SYNDICATE_MEMBERSHIPS,
+            )
+        except Exception:  # noqa: BLE001 - fail closed at the membership boundary
+            return unknown(
+                "profile_syndicate_membership_authority_unavailable", state="degraded"
+            )
+        if not isinstance(read, SyndicateMembershipRead) or not isinstance(
+            read.rows, list
+        ):
+            return unknown(
+                "profile_syndicate_membership_source_invalid_response", state="degraded"
+            )
+        if not read.available:
+            return unknown(
+                "profile_syndicate_membership_authority_unavailable", state="degraded"
+            )
+        if not read.scope_known:
+            return unknown(
+                read.reason or "profile_syndicate_membership_scope_unverified"
+            )
+        if len(read.rows) > MAX_SYNDICATE_MEMBERSHIPS:
+            return unknown(
+                "profile_syndicate_membership_source_limit_exceeded", state="degraded"
+            )
+
+        memberships: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        seen: set[str] = set()
+        for row in read.rows:
+            if (
+                not isinstance(row, SyndicateMembership)
+                or row.tenant_id != request.tenantId
+                or row.entity_id != request.subject.id
+                or not row.population_id
+                or row.population_type not in {
+                    "segment",
+                    "cohort",
+                    "cluster",
+                    "community",
+                    "batch",
+                    "archetype",
+                    "anomaly",
+                    "lookalike",
+                    "risk",
+                    "lifecycle",
+                }
+                or not isinstance(row.evidence_ref, EvidenceRef)
+                or row.evidence_ref.type != "relationship"
+                or row.evidence_ref.source != "graph_mutation_ledger"
+                or not row.evidence_ref.id.strip()
+            ):
+                return unknown("profile_syndicate_membership_scope_or_evidence_invalid")
+            if row.population_id in seen:
+                continue
+            seen.add(row.population_id)
+            memberships.append(
+                {
+                    "populationId": row.population_id,
+                    "populationType": row.population_type,
+                    "membershipState": "active",
+                    "joinedAt": row.joined_at,
+                    "evidenceRef": row.evidence_ref.model_dump(mode="json"),
+                }
+            )
+            evidence_refs.append(row.evidence_ref)
+
+        if read.truncated:
+            state = "degraded"
+            reason = "profile_syndicate_membership_scan_truncated"
+        elif read.reason:
+            state = "degraded"
+            reason = read.reason
+        elif memberships:
+            state = "degraded"
+            reason = "profile_syndicate_membership_completeness_unknown"
+        else:
+            state = "unknown"
+            reason = "profile_syndicate_membership_not_observed_completeness_unknown"
+
+        section = ProjectionSection(
+            id=SLOT_SYNDICATES,
+            state=state,  # type: ignore[arg-type]
+            title="Syndicate and cohort memberships",
+            content={
+                "state": state,
+                "memberships": memberships,
+                "observedMembershipCount": len(memberships),
+                "coverage": "unknown",
+                "complete": False,
+                "temporalInterpretation": "current_membership_candidates_verified_against_graph_ledger",
+                "freshness": {
+                    "state": "unknown",
+                    "observedAt": None,
+                    "reason": "Profile360 has no membership freshness threshold.",
+                },
+                "readAuthority": "population_memberships+population_definitions+graph_mutation_ledger",
+                "reasonCode": reason,
+                "limitations": [
+                    "membership rows enumerate candidate population IDs; exact active membership is verified from the tenant-scoped MEMBER_OF ledger aggregate",
+                    "membership roster completeness is unknown",
+                    "historical membership replay is unavailable",
+                    "Profile360 membership freshness policy is unavailable",
+                ],
+            },
+            warnings=(
+                ["membership read was bounded"] if read.truncated else None
+            ),
+            canonicalAuthorityRefs=list(SYNDICATE_AUTHORITIES),
+        )
+        claims = [
+            ClaimEnvelope(
+                id=f"profile360.syndicate_membership.{row.population_id}",
+                kind="profile_syndicate_membership",
+                subject=request.subject,
+                evidenceRefs=[row.evidence_ref],
+                claims=[
+                    "The exact tenant entity has an observed active MEMBER_OF edge to an explicitly opted-in Syndicates group."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=[SLOT_SYNDICATES],
+            )
+            for row in read.rows
+            if isinstance(row, SyndicateMembership)
+            and row.tenant_id == request.tenantId
+            and row.entity_id == request.subject.id
+            and row.population_id in seen
+            and row.evidence_ref in evidence_refs
+        ]
+        return section, claims
+
+    async def _agent_delegations(
+        self,
+        request: ProjectionRequest,
+        temporal: _TemporalRequest,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Reuse Agent360's tenant-scoped authority path for exact Agent subjects.
+
+        A human/profile entity is not linked to an agent merely because it is
+        present in Profile360. Entity subjects are accepted only when Agent360
+        resolves that exact entity ID as a canonical Agent entity. Runtime
+        agent references are accepted only after Agent360 resolves them through
+        its tenant-owned identity authority.
+        """
+
+        def unknown(reason: str, *, state: str = "unknown") -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=SLOT_AGENT_DELEGATIONS,
+                    state=state,  # type: ignore[arg-type]
+                    title="Agent delegation and authority",
+                    content={
+                        "state": state,
+                        "identityBinding": {"state": "unknown", "reason": reason},
+                        "delegationAuthority": {"state": state, "reason": reason},
+                        "policy": {
+                            "state": "not_evaluated_by_projection",
+                            "effectiveAuthorizationDecision": "unknown",
+                            "reason": (
+                                "Profile access policy is enforced by the frame runtime; "
+                                "stored delegation evidence does not authorize a new action."
+                            ),
+                        },
+                        "freshness": {
+                            "state": "unknown",
+                            "observedAt": None,
+                            "reason": "No Profile360 agent-authority freshness threshold is available.",
+                        },
+                        "temporalSemantics": temporal.mode,
+                    },
+                ),
+                [],
+            )
+
+        if request.subject.kind not in {"agent", "entity"}:
+            return unknown("profile_subject_has_no_exact_agent_binding")
+        if request.subject.kind == "entity":
+            entity = canonical_entity.record
+            if (
+                entity is None
+                or entity.get("tenant_id") != request.tenantId
+                or _safe_text(entity.get("entity_id")) != request.subject.id
+            ):
+                return unknown("profile_entity_registry_binding_unavailable")
+            if entity.get("entity_type") != "agent":
+                return unknown("profile_entity_is_not_a_canonical_agent")
+        if temporal.error is not None:
+            return unknown(temporal.error)
+        if temporal.as_of is not None or temporal.mode == "compare":
+            return unknown("agent_authority_historical_replay_unavailable")
+
+        try:
+            if self._agent_provider is None:
+                from actions.agent.agent360_provider import Agent360Provider
+
+                self._agent_provider = Agent360Provider()
+            agent_request = ProjectionRequest(
+                projectionId="agent360",
+                tenantId=request.tenantId,
+                subject=request.subject,
+                page=request.page,
+                timeRange=request.timeRange,
+                includeSections=["state"],
+                includeClaims=request.includeClaims,
+                temporalMode=temporal.mode,
+            )
+            agent_context = await ProviderRegistry().build_context(
+                "agent360", agent_request
+            )
+            agent_result = await self._agent_provider.project(agent_request, agent_context)
+        except Exception:  # noqa: BLE001 - fail closed at the cross-projection boundary
+            return unknown("agent360_authority_provider_unavailable", state="degraded")
+
+        if (
+            agent_result.projectionId != "agent360"
+            or agent_result.tenantId != request.tenantId
+        ):
+            return unknown("agent360_authority_result_scope_mismatch", state="degraded")
+
+        state_sections = [section for section in agent_result.sections if section.id == "state"]
+        state_content = state_sections[0].content if len(state_sections) == 1 else None
+        dimensions = state_content.get("dimensions") if isinstance(state_content, dict) else None
+        if not isinstance(dimensions, list):
+            return unknown("agent360_exact_agent_identity_unavailable")
+
+        def dimension(name: str) -> Optional[dict[str, Any]]:
+            matches = [
+                item
+                for item in dimensions
+                if isinstance(item, dict) and item.get("id") == name
+            ]
+            return matches[0] if len(matches) == 1 else None
+
+        identity_dimension = dimension("agent_identity")
+        actor_dimension = dimension("actor_attribution")
+        authority_dimension = dimension("authority_and_delegation")
+        identity_content = (
+            identity_dimension.get("content")
+            if isinstance(identity_dimension, dict)
+            else None
+        )
+        actor_content = (
+            actor_dimension.get("content") if isinstance(actor_dimension, dict) else None
+        )
+        authority_content = (
+            authority_dimension.get("content")
+            if isinstance(authority_dimension, dict)
+            else None
+        )
+        if not all(
+            isinstance(value, dict)
+            for value in (identity_content, actor_content, authority_content)
+        ):
+            return unknown("agent360_exact_agent_identity_unavailable")
+
+        canonical_agent_id = _safe_text(identity_content.get("canonicalAgentEntityId"))
+        attributed_agent_id = _safe_text(actor_content.get("resolvedCanonicalActor"))
+        identity_refs: list[EvidenceRef] = []
+        raw_identity_refs = identity_content.get("evidenceRefs")
+        if isinstance(raw_identity_refs, list):
+            for raw_ref in raw_identity_refs:
+                try:
+                    ref = EvidenceRef.model_validate(raw_ref)
+                except Exception:  # noqa: BLE001 - malformed identity evidence is omitted
+                    continue
+                if (
+                    ref.type == "entity"
+                    and ref.source in {"entities", "agent_deployment_identity_bindings"}
+                ):
+                    identity_refs.append(ref)
+        if (
+            not canonical_agent_id
+            or attributed_agent_id != canonical_agent_id
+            or not identity_refs
+            or actor_content.get("state") != "matched"
+        ):
+            return unknown("agent360_exact_agent_identity_unavailable")
+        if request.subject.kind == "entity" and canonical_agent_id != request.subject.id:
+            return unknown("profile_entity_is_not_the_resolved_canonical_agent")
+
+        authority_state = (
+            authority_dimension.get("state")
+            if isinstance(authority_dimension, dict)
+            else None
+        )
+        if not isinstance(authority_state, str):
+            return unknown("agent360_authority_state_invalid", state="degraded")
+        if authority_state in PROJECTION_SECTION_STATES:
+            section_state = authority_state
+        elif authority_state in {"partial", "conflicted", "truncated", "unavailable"}:
+            # Keep more specific incomplete states in the authority payload,
+            # while mapping them to the shared section-state contract.
+            section_state = "degraded"
+        else:
+            return unknown("agent360_authority_state_invalid", state="degraded")
+
+        # Agent360 has already tenant-validated these records and party joins.
+        # Keep an explicit allowlist at the Profile360 boundary so new internal
+        # Agent360 fields do not silently become part of the Profile contract.
+        authority_view = {
+            "state": authority_state,
+            "upstreamDegradedReasons": (
+                [
+                    reason
+                    for reason in agent_result.degradedReasons
+                    if isinstance(reason, str) and reason and len(reason) <= 128
+                ]
+                if section_state == "degraded"
+                else []
+            ),
+            **{
+                key: authority_content[key]
+                for key in (
+                    "delegationRecords",
+                    "delegationReadConflicts",
+                    "actionScopedDecisions",
+                    "actionScopedDecisionState",
+                    "activeIncomingCount",
+                    "capabilityAccessProfile",
+                    "temporalSemantics",
+                    "truncated",
+                    "evidenceRefs",
+                )
+                if key in authority_content
+            },
+            "effectiveAuthorizationDecision": "unknown",
+        }
+        content = {
+            "state": section_state,
+            "identityBinding": {
+                "state": "matched",
+                "sourceAgentId": request.subject.id,
+                "canonicalAgentEntityId": canonical_agent_id,
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", exclude_none=True)
+                    for ref in _dedupe_refs(identity_refs)
+                ],
+            },
+            "delegationAuthority": authority_view,
+            "policy": {
+                "state": "not_evaluated_by_projection",
+                "effectiveAuthorizationDecision": "unknown",
+                "reason": (
+                    "Profile access policy is enforced by the frame runtime. Agent360 "
+                    "reports stored grants and recorded action decisions; it does not "
+                    "authorize a new action or resource request."
+                ),
+            },
+            "freshness": {
+                "state": "unknown",
+                "observedAt": None,
+                "reason": "Agent360 exposes current repository state without a Profile360 freshness threshold.",
+            },
+            "temporalSemantics": authority_content.get(
+                "temporalSemantics", "current_repository_state; no historical replay"
+            ),
+        }
+        if request.timeRange is not None:
+            content["requestedTemporalMode"] = temporal.mode
+
+        exact_claim_kinds = {
+            "agent_delegation_record",
+            "agent_delegation_active_state_conflict",
+            "canonically_resolved_delegation_party",
+            "delegation_party_identity_resolution",
+            "server_recorded_delegation_decision",
+            "agent_capability_access_profile",
+        }
+        claims: list[ClaimEnvelope] = []
+        if request.includeClaims is not False:
+            for claim in agent_result.claims:
+                if (
+                    claim.kind not in exact_claim_kinds
+                    or claim.subject != request.subject
+                    or not claim.evidenceRefs
+                ):
+                    continue
+                claims.append(
+                    claim.model_copy(
+                        update={
+                            "subject": request.subject,
+                            "domainSlotIds": [SLOT_AGENT_DELEGATIONS],
+                        }
+                    )
+                )
+
+        return (
+            ProjectionSection(
+                id=SLOT_AGENT_DELEGATIONS,
+                state=section_state,  # type: ignore[arg-type]
+                title="Agent delegation and authority",
+                content=content,
+                canonicalAuthorityRefs=list(AGENT_DELEGATION_AUTHORITIES),
+            ),
+            claims,
+        )
 
     async def _profile_communications(
         self,
@@ -1361,7 +3059,7 @@ class Profile360Provider:
         identity: ProfileRead,
         canonical_entity: CanonicalEntityRead,
     ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
-        """Project resolved session identity observations, not SDK rollup ownership."""
+        """Join resolved profile identity links to exact session and event authorities."""
 
         def unknown(reason: str, *, state: str = "unknown") -> tuple[ProjectionSection, list[ClaimEnvelope]]:
             return (
@@ -1372,10 +3070,18 @@ class Profile360Provider:
                     content={
                         "state": state,
                         "reasonCode": reason,
-                        "coverage": "resolved_source_identity_links_only",
+                        "coverage": "unknown",
+                        "complete": False,
+                        "roster": {
+                            "state": "unknown",
+                            "basis": "resolved_source_identity_session_claims",
+                            "complete": False,
+                        },
+                        "timeline": {"state": "unknown", "complete": False},
+                        "items": [],
                     },
                     warnings=[reason],
-                    canonicalAuthorityRefs=["identity"],
+                    canonicalAuthorityRefs=["identity", "analytics_events"],
                 ),
                 [],
             )
@@ -1427,8 +3133,8 @@ class Profile360Provider:
         if not isinstance(read.rows, list) or len(read.rows) > limit:
             return unknown("profile_session_identity_source_limit_exceeded", state="degraded")
 
-        items: list[dict[str, Any]] = []
-        claims: list[ClaimEnvelope] = []
+        sessions: list[dict[str, Any]] = []
+        session_ids: set[str] = set()
         seen: set[str] = set()
         for row in read.rows:
             if (
@@ -1449,6 +3155,12 @@ class Profile360Provider:
             if source_id in seen:
                 return unknown("profile_session_identity_duplicate_source")
             seen.add(source_id)
+            if session_id in session_ids:
+                # AnalyticsRepository defines a tenant + session ID as one
+                # canonical session. Two source identities in different
+                # namespaces cannot be collapsed onto that key safely.
+                return unknown("profile_session_identifier_ambiguous")
+            session_ids.add(session_id)
             first_seen = _safe_instant(row.get("first_seen_at"))
             last_seen = _safe_instant(row.get("last_seen_at"))
             evidence_ref = EvidenceRef(
@@ -1457,7 +3169,7 @@ class Profile360Provider:
                 source="identity_source_identities",
                 observedAt=last_seen,
             )
-            items.append(
+            sessions.append(
                 {
                     "sourceIdentityId": source_id,
                     "sourceNamespace": source_namespace,
@@ -1465,15 +3177,194 @@ class Profile360Provider:
                     "firstSeenAt": first_seen,
                     "lastSeenAt": last_seen,
                     "sessionIdentifierPresent": True,
-                    "evidenceRef": evidence_ref.model_dump(mode="json"),
+                    "evidenceRef": evidence_ref,
+                    "sessionId": session_id,
                 }
             )
+        if not sessions:
+            return unknown("profile_session_identity_links_not_observed")
+
+        reasons = {
+            "profile_session_roster_completeness_unknown",
+            "profile_session_event_roster_completeness_unknown",
+        }
+        rollups_by_session: dict[str, dict[str, Any]] = {}
+        rollup_reader = getattr(self._source, "analytics_session_rollups", None)
+        rollup_read: Optional[SessionRollupRead] = None
+        if not callable(rollup_reader):
+            reasons.add("profile_session_rollup_source_unavailable")
+        else:
+            try:
+                rollup_read = await rollup_reader(
+                    request.tenantId,
+                    sorted(session_ids),
+                    limit=MAX_SESSION_IDENTITY_LIMIT,
+                )
+            except Exception:  # noqa: BLE001 - source failures remain typed
+                reasons.add("profile_session_rollup_source_unavailable")
+        if rollup_read is not None and not isinstance(rollup_read, SessionRollupRead):
+            reasons.add("profile_session_rollup_source_invalid_response")
+            rollup_read = None
+        elif rollup_read is not None and not rollup_read.available:
+            reasons.add(rollup_read.reason or "profile_session_rollup_source_unavailable")
+        elif rollup_read is not None and not rollup_read.scope_known:
+            reasons.add(rollup_read.reason or "profile_session_rollup_scope_unknown")
+            rollup_read = None
+        if rollup_read is not None and rollup_read.available and rollup_read.scope_known:
+            if (
+                not isinstance(rollup_read.rows, list)
+                or len(rollup_read.rows) > MAX_SESSION_IDENTITY_LIMIT
+            ):
+                return unknown("profile_session_rollup_source_limit_exceeded", state="degraded")
+            for row in rollup_read.rows:
+                if (
+                    not isinstance(row, dict)
+                    or row.get("tenant_id") != request.tenantId
+                    or row.get("record_type") != "analytics_session"
+                ):
+                    return unknown("profile_session_rollup_scope_mismatch")
+                session_id = _safe_text(row.get("session_id"))
+                rollup_id = _safe_text(row.get("id"))
+                if session_id is None or session_id not in session_ids or rollup_id is None:
+                    return unknown("profile_session_rollup_identity_unproven")
+                if session_id in rollups_by_session:
+                    return unknown("profile_session_rollup_duplicate_session")
+                rollups_by_session[session_id] = row
+            if rollup_read.truncated:
+                reasons.add("profile_session_rollup_read_capped")
+        if session_ids - set(rollups_by_session):
+            # A missing rollup is unknown evidence, not proof of no session.
+            reasons.add("profile_session_rollup_not_observed_for_resolved_link")
+
+        event_reader = getattr(self._source, "session_events", None)
+        event_read: Optional[EventRead] = None
+        if not callable(event_reader):
+            reasons.add("profile_session_event_source_unavailable")
+        else:
+            try:
+                event_read = await event_reader(
+                    request.tenantId,
+                    request.subject,
+                    sorted(session_ids),
+                    limit=MAX_EVENT_LIMIT,
+                    start=temporal.start,
+                    end=temporal.end,
+                )
+            except Exception:  # noqa: BLE001 - source failures remain typed
+                reasons.add("profile_session_event_source_unavailable")
+        if event_read is not None and not isinstance(event_read, EventRead):
+            reasons.add("profile_session_event_source_invalid_response")
+            event_read = None
+        elif event_read is not None and not event_read.available:
+            reasons.add(event_read.reason or "profile_session_event_source_unavailable")
+        elif event_read is not None and not event_read.scope_known:
+            reasons.add(event_read.reason or "profile_session_event_scope_unknown")
+            event_read = None
+        elif (
+            event_read is not None
+            and event_read.canonical_subject_id != request.subject.id
+        ):
+            reasons.add("profile_session_event_profile_join_unproven")
+            event_read = None
+
+        events_by_session: dict[str, list[tuple[dict[str, Any], EvidenceRef]]] = {}
+        seen_event_ids: set[str] = set()
+        if event_read is not None and event_read.available and event_read.scope_known:
+            if not isinstance(event_read.rows, list) or len(event_read.rows) > MAX_EVENT_LIMIT:
+                return unknown("profile_session_event_source_limit_exceeded", state="degraded")
+            for event in event_read.rows:
+                if not isinstance(event, dict):
+                    reasons.add("profile_session_event_source_invalid_row")
+                    continue
+                if event.get("tenant_id") != request.tenantId:
+                    return unknown("profile_session_event_tenant_scope_mismatch")
+                session_id = _safe_text(event.get("session_id"))
+                if session_id not in session_ids:
+                    continue
+                event_entity_id = event.get("canonical_entity_id")
+                if event_entity_id is not None and str(event_entity_id) != request.subject.id:
+                    reasons.add("profile_session_event_profile_join_mismatch")
+                    continue
+                event_id = _safe_text(event.get("event_id"))
+                occurred_at = _safe_instant(event.get("occurred_at"))
+                if event_id is None or occurred_at is None:
+                    reasons.add("profile_session_event_provenance_incomplete")
+                    continue
+                if not _within(occurred_at, temporal.start, temporal.end):
+                    reasons.add("profile_session_event_outside_requested_window")
+                    continue
+                if event_id in seen_event_ids:
+                    return unknown("profile_session_event_duplicate_id")
+                seen_event_ids.add(event_id)
+                event_ref = EvidenceRef(
+                    id=event_id,
+                    type="event",
+                    source="analytics_events",
+                    observedAt=occurred_at,
+                )
+                event_item = {
+                    "eventId": event_id,
+                    "eventType": _safe_text(event.get("event_type")),
+                    "occurredAt": occurred_at,
+                    "evidenceRef": event_ref.model_dump(mode="json"),
+                }
+                events_by_session.setdefault(session_id, []).append((event_item, event_ref))
+            if event_read.truncated:
+                reasons.add("profile_session_event_read_capped")
+        if not any(events_by_session.values()):
+            reasons.add("profile_session_events_not_observed_for_resolved_links")
+
+        items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        for session in sessions:
+            session_id = session.pop("sessionId")
+            session_evidence = session.pop("evidenceRef")
+            joined_events = events_by_session.get(session_id, [])
+            rollup = rollups_by_session.get(session_id)
+            rollup_evidence = None
+            session_rollup = None
+            if rollup is not None:
+                rollup_evidence = EvidenceRef(
+                    id=str(rollup["id"]),
+                    type="document",
+                    source="analytics_sessions",
+                    observedAt=_safe_instant(rollup.get("last_seen_at")),
+                )
+                session_rollup = {
+                    "firstSeenAt": _safe_instant(rollup.get("first_seen_at")),
+                    "lastSeenAt": _safe_instant(rollup.get("last_seen_at")),
+                    "observedEventCount": (
+                        rollup.get("event_count")
+                        if isinstance(rollup.get("event_count"), int)
+                        and rollup.get("event_count") >= 0
+                        else None
+                    ),
+                    "observedPageViewCount": (
+                        rollup.get("page_views")
+                        if isinstance(rollup.get("page_views"), int)
+                        and rollup.get("page_views") >= 0
+                        else None
+                    ),
+                    "lastEventType": _safe_text(rollup.get("last_event_type")),
+                    "timeScope": "all_processed_events_for_exact_tenant_session",
+                    "complete": False,
+                }
+            session["eventCount"] = len(joined_events)
+            session["events"] = [event for event, _ in joined_events]
+            session["evidenceRef"] = session_evidence.model_dump(mode="json")
+            session["sessionRollup"] = session_rollup
+            session["sessionRollupEvidenceRef"] = (
+                rollup_evidence.model_dump(mode="json") if rollup_evidence else None
+            )
+            session["timelineComplete"] = False
+            session["timelineState"] = "observed" if joined_events else "unknown"
+            items.append(session)
             claims.append(
                 ClaimEnvelope(
-                    id=f"profile360.session_identity.{source_id}",
+                    id=f"profile360.session_identity.{session['sourceIdentityId']}",
                     kind="resolved_session_source_identity",
                     subject=request.subject,
-                    evidenceRefs=[evidence_ref],
+                    evidenceRefs=[session_evidence],
                     claims=[
                         "A resolved tenant-scoped source identity with a session identifier is linked to this canonical profile."
                     ],
@@ -1481,24 +3372,65 @@ class Profile360Provider:
                     domainSlotIds=["session_history"],
                 )
             )
-        if not items:
-            return unknown("profile_session_identity_links_not_observed")
-        reasons = ["profile_session_event_timeline_not_joined"]
+            if rollup_evidence is not None:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"profile360.session_rollup.{rollup_evidence.id}",
+                        kind="canonical_analytics_session_rollup",
+                        subject=request.subject,
+                        evidenceRefs=[session_evidence, rollup_evidence],
+                        claims=[
+                            "The canonical analytics session authority has an observed rollup for an exact tenant-scoped session identifier carried by a resolved source identity linked to this profile."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["session_history"],
+                    )
+                )
+            for event, event_ref in joined_events:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"profile360.session_event.{event['eventId']}",
+                        kind="resolved_session_activity_event",
+                        subject=request.subject,
+                        evidenceRefs=[session_evidence, event_ref],
+                        claims=[
+                            f"Analytics event {event['eventId']} is recorded for a session identifier on a resolved source identity linked to this profile."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["session_history"],
+                    )
+                )
         if read.truncated:
-            reasons.append("profile_session_identity_read_capped")
+            reasons.add("profile_session_identity_read_capped")
         return (
             ProjectionSection(
                 id="sessions",
                 state="degraded",
                 title="Profile session identity history",
                 content={
-                    "coverage": "resolved_source_identity_links_only",
+                    "coverage": "resolved_identity_session_links_and_exact_canonical_session_reads",
                     "complete": False,
                     "count": len(items),
                     "items": items,
+                    "roster": {
+                        "state": "partial",
+                        "basis": "resolved_source_identity_records_with_session_id",
+                        "complete": False,
+                        "sourceTruncated": read.truncated,
+                    },
+                    "timeline": {
+                        "state": "observed" if any(events_by_session.values()) else "unknown",
+                        "complete": False,
+                        "start": temporal.start,
+                        "end": temporal.end,
+                        "eventLimit": MAX_EVENT_LIMIT,
+                    },
+                    "sessionRollupReadTruncated": bool(rollup_read and rollup_read.truncated),
+                    "eventReadTruncated": bool(event_read and event_read.truncated),
+                    "reasonCodes": sorted(reasons),
                 },
-                warnings=reasons,
-                canonicalAuthorityRefs=["identity"],
+                warnings=sorted(reasons),
+                canonicalAuthorityRefs=["identity", "analytics_events"],
             ),
             claims,
         )

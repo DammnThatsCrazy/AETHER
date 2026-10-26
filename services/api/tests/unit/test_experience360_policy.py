@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from governance.security.access_control import ALL_DOMAINS
 from shared.intelligence_projections.contracts import Experience360FrameRequest
 from shared.intelligence_projections.generated_registry import (
     PRODUCT_360_SURFACE_DEFINITIONS,
@@ -74,6 +75,7 @@ def test_every_catalog_authority_reference_has_an_explicit_access_domain() -> No
     }
 
     assert authority_refs == set(AUTHORITY_DOMAIN_BY_REF)
+    assert set(AUTHORITY_DOMAIN_BY_REF.values()) <= set(ALL_DOMAINS)
     assert set(PRODUCT_360_SURFACE_DEFINITIONS) == {
         surface["id"] for surface in contract["productSurfaces"]
     }

@@ -15,6 +15,7 @@ requested subject before projection.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from shared.temporal.instant import coerce_utc_lenient
@@ -24,7 +25,9 @@ from graph.operational_intelligence.models import EvidenceRef
 
 
 IdentitySubjectKind = Literal["entity", "agent", "source"]
-IdentitySlotState = Literal["available", "empty", "unknown", "degraded", "truncated", "suppressed"]
+IdentitySlotState = Literal[
+    "available", "empty", "partial", "unknown", "degraded", "truncated", "suppressed"
+]
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
@@ -61,6 +64,15 @@ class IdentityBatchRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class IdentityProviderRegistryRead:
+    """Exact provider-runtime registry lookup for one recorded source system."""
+
+    entry: Optional[dict[str, Any]] = None
+    available: bool = True
+    reason: Optional[str] = None
+
+
 class Identity360Source(Protocol):
     """Injectable reads from canonical entity, identity and evidence stores."""
 
@@ -71,6 +83,10 @@ class Identity360Source(Protocol):
     async def source_identity(
         self, tenant_id: str, source_identity_id: str
     ) -> IdentityRecordRead: ...
+
+    async def provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead: ...
 
     async def source_identities_for_entity(
         self, tenant_id: str, entity_id: str, *, limit: int
@@ -100,6 +116,10 @@ class Identity360Source(Protocol):
         self, tenant_id: str, entity_id: str, *, limit: int
     ) -> IdentityBatchRead: ...
 
+    async def wallet_inventory_for_entity(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> IdentityBatchRead: ...
+
 
 class RepositoryIdentity360Source:
     """Adapter over existing canonical repositories; imports are lazy.
@@ -110,8 +130,9 @@ class RepositoryIdentity360Source:
     truncation; no table or truth is introduced here.
     """
 
-    def __init__(self, identity_repository: Any = None) -> None:
+    def __init__(self, identity_repository: Any = None, wallet_repository: Any = None) -> None:
         self._identity_repository = identity_repository
+        self._wallet_repository = wallet_repository
 
     def _identity_repo(self) -> Any:
         if self._identity_repository is None:
@@ -155,6 +176,50 @@ class RepositoryIdentity360Source:
                 reason=f"source_identities_{type(exc).__name__}",
             )
         return IdentityRecordRead(record=row)
+
+    async def provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead:
+        """Resolve only an exact recorded provider key against the runtime registry.
+
+        This does not parse a namespace, infer a provider from a prefix, or load
+        plugins as a side effect of a read. The application loads the registry
+        during startup; an absent exact key therefore remains explicitly
+        unknown to Identity360.
+        """
+        if not source_system_id.strip():
+            return IdentityProviderRegistryRead(reason="source_system_id_not_recorded")
+        try:
+            from connectors.provider_runtime.registry import provider_registry
+
+            plugin = provider_registry.get(source_system_id)
+            if plugin is None:
+                return IdentityProviderRegistryRead(reason="provider_identity_not_registered")
+            identity = plugin.identity()
+            manifest = plugin.manifest()
+        except Exception as exc:  # noqa: BLE001 - lookup failures stay content-free
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason=f"provider_registry_{type(exc).__name__}",
+            )
+
+        identity_key = _safe_text(getattr(identity, "key", None))
+        manifest_key = _safe_text(getattr(manifest, "identity_key", None))
+        if identity_key != source_system_id or manifest_key != source_system_id:
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_identity_mismatch",
+            )
+        return IdentityProviderRegistryRead(
+            entry={
+                "identityKey": identity_key,
+                "providerFamily": _safe_text(getattr(manifest, "provider_family", None)),
+                "productId": _safe_text(getattr(manifest, "product_id", None)),
+                "capabilityId": _safe_text(getattr(manifest, "capability_id", None)),
+                "displayName": _safe_text(getattr(manifest, "display_name", None)),
+                "category": _safe_text(getattr(manifest, "category", None)),
+            }
+        )
 
     async def source_identities_for_entity(
         self, tenant_id: str, entity_id: str, *, limit: int
@@ -313,6 +378,38 @@ class RepositoryIdentity360Source:
             truncated=len(rows) > limit,
         )
 
+    async def wallet_inventory_for_entity(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> IdentityBatchRead:
+        """Read explicit tenant/entity wallet links without exposing addresses.
+
+        ``entity_wallets`` is the canonical link registry used by the financial
+        flow authority. A row proves that the tenant recorded a wallet link for
+        this exact owner entity; it does not prove current wallet control. The
+        extra row preserves truncation instead of turning a capped list into a
+        complete inventory claim.
+        """
+        try:
+            if self._wallet_repository is None:
+                from repositories.repos import WalletRepository
+
+                self._wallet_repository = WalletRepository()
+            rows = await self._wallet_repository.find_many(
+                filters={"tenant_id": tenant_id, "owner_entity_id": entity_id},
+                limit=limit + 1,
+            )
+        except Exception as exc:  # noqa: BLE001 - provider reports bounded degradation
+            return IdentityBatchRead(
+                available=False,
+                reason=f"entity_wallets_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list):
+            return IdentityBatchRead(
+                available=False,
+                reason="entity_wallets_invalid_response",
+            )
+        return IdentityBatchRead(rows=tuple(rows[:limit]), truncated=len(rows) > limit)
+
 
 @dataclass(frozen=True)
 class Identity360Slot:
@@ -402,7 +499,15 @@ class Identity360Provider:
         want_policy = "policy_redactions" in requested
         want_trace = "evidence_trace" in requested
         want_subject = bool(
-            requested & {"match_evidence", "conflicts", "confidence", "aliases", "evidence_trace"}
+            requested
+            & {
+                "match_evidence",
+                "conflicts",
+                "confidence",
+                "aliases",
+                "wallets",
+                "evidence_trace",
+            }
         )
         want_lineage = bool(
             requested
@@ -412,6 +517,7 @@ class Identity360Provider:
         want_evidence = bool(
             requested & {"match_evidence", "confidence", "aliases", "evidence_trace"}
         )
+        want_verification = bool(requested & {"match_evidence", "wallets", "evidence_trace"})
         want_claims = want_identifiers or want_trace
         needs_entity_scope = bool(requested)
 
@@ -487,7 +593,9 @@ class Identity360Provider:
         decisions_read = IdentityBatchRead()
         conflicts_read = IdentityBatchRead()
         verification_read = IdentityBatchRead()
+        wallet_inventory_read = IdentityBatchRead(reason="wallet_inventory_not_requested")
         claim_read = IdentityBatchRead()
+        provider_registry_reads: dict[str, IdentityProviderRegistryRead] = {}
 
         source_rows: list[dict[str, Any]] = []
         claim_rows: list[dict[str, Any]] = []
@@ -507,6 +615,9 @@ class Identity360Provider:
                     expected_source_id=subject_id,
                     source_field="source_identity_id",
                 )
+                claim_rows, claim_read = self._validated_provenance_rows(
+                    claim_read, claim_rows, "identity_claims"
+                )
 
         if entity_id is not None and subject_scope_known:
             if subject_kind != "source" and want_lineage:
@@ -522,6 +633,9 @@ class Identity360Provider:
                     expected_entity_id=entity_id,
                     source_field="canonical_entity_id",
                 )
+                source_rows, source_rows_read = self._validated_provenance_rows(
+                    source_rows_read, source_rows, "identity_source_identities"
+                )
             if want_relationships:
                 edges_read = await self._safe_batch(
                     "identity_edges",
@@ -536,14 +650,44 @@ class Identity360Provider:
                     "identity_decision_evidence",
                     self._source.decisions_for_entity(tenant_id, entity_id, limit=self._limit),
                 )
+            if want_verification:
                 verification_read = await self._safe_batch(
                     "identity_verification_evidence",
                     self._source.verification_for_entity(tenant_id, entity_id, limit=self._limit),
                 )
+            if want_wallets:
+                wallet_inventory_reader = getattr(
+                    self._source, "wallet_inventory_for_entity", None
+                )
+                if callable(wallet_inventory_reader):
+                    wallet_inventory_read = await self._safe_batch(
+                        "entity_wallets",
+                        wallet_inventory_reader(tenant_id, entity_id, limit=self._limit),
+                    )
+                else:
+                    wallet_inventory_read = IdentityBatchRead(
+                        reason="entity_wallets_authority_not_joined",
+                    )
             if want_conflicts or want_trace:
                 conflicts_read = await self._safe_batch(
                     "identity_conflicts",
                     self._source.conflicts_for_entity(tenant_id, entity_id, limit=self._limit),
+                )
+
+        # Namespace metadata is joined only through the exact source-system key
+        # recorded by the tenant-scoped identity authority. In particular, never
+        # derive a provider from a namespace prefix or infer a tenant connection.
+        if want_namespaces and not source_suppressed:
+            provider_system_ids = {
+                source_system_id
+                for row in source_rows
+                if not _is_suppressed(row.get("status"))
+                and _safe_text(row.get("source_namespace"))
+                and (source_system_id := _safe_text(row.get("source_system_id")))
+            }
+            for source_system_id in sorted(provider_system_ids):
+                provider_registry_reads[source_system_id] = (
+                    await self._safe_provider_registry_entry(source_system_id)
                 )
 
         aliases, aliases_read = self._validated_rows(
@@ -552,6 +696,9 @@ class Identity360Provider:
             expected_entity_id=entity_id,
             source_field="canonical_entity_id",
             reason_on_mismatch="identity_alias_scope_mismatch",
+        )
+        aliases, aliases_read = self._validated_provenance_rows(
+            aliases_read, aliases, "identity_aliases"
         )
         edges, edges_read = self._validated_edge_rows(edges_read, tenant_id, entity_id)
         decision_rows, decisions_read = self._validated_rows(
@@ -569,32 +716,77 @@ class Identity360Provider:
             expected_entity_id=entity_id,
             source_field="canonical_entity_id",
         )
+        wallet_inventory_rows, wallet_inventory_read = self._validated_rows(
+            wallet_inventory_read,
+            tenant_id,
+            expected_entity_id=entity_id,
+            source_field="owner_entity_id",
+            reason_on_mismatch="identity_wallet_inventory_subject_mismatch",
+        )
+        wallet_inventory_rows, wallet_inventory_read = self._validated_provenance_rows(
+            wallet_inventory_read, wallet_inventory_rows, "entity_wallets"
+        )
 
         # For a source subject, include its exact source registry record and its
         # claim metadata only. Values, hashes, proof material and import payloads
         # are never copied into Identity360 output.
         if subject_kind == "source":
             source_items = [
-                _safe_source_identity(
-                    row,
-                    include_canonical_entity=bool(safe_entity and safe_subject),
-                )
+                {
+                    **_safe_source_identity(
+                        row,
+                        include_canonical_entity=bool(safe_entity and safe_subject),
+                    ),
+                    "evidenceRef": _required_row_ref(
+                        row, "identity_source_identities"
+                    ).model_dump(mode="json", exclude_none=True),
+                }
                 for row in source_rows
             ]
         else:
-            source_items = [_safe_source_identity(row) for row in source_rows]
+            source_items = [
+                {
+                    **_safe_source_identity(row),
+                    "evidenceRef": _required_row_ref(
+                        row, "identity_source_identities"
+                    ).model_dump(mode="json", exclude_none=True),
+                }
+                for row in source_rows
+            ]
         lineage_refs = [
             ref
             for ref in (_row_ref(row, "identity_source_identities") for row in source_rows)
             if ref is not None
         ]
-        claim_items = [_safe_claim(row) for row in claim_rows]
+        lineage_ref_by_source_id = {
+            source_id: ref
+            for row in source_rows
+            if (source_id := _safe_text(row.get("id")))
+            if (ref := _row_ref(row, "identity_source_identities")) is not None
+        }
+        claim_items = [
+            {
+                **_safe_claim(row),
+                "evidenceRef": _required_row_ref(row, "identity_claims").model_dump(
+                    mode="json", exclude_none=True
+                ),
+            }
+            for row in claim_rows
+        ]
         claim_refs = [
             ref
             for ref in (_row_ref(row, "identity_claims") for row in claim_rows)
             if ref is not None
         ]
-        alias_items = [_safe_alias(row) for row in aliases]
+        alias_items = [
+            {
+                **_safe_alias(row),
+                "evidenceRef": _required_row_ref(row, "identity_aliases").model_dump(
+                    mode="json", exclude_none=True
+                ),
+            }
+            for row in aliases
+        ]
         alias_refs = [
             ref for ref in (_row_ref(row, "identity_aliases") for row in aliases) if ref is not None
         ]
@@ -608,6 +800,60 @@ class Identity360Provider:
             for ref in (_row_ref(row, "identity_decision_evidence") for row in decision_rows)
             if ref is not None
         ]
+        wallet_verification_rows = [
+            row
+            for row in verification_rows
+            if row.get("identifier_type") == "wallet"
+            and row.get("evidence_type") == "wallet_ownership_verified"
+        ]
+        wallet_verification_items = [
+            _safe_verification(row) for row in wallet_verification_rows
+        ]
+        wallet_verification_refs = [
+            ref
+            for ref in (
+                _row_ref(row, "identity_verification_evidence")
+                for row in wallet_verification_rows
+            )
+            if ref is not None
+        ]
+        wallet_inventory_items: list[dict[str, Any]] = []
+        wallet_inventory_refs: list[EvidenceRef] = []
+        for row in wallet_inventory_rows:
+            record_id = _safe_text(row.get("id"))
+            if record_id is None:
+                wallet_inventory_read = IdentityBatchRead(
+                    available=False,
+                    truncated=wallet_inventory_read.truncated,
+                    reason="entity_wallets_evidence_ref_missing",
+                )
+                wallet_inventory_items = []
+                wallet_inventory_refs = []
+                break
+            linked_at = _safe_text(row.get("linked_at"))
+            # The repository key may have been caller-supplied and can itself
+            # contain an address. Use a tenant-bound opaque record reference;
+            # never echo either the key or wallet address into the surface.
+            opaque_record_ref = "wallet-link:" + hashlib.sha256(
+                f"{tenant_id}\0{record_id}".encode("utf-8")
+            ).hexdigest()
+            evidence_ref = EvidenceRef(
+                id=opaque_record_ref,
+                type="annotation",
+                source="entity_wallets",
+                observedAt=linked_at,
+            )
+            wallet_inventory_refs.append(evidence_ref)
+            wallet_inventory_items.append(
+                {
+                    "recordRef": opaque_record_ref,
+                    "chain": _safe_text(row.get("chain")),
+                    "linkedAt": linked_at,
+                    "evidenceRef": evidence_ref.model_dump(
+                        mode="json", exclude_none=True
+                    ),
+                }
+            )
         conflict_items = [_safe_conflict(row) for row in conflict_rows]
         conflict_refs = [
             ref for ref in (_row_ref(row, "identity_conflicts") for row in conflict_rows) if ref is not None
@@ -621,8 +867,9 @@ class Identity360Provider:
             if ref is not None
         ]
 
-        if subject_kind == "source" and source_row is not None and not source_suppressed:
-            warnings.append("source_provider_registry_join_not_performed")
+        for provider_read in provider_registry_reads.values():
+            if provider_read.reason:
+                warnings.append(provider_read.reason)
 
         freshness = _freshness(
             [
@@ -633,6 +880,7 @@ class Identity360Provider:
                 *decision_rows,
                 *conflict_rows,
                 *verification_rows,
+                *wallet_inventory_rows,
             ]
         )
         entity_identity_known = entity_id is not None and subject_scope_known
@@ -719,16 +967,110 @@ class Identity360Provider:
                 "identity_subject_not_resolved" if not subject_scope_known else None
             )
 
-        namespace_items = [
-            {
-                "sourceIdentityId": item.get("id"),
-                "sourceKind": item.get("sourceKind"),
-                "sourceNamespace": item.get("sourceNamespace"),
-                "status": item.get("status"),
-            }
-            for item in source_items
-            if item.get("sourceNamespace")
+        source_row_by_id = {
+            source_id: row
+            for row in source_rows
+            if (source_id := _safe_text(row.get("id"))) is not None
+        }
+        namespace_items: list[dict[str, Any]] = []
+        for item in source_items:
+            if not item.get("sourceNamespace"):
+                continue
+            source_row = source_row_by_id.get(str(item.get("id") or ""), {})
+            source_system_id = _safe_text(source_row.get("source_system_id"))
+            provider_read = provider_registry_reads.get(source_system_id or "")
+            provider_entry = provider_read.entry if provider_read is not None else None
+            provider_join_state = (
+                "resolved"
+                if provider_entry is not None
+                else "degraded"
+                if provider_read is not None and not provider_read.available
+                else "unknown"
+            )
+            namespace_items.append(
+                {
+                    "sourceIdentityId": item.get("id"),
+                    "sourceKind": item.get("sourceKind"),
+                    "sourceNamespace": item.get("sourceNamespace"),
+                    "canonicalEntityId": item.get("canonicalEntityId"),
+                    "status": item.get("status"),
+                    "evidenceRef": item.get("evidenceRef"),
+                    "providerIdentity": (
+                        provider_entry.get("identityKey") if provider_entry is not None else None
+                    ),
+                    "provider": provider_entry,
+                    "providerRegistryJoin": {
+                        "state": provider_join_state,
+                        "reason": (
+                            None
+                            if provider_join_state == "resolved"
+                            else provider_read.reason
+                            if provider_read is not None
+                            else "source_system_id_not_recorded"
+                        ),
+                    },
+                }
+            )
+            if provider_read is None:
+                warnings.append("source_system_id_not_recorded")
+        namespace_metadata_incomplete = len(namespace_items) < len(source_items)
+        namespace_provider_reads = [
+            provider_registry_reads[source_system_id]
+            for row in source_rows
+            if not _is_suppressed(row.get("status"))
+            and _safe_text(row.get("source_namespace"))
+            and (source_system_id := _safe_text(row.get("source_system_id")))
+            and source_system_id in provider_registry_reads
         ]
+        namespace_registry_degraded = any(
+            not provider_read.available for provider_read in namespace_provider_reads
+        )
+        namespace_registry_complete = (
+            bool(source_items)
+            and not namespace_metadata_incomplete
+            and len(namespace_items) == len(source_items)
+            and len(namespace_provider_reads) == len(namespace_items)
+            and all(provider_read.entry is not None for provider_read in namespace_provider_reads)
+        )
+        namespace_registry_summary = {
+            "state": "partial"
+            if namespace_registry_complete
+            else "degraded"
+            if namespace_registry_degraded
+            else "partial"
+            if source_items
+            else "unknown",
+            "authority": "provider_runtime_registry",
+            "joinState": "resolved"
+            if namespace_registry_complete
+            else "degraded"
+            if namespace_registry_degraded
+            else "unknown",
+            "resolvedEntries": sum(
+                provider_read.entry is not None for provider_read in namespace_provider_reads
+            ),
+            "unknownEntries": sum(
+                provider_read.entry is None and provider_read.available
+                for provider_read in namespace_provider_reads
+            )
+            + max(0, len(namespace_items) - len(namespace_provider_reads)),
+            "degradedEntries": sum(
+                not provider_read.available for provider_read in namespace_provider_reads
+            ),
+            "reason": (
+                "provider_registry_freshness_unknown"
+                if namespace_registry_complete
+                else "provider_identity_lookup_incomplete"
+                if source_items and not namespace_registry_degraded
+                else "provider_registry_read_degraded"
+                if namespace_registry_degraded
+                else None
+            ),
+            "freshness": {
+                "state": "unknown",
+                "reason": "provider_runtime_registry_has_no_read_watermark",
+            },
+        }
         if subject_kind == "source":
             if source_row is None:
                 namespace_state: IdentitySlotState = (
@@ -738,23 +1080,51 @@ class Identity360Provider:
             elif source_suppressed:
                 namespace_state = "suppressed"
                 namespace_reason = "source_identity_suppressed"
+            elif namespace_items and namespace_registry_complete:
+                namespace_state = "partial"
+                namespace_reason = "provider_registry_freshness_unknown"
+            elif namespace_items and namespace_registry_degraded:
+                namespace_state = "degraded"
+                namespace_reason = "source_provider_registry_read_degraded"
             elif namespace_items:
-                namespace_state = "available"
-                namespace_reason = None
+                namespace_state = "partial"
+                namespace_reason = (
+                    "source_namespace_metadata_incomplete"
+                    if namespace_metadata_incomplete
+                    else "source_provider_identity_unresolved"
+                )
             else:
-                namespace_state = "empty"
+                namespace_state = "unknown"
                 namespace_reason = "source_namespace_not_recorded"
         else:
-            namespace_state = _batch_state(
-                source_rows_read,
-                known_subject=subject_scope_known,
-                any_rows=bool(namespace_items),
-                failures=warnings,
-            )
-            namespace_reason = source_rows_read.reason or (
-                "identity_subject_not_resolved" if not subject_scope_known else None
-            )
-            if source_items and not namespace_items and namespace_state == "empty":
+            if not subject_scope_known:
+                namespace_state = (
+                    "degraded" if not source_rows_read.available or warnings else "unknown"
+                )
+                namespace_reason = source_rows_read.reason or "identity_subject_not_resolved"
+            elif not source_rows_read.available:
+                namespace_state = "degraded"
+                namespace_reason = source_rows_read.reason or "source_identity_read_degraded"
+            elif source_rows_read.truncated:
+                namespace_state = "truncated"
+                namespace_reason = "source_identity_read_truncated"
+            elif not source_items:
+                namespace_state = "empty"
+                namespace_reason = None
+            elif namespace_metadata_incomplete or namespace_registry_degraded:
+                namespace_state = "degraded"
+                namespace_reason = (
+                    "source_provider_registry_read_degraded"
+                    if namespace_registry_degraded
+                    else "source_namespace_metadata_incomplete"
+                )
+            elif namespace_registry_complete:
+                namespace_state = "partial"
+                namespace_reason = "provider_registry_freshness_unknown"
+            elif namespace_items:
+                namespace_state = "partial"
+                namespace_reason = "source_provider_identity_unresolved"
+            else:
                 namespace_state = "degraded"
                 namespace_reason = "source_namespace_not_recorded"
 
@@ -846,20 +1216,36 @@ class Identity360Provider:
         )
 
         device_identifier_types = {"device_id", "installation_id", "session_id"}
-        device_session_items = [
-            {
-                "sourceIdentityId": item.get("id"),
-                "identifierTypes": [
-                    identifier_type
-                    for identifier_type in item.get("identifierTypes", [])
-                    if identifier_type in device_identifier_types
-                ],
-                "firstSeenAt": item.get("firstSeenAt"),
-                "lastSeenAt": item.get("lastSeenAt"),
-            }
-            for item in source_items
-            if device_identifier_types.intersection(item.get("identifierTypes", []))
-        ]
+        device_session_items: list[dict[str, Any]] = []
+        device_session_evidence_missing = False
+        for item in source_items:
+            observed_types = sorted(
+                device_identifier_types.intersection(item.get("identifierTypes", []))
+            )
+            if not observed_types:
+                continue
+            evidence_ref = lineage_ref_by_source_id.get(str(item.get("id") or ""))
+            if evidence_ref is None:
+                # Do not surface a device/session observation without a
+                # canonical source-identity evidence pointer.
+                device_session_evidence_missing = True
+                continue
+            device_session_items.append(
+                {
+                    "sourceIdentityId": item.get("id"),
+                    "identifierTypes": observed_types,
+                    "firstSeenAt": item.get("firstSeenAt"),
+                    "lastSeenAt": item.get("lastSeenAt"),
+                    "evidenceRef": evidence_ref.model_dump(mode="json", exclude_none=True),
+                }
+            )
+        device_session_refs = _dedupe_refs(
+            [
+                lineage_ref_by_source_id[str(item["sourceIdentityId"])]
+                for item in device_session_items
+                if str(item.get("sourceIdentityId") or "") in lineage_ref_by_source_id
+            ]
+        )
         if subject_kind == "source":
             devices_state: IdentitySlotState = (
                 "unknown"
@@ -869,6 +1255,10 @@ class Identity360Provider:
                 else "suppressed"
                 if source_suppressed
                 else "degraded"
+                if device_session_evidence_missing
+                else "degraded"
+                if not source_record_read.available
+                else "partial"
                 if device_session_items
                 else "unknown"
             )
@@ -877,17 +1267,27 @@ class Identity360Provider:
                 if source_row is None
                 else "source_identity_suppressed"
                 if source_suppressed
+                else "device_session_evidence_ref_missing"
+                if device_session_evidence_missing
+                else "source_identity_read_degraded"
+                if not source_record_read.available
                 else "device_session_inventory_authority_not_joined"
             )
         else:
             devices_state = (
                 "degraded"
-                if not source_rows_read.available or source_rows_read.truncated or device_session_items
+                if not source_rows_read.available or device_session_evidence_missing
+                else "truncated"
+                if source_rows_read.truncated
+                else "partial"
+                if device_session_items
                 else "unknown"
             )
             devices_reason = source_rows_read.reason or (
                 "identity_subject_not_resolved"
                 if not subject_scope_known
+                else "device_session_evidence_ref_missing"
+                if device_session_evidence_missing
                 else "device_session_inventory_authority_not_joined"
             )
 
@@ -902,7 +1302,52 @@ class Identity360Provider:
             if item.get("sourceKind") == "sdk_wallet"
             or "wallet" in str(item.get("sourceNamespace") or "").lower()
         ]
-        wallet_reason = "canonical_wallet_ownership_authority_not_joined"
+        wallet_inventory_coverage = _batch_coverage(
+            wallet_inventory_read, wallet_inventory_rows
+        )
+        if (
+            wallet_inventory_read.reason == "entity_wallets_authority_not_joined"
+            and not wallet_inventory_rows
+        ):
+            wallet_inventory_coverage["state"] = "unknown"
+        if not want_wallets:
+            wallet_state: IdentitySlotState = "unknown"
+            wallet_reason = "identity_slot_not_requested"
+        elif not subject_scope_known:
+            wallet_state = "degraded" if warnings else "unknown"
+            wallet_reason = "identity_subject_not_resolved"
+        elif wallet_inventory_read.truncated or verification_read.truncated:
+            wallet_state = "truncated"
+            wallet_reason = (
+                "wallet_inventory_read_truncated"
+                if wallet_inventory_read.truncated
+                else "wallet_proof_read_truncated"
+            )
+        elif wallet_inventory_items or wallet_verification_items:
+            # Canonical wallet links identify the recorded inventory for this
+            # exact entity; verification evidence proves control at a recorded
+            # time only. Neither source establishes current control.
+            wallet_state = "partial"
+            wallet_reason = (
+                "wallet_inventory_observed_current_control_unknown"
+                if wallet_inventory_items
+                else "wallet_ownership_proof_observed_wallet_inventory_unknown"
+            )
+            if not wallet_inventory_read.available:
+                wallet_reason = wallet_inventory_read.reason or wallet_reason
+            elif not verification_read.available:
+                wallet_reason = verification_read.reason or wallet_reason
+        elif not wallet_inventory_read.available:
+            wallet_state = "degraded"
+            wallet_reason = wallet_inventory_read.reason or "wallet_inventory_read_degraded"
+        elif not verification_read.available:
+            wallet_state = "degraded"
+            wallet_reason = verification_read.reason or "wallet_proof_read_degraded"
+        else:
+            # Absence from this link registry and proof table is not evidence
+            # that the subject has no wallet in other authorities.
+            wallet_state = "unknown"
+            wallet_reason = "wallet_link_and_ownership_proof_not_observed_wallet_presence_unknown"
 
         all_refs = _dedupe_refs(
             [
@@ -914,6 +1359,7 @@ class Identity360Provider:
                 *decision_refs,
                 *conflict_refs,
                 *verification_refs,
+                *wallet_inventory_refs,
             ]
         )
         all_reads = [
@@ -924,6 +1370,7 @@ class Identity360Provider:
             decisions_read,
             conflicts_read,
             verification_read,
+            wallet_inventory_read,
         ]
         trace_state: IdentitySlotState
         if not subject_scope_known:
@@ -978,10 +1425,7 @@ class Identity360Provider:
                         "mappings": namespace_items,
                         "authority": "identity_source_identities",
                         "completeness": "observed_source_identity_metadata",
-                        "canonicalNamespaceRegistryJoin": {
-                            "state": "unknown",
-                            "reason": "source_provider_registry_join_not_performed",
-                        },
+                        "canonicalNamespaceRegistryJoin": namespace_registry_summary,
                         "freshness": freshness,
                     }
                     if want_namespaces
@@ -1108,6 +1552,9 @@ class Identity360Provider:
                     {
                         "state": devices_state,
                         "sourceIdentityObservations": device_session_items,
+                        "sourceIdentityCoverage": source_identity_coverage,
+                        "observedIdentifierCount": len(device_session_items),
+                        "inventoryState": "unknown",
                         "identifierValuesIncluded": False,
                         "limitations": [
                             "This is source identity identifier metadata, not a device or session inventory.",
@@ -1118,26 +1565,57 @@ class Identity360Provider:
                     if want_devices
                     else {"state": "unknown", "reason": "identity_slot_not_requested"}
                 ),
-                evidence_refs=(
-                    _dedupe_refs([*lineage_refs, *subject_refs]) if want_devices else ()
-                ),
+                evidence_refs=device_session_refs if want_devices else (),
                 reason=devices_reason if want_devices else "identity_slot_not_requested",
                 truncated=source_rows_read.truncated if want_devices else False,
             ),
             Identity360Slot(
                 id="wallets",
-                state=slot_state("wallets", "unknown"),
+                state=slot_state("wallets", wallet_state),
                 content=(
                     {
-                        "state": "unknown",
+                        "state": wallet_state,
                         "observedSourceCandidates": wallet_candidates,
+                        "linkedWallets": wallet_inventory_items,
+                        "ownershipProofs": wallet_verification_items,
+                        "inventoryState": (
+                            "degraded"
+                            if not wallet_inventory_read.available
+                            else "truncated"
+                            if wallet_inventory_read.truncated
+                            else "available"
+                            if wallet_inventory_items
+                            else "unknown"
+                        ),
                         "ownershipState": "unknown",
-                        "authority": "wallet_identity",
-                        "reason": wallet_reason,
-                        "freshness": {
-                            "state": "unknown",
-                            "reason": "canonical_wallet_freshness_authority_not_joined",
+                        "currentControl": "unknown",
+                        "addressIncluded": False,
+                        "identifierHashIncluded": False,
+                        "authorities": ["entity_wallets", "identity_verification_evidence"],
+                        "coverage": {
+                            "walletInventory": _batch_coverage(
+                                wallet_inventory_read, wallet_inventory_rows
+                            )
+                            if wallet_inventory_read.reason
+                            != "entity_wallets_authority_not_joined"
+                            else wallet_inventory_coverage,
+                            "verificationEvidence": _batch_coverage(
+                                verification_read, verification_rows
+                            ),
+                            "linkedWalletsReturned": len(wallet_inventory_items),
+                            "walletOwnershipProofsReturned": len(wallet_verification_items),
                         },
+                        "limitations": [
+                            "Wallet addresses, wallet identifiers, and identifier hashes are omitted.",
+                            "Linked-wallet records establish recorded entity associations only, not present control.",
+                            "Verification proves control at the recorded time only; current control is unknown.",
+                            "Source candidates do not establish ownership.",
+                        ],
+                        "inventoryReason": wallet_inventory_read.reason,
+                        "reason": wallet_reason,
+                        "freshness": _freshness(
+                            [*wallet_inventory_rows, *wallet_verification_rows]
+                        ),
                     }
                     if want_wallets
                     else {"state": "unknown", "reason": "identity_slot_not_requested"}
@@ -1150,11 +1628,18 @@ class Identity360Provider:
                             if item.get("sourceKind") == "sdk_wallet"
                             or "wallet" in str(item.get("sourceNamespace") or "").lower()
                         ]
+                        + wallet_inventory_refs
+                        + wallet_verification_refs
                     )
                     if want_wallets
                     else ()
                 ),
                 reason=wallet_reason if want_wallets else "identity_slot_not_requested",
+                truncated=(
+                    wallet_inventory_read.truncated or verification_read.truncated
+                    if want_wallets
+                    else False
+                ),
             ),
             Identity360Slot(
                 id="policy_redactions",
@@ -1325,6 +1810,55 @@ class Identity360Provider:
                 reason=f"{source_name}_{type(exc).__name__}",
             )
 
+    async def _safe_provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead:
+        reader = getattr(self._source, "provider_registry_entry", None)
+        if not callable(reader):
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_reader_unavailable",
+            )
+        try:
+            result = await reader(source_system_id)
+        except Exception as exc:  # noqa: BLE001 - keep registry diagnostics private
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason=f"provider_registry_{type(exc).__name__}",
+            )
+        if not isinstance(result, IdentityProviderRegistryRead):
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_invalid_read_result",
+            )
+        if not result.available:
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason=result.reason or "provider_registry_read_degraded",
+            )
+        if result.entry is not None and result.entry.get("identityKey") != source_system_id:
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_identity_mismatch",
+            )
+        if result.entry is None:
+            return result
+        return IdentityProviderRegistryRead(
+            entry={
+                "identityKey": source_system_id,
+                **{
+                    field: _safe_text(result.entry.get(field))
+                    for field in (
+                        "providerFamily",
+                        "productId",
+                        "capabilityId",
+                        "displayName",
+                        "category",
+                    )
+                },
+            }
+        )
+
     @staticmethod
     def _scope_record(
         read: IdentityRecordRead,
@@ -1371,6 +1905,23 @@ class Identity360Provider:
                 and str(row.get(source_field) or "") != expected
             ):
                 return [], IdentityBatchRead(available=False, reason=reason_on_mismatch)
+        return rows, read
+
+    @staticmethod
+    def _validated_provenance_rows(
+        read: IdentityBatchRead,
+        rows: list[dict[str, Any]],
+        source: str,
+    ) -> tuple[list[dict[str, Any]], IdentityBatchRead]:
+        """Reject scoped records that cannot carry an exact record-level ref."""
+        if not read.available:
+            return [], read
+        if any(_required_row_ref_or_none(row, source) is None for row in rows):
+            return [], IdentityBatchRead(
+                available=False,
+                truncated=read.truncated,
+                reason=f"{source}_evidence_ref_missing",
+            )
         return rows, read
 
     @staticmethod
@@ -1469,7 +2020,9 @@ def _safe_source_identity(
         "sourceNamespace": _safe_text(row.get("source_namespace")),
         "status": status,
         "canonicalEntityId": (
-            _safe_text(row.get("canonical_entity_id")) if include_canonical_entity else None
+            _safe_text(row.get("canonical_entity_id"))
+            if include_canonical_entity and status == "resolved"
+            else None
         ),
         "identifierTypes": sorted(field for field in _SOURCE_IDENTIFIER_FIELDS if row.get(field)),
         "firstSeenAt": _safe_text(row.get("first_seen_at")),
@@ -1537,7 +2090,13 @@ def _safe_decision(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _safe_verification(row: dict[str, Any]) -> dict[str, Any]:
-    return {
+    metadata = row.get("metadata")
+    chain_namespace = (
+        _safe_text(metadata.get("chain_namespace"))
+        if row.get("identifier_type") == "wallet" and isinstance(metadata, dict)
+        else None
+    )
+    item = {
         "id": _safe_text(row.get("id")),
         "evidenceType": _safe_text(row.get("evidence_type")),
         "identifierType": _safe_text(row.get("identifier_type")),
@@ -1549,6 +2108,9 @@ def _safe_verification(row: dict[str, Any]) -> dict[str, Any]:
         "expiresAt": _safe_text(row.get("expires_at")),
         "revokedAt": _safe_text(row.get("revoked_at")),
     }
+    if row.get("identifier_type") == "wallet":
+        item["chainNamespace"] = chain_namespace
+    return item
 
 
 def _safe_conflict(row: dict[str, Any]) -> dict[str, Any]:
@@ -1591,6 +2153,20 @@ def _row_ref(row: dict[str, Any], source: str) -> Optional[EvidenceRef]:
             else row.get("confidence")
         ),
     )
+
+
+def _required_row_ref_or_none(row: dict[str, Any], source: str) -> Optional[EvidenceRef]:
+    """Build a row-level evidence pointer without falling back to its subject."""
+    if not _safe_text(row.get("id")):
+        return None
+    return _row_ref(row, source)
+
+
+def _required_row_ref(row: dict[str, Any], source: str) -> EvidenceRef:
+    ref = _required_row_ref_or_none(row, source)
+    if ref is None:
+        raise ValueError(f"{source} row passed without a validated evidence reference")
+    return ref
 
 
 def _batch_state(
@@ -1643,6 +2219,7 @@ def _freshness(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for timestamp in (
             _safe_text(row.get("updated_at"))
             or _safe_text(row.get("last_seen_at"))
+            or _safe_text(row.get("linked_at"))
             or _safe_text(row.get("verified_at"))
             or _safe_text(row.get("created_at"))
             or _safe_text(row.get("ingested_at")),
@@ -1728,6 +2305,7 @@ __all__ = [
     "Identity360Result",
     "Identity360Slot",
     "Identity360Source",
+    "IdentityProviderRegistryRead",
     "IdentityBatchRead",
     "IdentityRecordRead",
     "RepositoryIdentity360Source",

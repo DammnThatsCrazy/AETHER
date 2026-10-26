@@ -14,12 +14,17 @@ from intelligence.risk360.signals import (
 )
 
 
-def _parse_observed_at(value: str) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except (AttributeError, ValueError):
+def _parse_observed_at(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
         return None
-    return parsed if parsed.tzinfo is not None else None
+    return parsed if parsed.tzinfo is not None and parsed.utcoffset() is not None else None
 
 
 async def persist_agentic_delegation_assessments(
@@ -104,20 +109,33 @@ async def persist_agentic_delegation_assessments(
         if len(binding_evidence) != 1:
             continue
         identity_source, identity_id = next(iter(binding_evidence))
+        binding_rows = [
+            row
+            for row in identity_rows
+            if row.get("canonical_agent_entity_id") == agent_id
+            and row.get("identity_evidence_source") == identity_source
+            and row.get("identity_evidence_id") == identity_id
+        ]
+        binding_times = [
+            _parse_observed_at(row.get("identity_bound_at")) for row in binding_rows
+        ]
+        # A current identity binding must not retroactively attribute a detector
+        # observation that predates the binding. Missing, malformed, naive, or
+        # conflicting binding times cannot establish that historical join.
+        if (
+            not binding_times
+            or any(bound_at is None for bound_at in binding_times)
+            or len(set(binding_times)) != 1
+        ):
+            continue
+        identity_bound_at = binding_times[0]
+        if identity_bound_at is None or identity_bound_at > assessed_at:
+            continue
         identity_ref = EvidenceRef(
             id=identity_id,
             type="entity",
             source=identity_source,
-            observedAt=next(
-                (
-                    row.get("identity_bound_at")
-                    for row in identity_rows
-                    if row.get("canonical_agent_entity_id") == agent_id
-                    and row.get("identity_evidence_id") == identity_id
-                    and isinstance(row.get("identity_bound_at"), str)
-                ),
-                None,
-            ),
+            observedAt=identity_bound_at.isoformat(),
             uri=f"store://agent_identity_bindings/{identity_id}",
         )
         signals = signals_from_fraud_network_evidence(

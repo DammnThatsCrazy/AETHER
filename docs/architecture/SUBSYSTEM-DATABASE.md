@@ -6,7 +6,22 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/repositories/repos.py, services/api/repositories/tenant_row_keys.py, services/api/repositories/lake.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
+source_files:
+  - services/api/repositories/repos.py
+  - services/api/repositories/tenant_row_keys.py
+  - services/api/repositories/lake.py
+  - services/api/repositories/commerce_repos.py
+  - services/api/actions/agent/user_agents.py
+  - services/api/value/economic/ai_aggregation.py
+  - services/api/intelligence/workflow/workflow360_provider.py
+  - services/api/value/x402/commerce_store.py
+  - services/api/intelligence/risk360/store.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
+  - services/api/alembic/versions/20261022_execution_approval_decisions.py
+  - services/api/alembic/versions/20261022_risk_poisoning_evidence.py
+  - services/api/alembic/versions/20261024_risk_intervention_records.py
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
@@ -14,12 +29,21 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
   - {'commit': '30d10ccb6', 'reason': 'Reviewed CSV import rights-lineage persistence. The body now documents the additive Bronze metadata and silver_import_facts JSONB refs/record IDs; other repository and database dispatch behavior is unchanged.'}
 source_hashes:
+  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
+  "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
+  "services/api/alembic/versions/20261024_risk_intervention_records.py": "sha256:f3fadd1672c15560cab018906246e307438035404f4fcbcb84c976cae9bdc3b7"
+  "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
+  "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
+  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
+  "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
+  "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -122,7 +146,11 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `operator_actions` | `OperatorActionRepository` | Operator approve/suppress/escalate/annotate audit |
 | `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
-| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition |
+| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition, exact workflow-run/invocation references, and an optional validated caller-reported workflow definition reference |
+| `commerce_approval_decisions` | `ApprovalDecisionsRepository` | Append-only tenant-scoped x402 decision history with exact execution references |
+| `risk_poisoning_evidence` | `RiskPoisoningEvidenceRepository` | Typed tenant-scoped risk evidence and append-only lifecycle/restatement history |
+| `risk_intervention_records` | `RiskInterventionRepository` | Exact tenant/subject intervention decision and reported outcome records; the row alone does not prove action execution |
+| `workflow_definition_revisions` | workflow definition authority | Immutable tenant-scoped revisions and idempotent content replay; persisted creation time is returned on replay. A bounded exact-tenant history read selects the highest revision created and effective by an `asOf` instant, with malformed or truncated history unknown. |
 | `delegations` | `DelegationRepository` | Scoped, time-bound, revocable entity-to-entity delegations (hot-path Redis-cached) |
 | `payment_intents` | `PaymentIntentRepository` | Pre-execution economic decisions: quotes, retries, budget eval, authorizations, settlements — full intent-to-outcome chain, tenant-scoped; authorization and execution references are retained on the source row when explicitly supplied |
 | `settlement_events` | `SettlementEventRepository` | Settlement attempts and terminal outcomes for PaymentIntent records, tenant-scoped |
@@ -130,6 +158,12 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
 | `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
 | `agent_deployment_identity_bindings` | `AgentDeploymentIdentityBindingRepository` | Explicit tenant-admin binding from source namespace/reference to a same-tenant canonical Agent; uniquely scoped by tenant + namespace + source reference |
+
+The risk evidence and intervention migrations index immutable tenant and subject
+expressions. Chronological repository reads cast the recorded JSON timestamp at
+query time; PostgreSQL does not permit that timezone-dependent cast in an index
+expression. A successful migration is schema evidence, while intervention
+execution and independent outcome verification remain separate authorities.
 
 **Agent deployment identity bindings:** The additive
 `20261011_agent_deployment_identity_bindings` migration creates the durable
@@ -156,7 +190,30 @@ by the requested tenant and exact canonical entity IDs; duplicate or
 truncated results are not selected as canonical. `AgentExecutionRepository`
 also retains the initiating principal ID supplied by the authenticated
 server-side execution path so it remains distinct from the agent and source
-actor claims.
+actor claims. It persists `workflow_run_id` and `workflow_run_invocation_ids`
+when canonical tenant-scoped invocation facts with the same agent and an exact
+`action_id` equal to the stable execution ID resolve to one unambiguous run.
+Workflow360 revalidates the tenant, run, agent, action, and invocation IDs
+before exposing an execution as a workflow step; absent or ambiguous links stay
+unknown. An optional `workflow_definition_link` records a caller-reported
+definition ID, revision, digest, and evidence only after the authenticated
+execution path confirms one exact run link, complete bounded definition history
+at the validation time, and an active revision that names the Agent in a step.
+Workflow360 rechecks the persisted link against the same tenant/run execution
+and definition authorities before showing a degraded association summary. The
+reference does not prove that a declared trigger or step executed. It also
+resolves a stored `triggered_by_event_id` only when the exact
+tenant-scoped analytics event exists. This exposes the recorded reference with
+event and execution evidence; it does not establish event-to-run causality or
+complete trigger coverage. If the event reader reports unavailable or not-read,
+rows supplied alongside that state are ignored and the slot stays degraded or
+unknown. These fields use the existing JSONB record and require no migration.
+Workflow360 additionally follows only `outcome_id`
+references on the exact tenant/run invocation facts to
+`OutcomeTruthStore.get(tenant_id, outcome_id)`. It validates the canonical
+outcome scope and evidence, carries the invocation IDs as association lineage,
+and does not infer run causality; the outcome store's feature flag gates the
+read. Policy and freshness remain unknown.
 
 ### Analytics event store
 

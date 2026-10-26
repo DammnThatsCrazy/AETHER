@@ -273,6 +273,88 @@ class ComputedResultsRepository:
         )
         return json.loads(row["data"]) if row else None
 
+    async def list_runs_for_subject(
+        self,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        *,
+        definition_prefix: str,
+        limit: int = 100,
+        as_of: Optional[datetime] = None,
+    ) -> list[dict]:
+        """List exact-subject computation runs from a namespaced definition.
+
+        Subject fields live in the canonical run envelope's JSON data. The
+        tenant, definition namespace, and exact subject predicates are applied
+        before the bound in PostgreSQL; the local adapter applies the same
+        filters before sorting and limiting. ``as_of`` filters by system time
+        (when the run began), preserving the distinction from source event
+        time.
+        """
+        if not tenant_id or not subject_kind or not subject_id or not definition_prefix:
+            raise ValueError("tenant, exact subject, and definition prefix are required")
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
+            raise ValueError("run history as_of must include a timezone")
+
+        pool = await self._backend()
+        if pool is None:
+            rows = []
+            for row in self._runs.values():
+                data = row.get("data")
+                if not isinstance(data, dict):
+                    continue
+                if (
+                    row.get("tenant_id") != tenant_id
+                    or not str(row.get("definition_id", "")).startswith(definition_prefix)
+                    or data.get("subject_kind") != subject_kind
+                    or data.get("subject_id") != subject_id
+                ):
+                    continue
+                started_at = row.get("started_at")
+                if as_of is not None and isinstance(started_at, str):
+                    try:
+                        parsed = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    except ValueError:
+                        # Return malformed matching records so the consumer can
+                        # mark the read degraded instead of hiding bad history.
+                        pass
+                    else:
+                        if parsed.tzinfo is not None and parsed > as_of:
+                            continue
+                rows.append(row)
+            rows.sort(
+                key=lambda row: (str(row.get("started_at") or ""), str(row.get("run_id") or "")),
+                reverse=True,
+            )
+            return rows[:limit]
+
+        query = (
+            "SELECT data FROM computation_runs WHERE tenant_id=$1 "
+            "AND definition_id LIKE $2 "
+            "AND data->'data'->>'subject_kind'=$3 "
+            "AND data->'data'->>'subject_id'=$4"
+        )
+        args: list[Any] = [
+            tenant_id,
+            f"{definition_prefix}%",
+            subject_kind,
+            subject_id,
+        ]
+        if as_of is not None:
+            query += " AND started_at <= $5"
+            args.append(as_of)
+        query += f" ORDER BY started_at DESC, run_id ASC LIMIT ${len(args) + 1}"
+        args.append(limit)
+        got = await pool.fetch(query, *args)
+        rows = []
+        for row in got:
+            payload = row["data"]
+            rows.append(json.loads(payload) if isinstance(payload, str) else payload)
+        return rows
+
     async def get_active(
         self, tenant_id: str, definition_id: str, definition_version: str, context_hash: str
     ) -> Optional[dict]:

@@ -10,7 +10,7 @@ canonical_owner: ml@aether
 source_files: [services/ml/common/model_registry.py, services/ml/common/feature_contracts.py, services/ml/common/artifact_registry.py, services/ml/training/pipelines/train.py, services/ml/serving/src/api.py, services/api/intelligence/ml_serving/routes.py, services/api/governance/model_extraction_defense/defense_layer.py]
 source_hashes:
   "services/api/governance/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
-  "services/api/intelligence/ml_serving/routes.py": "sha256:b5c5842465c2a11827c297c27dc3f154af4a09669ca199e1eab8aaa12ae1252d"
+  "services/api/intelligence/ml_serving/routes.py": "sha256:603a29cc3b129a03ea6a1906b76c9a6b778f52ff6f2fc715733fd8522b58a5f5"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
@@ -171,6 +171,12 @@ Enforced by `_enforce_load_policy()`. Fails closed on any policy violation.
 | GET /v1/monitoring/extraction | ✅ | Extraction defense event summary |
 
 Stub policy: stubs load only when `AETHER_ENV` ∉ {`production`, `staging`}. Production and staging serve 503 when artifacts are missing.
+
+The backend inference route may additionally persist a Profile360 future-state
+record only when the model response supplies explicit versioned states, a
+bounded validity interval, exact source-event evidence, an approved artifact,
+and an allowed inference policy decision. Ordinary prediction responses do not
+become canonical future-state facts.
 
 `DataFreshnessSLATracker` is instantiated at serving startup and records per-model SLA checks against freshness contracts. The `/ready` endpoint gates load-balancer traffic when the violation rate exceeds 10%.
 

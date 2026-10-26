@@ -18,6 +18,12 @@ from .economic_analytics import CommerceEconomicAnalytics
 from actions.agent.economic import AgentEconomicViews
 from value.commerce.order_payment_reconciliation import CommerceOrderPaymentLedger
 from value.economic.operation_linkage import commerce_ledger_operation_link
+from value.commerce.commerce_intents import (
+    CommerceIntentDeclaration,
+    CommerceIntentIdempotencyConflict,
+    CommerceIntentRepository,
+    CommerceIntentSubjectNotFound,
+)
 
 logger = get_logger("aether.service.commerce.routes")
 router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
@@ -26,6 +32,48 @@ _service = CommerceService()
 _agent_economics = AgentEconomicViews()
 _analytics = CommerceEconomicAnalytics()
 _order_payment_ledger = CommerceOrderPaymentLedger()
+_commerce_intents = CommerceIntentRepository()
+
+
+@router.post("/intents")
+async def record_commerce_intent(body: CommerceIntentDeclaration, request: Request):
+    """Record an authenticated principal's explicit product/offer intent.
+
+    This is the declaration authority. Views, cart mutations, checkout starts,
+    and payment attempts do not call it or imply an intent declaration.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("commerce:write")
+    actor_id = getattr(tenant, "user_id", None)
+    if not actor_id:
+        raise HTTPException(
+            status_code=403,
+            detail="commerce intent declarations require an authenticated human principal",
+        )
+    try:
+        record = await _commerce_intents.record_declaration(
+            tenant_id=tenant.tenant_id,
+            actor_kind="human",
+            actor_id=actor_id,
+            declaration=body,
+        )
+    except CommerceIntentSubjectNotFound as exc:
+        # Do not reveal whether the same product/offer exists for another tenant.
+        raise HTTPException(
+            status_code=404,
+            detail="canonical commerce subject not found for tenant",
+        ) from exc
+    except CommerceIntentIdempotencyConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="commerce intent idempotency key conflicts with an existing declaration",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - storage failures do not expose backend details
+        raise HTTPException(
+            status_code=503,
+            detail="commerce intent authority is unavailable",
+        ) from exc
+    return APIResponse(data=record.model_dump(mode="json")).to_dict()
 
 
 @router.post("/payments")

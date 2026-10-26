@@ -5,7 +5,22 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from datetime import datetime
 from typing import Any, Optional
+
+from graph.operational_intelligence.models import EvidenceRef
+
+_PAYMENT_SOURCE_DETAIL_FIELDS = (
+    "paymentRail",
+    "flowType",
+    "sourceAmount",
+    "sourceAsset",
+    "sourceChain",
+    "destinationAmount",
+    "destinationAsset",
+    "destinationChain",
+    "txHash",
+)
 
 
 async def journey_commerce_operation_evidence(
@@ -46,11 +61,28 @@ async def journey_commerce_operation_evidence(
             "invalid_ledger_records": 0,
             "as_of": as_of,
         }
+    if (
+        str(journey.get("tenant_id")) != tenant_id
+        or str(journey.get("journey_id")) != journey_id
+        or not journey.get("is_current")
+        or not journey.get("journey_version_id")
+    ):
+        return {
+            "journey_id": journey_id,
+            "join_basis": "explicit_journey_step_commerce_order_ref",
+            "operation_links": [],
+            "payment_facts": [],
+            "association_evidence": [],
+            "reason": "journey_current_version_scope_invalid",
+            "evidence_truncated": True,
+            "as_of": as_of,
+        }
 
     repo = JourneyStepRepository()
     version_id = str(journey.get("journey_version_id"))
     refs: list[str] = []
     seen_refs: set[str] = set()
+    association_evidence: list[dict[str, Any]] = []
     scanned = 0
     cursor: Optional[str] = None
     truncated = False
@@ -66,6 +98,21 @@ async def journey_commerce_operation_evidence(
             break
         scanned += len(page)
         for step in page:
+            if not isinstance(step, dict):
+                invalid_reference_count += 1
+                continue
+            step_id = str(step.get("step_id") or "").strip()
+            activity_id = str(step.get("activity_id") or "").strip()
+            if (
+                str(step.get("tenant_id")) != tenant_id
+                or str(step.get("journey_id")) != journey_id
+                or str(step.get("journey_version_id")) != version_id
+                or not step_id
+                or not activity_id
+                or step.get("activity_status") in {"tombstoned", "deleted", "consent_restricted"}
+            ):
+                invalid_reference_count += 1
+                continue
             summary = step.get("evidence_summary")
             if isinstance(summary, str):
                 try:
@@ -74,30 +121,49 @@ async def journey_commerce_operation_evidence(
                     summary = None
             if not isinstance(summary, dict):
                 continue
+            created_at = step.get("created_at")
+            if isinstance(created_at, datetime):
+                created_at = created_at.isoformat()
+            step_evidence = EvidenceRef(
+                id=step_id,
+                type="event",
+                source="journey_steps",
+                observedAt=created_at if isinstance(created_at, str) else None,
+            ).model_dump(mode="json")
+
+            def admit_reference(value: Any) -> None:
+                nonlocal truncated, invalid_reference_count
+                reference = _valid_order_reference(value)
+                if reference is None:
+                    if value is not None:
+                        invalid_reference_count += 1
+                    return
+                if reference in seen_refs:
+                    return
+                seen_refs.add(reference)
+                if len(refs) >= max_order_refs:
+                    truncated = True
+                    return
+                refs.append(reference)
+                association_evidence.append(
+                    {
+                        "commerceOrderRef": reference,
+                        "subjectKind": "journey",
+                        "subjectId": journey_id,
+                        "journeyVersionId": version_id,
+                        "stepId": step_id,
+                        "activityId": activity_id,
+                        "evidence": step_evidence,
+                    }
+                )
+
             values = summary.get("commerce_order_refs", [])
             if isinstance(values, str):
                 values = [values]
             if isinstance(values, list):
                 for value in values:
-                    reference = _valid_order_reference(value)
-                    if reference is None and value is not None:
-                        invalid_reference_count += 1
-                    elif reference is not None and reference not in seen_refs:
-                        seen_refs.add(reference)
-                        if len(refs) < max_order_refs:
-                            refs.append(reference)
-                        else:
-                            truncated = True
-            single = summary.get("commerce_order_ref")
-            reference = _valid_order_reference(single)
-            if reference is None and single is not None:
-                invalid_reference_count += 1
-            elif reference is not None and reference not in seen_refs:
-                seen_refs.add(reference)
-                if len(refs) < max_order_refs:
-                    refs.append(reference)
-                else:
-                    truncated = True
+                    admit_reference(value)
+            admit_reference(summary.get("commerce_order_ref"))
         if len(page) < min(500, max_steps - (scanned - len(page))):
             break
         cursor = str(page[-1].get("step_position", ""))
@@ -167,6 +233,7 @@ async def journey_commerce_operation_evidence(
         "join_basis": "explicit_journey_step_commerce_order_ref",
         "operation_links": links,
         "payment_facts": payment_facts,
+        "association_evidence": association_evidence,
         "amounts_included": True,
         "operation_link_amounts_included": False,
         "facts_are_aggregated": False,
@@ -469,8 +536,26 @@ def _commerce_payment_facts(
             id=evidence_id,
             type="transaction",
             source=provider,
-            observedAt=source_record.get("observedAt"),
+            observedAt=source_record.get("_recordObservedAt")
+            or source_record.get("observedAt"),
         )
+        evidence_refs = [evidence.model_dump(mode="json")]
+        tx_hash = source_record.get("txHash")
+        if (
+            fact_kind == "payment"
+            and isinstance(tx_hash, str)
+            and tx_hash.strip()
+            and len(tx_hash.strip()) <= 512
+            and all(ord(char) >= 32 and ord(char) != 127 for char in tx_hash.strip())
+        ):
+            evidence_refs.append(
+                EvidenceRef(
+                    id=tx_hash.strip(),
+                    type="transaction",
+                    source=provider,
+                    observedAt=source_record.get("observedAt"),
+                ).model_dump(mode="json")
+            )
         reference_digest = hashlib.sha256(operation_ref.encode("utf-8")).hexdigest()[:16]
         fact_digest = hashlib.sha256(
             json.dumps(source_record, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -501,9 +586,14 @@ def _commerce_payment_facts(
                 "ledgerCreatedAt": record.get("createdAt"),
                 "ledgerUpdatedAt": record.get("updatedAt"),
                 "asOf": as_of,
-                "evidence": [evidence.model_dump(mode="json")],
+                "evidence": evidence_refs,
             }
         )
+        if fact_kind == "payment":
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS:
+                value = source_record.get(field)
+                if value is not None:
+                    facts[-1][field] = value
         if fact_kind == "order":
             facts[-1]["providerOrderId"] = source_record.get("providerOrderId")
             facts[-1]["revisionId"] = source_record.get("revisionId")
@@ -545,7 +635,7 @@ def _commerce_payment_facts(
     payment_observations = record.get("paymentObservations")
     if not isinstance(payment_observations, list) or not payment_observations:
         payment_observations = list((record.get("payments") or {}).values())
-    for payment in payment_observations:
+    for payment in _collapse_compatible_payment_observations(payment_observations):
         if isinstance(payment, dict):
             add_fact(
                 fact_kind="payment",
@@ -580,6 +670,68 @@ def _commerce_payment_facts(
             )
 
     return facts
+
+
+def _collapse_compatible_payment_observations(
+    observations: list[Any],
+) -> list[dict[str, Any]]:
+    """Keep one value fact per payment when a later snapshot only adds details.
+
+    The ledger retains each observed snapshot for as-of reconstruction. Once a
+    snapshot is selected for a projection, compatible snapshots with the same
+    provider payment ID can be folded into one fact. Any divergent amount,
+    lifecycle, timestamp, rail, or network evidence remains separate so the
+    existing conflict state stays visible.
+    """
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    ungrouped: list[dict[str, Any]] = []
+    for row in observations:
+        if not isinstance(row, dict):
+            continue
+        provider = row.get("provider")
+        payment_id = row.get("providerPaymentId")
+        if (
+            not isinstance(provider, str)
+            or not provider
+            or not isinstance(payment_id, str)
+            or not payment_id
+        ):
+            ungrouped.append(row)
+            continue
+        groups.setdefault((provider, payment_id), []).append(row)
+
+    collapsed: list[dict[str, Any]] = list(ungrouped)
+    stable_fields = (
+        "provider",
+        "providerPaymentId",
+        "amount",
+        "currency",
+        "status",
+        "occurredAt",
+    )
+    for rows in groups.values():
+        if len(rows) == 1:
+            collapsed.append(rows[0])
+            continue
+        divergent = any(
+            len({row.get(field) for row in rows}) > 1 for field in stable_fields
+        ) or any(
+            len({row.get(field) for row in rows if row.get(field) is not None}) > 1
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS
+        )
+        if divergent:
+            collapsed.extend(rows)
+            continue
+        merged = dict(rows[0])
+        merged["_recordObservedAt"] = rows[0].get("observedAt")
+        for row in rows[1:]:
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS:
+                if row.get(field) is not None:
+                    merged[field] = row[field]
+            if row.get("observedAt") is not None:
+                merged["observedAt"] = row["observedAt"]
+        collapsed.append(merged)
+    return collapsed
 
 
 __all__ = [

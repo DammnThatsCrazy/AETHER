@@ -34,7 +34,8 @@ DSR_TYPES: tuple[str, ...] = (
 # Order is stable and load-bearing: open_request() seeds one pending step per
 # component in this exact order so status() output is deterministic. Recent
 # appended components include ``analytics_events``, ``silver_facts``,
-# ``bronze_events``, ``web3_observations``, and ``x402_commerce``. Every component is executed by the
+# ``bronze_events``, ``web3_observations``, ``x402_commerce``, and
+# ``risk_poisoning_evidence``. Every component is executed by the
 # ``consent.erasure`` job (services/api/governance/consent/erasure_jobs.py +
 # erasure_planes.py); scripts/release/check_dsr_coverage.py fails CI when one
 # is not.
@@ -75,6 +76,9 @@ DSRComponent = Literal[
     "web3_observations",
     "x402_commerce",
     "journey_handoffs",
+    "risk_poisoning_evidence",
+    "risk_intervention_records",
+    "social_relationship_evidence_events",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -113,6 +117,9 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "web3_observations",
     "x402_commerce",
     "journey_handoffs",
+    "risk_poisoning_evidence",
+    "risk_intervention_records",
+    "social_relationship_evidence_events",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

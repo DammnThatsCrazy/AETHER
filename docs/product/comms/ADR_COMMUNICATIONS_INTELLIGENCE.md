@@ -7,8 +7,11 @@ audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
 source_files: [services/api/journeys/comms/contracts.py, services/api/journeys/comms/projector.py, services/api/ingestion/silver/dispatcher.py]
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR dispatcher diff: CommerceFlowProjector handles cart and checkout events only. Communication projector fan-out and canonical activity ownership described by these ADRs are unchanged."
 source_hashes:
-  "services/api/ingestion/silver/dispatcher.py": "sha256:91649997a908ec2894c0097e513dba14c6a7e4d5c39a6519159bf0593e3d01fb"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:2d6b6441ecd52e2313d377bfed557ea955be035d1e4cede37e80200a80e1939c"
   "services/api/journeys/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
   "services/api/journeys/comms/projector.py": "sha256:dca2f1d942cceba08f88a978da1d68cd914e65fbf8b93f99baef25567b69b4a0"
 ---

@@ -3,10 +3,13 @@
 ``communication360`` is an intelligence projection over canonical Aether
 communication truth — never a competing system of record (ADR-010). This
 provider projects the *communication + information-flow* domain for a subject
-of kind ``campaign`` / ``episode`` / ``source`` from the Phase-2/3 canonical
-surface: the shipped message spine (``services/api/journeys/comms`` silver path, read
-through :class:`SilverCommsSource`) and the Phase-3 canonical-authority fact
-store (``services/api/journeys/communication360`` :class:`CanonicalFactSource`).
+of kind ``campaign`` / ``episode`` / ``source`` / ``entity`` from the Phase-2/3
+canonical surface: the shipped message spine (``services/api/journeys/comms``
+silver path, read through :class:`SilverCommsSource`) and the Phase-3
+canonical-authority fact store (``services/api/journeys/communication360``
+:class:`CanonicalFactSource`). Entity scope requires an exact tenant-owned
+entity-registry match and a matching endpoint identity-binding record; it does
+not expand through organization membership.
 
 The provider is a read-only, fail-isolated, tenant-scoped projection:
 
@@ -72,6 +75,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional, Protocol, Union
+from urllib.parse import quote
 from uuid import UUID
 
 # Lightweight plane imports — always importable.
@@ -92,12 +96,22 @@ from shared.intelligence_projections.registry import ProviderRegistry
 
 # Reused canonical primitives (never redefined here).
 from journeys.communication360.contracts import CommunicationMessage
+from journeys.communication360.delegation_join import (
+    AuthorDelegationRead,
+    DelegationLookup,
+    read_author_delegations,
+)
 from journeys.communication360.reader import (
     CommunicationSource,
     default_sources,
 )
 from graph.operational_intelligence.models import EvidenceRef
-from intelligence.risk360.contracts import RiskSignal
+from identity.identity.source_subject_scope import (
+    RepositorySourceSubjectScopeReader,
+    SourceSubjectScopeRead,
+    SourceSubjectScopeReader,
+)
+from intelligence.risk360.contracts import RiskAssessment, RiskSignal
 from shared.contracts_models.epistemic import EpistemicStatus
 
 # Sections the registry declares for communication360 (JSON output order —
@@ -113,7 +127,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 
 # Subject kinds communication360 serves (registry subjectKinds).
 _SCOPED_SUBJECT_KINDS: frozenset[str] = frozenset(
-    {"agent", "campaign", "episode", "journey", "source"}
+    {"agent", "campaign", "entity", "episode", "journey", "source"}
 )
 
 # Typed degraded-reason codes surfaced on ``result.degradedReasons`` (short
@@ -126,6 +140,11 @@ _DEFAULT_READ_LIMIT = 100
 _MAX_READ_LIMIT = 500
 _MAX_JOURNEY_LINK_READS = 50
 _MAX_RISK_SIGNAL_READS = 100
+_MAX_RISK_ASSESSMENT_READS = 50
+_MAX_RECIPIENT_RISK_IDENTITY_READS = 50
+_MAX_CONSENT_POLICY_READS = 100
+_MAX_PROFILE_LINK_READS = 50
+_MAX_RESPONSE_EVENT_LINKS = 100
 
 # Section-level limitation note for subjects without a message-spine join.
 _SCOPE_NOTES: dict[str, str] = {
@@ -139,6 +158,27 @@ _SCOPE_NOTES: dict[str, str] = {
         "messages have no canonical source join; exact source reference communication facts remain readable"
     ),
 }
+
+_ENTITY_BINDING_EVIDENCE_URIS = {
+    "agent_deployment_identity_bindings": "store://agent_identity_bindings/",
+    "comms_provider_identities": "store://comms_provider_identities/",
+}
+_ENTITY_REFERENCE_KEYS = frozenset(
+    {
+        "entity_id",
+        "entity_ids",
+        "actor_id",
+        "actor_entity_id",
+        "participant_id",
+        "participant_ids",
+        "participant_entity_id",
+        "participant_entity_ids",
+        "sender_entity_id",
+        "sender_entity_ids",
+        "recipient_entity_id",
+        "recipient_entity_ids",
+    }
+)
 
 # Canonical fact ``kind`` discriminators each state dimension / section reads.
 _KINDS_INFORMATION = frozenset({"information", "information_transformation"})
@@ -236,10 +276,258 @@ class AgentIdentityRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class ResponseEventRead:
+    fact_id: str
+    message_id: Optional[str]
+    state: str
+    reason: str
+    evidence: tuple[EvidenceRef, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "factId": self.fact_id,
+            "messageId": self.message_id,
+            "state": self.state,
+            "reason": self.reason,
+            "responseToMessageId": None,
+            "causalStatus": "unverified",
+            "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True) for ref in self.evidence],
+        }
+
+
 class AgentIdentityReader(Protocol):
     async def resolve(self, tenant_id: str, source_agent_ref: str) -> AgentIdentityRead:
         """Resolve only through a tenant-owned canonical Agent identity authority."""
         ...
+
+
+@dataclass(frozen=True)
+class EntityIdentityRead:
+    """Tenant-scoped result for resolving an exact canonical entity id."""
+
+    state: str
+    canonical_entity_id: Optional[str] = None
+    evidence: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+
+
+class EntityIdentityReader(Protocol):
+    async def resolve(self, tenant_id: str, canonical_entity_id: str) -> EntityIdentityRead:
+        """Resolve only an exact entity id owned by the requesting tenant."""
+        ...
+
+
+@dataclass(frozen=True)
+class ProfileLinkRead:
+    """Exact tenant profile identity read for one typed communication reference."""
+
+    state: str
+    profile_id: Optional[str] = None
+    canonical_entity_id: Optional[str] = None
+    evidence: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+
+
+class ProfileLinkReader(Protocol):
+    async def resolve(self, tenant_id: str, profile_id: str) -> ProfileLinkRead:
+        """Verify one direct profile ID in the canonical tenant profile store."""
+        ...
+
+
+class RepositoryProfileLinkReader:
+    """Verify exact tenant/profile identity using the existing profile authority."""
+
+    async def resolve(self, tenant_id: str, profile_id: str) -> ProfileLinkRead:
+        if not tenant_id or not profile_id:
+            return ProfileLinkRead(state="unknown", reason="profile_link_scope_invalid")
+        try:
+            from dependencies.providers import get_cache, get_graph
+            from repositories.repos import EntityRepository, IdentityRepository, tenant_record_id
+
+            row = await IdentityRepository(get_graph(), get_cache()).get_profile(
+                tenant_id, profile_id
+            )
+        except Exception:  # noqa: BLE001 - identity outage stays unknown
+            return ProfileLinkRead(
+                state="degraded", reason="profile_identity_authority_unavailable"
+            )
+        if row is None:
+            return ProfileLinkRead(state="unresolved", reason="profile_identity_not_found")
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or str(row.get("user_id") or "") != profile_id
+        ):
+            return ProfileLinkRead(state="ambiguous", reason="profile_identity_scope_mismatch")
+        explicit_entity_id = row.get("canonical_entity_id")
+        if explicit_entity_id is not None and explicit_entity_id != profile_id:
+            return ProfileLinkRead(
+                state="ambiguous", reason="profile_canonical_entity_binding_mismatch"
+            )
+        try:
+            entity_rows = await EntityRepository().find_many(
+                filters={"tenant_id": tenant_id, "entity_id": profile_id},
+                limit=2,
+            )
+        except Exception:  # noqa: BLE001 - current canonical entity remains unknown
+            return ProfileLinkRead(
+                state="degraded", reason="profile_canonical_entity_authority_unavailable"
+            )
+        if not isinstance(entity_rows, list) or len(entity_rows) != 1:
+            return ProfileLinkRead(
+                state="ambiguous" if isinstance(entity_rows, list) and entity_rows else "unresolved",
+                reason="profile_canonical_entity_not_unique_or_missing",
+            )
+        entity = entity_rows[0]
+        if (
+            not isinstance(entity, dict)
+            or entity.get("tenant_id") != tenant_id
+            or str(entity.get("entity_id") or "") != profile_id
+            or entity.get("entity_type") != "human"
+        ):
+            return ProfileLinkRead(
+                state="ambiguous", reason="profile_canonical_human_entity_scope_mismatch"
+            )
+        observed_at = row.get("updated_at") or row.get("created_at")
+        if isinstance(observed_at, datetime):
+            observed_at = observed_at.isoformat()
+        evidence = EvidenceRef(
+            id=profile_id,
+            type="entity",
+            source="identity.profiles",
+            observedAt=observed_at if isinstance(observed_at, str) and observed_at else None,
+            uri=f"store://profiles/{quote(tenant_record_id(tenant_id, profile_id), safe='')}",
+        )
+        entity_observed_at = entity.get("updated_at") or entity.get("created_at")
+        if isinstance(entity_observed_at, datetime):
+            entity_observed_at = entity_observed_at.isoformat()
+        entity_evidence = EvidenceRef(
+            id=profile_id,
+            type="entity",
+            source="entity_registry",
+            observedAt=(
+                entity_observed_at
+                if isinstance(entity_observed_at, str) and entity_observed_at
+                else None
+            ),
+        )
+        return ProfileLinkRead(
+            state="resolved",
+            profile_id=profile_id,
+            canonical_entity_id=profile_id,
+            evidence=(evidence, entity_evidence),
+        )
+
+
+@dataclass(frozen=True)
+class RecipientIdentityRead:
+    """Tenant-scoped exact resolution of one communication recipient binding."""
+
+    state: str
+    canonical_entity_id: Optional[str] = None
+    evidence: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+
+
+class RecipientIdentityReader(Protocol):
+    async def resolve(
+        self, tenant_id: str, identity_binding_id: str, expected_entity_id: str
+    ) -> RecipientIdentityRead:
+        """Resolve an exact provider recipient binding to its canonical entity."""
+        ...
+
+
+class RepositoryEntityIdentityReader:
+    """Exact entity-registry lookup used before entity-scoped communication reads."""
+
+    async def resolve(self, tenant_id: str, canonical_entity_id: str) -> EntityIdentityRead:
+        if not tenant_id or not canonical_entity_id:
+            return EntityIdentityRead(state="unknown", reason="entity_identity_scope_invalid")
+        try:
+            from repositories.repos import EntityRepository
+
+            rows = await EntityRepository().find_many(
+                filters={"tenant_id": tenant_id, "entity_id": canonical_entity_id},
+                limit=2,
+            )
+        except Exception:  # noqa: BLE001 - identity outage remains unknown
+            return EntityIdentityRead(state="unknown", reason="entity_identity_authority_unavailable")
+        if not isinstance(rows, list):
+            return EntityIdentityRead(state="unknown", reason="entity_identity_authority_invalid_response")
+        if len(rows) > 1:
+            return EntityIdentityRead(state="ambiguous", reason="entity_identity_multiple_matches")
+        if not rows:
+            return EntityIdentityRead(state="unresolved", reason="entity_identity_binding_not_found")
+        row = rows[0]
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("entity_id") != canonical_entity_id
+        ):
+            return EntityIdentityRead(state="ambiguous", reason="entity_identity_scope_mismatch")
+        observed_at = row.get("updated_at") or row.get("created_at")
+        evidence = EvidenceRef(
+            id=canonical_entity_id,
+            type="entity",
+            source="entity_registry",
+            observedAt=observed_at if isinstance(observed_at, str) and observed_at else None,
+        )
+        return EntityIdentityRead(
+            state="resolved",
+            canonical_entity_id=canonical_entity_id,
+            evidence=(evidence,),
+        )
+
+
+class RepositoryRecipientIdentityReader:
+    """Verify an exact resolved provider-recipient mapping in its tenant."""
+
+    async def resolve(
+        self, tenant_id: str, identity_binding_id: str, expected_entity_id: str
+    ) -> RecipientIdentityRead:
+        if not tenant_id or not identity_binding_id or not expected_entity_id:
+            return RecipientIdentityRead(state="unknown", reason="recipient_identity_scope_invalid")
+        try:
+            from journeys.comms.identity_bridge import ProviderIdentityRepository
+
+            row = await ProviderIdentityRepository().find_by_id(identity_binding_id)
+        except Exception:  # noqa: BLE001 - identity outage remains unknown
+            return RecipientIdentityRead(
+                state="unknown", reason="recipient_identity_authority_unavailable"
+            )
+        if not isinstance(row, dict):
+            return RecipientIdentityRead(
+                state="unresolved", reason="recipient_identity_binding_not_found"
+            )
+        if (
+            row.get("tenant_id") != tenant_id
+            or str(row.get("identity_id") or row.get("id") or "") != identity_binding_id
+        ):
+            return RecipientIdentityRead(
+                state="ambiguous", reason="recipient_identity_scope_mismatch"
+            )
+        if row.get("resolution_status") != "resolved":
+            return RecipientIdentityRead(
+                state="unresolved", reason="recipient_identity_binding_unresolved"
+            )
+        canonical_entity_id = row.get("canonical_entity_id")
+        if canonical_entity_id != expected_entity_id:
+            return RecipientIdentityRead(
+                state="ambiguous", reason="recipient_identity_canonical_entity_mismatch"
+            )
+        evidence = EvidenceRef(
+            id=identity_binding_id,
+            type="entity",
+            source="comms_provider_identities",
+            observedAt=row.get("verified_at") or row.get("updated_at"),
+            uri=f"store://comms_provider_identities/{quote(identity_binding_id, safe='')}",
+        )
+        return RecipientIdentityRead(
+            state="resolved",
+            canonical_entity_id=expected_entity_id,
+            evidence=(evidence,),
+        )
 
 
 class CurrentJourneyReader(Protocol):
@@ -267,6 +555,16 @@ class JourneyLinkRead:
     links: tuple[tuple[str, EvidenceRef, EvidenceRef], ...] = ()
 
 
+@dataclass(frozen=True)
+class ProfileLinksRead:
+    """Bounded joins from typed communication profile IDs to tenant profiles."""
+
+    state: str
+    reason: str
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    links: tuple[dict[str, Any], ...] = ()
+
+
 class RiskSignalReader(Protocol):
     async def signals(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -274,9 +572,48 @@ class RiskSignalReader(Protocol):
         """Read signals for one exact tenant and typed Risk360 subject."""
         ...
 
+    async def assessments(
+        self, *, tenant_id: str, subject: ProjectionSubject, limit: int
+    ) -> list[dict[str, Any]]:
+        """Read assessment outputs for the same exact tenant and typed subject."""
+        ...
+
+
+class ConsentPolicyReader(Protocol):
+    async def evaluate(
+        self, tenant_id: str, subject_id: str, purpose: str
+    ) -> Any:
+        """Evaluate current server consent for one exact tenant/subject/purpose."""
+        ...
+
+
+class RepositoryConsentPolicyReader:
+    """Read current consent from the canonical server consent authority."""
+
+    async def evaluate(self, tenant_id: str, subject_id: str, purpose: str) -> Any:
+        # Keep governance imports lazy so importing the projection stays
+        # database-free. The authority performs the exact tenant, subject and
+        # purpose lookup and fails closed when a receipt is absent or invalid.
+        from governance.consent.authority import evaluate_consent_with_receipt
+
+        return await evaluate_consent_with_receipt(
+            tenant_id=tenant_id,
+            subject_id=subject_id,
+            anonymous_id=None,
+            purpose=purpose,
+        )
+
+
+@dataclass(frozen=True)
+class ConsentPolicyRead:
+    """Bounded current-consent evaluation over exact communication recipients."""
+
+    state: str
+    content: dict[str, Any]
+
 
 class RepositoryRiskSignalReader:
-    """Exact subject read over the canonical tenant-scoped RiskSignal store."""
+    """Exact subject reads over tenant-scoped RiskSignal and RiskAssessment stores."""
 
     async def signals(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -287,16 +624,30 @@ class RepositoryRiskSignalReader:
             tenant_id, subject.kind, subject.id, limit=limit
         )
 
+    async def assessments(
+        self, *, tenant_id: str, subject: ProjectionSubject, limit: int
+    ) -> list[dict[str, Any]]:
+        from intelligence.risk360.store import RiskAssessmentRepository
+
+        return await RiskAssessmentRepository().list_by_subject(
+            tenant_id, subject.kind, subject.id, limit=limit
+        )
+
 
 @dataclass(frozen=True)
 class RiskFlagRead:
-    """Exact-subject canonical risk signals safe to cite in Communication360."""
+    """Consent-gated exact-subject risk signals and assessment observations."""
 
     state: str
     reason: str
     evidence_refs: tuple[EvidenceRef, ...] = ()
     signals: tuple[RiskSignal, ...] = ()
-    identity_refs: tuple[EvidenceRef, ...] = ()
+    authority_refs: tuple[EvidenceRef, ...] = ()
+    source_coverage_state: str = "unknown"
+    freshness_state: str = "unknown"
+    assessments: tuple[RiskAssessment, ...] = ()
+    assessment_state: str = "unknown"
+    assessment_reason: str = "risk_assessment_authority_not_read"
 
 
 class RepositoryAgentIdentityReader:
@@ -370,6 +721,13 @@ def _resolve_scope(request: ProjectionRequest) -> _Scope:
             participant_entity_id=request.subject.id,
             participant_identity_ids=(request.subject.id,),
         )
+    if kind == "entity":
+        return _Scope(
+            kind=kind,
+            id=request.subject.id,
+            participant_entity_id=request.subject.id,
+            participant_identity_ids=(request.subject.id,),
+        )
     if kind in {"episode", "journey", "source"}:
         return _Scope(
             kind=kind,
@@ -436,12 +794,15 @@ def _row_matches_scope(
         return False
     reference_keys = {
         "agent": {"agent_id", "actor_id", "actor_entity_id", "agent_entity_id", "entity_id"},
+        "entity": set(_ENTITY_REFERENCE_KEYS),
         "campaign": {"campaign_id", "campaign_ids"},
         "episode": {"episode_id", "episode_ids"},
         "journey": {"journey_id", "journey_ids"},
         "source": {"source_id", "source_namespace", "provider_id"},
     }.get(scope.kind, set())
-    reference_ids = scope.participant_identity_ids if scope.kind == "agent" else (scope.id,)
+    reference_ids = (
+        scope.participant_identity_ids if scope.kind in {"agent", "entity"} else (scope.id,)
+    )
     for reference_id in reference_ids:
         if any(str(row.get(key) or "") == reference_id for key in reference_keys):
             return True
@@ -469,6 +830,34 @@ def _payload_has_exact_reference(value: Any, keys: set[str], reference: str) -> 
     return False
 
 
+def _has_exact_entity_binding(
+    *,
+    side: str,
+    entity_id: Optional[str],
+    binding_id: Optional[str],
+    evidence_ref: Optional[EvidenceRef],
+    expected_entity_id: str,
+) -> bool:
+    """Require a typed canonical binding record for one exact message endpoint."""
+    if (
+        entity_id != expected_entity_id
+        or not isinstance(binding_id, str)
+        or not binding_id.strip()
+        or evidence_ref is None
+        or evidence_ref.id != binding_id
+        or evidence_ref.type != "entity"
+    ):
+        return False
+    expected_source = {
+        "sender": "agent_deployment_identity_bindings",
+        "recipient": "comms_provider_identities",
+    }.get(side)
+    source_uri = _ENTITY_BINDING_EVIDENCE_URIS.get(expected_source or "")
+    if source_uri is None or evidence_ref.source != expected_source:
+        return False
+    return evidence_ref.uri == f"{source_uri}{quote(binding_id, safe='')}"
+
+
 def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool:
     if scope.kind == "campaign":
         return str(message.campaign_id or "") == scope.id
@@ -476,6 +865,20 @@ def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool
         return bool(
             set(scope.participant_identity_ids)
             & {message.sender_entity_id, message.recipient_entity_id}
+        )
+    if scope.kind == "entity":
+        return _has_exact_entity_binding(
+            side="sender",
+            entity_id=message.sender_entity_id,
+            binding_id=message.sender_identity_binding_id,
+            evidence_ref=message.sender_identity_evidence_ref,
+            expected_entity_id=scope.id,
+        ) or _has_exact_entity_binding(
+            side="recipient",
+            entity_id=message.recipient_entity_id,
+            binding_id=message.recipient_identity_binding_id,
+            evidence_ref=message.recipient_identity_evidence_ref,
+            expected_entity_id=scope.id,
         )
     return False
 
@@ -494,38 +897,44 @@ def _communication_slot_ids(
     slot_ids: set[str],
     section_ids: set[str],
 ) -> list[str]:
-    """Return exact Communications360 slots bound to this subject and evidence section.
+    """Return catalog slots bound to this subject and evidence section.
 
-    Keep claim attribution within the product surface catalog. A technical
-    communication fact may feed other projections, but that does not make its
-    claim part of every other surface's slot contract.
+    Keep claim attribution within explicit product-surface bindings. A
+    technical communication fact may feed other projections, but that does
+    not make its claim part of every other surface's slot contract.
     """
-    surface = PRODUCT_360_SURFACE_DEFINITIONS.get("communications360", {})
-    if not isinstance(surface, dict):
-        return []
     result: set[str] = set()
-    for slot in surface.get("domainSlots", []):
-        if not isinstance(slot, dict):
+    for surface in PRODUCT_360_SURFACE_DEFINITIONS.values():
+        if not isinstance(surface, dict):
             continue
-        slot_id = slot.get("id")
-        if not isinstance(slot_id, str) or slot_id not in slot_ids:
-            continue
-        for binding in slot.get("projectionBindings", []):
-            if not isinstance(binding, dict) or binding.get("projectionId") != "communication360":
+        for slot in surface.get("domainSlots", []):
+            if not isinstance(slot, dict):
                 continue
-            if subject_kind not in binding.get("subjectKinds", []):
+            slot_id = slot.get("id")
+            if not isinstance(slot_id, str) or slot_id not in slot_ids:
                 continue
-            if not set(binding.get("sectionIds", [])).intersection(section_ids):
-                continue
-            result.add(slot_id)
+            for binding in slot.get("projectionBindings", []):
+                if (
+                    not isinstance(binding, dict)
+                    or binding.get("projectionId") != "communication360"
+                ):
+                    continue
+                if subject_kind not in binding.get("subjectKinds", []):
+                    continue
+                if not set(binding.get("sectionIds", [])).intersection(section_ids):
+                    continue
+                result.add(slot_id)
     return sorted(result)
 
 
 def _canonical_communication_slot_ids(
     subject_kind: str,
+    subject_id: str,
     row: dict[str, Any],
+    *,
+    allow_agent_authorship: bool = True,
 ) -> list[str]:
-    """Attribute a canonical fact only to the exact Communications360 slots it supports."""
+    """Attribute a canonical fact only to its exact catalog slots."""
     kind = str(row.get("kind") or "")
     payload = _payload_of(row)
     supported: set[str] = {"evidence_trace"}
@@ -536,19 +945,11 @@ def _canonical_communication_slot_ids(
         supported.add("thread_summary")
     if kind == "participant_binding":
         supported.add("participants")
-        role = str(payload.get("role") or "").strip().lower()
-        entity_type = str(payload.get("entity_type") or "").strip().lower()
-        has_agent_identity = (
-            entity_type == "agent"
-            or bool(payload.get("agent_id"))
-            or bool(row.get("agent_id"))
-        )
-        has_author = bool(
-            payload.get("entity_id")
-            or payload.get("principal_entity_id")
-            or row.get("actor_id")
-        )
-        if subject_kind == "agent" and role == "author" and has_agent_identity and has_author:
+        if (
+            allow_agent_authorship
+            and subject_kind == "agent"
+            and _agent_author_binding_evidence(row, canonical_agent_id=subject_id)
+        ):
             supported.add("agent_authorship")
     if (
         kind == "communication_act"
@@ -559,6 +960,24 @@ def _canonical_communication_slot_ids(
 
     if subject_kind == "campaign" and _row_reference_values(row, "campaign_id", "campaign_ids"):
         supported.add("campaign_links")
+    if subject_kind == "entity" and _payload_has_exact_reference(
+        {"row": row, "payload": payload}, set(_ENTITY_REFERENCE_KEYS), subject_id
+    ):
+        supported.add("communications")
+    if subject_kind == "episode" and subject_id in _row_reference_values(
+        row, "episode_id", "episode_ids"
+    ):
+        # Episode-linked communication facts are an exact canonical join. The
+        # message spine still has no episode join, so the product slot remains
+        # partial and receives no claims from unscoped message inventory.
+        supported.add("communications")
+    if subject_kind == "journey" and subject_id in _row_reference_values(
+        row, "journey_id", "journey_ids"
+    ):
+        # Journey attribution is limited to explicit typed IDs on the
+        # tenant-scoped canonical fact row. Message endpoints and free text do
+        # not establish a communication-to-journey join.
+        supported.add("communications")
 
     bound = _communication_slot_ids(
         subject_kind,
@@ -633,7 +1052,13 @@ def _communication_required_slot_coverage(
     canonical_up: bool,
     canonical_truncated: bool,
     journey_links: JourneyLinkRead,
+    profile_links: ProfileLinksRead,
     risk_flags: RiskFlagRead,
+    policy_state: ConsentPolicyRead,
+    author_delegations: list[AuthorDelegationRead],
+    author_delegations_truncated: bool,
+    response_links: list[ResponseEventRead],
+    response_links_truncated: bool,
 ) -> dict[str, dict[str, Any]]:
     """Expose all SSOT slots without promoting IDs, transport, or policy inputs to truth."""
     message_refs = _dedupe_refs(
@@ -679,7 +1104,14 @@ def _communication_required_slot_coverage(
 
     participant_rows = [row for row in fact_rows if row.get("kind") == "participant_binding"]
     participant_refs = _dedupe_refs(
-        [ref for row in participant_rows if (ref := _row_evidence(row)) is not None]
+        [
+            ref
+            for row in participant_rows
+            for ref in [
+                *([_row_evidence(row)] if _row_evidence(row) is not None else []),
+                *_trusted_participant_source_evidence(row),
+            ]
+        ]
     )
     message_endpoint_refs = [
         ref
@@ -707,16 +1139,6 @@ def _communication_required_slot_coverage(
             if isinstance(ref, EvidenceRef)
         ]
     )
-    profile_rows = [
-        row
-        for row in fact_rows
-        if _has_typed_reference(
-            {"row": row, "payload": _payload_of(row)}, frozenset({"profile_id", "profile_ids"})
-        )
-    ]
-    profile_refs = _dedupe_refs(
-        [ref for row in profile_rows if (ref := _row_evidence(row)) is not None]
-    )
     response_rows = [
         row
         for row in fact_rows
@@ -730,22 +1152,28 @@ def _communication_required_slot_coverage(
     author_rows = [
         row
         for row in participant_rows
-        if str(_payload_of(row).get("role") or "").strip().lower() == "author"
-        and (
-            str(_payload_of(row).get("entity_type") or "").strip().lower() == "agent"
-            or _payload_of(row).get("agent_id")
-            or row.get("agent_id")
-        )
-        and (
-            _payload_of(row).get("entity_id")
-            or _payload_of(row).get("principal_entity_id")
-            or row.get("actor_id")
+        if not _projection_requests_noncurrent_scope(request)
+        if scope.kind != "agent" or scope.participant_entity_id
+        if _agent_author_binding_evidence(
+            row,
+            canonical_agent_id=scope.participant_entity_id if scope.kind == "agent" else None,
         )
     ]
     author_refs = _dedupe_refs(
-        [ref for row in author_rows if (ref := _row_evidence(row)) is not None]
+        [
+            ref
+            for row in author_rows
+            for ref in _agent_author_binding_evidence(
+                row,
+                canonical_agent_id=scope.participant_entity_id if scope.kind == "agent" else None,
+            )
+        ]
     )
-    if scope.kind == "agent" and scope.identity_resolution_state == "resolved":
+    if (
+        not _projection_requests_noncurrent_scope(request)
+        and scope.kind == "agent"
+        and scope.identity_resolution_state == "resolved"
+    ):
         agent_message_refs = [
             ref
             for message in messages
@@ -754,16 +1182,6 @@ def _communication_required_slot_coverage(
             if isinstance(ref, EvidenceRef)
         ]
         author_refs = _dedupe_refs([*author_refs, *agent_message_refs])
-
-    consent_refs = _dedupe_refs(
-        [
-            ref
-            for message in messages
-            if message.consent_evidence.state == "recorded"
-            for ref in message.consent_evidence.evidence_refs
-            if isinstance(ref, EvidenceRef)
-        ]
-    )
 
     if conversation_refs:
         thread_slot = slot(
@@ -813,7 +1231,38 @@ def _communication_required_slot_coverage(
             fact_refs if message_ids_exist else None,
         )
 
-    if participant_evidence:
+    trusted_roster_rows = [
+        row for row in participant_rows if _trusted_participant_source_evidence(row)
+    ]
+    source_complete_rosters = [
+        row
+        for row in trusted_roster_rows
+        if _payload_of(row).get("roster_completeness_state") == "complete"
+        and _payload_of(row).get("roster_expected_binding_count")
+        == _payload_of(row).get("roster_binding_count")
+    ]
+    source_incomplete_rosters = [
+        row
+        for row in trusted_roster_rows
+        if _payload_of(row).get("roster_completeness_state") != "complete"
+        or _payload_of(row).get("roster_expected_binding_count")
+        != _payload_of(row).get("roster_binding_count")
+    ]
+    if participant_evidence and source_complete_rosters:
+        participant_slot = slot(
+            "degraded",
+            "partial",
+            "complete_provider_roster_observed_but_provider_conversation_to_canonical_conversation_membership_is_unresolved",
+            participant_evidence,
+        )
+    elif participant_evidence and source_incomplete_rosters:
+        participant_slot = slot(
+            "degraded",
+            "partial",
+            "provider_participant_roster_is_explicitly_partial_or_has_uncovered_bindings",
+            participant_evidence,
+        )
+    elif participant_evidence:
         participant_slot = slot(
             "degraded",
             "partial",
@@ -849,7 +1298,17 @@ def _communication_required_slot_coverage(
         list(journey_links.evidence_refs),
     )
 
-    if response_refs:
+    linked_response_refs = _dedupe_refs(
+        [ref for link in response_links if link.state == "linked" for ref in link.evidence]
+    )
+    if linked_response_refs:
+        response_slot = slot(
+            "degraded",
+            "partial",
+            "response_acts_join_exact_messages_and_senders_but_reply_targets_and_inventory_are_unknown",
+            linked_response_refs,
+        )
+    elif response_refs:
         response_slot = slot(
             "degraded",
             "partial",
@@ -858,16 +1317,30 @@ def _communication_required_slot_coverage(
         )
     else:
         response_slot = slot("unknown", "unknown", "canonical_response_event_authority_not_joined")
+    response_slot["responseEventLinks"] = [link.as_dict() for link in response_links]
+    response_slot["responseReadTruncated"] = response_links_truncated
 
-    if author_refs:
+    delegation_refs = _dedupe_refs(
+        [ref for read in author_delegations for ref in read.evidence]
+    )
+    if _projection_requests_noncurrent_scope(request):
+        author_slot = slot(
+            "unknown", "unknown", "historical_agent_authorship_replay_unavailable"
+        )
+    elif author_refs:
         author_slot = slot(
             "degraded",
             "partial",
-            "observed_sender_or_author_binding_lacks_complete_actor_authority_evaluation",
-            author_refs,
+            "observed_agent_author_binding_with_bounded_event_time_delegation_evaluation"
+            if delegation_refs
+            else "observed_sender_or_author_binding_lacks_complete_actor_authority_evaluation",
+            _dedupe_refs([*author_refs, *delegation_refs]),
         )
     else:
         author_slot = slot("unknown", "unknown", "canonical_authorship_binding_not_observed")
+    author_slot["delegationEvaluations"] = [read.as_dict() for read in author_delegations]
+    author_slot["delegationReadTruncated"] = author_delegations_truncated
+    author_slot["currentAuthorityState"] = "unknown"
 
     evidence_slot = (
         slot(
@@ -885,30 +1358,148 @@ def _communication_required_slot_coverage(
         "message_inventory": message_slot,
         "participants": participant_slot,
         "campaign_links": campaign_slot,
-        "profile_links": (
-            slot("degraded", "partial", "typed_profile_reference_observed_without_profile_resolution", profile_refs)
-            if profile_refs
-            else slot("unknown", "unknown", "communication_profile_link_not_observed")
-        ),
+        "profile_links": {
+            **slot(
+                profile_links.state,
+                "partial" if profile_links.links else "unknown",
+                profile_links.reason,
+                list(profile_links.evidence_refs),
+            ),
+            "links": list(profile_links.links),
+            # The profile record read is exact and tenant-scoped, but the
+            # authority does not provide historical identity or a freshness
+            # watermark for the communication-to-profile relationship.
+            "temporalState": "unknown",
+            "temporalReason": "profile_identity_history_not_joined",
+            "freshnessState": "unknown",
+            "freshnessReason": "profile_identity_authority_has_no_projection_watermark",
+        },
         "journey_links": journey_slot,
         "response_events": response_slot,
         "agent_authorship": author_slot,
-        "policy_state": slot(
-            "unknown",
-            "unknown",
-            "consent_receipts_are_lineage_inputs_not_a_policy_decision",
-            consent_refs,
-        ),
-        "risk_flags": slot(
-            risk_flags.state,
-            "complete" if risk_flags.state == "available" else (
-                "unknown" if risk_flags.state == "unknown" else "partial"
+        "policy_state": policy_state.content,
+        "risk_flags": {
+            **slot(
+                risk_flags.state,
+                risk_flags.source_coverage_state,
+                risk_flags.reason,
+                list(risk_flags.evidence_refs),
             ),
-            risk_flags.reason,
-            list(risk_flags.evidence_refs),
-        ),
+            "riskOutputs": [
+                _risk_assessment_observation(assessment, request.tenantId)
+                for assessment in risk_flags.assessments
+            ],
+            "riskOutputReadState": risk_flags.assessment_state,
+            "riskOutputReadReason": risk_flags.assessment_reason,
+            "historyState": "unknown",
+            "causalAttribution": "not_established_from_communication",
+            "freshnessState": risk_flags.freshness_state,
+            "freshnessReason": "risk_signal_and_assessment_authorities_have_no_current_coverage_watermark",
+        },
         "evidence_trace": evidence_slot,
     }
+
+
+def _exact_consent_policy_inputs(
+    messages: list[CommunicationMessage], tenant_id: str
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Collect only recipient/purpose pairs backed by tenant-scoped message evidence."""
+    inputs: dict[tuple[str, str], dict[str, Any]] = {}
+    for message in messages:
+        if message.tenant_id != tenant_id:
+            continue
+        subject_id = message.recipient_entity_id
+        binding_id = message.recipient_identity_binding_id
+        binding_ref = message.recipient_identity_evidence_ref
+        consent = message.consent_evidence
+        purpose = consent.purpose
+        if (
+            not subject_id
+            or not binding_id
+            or not isinstance(purpose, str)
+            or not purpose.strip()
+            or binding_ref is None
+            or binding_ref.id != binding_id
+            or binding_ref.type != "entity"
+            or binding_ref.source != "comms_provider_identities"
+            or binding_ref.uri
+            != f"store://comms_provider_identities/{quote(binding_id, safe='')}"
+            or not message.evidence_refs
+        ):
+            continue
+
+        historical_refs: list[EvidenceRef] = []
+        historical_outcome = "unknown"
+        if consent.state == "recorded":
+            if (
+                consent.subject_entity_id != subject_id
+                or consent.identity_binding_id != binding_id
+                or not consent.receipt_id
+            ):
+                continue
+            receipt_ref = next(
+                (
+                    ref
+                    for ref in consent.evidence_refs
+                    if ref.id == consent.receipt_id
+                    and ref.source == "governance.consent.authority"
+                    and ref.uri
+                    == f"store://consent_receipts/{quote(consent.receipt_id, safe='')}"
+                ),
+                None,
+            )
+            consent_binding_ref = next(
+                (
+                    ref
+                    for ref in consent.evidence_refs
+                    if ref.id == binding_id
+                    and ref.source == "comms_provider_identities"
+                    and ref.uri
+                    == f"store://comms_provider_identities/{quote(binding_id, safe='')}"
+                ),
+                None,
+            )
+            if receipt_ref is None or consent_binding_ref is None:
+                continue
+            historical_refs = [receipt_ref, consent_binding_ref]
+            # The connector writes this lineage only after the server consent
+            # authority returned an allowed receipt. This records that past
+            # processing event; it says nothing about current consent.
+            historical_outcome = "allowed"
+        elif consent.state != "unknown":
+            continue
+
+        pair = (subject_id, purpose.strip())
+        entry = inputs.setdefault(
+            pair,
+            {
+                "subjectEntityId": subject_id,
+                "purpose": purpose.strip(),
+                "messageIds": [],
+                "inputEvidenceRefs": [],
+                "historicalEvidenceRefs": [],
+                "historicalOutcomeAtCommunication": historical_outcome,
+            },
+        )
+        if message.message_id not in entry["messageIds"]:
+            entry["messageIds"].append(message.message_id)
+        entry["inputEvidenceRefs"].extend(
+            [
+                ref
+                for ref in message.evidence_refs
+                if isinstance(ref, EvidenceRef)
+            ]
+        )
+        entry["inputEvidenceRefs"].append(binding_ref)
+        entry["historicalEvidenceRefs"].extend(historical_refs)
+        if historical_outcome == "allowed":
+            entry["historicalOutcomeAtCommunication"] = "allowed"
+
+    for entry in inputs.values():
+        entry["inputEvidenceRefs"] = _dedupe_refs(entry["inputEvidenceRefs"])
+        entry["historicalEvidenceRefs"] = _dedupe_refs(entry["historicalEvidenceRefs"])
+        entry["messageIds"].sort()
+    return inputs
 
 
 def _canonical_open_state_count(
@@ -1086,6 +1677,241 @@ def _row_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
     )
 
 
+def _response_event_links(
+    *,
+    request: ProjectionRequest,
+    scope: _Scope,
+    messages: list[CommunicationMessage],
+    rows: list[dict[str, Any]],
+) -> tuple[list[ResponseEventRead], bool]:
+    """Join a response-like act only to its exact identity-bound message."""
+    response_rows = [
+        row for row in rows
+        if row.get("tenant_id") == request.tenantId
+        and row.get("kind") == "communication_act"
+        and str(_payload_of(row).get("act_type") or "").strip().lower()
+        in {"acknowledge", "reply", "replied", "respond", "responded"}
+    ]
+    truncated = len(response_rows) > _MAX_RESPONSE_EVENT_LINKS
+    messages_by_id: dict[str, list[CommunicationMessage]] = {}
+    for message in messages:
+        messages_by_id.setdefault(message.message_id, []).append(message)
+    links: list[ResponseEventRead] = []
+    for row in response_rows[:_MAX_RESPONSE_EVENT_LINKS]:
+        fact_ref = _row_evidence(row)
+        if fact_ref is None:
+            continue
+        payload = _payload_of(row)
+        message_id = payload.get("message_id")
+        if not isinstance(message_id, str) or not message_id:
+            links.append(ResponseEventRead(fact_ref.id, None, "unknown", "response_message_id_missing", (fact_ref,)))
+            continue
+        matches = messages_by_id.get(message_id, [])
+        if len(matches) != 1:
+            links.append(ResponseEventRead(fact_ref.id, message_id, "unknown", "response_message_not_uniquely_read", (fact_ref,)))
+            continue
+        message = matches[0]
+        actor_id = payload.get("actor_entity_id")
+        actor_bound = (
+            isinstance(actor_id, str)
+            and bool(actor_id)
+            and _has_exact_entity_binding(
+                side="sender",
+                entity_id=message.sender_entity_id,
+                binding_id=message.sender_identity_binding_id,
+                evidence_ref=message.sender_identity_evidence_ref,
+                expected_entity_id=actor_id,
+            )
+        )
+        if request.subject.kind == "agent":
+            actor_bound = actor_bound and actor_id == scope.participant_entity_id
+        elif request.subject.kind == "campaign":
+            actor_bound = actor_bound and message.campaign_id == request.subject.id
+        else:
+            actor_bound = False
+        refs = _dedupe_refs([
+            fact_ref,
+            *message.evidence_refs,
+            *(
+                [message.sender_identity_evidence_ref]
+                if message.sender_identity_evidence_ref is not None else []
+            ),
+        ])
+        links.append(
+            ResponseEventRead(
+                fact_ref.id,
+                message_id,
+                "linked" if actor_bound else "unknown",
+                "response_act_exact_message_and_sender_identity_joined"
+                if actor_bound else "response_actor_or_sender_identity_unverified",
+                tuple(refs),
+            )
+        )
+    return links, truncated
+
+
+def _trusted_participant_source_evidence(row: dict[str, Any]) -> list[EvidenceRef]:
+    """Read source role/completeness evidence only from writer-shaped facts.
+
+    Generic participant rows remain readable as observed facts, but their
+    arbitrary payload evidence is not promoted into trusted provenance.
+    """
+    payload = _payload_of(row)
+    provenance = payload.get("source_provenance")
+    authentication = provenance.get("authentication") if isinstance(provenance, dict) else None
+    identity = payload.get("source_identity")
+    actor = payload.get("actor_attribution")
+    policy = payload.get("policy")
+    provider = payload.get("provider")
+    if not (
+        isinstance(provenance, dict)
+        and isinstance(authentication, dict)
+        and authentication.get("method") == "tenant_webhook_hmac"
+        and authentication.get("verified") is True
+        and isinstance(provider, str)
+        and provider
+        and provenance.get("namespace") == provider
+        and provenance.get("provider_account_id") == payload.get("provider_account_id")
+        and provenance.get("event_id") == row.get("source_event_id")
+        and payload.get("communication_scope_kind") == "provider_conversation"
+        and payload.get("provider_conversation_id") == payload.get("communication_scope")
+        and isinstance(payload.get("roster_id"), str)
+        and payload.get("roster_id")
+        and isinstance(payload.get("binding_id"), str)
+        and payload.get("binding_id")
+        and isinstance(payload.get("role"), str)
+        and payload.get("claim_state") == "observed"
+        and isinstance(identity, dict)
+        and identity.get("resolution_status") == "resolved"
+        and isinstance(identity.get("identity_binding_id"), str)
+        and identity.get("identity_binding_id")
+        and isinstance(payload.get("entity_id"), str)
+        and payload.get("entity_id")
+        and isinstance(actor, dict)
+        and actor.get("actor_id") == row.get("actor_id")
+        and isinstance(policy, dict)
+        and policy.get("ingress_consent_outcome") == "allowed"
+        and policy.get("sensitive_message_fields_redacted") is True
+    ):
+        return []
+
+    parsed_refs: dict[str, list[EvidenceRef]] = {
+        "role_evidence_refs": [],
+        "roster_completeness_evidence_refs": [],
+    }
+    for key in parsed_refs:
+        candidates = payload.get(key)
+        if not isinstance(candidates, list):
+            continue
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if (
+                candidate.get("source") != provider
+                or candidate.get("uri") is not None
+                or not isinstance(candidate.get("id"), str)
+                or not candidate["id"].strip()
+                or "@" in candidate["id"]
+                or any(ch.isspace() for ch in candidate["id"].strip())
+                or not isinstance(candidate.get("observedAt"), str)
+                or not candidate["observedAt"].strip()
+            ):
+                continue
+            try:
+                observed_at = datetime.fromisoformat(
+                    candidate["observedAt"].strip().replace("Z", "+00:00")
+                )
+                if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+                    continue
+                parsed_refs[key].append(EvidenceRef.model_validate(candidate))
+            except Exception:  # noqa: BLE001 - invalid source evidence remains untrusted
+                continue
+    roster_state = payload.get("roster_completeness_state")
+    expected_count = payload.get("roster_expected_binding_count")
+    binding_count = payload.get("roster_binding_count")
+    if not parsed_refs["role_evidence_refs"]:
+        return []
+    if roster_state in {"complete", "partial"} and not parsed_refs[
+        "roster_completeness_evidence_refs"
+    ]:
+        return []
+    if roster_state == "complete" and (
+        not isinstance(expected_count, int)
+        or isinstance(expected_count, bool)
+        or expected_count < 1
+        or expected_count != binding_count
+    ):
+        return []
+    if roster_state not in {"complete", "partial", "unknown"}:
+        return []
+    return _dedupe_refs(
+        [
+            *parsed_refs["role_evidence_refs"],
+            *parsed_refs["roster_completeness_evidence_refs"],
+        ]
+    )
+
+
+def _agent_author_binding_evidence(
+    row: dict[str, Any], *, canonical_agent_id: Optional[str] = None
+) -> list[EvidenceRef]:
+    """Evidence for an exact Agent author role at the recorded event time.
+
+    The author is the participant's canonical entity, not a principal, event
+    actor, or source/runtime ``agent_id``. Provider role evidence is an
+    observed assertion; it does not establish canonical conversation
+    membership or current delegation authority.
+    """
+    if row.get("kind") != "participant_binding":
+        return []
+    payload = _payload_of(row)
+    entity_id = payload.get("entity_id")
+    if not (
+        isinstance(entity_id, str)
+        and entity_id
+        and (canonical_agent_id is None or entity_id == canonical_agent_id)
+        and payload.get("entity_type") == "agent"
+        and payload.get("role") == "author"
+        and payload.get("tenant_id") == row.get("tenant_id")
+        and isinstance(payload.get("provider_account_id"), str)
+        and payload.get("provider_account_id")
+        and isinstance(payload.get("provider_conversation_id"), str)
+        and payload.get("provider_conversation_id")
+    ):
+        return []
+    provenance = payload.get("source_provenance")
+    if not isinstance(provenance, dict):
+        return []
+
+    def instant(value: Any) -> Optional[datetime]:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None and parsed.utcoffset() is not None else None
+
+    occurred_at = instant(row.get("occurred_at"))
+    source_event_at = instant(provenance.get("event_occurred_at"))
+    valid_from = instant(payload.get("valid_from"))
+    valid_to = instant(payload.get("valid_to")) if payload.get("valid_to") is not None else None
+    if (
+        occurred_at is None
+        or source_event_at != occurred_at
+        or valid_from is None
+        or valid_from > occurred_at
+        or (payload.get("valid_to") is not None and valid_to is None)
+        or (valid_to is not None and occurred_at >= valid_to)
+    ):
+        return []
+    fact_ref = _row_evidence(row)
+    source_refs = _trusted_participant_source_evidence(row)
+    if fact_ref is None or not source_refs:
+        return []
+    return _dedupe_refs([fact_ref, *source_refs])
+
+
 def _dedupe_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
     """EvidenceRefs deduped by id, first occurrence order preserved."""
     seen: set[str] = set()
@@ -1096,6 +1922,83 @@ def _dedupe_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
         seen.add(ref.id)
         out.append(ref)
     return out
+
+
+def _risk_assessment_refs(
+    assessment: RiskAssessment, tenant_id: str
+) -> Optional[list[EvidenceRef]]:
+    """Require exact source evidence before citing a canonical assessment row."""
+    if not assessment.assessment_id.strip():
+        return None
+    if assessment.assessed_at is not None and (
+        assessment.assessed_at.tzinfo is None
+        or assessment.assessed_at.utcoffset() is None
+    ):
+        return None
+    exposure = assessment.exposure
+    if exposure is not None and (
+        exposure.tenant_id != tenant_id
+        or exposure.subject_kind != assessment.subject_kind
+        or exposure.subject_id != assessment.subject_id
+    ):
+        return None
+    inputs = [*assessment.evidence_refs]
+    for component in assessment.vector.components:
+        if component.score is not None and not component.evidence_refs:
+            return None
+        inputs.extend(component.evidence_refs)
+    if exposure is not None:
+        inputs.extend(exposure.evidence_refs)
+    if not inputs or any(not ref.id.strip() or not ref.source.strip() for ref in inputs):
+        return None
+    record_ref = EvidenceRef(
+        id=assessment.assessment_id,
+        type="model_output",
+        source="risk_assessments",
+        observedAt=(
+            assessment.assessed_at.astimezone(timezone.utc).isoformat()
+            if assessment.assessed_at is not None
+            else None
+        ),
+        uri=f"store://risk_assessments/{quote(f'{tenant_id}:{assessment.assessment_id}', safe='')}",
+    )
+    unique: dict[tuple[str, str], EvidenceRef] = {}
+    for ref in [record_ref, *inputs]:
+        unique.setdefault((ref.source, ref.id), ref)
+    return list(unique.values())
+
+
+def _risk_assessment_observation(
+    assessment: RiskAssessment, tenant_id: str
+) -> dict[str, Any]:
+    """Render source-backed output state without communication causality."""
+    refs = _risk_assessment_refs(assessment, tenant_id) or []
+    return {
+        "assessmentId": assessment.assessment_id,
+        "subject": {"kind": assessment.subject_kind, "id": assessment.subject_id},
+        "policyId": assessment.policy_id,
+        "policyVersion": assessment.policy_version,
+        "runId": assessment.run_id,
+        "assessedAt": (
+            assessment.assessed_at.astimezone(timezone.utc).isoformat()
+            if assessment.assessed_at is not None
+            else None
+        ),
+        "claimState": assessment.claim_state.value,
+        "confidence": assessment.confidence,
+        "components": [
+            {
+                "dimension": component.dimension,
+                "state": component.state.value,
+                "score": component.score,
+                "claimState": component.claim_state.value,
+                "confidence": component.confidence,
+            }
+            for component in assessment.vector.components
+        ],
+        "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True) for ref in refs],
+        "causalStatus": "not_established_from_communication",
+    }
 
 
 def _message_state_value(message: CommunicationMessage) -> Optional[str]:
@@ -1118,8 +2021,14 @@ class Communication360Provider:
         sources: Optional[Union[CommunicationSource, dict[str, CommunicationSource]]] = None,
         *,
         agent_identity_reader: Optional[AgentIdentityReader] = None,
+        entity_identity_reader: Optional[EntityIdentityReader] = None,
+        profile_link_reader: Optional[ProfileLinkReader] = None,
+        recipient_identity_reader: Optional[RecipientIdentityReader] = None,
+        source_subject_scope_reader: Optional[SourceSubjectScopeReader] = None,
         journey_reader: Optional[CurrentJourneyReader] = None,
         risk_signal_reader: Optional[RiskSignalReader] = None,
+        consent_policy_reader: Optional[ConsentPolicyReader] = None,
+        delegation_repository: Optional[DelegationLookup] = None,
     ) -> None:
         """Injectable sources (test seam); default = ``default_sources()``.
 
@@ -1146,8 +2055,30 @@ class Communication360Provider:
             if agent_identity_reader is not None
             else RepositoryAgentIdentityReader()
         )
+        self._entity_identity = (
+            entity_identity_reader
+            if entity_identity_reader is not None
+            else RepositoryEntityIdentityReader()
+        )
+        self._profile_links = profile_link_reader or RepositoryProfileLinkReader()
+        self._recipient_identity = (
+            recipient_identity_reader
+            if recipient_identity_reader is not None
+            else RepositoryRecipientIdentityReader()
+        )
+        self._source_subject_scope = (
+            source_subject_scope_reader
+            if source_subject_scope_reader is not None
+            else RepositorySourceSubjectScopeReader()
+        )
         self._journeys = journey_reader or RepositoryCurrentJourneyReader()
         self._risk_signals = risk_signal_reader or RepositoryRiskSignalReader()
+        self._consent_policy = consent_policy_reader or RepositoryConsentPolicyReader()
+        if delegation_repository is None:
+            from repositories.repos import DelegationRepository
+
+            delegation_repository = DelegationRepository()
+        self._delegations = delegation_repository
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
 
@@ -1197,10 +2128,48 @@ class Communication360Provider:
                     canonical_fact_bindable=False,
                     note=identity.reason or "agent_identity_unresolved",
                 )
+        elif request.subject.kind == "entity":
+            try:
+                identity = await self._entity_identity.resolve(tenant_id, request.subject.id)
+            except Exception:  # noqa: BLE001 - fail closed on identity errors
+                identity = EntityIdentityRead(
+                    state="unknown", reason="entity_identity_authority_unavailable"
+                )
+            identity_evidence = tuple(
+                ref
+                for ref in identity.evidence
+                if ref.id == request.subject.id
+                and ref.type == "entity"
+                and ref.source == "entity_registry"
+            )
+            if (
+                identity.state == "resolved"
+                and identity.canonical_entity_id == request.subject.id
+                and identity_evidence
+            ):
+                scope = replace(
+                    scope,
+                    participant_entity_id=request.subject.id,
+                    participant_identity_ids=(request.subject.id,),
+                    identity_resolution_state="resolved",
+                    identity_evidence=identity_evidence,
+                )
+            else:
+                scope = replace(
+                    scope,
+                    participant_entity_id=None,
+                    participant_identity_ids=(),
+                    identity_resolution_state=identity.state,
+                    identity_evidence=identity_evidence,
+                    bindable=False,
+                    canonical_fact_bindable=False,
+                    note=identity.reason or "entity_identity_unresolved",
+                )
 
         # Read the canonical fact store once (scope-matched below by family).
         identity_readable = (
-            request.subject.kind != "agent" or scope.identity_resolution_state == "resolved"
+            request.subject.kind not in {"agent", "entity"}
+            or scope.identity_resolution_state == "resolved"
         )
         canonical_up, canonical_rows, canonical_truncated = (
             await self._read_canonical_rows(tenant_id, scope, limit=read_limit)
@@ -1215,7 +2184,13 @@ class Communication360Provider:
             canonical_up=canonical_up,
             canonical_truncated=canonical_truncated,
         )
-        risk_flags = await self._read_risk_flags(request, scope)
+        profile_links = await self._read_profile_links(
+            tenant_id,
+            in_scope_rows,
+            noncurrent_scope=_projection_requests_noncurrent_scope(request),
+            canonical_up=canonical_up,
+            canonical_truncated=canonical_truncated,
+        )
 
         # Read the message spine only when the subject binds to it.
         messages: list[CommunicationMessage] = []
@@ -1230,6 +2205,49 @@ class Communication360Provider:
                 for m in messages
                 if str(m.tenant_id) == tenant_id and _message_matches_scope(m, scope)
             ]
+
+        response_links, response_links_truncated = _response_event_links(
+            request=request,
+            scope=scope,
+            messages=messages,
+            rows=in_scope_rows,
+        )
+
+        policy_state = await self._read_policy_state(
+            request,
+            messages,
+            scope=scope,
+            silver_up=silver_up,
+            silver_truncated=silver_truncated,
+        )
+        risk_flags = await self._read_risk_flags(
+            request,
+            scope,
+            messages=messages,
+            silver_up=silver_up,
+            silver_truncated=silver_truncated,
+        )
+        author_delegations: list[AuthorDelegationRead] = []
+        author_delegations_truncated = False
+        if (
+            not _projection_requests_noncurrent_scope(request)
+            and request.subject.kind == "agent"
+            and scope.identity_resolution_state == "resolved"
+            and scope.participant_entity_id
+            and canonical_up
+        ):
+            author_delegations, author_delegations_truncated = await read_author_delegations(
+                tenant_id=tenant_id,
+                agent_entity_id=scope.participant_entity_id,
+                rows=[
+                    row
+                    for row in in_scope_rows
+                    if _agent_author_binding_evidence(
+                        row, canonical_agent_id=scope.participant_entity_id
+                    )
+                ],
+                repository=self._delegations,
+            )
 
         degraded_reasons: list[str] = []
         if not silver_up:
@@ -1251,7 +2269,13 @@ class Communication360Provider:
                 canonical_truncated,
                 context,
                 journey_links,
+                profile_links,
                 risk_flags,
+                policy_state,
+                author_delegations,
+                author_delegations_truncated,
+                response_links,
+                response_links_truncated,
             ),
             self._state_section(
                 request,
@@ -1283,6 +2307,8 @@ class Communication360Provider:
                 canonical_up,
                 silver_truncated,
                 canonical_truncated,
+                author_delegations,
+                response_links,
             ),
             self._interactions_section(
                 request,
@@ -1290,6 +2316,8 @@ class Communication360Provider:
                 in_scope_rows,
                 canonical_up,
                 canonical_truncated,
+                author_delegations,
+                response_links,
             ),
             self._outcomes_section(context),
         ]
@@ -1302,8 +2330,13 @@ class Communication360Provider:
         )
         claims.extend(self._journey_link_claims(request, journey_links))
         claims.extend(self._risk_flag_claims(request, risk_flags))
-        if request.subject.kind == "agent" and scope.identity_resolution_state != "resolved":
-            degraded_reasons.append(scope.note or "agent_identity_unresolved")
+        claims.extend(self._author_delegation_claims(request, scope, in_scope_rows, author_delegations))
+        claims.extend(self._response_event_claims(request, response_links))
+        if (
+            request.subject.kind in {"agent", "entity"}
+            and scope.identity_resolution_state != "resolved"
+        ):
+            degraded_reasons.append(scope.note or f"{request.subject.kind}_identity_unresolved")
 
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -1318,28 +2351,484 @@ class Communication360Provider:
 
     # ── Defensive reads ────────────────────────────────────────────────────
 
+    async def _read_policy_state(
+        self,
+        request: ProjectionRequest,
+        messages: list[CommunicationMessage],
+        *,
+        scope: _Scope,
+        silver_up: bool,
+        silver_truncated: bool,
+    ) -> ConsentPolicyRead:
+        """Evaluate current consent only for exact, identity-bound recipients.
+
+        Communication facts preserve the purpose and subject binding used at
+        ingestion. The current consent decision always comes from the canonical
+        server authority; a historical receipt is returned only as historical
+        lineage and can never turn an unevaluated current state into an allow.
+        """
+        base: dict[str, Any] = {
+            "coverage": "unknown",
+            "reason": "no_exact_subject_linked_consent_purpose_observed",
+            "evaluation": "current_server_consent_authority_for_exact_subject_purpose_pairs",
+            "policyScope": "current_consent_only_for_exact_recipient_purposes",
+            "currentPolicyState": "not_evaluated",
+            "currentConsentState": "unknown",
+            "nonConsentPolicyState": "unknown",
+            "decisionEvidenceState": "not_persisted",
+            "historicalDecisionCoverage": "unknown",
+            "historicalDecisionCount": 0,
+            "historicalDecisions": [],
+            "currentDecisionCount": 0,
+            "currentEvaluations": [],
+            "evidenceRefs": [],
+        }
+
+        if _projection_requests_noncurrent_scope(request):
+            base["reason"] = "current_consent_not_evaluated_for_historical_request"
+            return ConsentPolicyRead("unknown", {"state": "unknown", **base})
+        if not scope.bindable:
+            base["reason"] = "message_subject_binding_unavailable_for_consent_policy"
+            return ConsentPolicyRead("unknown", {"state": "unknown", **base})
+        if not silver_up:
+            base["coverage"] = "partial"
+            base["reason"] = "communication_message_authority_unavailable_for_policy_inputs"
+            return ConsentPolicyRead("degraded", {"state": "degraded", **base})
+
+        inputs = _exact_consent_policy_inputs(messages, request.tenantId)
+        if not inputs:
+            if silver_truncated:
+                base["coverage"] = "partial"
+                base["reason"] = "communication_message_policy_inputs_truncated"
+                return ConsentPolicyRead("degraded", {"state": "degraded", **base})
+            base["historicalDecisionCoverage"] = "complete"
+            return ConsentPolicyRead("unknown", {"state": "unknown", **base})
+
+        pairs = sorted(inputs.items())[:_MAX_CONSENT_POLICY_READS]
+        read_truncated = len(inputs) > _MAX_CONSENT_POLICY_READS
+        evaluations: list[dict[str, Any]] = []
+        current_refs: list[EvidenceRef] = []
+        all_input_refs: list[EvidenceRef] = []
+        historical_decisions: list[dict[str, Any]] = []
+        authority_failed = False
+        for (subject_id, purpose), evidence in pairs:
+            evaluated_at = _utc_now_iso()
+            all_input_refs.extend(evidence["inputEvidenceRefs"])
+            all_input_refs.extend(evidence["historicalEvidenceRefs"])
+            historical_decisions.append(
+                {
+                    "subjectEntityId": subject_id,
+                    "purpose": purpose,
+                    "messageIds": list(evidence["messageIds"]),
+                    "outcomeAtCommunication": evidence["historicalOutcomeAtCommunication"],
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in evidence["historicalEvidenceRefs"]
+                    ],
+                }
+            )
+            try:
+                raw = await self._consent_policy.evaluate(
+                    request.tenantId, subject_id, purpose
+                )
+            except Exception:  # noqa: BLE001 - do not leak authority details
+                raw = None
+                authority_failed = True
+
+            allowed = (
+                raw.get("allowed")
+                if isinstance(raw, dict)
+                else getattr(raw, "allowed", None)
+            )
+            reason_code = (
+                raw.get("reason_code")
+                if isinstance(raw, dict)
+                else getattr(raw, "reason_code", None)
+            )
+            receipt_id = (
+                raw.get("receipt_id")
+                if isinstance(raw, dict)
+                else getattr(raw, "receipt_id", None)
+            )
+            authority_refs: list[EvidenceRef] = []
+            if allowed is True and isinstance(receipt_id, str) and receipt_id.strip():
+                decision = "allowed"
+                reason = None
+                authority_refs.append(
+                    EvidenceRef(
+                        id=receipt_id,
+                        type="event",
+                        source="governance.consent.authority",
+                        observedAt=evaluated_at,
+                        uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+                    )
+                )
+            elif allowed is False:
+                decision = "denied"
+                reason = (
+                    reason_code
+                    if isinstance(reason_code, str) and reason_code
+                    else "consent_denied"
+                )
+            else:
+                decision = "unknown"
+                reason = (
+                    "consent_authority_unavailable"
+                    if raw is None
+                    else "consent_authority_returned_unverifiable_result"
+                )
+                authority_failed = True
+
+            current_refs.extend(authority_refs)
+            evaluations.append(
+                {
+                    "subjectEntityId": subject_id,
+                    "purpose": purpose,
+                    "messageIds": list(evidence["messageIds"]),
+                    "decision": decision,
+                    "reasonCode": reason,
+                    "evaluatedAt": evaluated_at,
+                    "policyDecisionEvidencePersisted": False,
+                    "authorityEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in authority_refs
+                    ],
+                    "subjectEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in evidence["inputEvidenceRefs"]
+                    ],
+                }
+            )
+
+        decisions = {entry["decision"] for entry in evaluations}
+        if decisions == {"allowed"}:
+            current_consent_state = "allowed"
+        elif decisions == {"denied"}:
+            current_consent_state = "denied"
+        elif decisions == {"unknown"}:
+            current_consent_state = "unknown"
+        elif "unknown" in decisions:
+            current_consent_state = "partial"
+        else:
+            current_consent_state = "mixed"
+
+        incomplete = authority_failed or read_truncated or silver_truncated
+        slot_state = "degraded" if incomplete else "available"
+        reason = (
+            "consent_authority_unavailable_or_unverifiable_result"
+            if authority_failed
+            else "exact_consent_policy_inputs_truncated"
+            if read_truncated or silver_truncated
+            else "current_consent_evaluated_for_exact_subject_purpose_pairs_other_policy_unjoined"
+        )
+        all_refs = _dedupe_refs([*all_input_refs, *current_refs])
+        historical_count = sum(
+            item["outcomeAtCommunication"] == "allowed"
+            for item in historical_decisions
+        )
+        content = {
+            "state": slot_state,
+            "coverage": "partial",
+            "reason": reason,
+            "evaluation": "current_server_consent_authority_for_exact_subject_purpose_pairs",
+            "policyScope": "current_consent_only_for_exact_recipient_purposes",
+            "currentPolicyState": "partial",
+            "currentConsentState": current_consent_state,
+            "nonConsentPolicyState": "unknown",
+            "decisionEvidenceState": "not_persisted",
+            "historicalDecisionCoverage": "partial",
+            "historicalDecisionCount": historical_count,
+            "historicalDecisions": historical_decisions,
+            "currentDecisionCount": len(evaluations),
+            "currentEvaluations": evaluations,
+            "evidenceRefs": [
+                ref.model_dump(mode="json", exclude_none=True) for ref in all_refs
+            ],
+        }
+        return ConsentPolicyRead(slot_state, content)
+
+    async def _with_risk_assessments(
+        self,
+        read: RiskFlagRead,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+    ) -> RiskFlagRead:
+        """Join assessment output only after the same current consent gate."""
+        if not any(
+            ref.source == "governance.consent.authority"
+            and ref.type == "event"
+            and ref.id.strip()
+            for ref in read.authority_refs
+        ):
+            return replace(
+                read,
+                assessment_reason="current_analytics_consent_evidence_required",
+            )
+        reader = getattr(self._risk_signals, "assessments", None)
+        if not callable(reader):
+            return replace(read, assessment_reason="risk_assessment_authority_unavailable")
+        try:
+            rows = await reader(
+                tenant_id=tenant_id,
+                subject=subject,
+                limit=_MAX_RISK_ASSESSMENT_READS + 1,
+            )
+        except Exception:  # noqa: BLE001 - no source details cross the provider boundary
+            return replace(
+                read,
+                state="degraded",
+                reason="risk_assessment_authority_unavailable",
+                source_coverage_state="degraded",
+                assessment_state="degraded",
+                assessment_reason="risk_assessment_authority_unavailable",
+            )
+        if not isinstance(rows, list) or len(rows) > _MAX_RISK_ASSESSMENT_READS:
+            return replace(
+                read,
+                state="degraded",
+                reason="risk_assessment_read_truncated_or_invalid",
+                source_coverage_state="degraded",
+                assessment_state="degraded",
+                assessment_reason="risk_assessment_read_truncated_or_invalid",
+            )
+        assessments: list[RiskAssessment] = []
+        assessment_refs: list[EvidenceRef] = []
+        seen_ids: set[str] = set()
+        for raw in rows:
+            if (
+                not isinstance(raw, dict)
+                or raw.get("tenant_id") != tenant_id
+                or raw.get("subject_kind") != subject.kind
+                or raw.get("subject_id") != subject.id
+            ):
+                break
+            try:
+                assessment = RiskAssessment.model_validate(raw)
+            except Exception:  # noqa: BLE001 - malformed output is not evidence
+                break
+            refs = _risk_assessment_refs(assessment, tenant_id)
+            if (
+                assessment.assessment_id in seen_ids
+                or assessment.tenant_id != tenant_id
+                or assessment.subject_kind != subject.kind
+                or assessment.subject_id != subject.id
+                or refs is None
+            ):
+                break
+            seen_ids.add(assessment.assessment_id)
+            assessments.append(assessment)
+            assessment_refs.extend(refs)
+        else:
+            if not assessments:
+                return replace(
+                    read,
+                    assessment_reason="no_exact_subject_risk_assessment_observed",
+                )
+            state = read.state
+            reason = read.reason
+            source_coverage = read.source_coverage_state
+            if state == "unknown" and not read.signals:
+                state = "available"
+                reason = "exact_subject_risk_assessments_observed_under_current_analytics_consent"
+                source_coverage = "partial"
+            elif state == "available":
+                reason = "exact_subject_risk_signals_and_assessments_observed_under_current_analytics_consent"
+            return replace(
+                read,
+                state=state,
+                reason=reason,
+                evidence_refs=tuple(_dedupe_refs([*read.evidence_refs, *assessment_refs])),
+                source_coverage_state=source_coverage,
+                assessments=tuple(assessments),
+                assessment_state="partial",
+                assessment_reason="bounded_exact_subject_risk_assessment_outputs_history_and_freshness_unknown",
+            )
+        return replace(
+            read,
+            state="degraded",
+            reason="risk_assessment_scope_or_evidence_invalid",
+            source_coverage_state="degraded",
+            assessment_state="degraded",
+            assessment_reason="risk_assessment_scope_or_evidence_invalid",
+        )
+
     async def _read_risk_flags(
         self,
         request: ProjectionRequest,
         scope: _Scope,
+        *,
+        messages: list[CommunicationMessage],
+        silver_up: bool,
+        silver_truncated: bool,
     ) -> RiskFlagRead:
-        """Read only exact Risk360 subject keys; never infer a link to risk output."""
+        """Read exact Risk360 subjects, with current-policy gates for recipient joins.
+
+        For an entity subject, risk is read only when that same canonical entity
+        is an exact, identity-bound communication recipient. The communication
+        edge supplies identity context only: risk stays attached to the entity
+        Risk360 names and is never propagated to the sender, campaign, or thread.
+        """
         tenant_id = request.tenantId
         subject = request.subject
         if _projection_requests_noncurrent_scope(request):
             return RiskFlagRead("unknown", "risk_signal_temporal_lookup_unavailable")
         if subject.kind == "source":
             risk_subject = subject
+            try:
+                source_scope = await self._source_subject_scope.resolve(tenant_id, subject.id)
+            except Exception:  # noqa: BLE001 - identity authority is fail-closed
+                source_scope = SourceSubjectScopeRead(
+                    tenant_id,
+                    subject.id,
+                    "degraded",
+                    reason="source_identity_authority_unavailable",
+                )
+            if source_scope.tenant_id != tenant_id or source_scope.source_identity_id != subject.id:
+                return RiskFlagRead(
+                    "degraded",
+                    "source_identity_scope_mismatch",
+                    source_coverage_state="degraded",
+                )
+            if source_scope.state != "available" or not source_scope.canonical_entity_id:
+                state = "degraded" if source_scope.state == "degraded" else "unknown"
+                return RiskFlagRead(
+                    state,
+                    source_scope.reason or "source_identity_binding_unresolved",
+                    source_coverage_state="degraded" if state == "degraded" else "unknown",
+                )
+            source_identity_refs = tuple(
+                ref for ref in source_scope.evidence_refs if isinstance(ref, EvidenceRef)
+            )
+            if not source_identity_refs:
+                return RiskFlagRead(
+                    "unknown",
+                    "source_identity_binding_evidence_missing",
+                    source_coverage_state="unknown",
+                )
+            try:
+                policy = await self._consent_policy.evaluate(
+                    tenant_id, source_scope.canonical_entity_id, "analytics"
+                )
+            except Exception:  # noqa: BLE001 - consent authority is a fail-closed gate
+                return RiskFlagRead(
+                    "degraded",
+                    "source_analytics_consent_authority_unavailable",
+                    authority_refs=source_identity_refs,
+                    source_coverage_state="degraded",
+                )
+            allowed = (
+                policy.get("allowed")
+                if isinstance(policy, dict)
+                else getattr(policy, "allowed", None)
+            )
+            receipt_id = (
+                policy.get("receipt_id")
+                if isinstance(policy, dict)
+                else getattr(policy, "receipt_id", None)
+            )
+            if allowed is not True or not isinstance(receipt_id, str) or not receipt_id.strip():
+                return RiskFlagRead(
+                    "suppressed" if allowed is False else "unknown",
+                    "source_analytics_consent_not_established",
+                    authority_refs=source_identity_refs,
+                )
+            authority_refs = _dedupe_refs(
+                [
+                    *source_identity_refs,
+                    EvidenceRef(
+                        id=receipt_id,
+                        type="event",
+                        source="governance.consent.authority",
+                        observedAt=_utc_now_iso(),
+                        uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+                    ),
+                ]
+            )
         elif (
             subject.kind == "agent"
             and scope.identity_resolution_state == "resolved"
             and scope.participant_entity_id
         ):
             risk_subject = ProjectionSubject(kind="agent", id=scope.participant_entity_id)
+            agent_identity_refs = tuple(scope.identity_evidence)
+            try:
+                policy = await self._consent_policy.evaluate(
+                    tenant_id, scope.participant_entity_id, "analytics"
+                )
+            except Exception:  # noqa: BLE001 - consent authority is a fail-closed gate
+                return RiskFlagRead(
+                    "degraded",
+                    "agent_analytics_consent_authority_unavailable",
+                    authority_refs=agent_identity_refs,
+                    source_coverage_state="degraded",
+                )
+            allowed = (
+                policy.get("allowed")
+                if isinstance(policy, dict)
+                else getattr(policy, "allowed", None)
+            )
+            receipt_id = (
+                policy.get("receipt_id")
+                if isinstance(policy, dict)
+                else getattr(policy, "receipt_id", None)
+            )
+            policy_state = (
+                policy.get("state")
+                if isinstance(policy, dict)
+                else getattr(policy, "state", None)
+            )
+            ambiguous = (
+                policy.get("ambiguous") is True
+                if isinstance(policy, dict)
+                else getattr(policy, "ambiguous", None) is True
+            ) or (isinstance(policy_state, str) and policy_state.strip().lower() == "ambiguous")
+            # The canonical consent authority returns an affirmative receipt
+            # only when the exact tenant/subject/purpose check succeeds. Any
+            # denial, ambiguity, malformed result, or missing receipt blocks
+            # the RiskSignal read.
+            if (
+                ambiguous
+                or allowed is not True
+                or not isinstance(receipt_id, str)
+                or not receipt_id.strip()
+            ):
+                return RiskFlagRead(
+                    "suppressed" if allowed is False else "unknown",
+                    "agent_analytics_consent_not_established",
+                    authority_refs=agent_identity_refs,
+                )
+            authority_refs = _dedupe_refs(
+                [
+                    *agent_identity_refs,
+                    EvidenceRef(
+                        id=receipt_id,
+                        type="event",
+                        source="governance.consent.authority",
+                        observedAt=_utc_now_iso(),
+                        uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+                    ),
+                ]
+            )
+        elif (
+            subject.kind == "entity"
+            and scope.identity_resolution_state == "resolved"
+            and scope.participant_entity_id == subject.id
+        ):
+            risk_subject = ProjectionSubject(kind="entity", id=subject.id)
         else:
             return RiskFlagRead(
                 "unknown",
                 "risk360_does_not_serve_this_communication_subject_kind_or_identity_is_unresolved",
+            )
+
+        if risk_subject.kind == "entity":
+            return await self._read_recipient_risk_flags(
+                request,
+                scope,
+                messages=messages,
+                silver_up=silver_up,
+                silver_truncated=silver_truncated,
             )
 
         try:
@@ -1349,9 +2838,27 @@ class Communication360Provider:
                 limit=_MAX_RISK_SIGNAL_READS + 1,
             )
         except Exception:  # noqa: BLE001 - backing-source details stay private
-            return RiskFlagRead("degraded", "risk_signal_authority_unavailable")
+            return await self._with_risk_assessments(
+                RiskFlagRead(
+                    "degraded",
+                    "risk_signal_authority_unavailable",
+                    authority_refs=tuple(authority_refs),
+                    source_coverage_state="degraded",
+                ),
+                tenant_id=tenant_id,
+                subject=risk_subject,
+            )
         if not isinstance(rows, list):
-            return RiskFlagRead("degraded", "risk_signal_authority_returned_invalid_rows")
+            return await self._with_risk_assessments(
+                RiskFlagRead(
+                    "degraded",
+                    "risk_signal_authority_returned_invalid_rows",
+                    authority_refs=tuple(authority_refs),
+                    source_coverage_state="degraded",
+                ),
+                tenant_id=tenant_id,
+                subject=risk_subject,
+            )
 
         signals: list[RiskSignal] = []
         invalid_rows = False
@@ -1374,42 +2881,328 @@ class Communication360Provider:
                 continue
             signals.append(signal)
 
-        refs = _dedupe_refs([ref for signal in signals for ref in signal.evidence_refs])
-        identity_refs = (
-            scope.identity_evidence if risk_subject.kind == "agent" else ()
+        record_refs = [
+            EvidenceRef(
+                id=signal.signal_id,
+                type="event",
+                source="risk360/risk_signals",
+                observedAt=(
+                    signal.observed_at.isoformat() if signal.observed_at is not None else None
+                ),
+            )
+            for signal in signals
+        ]
+        refs = _dedupe_refs(
+            [*record_refs, *(ref for signal in signals for ref in signal.evidence_refs)]
         )
-        refs = _dedupe_refs([*identity_refs, *refs])
+        refs = _dedupe_refs([*authority_refs, *refs])
         if len(rows) > _MAX_RISK_SIGNAL_READS or invalid_rows:
-            return RiskFlagRead(
+            read = RiskFlagRead(
                 "degraded",
                 "risk_signal_read_truncated_or_contained_unscoped_records",
                 tuple(refs),
                 tuple(signals),
-                tuple(identity_refs),
+                tuple(authority_refs),
+                "degraded",
             )
-        if not signals:
-            return RiskFlagRead("unknown", "no_exact_subject_risk_signal_observed")
-        return RiskFlagRead(
-            "available",
-            "tenant_scoped_risk_signals_observed_for_exact_subject",
-            tuple(refs),
-            tuple(signals),
-            tuple(identity_refs),
+        elif not signals:
+            read = RiskFlagRead(
+                "unknown",
+                "no_exact_subject_risk_signal_observed",
+                tuple(authority_refs),
+                authority_refs=tuple(authority_refs),
+            )
+        else:
+            read = RiskFlagRead(
+                "available",
+                "tenant_scoped_risk_signals_observed_for_exact_subject",
+                tuple(refs),
+                tuple(signals),
+                tuple(authority_refs),
+                "partial",
+            )
+        return await self._with_risk_assessments(
+            read,
+            tenant_id=tenant_id,
+            subject=risk_subject,
+        )
+
+    async def _read_recipient_risk_flags(
+        self,
+        request: ProjectionRequest,
+        scope: _Scope,
+        *,
+        messages: list[CommunicationMessage],
+        silver_up: bool,
+        silver_truncated: bool,
+    ) -> RiskFlagRead:
+        """Join recipient risk only for the same resolved entity and current consent."""
+        tenant_id = request.tenantId
+        subject_id = request.subject.id
+        base_authority_refs = tuple(
+            ref
+            for ref in scope.identity_evidence
+            if ref.id == subject_id and ref.source == "entity_registry" and ref.type == "entity"
+        )
+        if scope.identity_resolution_state != "resolved" or not base_authority_refs:
+            return RiskFlagRead(
+                "unknown",
+                "recipient_risk_requires_resolved_tenant_entity_identity",
+                authority_refs=base_authority_refs,
+            )
+        if not silver_up:
+            return RiskFlagRead(
+                "degraded",
+                "communication_recipient_identity_authority_unavailable",
+                authority_refs=base_authority_refs,
+                source_coverage_state="degraded",
+            )
+
+        candidates: dict[str, CommunicationMessage] = {}
+        invalid_binding_seen = False
+        for message in messages:
+            if (
+                message.tenant_id != tenant_id
+                or message.recipient_entity_id != subject_id
+                or not message.evidence_refs
+            ):
+                continue
+            if not _has_exact_entity_binding(
+                side="recipient",
+                entity_id=message.recipient_entity_id,
+                binding_id=message.recipient_identity_binding_id,
+                evidence_ref=message.recipient_identity_evidence_ref,
+                expected_entity_id=subject_id,
+            ):
+                invalid_binding_seen = True
+                continue
+            binding_id = message.recipient_identity_binding_id
+            if isinstance(binding_id, str):
+                candidates.setdefault(binding_id, message)
+        if not candidates:
+            if silver_truncated or invalid_binding_seen:
+                return RiskFlagRead(
+                    "degraded",
+                    "communication_recipient_identity_coverage_incomplete",
+                    authority_refs=base_authority_refs,
+                    source_coverage_state="degraded",
+                )
+            return RiskFlagRead(
+                "unknown",
+                "exact_recipient_identity_not_observed",
+                authority_refs=base_authority_refs,
+            )
+
+        candidate_items = sorted(candidates.items())
+        read_truncated = len(candidate_items) > _MAX_RECIPIENT_RISK_IDENTITY_READS
+        candidate_items = candidate_items[:_MAX_RECIPIENT_RISK_IDENTITY_READS]
+        binding_refs: list[EvidenceRef] = []
+        identity_incomplete = False
+        resolved_binding_seen = False
+        for binding_id, _message in candidate_items:
+            try:
+                binding = await self._recipient_identity.resolve(tenant_id, binding_id, subject_id)
+            except Exception:  # noqa: BLE001 - identity details stay private
+                binding = RecipientIdentityRead(
+                    state="unknown", reason="recipient_identity_authority_unavailable"
+                )
+            valid_binding_refs = [
+                ref
+                for ref in binding.evidence
+                if ref.id == binding_id
+                and ref.type == "entity"
+                and ref.source == "comms_provider_identities"
+                and ref.uri == f"store://comms_provider_identities/{quote(binding_id, safe='')}"
+            ]
+            if (
+                binding.state != "resolved"
+                or binding.canonical_entity_id != subject_id
+                or not valid_binding_refs
+            ):
+                identity_incomplete = True
+                continue
+            resolved_binding_seen = True
+            binding_refs.extend(valid_binding_refs)
+
+        if not resolved_binding_seen:
+            return RiskFlagRead(
+                "degraded" if identity_incomplete or read_truncated else "unknown",
+                "recipient_identity_authority_unavailable_or_unresolved",
+                authority_refs=base_authority_refs,
+                source_coverage_state=(
+                    "degraded" if identity_incomplete or read_truncated else "unknown"
+                ),
+            )
+
+        try:
+            policy = await self._consent_policy.evaluate(tenant_id, subject_id, "analytics")
+        except Exception:  # noqa: BLE001 - consent authority is a fail-closed gate
+            return RiskFlagRead(
+                "degraded",
+                "recipient_analytics_consent_authority_unavailable",
+                authority_refs=_dedupe_refs([*base_authority_refs, *binding_refs]),
+                source_coverage_state="degraded",
+            )
+        allowed = (
+            policy.get("allowed") if isinstance(policy, dict) else getattr(policy, "allowed", None)
+        )
+        receipt_id = (
+            policy.get("receipt_id")
+            if isinstance(policy, dict)
+            else getattr(policy, "receipt_id", None)
+        )
+        if allowed is not True or not isinstance(receipt_id, str) or not receipt_id.strip():
+            return RiskFlagRead(
+                "suppressed" if allowed is False else "unknown",
+                "recipient_analytics_consent_not_established",
+                authority_refs=_dedupe_refs([*base_authority_refs, *binding_refs]),
+            )
+
+        policy_ref = EvidenceRef(
+            id=receipt_id,
+            type="event",
+            source="governance.consent.authority",
+            observedAt=_utc_now_iso(),
+            uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+        )
+        authority_refs = _dedupe_refs([*base_authority_refs, *binding_refs, policy_ref])
+        risk_subject = ProjectionSubject(kind="entity", id=subject_id)
+        try:
+            rows = await self._risk_signals.signals(
+                tenant_id=tenant_id,
+                subject=risk_subject,
+                limit=_MAX_RISK_SIGNAL_READS + 1,
+            )
+        except Exception:  # noqa: BLE001 - backing-source details stay private
+            return await self._with_risk_assessments(
+                RiskFlagRead(
+                    "degraded",
+                    "risk_signal_authority_unavailable",
+                    tuple(authority_refs),
+                    authority_refs=tuple(authority_refs),
+                    source_coverage_state="degraded",
+                ),
+                tenant_id=tenant_id,
+                subject=risk_subject,
+            )
+        if not isinstance(rows, list):
+            return await self._with_risk_assessments(
+                RiskFlagRead(
+                    "degraded",
+                    "risk_signal_authority_returned_invalid_rows",
+                    tuple(authority_refs),
+                    authority_refs=tuple(authority_refs),
+                    source_coverage_state="degraded",
+                ),
+                tenant_id=tenant_id,
+                subject=risk_subject,
+            )
+
+        signals: list[RiskSignal] = []
+        invalid_rows = False
+        for raw in rows[:_MAX_RISK_SIGNAL_READS]:
+            if (
+                not isinstance(raw, dict)
+                or str(raw.get("tenant_id") or "") != tenant_id
+                or str(raw.get("subject_kind") or "") != "entity"
+                or str(raw.get("subject_id") or "") != subject_id
+            ):
+                invalid_rows = True
+                continue
+            try:
+                signal = RiskSignal(**raw)
+            except Exception:  # noqa: BLE001 - malformed authority row stays degraded
+                invalid_rows = True
+                continue
+            if not signal.evidence_refs:
+                invalid_rows = True
+                continue
+            signals.append(signal)
+
+        risk_record_refs = [
+            EvidenceRef(
+                id=signal.signal_id,
+                type="event",
+                source="risk360/risk_signals",
+                observedAt=(
+                    signal.observed_at.isoformat() if signal.observed_at is not None else None
+                ),
+            )
+            for signal in signals
+        ]
+        refs = _dedupe_refs(
+            [
+                *authority_refs,
+                *risk_record_refs,
+                *(ref for signal in signals for ref in signal.evidence_refs),
+            ]
+        )
+        incomplete = (
+            len(rows) > _MAX_RISK_SIGNAL_READS
+            or invalid_rows
+            or read_truncated
+            or identity_incomplete
+            or silver_truncated
+        )
+        if incomplete:
+            read = RiskFlagRead(
+                "degraded",
+                "risk_signal_or_recipient_identity_coverage_incomplete",
+                tuple(refs),
+                tuple(signals),
+                tuple(authority_refs),
+                "degraded",
+            )
+        elif not signals:
+            read = RiskFlagRead(
+                "unknown",
+                "no_exact_current_recipient_risk_signal_observed",
+                tuple(refs),
+                authority_refs=tuple(authority_refs),
+            )
+        else:
+            read = RiskFlagRead(
+                "available",
+                "exact_recipient_risk_signal_observed_under_current_analytics_consent",
+                tuple(refs),
+                tuple(signals),
+                tuple(authority_refs),
+                "partial",
+            )
+        return await self._with_risk_assessments(
+            read,
+            tenant_id=tenant_id,
+            subject=risk_subject,
         )
 
     def _risk_flag_claims(
         self, request: ProjectionRequest, read: RiskFlagRead
     ) -> list[ClaimEnvelope]:
-        """Render risk signal records while preserving their epistemic status."""
+        """Render exact risk inputs and outputs without communication causality."""
         domain_slot_ids = _communication_slot_ids(
             request.subject.kind, {"risk_flags"}, {"evidence", "state"}
         )
-        return [
+        claims = [
             ClaimEnvelope(
                 id=f"risk-signal.{signal.signal_id}",
                 kind="communication_risk_signal_record",
                 subject=request.subject,
-                evidenceRefs=_dedupe_refs([*read.identity_refs, *signal.evidence_refs]),
+                evidenceRefs=_dedupe_refs(
+                    [
+                        *read.authority_refs,
+                        EvidenceRef(
+                            id=signal.signal_id,
+                            type="event",
+                            source="risk360/risk_signals",
+                            observedAt=(
+                                signal.observed_at.isoformat()
+                                if signal.observed_at is not None
+                                else None
+                            ),
+                        ),
+                        *signal.evidence_refs,
+                    ]
+                ),
                 claims=[
                     f"Canonical risk signal {signal.signal_id} is recorded for this exact subject.",
                     f"Risk dimension: {signal.risk_dimension}; source: {signal.source}.",
@@ -1421,6 +3214,28 @@ class Communication360Provider:
             for signal in read.signals
             if signal.evidence_refs
         ]
+        for assessment in read.assessments:
+            refs = _risk_assessment_refs(assessment, request.tenantId)
+            if not refs:
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk-assessment.{assessment.assessment_id}",
+                    kind="communication_risk_assessment_observed",
+                    subject=request.subject,
+                    evidenceRefs=_dedupe_refs([*read.authority_refs, *refs]),
+                    claims=[
+                        f"Canonical risk assessment {assessment.assessment_id} is recorded "
+                        "for the exact consent-gated Risk360 subject.",
+                        "This assessment does not establish communication causality "
+                        "or risk propagation to another subject.",
+                    ],
+                    confidence=assessment.confidence,
+                    claimState=assessment.claim_state,
+                    domainSlotIds=domain_slot_ids,
+                )
+            )
+        return claims
 
     async def _read_journey_links(
         self,
@@ -1555,6 +3370,211 @@ class Communication360Provider:
             tuple(links),
         )
 
+    async def _read_profile_links(
+        self,
+        tenant_id: str,
+        rows: list[dict[str, Any]],
+        *,
+        noncurrent_scope: bool,
+        canonical_up: bool,
+        canonical_truncated: bool,
+    ) -> ProfileLinksRead:
+        """Resolve direct profile IDs only when their communication fact has evidence."""
+        refs_by_id: dict[str, list[EvidenceRef]] = {}
+        ungrounded_ids: set[str] = set()
+        overflow = False
+        for row in rows:
+            raw_ids = _row_reference_values(row, "profile_id", "profile_ids")
+            if not raw_ids:
+                continue
+            fact_ref = _row_evidence(row)
+            for profile_id in raw_ids:
+                if profile_id not in refs_by_id and profile_id not in ungrounded_ids:
+                    if len(refs_by_id) + len(ungrounded_ids) >= _MAX_PROFILE_LINK_READS:
+                        overflow = True
+                        continue
+                if fact_ref is None:
+                    ungrounded_ids.add(profile_id)
+                    continue
+                ungrounded_ids.discard(profile_id)
+                refs = refs_by_id.setdefault(profile_id, [])
+                if all(existing.id != fact_ref.id for existing in refs):
+                    refs.append(fact_ref)
+
+        source_refs = _dedupe_refs([ref for refs in refs_by_id.values() for ref in refs])
+        if not canonical_up:
+            return ProfileLinksRead(
+                "degraded",
+                "communication_profile_reference_authority_unavailable",
+                tuple(source_refs),
+            )
+
+        missing_evidence_count = len(ungrounded_ids - set(refs_by_id))
+        reference_ids = sorted(refs_by_id)
+        if not reference_ids:
+            if missing_evidence_count:
+                return ProfileLinksRead(
+                    "degraded", "profile_reference_evidence_missing", tuple(source_refs)
+                )
+            if canonical_truncated:
+                return ProfileLinksRead(
+                    "degraded", REASON_SOURCE_READ_TRUNCATED, tuple(source_refs)
+                )
+            return ProfileLinksRead(
+                "unknown", "communication_profile_link_not_observed", tuple(source_refs)
+            )
+
+        if noncurrent_scope:
+            links = tuple(
+                {
+                    "profileId": profile_id,
+                    "canonicalEntityId": None,
+                    "resolutionState": "unknown",
+                    "reason": "historical_profile_identity_lookup_unavailable",
+                    "communicationEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in refs_by_id.get(profile_id, [])
+                    ],
+                    "identityEvidenceRefs": [],
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in refs_by_id.get(profile_id, [])
+                    ],
+                    "temporalState": "unknown",
+                    "freshnessState": "unknown",
+                }
+                for profile_id in reference_ids
+            )
+            incomplete = overflow or canonical_truncated or bool(missing_evidence_count)
+            return ProfileLinksRead(
+                "degraded" if incomplete else "unknown",
+                REASON_SOURCE_READ_TRUNCATED
+                if overflow or canonical_truncated
+                else "profile_reference_evidence_missing"
+                if missing_evidence_count
+                else "historical_profile_identity_lookup_unavailable",
+                tuple(source_refs),
+                links,
+            )
+
+        read_ids = [profile_id for profile_id in reference_ids if profile_id in refs_by_id]
+        read_ids = read_ids[:_MAX_PROFILE_LINK_READS]
+        semaphore = asyncio.Semaphore(8)
+
+        async def read_one(profile_id: str) -> tuple[str, ProfileLinkRead]:
+            async with semaphore:
+                try:
+                    result = await self._profile_links.resolve(tenant_id, profile_id)
+                except Exception:  # noqa: BLE001 - profile identity details stay private
+                    result = ProfileLinkRead(
+                        "degraded", reason="profile_identity_authority_unavailable"
+                    )
+            if not isinstance(result, ProfileLinkRead):
+                result = ProfileLinkRead(
+                    "degraded", reason="profile_identity_authority_invalid_response"
+                )
+            return profile_id, result
+
+        results = await asyncio.gather(*(read_one(profile_id) for profile_id in read_ids))
+        results_by_id = dict(results)
+        links: list[dict[str, Any]] = []
+        profile_refs: list[EvidenceRef] = []
+        unresolved = False
+        degraded = overflow or canonical_truncated or bool(missing_evidence_count)
+        authority_unavailable = False
+
+        for profile_id in reference_ids:
+            communication_refs = refs_by_id.get(profile_id, [])
+            read = results_by_id.get(profile_id)
+            profile_evidence = [
+                ref
+                for ref in (read.evidence if read is not None else ())
+                if read is not None
+                and read.state == "resolved"
+                and read.profile_id == profile_id
+                and isinstance(ref, EvidenceRef)
+                and ref.id == profile_id
+                and ref.type == "entity"
+                and ref.source == "identity.profiles"
+            ]
+            entity_evidence = [
+                ref
+                for ref in (read.evidence if read is not None else ())
+                if read is not None
+                and read.state == "resolved"
+                and read.canonical_entity_id == profile_id
+                and isinstance(ref, EvidenceRef)
+                and ref.id == profile_id
+                and ref.type == "entity"
+                and ref.source == "entity_registry"
+            ]
+            resolved = bool(
+                read is not None
+                and read.state == "resolved"
+                and read.profile_id == profile_id
+                and read.canonical_entity_id == profile_id
+                and profile_evidence
+                and entity_evidence
+            )
+            reason = (
+                "exact_tenant_profile_and_canonical_human_entity_joined_to_typed_communication_reference"
+                if resolved
+                else read.reason
+                if read is not None and isinstance(read.reason, str) and read.reason
+                else "profile_identity_authority_read_limit_exceeded"
+                if profile_id in refs_by_id and read is None
+                else "profile_identity_reference_not_resolved"
+            )
+            if read is not None and read.state in {"degraded", "ambiguous"}:
+                degraded = True
+                authority_unavailable = authority_unavailable or read.state == "degraded"
+            if not resolved:
+                unresolved = True
+            else:
+                profile_refs.extend([*profile_evidence, *entity_evidence])
+            links.append(
+                {
+                    "profileId": profile_id,
+                    "canonicalEntityId": profile_id if resolved else None,
+                    "resolutionState": "resolved" if resolved else "unknown",
+                    "reason": reason,
+                    "communicationEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in communication_refs
+                    ],
+                    "identityEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in [*profile_evidence, *entity_evidence]
+                    ],
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in _dedupe_refs(
+                            [*communication_refs, *profile_evidence, *entity_evidence]
+                        )
+                    ],
+                    "temporalState": "unknown",
+                    "freshnessState": "unknown",
+                }
+            )
+
+        all_refs = _dedupe_refs([*source_refs, *profile_refs])
+        all_resolved = not unresolved and not degraded
+        state = "available" if all_resolved else "degraded" if degraded else "unknown"
+        reason = (
+            "exact_tenant_profile_and_canonical_human_entity_records_joined_to_evidence_backed_communication_references"
+            if all_resolved
+            else REASON_SOURCE_READ_TRUNCATED
+            if canonical_truncated or overflow
+            else "profile_reference_evidence_missing"
+            if missing_evidence_count
+            else "profile_identity_authority_unavailable"
+            if authority_unavailable
+            else "one_or_more_profile_references_lack_joinable_identity_evidence"
+            if unresolved
+            else "profile_identity_authority_unavailable"
+        )
+        return ProfileLinksRead(state, reason, tuple(all_refs), tuple(links))
+
     def _journey_link_claims(
         self, request: ProjectionRequest, read: JourneyLinkRead
     ) -> list[ClaimEnvelope]:
@@ -1624,7 +3644,13 @@ class Communication360Provider:
         canonical_truncated: bool,
         context: ProjectionContext,
         journey_links: JourneyLinkRead,
+        profile_links: ProfileLinksRead,
         risk_flags: RiskFlagRead,
+        policy_state: ConsentPolicyRead,
+        author_delegations: list[AuthorDelegationRead],
+        author_delegations_truncated: bool,
+        response_links: list[ResponseEventRead],
+        response_links_truncated: bool,
     ) -> ProjectionSection:
         """Summary of a complete message scope or exact canonical fact scope."""
         fact_rows = _communication_fact_rows(rows)
@@ -1720,7 +3746,13 @@ class Communication360Provider:
                     canonical_up=canonical_up,
                     canonical_truncated=canonical_truncated,
                     journey_links=journey_links,
+                    profile_links=profile_links,
                     risk_flags=risk_flags,
+                    policy_state=policy_state,
+                    author_delegations=author_delegations,
+                    author_delegations_truncated=author_delegations_truncated,
+                    response_links=response_links,
+                    response_links_truncated=response_links_truncated,
                 ),
             },
             warnings=reasons or None,
@@ -2131,6 +4163,8 @@ class Communication360Provider:
         canonical_up: bool,
         silver_truncated: bool,
         canonical_truncated: bool,
+        author_delegations: list[AuthorDelegationRead],
+        response_links: list[ResponseEventRead],
     ) -> ProjectionSection:
         """evidence — every reused EvidenceRef grounding the sequence, deduped."""
         refs: list[EvidenceRef] = list(scope.identity_evidence)
@@ -2145,6 +4179,10 @@ class Communication360Provider:
             ref = _row_evidence(row)
             if ref is not None:
                 refs.append(ref)
+        for read in author_delegations:
+            refs.extend(read.evidence)
+        for link in response_links:
+            refs.extend(link.evidence)
         deduped = _dedupe_refs(refs)
         state = "available"
         if (
@@ -2184,6 +4222,8 @@ class Communication360Provider:
         rows: list[dict[str, Any]],
         canonical_up: bool,
         canonical_truncated: bool,
+        author_delegations: list[AuthorDelegationRead],
+        response_links: list[ResponseEventRead],
     ) -> ProjectionSection:
         """interactions — tenant-bound canonical communication records."""
         if not scope.canonical_fact_bindable:
@@ -2212,6 +4252,8 @@ class Communication360Provider:
                 "scope": scope.as_dict(),
                 "count": len(interactions),
                 "interactions": interactions,
+                "authorDelegationEvaluations": [read.as_dict() for read in author_delegations],
+                "responseEventLinks": [link.as_dict() for link in response_links],
                 "sourceTruncated": canonical_truncated,
                 "sourceCompleteness": (
                     "not_read"
@@ -2253,10 +4295,26 @@ class Communication360Provider:
             base["messageId"] = payload.get("message_id")
             base["conversationId"] = payload.get("conversation_id")
         elif kind == "participant_binding":
+            binding_evidence_refs = _trusted_participant_source_evidence(row)
+            if binding_evidence_refs:
+                base["evidenceRefIds"] = [
+                    ref.id
+                    for ref in _dedupe_refs(
+                    [
+                        *([evidence] if evidence is not None else []),
+                        *binding_evidence_refs,
+                    ]
+                    )
+                ]
+                base["sourceRosterState"] = payload.get("roster_completeness_state")
+                base["sourceProvider"] = payload.get("provider")
+                base["sourceProviderAccountId"] = payload.get("provider_account_id")
+                base["providerConversationId"] = payload.get("provider_conversation_id")
             base["role"] = payload.get("role")
             base["entityId"] = payload.get("entity_id") or row.get("actor_id")
             base["entityType"] = payload.get("entity_type")
             base["communicationScope"] = payload.get("communication_scope")
+            base["communicationScopeKind"] = payload.get("communication_scope_kind")
             base["principalEntityId"] = payload.get("principal_entity_id")
             base["delegationGrantId"] = payload.get("delegation_grant_id")
             base["validFrom"] = payload.get("valid_from")
@@ -2396,6 +4454,77 @@ class Communication360Provider:
 
     # ── Claims ─────────────────────────────────────────────────────────────
 
+    def _response_event_claims(
+        self,
+        request: ProjectionRequest,
+        links: list[ResponseEventRead],
+    ) -> list[ClaimEnvelope]:
+        subject = ProjectionSubject(kind=request.subject.kind, id=request.subject.id)
+        return [
+            ClaimEnvelope(
+                id=f"communication_response_link.{link.fact_id}",
+                kind="communication_response_message_observation",
+                subject=subject,
+                evidenceRefs=list(link.evidence),
+                claims=[
+                    f"response-like communication act {link.fact_id} references exact message {link.message_id}",
+                    "the message replied to and causal response outcome are not established",
+                ],
+                confidence=1.0,
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["response_events"],
+            )
+            for link in links
+            if link.state == "linked" and link.message_id and link.evidence
+        ]
+
+    def _author_delegation_claims(
+        self,
+        request: ProjectionRequest,
+        scope: _Scope,
+        rows: list[dict[str, Any]],
+        reads: list[AuthorDelegationRead],
+    ) -> list[ClaimEnvelope]:
+        if request.subject.kind != "agent" or scope.identity_resolution_state != "resolved":
+            return []
+        rows_by_id = {
+            row.get("fact_id") or row.get("idempotency_key"): row
+            for row in rows
+            if row.get("kind") == "participant_binding"
+        }
+        claims: list[ClaimEnvelope] = []
+        for read in reads:
+            if read.state not in {"allowed", "denied"} or not read.grant_id:
+                continue
+            row = rows_by_id.get(read.fact_id)
+            author_refs = (
+                _agent_author_binding_evidence(
+                    row, canonical_agent_id=scope.participant_entity_id
+                )
+                if isinstance(row, dict)
+                else []
+            )
+            if not author_refs or not read.evidence:
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"communication_author_delegation.{read.fact_id}",
+                    kind="communication_author_delegation_observation",
+                    subject=ProjectionSubject(kind="agent", id=request.subject.id),
+                    evidenceRefs=_dedupe_refs(
+                        [*scope.identity_evidence, *author_refs, *read.evidence]
+                    ),
+                    claims=[
+                        f"agent author delegation {read.state} for the recorded communication event",
+                        "this event-time observation is not a current action authorization",
+                    ],
+                    confidence=1.0,
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["agent_authorship"],
+                )
+            )
+        return claims
+
     def _build_claims(
         self,
         request: ProjectionRequest,
@@ -2447,8 +4576,14 @@ class Communication360Provider:
             if request.subject.kind == "campaign" and message.campaign_id == request.subject.id:
                 message_slots.add("campaign_links")
                 claim_text.append(f"message {message.message_id} is linked to this campaign")
+            if request.subject.kind == "entity":
+                message_slots.add("communications")
+                claim_text.append(
+                    f"message {message.message_id} has an exact identity-bound endpoint for this entity"
+                )
             is_agent_author = bool(
-                request.subject.kind == "agent"
+                not _projection_requests_noncurrent_scope(request)
+                and request.subject.kind == "agent"
                 and scope.identity_resolution_state == "resolved"
                 and message.sender_entity_id in scope.participant_identity_ids
                 and message.sender_identity_binding_id
@@ -2482,7 +4617,16 @@ class Communication360Provider:
             if not fact_id:
                 continue
             fact_kind = str(row.get("kind") or "unknown")
-            domain_slot_ids = _canonical_communication_slot_ids(request.subject.kind, row)
+            domain_slot_ids = _canonical_communication_slot_ids(
+                request.subject.kind,
+                (
+                    scope.participant_entity_id or ""
+                    if request.subject.kind == "agent"
+                    else request.subject.id
+                ),
+                row,
+                allow_agent_authorship=not _projection_requests_noncurrent_scope(request),
+            )
             payload = _payload_of(row)
             claim_text = [
                 f"canonical communication fact {fact_id} recorded",
@@ -2491,17 +4635,23 @@ class Communication360Provider:
             campaign_ids = _row_reference_values(row, "campaign_id", "campaign_ids")
             if request.subject.kind == "campaign" and request.subject.id in campaign_ids:
                 claim_text.append(f"canonical communication fact references campaign {request.subject.id}")
+            journey_ids = _row_reference_values(row, "journey_id", "journey_ids")
+            if request.subject.kind == "journey" and request.subject.id in journey_ids:
+                claim_text.append(f"canonical communication fact references journey {request.subject.id}")
             if fact_kind in {"conversation", "provider_thread"}:
                 claim_text.append(f"canonical {fact_kind} record {fact_id} observed")
             if fact_kind == "participant_binding":
                 claim_text.append("canonical communication participant binding observed")
-                is_agent_author = (
-                    request.subject.kind == "agent"
-                    and str(payload.get("role") or "").strip().lower() == "author"
-                    and (
-                        str(payload.get("entity_type") or "").strip().lower() == "agent"
-                        or bool(payload.get("agent_id"))
-                        or bool(row.get("agent_id"))
+                if _trusted_participant_source_evidence(row):
+                    claim_text.append(
+                        "provider-authenticated participant role assertion and source evidence observed"
+                    )
+                is_agent_author = bool(
+                    not _projection_requests_noncurrent_scope(request)
+                    and request.subject.kind == "agent"
+                    and scope.participant_entity_id
+                    and _agent_author_binding_evidence(
+                        row, canonical_agent_id=scope.participant_entity_id
                     )
                 )
                 if is_agent_author:
@@ -2519,7 +4669,17 @@ class Communication360Provider:
                     id=f"canonical_fact.{fact_id}",
                     kind="communication_fact_observation",
                     subject=subject,
-                    evidenceRefs=[evidence],
+                    evidenceRefs=_dedupe_refs(
+                        [
+                            *scope.identity_evidence,
+                            evidence,
+                            *(
+                                _trusted_participant_source_evidence(row)
+                                if fact_kind == "participant_binding"
+                                else []
+                            ),
+                        ]
+                    ),
                     claims=claim_text,
                     confidence=1.0,
                     claimState=EpistemicStatus.OBSERVED,

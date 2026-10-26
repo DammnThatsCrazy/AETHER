@@ -55,6 +55,7 @@ def test_unbound_surface_slot_must_name_its_implementation_gap() -> None:
         slot for slot in campaign["domainSlots"] if slot["id"] == "signal_sources"
     )
     slot["projectionBindings"] = []
+    slot.pop("partialImplementationReason", None)
     slot["unboundReason"] = "canonical_signal_source_provider_not_connected"
 
     assert validate_product_surface_catalog(registry) == []
@@ -332,6 +333,81 @@ def test_episode360_legacy_identity_context_only_binds_supported_subject_kinds()
     )
 
 
+def test_episode360_communications_binds_exact_facts_with_partial_message_coverage() -> None:
+    registry = _registry()
+    surface = next(
+        item for item in registry["productSurfaces"] if item["id"] == "episode360"
+    )
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "communications")
+
+    assert slot["canonicalAuthorityRefs"] == ["communication_facts"]
+    assert slot["projectionBindings"] == [
+        {
+            "projectionId": "communication360",
+            "role": "supporting",
+            "sectionIds": ["interactions"],
+            "subjectKinds": ["episode"],
+        }
+    ]
+    assert slot["partialImplementationReason"] == (
+        "episode_communication_facts_are_exact_but_message_spine_join_and_completeness_are_unavailable"
+    )
+
+
+def test_execution360_risk_events_binds_exact_recorded_signals_with_partial_coverage() -> None:
+    registry = _registry()
+    projection = next(item for item in registry["projections"] if item["id"] == "execution360")
+    surface = next(
+        item for item in registry["productSurfaces"] if item["id"] == "execution360"
+    )
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "risk_events")
+
+    assert "risk_signals" in projection["canonicalAuthorities"]
+    assert slot["canonicalAuthorityRefs"] == [
+        "agent_executions",
+        "execution_facts",
+        "risk_signals",
+    ]
+    assert slot["projectionBindings"] == [
+        {
+            "projectionId": "execution360",
+            "role": "primary",
+            "sectionIds": ["interactions"],
+            "subjectKinds": ["agent", "entity", "episode", "execution"],
+        }
+    ]
+    assert slot["partialImplementationReason"] == (
+        "only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_and_freshness_threshold_unknown"
+    )
+
+
+def test_social360_propagation_binds_governed_paths_but_remains_partial() -> None:
+    registry = _registry()
+    projection = next(item for item in registry["projections"] if item["id"] == "social360")
+    surface = next(item for item in registry["productSurfaces"] if item["id"] == "social360")
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "propagation")
+
+    assert "propagation" in projection["outputSections"]
+    assert slot["canonicalAuthorityRefs"] == [
+        "graph",
+        "influence_propagation",
+        "relationship_facts",
+        "relationship_predicate_registry",
+        "social_observations",
+    ]
+    assert slot["projectionBindings"] == [
+        {
+            "projectionId": "social360",
+            "role": "primary",
+            "sectionIds": ["propagation"],
+            "subjectKinds": ["entity", "relationship"],
+        }
+    ]
+    assert slot["partialImplementationReason"] == (
+        "bounded_observed_paths_have_no_component_measurements_or_completeness_and_freshness_sla"
+    )
+
+
 def test_account_and_identity_direct_providers_are_separate_from_projection_bindings() -> None:
     registry = _registry()
     surfaces = {surface["id"]: surface for surface in registry["productSurfaces"]}
@@ -343,8 +419,14 @@ def test_account_and_identity_direct_providers_are_separate_from_projection_bind
             "providerKind": "surface_frame_provider",
             "bindingStatus": "runtime_wired",
             "subjectKinds": ["entity"],
-            "domainSlotIds": ["account_summary", "members", "agents"],
-            "canonicalAuthorityRefs": ["entities", "entity_registry", "graph"],
+            "domainSlotIds": ["account_summary", "members", "agents", "profiles", "risk"],
+            "canonicalAuthorityRefs": [
+                "entities",
+                "entity_registry",
+                "graph",
+                "identity",
+                "risk_outputs",
+            ],
             "implementationRef": "services/api/identity/account360_provider.py",
             "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
         }

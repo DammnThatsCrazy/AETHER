@@ -18,6 +18,7 @@ its names are re-exported here as the formalized surface.
 """
 
 from graph.geographic360.capsule_semantics import (
+    CAPSULE_LOCATION_NORMALIZATION_VERSION,
     CAPSULE_LOCATION_PROVIDER,
     DEFAULT_ROLE,
     MAX_CAPSULE_PRECISION,
@@ -44,6 +45,7 @@ from graph.geographic360.provider import (
 )
 
 __all__ = [
+    "CAPSULE_LOCATION_NORMALIZATION_VERSION",
     "CAPSULE_LOCATION_PROVIDER",
     "DEFAULT_ROLE",
     "Geographic360Provider",

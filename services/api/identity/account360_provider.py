@@ -1,15 +1,18 @@
 """Account360 product-frame provider over canonical sibling projections.
 
 Account360 is a product surface, not an independent source of truth or a new
-technical projection. Its contract binds Profile360, Relationship360, and
-Economic360 sections. This provider verifies the requested canonical entity
-inside the authenticated tenant, then delegates section mapping, evidence,
+technical projection. Its contract composes governed Profile360,
+Relationship360, and Economic360 sections, plus exact membership and risk
+authority reads. This provider verifies the requested canonical entity inside
+the authenticated tenant, then delegates section mapping, evidence,
 freshness, completeness, and slot policy handling to the shared frame
 composer. It never reads account/member tables, creates duplicate aggregates,
-or writes graph state. The `members` and `agents` slots read only tenant-owned
-`MEMBER_OF` graph facts joined to exact tenant entity-registry rows; those
-observed lists remain coverage-unknown because the source has no completeness
-watermark.
+or writes graph state. The `members`, `agents`, `profiles`, and `risk` slots
+read only tenant-owned `MEMBER_OF` graph facts joined to exact tenant
+entity-registry rows; profile and Risk360 member frames are separately
+policy-evaluated and all observed roster views remain coverage-unknown because
+the source has no completeness watermark. The risk slot preserves direct
+account risk separately from evidence-backed risk frames for exact members.
 
 Projection results must already have been produced under their own projection
 policy. This class requires an explicit frame disposition and makes every
@@ -19,10 +22,13 @@ policy evaluation as an allow.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
-from typing import Mapping, Optional, Protocol, Sequence
+from datetime import date, datetime
+from typing import Any, Awaitable, Callable, Mapping, Optional, Protocol, Sequence
 
 from graph.operational_intelligence.models import EvidenceRef
+from shared.temporal.instant import parse_instant_strict, to_iso_utc
 from shared.intelligence_projections.composition import (
     PRODUCT_360_SURFACE_DEFINITIONS,
     compose_experience360_frame,
@@ -35,9 +41,16 @@ from shared.intelligence_projections.contracts import (
     Experience360PolicyDisposition,
     Experience360ProjectionProvenance,
     Experience360Quality,
+    ProjectionContext,
+    ProjectionDependencyState,
+    ProjectionRequest,
+    ProjectionSubject,
     ProjectionResult,
 )
 from shared.intelligence_projections.errors import ProjectionError
+from shared.intelligence_projections.generated_registry import (
+    INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+)
 
 
 SURFACE_ID = "account360"
@@ -45,7 +58,20 @@ ACCOUNT_IDENTITY_SLOT = "account_summary"
 LEGACY_ACCOUNT_IDENTITY_SLOT = "account_identity_and_state"
 ACCOUNT_MEMBERS_SLOT = "members"
 ACCOUNT_AGENTS_SLOT = "agents"
+ACCOUNT_PROFILES_SLOT = "profiles"
+ACCOUNT_RISK_SLOT = "risk"
+ACCOUNT_JOURNEYS_SLOT = "journeys"
+ACCOUNT_CONTRACTS_SLOT = "contracts"
+_RISK_CONTEXT_PROJECTION_ID = "risk360"
 _MAX_ACCOUNT_MEMBER_EDGES = 10_000
+_MAX_ACCOUNT_MEMBER_LEDGER_ROWS = 100_000
+_MAX_ACCOUNT_MEMBER_PROFILE_FRAMES = 100
+_MAX_ACCOUNT_MEMBER_PROFILE_CONCURRENCY = 4
+_MAX_ACCOUNT_MEMBER_JOURNEY_FRAMES = 100
+_MAX_ACCOUNT_MEMBER_JOURNEY_CONCURRENCY = 4
+_MAX_ACCOUNT_MEMBER_RISK_FRAMES = 100
+_MAX_ACCOUNT_MEMBER_RISK_CONCURRENCY = 4
+_MAX_ACCOUNT_CONTRACT_RECORDS = 100
 # The canonical identity model distinguishes ``account`` from ``organization``;
 # the latter is the persisted entity-registry kind for a tenant's B2B business
 # account. Account360 may represent either account kind, but never a person,
@@ -64,6 +90,38 @@ class AccountIdentityRead:
     display_name: Optional[str] = None
     tenant_id: Optional[str] = None
     entity_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class AccountContractRecord:
+    """Sanitized tenant contract record explicitly bound to one account id."""
+
+    tenant_id: str
+    account_id: str
+    contract_profile_id: str
+    contract_status: Optional[str]
+    billing_model: Optional[str]
+    package_id: Optional[str]
+    plan_tier: Optional[str]
+    billing_period: Optional[str]
+    currency: Optional[str]
+    contract_start_date: Optional[str]
+    contract_end_date: Optional[str]
+    renewal_date: Optional[str]
+    evidence_ref: EvidenceRef
+
+
+@dataclass(frozen=True)
+class AccountContractsRead:
+    """Bounded canonical commerce contract lookup for an exact account."""
+
+    state: str
+    tenant_id: str
+    account_entity_id: str
+    records: tuple[AccountContractRecord, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    source_as_of: Optional[str] = None
+    truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -91,6 +149,193 @@ class AccountMembersRead:
     source_as_of: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class _AccountMemberLedgerRead:
+    """Exact current membership evidence reconstructed from the graph ledger."""
+
+    state: str
+    role: Optional[str] = None
+    evidence_ref: Optional[EvidenceRef] = None
+    reason_code: Optional[str] = None
+
+
+def _read_current_account_member_edge(
+    tenant_id: str,
+    member_id: str,
+    organization_entity_id: str,
+    graph_edge: object,
+    rows: Sequence[dict[str, Any]],
+) -> _AccountMemberLedgerRead:
+    """Require one exact live MEMBER_OF edge in tenant mutation history."""
+
+    from shared.graph.graph import EdgeType
+
+    aggregate_id = f"{EdgeType.MEMBER_OF}:{member_id}:{organization_entity_id}"
+    offsets = [row.get("ledger_offset") for row in rows]
+    if any(
+        not isinstance(offset, int) or isinstance(offset, bool) or offset <= 0
+        for offset in offsets
+    ) or len(
+        set(offsets)
+    ) != len(offsets):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_order_invalid"
+        )
+    ordered_rows = sorted(rows, key=lambda row: row["ledger_offset"])
+
+    edge_is_live = False
+    latest_add: Optional[dict[str, Any]] = None
+    for row in ordered_rows:
+        payload = row.get("payload")
+        if (
+            row.get("tenant_id") != tenant_id
+            or row.get("aggregate_type") != "edge"
+            or row.get("aggregate_id") != aggregate_id
+            or not isinstance(payload, dict)
+            or payload.get("kind") not in {"edge", "edge_revocation"}
+            or payload.get("edge_type") != EdgeType.MEMBER_OF
+            or payload.get("from_vertex_id") != member_id
+            or payload.get("to_vertex_id") != organization_entity_id
+        ):
+            return _AccountMemberLedgerRead(
+                "unknown", reason_code="account_member_graph_ledger_scope_mismatch"
+            )
+        if payload.get("kind") == "edge_revocation":
+            edge_is_live = False
+            latest_add = None
+            continue
+
+        properties = payload.get("properties")
+        if not isinstance(properties, dict) or properties.get("tenant_id") != tenant_id:
+            return _AccountMemberLedgerRead(
+                "unknown", reason_code="account_member_graph_ledger_edge_tenant_mismatch"
+            )
+        if edge_is_live:
+            return _AccountMemberLedgerRead(
+                "unknown", reason_code="account_member_graph_ledger_live_edge_ambiguous"
+            )
+        edge_is_live = True
+        latest_add = row
+
+    if not edge_is_live or latest_add is None:
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_membership_not_live"
+        )
+
+    latest_properties = latest_add["payload"].get("properties")
+    assert isinstance(latest_properties, dict)
+    graph_properties = (
+        graph_edge.properties if isinstance(getattr(graph_edge, "properties", None), dict) else {}
+    )
+    ledger_idempotency_key = latest_properties.get("idempotency_key")
+    graph_idempotency_key = graph_properties.get("idempotency_key")
+    if (
+        graph_idempotency_key not in (None, "")
+        and ledger_idempotency_key not in (None, "")
+        and graph_idempotency_key != ledger_idempotency_key
+    ):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_projection_mismatch"
+        )
+    membership_state = latest_properties.get("membership_state")
+    if membership_state is not None and (
+        not isinstance(membership_state, str)
+        or membership_state.strip().lower() not in {"active", ""}
+    ):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_ledger_membership_inactive"
+        )
+    if (
+        latest_properties.get("valid_to") not in (None, "")
+        or latest_add.get("valid_to") not in (None, "")
+    ):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_edge_valid_time_not_evaluated"
+        )
+
+    mutation_id = latest_add.get("mutation_id")
+    if not isinstance(mutation_id, str) or not mutation_id.strip():
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_evidence_missing"
+        )
+    role = _safe_member_role(latest_properties.get("role"))
+    recorded_at = latest_add.get("recorded_at")
+    return _AccountMemberLedgerRead(
+        "resolved",
+        role=role,
+        evidence_ref=EvidenceRef(
+            id=mutation_id,
+            type="relationship",
+            source="graph_mutation_ledger",
+            observedAt=recorded_at if isinstance(recorded_at, str) else None,
+        ),
+        reason_code=(
+            "account_member_role_unavailable"
+            if latest_properties.get("role") not in (None, "") and role is None
+            else None
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class AccountRiskRead:
+    """Exact entity-scoped Risk360 output with explicit limitations."""
+
+    state: str
+    result: Optional[ProjectionResult] = None
+    reason_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AccountMemberProfilesRead:
+    """Bounded, per-member policy-evaluated Profile360 frames."""
+
+    state: str
+    profiles: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    provenance: tuple[Experience360ProjectionProvenance, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    source_as_of: Optional[str] = None
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
+class AccountMemberJourneysRead:
+    """Bounded current journey participation for policy-approved human members."""
+
+    state: str
+    journeys: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    provenance: tuple[Experience360ProjectionProvenance, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    source_as_of: Optional[str] = None
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
+class AccountMemberRisksRead:
+    """Bounded, per-member policy-evaluated Risk360 frames."""
+
+    state: str
+    risks: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    provenance: tuple[Experience360ProjectionProvenance, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    source_as_of: Optional[str] = None
+    truncated: bool = False
+
+
+AccountMemberProfileReader = Callable[
+    [AccountMember, Experience360FrameRequest], Awaitable[Experience360Frame]
+]
+AccountMemberJourneyReader = Callable[
+    [AccountMember, Experience360FrameRequest], Awaitable[Experience360Frame]
+]
+AccountMemberRiskReader = Callable[
+    [AccountMember, Experience360FrameRequest], Awaitable[Experience360Frame]
+]
+
+
 class Account360Source(Protocol):
     """Read seam for the canonical entity registry.
 
@@ -106,12 +351,22 @@ class Account360Source(Protocol):
         self, tenant_id: str, organization_entity_id: str
     ) -> AccountMembersRead: ...
 
+    async def account_contracts(
+        self, tenant_id: str, account_entity_id: str, *, limit: int
+    ) -> AccountContractsRead: ...
+
 
 class RepositoryAccount360Source:
     """Tenant-filtered adapter over the canonical entities repository."""
 
-    def __init__(self, graph: Optional[object] = None) -> None:
+    def __init__(
+        self,
+        graph: Optional[object] = None,
+        *,
+        ledger: Optional[object] = None,
+    ) -> None:
         self._graph = graph
+        self._ledger = ledger
 
     async def canonical_entity(
         self, tenant_id: str, entity_id: str
@@ -222,8 +477,7 @@ class RepositoryAccount360Source:
         if scan_truncated:
             reasons.add("account_member_tenant_edge_scan_truncated")
 
-        edge_rows: list[tuple[str, Optional[str], EvidenceRef]] = []
-        edge_ids: set[str] = set()
+        candidate_edges: dict[str, list[object]] = {}
         for edge in edges:
             if (
                 not hasattr(edge, "properties")
@@ -260,33 +514,148 @@ class RepositoryAccount360Source:
                 # Current graph edge reads do not evaluate bitemporal validity.
                 reasons.add("account_member_edge_valid_time_not_evaluated")
                 continue
-            idempotency_key = props.get("idempotency_key")
-            if not isinstance(idempotency_key, str) or not idempotency_key.strip():
-                reasons.add("account_member_edge_evidence_missing")
-                continue
-            observed_at = (
-                props.get("recorded_at")
-                or props.get("valid_from")
-                or getattr(edge, "created_at", None)
-            )
-            evidence = EvidenceRef(
-                id=idempotency_key,
-                type="relationship",
-                source="graph",
-                observedAt=(observed_at if isinstance(observed_at, str) else None),
-                uri=f"graph://edges/{idempotency_key}",
-            )
-            role = _safe_member_role(props.get("role"))
-            if props.get("role") not in (None, "") and role is None:
-                reasons.add("account_member_role_unavailable")
-            edge_rows.append((member_id, role, evidence))
-            edge_ids.add(member_id)
+            candidate_edges.setdefault(member_id, []).append(edge)
 
-        if not edge_ids:
+        if not candidate_edges:
             if scan_truncated:
                 reasons.add("account_member_edges_not_observed_in_truncated_scan")
             else:
                 reasons.add("account_member_edges_not_observed_completeness_unknown")
+            return AccountMembersRead(
+                "unknown",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=tuple(sorted(reasons)),
+            )
+
+        # Graph rows are a bounded candidate index only. A positive current
+        # membership also needs the exact tenant + MEMBER_OF aggregate to be
+        # live in the append-only mutation ledger. This prevents stale graph
+        # projections or idempotency keys from asserting a membership after
+        # revocation.
+        try:
+            from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+
+            ledger = self._ledger or GraphMutationLedgerRepository()
+            ledger_rows = await ledger.list_records(
+                tenant_id,
+                limit=_MAX_ACCOUNT_MEMBER_LEDGER_ROWS + 1,
+            )
+        except Exception:  # noqa: BLE001 - fail closed at the canonical authority
+            return AccountMembersRead(
+                "unavailable",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=("account_member_graph_ledger_unavailable",),
+            )
+        if not isinstance(ledger_rows, list):
+            return AccountMembersRead(
+                "unknown",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=("account_member_graph_ledger_invalid_response",),
+            )
+        if len(ledger_rows) > _MAX_ACCOUNT_MEMBER_LEDGER_ROWS:
+            return AccountMembersRead(
+                "truncated",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=(
+                    "account_member_graph_ledger_scan_truncated",
+                    "account_member_edge_completeness_unproven",
+                ),
+            )
+        if any(
+            not isinstance(row, dict) or row.get("tenant_id") != tenant_id
+            for row in ledger_rows
+        ):
+            return AccountMembersRead(
+                "unknown",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=("account_member_graph_ledger_scope_mismatch",),
+            )
+
+        from shared.graph.graph import EdgeType
+
+        aggregate_to_member = {
+            f"{EdgeType.MEMBER_OF}:{member_id}:{organization_entity_id}": member_id
+            for member_id in candidate_edges
+        }
+        ledger_rows_by_aggregate: dict[str, list[dict[str, Any]]] = {
+            aggregate_id: [] for aggregate_id in aggregate_to_member
+        }
+        invalid_ledger_members: set[str] = set()
+        for row in ledger_rows:
+            aggregate_id = row.get("aggregate_id")
+            payload = row.get("payload")
+            member_id = (
+                aggregate_to_member.get(aggregate_id)
+                if isinstance(aggregate_id, str)
+                else None
+            )
+            payload_member_id = (
+                payload.get("from_vertex_id")
+                if isinstance(payload, dict)
+                and payload.get("edge_type") == EdgeType.MEMBER_OF
+                and payload.get("to_vertex_id") == organization_entity_id
+                else None
+            )
+            candidate_id = member_id or (
+                payload_member_id
+                if isinstance(payload_member_id, str)
+                and payload_member_id in candidate_edges
+                else None
+            )
+            if candidate_id is None:
+                continue
+            if (
+                not isinstance(aggregate_id, str)
+                or aggregate_id not in aggregate_to_member
+                or row.get("aggregate_type") != "edge"
+                or not isinstance(payload, dict)
+                or payload.get("kind") not in {"edge", "edge_revocation"}
+                or payload.get("edge_type") != EdgeType.MEMBER_OF
+                or payload.get("from_vertex_id") != candidate_id
+                or payload.get("to_vertex_id") != organization_entity_id
+            ):
+                reasons.add("account_member_graph_ledger_scope_mismatch")
+                invalid_ledger_members.add(candidate_id)
+                continue
+            if payload.get("kind") == "edge":
+                properties = payload.get("properties")
+                if not isinstance(properties, dict) or properties.get("tenant_id") != tenant_id:
+                    reasons.add("account_member_graph_ledger_edge_tenant_mismatch")
+                    invalid_ledger_members.add(candidate_id)
+                    continue
+            ledger_rows_by_aggregate[aggregate_id].append(row)
+
+        edge_rows: list[tuple[str, Optional[str], EvidenceRef]] = []
+        for member_id, candidate_rows in candidate_edges.items():
+            if member_id in invalid_ledger_members:
+                continue
+            if len(candidate_rows) != 1:
+                reasons.add("account_member_graph_edge_ambiguous")
+                continue
+            aggregate_id = f"{EdgeType.MEMBER_OF}:{member_id}:{organization_entity_id}"
+            member_ledger = _read_current_account_member_edge(
+                tenant_id,
+                member_id,
+                organization_entity_id,
+                candidate_rows[0],
+                ledger_rows_by_aggregate.get(aggregate_id, []),
+            )
+            if member_ledger.reason_code:
+                reasons.add(member_ledger.reason_code)
+            if member_ledger.state != "resolved" or member_ledger.evidence_ref is None:
+                continue
+            edge_rows.append(
+                (member_id, member_ledger.role, member_ledger.evidence_ref)
+            )
+
+        edge_ids = {member_id for member_id, _, _ in edge_rows}
+        if not edge_ids:
+            reasons.add("account_member_rows_not_resolved")
             return AccountMembersRead(
                 "unknown",
                 tenant_id,
@@ -397,6 +766,183 @@ class RepositoryAccount360Source:
             source_as_of=max(source_as_of_values) if source_as_of_values else None,
         )
 
+    async def account_contracts(
+        self, tenant_id: str, account_entity_id: str, *, limit: int
+    ) -> AccountContractsRead:
+        """Join only commerce contract profiles explicitly keyed by account id.
+
+        Tenant-level billing defaults are not treated as an account contract.
+        This query requires the tenant id from the authenticated frame request
+        and the exact canonical account entity id in the stored ``account_id``
+        field; it never infers account ownership from tenant membership.
+        """
+        if not tenant_id.strip() or not account_entity_id.strip():
+            return AccountContractsRead(
+                "unknown",
+                tenant_id,
+                account_entity_id,
+                reason_codes=("account_contract_scope_invalid",),
+            )
+        bounded_limit = min(max(limit, 1), _MAX_ACCOUNT_CONTRACT_RECORDS)
+        try:
+            from billing.billing.revops import TenantContractProfileRepository
+
+            rows = await TenantContractProfileRepository().find_many(
+                filters={"tenant_id": tenant_id, "account_id": account_entity_id},
+                limit=bounded_limit + 1,
+            )
+        except Exception:  # noqa: BLE001 - keep commerce source failure opaque
+            return AccountContractsRead(
+                "unavailable",
+                tenant_id,
+                account_entity_id,
+                reason_codes=("account_contract_commerce_authority_unavailable",),
+            )
+        if not isinstance(rows, list):
+            return AccountContractsRead(
+                "unknown",
+                tenant_id,
+                account_entity_id,
+                reason_codes=("account_contract_commerce_authority_invalid_response",),
+            )
+
+        truncated = len(rows) > bounded_limit
+        selected = rows[:bounded_limit]
+        records: list[AccountContractRecord] = []
+        seen_ids: set[str] = set()
+        for row in selected:
+            if not isinstance(row, dict):
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_commerce_record_invalid",),
+                    truncated=truncated,
+                )
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("account_id") != account_entity_id
+            ):
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_scope_mismatch",),
+                    truncated=truncated,
+                )
+            contract_id = row.get("contract_profile_id") or row.get("id")
+            if not isinstance(contract_id, str) or not contract_id.strip():
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_record_identity_missing",),
+                    truncated=truncated,
+                )
+            if contract_id in seen_ids:
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_record_identity_ambiguous",),
+                    truncated=truncated,
+                )
+            seen_ids.add(contract_id)
+            typed_values = {
+                "contract_status": _bounded_contract_value(
+                    row.get("contract_status"),
+                    {
+                        "draft",
+                        "active",
+                        "pending_signature",
+                        "expired",
+                        "cancelled",
+                        "renewal_pending",
+                    },
+                ),
+                "billing_model": _bounded_contract_value(
+                    row.get("billing_model"),
+                    {
+                        "flat_subscription",
+                        "usage_based",
+                        "hybrid",
+                        "enterprise_contract",
+                        "value_based",
+                        "pilot",
+                    },
+                ),
+                "billing_period": _bounded_contract_value(
+                    row.get("billing_period"),
+                    {"monthly", "quarterly", "annual", "custom"},
+                ),
+                "package_id": _bounded_text(row.get("package_id")),
+                "plan_tier": _bounded_text(row.get("plan_tier")),
+                "currency": _bounded_currency(row.get("currency")),
+                "contract_start_date": _account_contract_date(
+                    row.get("contract_start_date")
+                ),
+                "contract_end_date": _account_contract_date(
+                    row.get("contract_end_date")
+                ),
+                "renewal_date": _account_contract_date(row.get("renewal_date")),
+            }
+            invalid_fields = [
+                field
+                for field, value in typed_values.items()
+                if row.get(field) not in (None, "") and value is None
+            ]
+            if invalid_fields:
+                return AccountContractsRead(
+                    "unknown",
+                    tenant_id,
+                    account_entity_id,
+                    reason_codes=("account_contract_record_typed_value_invalid",),
+                    truncated=truncated,
+                )
+            observed_at = _account_contract_instant(
+                row.get("updated_at") or row.get("created_at")
+            )
+            evidence_ref = EvidenceRef(
+                id=contract_id,
+                type="document",
+                source="tenant_contract_profiles",
+                observedAt=observed_at,
+            )
+            records.append(
+                AccountContractRecord(
+                    tenant_id=tenant_id,
+                    account_id=account_entity_id,
+                    contract_profile_id=contract_id,
+                    contract_status=typed_values["contract_status"],
+                    billing_model=typed_values["billing_model"],
+                    package_id=typed_values["package_id"],
+                    plan_tier=typed_values["plan_tier"],
+                    billing_period=typed_values["billing_period"],
+                    currency=typed_values["currency"],
+                    contract_start_date=typed_values["contract_start_date"],
+                    contract_end_date=typed_values["contract_end_date"],
+                    renewal_date=typed_values["renewal_date"],
+                    evidence_ref=evidence_ref,
+                )
+            )
+        records.sort(key=lambda record: record.contract_profile_id)
+        timestamps = [
+            record.evidence_ref.observedAt
+            for record in records
+            if record.evidence_ref.observedAt
+        ]
+        return AccountContractsRead(
+            "truncated" if truncated else "available" if records else "empty",
+            tenant_id,
+            account_entity_id,
+            records=tuple(records),
+            reason_codes=(
+                ("account_contract_read_truncated",) if truncated else ()
+            ),
+            source_as_of=max(timestamps) if timestamps else None,
+            truncated=truncated,
+        )
+
 
 class Account360Provider:
     """Compose the Account360 frame from policy-scoped canonical projections."""
@@ -405,8 +951,14 @@ class Account360Provider:
     owns_canonical_truth = False
     graph_mutation_policy = "read_only"
 
-    def __init__(self, source: Optional[Account360Source] = None) -> None:
+    def __init__(
+        self,
+        source: Optional[Account360Source] = None,
+        *,
+        risk_provider: Optional[object] = None,
+    ) -> None:
         self._source = source if source is not None else RepositoryAccount360Source()
+        self._risk_provider = risk_provider
 
     async def compose(
         self,
@@ -422,6 +974,9 @@ class Account360Provider:
         actor_attribution_by_slot: Optional[
             Mapping[str, Experience360ActorAttribution]
         ] = None,
+        member_profile_reader: Optional[AccountMemberProfileReader] = None,
+        member_journey_reader: Optional[AccountMemberJourneyReader] = None,
+        member_risk_reader: Optional[AccountMemberRiskReader] = None,
         generated_at: Optional[str] = None,
     ) -> Experience360Frame:
         """Build an Account360 frame without relaxing policy or source scope.
@@ -532,10 +1087,45 @@ class Account360Provider:
                 reason_code=identity.reason_code or "account_entity_identity_unknown",
             )
 
+        contracts_read: Optional[AccountContractsRead] = None
+        if (
+            ACCOUNT_CONTRACTS_SLOT in requested_slot_ids
+            and effective_slot_policy[ACCOUNT_CONTRACTS_SLOT].state
+            in {"allowed", "not_applicable"}
+        ):
+            if not request.includeEvidence:
+                contracts_read = AccountContractsRead(
+                    "unknown",
+                    request.tenantId,
+                    request.subject.id,
+                    reason_codes=("account_contract_evidence_not_requested",),
+                )
+            elif request.asOf is not None or request.timeRange is not None:
+                contracts_read = AccountContractsRead(
+                    "unknown",
+                    request.tenantId,
+                    request.subject.id,
+                    reason_codes=("account_contract_temporal_replay_unavailable",),
+                )
+            else:
+                contracts_read = await self._read_account_contracts(request)
+
         members_read: Optional[AccountMembersRead] = None
-        membership_slots = {ACCOUNT_MEMBERS_SLOT, ACCOUNT_AGENTS_SLOT} & set(
-            requested_slot_ids
+        membership_slots = {
+            ACCOUNT_MEMBERS_SLOT,
+            ACCOUNT_AGENTS_SLOT,
+            ACCOUNT_PROFILES_SLOT,
+            ACCOUNT_JOURNEYS_SLOT,
+        } & set(requested_slot_ids)
+        risk_policy_allows_members = (
+            ACCOUNT_RISK_SLOT in requested_slot_ids
+            and effective_slot_policy[ACCOUNT_RISK_SLOT].state
+            in {"allowed", "not_applicable"}
+            and request.asOf is None
+            and request.timeRange is None
         )
+        if risk_policy_allows_members:
+            membership_slots.add(ACCOUNT_RISK_SLOT)
         membership_is_allowed = any(
             effective_slot_policy[slot_id].state in {"allowed", "not_applicable"}
             for slot_id in membership_slots
@@ -554,6 +1144,83 @@ class Account360Provider:
                     request.subject.id,
                     reason_codes=("account_member_graph_subject_kind_unsupported",),
                 )
+
+        member_profiles_read: Optional[AccountMemberProfilesRead] = None
+        if (
+            ACCOUNT_PROFILES_SLOT in requested_slot_ids
+            and effective_slot_policy[ACCOUNT_PROFILES_SLOT].state
+            in {"allowed", "not_applicable"}
+        ):
+            if not request.includeEvidence:
+                member_profiles_read = AccountMemberProfilesRead(
+                    "unknown",
+                    reason_codes=("account_member_profiles_evidence_not_requested",),
+                )
+            elif members_read is None:
+                member_profiles_read = AccountMemberProfilesRead(
+                    "unknown",
+                    reason_codes=("account_member_profile_membership_unavailable",),
+                )
+            elif identity.entity_type != "organization":
+                member_profiles_read = AccountMemberProfilesRead(
+                    "unknown",
+                    reason_codes=("account_member_profile_organization_subject_required",),
+                )
+            else:
+                member_profiles_read = await self._read_member_profiles(
+                    request,
+                    members_read,
+                    member_profile_reader=member_profile_reader,
+                )
+
+        member_journeys_read: Optional[AccountMemberJourneysRead] = None
+        if (
+            ACCOUNT_JOURNEYS_SLOT in requested_slot_ids
+            and effective_slot_policy[ACCOUNT_JOURNEYS_SLOT].state
+            in {"allowed", "not_applicable"}
+        ):
+            if not request.includeEvidence:
+                member_journeys_read = AccountMemberJourneysRead(
+                    "unknown",
+                    reason_codes=("account_member_journeys_evidence_not_requested",),
+                )
+            elif members_read is None:
+                member_journeys_read = AccountMemberJourneysRead(
+                    "unknown",
+                    reason_codes=("account_member_journey_membership_unavailable",),
+                )
+            elif identity.entity_type != "organization":
+                member_journeys_read = AccountMemberJourneysRead(
+                    "unknown",
+                    reason_codes=("account_member_journey_organization_subject_required",),
+                )
+            else:
+                member_journeys_read = await self._read_member_journeys(
+                    request,
+                    members_read,
+                    member_journey_reader=member_journey_reader,
+                )
+
+        risk_read: Optional[AccountRiskRead] = None
+        member_risks_read: Optional[AccountMemberRisksRead] = None
+        if ACCOUNT_RISK_SLOT in requested_slot_ids:
+            risk_policy = effective_slot_policy[ACCOUNT_RISK_SLOT]
+            if risk_policy.state in {"allowed", "not_applicable"}:
+                risk_read = await self._read_risk(
+                    request,
+                    entity_type=identity.entity_type,
+                )
+                if members_read is None:
+                    member_risks_read = AccountMemberRisksRead(
+                        "unknown",
+                        reason_codes=("account_member_risk_membership_unavailable",),
+                    )
+                else:
+                    member_risks_read = await self._read_member_risks(
+                        request,
+                        members_read,
+                        member_risk_reader=member_risk_reader,
+                    )
 
         frame = compose_experience360_frame(
             request,
@@ -576,9 +1243,34 @@ class Account360Provider:
                 and identity_slot_id in (freshness_by_slot or {})
             ),
         )
-        return self._attach_members_context(
+        frame = self._attach_members_context(
             frame,
             members_read,
+            include_evidence=request.includeEvidence,
+            requested_slot_ids=requested_slot_ids,
+        )
+        frame = self._attach_member_profiles_context(
+            frame,
+            member_profiles_read,
+            include_evidence=request.includeEvidence,
+            requested_slot_ids=requested_slot_ids,
+        )
+        frame = self._attach_member_journeys_context(
+            frame,
+            member_journeys_read,
+            include_evidence=request.includeEvidence,
+            requested_slot_ids=requested_slot_ids,
+        )
+        frame = self._attach_risk_context(
+            frame,
+            risk_read,
+            member_risks_read,
+            include_evidence=request.includeEvidence,
+            requested_slot_ids=requested_slot_ids,
+        )
+        return self._attach_account_contracts_context(
+            frame,
+            contracts_read,
             include_evidence=request.includeEvidence,
             requested_slot_ids=requested_slot_ids,
         )
@@ -633,6 +1325,113 @@ class Account360Provider:
             )
         return identity
 
+    async def _read_account_contracts(
+        self, request: Experience360FrameRequest
+    ) -> AccountContractsRead:
+        """Validate an exact-account commerce contract authority response."""
+
+        reader = getattr(self._source, "account_contracts", None)
+        if not callable(reader):
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_commerce_authority_not_joined",),
+            )
+        try:
+            result = await reader(
+                request.tenantId,
+                request.subject.id,
+                limit=_MAX_ACCOUNT_CONTRACT_RECORDS,
+            )
+        except Exception:  # noqa: BLE001 - authority failure remains content-free
+            return AccountContractsRead(
+                "unavailable",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_commerce_authority_unavailable",),
+            )
+        if not isinstance(result, AccountContractsRead):
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_commerce_authority_invalid_response",),
+            )
+        if (
+            result.tenant_id != request.tenantId
+            or result.account_entity_id != request.subject.id
+            or result.state not in {"available", "empty", "truncated", "unknown", "unavailable"}
+        ):
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_scope_or_state_invalid",),
+            )
+        if len(result.records) > _MAX_ACCOUNT_CONTRACT_RECORDS:
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_authority_limit_exceeded",),
+            )
+        records: list[AccountContractRecord] = []
+        seen_ids: set[str] = set()
+        for record in result.records:
+            if (
+                not isinstance(record, AccountContractRecord)
+                or record.tenant_id != request.tenantId
+                or record.account_id != request.subject.id
+                or not record.contract_profile_id.strip()
+                or record.contract_profile_id in seen_ids
+                or not isinstance(record.evidence_ref, EvidenceRef)
+                or record.evidence_ref.id != record.contract_profile_id
+                or record.evidence_ref.type != "document"
+                or record.evidence_ref.source != "tenant_contract_profiles"
+            ):
+                return AccountContractsRead(
+                    "unknown",
+                    request.tenantId,
+                    request.subject.id,
+                    reason_codes=("account_contract_scope_or_evidence_invalid",),
+                    truncated=result.truncated,
+                )
+            seen_ids.add(record.contract_profile_id)
+            records.append(record)
+        if result.state == "available" and not records:
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_authority_state_mismatch",),
+            )
+        if result.state == "empty" and records:
+            return AccountContractsRead(
+                "unknown",
+                request.tenantId,
+                request.subject.id,
+                reason_codes=("account_contract_authority_state_mismatch",),
+            )
+        source_as_of = _account_contract_instant(result.source_as_of)
+        return AccountContractsRead(
+            result.state,
+            request.tenantId,
+            request.subject.id,
+            records=tuple(records),
+            reason_codes=tuple(
+                reason
+                for reason in result.reason_codes
+                if isinstance(reason, str)
+                and reason
+                and len(reason) <= 96
+                and reason.isascii()
+                and all(char.isalnum() or char in {"_", "-"} for char in reason)
+            ),
+            source_as_of=source_as_of,
+            truncated=result.truncated,
+        )
+
     @staticmethod
     def _requested_slot_ids(request: Experience360FrameRequest) -> list[str]:
         definition = PRODUCT_360_SURFACE_DEFINITIONS.get(SURFACE_ID)
@@ -667,7 +1466,14 @@ class Account360Provider:
     async def _read_members(
         self, request: Experience360FrameRequest
     ) -> AccountMembersRead:
-        """Read and validate only an explicitly allowed Account members slot."""
+        """Read exact membership dependencies for policy-allowed account slots.
+
+        When ``profiles`` is requested, its own Account360 slot policy gates
+        this lookup. Each returned member is then evaluated again under the
+        Profile360 policy before any Profile360 provider reads are performed.
+        The ``risk`` slot uses the same exact roster as candidate subjects, but
+        each member Risk360 frame must pass its own risk-summary policy gate.
+        """
 
         reader = getattr(self._source, "account_members", None)
         if not callable(reader):
@@ -726,7 +1532,7 @@ class Account360Provider:
                 or member.entity_id in seen_member_ids
                 or not isinstance(member.membership_evidence_ref, EvidenceRef)
                 or member.membership_evidence_ref.type != "relationship"
-                or member.membership_evidence_ref.source != "graph"
+                or member.membership_evidence_ref.source != "graph_mutation_ledger"
                 or not member.membership_evidence_ref.id.strip()
                 or not isinstance(member.entity_evidence_ref, EvidenceRef)
                 or member.entity_evidence_ref.type != "entity"
@@ -767,6 +1573,676 @@ class Account360Provider:
             reason_codes=reasons,
             source_as_of=(result.source_as_of if isinstance(result.source_as_of, str) else None),
         )
+
+    @staticmethod
+    async def _read_member_profiles(
+        request: Experience360FrameRequest,
+        members_read: AccountMembersRead,
+        *,
+        member_profile_reader: Optional[AccountMemberProfileReader],
+    ) -> AccountMemberProfilesRead:
+        """Compose bounded exact-member Profile360 frames under member policy.
+
+        Account membership facts identify candidate subjects only. The injected
+        reader must evaluate the separate Profile360 policy for each exact
+        member before resolving any profile projection. No profile is read
+        when that reader is unavailable.
+        """
+
+        if member_profile_reader is None:
+            return AccountMemberProfilesRead(
+                "unknown",
+                reason_codes=("account_member_profile_reader_unavailable",),
+                source_as_of=members_read.source_as_of,
+            )
+        if members_read.state not in {"degraded", "truncated"}:
+            return AccountMemberProfilesRead(
+                members_read.state
+                if members_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown",
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_profile_membership_scope_not_usable",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+        if not members_read.members:
+            return AccountMemberProfilesRead(
+                "unknown",
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_profile_roster_completeness_unknown",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+
+        ordered_members = sorted(members_read.members, key=lambda item: item.entity_id)
+        selected_members = ordered_members[:_MAX_ACCOUNT_MEMBER_PROFILE_FRAMES]
+        fanout_truncated = len(ordered_members) > len(selected_members)
+        semaphore = asyncio.Semaphore(_MAX_ACCOUNT_MEMBER_PROFILE_CONCURRENCY)
+
+        async def read_one(
+            member: AccountMember,
+        ) -> tuple[Optional[Experience360Frame], Optional[str]]:
+            async with semaphore:
+                try:
+                    profile_frame = await member_profile_reader(member, request)
+                except Exception:  # noqa: BLE001 - member policy/provider failures are opaque
+                    return None, "account_member_profile_read_unavailable"
+            expected_subject_kind = "agent" if member.entity_type == "agent" else "entity"
+            if (
+                not isinstance(profile_frame, Experience360Frame)
+                or profile_frame.surfaceId != "profile360"
+                or profile_frame.tenantId != request.tenantId
+                or profile_frame.subject.kind != expected_subject_kind
+                or profile_frame.subject.id != member.entity_id
+                or profile_frame.contractVersion
+                != INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+            ):
+                return None, "account_member_profile_frame_scope_or_contract_invalid"
+            visible_profile_slots = [
+                slot
+                for slot in profile_frame.slots
+                if slot.policyDisposition.state in {"allowed", "not_applicable"}
+            ]
+            if not visible_profile_slots:
+                return None, "account_member_profile_policy_withheld_or_unknown"
+            return profile_frame, None
+
+        results = await asyncio.gather(*(read_one(member) for member in selected_members))
+        profile_entries: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        provenance: list[Experience360ProjectionProvenance] = []
+        reasons = set(members_read.reason_codes)
+        reasons.add("account_member_profile_roster_completeness_unknown")
+        if fanout_truncated:
+            reasons.add("account_member_profile_fanout_truncated")
+
+        for member, (profile_frame, reason) in zip(selected_members, results, strict=True):
+            if profile_frame is None:
+                if reason:
+                    reasons.add(reason)
+                continue
+            membership_refs = _unique_evidence_refs(
+                [member.membership_evidence_ref, member.entity_evidence_ref]
+            )
+            visible_profile_slots = [
+                slot
+                for slot in profile_frame.slots
+                if slot.policyDisposition.state in {"allowed", "not_applicable"}
+            ]
+            profile_refs = _unique_evidence_refs(
+                [
+                    ref
+                    for slot in visible_profile_slots
+                    for ref in [
+                        *slot.evidenceRefs,
+                        *(item for line in slot.provenance for item in line.evidenceRefs),
+                    ]
+                ]
+            )
+            combined_refs = _unique_evidence_refs([*membership_refs, *profile_refs])
+            evidence_refs.extend(combined_refs)
+            provenance.extend(
+                line
+                for slot in visible_profile_slots
+                for line in slot.provenance
+            )
+            provenance.append(
+                Experience360ProjectionProvenance(
+                    tenantId=request.tenantId,
+                    sourceState="degraded",
+                    generatedAt=profile_frame.generatedAt,
+                    sourceKind="authority",
+                    claimOrigin="canonical_authority",
+                    evidenceRefs=membership_refs,
+                    canonicalAuthorityRefs=["graph", "entity_registry"],
+                )
+            )
+            profile_entries.append(
+                {
+                    "member": {
+                        "kind": profile_frame.subject.kind,
+                        "id": member.entity_id,
+                        "entityType": member.entity_type,
+                    },
+                    "membershipEvidenceRefIds": [ref.id for ref in membership_refs],
+                    "profileFrame": profile_frame.model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    ),
+                }
+            )
+
+        if not profile_entries:
+            return AccountMemberProfilesRead(
+                "unknown",
+                reason_codes=tuple(sorted(reasons)),
+                source_as_of=members_read.source_as_of,
+                truncated=fanout_truncated,
+            )
+        return AccountMemberProfilesRead(
+            "degraded",
+            profiles=tuple(profile_entries),
+            evidence_refs=tuple(_unique_evidence_refs(evidence_refs)),
+            provenance=tuple(_unique_provenance(provenance)),
+            reason_codes=tuple(sorted(reasons)),
+            source_as_of=members_read.source_as_of,
+            truncated=fanout_truncated,
+        )
+
+    @staticmethod
+    async def _read_member_journeys(
+        request: Experience360FrameRequest,
+        members_read: AccountMembersRead,
+        *,
+        member_journey_reader: Optional[AccountMemberJourneyReader],
+    ) -> AccountMemberJourneysRead:
+        """Join current member journeys through independently governed Profile360.
+
+        This is a bounded path over exact current MEMBER_OF evidence and exact
+        human Profile360 journey-participation frames. It does not assert that
+        the member belonged to the account when an older journey occurred, and
+        it never expands journeys for agents or other entity kinds.
+        """
+
+        if request.asOf is not None or request.timeRange is not None:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=("account_member_journey_valid_time_unavailable",),
+                source_as_of=members_read.source_as_of,
+            )
+        if member_journey_reader is None:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=("account_member_journey_reader_unavailable",),
+                source_as_of=members_read.source_as_of,
+            )
+        if members_read.state not in {"degraded", "truncated"}:
+            state = (
+                members_read.state
+                if members_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            return AccountMemberJourneysRead(
+                state,
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_journey_membership_scope_not_usable",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+
+        human_members = sorted(
+            (member for member in members_read.members if member.entity_type == "human"),
+            key=lambda item: item.entity_id,
+        )
+        if not human_members:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_journey_human_members_not_observed",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+
+        selected_members = human_members[:_MAX_ACCOUNT_MEMBER_JOURNEY_FRAMES]
+        fanout_truncated = len(human_members) > len(selected_members)
+        semaphore = asyncio.Semaphore(_MAX_ACCOUNT_MEMBER_JOURNEY_CONCURRENCY)
+
+        async def read_one(
+            member: AccountMember,
+        ) -> tuple[
+            Optional[dict[str, Any]],
+            tuple[EvidenceRef, ...],
+            tuple[Experience360ProjectionProvenance, ...],
+            Optional[str],
+        ]:
+            async with semaphore:
+                try:
+                    profile_frame = await member_journey_reader(member, request)
+                except Exception:  # noqa: BLE001 - member policy/provider failures are opaque
+                    return None, (), (), "account_member_journey_read_unavailable"
+
+            if (
+                not isinstance(profile_frame, Experience360Frame)
+                or profile_frame.surfaceId != "profile360"
+                or profile_frame.tenantId != request.tenantId
+                or profile_frame.subject.kind != "entity"
+                or profile_frame.subject.id != member.entity_id
+                or profile_frame.contractVersion
+                != INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+            ):
+                return None, (), (), "account_member_journey_frame_scope_or_contract_invalid"
+
+            journey_slots = [
+                slot for slot in profile_frame.slots if slot.id == "journey_participation"
+            ]
+            if len(journey_slots) != 1:
+                return None, (), (), "account_member_journey_profile_slot_missing_or_ambiguous"
+            journey_slot = journey_slots[0]
+            if journey_slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+                return None, (), (), "account_member_journey_profile_policy_withheld_or_unknown"
+            slot_content = journey_slot.content
+            section_entries = (
+                slot_content.get("sections") if isinstance(slot_content, dict) else None
+            )
+            journey_sections = [
+                section
+                for section in section_entries or []
+                if isinstance(section, dict)
+                and section.get("projectionId") == "profile360"
+                and section.get("sectionId") == "journeys"
+            ]
+            if len(journey_sections) != 1:
+                return None, (), (), "account_member_journey_profile_section_missing_or_ambiguous"
+            content = journey_sections[0].get("content")
+            if (
+                not isinstance(content, dict)
+                or content.get("currentOnly") is not True
+                or not isinstance(content.get("items"), list)
+            ):
+                return None, (), (), "account_member_journey_profile_content_invalid"
+
+            raw_items = content["items"]
+            if not raw_items:
+                return None, (), (), "account_member_journey_profile_items_not_observed"
+            if len(raw_items) > 100:
+                return None, (), (), "account_member_journey_profile_item_limit_exceeded"
+
+            slot_evidence = {
+                ref.id: ref
+                for ref in [
+                    *journey_slot.evidenceRefs,
+                    *(
+                        evidence_ref
+                        for provenance_line in journey_slot.provenance
+                        for evidence_ref in provenance_line.evidenceRefs
+                    ),
+                ]
+                if isinstance(ref, EvidenceRef)
+            }
+            validated_items: list[dict[str, Any]] = []
+            journey_evidence: list[EvidenceRef] = []
+            for item in raw_items:
+                if not isinstance(item, dict):
+                    return None, (), (), "account_member_journey_profile_item_invalid"
+                journey_id = item.get("journeyId")
+                version_id = item.get("versionId")
+                if (
+                    not isinstance(journey_id, str)
+                    or not journey_id.strip()
+                    or not isinstance(version_id, str)
+                    or not version_id.strip()
+                ):
+                    return None, (), (), "account_member_journey_identity_incomplete"
+                evidence_ref = slot_evidence.get(version_id)
+                if (
+                    evidence_ref is None
+                    or evidence_ref.type != "document"
+                    or evidence_ref.source != "journey_versions"
+                ):
+                    return None, (), (), "account_member_journey_evidence_missing_or_unscoped"
+                journey_evidence.append(evidence_ref)
+                validated_items.append(
+                    {
+                        "journeyId": journey_id,
+                        "versionId": version_id,
+                        "journeyState": (
+                            item.get("journeyState")
+                            if isinstance(item.get("journeyState"), str)
+                            else None
+                        ),
+                        "computedAt": (
+                            item.get("computedAt")
+                            if isinstance(item.get("computedAt"), str)
+                            else None
+                        ),
+                        "evidenceRefId": evidence_ref.id,
+                    }
+                )
+
+            membership_refs = _unique_evidence_refs(
+                [member.membership_evidence_ref, member.entity_evidence_ref]
+            )
+            profile_refs = _unique_evidence_refs(journey_evidence)
+            combined_refs = _unique_evidence_refs([*membership_refs, *profile_refs])
+            if not combined_refs:
+                return None, (), (), "account_member_journey_evidence_missing_or_unscoped"
+            membership_provenance = Experience360ProjectionProvenance(
+                tenantId=request.tenantId,
+                sourceState="degraded",
+                generatedAt=profile_frame.generatedAt,
+                sourceKind="authority",
+                claimOrigin="canonical_authority",
+                evidenceRefs=membership_refs,
+                canonicalAuthorityRefs=["graph", "entity_registry"],
+            )
+            journey_provenance = [
+                line
+                for line in journey_slot.provenance
+                if line.evidenceRefs
+                and any(ref.id in {item.id for item in profile_refs} for ref in line.evidenceRefs)
+            ]
+            return (
+                {
+                    "member": {"kind": "entity", "id": member.entity_id},
+                    "membershipEvidenceRefIds": [ref.id for ref in membership_refs],
+                    "journeys": validated_items,
+                },
+                combined_refs,
+                tuple([membership_provenance, *journey_provenance]),
+                None,
+            )
+
+        results = await asyncio.gather(*(read_one(member) for member in selected_members))
+        journeys: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        provenance: list[Experience360ProjectionProvenance] = []
+        reasons = set(members_read.reason_codes)
+        reasons.add("account_member_journey_membership_temporal_scope_unproven")
+        reasons.add("account_member_journey_roster_completeness_unknown")
+        if fanout_truncated:
+            reasons.add("account_member_journey_fanout_truncated")
+
+        for result, refs, lines, reason in results:
+            if reason is not None:
+                reasons.add(reason)
+                continue
+            if result is None:
+                continue
+            journeys.append(result)
+            evidence_refs.extend(refs)
+            provenance.extend(lines)
+
+        if not journeys:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=tuple(sorted(reasons)),
+                source_as_of=members_read.source_as_of,
+                truncated=fanout_truncated,
+            )
+        return AccountMemberJourneysRead(
+            "degraded",
+            journeys=tuple(journeys),
+            evidence_refs=tuple(_unique_evidence_refs(evidence_refs)),
+            provenance=tuple(_unique_provenance(provenance)),
+            reason_codes=tuple(sorted(reasons)),
+            source_as_of=members_read.source_as_of,
+            truncated=fanout_truncated,
+        )
+
+    @staticmethod
+    async def _read_member_risks(
+        request: Experience360FrameRequest,
+        members_read: AccountMembersRead,
+        *,
+        member_risk_reader: Optional[AccountMemberRiskReader],
+    ) -> AccountMemberRisksRead:
+        """Read exact-member Risk360 frames only after each member policy gate.
+
+        The reader must return a Risk360 product frame whose frame and
+        ``risk_summary`` slot policy dispositions both allow the exact member.
+        Membership facts only select candidate subjects; they never grant
+        risk access. Current roster completeness and risk freshness remain
+        unknown because neither authority supplies the required watermarks.
+        """
+
+        if request.asOf is not None or request.timeRange is not None:
+            return AccountMemberRisksRead(
+                "unknown",
+                reason_codes=("account_member_risk_temporal_read_unavailable",),
+                source_as_of=members_read.source_as_of,
+            )
+        if member_risk_reader is None:
+            return AccountMemberRisksRead(
+                "unknown",
+                reason_codes=("account_member_risk_reader_unavailable",),
+                source_as_of=members_read.source_as_of,
+            )
+        if members_read.state not in {"degraded", "truncated"}:
+            state = (
+                members_read.state
+                if members_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            return AccountMemberRisksRead(
+                state,
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_risk_membership_scope_not_usable",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+        if not members_read.members:
+            return AccountMemberRisksRead(
+                "unknown",
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_risk_roster_completeness_unknown",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+
+        ordered_members = sorted(members_read.members, key=lambda item: item.entity_id)
+        selected_members: list[AccountMember] = []
+        seen_member_ids: set[str] = set()
+        duplicate_member = False
+        for member in ordered_members:
+            if member.entity_id in seen_member_ids:
+                duplicate_member = True
+                continue
+            seen_member_ids.add(member.entity_id)
+            selected_members.append(member)
+        selected_members = selected_members[:_MAX_ACCOUNT_MEMBER_RISK_FRAMES]
+        fanout_truncated = len(seen_member_ids) > len(selected_members)
+        semaphore = asyncio.Semaphore(_MAX_ACCOUNT_MEMBER_RISK_CONCURRENCY)
+
+        async def read_one(
+            member: AccountMember,
+        ) -> tuple[Optional[Experience360Frame], Optional[str]]:
+            async with semaphore:
+                try:
+                    risk_frame = await member_risk_reader(member, request)
+                except Exception:  # noqa: BLE001 - member policy/provider failures are opaque
+                    return None, "account_member_risk_read_unavailable"
+            expected_subject_kind = "agent" if member.entity_type == "agent" else "entity"
+            if (
+                not isinstance(risk_frame, Experience360Frame)
+                or risk_frame.surfaceId != "risk360"
+                or risk_frame.tenantId != request.tenantId
+                or risk_frame.subject.kind != expected_subject_kind
+                or risk_frame.subject.id != member.entity_id
+                or risk_frame.contractVersion
+                != INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+            ):
+                return None, "account_member_risk_frame_scope_or_contract_invalid"
+            if risk_frame.policyDisposition.state not in {"allowed", "not_applicable"}:
+                return None, "account_member_risk_policy_withheld_or_unknown"
+            risk_slots = [slot for slot in risk_frame.slots if slot.id == "risk_summary"]
+            if len(risk_slots) != 1 or len(risk_frame.slots) != 1:
+                return None, "account_member_risk_slot_unavailable"
+            risk_slot = risk_slots[0]
+            if risk_slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+                return None, "account_member_risk_policy_withheld_or_unknown"
+            risk_refs = _unique_evidence_refs(
+                [
+                    *risk_slot.evidenceRefs,
+                    *(item for line in risk_slot.provenance for item in line.evidenceRefs),
+                ]
+            )
+            if (
+                risk_slot.state not in {"available", "degraded"}
+                or risk_slot.content is None
+                or not risk_refs
+            ):
+                return None, "account_member_risk_evidence_missing"
+            return risk_frame, None
+
+        results = await asyncio.gather(*(read_one(member) for member in selected_members))
+        risk_entries: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        provenance: list[Experience360ProjectionProvenance] = []
+        reasons = set(members_read.reason_codes)
+        reasons.add("account_member_risk_roster_completeness_unknown")
+        if duplicate_member:
+            reasons.add("account_member_risk_duplicate_members_deduplicated")
+        if fanout_truncated:
+            reasons.add("account_member_risk_fanout_truncated")
+
+        for member, (risk_frame, reason) in zip(selected_members, results, strict=True):
+            if risk_frame is None:
+                if reason:
+                    reasons.add(reason)
+                continue
+            risk_slots = [slot for slot in risk_frame.slots if slot.id == "risk_summary"]
+            risk_slot = risk_slots[0]
+            membership_refs = _unique_evidence_refs(
+                [member.membership_evidence_ref, member.entity_evidence_ref]
+            )
+            risk_refs = _unique_evidence_refs(
+                [
+                    *risk_slot.evidenceRefs,
+                    *(ref for line in risk_slot.provenance for ref in line.evidenceRefs),
+                ]
+            )
+            combined_refs = _unique_evidence_refs([*membership_refs, *risk_refs])
+            evidence_refs.extend(combined_refs)
+            provenance.extend(risk_slot.provenance)
+            provenance.append(
+                Experience360ProjectionProvenance(
+                    tenantId=request.tenantId,
+                    sourceState="degraded",
+                    generatedAt=risk_frame.generatedAt,
+                    sourceKind="authority",
+                    claimOrigin="canonical_authority",
+                    evidenceRefs=membership_refs,
+                    canonicalAuthorityRefs=["graph", "entity_registry"],
+                )
+            )
+            risk_entries.append(
+                {
+                    "member": {
+                        "kind": risk_frame.subject.kind,
+                        "id": member.entity_id,
+                        "entityType": member.entity_type,
+                    },
+                    "membershipEvidenceRefIds": [ref.id for ref in membership_refs],
+                    "riskFrame": risk_frame.model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    ),
+                }
+            )
+
+        if not risk_entries:
+            return AccountMemberRisksRead(
+                "unknown",
+                reason_codes=tuple(sorted(reasons)),
+                source_as_of=members_read.source_as_of,
+                truncated=fanout_truncated,
+            )
+        return AccountMemberRisksRead(
+            "degraded",
+            risks=tuple(risk_entries),
+            evidence_refs=tuple(_unique_evidence_refs(evidence_refs)),
+            provenance=tuple(_unique_provenance(provenance)),
+            reason_codes=tuple(sorted(reasons)),
+            source_as_of=members_read.source_as_of,
+            truncated=fanout_truncated,
+        )
+
+    async def _read_risk(
+        self,
+        request: Experience360FrameRequest,
+        *,
+        entity_type: Optional[str],
+    ) -> AccountRiskRead:
+        """Reuse Risk360's canonical entity read under Account's risk policy.
+
+        This path is intentionally limited to an exact, already-resolved
+        Account entity. It does not treat account_id as entity_id, aggregate
+        member risk, or imply coverage for related entities. The owning
+        Risk360 provider retains risk record validation and claim semantics.
+        """
+
+        if request.subject.kind != "entity" or entity_type not in _ACCOUNT_ENTITY_TYPES:
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_entity_subject_unavailable",),
+            )
+        if request.asOf is not None or request.timeRange is not None:
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_temporal_projection_unavailable",),
+            )
+        if not request.includeEvidence:
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_evidence_not_requested",),
+            )
+
+        provider = self._risk_provider
+        if provider is None:
+            try:
+                from intelligence.risk360.provider import Risk360Provider
+
+                provider = Risk360Provider()
+                self._risk_provider = provider
+            except Exception:  # noqa: BLE001 - optional authority fails closed
+                return AccountRiskRead(
+                    "unavailable",
+                    reason_codes=("account_risk_provider_unavailable",),
+                )
+
+        projection_request = ProjectionRequest(
+            projectionId=_RISK_CONTEXT_PROJECTION_ID,
+            tenantId=request.tenantId,
+            subject=ProjectionSubject(kind="entity", id=request.subject.id),
+            includeSections=["summary", "state", "evidence"],
+            includeClaims=True,
+            temporalMode="window",
+        )
+        # Risk360's profile/cluster enrichments are not joined by Account360.
+        # Preserve the canonical provider's own degraded summary/state output
+        # instead of declaring those dependencies available from unrelated
+        # Account slots.
+        projection_context = ProjectionContext(
+            projectionId=_RISK_CONTEXT_PROJECTION_ID,
+            tenantId=request.tenantId,
+            registryState="implemented",
+            dependencyState=[
+                ProjectionDependencyState(
+                    projectionId="profile360",
+                    state="unknown",
+                    reason="account_risk_profile_context_not_joined",
+                ),
+                ProjectionDependencyState(
+                    projectionId="cluster360",
+                    state="unknown",
+                    reason="account_risk_cluster_context_not_joined",
+                ),
+            ],
+            warnings=["account_risk_related_entity_join_not_available"],
+        )
+        project = getattr(provider, "project", None)
+        if not callable(project):
+            return AccountRiskRead(
+                "unavailable",
+                reason_codes=("account_risk_provider_invalid",),
+            )
+        try:
+            result = await project(projection_request, projection_context)
+        except Exception:  # noqa: BLE001 - direct provider failure remains opaque
+            return AccountRiskRead(
+                "unavailable",
+                reason_codes=("account_risk_provider_unavailable",),
+            )
+        if not isinstance(result, ProjectionResult):
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_provider_invalid_response",),
+            )
+        return AccountRiskRead("degraded", result=result)
 
     @staticmethod
     def _attach_members_context(
@@ -955,6 +2431,482 @@ class Account360Provider:
         return frame.model_copy(update={"slots": slots})
 
     @staticmethod
+    def _attach_member_profiles_context(
+        frame: Experience360Frame,
+        profiles_read: Optional[AccountMemberProfilesRead],
+        *,
+        include_evidence: bool,
+        requested_slot_ids: Sequence[str],
+    ) -> Experience360Frame:
+        """Attach only per-member Profile360 frames that passed their own policy."""
+
+        if ACCOUNT_PROFILES_SLOT not in requested_slot_ids:
+            return frame
+        slots = list(frame.slots)
+        profile_index = next(
+            (index for index, slot in enumerate(slots) if slot.id == ACCOUNT_PROFILES_SLOT),
+            None,
+        )
+        if profile_index is None:
+            return frame
+        slot = slots[profile_index]
+        if slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+            return frame
+
+        reasons = set(profiles_read.reason_codes if profiles_read is not None else ())
+        if not include_evidence:
+            reasons.add("account_member_profiles_evidence_not_requested")
+        if profiles_read is None:
+            reasons.add("account_member_profile_read_not_requested")
+        if (
+            not include_evidence
+            or profiles_read is None
+            or profiles_read.state != "degraded"
+            or not profiles_read.profiles
+            or not profiles_read.evidence_refs
+            or not profiles_read.provenance
+        ):
+            state = (
+                profiles_read.state
+                if profiles_read is not None
+                and profiles_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            slots[profile_index] = slot.model_copy(
+                update={
+                    "state": state,
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown",
+                        sourceAsOf=(profiles_read.source_as_of if profiles_read else None),
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(set([*slot.limitations, *reasons])),
+                    "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        evidence_refs = _unique_evidence_refs(
+            [*slot.evidenceRefs, *profiles_read.evidence_refs]
+        )
+        provenance = list(slot.provenance)
+        for item in profiles_read.provenance:
+            if item not in provenance:
+                provenance.append(item)
+        reasons.update(
+            {
+                "account_member_profile_roster_completeness_unknown",
+                "account_member_profiles_freshness_sla_unconfigured",
+            }
+        )
+        content = {
+            "subject": {"kind": frame.subject.kind, "id": frame.subject.id},
+            "membershipRelation": "MEMBER_OF",
+            "profiles": list(profiles_read.profiles),
+            "coverage": {
+                "state": "partial",
+                "profilesReturned": len(profiles_read.profiles),
+                "reason": "account_member_profile_roster_completeness_unknown",
+            },
+        }
+        slots[profile_index] = slot.model_copy(
+            update={
+                "state": "degraded",
+                "content": content,
+                "claims": [],
+                "provenance": provenance,
+                "evidenceRefs": evidence_refs,
+                "freshness": Experience360Freshness(
+                    state="unknown",
+                    sourceAsOf=profiles_read.source_as_of,
+                ),
+                "quality": Experience360Quality(
+                    state="partial",
+                    evidenceRefs=evidence_refs,
+                    reasonCodes=sorted(reasons),
+                ),
+                "limitations": sorted(set([*slot.limitations, *reasons])),
+                "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
+            }
+        )
+        return frame.model_copy(update={"slots": slots})
+
+    @staticmethod
+    def _attach_member_journeys_context(
+        frame: Experience360Frame,
+        journeys_read: Optional[AccountMemberJourneysRead],
+        *,
+        include_evidence: bool,
+        requested_slot_ids: Sequence[str],
+    ) -> Experience360Frame:
+        """Attach current member journey facts without implying account ownership."""
+
+        if ACCOUNT_JOURNEYS_SLOT not in requested_slot_ids:
+            return frame
+        slots = list(frame.slots)
+        journeys_index = next(
+            (index for index, slot in enumerate(slots) if slot.id == ACCOUNT_JOURNEYS_SLOT),
+            None,
+        )
+        if journeys_index is None:
+            return frame
+        slot = slots[journeys_index]
+        if slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+            return frame
+
+        reasons = set(journeys_read.reason_codes if journeys_read is not None else ())
+        if not include_evidence:
+            reasons.add("account_member_journeys_evidence_not_requested")
+        if journeys_read is None:
+            reasons.add("account_member_journey_read_not_requested")
+        if (
+            not include_evidence
+            or journeys_read is None
+            or journeys_read.state != "degraded"
+            or not journeys_read.journeys
+            or not journeys_read.evidence_refs
+            or not journeys_read.provenance
+        ):
+            state = (
+                journeys_read.state
+                if journeys_read is not None
+                and journeys_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            slots[journeys_index] = slot.model_copy(
+                update={
+                    "state": state,
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown",
+                        sourceAsOf=(journeys_read.source_as_of if journeys_read else None),
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(set([*slot.limitations, *reasons])),
+                    "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        evidence_refs = _unique_evidence_refs(
+            [*slot.evidenceRefs, *journeys_read.evidence_refs]
+        )
+        provenance = list(slot.provenance)
+        for item in journeys_read.provenance:
+            if item not in provenance:
+                provenance.append(item)
+        reasons.update(
+            {
+                "account_member_journey_membership_temporal_scope_unproven",
+                "account_member_journey_roster_completeness_unknown",
+                "account_member_journeys_freshness_sla_unconfigured",
+            }
+        )
+        existing_reasons = set(slot.reasonCodes) - {
+            "account_journey_membership_authority_not_joined",
+            "slot_provider_not_connected",
+        }
+        existing_limitations = set(slot.limitations) - {
+            "account_journey_membership_authority_not_joined",
+            "slot_provider_not_connected",
+        }
+        content = {
+            "subject": {"kind": frame.subject.kind, "id": frame.subject.id},
+            "association": "current_member_to_current_journey_participation",
+            "journeys": list(journeys_read.journeys),
+            "coverage": {
+                "state": "partial",
+                "membersReturned": len(journeys_read.journeys),
+                "reason": "account_member_journey_roster_completeness_unknown",
+            },
+        }
+        slots[journeys_index] = slot.model_copy(
+            update={
+                "state": "degraded",
+                "content": content,
+                "claims": [],
+                "provenance": provenance,
+                "evidenceRefs": evidence_refs,
+                "freshness": Experience360Freshness(
+                    state="unknown",
+                    sourceAsOf=journeys_read.source_as_of,
+                ),
+                "quality": Experience360Quality(
+                    state="partial",
+                    evidenceRefs=evidence_refs,
+                    reasonCodes=sorted(reasons),
+                ),
+                "limitations": sorted(existing_limitations | reasons),
+                "reasonCodes": sorted(existing_reasons | reasons),
+            }
+        )
+        return frame.model_copy(update={"slots": slots})
+
+    @staticmethod
+    def _attach_risk_context(
+        frame: Experience360Frame,
+        risk_read: Optional[AccountRiskRead],
+        member_risks_read: Optional[AccountMemberRisksRead],
+        *,
+        include_evidence: bool,
+        requested_slot_ids: Sequence[str],
+    ) -> Experience360Frame:
+        """Attach evidenced direct risk and policy-permitted exact-member risk."""
+
+        if ACCOUNT_RISK_SLOT not in requested_slot_ids:
+            return frame
+        slots = list(frame.slots)
+        risk_index = next(
+            (index for index, slot in enumerate(slots) if slot.id == ACCOUNT_RISK_SLOT),
+            None,
+        )
+        if risk_index is None:
+            return frame
+        slot = slots[risk_index]
+        if slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+            return frame
+
+        base_reasons = set(risk_read.reason_codes if risk_read is not None else ())
+        if member_risks_read is not None:
+            base_reasons.update(member_risks_read.reason_codes)
+        if not include_evidence:
+            base_reasons.add("account_risk_evidence_not_requested")
+        if risk_read is None:
+            base_reasons.add("account_risk_projection_not_requested")
+
+        result = risk_read.result if risk_read is not None else None
+        if result is not None:
+            if (
+                result.projectionId != _RISK_CONTEXT_PROJECTION_ID
+                or result.tenantId != frame.tenantId
+                or result.contractVersion
+                != INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+                or any(claim.subject != frame.subject for claim in result.claims)
+            ):
+                result = None
+                base_reasons.add("account_risk_projection_scope_or_contract_invalid")
+
+        sections_by_id: dict[str, Any] = {}
+        if result is not None:
+            for section in result.sections:
+                if section.id in sections_by_id:
+                    base_reasons.add("account_risk_projection_section_ambiguous")
+                    sections_by_id.clear()
+                    result = None
+                    break
+                sections_by_id[section.id] = section
+
+        summary = sections_by_id.get("summary") if result is not None else None
+        state = sections_by_id.get("state") if result is not None else None
+        for section in (summary, state):
+            if section is None:
+                base_reasons.add("account_risk_projection_section_unavailable")
+                continue
+            content = section.content
+            if (
+                not isinstance(content, Mapping)
+                or content.get("tenantId") != frame.tenantId
+                or content.get("subject")
+                != {"kind": frame.subject.kind, "id": frame.subject.id}
+            ):
+                base_reasons.add("account_risk_projection_subject_mismatch")
+                result = None
+                break
+            if section.state not in {"available", "degraded", "empty", "missing"}:
+                base_reasons.add("account_risk_projection_section_state_unsupported")
+                result = None
+                break
+            if section.warnings:
+                base_reasons.add("account_risk_source_section_degraded")
+
+        risk_claims = []
+        direct_evidence_refs: list[EvidenceRef] = []
+        if result is not None and include_evidence:
+            risk_claims = [
+                claim.model_copy(update={"domainSlotIds": [ACCOUNT_RISK_SLOT]})
+                for claim in result.claims
+                if claim.subject == frame.subject
+                and set(claim.domainSlotIds or [])
+                & {"risk_summary", "risk_assessment_state", "risk_evidence_and_limitations", "evidence_trace"}
+                and claim.evidenceRefs
+            ]
+            direct_evidence_refs = _unique_evidence_refs(
+                [ref for claim in risk_claims for ref in claim.evidenceRefs]
+            )
+
+        member_risks = (
+            list(member_risks_read.risks)
+            if include_evidence
+            and member_risks_read is not None
+            and member_risks_read.state == "degraded"
+            and member_risks_read.risks
+            and member_risks_read.evidence_refs
+            and member_risks_read.provenance
+            else []
+        )
+        member_evidence_refs = (
+            list(member_risks_read.evidence_refs) if member_risks else []
+        )
+        direct_assessment_evidenced = bool(
+            result is not None
+            and summary is not None
+            and state is not None
+            and summary.state != "missing"
+            and risk_claims
+            and direct_evidence_refs
+        )
+        if not direct_assessment_evidenced:
+            risk_claims = []
+            direct_evidence_refs = []
+        evidence_refs = _unique_evidence_refs(
+            [*direct_evidence_refs, *member_evidence_refs]
+        )
+
+        # Never turn an absent assessment or an evidence-free payload into a
+        # positive/empty account-risk assertion. Exact MEMBER_OF facts and a
+        # member's own policy-permitted Risk360 frame may independently supply
+        # evidenced member context when direct account risk is absent.
+        if (
+            not direct_assessment_evidenced
+            and not member_risks
+        ):
+            if result is not None and summary is not None and summary.state == "missing":
+                base_reasons.add("account_risk_assessment_not_observed")
+            if result is not None and not direct_evidence_refs:
+                base_reasons.add("account_risk_evidence_missing")
+            state_name = (
+                risk_read.state
+                if risk_read is not None
+                and risk_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            slots[risk_index] = slot.model_copy(
+                update={
+                    "state": state_name,
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(state="unknown"),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(base_reasons)
+                    ),
+                    "limitations": sorted(set([*slot.limitations, *base_reasons])),
+                    "reasonCodes": sorted(set([*slot.reasonCodes, *base_reasons])),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        partial_reasons = {
+            "account_risk_related_entity_join_not_available",
+            "account_risk_freshness_sla_unconfigured",
+            "account_risk_profile_context_not_joined",
+            "account_risk_cluster_context_not_joined",
+            "account_risk_member_roster_completeness_unknown",
+            "account_risk_member_freshness_sla_unconfigured",
+        }
+        reasons = base_reasons | partial_reasons
+        provenance: list[Experience360ProjectionProvenance] = []
+        if direct_assessment_evidenced and result is not None:
+            for section in (summary, state):
+                if section is None:
+                    continue
+                provenance.append(
+                    Experience360ProjectionProvenance(
+                        tenantId=frame.tenantId,
+                        projectionId=_RISK_CONTEXT_PROJECTION_ID,
+                        sourceKind="section",
+                        sectionId=section.id,
+                        sourceState=section.state,
+                        generatedAt=result.generatedAt,
+                        claimOrigin="unknown",
+                        evidenceRefs=direct_evidence_refs,
+                        canonicalAuthorityRefs=["risk_outputs"],
+                    )
+                )
+        if member_risks:
+            provenance.extend(member_risks_read.provenance)
+        if not direct_assessment_evidenced and result is not None:
+            if summary is not None and summary.state == "missing":
+                reasons.add("account_risk_assessment_not_observed")
+            elif not direct_evidence_refs:
+                reasons.add("account_risk_evidence_missing")
+        member_reason_codes = set(
+            member_risks_read.reason_codes if member_risks_read is not None else ()
+        )
+        member_reason_codes.update(
+            {
+                "account_risk_member_roster_completeness_unknown",
+                "account_risk_member_freshness_sla_unconfigured",
+            }
+        )
+        content = {
+            "subject": {"kind": frame.subject.kind, "id": frame.subject.id},
+            "scope": "direct_account_entity_only",
+            "summary": (
+                dict(summary.content)
+                if direct_assessment_evidenced and summary is not None
+                else None
+            ),
+            "state": (
+                dict(state.content)
+                if direct_assessment_evidenced and state is not None
+                else None
+            ),
+            "memberRiskContext": member_risks,
+            "memberCoverage": {
+                "state": "unknown",
+                "membersWithRisk": len(member_risks),
+                "sourceAsOf": (
+                    member_risks_read.source_as_of
+                    if member_risks_read is not None
+                    else None
+                ),
+                "reasonCodes": sorted(member_reason_codes),
+            },
+            "coverage": {
+                "state": "partial",
+                "reason": "account_risk_related_entity_join_not_available",
+            },
+        }
+        slots[risk_index] = slot.model_copy(
+            update={
+                "state": "degraded",
+                "content": content,
+                "claims": risk_claims,
+                "provenance": provenance,
+                "evidenceRefs": evidence_refs,
+                "freshness": Experience360Freshness(
+                    state="unknown",
+                    sourceAsOf=(
+                        member_risks_read.source_as_of
+                        if member_risks_read is not None
+                        else None
+                    ),
+                ),
+                "quality": Experience360Quality(
+                    state="partial",
+                    evidenceRefs=evidence_refs,
+                    reasonCodes=sorted(reasons),
+                ),
+                "limitations": sorted(set([*slot.limitations, *reasons])),
+                "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
+            }
+        )
+        return frame.model_copy(update={"slots": slots})
+
+    @staticmethod
     def _attach_identity_context(
         frame: Experience360Frame,
         identity: AccountIdentityRead,
@@ -1077,6 +3029,226 @@ class Account360Provider:
             return frame.model_copy(update={"slots": slots})
         return frame
 
+    @staticmethod
+    def _attach_account_contracts_context(
+        frame: Experience360Frame,
+        contracts_read: Optional[AccountContractsRead],
+        *,
+        include_evidence: bool,
+        requested_slot_ids: Sequence[str],
+    ) -> Experience360Frame:
+        """Attach exact account-bound commerce contracts under slot policy."""
+
+        if ACCOUNT_CONTRACTS_SLOT not in requested_slot_ids:
+            return frame
+        slots = list(frame.slots)
+        index = next(
+            (i for i, slot in enumerate(slots) if slot.id == ACCOUNT_CONTRACTS_SLOT),
+            None,
+        )
+        if index is None:
+            return frame
+        slot = slots[index]
+        if slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+            return frame
+
+        reasons = set(
+            contracts_read.reason_codes if contracts_read is not None else ()
+        )
+        if not include_evidence:
+            reasons.add("account_contract_evidence_not_requested")
+        if contracts_read is None:
+            reasons.add("account_contract_authority_not_requested")
+        elif (
+            contracts_read.tenant_id != frame.tenantId
+            or contracts_read.account_entity_id != frame.subject.id
+        ):
+            reasons.add("account_contract_scope_mismatch")
+            contracts_read = None
+        if contracts_read is not None and contracts_read.state in {"unknown", "unavailable"}:
+            if contracts_read.state == "unavailable":
+                reasons.add("account_contract_commerce_authority_unavailable")
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "unknown",
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown", sourceAsOf=contracts_read.source_as_of
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(reasons),
+                    "reasonCodes": sorted(reasons),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+        if contracts_read is None or not include_evidence:
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "unknown",
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(state="unknown"),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(reasons),
+                    "reasonCodes": sorted(reasons),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        if contracts_read.state == "empty" and not contracts_read.records:
+            provenance = Experience360ProjectionProvenance(
+                tenantId=frame.tenantId,
+                sourceState="empty",
+                generatedAt=frame.generatedAt,
+                sourceKind="authority",
+                claimOrigin="unknown",
+                canonicalAuthorityRefs=["commerce"],
+            )
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "empty",
+                    "content": {
+                        "state": "empty",
+                        "accountEntityId": frame.subject.id,
+                        "records": [],
+                        "coverage": {
+                            "source": "tenant_contract_profiles",
+                            "exactAccountMatch": True,
+                            "returned": 0,
+                            "truncated": False,
+                        },
+                        "freshness": {
+                            "state": "unknown",
+                            "reason": "account_contract_freshness_sla_unconfigured",
+                        },
+                    },
+                    "claims": [],
+                    "provenance": [provenance],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown", sourceAsOf=contracts_read.source_as_of
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown",
+                        reasonCodes=["account_contract_freshness_sla_unconfigured"],
+                    ),
+                    "limitations": [
+                        "No tenant contract profile with an exact account_id match was returned.",
+                        "Absence of a billing profile does not establish absence of external agreements or obligations.",
+                    ],
+                    "reasonCodes": [],
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        records = list(contracts_read.records)
+        if not records:
+            reasons.add("account_contract_authority_state_mismatch")
+            slots[index] = slot.model_copy(
+                update={
+                    "state": "unknown",
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown", sourceAsOf=contracts_read.source_as_of
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(reasons),
+                    "reasonCodes": sorted(reasons),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        reasons.add("account_contract_freshness_sla_unconfigured")
+        if contracts_read.truncated or contracts_read.state == "truncated":
+            reasons.add("account_contract_read_truncated")
+        if any(record.evidence_ref.observedAt is None for record in records):
+            reasons.add("account_contract_source_timestamp_unknown")
+        evidence_refs = _unique_evidence_refs(
+            [record.evidence_ref for record in records]
+        )
+        provenance = Experience360ProjectionProvenance(
+            tenantId=frame.tenantId,
+            sourceState="degraded",
+            generatedAt=frame.generatedAt,
+            sourceKind="authority",
+            claimOrigin="canonical_authority",
+            evidenceRefs=evidence_refs,
+            canonicalAuthorityRefs=["commerce"],
+        )
+        record_content = [
+            {
+                "contractProfileId": record.contract_profile_id,
+                "accountId": record.account_id,
+                "status": record.contract_status,
+                "billingModel": record.billing_model,
+                "packageId": record.package_id,
+                "planTier": record.plan_tier,
+                "billingPeriod": record.billing_period,
+                "currency": record.currency,
+                "contractStartDate": record.contract_start_date,
+                "contractEndDate": record.contract_end_date,
+                "renewalDate": record.renewal_date,
+                "evidenceRef": record.evidence_ref.model_dump(
+                    mode="json", exclude_none=True
+                ),
+            }
+            for record in records
+        ]
+        slots[index] = slot.model_copy(
+            update={
+                "state": "degraded",
+                "content": {
+                    "state": "partial",
+                    "accountEntityId": frame.subject.id,
+                    "records": record_content,
+                    "coverage": {
+                        "source": "tenant_contract_profiles",
+                        "exactAccountMatch": True,
+                        "returned": len(records),
+                        "truncated": contracts_read.truncated,
+                        "sourceAsOf": contracts_read.source_as_of,
+                    },
+                    "freshness": {
+                        "state": "unknown",
+                        "sourceAsOf": contracts_read.source_as_of,
+                        "reason": "account_contract_freshness_sla_unconfigured",
+                    },
+                    "limitations": [
+                        "Only tenant contract profiles whose stored account_id equals this canonical account entity are included.",
+                        "Signed external agreement text and legal obligation coverage are not joined.",
+                    ],
+                },
+                "claims": [],
+                "provenance": [provenance],
+                "evidenceRefs": evidence_refs,
+                "freshness": Experience360Freshness(
+                    state="unknown", sourceAsOf=contracts_read.source_as_of
+                ),
+                "quality": Experience360Quality(
+                    state="partial",
+                    evidenceRefs=evidence_refs,
+                    reasonCodes=sorted(reasons),
+                ),
+                "limitations": sorted(reasons),
+                "reasonCodes": sorted(reasons),
+            }
+        )
+        return frame.model_copy(update={"slots": slots})
+
     def _unknown_entity_frame(
         self,
         request: Experience360FrameRequest,
@@ -1149,6 +3321,29 @@ def _unique_evidence_refs(refs: Sequence[EvidenceRef]) -> list[EvidenceRef]:
     return unique
 
 
+def _unique_provenance(
+    provenance: Sequence[Experience360ProjectionProvenance],
+) -> list[Experience360ProjectionProvenance]:
+    """Preserve first-seen lineage while removing duplicate source records."""
+
+    seen: set[tuple[object, ...]] = set()
+    unique: list[Experience360ProjectionProvenance] = []
+    for item in provenance:
+        key = (
+            item.tenantId,
+            item.projectionId,
+            item.sourceKind,
+            item.sectionId,
+            item.claimId,
+            tuple(ref.model_dump_json(by_alias=True) for ref in item.evidenceRefs),
+            tuple(item.canonicalAuthorityRefs),
+        )
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
+
+
 def _safe_member_role(value: object) -> Optional[str]:
     """Keep only bounded enum-like membership roles from graph properties."""
 
@@ -1167,11 +3362,71 @@ def _safe_member_role(value: object) -> Optional[str]:
     return role
 
 
+def _account_contract_instant(value: object) -> Optional[str]:
+    """Normalize a source timestamp or leave freshness unknown."""
+
+    if isinstance(value, datetime):
+        try:
+            return to_iso_utc(value)
+        except ValueError:
+            return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return to_iso_utc(parse_instant_strict(value))
+    except ValueError:
+        return None
+
+
+def _account_contract_date(value: object) -> Optional[str]:
+    """Accept only a canonical ISO calendar date for contract effective dates."""
+
+    text = _bounded_text(value, max_length=10)
+    if text is None:
+        return None
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed.isoformat() if parsed.isoformat() == text else None
+
+
+def _bounded_text(value: object, *, max_length: int = 160) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if (
+        not text
+        or len(text) > max_length
+        or not text.isascii()
+        or any(ord(char) < 32 or ord(char) == 127 for char in text)
+    ):
+        return None
+    return text
+
+
+def _bounded_contract_value(value: object, allowed: set[str]) -> Optional[str]:
+    text = _bounded_text(value, max_length=64)
+    return text if text in allowed else None
+
+
+def _bounded_currency(value: object) -> Optional[str]:
+    text = _bounded_text(value, max_length=3)
+    if text is None:
+        return None
+    normalized = text.upper()
+    return normalized if len(normalized) == 3 and normalized.isalpha() else None
+
+
 __all__ = [
     "ACCOUNT_AGENTS_SLOT",
     "ACCOUNT_MEMBERS_SLOT",
     "ACCOUNT_IDENTITY_SLOT",
     "Account360Provider",
+    "AccountContractRecord",
+    "AccountContractsRead",
     "Account360Source",
     "AccountIdentityRead",
     "AccountMember",

@@ -28,6 +28,7 @@ import io
 import json
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 os.environ.setdefault("AETHER_ENV", "local")
@@ -214,6 +215,12 @@ async def _seed_graph(world: World) -> None:
 
 
 async def _seed_profile(world: World) -> None:
+    from identity.profile.prediction_authority import (
+        PredictionAuthorityEvidence,
+        ProfilePredictionOutput,
+        ProfilePredictionOutputRepository,
+    )
+
     t = world.tenant
     await _ProfileStore().insert(tenant_record_id(t, USER),
                                  {"tenant_id": t, "user_id": USER, "traits": {"email": "s@x"}})
@@ -227,6 +234,53 @@ async def _seed_profile(world: World) -> None:
     await JourneyChainRepository().upsert_chain(
         f"chain-{world.other_entity}", world.other_entity, t, "j3", "j3", 1, "a", "b",
     )
+
+    async def _prediction(tenant: str, entity: str, prediction_id: str) -> None:
+        now = datetime.now(timezone.utc)
+        await ProfilePredictionOutputRepository().record(
+            ProfilePredictionOutput(
+                prediction_id=prediction_id,
+                idempotency_key=f"{prediction_id}-key",
+                tenant_id=tenant,
+                entity_id=entity,
+                model_id="churn_prediction",
+                artifact_version="v-production-2",
+                artifact_checksum_sha256="a" * 64,
+                artifact_approval_state="promoted",
+                feature_schema_hash="schema-hash-v1",
+                feature_digest="0123456789abcdef",
+                state_schema_version="profile_future_state.v1",
+                policy_decision_id=f"policy-{prediction_id}",
+                policy_version="consent-v2",
+                actor_id="system-test",
+                generated_at=now,
+                valid_from=now - timedelta(minutes=1),
+                valid_until=now + timedelta(hours=1),
+                states=[{"state": "at_risk", "probability": 0.7, "rank": 1}],
+                evidence_refs=[
+                    PredictionAuthorityEvidence(
+                        id=f"event-{prediction_id}",
+                        type="event",
+                        source="analytics_events",
+                        observed_at=now - timedelta(minutes=2),
+                    ),
+                    PredictionAuthorityEvidence(
+                        id="churn_prediction@v-production-2:" + "a" * 64,
+                        type="model_output",
+                        source="model_artifact_registry",
+                    ),
+                    PredictionAuthorityEvidence(
+                        id=f"policy-{prediction_id}",
+                        type="annotation",
+                        source="consent_policy_decisions",
+                    ),
+                ],
+            )
+        )
+
+    await _prediction(t, world.entity, f"prediction-subject-{world.tenant}")
+    await _prediction(t, world.other_entity, f"prediction-other-{world.tenant}")
+    await _prediction(world.other_tenant, world.entity, f"prediction-tenant-{world.other_tenant}")
 
 
 async def _seed_features(world: World, cache) -> None:
@@ -496,7 +550,7 @@ async def test_full_erasure_leaves_no_component_pending_and_erases_every_store()
     # graph_edges: 1 identity_edges row + 2 entity graph edges + the profile
     # user vertex's edge (tenant-scoped).
     assert records("graph_edges") == 4
-    assert records("profile360_snapshots") == 3
+    assert records("profile360_snapshots") == 4
     assert records("feature_rows") == 1
     assert steps["feature_rows"]["artifacts_impacted"] == 1
     assert records("prediction_drift_buffers") == 2
@@ -523,6 +577,122 @@ async def test_full_erasure_leaves_no_component_pending_and_erases_every_store()
     assert steps["model_artifacts"]["requires_retrain"] is True
 
     await _assert_stores_erased(world)
+
+
+async def test_x402_approval_decisions_and_risk_evidence_are_dsr_scoped() -> None:
+    from value.x402.commerce_models import ApprovalDecision, ApprovalRequest
+    from value.x402.commerce_store import get_commerce_store, reset_commerce_store
+    from intelligence.risk360.contracts import RiskPoisoningEvidence
+    from intelligence.risk360.store import RiskPoisoningEvidenceRepository
+    from graph.operational_intelligence.models import EvidenceRef
+
+    world = World()
+    reset_commerce_store()
+    await _seed_identity(world)
+
+    commerce = get_commerce_store()
+    subject_approval = ApprovalRequest(
+        tenant_id=world.tenant,
+        challenge_id=f"challenge-{world.tenant}",
+        resource_id="resource-1",
+        requester_id=world.entity,
+        requester_type="user",
+        amount_usd=1,
+        asset_symbol="USDC",
+        chain="eip155:8453",
+    )
+    foreign_approval = ApprovalRequest(
+        tenant_id=world.other_tenant,
+        challenge_id=f"challenge-{world.other_tenant}",
+        resource_id="resource-2",
+        requester_id=USER,
+        requester_type="user",
+        amount_usd=2,
+        asset_symbol="USDC",
+        chain="eip155:8453",
+    )
+    await commerce.put_approval(subject_approval)
+    await commerce.put_approval(foreign_approval)
+    subject_decision = ApprovalDecision(
+        approval_id=subject_approval.approval_id,
+        tenant_id=world.tenant,
+        action="approve",
+        decided_by="operator-1",
+        reason="subject-linked approval",
+    )
+    foreign_decision = ApprovalDecision(
+        approval_id=foreign_approval.approval_id,
+        tenant_id=world.other_tenant,
+        action="approve",
+        decided_by="operator-2",
+        reason="same subject reference in another tenant",
+    )
+    await commerce.put_approval_decision(subject_decision)
+    await commerce.put_approval_decision(foreign_decision)
+
+    risk = RiskPoisoningEvidenceRepository()
+    recorded_at = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
+
+    def poisoning_record(
+        evidence_id: str, tenant_id: str, subject_id: str, source_id: str
+    ) -> RiskPoisoningEvidence:
+        return RiskPoisoningEvidence(
+            evidence_id=evidence_id,
+            tenant_id=tenant_id,
+            source_id=source_id,
+            subject_kind="entity",
+            subject_id=subject_id,
+            poisoning_type="agent_trace_tampering",
+            signal_strength=0.7,
+            confidence="medium",
+            detector_id="detector-1",
+            detector_version="1.0",
+            source_record_id=f"record-{evidence_id}",
+            evidence_refs=[
+                EvidenceRef(
+                    id=f"evidence-{evidence_id}",
+                    type="event",
+                    source="risk-test",
+                )
+            ],
+            first_seen_at=recorded_at,
+            last_seen_at=recorded_at,
+            recorded_at=recorded_at,
+        )
+
+    await risk.create(
+        poisoning_record("risk-subject", world.tenant, world.entity, "source-1")
+    )
+    await risk.create(
+        poisoning_record("risk-source-ref", world.tenant, world.other_entity, world.entity)
+    )
+    await risk.create(
+        poisoning_record("risk-other", world.tenant, world.other_entity, "source-2")
+    )
+    await risk.create(
+        poisoning_record("risk-foreign", world.other_tenant, world.entity, "source-3")
+    )
+
+    propagation_id = await dsr_propagation_service.open_request(
+        world.tenant, USER, "erasure"
+    )
+    outcome = await _run(world, propagation_id)
+    assert outcome.status == "succeeded", outcome.error
+
+    steps = await _steps(world, propagation_id)
+    assert steps["__overall__"]["overall"] == "completed"
+    assert steps["x402_commerce"]["records_impacted"] == 2
+    assert steps["risk_poisoning_evidence"]["records_impacted"] == 2
+    assert await commerce.get_approval_decision(
+        world.tenant, subject_decision.decision_id
+    ) is None
+    assert await commerce.get_approval_decision(
+        world.other_tenant, foreign_decision.decision_id
+    ) is not None
+    assert await risk.get(world.tenant, "risk-subject") is None
+    assert await risk.get(world.tenant, "risk-source-ref") is None
+    assert await risk.get(world.tenant, "risk-other") is not None
+    assert await risk.get(world.other_tenant, "risk-foreign") is not None
 
 
 async def _assert_stores_erased(world: World) -> None:

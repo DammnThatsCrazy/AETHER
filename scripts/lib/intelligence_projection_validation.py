@@ -87,7 +87,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # Curated vocabularies
 # ---------------------------------------------------------------------------
 
-# Union of every canonicalAuthorities value across the 18-projection registry.
+# Curated union of technical-projection and direct product-provider authorities.
 # Alphabetized. Kept here so an authority can never silently drift out of the
 # curated plane; additions to a projection must land here (or be declared
 # pending) in the same change.
@@ -99,16 +99,23 @@ AUTHORITY_INDEX = frozenset(
         "agent_entity",
         "agent_executions",
         "ai_execution_facts",
+        "analytics_events",
+        "authenticated_tenant_permission",
         "attribution_credits",
         "attribution_runs",
         "behavioral_signals",
+        "bronze_sdk_events",
         "campaign_facts",
+        "campaign_population_link_events",
         "campaign_touchpoints",
+        "canonical_activity",
         "canonical_conversions",
         "cluster_definitions",
         "cluster_membership",
         "cohort_membership",
         "commerce",
+        "commerce_order_payment_ledger",
+        "commerce_intent_authority",
         "commerce_product_offer_graph",
         "communication",
         "communication_facts",
@@ -119,13 +126,17 @@ AUTHORITY_INDEX = frozenset(
         "context_capsules",
         "credential_readiness",
         "currency_value_normalization",
+        "delegations",
         "deployments",
         "economic",
         "economic_facts",
         "entities",
         "entity_graph",
+        "entity_identity",
         "entity_registry",
+        "entity_wallets",
         "episode_facts",
+        "episode_journey_authority_records",
         "evidence",
         "events",
         "execution_facts",
@@ -133,18 +144,25 @@ AUTHORITY_INDEX = frozenset(
         "flow_traces",
         "fraud_synthesis",
         "geo_observations",
+        "geo_temporal_timezone_assertions",
         "gold_temporal_heatmap",
         "graph",
+        "graph_edges",
         "graph_motifs",
         "graph_snapshots",
         "identity",
+        "identity_clusters_v2",
+        "identity_source_identities",
+        "influence_propagation",
         "ingestion_health",
         "infrastructure_facts",
         "infrastructure_state",
         "journeys",
+        "journey_steps",
         "locations",
         "managed_integration_lifecycle",
         "measurement_contract",
+        "model_artifact_registry",
         "model_governance",
         "mutation_history",
         "observations",
@@ -153,31 +171,50 @@ AUTHORITY_INDEX = frozenset(
         "payments",
         "population",
         "population_definitions",
+        "profile_prediction_outputs",
         "provider_connections",
         "provider_health",
         "provider_registry",
         "relationship_facts",
+        "relationship_fidelity",
+        "relationship_predicate_registry",
         "resources",
+        "revenue_adjustments",
         "risk_assessments",
+        "risk_intervention_records",
         "risk_outputs",
         "risk_signals",
+        "risk_signals",
+        "semantic_context_cards",
+        "semantic_embedding_metadata",
         "semantic_memory_graph",
         "semantic_memory_records",
         "silver_semantic_observations",
+        "silver_exposure_facts",
+        "silver_commerce_flow_facts",
         "social_observations",
+        "social_relationship_evidence_events",
+        "spend_records",
         "source_coverage",
         "source_facts",
         "source_provenance",
         "source_schema",
+        "support_callback_events",
+        "support_callbacks",
+        "support_case_agent_assignment_events",
+        "support_case_context_events",
         "support_cases",
         "support_case_events",
         "sync_state",
         "temporal",
         "temporal_kernel",
+        "targeting_leakage_findings",
+        "tenant_contract_profiles",
         "tools",
         "touchpoints",
         "transfers",
         "validity_state",
+        "workflow_definition_revisions",
     }
 )
 
@@ -230,20 +267,28 @@ _OUTPUT_SECTIONS = frozenset(
     {
         "summary",
         "state",
+        "financial_risk",
         "timeline",
         "evidence",
         "interactions",
         "journeys",
+        "anomalies",
+        "normalization",
+        "stages",
         "paths",
         "sessions",
         "outcomes",
         "findings",
+        "influence",
+        "propagation",
         "health",
         "coverage",
         "deployments",
         "episode_context",
         "policy_boundary",
         "agent_spawned_agents",
+        "agent_delegations",
+        "syndicates",
         "signal_summary",
         "source_inventory",
         "classification",
@@ -252,6 +297,8 @@ _OUTPUT_SECTIONS = frozenset(
         "linked_entities",
         "campaign_links",
         "risk_flags",
+        "risk_edges",
+        "relationships",
         "freshness",
         "evidence_trace",
         "semantic_summary",
@@ -273,12 +320,16 @@ _OUTPUT_SECTIONS = frozenset(
         "value",
         "risk",
         "workflow_summary",
+        "journey_attribution",
+        "likely_next_states",
         "triggers",
         "runs",
         "actors",
         "approvals",
         "agent_steps",
         "actions",
+        "social_contagion",
+        "trust_edges",
         "failures",
     }
 )
@@ -422,8 +473,25 @@ EXPECTED_DIRECT_PROVIDER_BINDINGS = {
             "providerKind": "surface_frame_provider",
             "bindingStatus": "runtime_wired",
             "subjectKinds": ["entity"],
-            "domainSlotIds": ["account_summary", "members", "agents"],
-            "canonicalAuthorityRefs": ["entities", "entity_registry", "graph"],
+            "domainSlotIds": [
+                "account_summary",
+                "members",
+                "agents",
+                "profiles",
+                "risk",
+                "journeys",
+                "contracts",
+            ],
+            "canonicalAuthorityRefs": [
+                "commerce",
+                "entities",
+                "entity_registry",
+                "graph",
+                "identity",
+                "journeys",
+                "risk_outputs",
+                "tenant_contract_profiles",
+            ],
             "implementationRef": "services/api/identity/account360_provider.py",
             "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
         }
@@ -449,8 +517,10 @@ EXPECTED_DIRECT_PROVIDER_BINDINGS = {
             "canonicalAuthorityRefs": [
                 "entities",
                 "entity_registry",
+                "entity_wallets",
                 "evidence",
                 "identity",
+                "provider_registry",
                 "source_provenance",
             ],
             "implementationRef": "services/api/identity/identity/identity360_provider.py",
@@ -723,16 +793,6 @@ def _find_cycles(edges: dict[str, set[str]]) -> list[list[str]]:
     return unique
 
 
-def _cycle_has_optional_edge(cycle: list[str], optional_edges: dict[str, set[str]]) -> bool:
-    """True if any edge of the cycle is an optional projection dependency."""
-    for i in range(len(cycle)):
-        src = cycle[i]
-        dst = cycle[(i + 1) % len(cycle)]
-        if dst in optional_edges.get(src, set()):
-            return True
-    return False
-
-
 def _format_optional_cycle_path(cycle: list[str], optional_edges: dict[str, set[str]]) -> str:
     """Render a cycle path with an ``(optional)`` marker on each optional edge.
 
@@ -749,6 +809,32 @@ def _format_optional_cycle_path(cycle: list[str], optional_edges: dict[str, set[
         else:
             segments.append(dst)
     return " -> ".join(segments)
+
+
+def _cycle_through_optional_edge(
+    source: str, target: str, edges: dict[str, set[str]]
+) -> list[str] | None:
+    """Find a shortest cycle containing one declared optional edge.
+
+    The general DFS cycle detector reports representative paths only. An
+    optional edge can therefore participate in a real cycle without appearing
+    in those paths. Search back from its target so every cyclic optional edge
+    receives a diagnostic. The registry is small, and sorted neighbors keep
+    warning paths stable across runs.
+    """
+    queue: list[list[str]] = [[target]]
+    visited = {target}
+    for path in queue:
+        node = path[-1]
+        if node == source:
+            cycle = [source, *path[:-1]]
+            first = cycle.index(min(cycle))
+            return cycle[first:] + cycle[:first]
+        for neighbor in sorted(edges.get(node, ())):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append([*path, neighbor])
+    return None
 
 
 def _pending_ids(p: dict) -> set[str]:
@@ -986,26 +1072,30 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
             Violation("dependency_dag", "error", f"dependency cycle: {path}", cycle[0])
         )
 
-    # Union cycles (required ∪ optional) that exist only through an optional
-    # edge are benign → warning: the lazy runtime degrades missing optional deps
-    # to not_applicable, so a union cycle is never an ordering deadlock. Each
-    # warning labels the optional edge(s) with an ``(optional)`` marker.
+    # Union cycles (required ∪ optional) that exist through an optional edge
+    # are benign → warning: the lazy runtime degrades missing optional deps to
+    # not_applicable. Check each optional edge, since one representative cycle
+    # per component can conceal other participating optional edges.
     union_edges = {
         pid: set(required_edges.get(pid, ())) | set(optional_edges.get(pid, ()))
         for pid in ids
     }
-    for cycle in _find_cycles(union_edges):
-        if not _cycle_has_optional_edge(cycle, optional_edges):
-            continue  # fully-required cycle already reported as an error above
-        path = _format_optional_cycle_path(cycle, optional_edges)
-        violations.append(
-            Violation(
-                "dependency_dag",
-                "warning",
-                f"dependency cycle (via optional edge): {path}",
-                cycle[0],
+    reported_cycles: set[tuple[str, ...]] = set()
+    for source in sorted(optional_edges):
+        for target in sorted(optional_edges[source]):
+            cycle = _cycle_through_optional_edge(source, target, union_edges)
+            if cycle is None or tuple(cycle) in reported_cycles:
+                continue
+            reported_cycles.add(tuple(cycle))
+            path = _format_optional_cycle_path(cycle, optional_edges)
+            violations.append(
+                Violation(
+                    "dependency_dag",
+                    "warning",
+                    f"dependency cycle (via optional edge): {path}",
+                    cycle[0],
+                )
             )
-        )
 
     for p in projections:
         pid = p.get("id")
@@ -2081,6 +2171,32 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
                             sid,
                         )
                     )
+            required_claim_projection_ids = slot.get("requiredClaimProjectionIds", [])
+            if (
+                not isinstance(required_claim_projection_ids, list)
+                or not all(
+                    isinstance(projection_id, str) and projection_id
+                    for projection_id in required_claim_projection_ids
+                )
+                or len(set(required_claim_projection_ids)) != len(required_claim_projection_ids)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "requiredClaimProjectionIds must list unique bound projection ids",
+                        sid,
+                    )
+                )
+            elif set(required_claim_projection_ids) - slot_projection_ids:
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "requiredClaimProjectionIds must be included in the slot projection bindings",
+                        sid,
+                    )
+                )
             if isinstance(authorities, list):
                 missing_authorities = set(authorities) - slot_provider_authorities
                 declared_gap = slot.get("unboundCanonicalAuthorityRefs", [])

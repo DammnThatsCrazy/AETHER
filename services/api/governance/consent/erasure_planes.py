@@ -100,6 +100,9 @@ SILVER_FACTS_COMPONENT = "silver_facts"
 BRONZE_EVENTS_COMPONENT = "bronze_events"
 WEB3_OBSERVATIONS_COMPONENT = "web3_observations"
 X402_COMMERCE_COMPONENT = "x402_commerce"
+RISK_POISONING_EVIDENCE_COMPONENT = "risk_poisoning_evidence"
+RISK_INTERVENTION_RECORDS_COMPONENT = "risk_intervention_records"
+SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT = "social_relationship_evidence_events"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -368,11 +371,13 @@ async def _revoke_graph_edges(tenant_id: str, vertex_ids: Iterable[str]) -> int:
 
 
 async def erase_profile360_plane(subject: ErasureSubject) -> dict[str, Receipt]:
-    """Hard-delete the Profile 360 snapshot stores for the subject.
+    """Hard-delete the Profile 360 snapshot and prediction stores for the subject.
 
     ``profiles`` (the identity profile row, keyed ``{tenant}:{user id}``), the derived
     ``behavior_profiles`` snapshot (keyed by entity id) and the cross-journey
-    ``journey_chains`` memory. All three are ``hard_delete`` by storage policy.
+    ``journey_chains`` memory, and governed ``profile_prediction_outputs`` are
+    exact tenant/entity stores. Prediction output deletion honors its storage
+    legal holds; provenance remains append-only unless a DSR requires erasure.
     """
     from repositories.repos import (
         BehaviorProfileRepository,
@@ -388,11 +393,44 @@ async def erase_profile360_plane(subject: ErasureSubject) -> dict[str, Receipt]:
     )
     behavior = await _delete_where(BehaviorProfileRepository(), tenant, ["entity_id"], ids)
     chains = await _delete_where(JourneyChainRepository(), tenant, ["entity_id"], ids)
+    from shared.storage.lifecycle import StorageLifecycle
+    from identity.profile.prediction_authority import ProfilePredictionOutputRepository
+
+    lifecycle = StorageLifecycle()
+    held = None
+    for entity_id in ids:
+        held = await lifecycle.active_hold(
+            tenant, "profile_prediction_outputs", entity_id
+        )
+        if held is not None:
+            break
+    prediction_outputs = 0
+    if held is None:
+        prediction_outputs = await ProfilePredictionOutputRepository().delete_for_tenant_where(
+            tenant, "entity_id", ids
+        )
+
+    status = "skipped_legal_hold" if held is not None else "completed"
+    detail = {
+        "profiles": profiles,
+        "behavior_profiles": behavior,
+        "journey_chains": chains,
+    }
+    if held is not None:
+        detail["profile_prediction_outputs_skipped_legal_hold"] = 1
+    else:
+        detail["profile_prediction_outputs"] = prediction_outputs
     return {
         PROFILE360_COMPONENT: Receipt(
-            records_impacted=profiles + behavior + chains,
-            detail={"profiles": profiles, "behavior_profiles": behavior,
-                    "journey_chains": chains},
+            status=status,
+            records_impacted=profiles + behavior + chains + prediction_outputs,
+            policy_decision_id=(
+                f"storage_legal_hold:{held.get('hold_id')}" if held is not None else None
+            ),
+            blocked_reason=(
+                str(held.get("reason") or "legal hold") if held is not None else None
+            ),
+            detail=detail,
         ),
     }
 
@@ -1024,6 +1062,9 @@ SILVER_EXCLUDED_TABLES = frozenset({
     "canonical_conversions",
     "silver_semantic_observations",
     "semantic_memory_records",
+    "semantic_context_cards",
+    "semantic_embedding_metadata",
+    "workflow_definition_revisions",
     "silver_semantic_entity_mentions",
     "silver_semantic_subject_links",
     "silver_semantic_claims",
@@ -1322,7 +1363,8 @@ async def erase_x402_commerce_plane(subject: ErasureSubject) -> dict[str, Receip
     from shared.storage.lifecycle import StorageLifecycle
     lifecycle = StorageLifecycle()
     for resource_type in (
-        "commerce_challenges", "commerce_approvals", "commerce_entitlements",
+        "commerce_challenges", "commerce_approvals", "commerce_approval_decisions",
+        "commerce_entitlements",
         "commerce_authorizations", "commerce_receipts", "commerce_settlements",
         "commerce_grants", "commerce_fulfillments", "commerce_budget_policies",
     ):
@@ -1340,6 +1382,93 @@ async def erase_x402_commerce_plane(subject: ErasureSubject) -> dict[str, Receip
         records_impacted=sum(counts.values()),
         detail={f"x402_{name}": count for name, count in counts.items()},
     )}
+
+
+async def erase_risk_poisoning_evidence_plane(
+    subject: ErasureSubject,
+) -> dict[str, Receipt]:
+    """Erase exact tenant subject/source poisoning evidence, honoring holds."""
+    from shared.storage.lifecycle import StorageLifecycle
+    from intelligence.risk360.store import RiskPoisoningEvidenceRepository
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(
+            subject.tenant_id, "risk_poisoning_evidence", ref
+        )
+        if hold is not None:
+            return {
+                RISK_POISONING_EVIDENCE_COMPONENT: Receipt(
+                    status="skipped_legal_hold",
+                    policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                    blocked_reason=str(hold.get("reason") or "legal hold"),
+                )
+            }
+
+    deleted = await RiskPoisoningEvidenceRepository().erase_subject_refs(
+        subject.tenant_id, set(subject.refs)
+    )
+    return {
+        RISK_POISONING_EVIDENCE_COMPONENT: Receipt(records_impacted=deleted)
+    }
+
+
+async def erase_risk_intervention_records_plane(
+    subject: ErasureSubject,
+) -> dict[str, Receipt]:
+    """Erase exact tenant subject/actor intervention records, honoring holds."""
+    from shared.storage.lifecycle import StorageLifecycle
+    from intelligence.risk360.store import RiskInterventionRepository
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(
+            subject.tenant_id, "risk_intervention_records", ref
+        )
+        if hold is not None:
+            return {
+                RISK_INTERVENTION_RECORDS_COMPONENT: Receipt(
+                    status="skipped_legal_hold",
+                    policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                    blocked_reason=str(hold.get("reason") or "legal hold"),
+                )
+            }
+
+    deleted = await RiskInterventionRepository().erase_subject_refs(
+        subject.tenant_id, set(subject.refs)
+    )
+    return {
+        RISK_INTERVENTION_RECORDS_COMPONENT: Receipt(records_impacted=deleted)
+    }
+
+
+async def erase_social_relationship_evidence_plane(
+    subject: ErasureSubject,
+) -> dict[str, Receipt]:
+    """Erase exact tenant social assertions naming a subject in any role."""
+    from shared.storage.lifecycle import StorageLifecycle
+    from services.social360.evidence_authority import RepositorySocialEvidenceStore
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(
+            subject.tenant_id, SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT, ref
+        )
+        if hold is not None:
+            return {
+                SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT: Receipt(
+                    status="skipped_legal_hold",
+                    policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                    blocked_reason=str(hold.get("reason") or "legal hold"),
+                )
+            }
+
+    deleted = await RepositorySocialEvidenceStore().erase_subject_refs(
+        subject.tenant_id, set(subject.refs)
+    )
+    return {
+        SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT: Receipt(records_impacted=deleted)
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1364,6 +1493,21 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
     ("bronze", (BRONZE_EVENTS_COMPONENT,), erase_bronze_plane),
     ("web3_observations", (WEB3_OBSERVATIONS_COMPONENT,), erase_web3_observations_plane),
     ("x402_commerce", (X402_COMMERCE_COMPONENT,), erase_x402_commerce_plane),
+    (
+        "risk_poisoning_evidence",
+        (RISK_POISONING_EVIDENCE_COMPONENT,),
+        erase_risk_poisoning_evidence_plane,
+    ),
+    (
+        "risk_intervention_records",
+        (RISK_INTERVENTION_RECORDS_COMPONENT,),
+        erase_risk_intervention_records_plane,
+    ),
+    (
+        "social_relationship_evidence_events",
+        (SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT,),
+        erase_social_relationship_evidence_plane,
+    ),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )
 ML_ARTIFACT_COMPONENTS = (TRAINING_DATASETS_COMPONENT, MODEL_ARTIFACTS_COMPONENT)

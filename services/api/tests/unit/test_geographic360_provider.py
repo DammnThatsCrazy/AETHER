@@ -97,6 +97,7 @@ def _fact(
     provider: str | None = "geoip",
     source_observation_id: str | None = None,
     source_evidence_refs: tuple[str, ...] = (),
+    schema_version: str | None = None,
 ) -> LocationRow:
     return LocationRow(
         location_id=location_id,
@@ -118,6 +119,7 @@ def _fact(
         provider=provider,
         source_observation_id=source_observation_id,
         source_evidence_refs=source_evidence_refs,
+        schema_version=schema_version,
     )
 
 
@@ -312,6 +314,14 @@ async def test_entity_projection_is_a_valid_typed_result():
     assert any(c.id == "summary.primary_location" for c in claims)
     primary_claim = next(c for c in claims if c.id == "summary.primary_location")
     assert primary_claim.evidenceRefs and primary_claim.evidenceRefs[0].id == "location:loc-primary"
+    temporal_claim = next(
+        c for c in claims if c.kind == "profile_location_temporal_evidence"
+    )
+    assert temporal_claim.domainSlotIds == ["location_temporal"]
+    assert {ref.id for ref in temporal_claim.evidenceRefs} == {
+        "location:loc-primary",
+        "location:loc-egress",
+    }
 
     evidence = _sections(result)["evidence"]
     assert evidence.content["count"] == 2
@@ -329,6 +339,9 @@ async def test_entity_projection_is_a_valid_typed_result():
     ):
         assert required_slots[slot_id]["state"] == "unknown"
         assert required_slots[slot_id]["content"] is None
+    assert required_slots["timezone"]["reasonCode"] == (
+        "canonical_timezone_authority_not_joined"
+    )
     assert all(
         slot["policy"]["state"] == "not_evaluated_by_projection_provider"
         for slot in required_slots.values()
@@ -374,10 +387,142 @@ async def test_required_slots_preserve_source_evidence_and_temporal_provenance()
         "evidenceRefs": ["evidence:source-17"],
         "sourceProvider": "context_capsule",
     }
+    normalization = slots["normalization"]
+    assert normalization["state"] == "degraded"
+    assert normalization["reasonCode"] == (
+        "location_normalization_algorithm_lineage_unavailable"
+    )
+    assert normalization["content"]["lineageCompleteness"] == "partial"
+    assert normalization["content"]["entries"] == [
+        {
+            "locationFactId": "loc-source-linked",
+            "sourceLinkState": "linked",
+            "sourceObservationId": "capsule-observation-17",
+            "sourceProvider": "context_capsule",
+            "sourceEvidenceRefs": ["evidence:source-17"],
+            "sourceEvidenceRefsTruncated": False,
+            "locationFactSchemaVersion": None,
+            "sourceObservedAt": T_RECENT,
+        }
+    ]
+    assert normalization["freshness"] == {
+        "state": "unknown",
+        "reasonCode": "location_normalization_timestamp_unavailable",
+    }
+    assert normalization["evidenceRefs"] == [
+        {
+            "id": "location:loc-source-linked",
+            "type": "relationship",
+            "source": "location_facts",
+            "observedAt": T_RECENT,
+            "confidence": None,
+            "uri": None,
+        }
+    ]
+    normalization_claim = next(
+        claim
+        for claim in result.claims
+        if claim.id == "normalization.location_fact_lineage"
+    )
+    assert normalization_claim.domainSlotIds == ["normalization"]
+    assert "Portland" not in str(normalization)
+    assert "coarse_cell" not in str(normalization)
 
 
 @pytest.mark.asyncio
-async def test_activity_density_is_exact_entity_temporal_only_and_evidence_backed():
+async def test_timezone_is_not_inferred_from_exact_coordinates_or_place_labels():
+    # A precise location fact is still not a timezone mapping. The provider
+    # must not convert coordinates or a recognizable city label into an IANA
+    # zone without an exact canonical/source-reported timezone authority.
+    row = _fact(
+        "loc-new-york-precise",
+        precision_class="precise",
+        country_code="US",
+        region_name="New York",
+        region_code="NY",
+        city="New York City",
+        coordinate_present=True,
+        observed_at=T_RECENT,
+        provider="canonical_location_facts",
+        source_observation_id="observation-location-22",
+        source_evidence_refs=("evidence:location-22",),
+    )
+    posture = _posture(facts=(row,))
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+    }))
+    request = _request()
+
+    result = await provider.project(request, await _context(request))
+
+    slot = _sections(result)["state"].content["requiredSlots"]["timezone"]
+    assert slot["state"] == "unknown"
+    assert slot["reasonCode"] == "canonical_timezone_authority_not_joined"
+    assert slot["content"] is None
+    assert slot["evidenceRefs"] == []
+    assert not any("timezone" in claim.domainSlotIds for claim in result.claims)
+    assert "America/New_York" not in str(result.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_location_fact_schema_version_alone_is_not_normalization_lineage():
+    row = _fact(
+        "loc-schema-only",
+        provider="geoip",
+        source_observation_id=None,
+        source_evidence_refs=(),
+        schema_version="1.0.0",
+    )
+    posture = _posture(facts=(row,))
+    provider = Geographic360Provider(
+        reader=_FakeGeoReader({
+            ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+        })
+    )
+    request = _request()
+
+    result = await provider.project(request, await _context(request))
+
+    normalization = _sections(result)["state"].content["requiredSlots"]["normalization"]
+    assert normalization["state"] == "unknown"
+    assert normalization["content"] is None
+    assert normalization["reasonCode"] == "location_normalization_lineage_unavailable"
+    assert not any(
+        claim.domainSlotIds == ["normalization"] for claim in result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_normalization_lineage_bounds_source_entries_and_reports_truncation():
+    facts = tuple(
+        _fact(
+            f"loc-lineage-{index}",
+            source_observation_id=f"observation-{index}",
+            observed_at=T_RECENT,
+        )
+        for index in range(101)
+    )
+    posture = _posture(facts=facts)
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+    }))
+    request = _request()
+
+    result = await provider.project(request, await _context(request))
+
+    normalization = _sections(result)["state"].content["requiredSlots"]["normalization"]
+    content = normalization["content"]
+    assert normalization["state"] == "degraded"
+    assert content["sourceLinkedFactCount"] == 101
+    assert content["listedSourceLinkedFactCount"] == 100
+    assert content["omittedSourceLinkedFactCount"] == 1
+    assert content["sourceLinkedFactListTruncated"] is True
+    assert len(content["entries"]) == 100
+    assert len(normalization["evidenceRefs"]) == 100
+
+
+@pytest.mark.asyncio
+async def test_activity_density_without_exact_location_fact_reference_stays_unknown():
     posture = _posture(facts=_portland_facts())
     activity_reader = _FakeActivityReader(
         GeographicActivityDensityRead(
@@ -416,30 +561,22 @@ async def test_activity_density_is_exact_entity_temporal_only_and_evidence_backe
 
     slot = _sections(result)["state"].content["requiredSlots"]["activity_density"]
     assert activity_reader.calls == [(TENANT, "ent-portland", 200)]
-    assert slot["state"] == "degraded"
-    assert slot["reasonCode"] == "temporal_activity_density_not_linked_to_place"
-    assert slot["content"]["locationCorrelationState"] == "unknown"
-    assert slot["content"]["spatialDensityAsserted"] is False
-    assert slot["content"]["points"] == [
-        {
-            "dayOfWeek": "monday",
-            "hourUtc": 14,
-            "activityCount": 7,
-            "materializedAt": datetime.fromisoformat(T_RECENT).isoformat(),
-        }
-    ]
-    assert {ref["source"] for ref in slot["evidenceRefs"]} == {
-        "gold_temporal_heatmap"
-    }
+    assert slot["state"] == "unknown"
+    assert slot["reasonCode"] == (
+        "temporal_activity_density_not_linked_to_exact_location_fact"
+    )
+    assert slot["content"] is None
+    assert slot["evidenceRefs"] == []
     assert "America/Los_Angeles" not in str(slot)
     assert "Portland" not in str(slot)
     assert "8628h3cell" not in str(slot)
     assert "latitude" not in str(slot)
-    assert _sections(result)["state"].content["requiredSlots"]["timezone"]["state"] == "unknown"
-    claim = next(claim for claim in result.claims if claim.id == "activity.temporal_density")
-    assert claim.domainSlotIds == ["activity_density"]
-    assert claim.evidenceRefs[0].source == "gold_temporal_heatmap"
-    assert "no timezone is inferred" in claim.claims[0]
+    timezone_slot = _sections(result)["state"].content["requiredSlots"]["timezone"]
+    assert timezone_slot["state"] == "unknown"
+    assert timezone_slot["reasonCode"] == "canonical_timezone_authority_not_joined"
+    assert timezone_slot["content"] is None
+    assert timezone_slot["evidenceRefs"] == []
+    assert not any(claim.id == "activity.temporal_density" for claim in result.claims)
 
 
 @pytest.mark.asyncio
@@ -452,6 +589,7 @@ async def test_activity_density_drops_foreign_rows_and_marks_partial_coverage():
                     "tenant_id": TENANT,
                     "entity_id": "ent-portland",
                     "dimensions": {
+                        "location_id": "loc-primary",
                         "day_of_week": "monday",
                         "hour_utc": 14,
                         "activity_count": 7,
@@ -490,7 +628,23 @@ async def test_activity_density_drops_foreign_rows_and_marks_partial_coverage():
     assert slot["reasonCode"] == "temporal_activity_density_read_incomplete"
     assert slot["content"]["pointCountComplete"] is False
     assert [point["activityCount"] for point in slot["content"]["points"]] == [7]
+    assert slot["content"]["locationCorrelationState"] == (
+        "exact_canonical_location_fact_reference"
+    )
+    assert slot["content"]["points"][0]["locationFactId"] == "loc-primary"
+    assert slot["content"]["points"][0]["locationReferenceBasis"] == "location_id"
+    assert {ref["source"] for ref in slot["evidenceRefs"]} == {
+        "gold_temporal_heatmap",
+        "location_facts",
+    }
     assert "foreign-activity" not in str(slot)
+    claim = next(claim for claim in result.claims if claim.id == "activity.temporal_density")
+    assert claim.domainSlotIds == ["activity_density"]
+    assert "loc-primary" in claim.claims[0]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "gold_temporal_heatmap",
+        "location_facts",
+    }
 
 
 @pytest.mark.asyncio

@@ -36,10 +36,13 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
 from shared.intelligence_projections.errors import ProjectionError  # noqa: E402
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+    PRODUCT_360_SURFACE_DEFINITIONS,
 )
 from identity.account360_provider import (  # noqa: E402
     Account360Provider,
     AccountIdentityRead,
+    AccountMember,
+    AccountMembersRead,
 )
 from identity.identity.identity360_provider import (  # noqa: E402
     Identity360Result,
@@ -85,6 +88,310 @@ def test_explicitly_unbound_required_slot_remains_unknown_with_gap_reason() -> N
     assert "slot_provider_not_connected" in reasons
     assert "contract_registry_provider_not_connected" in slot["limitations"]
     assert missing == set()
+
+
+def test_value_financial_risk_catalog_requires_both_exact_subject_projections() -> None:
+    surface = PRODUCT_360_SURFACE_DEFINITIONS["value360"]
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "financial_risk")
+
+    assert "unboundReason" not in slot
+    assert slot["requiredClaimProjectionIds"] == ("economic360", "risk360")
+    assert {
+        binding["projectionId"]: set(binding["subjectKinds"])
+        for binding in slot["projectionBindings"]
+    } == {
+        "economic360": {"agent", "cluster", "entity", "source"},
+        "risk360": {"agent", "cluster", "entity", "source"},
+    }
+    assert {"economic_facts", "risk_outputs"} == set(slot["canonicalAuthorityRefs"])
+    assert {"risk360.explore", "risk360.read"}.issubset(
+        set(surface["backendCapabilities"]["projectionCapabilityKeys"])
+    )
+    risk_binding = next(
+        binding
+        for binding in slot["projectionBindings"]
+        if binding["projectionId"] == "risk360"
+    )
+    assert risk_binding["sectionIds"] == ("financial_risk",)
+
+
+@pytest.mark.asyncio
+async def test_value_financial_risk_frame_runs_both_claim_sources_after_slot_policy() -> None:
+    calls: list[tuple[str, list[str] | None]] = []
+    economic_evidence = EVIDENCE.model_copy(update={"id": "economic-frame-fact"})
+    risk_evidence = EVIDENCE.model_copy(update={"id": "risk-frame-fact"})
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T12:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "financial_risk": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, request, **kwargs):
+            calls.append((request.projectionId, request.includeSections))
+            if request.projectionId == "economic360":
+                kind, evidence = "economic_rollup", economic_evidence
+            else:
+                kind, evidence = "risk_dimension_state", risk_evidence
+            return ProjectionResult(
+                projectionId=request.projectionId,
+                tenantId=request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [evidence]},
+                    )
+                    for section_id in (request.includeSections or [])
+                ],
+                claims=[
+                    ClaimEnvelope(
+                        id=f"{request.projectionId}.financial-risk",
+                        kind=kind,
+                        subject=request.subject,
+                        evidenceRefs=[evidence],
+                        claims=[f"Evidence-backed {kind} for the exact subject."],
+                        domainSlotIds=["financial_risk"],
+                    )
+                ],
+                dependencyState=[],
+                generatedAt="2026-10-23T12:00:00Z",
+                degradedReasons=[],
+            )
+
+    request = Experience360FrameRequest(
+        surfaceId="value360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id="entity-value-risk"),
+        requestedSlotIds=["financial_risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T12:00:00Z",
+    )
+
+    slot = frame.slots[0]
+    assert calls == [
+        ("economic360", ["evidence", "summary"]),
+        ("risk360", ["financial_risk"]),
+    ]
+    assert slot.id == "financial_risk"
+    assert slot.state == "degraded"
+    assert {claim.kind for claim in slot.claims} == {
+        "economic_rollup",
+        "risk_dimension_state",
+    }
+    assert {ref.id for ref in slot.evidenceRefs} == {
+        "economic-frame-fact",
+        "risk-frame-fact",
+    }
+    assert slot.freshness.state == "unknown"
+    assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.parametrize("missing_claim_projection", [None, "economic360", "risk360"])
+def test_value_financial_risk_requires_economic_and_risk_source_claims(
+    missing_claim_projection: str | None,
+) -> None:
+    slot_definition = {
+        "id": "financial_risk",
+        "requirement": "required",
+        "canonicalAuthorityRefs": ["economic_facts", "risk_outputs"],
+        "requiredClaimProjectionIds": ["economic360", "risk360"],
+        "projectionBindings": [
+            {
+                "projectionId": "economic360",
+                "role": "primary",
+                "subjectKinds": ["entity"],
+                "sectionIds": ["evidence", "summary"],
+            },
+            {
+                "projectionId": "risk360",
+                "role": "supporting",
+                "subjectKinds": ["entity"],
+                "sectionIds": ["financial_risk"],
+            },
+        ],
+    }
+    economic_evidence = EVIDENCE.model_copy(update={"id": "economic-fact-1"})
+    risk_evidence = EVIDENCE.model_copy(update={"id": "financial-risk-1"})
+    results = []
+    for projection_id, section_ids, evidence, kind in (
+        ("economic360", ("evidence", "summary"), economic_evidence, "economic_rollup"),
+        (
+            "risk360",
+            ("financial_risk",),
+            risk_evidence,
+            "risk_dimension_state",
+        ),
+    ):
+        claims = []
+        if projection_id != missing_claim_projection:
+            claims = [
+                ClaimEnvelope(
+                    id=f"{projection_id}.financial-risk-claim",
+                    kind=kind,
+                    subject=SUBJECT,
+                    evidenceRefs=[evidence],
+                    claims=[f"Evidence-backed {kind} for the exact subject."],
+                    domainSlotIds=["financial_risk"],
+                )
+            ]
+        results.append(
+            ProjectionResult(
+                projectionId=projection_id,
+                tenantId=TENANT,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [evidence]},
+                    )
+                    for section_id in section_ids
+                ],
+                claims=claims,
+                dependencyState=[],
+                generatedAt="2026-10-23T12:00:00Z",
+                degradedReasons=[],
+            )
+        )
+
+    slot, reasons, missing = _compose_slot_content(
+        slot_id="financial_risk",
+        slot_definition=slot_definition,
+        results={result.projectionId: result for result in results},
+        include_evidence=True,
+        tenant_id=TENANT,
+        requested_as_of=None,
+        subject_kind="entity",
+        requires_exact_claim=True,
+    )
+
+    if missing_claim_projection is None:
+        assert slot["state"] == "available"
+        assert len(slot["claims"]) == 2
+        assert {claim.kind for claim in slot["claims"]} == {
+            "economic_rollup",
+            "risk_dimension_state",
+        }
+    else:
+        assert slot["state"] == "unknown"
+        assert slot["content"] is None
+        assert "required_source_claim_missing" in reasons
+        assert not slot["evidenceRefs"]
+    assert missing == set()
+
+
+def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> None:
+    confidence = next(
+        slot
+        for slot in PRODUCT_360_SURFACE_DEFINITIONS["value360"]["domainSlots"]
+        if slot["id"] == "confidence"
+    )
+
+    assert set(confidence["canonicalAuthorityRefs"]) == {
+        "ai_execution_facts",
+        "attribution_runs",
+        "attribution_credits",
+        "canonical_conversions",
+        "model_governance",
+    }
+    assert set(confidence["unboundCanonicalAuthorityRefs"]) == {"model_governance"}
+    assert confidence["authorityGapReason"] == (
+        "model_governance_calibration_and_validation_not_joined"
+    )
+    assert confidence["partialImplementationReason"]
+    assert len(confidence["projectionBindings"]) == 1
+    binding = confidence["projectionBindings"][0]
+    assert binding["projectionId"] == "economic360"
+    assert binding["role"] == "primary"
+    assert binding["sectionIds"] == ("evidence",)
+    assert set(binding["subjectKinds"]) == {
+        "account",
+        "agent",
+        "campaign",
+        "cluster",
+        "conversion",
+        "entity",
+        "journey",
+        "profile",
+    }
+
+
+def test_account360_communications_binding_is_exact_entity_and_partial() -> None:
+    communications = next(
+        slot
+        for slot in PRODUCT_360_SURFACE_DEFINITIONS["account360"]["domainSlots"]
+        if slot["id"] == "communications"
+    )
+
+    assert communications["canonicalAuthorityRefs"] == ("communication_facts",)
+    assert len(communications["projectionBindings"]) == 1
+    binding = communications["projectionBindings"][0]
+    assert binding["projectionId"] == "communication360"
+    assert binding["role"] == "primary"
+    assert binding["sectionIds"] == ("evidence", "interactions", "timeline")
+    assert binding["subjectKinds"] == ("entity",)
+    reason = communications["partialImplementationReason"]
+    assert "account/workspace aliases" in reason
+    assert "member fanout" in reason
+    assert "does not evaluate freshness" in reason
+    assert "frame-runtime responsibilities" in reason
+
+
+@pytest.mark.asyncio
+async def test_account360_communications_policy_denial_prevents_projection_read() -> None:
+    class DenyCommunicationsPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T10:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "communications": Experience360PolicyDisposition(state="denied")
+                },
+            )
+
+    class Runtime:
+        calls: list[str] = []
+
+        async def execute_projection(self, request, **_kwargs):
+            self.calls.append(request.projectionId)
+            raise AssertionError("denied Account communications must not be read")
+
+    runtime = Runtime()
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="account360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id="account-policy-1"),
+            requestedSlotIds=["communications"],
+            includeEvidence=True,
+        ),
+        policy_evaluator=DenyCommunicationsPolicy(),
+        projection_runtime=runtime,
+    )
+
+    slot = next(slot for slot in frame.slots if slot.id == "communications")
+    assert runtime.calls == []
+    assert slot.state == "suppressed"
+    assert slot.content is None
+    assert slot.claims == []
+    assert slot.evidenceRefs == []
+    assert "policy_denied" in slot.reasonCodes
 
 
 def test_required_source_aligned_slot_needs_an_exact_evidence_backed_claim() -> None:
@@ -239,7 +546,7 @@ def test_projection_provenance_uses_only_slot_aligned_authorities() -> None:
     }
     assert authority_refs_by_projection == {
         "relationship360": {"graph", "relationship_facts"},
-        "risk360": {"entity_graph"},
+        "risk360": {"entity_graph", "graph", "relationship_facts"},
     }
 
 
@@ -476,6 +783,79 @@ async def test_frame_runtime_routes_journey_subject_to_episode360() -> None:
 
 
 @pytest.mark.asyncio
+async def test_frame_runtime_routes_journey_communications_to_communication360() -> None:
+    calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T10:02:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "communications": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, request, **_kwargs):
+            section_ids = tuple(request.includeSections or [])
+            calls.append((request.projectionId, request.subject.kind, section_ids))
+            return ProjectionResult(
+                projectionId=request.projectionId,
+                tenantId=request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [EVIDENCE]},
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[
+                    ClaimEnvelope(
+                        id="communication360.journey-1.exact-fact",
+                        kind="canonical_communication_fact",
+                        subject=request.subject,
+                        evidenceRefs=[EVIDENCE],
+                        claims=["Canonical communication fact references this exact journey."],
+                        domainSlotIds=["communications"],
+                    )
+                ],
+                dependencyState=[],
+                generatedAt="2026-10-23T10:02:00Z",
+                degradedReasons=[],
+            )
+
+    request = Experience360FrameRequest(
+        surfaceId="journey360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="journey", id="journey-1"),
+        requestedSlotIds=["communications"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T10:02:00Z",
+    )
+
+    assert calls == [("communication360", "journey", ("evidence", "interactions"))]
+    slot = frame.slots[0]
+    assert frame.subject == ProjectionSubject(kind="journey", id="journey-1")
+    assert slot.id == "communications"
+    assert slot.state == "degraded"
+    assert "slot_partial_implementation" in slot.reasonCodes
+    assert [claim.id for claim in slot.claims] == [
+        "communication360.journey-1.exact-fact"
+    ]
+    assert slot.evidenceRefs == [EVIDENCE]
+
+
+@pytest.mark.asyncio
 async def test_signals360_unjoined_risk_flags_do_not_query_risk360() -> None:
     projection_calls: list[tuple[str, str, tuple[str, ...]]] = []
 
@@ -597,7 +977,10 @@ async def test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360() ->
     assert calls == [("risk360", "agent", ("evidence", "findings"))]
     assert frame.slots[0].state == "degraded"
     assert "slot_canonical_authority_gap" in frame.slots[0].reasonCodes
-    assert "exact_subject_authority_join_not_implemented" in frame.slots[0].reasonCodes
+    assert (
+        "agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined"
+        in frame.slots[0].reasonCodes
+    )
     risk_payload = next(
         payload
         for payload in frame.slots[0].content["sections"]
@@ -609,6 +992,130 @@ async def test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360() ->
     assert [claim.id for claim in frame.slots[0].claims] == [risk_claim.id]
     assert frame.slots[0].claims[0].evidenceRefs == [EVIDENCE]
     assert EVIDENCE in frame.slots[0].evidenceRefs
+
+
+@pytest.mark.asyncio
+async def test_support360_risk_slot_routes_exact_support_case_to_risk360_after_policy() -> None:
+    events: list[tuple[str, str]] = []
+    subject = ProjectionSubject(kind="support_case", id="case-risk-1")
+    risk_evidence = EvidenceRef(
+        id="risk-case-assessment-1",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-23T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "risk": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **_kwargs):
+            events.append(("projection", projection_request.projectionId))
+            assert projection_request.projectionId == "risk360"
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id="risk360.support-case-assessment-1",
+                kind="risk_assessment",
+                subject=subject,
+                evidenceRefs=[risk_evidence],
+                claims=["A tenant-scoped assessment is associated with this canonical support case."],
+                domainSlotIds=["risk"],
+            )
+            section_ids = tuple(projection_request.includeSections or ())
+            return ProjectionResult(
+                projectionId="risk360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [risk_evidence]},
+                        canonicalAuthorityRefs=["evidence", "risk_outputs", "risk_signals", "support_cases"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-23T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    request = Experience360FrameRequest(
+        surfaceId="support360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T12:01:00Z",
+    )
+
+    assert events == [("policy", "support360"), ("projection", "risk360")]
+    slot = frame.slots[0]
+    assert slot.id == "risk"
+    assert slot.state == "degraded"
+    assert "slot_partial_implementation" in slot.reasonCodes
+    assert [claim.id for claim in slot.claims] == [
+        "risk360.support-case-assessment-1"
+    ]
+    assert slot.evidenceRefs == [risk_evidence]
+
+
+@pytest.mark.asyncio
+async def test_support360_denied_risk_slot_does_not_query_risk360() -> None:
+    calls: list[str] = []
+
+    class RedactRiskPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "risk": Experience360PolicyDisposition(state="redacted")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **_kwargs):
+            calls.append(projection_request.projectionId)
+            raise AssertionError("redacted Support360 risk must not read any provider")
+
+    request = Experience360FrameRequest(
+        surfaceId="support360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="support_case", id="case-risk-redacted"),
+        requestedSlotIds=["risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=RedactRiskPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T12:01:00Z",
+    )
+
+    assert calls == []
+    assert frame.slots[0].state == "suppressed"
+    assert frame.slots[0].content is None
+    assert frame.slots[0].evidenceRefs == []
 
 
 def test_partial_financial_contagion_claim_does_not_complete_risk_slot() -> None:
@@ -1039,6 +1546,76 @@ async def test_identity360_scopes_direct_authority_reads_and_attaches_lineage() 
     assert slot.content["identityAuthorityRead"]["content"]["canonicalEntity"]["id"] == (
         "identity-entity-1"
     )
+
+
+@pytest.mark.asyncio
+async def test_identity360_preserves_partial_direct_authority_slot_state() -> None:
+    evidence = EvidenceRef(
+        id="wallet-proof-1",
+        type="annotation",
+        source="identity_verification_evidence",
+        observedAt="2026-10-16T10:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-16T10:02:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "wallets": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class IdentityProvider:
+        async def read(self, tenant_id, subject_kind, subject_id, *, requested_slot_ids=None):
+            return Identity360Result(
+                tenant_id=tenant_id,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                state="partial",
+                slots=(
+                    Identity360Slot(
+                        id="wallets",
+                        state="partial",
+                        content={
+                            "state": "partial",
+                            "ownershipState": "unknown",
+                            "currentControl": "unknown",
+                        },
+                        evidence_refs=(evidence,),
+                    ),
+                ),
+                generated_at="2026-10-16T10:01:00Z",
+            )
+
+    class Runtime:
+        async def execute_projection(self, *args, **kwargs):
+            raise AssertionError("the direct Identity360 provider owns the requested slot")
+
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="identity360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id="identity-entity-1"),
+            requestedSlotIds=["wallets"],
+            includeEvidence=True,
+        ),
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        identity360_provider=IdentityProvider(),
+    )
+
+    slot = frame.slots[0]
+    assert frame.state == "partial"
+    assert slot.state == "partial"
+    assert slot.content["identityAuthorityRead"]["state"] == "partial"
+    assert slot.content["identityAuthorityRead"]["content"]["currentControl"] == "unknown"
+    assert [(item.source, item.id) for item in slot.evidenceRefs] == [
+        ("identity_verification_evidence", "wallet-proof-1")
+    ]
 
 
 @pytest.mark.asyncio
@@ -1641,3 +2218,838 @@ async def test_episode360_entity_context_joins_exact_user_and_episode_evidence()
         ("relationship360", "evidence"): ("graph", "identity", "relationship_facts"),
         ("relationship360", "interactions"): ("graph", "relationship_facts"),
     }
+
+
+@pytest.mark.asyncio
+async def test_account360_member_profiles_use_exact_per_member_profile_policy() -> None:
+    account_id = "organization-profile-parent"
+    allowed_member_id = "member-profile-allowed"
+    denied_member_id = "member-profile-denied"
+    events: list[tuple[str, str, str]] = []
+
+    def member(entity_id: str, edge_id: str) -> AccountMember:
+        return AccountMember(
+            tenant_id=TENANT,
+            organization_entity_id=account_id,
+            entity_id=entity_id,
+            entity_type="human",
+            role=None,
+            membership_evidence_ref=EvidenceRef(
+                id=edge_id,
+                type="relationship",
+                source="graph_mutation_ledger",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+            entity_evidence_ref=EvidenceRef(
+                id=entity_id,
+                type="entity",
+                source="entity_registry",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+        )
+
+    class AccountSource:
+        async def canonical_entity(self, tenant_id: str, entity_id: str):
+            assert (tenant_id, entity_id) == (TENANT, account_id)
+            return AccountIdentityRead(
+                "resolved",
+                evidence_refs=(
+                    EvidenceRef(
+                        id=account_id,
+                        type="entity",
+                        source="entity_registry",
+                        observedAt="2026-10-18T12:00:00Z",
+                    ),
+                ),
+                entity_type="organization",
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+            )
+
+        async def account_members(self, tenant_id: str, organization_entity_id: str):
+            assert (tenant_id, organization_entity_id) == (TENANT, account_id)
+            events.append(("membership", "account360", organization_entity_id))
+            return AccountMembersRead(
+                "degraded",
+                TENANT,
+                account_id,
+                members=(
+                    member(allowed_member_id, "member-allowed-edge"),
+                    member(denied_member_id, "member-denied-edge"),
+                ),
+                reason_codes=("account_member_edge_completeness_unproven",),
+            )
+
+    class Policy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            if request.surfaceId == "account360":
+                return Experience360PolicyEvaluation(
+                    surfaceId=request.surfaceId,
+                    tenantId=request.tenantId,
+                    evaluatedAt="2026-10-18T12:30:00Z",
+                    frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                    slotDispositions={
+                        "profiles": Experience360PolicyDisposition(state="allowed")
+                    },
+                )
+
+            dispositions = {
+                slot["id"]: Experience360PolicyDisposition(state="denied")
+                for slot in PRODUCT_360_SURFACE_DEFINITIONS["profile360"]["domainSlots"]
+            }
+            frame_state = "allowed"
+            if request.subject.id == allowed_member_id:
+                dispositions["entity_identity"] = Experience360PolicyDisposition(
+                    state="allowed"
+                )
+            else:
+                frame_state = "denied"
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:30:00Z",
+                frameDisposition=Experience360PolicyDisposition(state=frame_state),
+                slotDispositions=dispositions,
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (projection_request.projectionId, projection_request.subject.id, section_ids)
+            )
+            events.append(("projection", projection_request.projectionId, projection_request.subject.id))
+            return ProjectionResult(
+                projectionId=projection_request.projectionId,
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[ProjectionSection(id=section_id, state="empty") for section_id in section_ids],
+                claims=[],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:30:00Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="account360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=account_id),
+        requestedSlotIds=["profiles"],
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=Policy(),
+        projection_runtime=runtime,
+        account360_provider=Account360Provider(AccountSource()),
+        generated_at="2026-10-18T12:30:00Z",
+    )
+
+    account_policy_index = events.index(("policy", "account360", account_id))
+    membership_index = events.index(("membership", "account360", account_id))
+    profile_policy_index = events.index(("policy", "profile360", allowed_member_id))
+    profile_projection_index = events.index(("projection", "profile360", allowed_member_id))
+    assert account_policy_index < membership_index < profile_policy_index < profile_projection_index
+    assert ("policy", "profile360", denied_member_id) in events
+    assert all(subject_id == allowed_member_id for _, subject_id, _ in runtime.calls)
+    assert runtime.calls == [("profile360", allowed_member_id, ("state", "summary"))]
+
+    slot = next(slot for slot in frame.slots if slot.id == "profiles")
+    assert slot.state == "degraded"
+    assert [entry["member"]["id"] for entry in slot.content["profiles"]] == [
+        allowed_member_id
+    ]
+    assert denied_member_id not in str(slot.content)
+    nested_frame = slot.content["profiles"][0]["profileFrame"]
+    assert nested_frame["surfaceId"] == "profile360"
+    assert nested_frame["subject"]["id"] == allowed_member_id
+    assert nested_frame["policyDisposition"]["state"] == "denied"
+    nested_slots = {item["id"]: item for item in nested_frame["slots"]}
+    assert nested_slots["entity_identity"]["policyDisposition"]["state"] == "allowed"
+    assert nested_slots["identity_spine"]["policyDisposition"]["state"] == "denied"
+    assert nested_slots["identity_spine"].get("content") is None
+
+
+@pytest.mark.asyncio
+async def test_account360_member_risk_runtime_applies_per_member_policy_before_projection() -> None:
+    events: list[tuple[str, str, str]] = []
+    account_id = "account-risk-member-parent"
+    allowed_member_id = "member-risk-allowed"
+    denied_member_id = "member-risk-denied"
+    allowed_risk_evidence = EvidenceRef(
+        id="risk-member-allowed-evidence",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+    direct_risk_evidence = EvidenceRef(
+        id="risk-account-direct-evidence",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    def member(entity_id: str, edge_id: str, entity_type: str = "human") -> AccountMember:
+        return AccountMember(
+            tenant_id=TENANT,
+            organization_entity_id=account_id,
+            entity_id=entity_id,
+            entity_type=entity_type,
+            role=None,
+            membership_evidence_ref=EvidenceRef(
+                id=edge_id,
+                type="relationship",
+                source="graph_mutation_ledger",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+            entity_evidence_ref=EvidenceRef(
+                id=entity_id,
+                type="entity",
+                source="entity_registry",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+        )
+
+    class AccountSource:
+        async def canonical_entity(self, tenant_id: str, entity_id: str):
+            assert (tenant_id, entity_id) == (TENANT, account_id)
+            return AccountIdentityRead(
+                "resolved",
+                evidence_refs=(
+                    EvidenceRef(
+                        id=entity_id,
+                        type="entity",
+                        source="entity_registry",
+                        observedAt="2026-10-18T12:00:00Z",
+                    ),
+                ),
+                entity_type="organization",
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+            )
+
+        async def account_members(self, tenant_id: str, organization_entity_id: str):
+            assert (tenant_id, organization_entity_id) == (TENANT, account_id)
+            events.append(("membership", "account360", organization_entity_id))
+            return AccountMembersRead(
+                "degraded",
+                TENANT,
+                account_id,
+                members=(
+                    member(allowed_member_id, "edge-member-risk-allowed"),
+                    member(denied_member_id, "edge-member-risk-denied", "agent"),
+                ),
+                reason_codes=("account_member_edge_completeness_unproven",),
+                source_as_of="2026-10-18T12:00:00Z",
+            )
+
+    class RiskProvider:
+        async def project(self, request, _context):
+            subject = ProjectionSubject(kind="entity", id=account_id)
+            claim = ClaimEnvelope(
+                id="risk360.account-direct",
+                kind="risk_assessment",
+                subject=subject,
+                evidenceRefs=[direct_risk_evidence],
+                claims=["A direct account risk assessment is observed."],
+                domainSlotIds=["risk_summary"],
+            )
+            assert request.subject == subject
+            return ProjectionResult(
+                projectionId="risk360",
+                tenantId=TENANT,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={
+                            "tenantId": TENANT,
+                            "subject": {"kind": subject.kind, "id": subject.id},
+                            "evidenceRefs": [direct_risk_evidence],
+                        },
+                    )
+                    for section_id in ("summary", "state")
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    class Policy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            if request.surfaceId == "account360":
+                return Experience360PolicyEvaluation(
+                    surfaceId=request.surfaceId,
+                    tenantId=request.tenantId,
+                    evaluatedAt="2026-10-18T12:30:00Z",
+                    frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                    slotDispositions={
+                        "risk": Experience360PolicyDisposition(state="allowed")
+                    },
+                )
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:30:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "risk_summary": Experience360PolicyDisposition(
+                        state=(
+                            "allowed"
+                            if request.subject.id == allowed_member_id
+                            else "denied"
+                        )
+                    )
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, request, **_kwargs):
+            sections = tuple(sorted(request.includeSections or ()))
+            self.calls.append(
+                (request.projectionId, request.tenantId, request.subject.id, sections)
+            )
+            events.append(("projection", request.projectionId, request.subject.id))
+            subject = request.subject
+            evidence = allowed_risk_evidence
+            claim = ClaimEnvelope(
+                id=f"risk360.{subject.id}",
+                kind="risk_assessment",
+                subject=subject,
+                evidenceRefs=[evidence],
+                claims=["A policy-permitted exact member assessment is observed."],
+                domainSlotIds=["risk_summary"],
+            )
+            return ProjectionResult(
+                projectionId="risk360",
+                tenantId=request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={
+                            "tenantId": request.tenantId,
+                            "subject": {"kind": subject.kind, "id": subject.id},
+                            "evidenceRefs": [evidence],
+                        },
+                    )
+                    for section_id in sections
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:30:00Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="account360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=account_id),
+        requestedSlotIds=["risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=Policy(),
+        projection_runtime=runtime,
+        account360_provider=Account360Provider(
+            AccountSource(), risk_provider=RiskProvider()
+        ),
+        generated_at="2026-10-18T12:30:00Z",
+    )
+
+    account_policy_index = events.index(("policy", "account360", account_id))
+    membership_index = events.index(("membership", "account360", account_id))
+    allowed_policy_index = events.index(("policy", "risk360", allowed_member_id))
+    allowed_projection_index = events.index(("projection", "risk360", allowed_member_id))
+    denied_policy_index = events.index(("policy", "risk360", denied_member_id))
+    assert account_policy_index < membership_index < allowed_policy_index
+    assert allowed_policy_index < allowed_projection_index
+    assert denied_policy_index < allowed_projection_index
+    assert runtime.calls == [
+        (
+            "risk360",
+            TENANT,
+            allowed_member_id,
+            ("evidence", "findings", "state", "summary"),
+        )
+    ]
+
+    risk_slot = next(slot for slot in frame.slots if slot.id == "risk")
+    member_entries = risk_slot.content["memberRiskContext"]
+    assert [entry["member"]["id"] for entry in member_entries] == [allowed_member_id]
+    assert denied_member_id not in str(risk_slot.content)
+    assert allowed_risk_evidence in risk_slot.evidenceRefs
+    assert any(
+        item.canonicalAuthorityRefs == ["graph", "entity_registry"]
+        for item in risk_slot.provenance
+    )
+    assert risk_slot.freshness.state == "unknown"
+    assert "account_risk_member_roster_completeness_unknown" in risk_slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_profile_risk_summary_routes_exact_entity_to_risk360_after_policy():
+    events: list[tuple[str, str, str]] = []
+    entity_id = "profile-risk-entity-1"
+    subject = ProjectionSubject(kind="entity", id=entity_id)
+    risk_evidence = EvidenceRef(
+        id="risk-assessment-profile-1",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "risk_summary": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (
+                    projection_request.projectionId,
+                    projection_request.subject.id,
+                    section_ids,
+                )
+            )
+            events.append(
+                ("projection", projection_request.projectionId, projection_request.subject.id)
+            )
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id="risk360.assessment.profile-risk-entity-1",
+                kind="risk_assessment",
+                subject=subject,
+                evidenceRefs=[risk_evidence],
+                claims=["A tenant-scoped risk assessment records this exact entity subject."],
+                domainSlotIds=["risk_summary"],
+            )
+            return ProjectionResult(
+                projectionId="risk360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"subjectId": entity_id, "evidenceRefs": [risk_evidence]},
+                        canonicalAuthorityRefs=["evidence", "risk_outputs"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["risk_summary"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=runtime,
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    assert events[0] == ("policy", "profile360", entity_id)
+    assert runtime.calls == [
+        ("risk360", entity_id, ("evidence", "findings", "state", "summary"))
+    ]
+    assert events[1] == ("projection", "risk360", entity_id)
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.content is not None
+    assert [claim.id for claim in slot.claims] == [
+        "risk360.assessment.profile-risk-entity-1"
+    ]
+    assert slot.evidenceRefs == [risk_evidence]
+    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
+        "evidence",
+        "findings",
+        "state",
+        "summary",
+    }
+    assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("subject_kind", ["entity", "agent"])
+async def test_profile_value_summary_routes_exact_subject_to_economic360_after_policy(
+    subject_kind: str,
+):
+    events: list[tuple[str, str, str]] = []
+    subject_id = f"profile-value-{subject_kind}-1"
+    subject = ProjectionSubject(kind=subject_kind, id=subject_id)
+    value_evidence = EvidenceRef(
+        id=f"economic-record-{subject_kind}-1",
+        type="transaction",
+        source="canonical_conversions",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "value_summary": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (
+                    projection_request.projectionId,
+                    projection_request.subject.id,
+                    section_ids,
+                )
+            )
+            events.append(
+                ("projection", projection_request.projectionId, projection_request.subject.id)
+            )
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id=f"economic360.summary.{subject_id}",
+                kind="economic_rollup",
+                subject=subject,
+                evidenceRefs=[value_evidence],
+                claims=["A tenant-scoped economic fact records this exact subject."],
+                domainSlotIds=["value_summary"],
+            )
+            return ProjectionResult(
+                projectionId="economic360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"subjectId": subject_id, "evidenceRefs": [value_evidence]},
+                        canonicalAuthorityRefs=["economic_facts", "evidence"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["value_summary"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=runtime,
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    assert events[0] == ("policy", "profile360", subject_id)
+    assert runtime.calls == [("economic360", subject_id, ("evidence", "summary"))]
+    assert events[1] == ("projection", "economic360", subject_id)
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.content is not None
+    assert [claim.id for claim in slot.claims] == [f"economic360.summary.{subject_id}"]
+    assert slot.evidenceRefs == [value_evidence]
+    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
+        "evidence",
+        "summary",
+    }
+    assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_profile_relationships_routes_exact_entity_to_relationship360_after_policy():
+    events: list[tuple[str, str, str]] = []
+    entity_id = "profile-relationship-entity-1"
+    subject = ProjectionSubject(kind="entity", id=entity_id)
+    relationship_evidence = EvidenceRef(
+        id="profile-relationship-mutation-1",
+        type="relationship",
+        source="graph_mutation_ledger",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "relationships": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (
+                    projection_request.projectionId,
+                    projection_request.subject.id,
+                    section_ids,
+                )
+            )
+            events.append(
+                ("projection", projection_request.projectionId, projection_request.subject.id)
+            )
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id="relationship360.graph-event.profile-relationship-1",
+                kind="relationship_graph_event",
+                subject=subject,
+                evidenceRefs=[relationship_evidence],
+                claims=["The canonical graph ledger records a relationship for this exact entity."],
+                domainSlotIds=["relationships"],
+            )
+            return ProjectionResult(
+                projectionId="relationship360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"subjectId": entity_id, "evidenceRefs": [relationship_evidence]},
+                        canonicalAuthorityRefs=["graph", "relationship_facts"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=["ledger_replay_completeness_is_unknown"],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["relationships"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=runtime,
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    assert events[0] == ("policy", "profile360", entity_id)
+    assert runtime.calls == [
+        ("relationship360", entity_id, ("evidence", "interactions", "summary"))
+    ]
+    assert events[1] == ("projection", "relationship360", entity_id)
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.content is not None
+    assert [claim.id for claim in slot.claims] == [
+        "relationship360.graph-event.profile-relationship-1"
+    ]
+    assert slot.evidenceRefs == [relationship_evidence]
+    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
+        "evidence",
+        "interactions",
+        "summary",
+    }
+    assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_profile_relationships_do_not_infer_entity_from_profile_alias():
+    profile_subject = ProjectionSubject(kind="profile", id="profile-alias-not-entity-1")
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "relationships": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **_kwargs):
+            raise AssertionError("profile alias must not be projected as an entity")
+
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="profile360",
+            tenantId=TENANT,
+            subject=profile_subject,
+            requestedSlotIds=["relationships"],
+        ),
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    slot = frame.slots[0]
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert "projection_binding_subject_kind_unsupported" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_profile_location_temporal_routes_exact_entity_to_geographic360_after_policy():
+    events: list[tuple[str, str, str]] = []
+    entity_id = "profile-location-entity-1"
+    subject = ProjectionSubject(kind="entity", id=entity_id)
+    location_evidence = EvidenceRef(
+        id="location:profile-location-fact-1",
+        type="relationship",
+        source="location_facts",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "location_temporal": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (
+                    projection_request.projectionId,
+                    projection_request.subject.id,
+                    section_ids,
+                )
+            )
+            events.append(
+                ("projection", projection_request.projectionId, projection_request.subject.id)
+            )
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id="profile_location_temporal.entity.profile-location-entity-1",
+                kind="profile_location_temporal_evidence",
+                subject=subject,
+                evidenceRefs=[location_evidence],
+                claims=[
+                    "Canonical location facts record a time-scoped observation for this exact subject; this is not a continuous physical trajectory."
+                ],
+                domainSlotIds=["location_temporal"],
+            )
+            return ProjectionResult(
+                projectionId="geographic360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [location_evidence]},
+                        canonicalAuthorityRefs=["geo_observations", "temporal"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="profile360",
+            tenantId=TENANT,
+            subject=subject,
+            requestedSlotIds=["location_temporal"],
+            includeEvidence=True,
+        ),
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=runtime,
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    assert events[0] == ("policy", "profile360", entity_id)
+    assert runtime.calls == [("geographic360", entity_id, ("evidence", "timeline"))]
+    assert events[1] == ("projection", "geographic360", entity_id)
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.content is not None
+    assert [claim.id for claim in slot.claims] == [
+        "profile_location_temporal.entity.profile-location-entity-1"
+    ]
+    assert slot.evidenceRefs == [location_evidence]
+    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
+        "evidence",
+        "timeline",
+    }
+    assert "slot_partial_implementation" in slot.reasonCodes

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,6 +22,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
     ProjectionRequest,
     ProjectionSubject,
 )
+from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from graph.operational_intelligence.models import EvidenceRef, TimeRangeFilter  # noqa: E402
 from shared.graph.graph import Edge, GraphClient, Vertex  # noqa: E402
 from shared.intelligence_projections.composition import (  # noqa: E402
@@ -30,13 +33,23 @@ from identity.identity.source_subject_scope import SourceSubjectScopeRead  # noq
 from services.social360.provider import (  # noqa: E402
     AgentSubjectScopeRead,
     OUTPUT_SECTIONS,
+    RepositorySocialRelationshipFidelityReader,
     Social360FactRead,
     SocialGraphPathRead,
     SocialObservedPath,
     Social360Provider,
+    SocialRelationshipFidelityRead,
     RepositorySocialGraphPathReader,
+    RepositorySocialSyndicateMembershipReader,
+    SocialSyndicateMembership,
+    SocialSyndicateMembershipRead,
+    RepositorySocialRiskContextEdgeReader,
+    SocialRiskContextEdge,
+    SocialRiskContextEdgeRead,
+    SocialRiskSignalRead,
     _domain_slot_ids,
 )
+from services.social360.evidence_authority import SocialEvidenceRead  # noqa: E402
 
 
 TENANT = "tenant-social-360"
@@ -63,6 +76,21 @@ class FakeSocialSource:
             truncated=len(rows) >= 500,
             reason=None if available else f"{fact_family}_source_unavailable",
         )
+
+
+class FakeSocialEvidenceAuthority:
+    def __init__(self, contagion: SocialEvidenceRead, trust: SocialEvidenceRead) -> None:
+        self.contagion = contagion
+        self.trust = trust
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+
+    async def read_social_contagion_evidence(self, tenant_id: str, subject_entity_id: str, **bounds):
+        self.calls.append(("social_contagion", tenant_id, {"subject_entity_id": subject_entity_id, **bounds}))
+        return self.contagion
+
+    async def read_trust_edge_evidence(self, tenant_id: str, subject_entity_id: str, **bounds):
+        self.calls.append(("trust_edge", tenant_id, {"subject_entity_id": subject_entity_id, **bounds}))
+        return self.trust
 
 
 class FakePopulationScopeReader:
@@ -103,6 +131,57 @@ class FakeSocialGraphPathReader:
     async def read_paths(self, tenant_id: str, start_entity_id: str):
         self.calls.append((tenant_id, start_entity_id))
         return self.result
+
+
+class FakeSocialRelationshipFidelityReader:
+    def __init__(self, reads: dict[tuple[str, str], SocialRelationshipFidelityRead]):
+        self.reads = reads
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def read(self, tenant_id: str, source_entity_id: str, target_entity_id: str):
+        self.calls.append((tenant_id, source_entity_id, target_entity_id))
+        return self.reads.get(
+            (source_entity_id, target_entity_id),
+            SocialRelationshipFidelityRead(
+                tenant_id,
+                f"{source_entity_id}::{target_entity_id}",
+                "unknown",
+                reason="relationship_fidelity_not_persisted",
+            ),
+        )
+
+
+class FakeSocialSyndicateMembershipReader:
+    def __init__(self, result: SocialSyndicateMembershipRead) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str, int]] = []
+
+    async def read(self, tenant_id: str, entity_id: str, *, limit: int):
+        self.calls.append((tenant_id, entity_id, limit))
+        return self.result
+
+
+class FakeSocialRiskContextEdgeReader:
+    def __init__(self, result: SocialRiskContextEdgeRead) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def read_edges(self, tenant_id: str, subject: ProjectionSubject):
+        self.calls.append((tenant_id, subject.kind, subject.id))
+        return self.result
+
+
+class FakeSocialRiskSignalReader:
+    def __init__(self, reads: dict[str, SocialRiskSignalRead]) -> None:
+        self.reads = reads
+        self.calls: list[tuple[str, str]] = []
+
+    async def read(self, tenant_id: str, entity_id: str):
+        self.calls.append((tenant_id, entity_id))
+        return self.reads.get(
+            entity_id,
+            SocialRiskSignalRead(tenant_id, entity_id, (), available=True),
+        )
 
 
 def _population_scope(
@@ -183,6 +262,24 @@ def _identity(
     }
 
 
+def _syndicate_membership(
+    *, tenant_id: str = TENANT, entity_id: str = "entity-a", population_id: str = "syndicate-a"
+):
+    return SocialSyndicateMembership(
+        tenant_id=tenant_id,
+        entity_id=entity_id,
+        population_id=population_id,
+        population_type="cluster",
+        joined_at="2026-10-18T09:00:00Z",
+        evidence_ref=EvidenceRef(
+            id=f"member-of-{population_id}",
+            type="relationship",
+            source="graph_mutation_ledger",
+            observedAt="2026-10-18T09:00:00Z",
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_entity_projection_is_tenant_scoped_and_emits_typed_fact_evidence():
     source = FakeSocialSource(
@@ -248,6 +345,185 @@ async def test_entity_projection_is_tenant_scoped_and_emits_typed_fact_evidence(
     assert identity_claim.evidenceRefs[0].id == "identity-fact-a"
     assert identity_claim.domainSlotIds == _domain_slot_ids("entity", "identity")
     assert source.calls[0] == ("identity", TENANT, 500)
+
+
+@pytest.mark.asyncio
+async def test_syndicates_slot_requires_exact_active_ledger_evidence_and_stays_partial():
+    membership = _syndicate_membership()
+    reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id=TENANT,
+            entity_id="entity-a",
+            rows=[membership],
+            available=True,
+            scope_known=True,
+        )
+    )
+    provider = Social360Provider(
+        source=FakeSocialSource({"identity": [_identity("identity-a", "entity-a", "social-a")]}),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=reader,
+    )
+
+    result = await provider.project(_request(include_sections=["syndicates"]), _context())
+
+    section = next(section for section in result.sections if section.id == "syndicates")
+    assert section.state == "degraded"
+    assert section.content["coverage"] == "unknown"
+    assert section.content["complete"] is False
+    assert section.content["memberships"] == [
+        {
+            "populationId": "syndicate-a",
+            "populationType": "cluster",
+            "membershipState": "active",
+            "joinedAt": "2026-10-18T09:00:00Z",
+            "evidenceRef": membership.evidence_ref.model_dump(mode="json"),
+        }
+    ]
+    assert section.content["freshness"]["state"] == "unknown"
+    assert section.canonicalAuthorityRefs == [
+        "cohort_membership",
+        "evidence",
+        "graph",
+        "population_definitions",
+    ]
+    claim = next(claim for claim in result.claims if "syndicates" in (claim.domainSlotIds or []))
+    assert claim.evidenceRefs == [membership.evidence_ref]
+    assert claim.claimState == "observed"
+    assert reader.calls == [(TENANT, "entity-a", 100)]
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_reader_requires_canonical_entity_before_membership_read():
+    membership = _syndicate_membership()
+
+    class FakeProfileSyndicateSource:
+        def __init__(self, *, canonical_scope_known: bool = True) -> None:
+            self.canonical_scope_known = canonical_scope_known
+            self.canonical_calls = []
+            self.membership_calls = []
+
+        async def canonical_entity(self, tenant_id, subject):
+            self.canonical_calls.append((tenant_id, subject.kind, subject.id))
+            return SimpleNamespace(
+                record={"tenant_id": tenant_id, "entity_id": subject.id},
+                available=True,
+                scope_known=self.canonical_scope_known,
+                reason=None,
+            )
+
+        async def syndicate_memberships(self, tenant_id, subject, *, limit):
+            self.membership_calls.append((tenant_id, subject.kind, subject.id, limit))
+            return SimpleNamespace(
+                rows=[membership],
+                available=True,
+                scope_known=True,
+                truncated=False,
+                reason=None,
+            )
+
+    source = FakeProfileSyndicateSource()
+    reader = RepositorySocialSyndicateMembershipReader(source=source)
+    result = await reader.read(TENANT, "entity-a", limit=500)
+    assert result.available is True
+    assert result.scope_known is True
+    assert result.rows == [membership]
+    assert source.canonical_calls == [(TENANT, "entity", "entity-a")]
+    assert source.membership_calls == [(TENANT, "entity", "entity-a", 100)]
+
+    unresolved_source = FakeProfileSyndicateSource(canonical_scope_known=False)
+    unresolved = await RepositorySocialSyndicateMembershipReader(
+        source=unresolved_source
+    ).read(TENANT, "entity-a", limit=100)
+    assert unresolved.available is True
+    assert unresolved.scope_known is False
+    assert unresolved_source.membership_calls == []
+
+
+@pytest.mark.asyncio
+async def test_syndicates_slot_keeps_missing_membership_unknown_and_rejects_foreign_scope():
+    empty_reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id=TENANT,
+            entity_id="entity-a",
+            rows=[],
+            available=True,
+            scope_known=True,
+        )
+    )
+    empty_result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=empty_reader,
+    ).project(_request(include_sections=["syndicates"]), _context())
+    empty_section = next(section for section in empty_result.sections if section.id == "syndicates")
+    assert empty_section.state == "unknown"
+    assert empty_section.content["memberships"] == []
+    assert empty_section.content["observedMembershipCount"] is None
+    assert empty_section.content["reasonCode"] == (
+        "social_syndicate_membership_not_observed_completeness_unknown"
+    )
+    assert not [claim for claim in empty_result.claims if "syndicates" in (claim.domainSlotIds or [])]
+
+    foreign_reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id="tenant-other",
+            entity_id="entity-a",
+            rows=[_syndicate_membership(tenant_id="tenant-other")],
+            available=True,
+            scope_known=True,
+        )
+    )
+    foreign_result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=foreign_reader,
+    ).project(_request(include_sections=["syndicates"]), _context())
+    foreign_section = next(
+        section for section in foreign_result.sections if section.id == "syndicates"
+    )
+    assert foreign_section.state == "unknown"
+    assert foreign_section.content["memberships"] == []
+    assert foreign_section.content["reasonCode"] == "social_syndicate_membership_scope_mismatch"
+    assert foreign_result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_syndicates_slot_requires_consent_and_does_not_claim_historical_membership():
+    reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id=TENANT,
+            entity_id="entity-a",
+            rows=[_syndicate_membership()],
+            available=True,
+            scope_known=True,
+        )
+    )
+
+    async def denied_consent(tenant_id: str, subject_id: str, anonymous_id, purpose: str):
+        return False, "consent_receipt_missing"
+
+    denied = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=denied_consent,
+        syndicate_membership_reader=reader,
+    ).project(_request(include_sections=["syndicates"]), _context())
+    assert denied.sections[0].state == "suppressed"
+    assert reader.calls == []
+
+    historical = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=reader,
+    ).project(
+        _request(include_sections=["syndicates"], temporal_mode="relative"),
+        _context(),
+    )
+    section = next(section for section in historical.sections if section.id == "syndicates")
+    assert section.state == "unknown"
+    assert section.content["reasonCode"] == "social_syndicate_historical_replay_unavailable"
+    assert section.content["memberships"] == []
+    assert reader.calls == []
 
 
 @pytest.mark.asyncio
@@ -423,6 +699,131 @@ async def test_denied_consent_suppresses_without_reading_social_facts():
 
 
 @pytest.mark.asyncio
+async def test_social_contagion_and_trust_sections_keep_claim_ceiling_and_exact_scope():
+    contagion = {
+        "record_id": "contagion-record-1",
+        "tenant_id": TENANT,
+        "assertion_kind": "social_contagion",
+        "subject_entity_id": "entity-a",
+        "source_entity_id": "entity-source",
+        "target_entity_id": "entity-a",
+        "path_entity_ids": ["entity-source", "entity-middle", "entity-a"],
+        "source_id": "connector:network-a",
+        "source_observation_id": "observation-1",
+        "source_revision_id": "revision-1",
+        "source_event_id": "source-event-1",
+        "observed_at": "2026-10-24T10:00:00Z",
+        "effective_at": "2026-10-24T10:00:00Z",
+        "recorded_at": "2026-10-24T10:01:00Z",
+        "actor_id": "operator-1",
+        "actor_type": "tenant_user",
+        "path_evidence_refs": [
+            {"id": "edge-1", "type": "relationship", "source": "relationship_facts"}
+        ],
+        "source_evidence_refs": [
+            {"id": "source-event-1", "type": "event", "source": "bronze_observation"}
+        ],
+        "risk_evidence_refs": [
+            {"id": "risk-1", "type": "model_output", "source": "risk_signals:model"}
+        ],
+        "source_trust_classification": "unverified_ingress",
+        "claim_state": "correlated",
+        "causal_status": "unverified",
+        "policy_state": "unknown",
+    }
+    trust = {
+        "record_id": "trust-record-1",
+        "tenant_id": TENANT,
+        "assertion_kind": "trust_edge",
+        "subject_entity_id": "entity-a",
+        "source_entity_id": "entity-source",
+        "target_entity_id": "entity-a",
+        "source_id": "aether.operator:operator-1",
+        "source_observation_id": "manual-observation-1",
+        "source_revision_id": "manual-revision-1",
+        "source_event_id": "manual-event-1",
+        "observed_at": "2026-10-24T10:00:00Z",
+        "effective_at": "2026-10-24T10:00:00Z",
+        "recorded_at": "2026-10-24T10:01:00Z",
+        "actor_id": "operator-1",
+        "actor_type": "tenant_user",
+        "policy_evidence_refs": [
+            {"id": "grant-1", "type": "annotation", "source": "authenticated_tenant_permission"}
+        ],
+        "risk_evidence_refs": [],
+        "assertion_state": "operator_asserted",
+        "risk_signal_ids": [],
+    }
+    authority = FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT, "entity-a", (contagion,)),
+        SocialEvidenceRead(TENANT, "entity-a", (trust,)),
+    )
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_evidence_authority=authority,
+    ).project(
+        _request(include_sections=["social_contagion", "trust_edges"]),
+        _context(),
+    )
+
+    contagion_section = next(section for section in result.sections if section.id == "social_contagion")
+    trust_section = next(section for section in result.sections if section.id == "trust_edges")
+    assert contagion_section.state == "available"
+    assert contagion_section.content["causalContagionEstablished"] is False
+    assert contagion_section.content["items"][0]["claimState"] == "correlated"
+    assert contagion_section.content["items"][0]["sourceTrustClassification"] == "unverified_ingress"
+    assert trust_section.state == "available"
+    assert trust_section.content["trustScoreInferred"] is False
+    assert trust_section.content["items"][0]["assertionState"] == "operator_asserted"
+    assert {claim.kind for claim in result.claims} == {
+        "social_contagion_source_report",
+        "social_trust_edge_operator_assertion",
+    }
+    assert all(claim.claimState.value in {"correlated", "observed"} for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_social_assertion_reads_receive_parsed_temporal_bounds():
+    authority = FakeSocialEvidenceAuthority(
+        SocialEvidenceRead(TENANT, "entity-a"), SocialEvidenceRead(TENANT, "entity-a")
+    )
+    provider = Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_evidence_authority=authority,
+    )
+    await provider.project(
+        _request(
+            include_sections=["social_contagion", "trust_edges"],
+            time_range=TimeRangeFilter(
+                from_="2026-10-23T00:00:00Z", to="2026-10-24T00:00:00Z"
+            ),
+            as_of="2026-10-24T12:00:00Z",
+        ),
+        _context(),
+    )
+    assert len(authority.calls) == 2
+    for _, _, bounds in authority.calls:
+        assert bounds["start"] == datetime(2026, 10, 23, tzinfo=timezone.utc)
+        assert bounds["end"] == datetime(2026, 10, 24, tzinfo=timezone.utc)
+        assert bounds["as_of"] == datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
+
+    authority.calls.clear()
+    result = await provider.project(
+        _request(
+            include_sections=["social_contagion"],
+            time_range=TimeRangeFilter(from_="not-an-instant"),
+        ),
+        _context(),
+    )
+    assert authority.calls == []
+    assertion = next(section for section in result.sections if section.id == "social_contagion")
+    assert assertion.state == "unknown"
+    assert "social_assertion_window_invalid" in assertion.warnings
+
+
+@pytest.mark.asyncio
 async def test_relationship_requires_consent_for_both_entities():
     source = FakeSocialSource()
     checked: list[str] = []
@@ -480,9 +881,13 @@ async def test_unavailable_identity_source_is_degraded_and_does_not_join_partial
     assert all(
         section.state == "degraded"
         for section_id, section in sections.items()
-        if section_id != "paths"
+        if section_id not in {
+            "paths", "propagation", "influence", "syndicates", "social_contagion", "trust_edges"
+        }
     )
     assert sections["paths"].state == "unknown"
+    assert sections["propagation"].state == "unknown"
+    assert sections["influence"].state == "unknown"
     assert sections["summary"].content["coverage"] == "unavailable"
     coverage = sections["evidence"].content["sourceCoverage"]
     assert coverage["state"] == "unavailable"
@@ -704,8 +1109,20 @@ async def test_population_truncation_empty_membership_and_historical_scope_are_e
         population_scope_reader=FakePopulationScopeReader(_population_scope("empty", ())),
     ).project(_request("population", "population-a"), _context())
     assert empty_source.calls == []
-    assert {section.state for section in empty.sections if section.id != "paths"} == {"empty"}
+    assert {
+        section.state
+        for section in empty.sections
+        if section.id not in {
+            "paths", "propagation", "influence", "syndicates", "risk_edges",
+            "social_contagion", "trust_edges",
+        }
+    } == {"empty"}
     assert next(section for section in empty.sections if section.id == "paths").state == "unknown"
+    assert next(section for section in empty.sections if section.id == "influence").state == "unknown"
+    assert next(section for section in empty.sections if section.id == "propagation").state == "unknown"
+    assert (
+        next(section for section in empty.sections if section.id == "risk_edges").state == "unknown"
+    )
 
     temporal_source = FakeSocialSource()
     temporal_scope = FakePopulationScopeReader(_population_scope())
@@ -852,13 +1269,22 @@ async def test_source_subject_rejects_temporal_scope_before_identity_or_social_r
     assert result.degradedReasons == ["source_identity_temporal_scope_unknown"]
 
 
-def _observed_edge(from_id: str, to_id: str, evidence_id: str | None = None) -> Edge:
+def _observed_edge(
+    from_id: str,
+    to_id: str,
+    evidence_id: str | None = None,
+    *,
+    tenant_id: str = TENANT,
+    observed_at: str | None = None,
+) -> Edge:
     properties = {
-        "tenant_id": TENANT,
+        "tenant_id": tenant_id,
         "relationship_predicate": "FOLLOWS",
         "idempotency_key": f"follow:{from_id}:{to_id}",
         "valid_from": "2026-10-20T10:00:00Z",
     }
+    if observed_at is not None:
+        properties["observed_at"] = observed_at
     if evidence_id is not None:
         properties["evidence_refs"] = [evidence_id]
     return Edge(
@@ -866,6 +1292,43 @@ def _observed_edge(from_id: str, to_id: str, evidence_id: str | None = None) -> 
         from_vertex_id=from_id,
         to_vertex_id=to_id,
         properties=properties,
+    )
+
+
+def _fidelity_read(
+    source_entity_id: str,
+    target_entity_id: str,
+    evidence_id: str,
+    *,
+    tenant_id: str = TENANT,
+    computed_at: str = "2026-10-22T10:00:00Z",
+    **dimensions: float,
+) -> SocialRelationshipFidelityRead:
+    relationship_ref = f"{source_entity_id}::{target_entity_id}"
+    return SocialRelationshipFidelityRead(
+        tenant_id=tenant_id,
+        relationship_ref=relationship_ref,
+        state="available",
+        vector={
+            "relationship_ref": relationship_ref,
+            "status": "current",
+            "observation_count": 1,
+            **dimensions,
+        },
+        vector_evidence_refs=(
+            EvidenceRef(
+                id=evidence_id,
+                type="event",
+                source="relationship_fidelity",
+            ),
+        ),
+        run_evidence_ref=EvidenceRef(
+            id=f"run:{source_entity_id}:{target_entity_id}",
+            type="model_output",
+            source="computation_substrate",
+            observedAt=computed_at,
+        ),
+        computed_at=computed_at,
     )
 
 
@@ -921,6 +1384,10 @@ async def test_repository_social_path_reader_returns_only_bounded_tenant_follows
     assert [(path.entity_ids, len(path.edge_evidence_refs)) for path in result.paths] == [
         (("entity-a", "entity-b", "entity-c"), 2)
     ]
+    assert [
+        (edge.from_vertex_id, edge.to_vertex_id) for edge in result.paths[0].graph_edges
+    ] == [("entity-a", "entity-b"), ("entity-b", "entity-c")]
+    assert result.paths[0].edge_observed_at == (None, None)
     refs = {ref.id for edge in result.paths[0].edge_evidence_refs for ref in edge}
     assert {
         "follow:entity-a:entity-b",
@@ -945,6 +1412,19 @@ async def test_repository_social_path_reader_returns_only_bounded_tenant_follows
     # Graph validity time is not a substitute for the source observation time.
     assert all(ref.observedAt is None for ref in fact_refs)
     assert "entity-foreign" not in {entity for path in result.paths for entity in path.entity_ids}
+
+    projected = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=RepositorySocialGraphPathReader(graph_client=client),
+    ).project(_request(include_sections=["propagation"]), _context())
+    propagation = projected.sections[0].content["propagation"]
+    assert propagation["paths"][0]["entityPath"] == ["entity-a", "entity-b", "entity-c"]
+    assert propagation["paths"][0]["timeOrderState"] == "unknown"
+    assert propagation["paths"][0]["propagationAuthority"][
+        "certifiedForPropagationAnalysis"
+    ]
+    assert {ref.id for ref in propagation["evidenceRefs"]} == refs
     await client.close()
 
 
@@ -1041,6 +1521,197 @@ async def test_multi_hop_paths_has_exact_claim_evidence_and_composes_to_its_slot
 
 
 @pytest.mark.asyncio
+async def test_propagation_slot_uses_exact_graph_path_and_governed_authority_without_scores():
+    edge_ab = _observed_edge("entity-a", "entity-b", "observation-ab")
+    edge_bc = _observed_edge("entity-b", "entity-c", "observation-bc")
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    (None, None),
+                ),
+            ),
+        )
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["propagation"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "propagation"
+    assert section.state == "degraded"
+    assert section.canonicalAuthorityRefs == [
+        "graph",
+        "relationship_facts",
+        "relationship_predicate_registry",
+        "influence_propagation",
+    ]
+    propagation = section.content["propagation"]
+    assert propagation["coverage"] == "bounded_observed_propagation_eligible_paths"
+    assert propagation["completeness"] == "unknown"
+    assert propagation["freshness"] == "unknown"
+    assert propagation["componentValuesIncluded"] is False
+    assert propagation["causalContagionEstablished"] is False
+    path = propagation["paths"][0]
+    assert path["entityPath"] == ["entity-a", "entity-b", "entity-c"]
+    assert path["timeOrderState"] == "unknown"
+    assert path["propagationAuthority"]["certifiedForPropagationAnalysis"] is True
+    assert path["propagationAuthority"]["decision"] == "pass"
+    assert all(
+        component["state"] in {"insufficient_data", "not_applicable"}
+        for component in path["componentCoverage"]
+    )
+    assert all(component["measuredHopCount"] == 0 for component in path["componentCoverage"])
+    assert all("value" not in component for component in path["componentCoverage"])
+    assert {ref.id for ref in propagation["evidenceRefs"]} == {
+        "follow:entity-a:entity-b",
+        "observation-ab",
+        "follow:entity-b:entity-c",
+        "observation-bc",
+    }
+    claim = next(claim for claim in result.claims if "propagation" in claim.domainSlotIds)
+    assert claim.domainSlotIds == ["propagation"]
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        "follow:entity-a:entity-b",
+        "observation-ab",
+        "follow:entity-b:entity-c",
+        "observation-bc",
+    }
+    assert "does not establish" in claim.claims[0]
+
+
+@pytest.mark.asyncio
+async def test_propagation_slot_rejects_cross_tenant_graph_hops_before_emitting_evidence():
+    edge_ab = _observed_edge(
+        "entity-a", "entity-b", "observation-ab", tenant_id="tenant-other"
+    )
+    edge_bc = _observed_edge("entity-b", "entity-c", "observation-bc")
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    (None, None),
+                ),
+            ),
+        )
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["propagation"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "propagation"
+    assert section.state == "degraded"
+    assert section.content is None
+    assert section.warnings == ["canonical_social_propagation_path_validation_failed"]
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_propagation_time_order_requires_explicit_source_observation_times():
+    edge_ab = _observed_edge(
+        "entity-a",
+        "entity-b",
+        "observation-ab",
+        observed_at="2026-10-19T10:00:00Z",
+    )
+    edge_bc = _observed_edge(
+        "entity-b",
+        "entity-c",
+        "observation-bc",
+        observed_at="2026-10-20T10:00:00Z",
+    )
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    ("2026-10-19T10:00:00+00:00", "2026-10-20T10:00:00+00:00"),
+                ),
+            ),
+        )
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["propagation"]), _context())
+
+    path = result.sections[0].content["propagation"]["paths"][0]
+    assert path["sourceObservedAtByEdge"] == [
+        "2026-10-19T10:00:00+00:00",
+        "2026-10-20T10:00:00+00:00",
+    ]
+    assert path["timeOrderState"] == "ordered"
+    assert "social_propagation_source_observation_time_missing" not in (
+        result.sections[0].warnings or []
+    )
+
+
+@pytest.mark.asyncio
 async def test_multi_hop_paths_is_unknown_when_no_bounded_path_is_observed():
     path_reader = FakeSocialGraphPathReader(
         SocialGraphPathRead(
@@ -1107,3 +1778,577 @@ async def test_multi_hop_paths_require_consent_for_every_path_endpoint():
     assert section.content is None
     assert section.warnings == ["social_path_endpoint_consent_restricted"]
     assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_influence_paths_join_exact_graph_edges_to_tenant_fidelity_and_preserve_gaps():
+    edge_ab = _observed_edge(
+        "entity-a", "entity-b", "observation-ab", observed_at="2026-10-20T10:00:00Z"
+    )
+    edge_bc = _observed_edge(
+        "entity-b", "entity-c", "observation-bc", observed_at="2026-10-21T10:00:00Z"
+    )
+    graph_fact_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    graph_fact_refs,
+                    (edge_ab, edge_bc),
+                    ("2026-10-20T10:00:00+00:00", "2026-10-21T10:00:00+00:00"),
+                ),
+            ),
+        )
+    )
+    fidelity_reader = FakeSocialRelationshipFidelityReader(
+        {
+            ("entity-a", "entity-b"): _fidelity_read(
+                "entity-a",
+                "entity-b",
+                "observation-ab",
+                interaction_frequency=0.8,
+                interaction_depth=0.6,
+                persistence=0.7,
+                reciprocity=0.9,
+            ),
+            ("entity-b", "entity-c"): _fidelity_read(
+                "entity-b",
+                "entity-c",
+                "observation-bc",
+                interaction_frequency=0.5,
+                interaction_depth=0.9,
+                persistence=0.4,
+                reciprocity=0.3,
+            ),
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+        relationship_fidelity_reader=fidelity_reader,
+    ).project(_request(include_sections=["influence"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "influence"
+    assert section.state == "degraded"
+    assert section.canonicalAuthorityRefs == [
+        "computation",
+        "graph",
+        "influence_propagation",
+        "relationship_facts",
+        "relationship_fidelity",
+        "relationship_predicate_registry",
+    ]
+    influence = section.content["influencePaths"]
+    assert influence["coverage"] == "bounded_evidence_backed_influence_analysis_paths"
+    assert influence["completeness"] == influence["freshness"] == "unknown"
+    assert influence["influenceSemantics"]["actualInfluenceEstablished"] is False
+    path = influence["paths"][0]
+    assert path["entityPath"] == ["entity-a", "entity-b", "entity-c"]
+    assert path["fidelityCoverage"] == {
+        "state": "complete",
+        "measuredHopCount": 2,
+        "materialHopCount": 2,
+        "completeness": "unknown",
+        "freshness": "unknown",
+        "evidenceJoin": "all_vector_evidence_refs_must_match_exact_path_edge",
+    }
+    assert path["influenceAuthority"]["certifiedForInfluenceAnalysis"] is True
+    assert path["componentValuesIncluded"] is True
+    assert path["actualInfluenceEstablished"] is False
+    assert path["causalContagionEstablished"] is False
+    components = {row["componentId"]: row for row in path["components"]}
+    assert components["raw_attention"]["state"] == "available"
+    assert components["raw_attention"]["value"] == 0.7
+    assert components["relationship_weighted_attention"]["value"] == 0.35
+    assert components["novel_attention"]["state"] == "insufficient_data"
+    evidence_ids = {ref.id for ref in path["evidenceRefs"]}
+    assert {
+        "follow:entity-a:entity-b",
+        "observation-ab",
+        "run:entity-a:entity-b",
+        "follow:entity-b:entity-c",
+        "observation-bc",
+        "run:entity-b:entity-c",
+    } <= evidence_ids
+    claim = next(claim for claim in result.claims if "influence_paths" in claim.domainSlotIds)
+    assert claim.domainSlotIds == ["influence_paths"]
+    assert claim.claimState == EpistemicStatus.DERIVED
+    assert "does not establish actual influence" in claim.claims[0]
+    assert fidelity_reader.calls == [
+        (TENANT, "entity-a", "entity-b"),
+        (TENANT, "entity-b", "entity-c"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_influence_paths_reject_fidelity_without_exact_edge_evidence_join():
+    edge_ab = _observed_edge(
+        "entity-a", "entity-b", "observation-ab", observed_at="2026-10-20T10:00:00Z"
+    )
+    edge_bc = _observed_edge(
+        "entity-b", "entity-c", "observation-bc", observed_at="2026-10-21T10:00:00Z"
+    )
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    ("2026-10-20T10:00:00+00:00", "2026-10-21T10:00:00+00:00"),
+                ),
+            ),
+        )
+    )
+    fidelity_reader = FakeSocialRelationshipFidelityReader(
+        {
+            ("entity-a", "entity-b"): _fidelity_read(
+                "entity-a",
+                "entity-b",
+                "unrelated-observation",
+                interaction_frequency=0.95,
+            )
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+        relationship_fidelity_reader=fidelity_reader,
+    ).project(_request(include_sections=["influence"]), _context())
+
+    section = result.sections[0]
+    path = section.content["influencePaths"]["paths"][0]
+    assert path["fidelityCoverage"]["state"] == "unavailable"
+    assert path["componentValuesIncluded"] is False
+    assert all(component["value"] is None for component in path["components"])
+    assert path["hopMeasurements"][0]["reasonCode"] == (
+        "relationship_fidelity_evidence_not_bound_to_path_edge"
+    )
+    evidence_ids = {ref.id for ref in path["evidenceRefs"]}
+    assert "unrelated-observation" not in evidence_ids
+    assert "run:entity-a:entity-b" not in evidence_ids
+    claim = next(claim for claim in result.claims if "influence_paths" in claim.domainSlotIds)
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert "0 of 2 path hops" in claim.claims[0]
+
+
+@pytest.mark.asyncio
+async def test_influence_paths_preserve_consent_filter_and_missing_path_unknown():
+    edge_ab = _observed_edge(
+        "entity-a", "entity-b", "observation-ab", observed_at="2026-10-20T10:00:00Z"
+    )
+    edge_bc = _observed_edge(
+        "entity-b", "entity-c", "observation-bc", observed_at="2026-10-21T10:00:00Z"
+    )
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    ("2026-10-20T10:00:00+00:00", "2026-10-21T10:00:00+00:00"),
+                ),
+            ),
+        )
+    )
+    fidelity_reader = FakeSocialRelationshipFidelityReader({})
+    checked: list[str] = []
+
+    async def deny_intermediate(tenant_id: str, subject_id: str, anonymous_id, purpose: str):
+        checked.append(subject_id)
+        return subject_id != "entity-b", "consent_receipt_missing"
+
+    denied = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=deny_intermediate,
+        social_graph_path_reader=path_reader,
+        relationship_fidelity_reader=fidelity_reader,
+    ).project(_request(include_sections=["influence"]), _context())
+    denied_section = denied.sections[0]
+    assert checked == ["entity-a", "entity-b", "entity-c"]
+    assert denied_section.state == "unknown"
+    assert denied_section.content is None
+    assert denied_section.warnings == ["social_path_endpoint_consent_restricted"]
+    assert fidelity_reader.calls == []
+    assert denied.claims == []
+
+    no_paths = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=FakeSocialGraphPathReader(
+            SocialGraphPathRead(
+                TENANT,
+                "entity-a",
+                paths=(),
+                reason_codes=("no_bounded_observed_follows_paths",),
+            )
+        ),
+        relationship_fidelity_reader=fidelity_reader,
+    ).project(_request(include_sections=["influence"]), _context())
+    no_path_section = no_paths.sections[0]
+    assert no_path_section.state == "unknown"
+    assert no_path_section.content is None
+    assert no_path_section.warnings == ["no_bounded_observed_follows_paths"]
+    assert no_paths.claims == []
+
+
+@pytest.mark.asyncio
+async def test_repository_social_fidelity_reader_uses_exact_tenant_directed_pair(monkeypatch):
+    from identity.relationship_intelligence import reads as relationship_reads
+
+    calls: list[tuple[str, str]] = []
+    fidelity_vector = {
+        "fidelity_vector_id": "fid-social-pair",
+        "relationship_ref": "entity-a::entity-b",
+        "status": "current",
+        "observation_count": 1,
+        "evidence_refs": ["observation-ab"],
+        "computed_at": "2026-10-22T10:00:00Z",
+        "interaction_frequency": 0.8,
+    }
+
+    async def read_latest_fidelity(tenant_id: str, relationship_ref: str):
+        calls.append((tenant_id, relationship_ref))
+        return {
+            "kind": "fidelity_vector_surface",
+            "relationship_ref": relationship_ref,
+            "status": "completed",
+            "run_id": "run-fidelity-ab",
+            "vector": fidelity_vector,
+        }
+
+    monkeypatch.setattr(relationship_reads, "read_latest_fidelity", read_latest_fidelity)
+    result = await RepositorySocialRelationshipFidelityReader().read(
+        TENANT, "entity-a", "entity-b"
+    )
+
+    assert calls == [(TENANT, "entity-a::entity-b")]
+    assert result.state == "available"
+    assert result.relationship_ref == "entity-a::entity-b"
+    assert result.vector["interaction_frequency"] == 0.8
+    assert [ref.id for ref in result.vector_evidence_refs] == ["observation-ab"]
+    assert result.run_evidence_ref.id == "run-fidelity-ab"
+
+
+def _risk_context_edge(
+    *, tenant_id: str = TENANT, source: str = "entity-a", target: str = "entity-b"
+) -> SocialRiskContextEdge:
+    return SocialRiskContextEdge(
+        tenant_id=tenant_id,
+        source_entity_id=source,
+        target_entity_id=target,
+        idempotency_key="risk-context-edge-a-b",
+        evidence_refs=(
+            EvidenceRef(
+                id="risk-context-edge-a-b",
+                type="relationship",
+                source="entity_graph",
+            ),
+            EvidenceRef(
+                id="risk-context-evidence-1",
+                type="event",
+                source="relationship_facts",
+            ),
+        ),
+        observed_at="2026-10-22T10:00:00Z",
+    )
+
+
+def _risk_signal_row(
+    *, tenant_id: str = TENANT, subject_id: str = "entity-a", evidence_id: str = "risk-context-evidence-1"
+) -> dict:
+    return {
+        "signal_id": "risk-signal-1",
+        "tenant_id": tenant_id,
+        "subject_kind": "entity",
+        "subject_id": subject_id,
+        "risk_dimension": "relationship",
+        "claim_state": "inferred",
+        "confidence": 0.7,
+        "evidence_refs": [
+            EvidenceRef(
+                id=evidence_id,
+                type="event",
+                source="fraud.detector.relationship",
+            ).model_dump(mode="json")
+        ],
+        "source": "fraud.detector.relationship",
+        "observed_at": "2026-10-22T10:00:00Z",
+        "score": 0.95,
+    }
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_require_exact_shared_risk_context_and_signal_evidence():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader(
+        {
+            "entity-a": SocialRiskSignalRead(
+                TENANT, "entity-a", (_risk_signal_row(),), available=True
+            )
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "risk_edges"
+    assert section.state == "available"
+    edge = section.content["edges"][0]
+    assert (edge["sourceEntityId"], edge["targetEntityId"]) == ("entity-a", "entity-b")
+    assert edge["associationState"] == "correlated_risk_context"
+    assert edge["riskSignalSupport"][0]["riskDimension"] == "relationship"
+    assert edge["riskSignalSupport"][0]["claimState"] == "inferred"
+    assert edge["riskScore"] is None
+    assert edge["riskPolicyEvaluation"] == "unknown"
+    assert edge["freshness"] == "unknown"
+    assert edge["causalRiskPropagationEstablished"] is False
+    assert edge["socialContagionEstablished"] is False
+    assert edge["trustEstablished"] is False
+    evidence_ids = {ref.id for ref in edge["evidenceRefs"]}
+    assert {"risk-context-edge-a-b", "risk-context-evidence-1", "risk-signal-1"} <= evidence_ids
+    assert len(result.claims) == 1
+    assert result.claims[0].claimState == EpistemicStatus.CORRELATED
+    assert "does not establish" in result.claims[0].claims[0]
+    assert signal_reader.calls == [(TENANT, "entity-a"), (TENANT, "entity-b")]
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_do_not_join_unrelated_risk_signal_evidence():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader(
+        {
+            "entity-a": SocialRiskSignalRead(
+                TENANT,
+                "entity-a",
+                (_risk_signal_row(evidence_id="other-risk-evidence"),),
+                available=True,
+            )
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.state == "unknown"
+    assert section.content["edges"] == []
+    assert section.warnings == ["no_risk_signal_evidence_linked_to_registered_risk_context_edge"]
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_reject_cross_tenant_signal_even_when_evidence_matches():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader(
+        {
+            "entity-a": SocialRiskSignalRead(
+                "tenant-other",
+                "entity-a",
+                (_risk_signal_row(tenant_id="tenant-other"),),
+                available=True,
+            )
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.state == "degraded"
+    assert section.content["edges"] == []
+    assert "canonical_risk_signal_scope_mismatch" in section.warnings
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_are_not_read_when_slot_is_not_requested():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader({})
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["findings"]), _context())
+
+    assert [section.id for section in result.sections] == ["findings"]
+    assert edge_reader.calls == []
+    assert signal_reader.calls == []
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_require_consent_for_neighbor_before_risk_read():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader({})
+
+    async def deny_neighbor(tenant_id: str, subject_id: str, anonymous_id, purpose: str):
+        return subject_id != "entity-b", "consent_receipt_missing"
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=deny_neighbor,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.state == "degraded"
+    assert section.content["edges"] == []
+    assert section.warnings == ["social_risk_edge_endpoint_consent_restricted"]
+    assert signal_reader.calls == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_repository_social_risk_edge_reader_filters_tenant_and_requires_graph_evidence():
+    from shared.graph.graph import Edge, Vertex
+
+    class Graph:
+        async def get_vertex_for_tenant(self, tenant_id: str, vertex_id: str):
+            assert tenant_id == TENANT
+            return Vertex(
+                "ENTITY",
+                vertex_id,
+                {"tenant_id": "tenant-other" if vertex_id == "entity-d" else TENANT},
+            )
+
+        async def get_edges_for_tenant(
+            self, tenant_id: str, *, limit: int, edge_types: list[str], include_revoked: bool
+        ):
+            assert tenant_id == TENANT
+            assert limit == 100
+            assert edge_types == ["SHARES_RISK_CONTEXT_WITH"]
+            assert include_revoked is False
+            return [
+                Edge(
+                    "SHARES_RISK_CONTEXT_WITH",
+                    "entity-a",
+                    "entity-b",
+                    {
+                        "tenant_id": TENANT,
+                        "relationship_predicate": "SHARES_RISK_CONTEXT_WITH",
+                        "idempotency_key": "risk-context-edge-a-b",
+                        "evidence_refs": ["risk-context-evidence-1"],
+                        "observed_at": "2026-10-22T10:00:00Z",
+                    },
+                ),
+                Edge(
+                    "SHARES_RISK_CONTEXT_WITH",
+                    "entity-a",
+                    "entity-c",
+                    {
+                        "tenant_id": "tenant-other",
+                        "relationship_predicate": "SHARES_RISK_CONTEXT_WITH",
+                        "idempotency_key": "foreign-edge",
+                        "evidence_refs": ["foreign-evidence"],
+                    },
+                ),
+                Edge(
+                    "SHARES_RISK_CONTEXT_WITH",
+                    "entity-a",
+                    "entity-d",
+                    {
+                        "tenant_id": TENANT,
+                        "relationship_predicate": "SHARES_RISK_CONTEXT_WITH",
+                        "idempotency_key": "foreign-endpoint-edge",
+                        "evidence_refs": ["foreign-endpoint-evidence"],
+                    },
+                ),
+            ], False
+
+    result = await RepositorySocialRiskContextEdgeReader(graph_client=Graph()).read_edges(
+        TENANT, ProjectionSubject(kind="entity", id="entity-a")
+    )
+
+    assert result.available is True
+    assert len(result.edges) == 1
+    assert result.edges[0].tenant_id == TENANT
+    assert result.edges[0].source_entity_id == "entity-a"
+    assert result.edges[0].target_entity_id == "entity-b"
+    assert {ref.id for ref in result.edges[0].evidence_refs} == {
+        "risk-context-edge-a-b",
+        "risk-context-evidence-1",
+    }
+    assert result.reason_codes == (
+        "canonical_risk_edge_endpoint_scope_unverified",
+        "canonical_risk_edge_scope_mismatch",
+    )

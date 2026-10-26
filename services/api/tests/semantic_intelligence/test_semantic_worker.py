@@ -79,6 +79,27 @@ async def test_worker_classifies_from_validated_event():
     assert rows[0].primary_subject_ref == "prod_1"
 
 
+async def test_worker_persists_only_backend_stamped_source_namespace():
+    consumer = SemanticEventConsumer()
+    for namespace in ("site:shop-a", "site:shop-b"):
+        event = _event("feedback_submitted", content="great support", product_id="prod_1")
+        event.source_service = "ingestion.batch"
+        event.payload["context"] = {"identity_namespace": namespace}
+        await consumer.on_validated_event(event)
+
+    rows = await get_store().list_semantic(TENANT)
+    assert {row.source_namespace for row in rows} == {"site:shop-a", "site:shop-b"}
+    assert len({row.idempotency_key for row in rows}) == 2
+
+    untrusted = _event("feedback_submitted", content="great support", product_id="prod_1")
+    untrusted.source_service = "untrusted.producer"
+    untrusted.payload["context"] = {"identity_namespace": "site:shop-c"}
+    await consumer.on_validated_event(untrusted)
+    rows = await get_store().list_semantic(TENANT)
+    assert len(rows) == 3
+    assert any(row.source_namespace is None for row in rows)
+
+
 async def test_worker_skips_telemetry():
     await SemanticEventConsumer().on_validated_event(_event("heartbeat"))
     assert await get_store().list_semantic(TENANT) == []

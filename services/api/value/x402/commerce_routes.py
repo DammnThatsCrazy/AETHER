@@ -112,6 +112,7 @@ class RequestApprovalBody(BaseModel):
     priority: str = "normal"
     reason: str = ""
     context: dict[str, Any] = {}
+    execution_action: Optional[str] = None
 
 
 class ResourceCreateBody(BaseModel):
@@ -177,6 +178,7 @@ async def request_approval(body: RequestApprovalBody, request: Request):
             priority=priority,
             reason=body.reason,
             context=body.context,
+            execution_action=body.execution_action,
         )
         return APIResponse(
             data={"approval": approval.model_dump(), "policy_decision": decision.model_dump()}
@@ -420,11 +422,23 @@ async def decide_approval(approval_id: str, body: ApprovalDecisionBody, request:
     _require_perm(request, "commerce:approve")
     plane = get_control_plane()
     try:
+        decided_by = body.decided_by
+        existing = await get_approval_service().get(_tenant_id(request), approval_id)
+        if existing is not None and existing.execution_id is not None:
+            # Bound execution approvals are actor evidence. Record the
+            # authenticated tenant principal instead of caller-supplied text.
+            authenticated_user_id = getattr(request.state.tenant, "user_id", None)
+            if not isinstance(authenticated_user_id, str) or not authenticated_user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="An authenticated tenant user is required to decide an execution-bound approval",
+                )
+            decided_by = authenticated_user_id
         result = await plane.apply_decision(
             tenant_id=_tenant_id(request),
             approval_id=approval_id,
             action=body.action,
-            decided_by=body.decided_by,
+            decided_by=decided_by,
             reason=body.reason,
             is_override=body.is_override,
         )

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 def _now_iso() -> str:
@@ -213,6 +213,12 @@ class ApprovalRequest(BaseModel):
     resource_id: str
     requester_id: str
     requester_type: str = "agent"
+    # Optional exact linkage to an agent execution that requested this
+    # commerce approval. This is a canonical identifier claim supplied by the
+    # server-side caller and is checked again before the execution is recorded.
+    execution_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    execution_action: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    last_decision_id: Optional[str] = None
     amount_usd: float
     asset_symbol: str
     chain: str
@@ -232,11 +238,18 @@ class ApprovalRequest(BaseModel):
     decision_reason: Optional[str] = None
     is_override: bool = False
 
+    @model_validator(mode="after")
+    def exact_execution_reference_is_complete(self) -> "ApprovalRequest":
+        if (self.execution_id is None) != (self.execution_action is None):
+            raise ValueError("execution_id and execution_action must be supplied together")
+        return self
+
 
 class ApprovalDecision(BaseModel):
     decision_id: str = Field(default_factory=lambda: _new_id("apd"))
     approval_id: str
     tenant_id: str
+    execution_id: Optional[str] = None
     action: str  # approve|reject|escalate|revoke
     decided_by: str
     reason: str

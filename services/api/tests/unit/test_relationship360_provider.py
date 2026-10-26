@@ -207,6 +207,7 @@ async def test_projects_ledger_edges_with_evidence_and_incomplete_coverage() -> 
     assert all(claim.evidenceRefs for claim in result.claims)
     assert all(claim.evidenceRefs[0].source == "graph_mutation_ledger" for claim in result.claims)
     assert all(claim.claimState.value == "observed" for claim in result.claims)
+    assert all("relationships" in claim.domainSlotIds for claim in result.claims)
     assert "ledger_replay_completeness_is_unknown" in (sections["timeline"].warnings or [])
 
 

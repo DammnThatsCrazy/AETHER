@@ -55,6 +55,7 @@ class InferencePolicyGate:
                 purpose=None,
                 granted_purposes=set(granted_purposes or []),
                 consent_snapshot_id=consent_snapshot_id,
+                consent_policy_version=policy.consent_policy_version(),
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
@@ -88,6 +89,7 @@ class InferencePolicyGate:
                 purpose=purpose,
                 granted_purposes=granted,
                 consent_snapshot_id=consent_snapshot_id,
+                consent_policy_version=policy.consent_policy_version(),
                 ip_address=ip_address,
                 user_agent=user_agent,
             )

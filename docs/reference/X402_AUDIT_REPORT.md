@@ -8,6 +8,8 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
+  - services/api/actions/agent/user_agents.py
+  - services/api/alembic/versions/20261022_execution_approval_decisions.py
   - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/authority.py
   - services/api/actions/agent_marketplace/identity_binding.py
@@ -24,14 +26,16 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
+  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
-  "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
+  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
+  "services/api/value/x402/": "sha256:a92283788ffc7dab83f99071da7dc9de7cd695eb5a46fb614afa5cbdbdadb708"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -375,3 +379,25 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 **Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/api/value/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
 
 Direct on-chain RPC verification is implemented for EVM (Base) and Solana chains via `_verify_evm()` and `_verify_solana()` in `verification.py`. These run when facilitator delegation is unavailable, active in all non-local environments. As of the credential-only x402 closure, RPC is resolved **per-tenant** from the credential authority (atomic `{url, api_key, auth_mode}`; providers `rpc_evm_base` / `rpc_svm_mainnet` / …) rather than a deployment-global URL; a deployed environment with no configured pair returns the `verification_unavailable` verdict (fail-closed). The tenant-supplied RPC URL is an SSRF surface (a tenant admin controls it and the verifier POSTs to it), so `rpc_resolver._validate_rpc_url()` runs every resolved URL through the shared outbound-destination check (`shared.security.ssrf.resolve_public_addresses`: every resolved address must be globally routable after unwrapping IPv4-mapped, NAT64, 6to4 and Teredo forms, which excludes loopback, RFC1918, link-local metadata, ULA and carrier-grade NAT) plus HTTPS-outside-local enforcement, failing closed on a non-public address before any request is made (the check runs off the event loop; an RPC host that does not resolve is counted as `x402_rpc_resolutions{source=unresolved}`, a refused one as `source=ssrf_blocked`). The verifier's JSON-RPC calls then go through `send_public_request`, which re-resolves, connects only to a validated address with the original `Host`/SNI and follows no redirects, so a DNS answer that changes between validation and connect cannot reach an internal address. An RPC host that does not resolve yields `verification_unavailable: … could not be resolved` rather than the non-public refusal, so a resolver blip is retried like any other unavailability. Verification additionally binds the payer and enforces finality (confirmation depth / `finalized` commitment) and strict asset decimals, and — for a batched/multicall receipt — scans **every** candidate transfer to the recipient before rejecting, so a valid transfer among several is not missed. Verdicts are classified terminal vs retryable: `not_finalized` / `verification_unavailable` are **retryable** and are never written to the payment-identifier idempotency store, so a not-yet-final payment re-checks the chain on the next call instead of being stranded behind a cached failure. External-facilitator transport failures (HTTP 5xx / 429 / timeout / unreachable) are likewise classified `verification_unavailable` (retryable), not a terminal failure, so a facilitator outage doesn't strand a valid payment. Receipt ids are deterministic per (tenant, authorization), so a retry UPSERTS the same receipt row rather than colliding on the `commerce_receipts (tenant_id, authorization_id)` unique index. Arbitrary EVM-compatible chains beyond Base are not yet supported; adding a new chain requires a `_ASSET_CONTRACT` entry and an RPC provider mapping.
+
+## 2026-10-23 — Execution-bound approval history
+
+Execution-bound x402 approvals now carry an exact server-created execution ID
+and action. The decision service stores typed decision history in the
+tenant-scoped `commerce_approval_decisions` repository, keeps the latest
+decision ID on the current approval, and records the authenticated tenant user
+for bound decisions. The agent execution endpoint checks the exact agent,
+action, resource, amount, current approval status, and latest decision before it
+records a linked run. This is evidence of AETHER's approval record and local
+policy decision; it does not execute a payment or prove that an external action
+completed. Non-x402 approval authorities and historical executions are not yet
+joined by this path.
+
+The decision repository now preserves typed, tenant-scoped decision IDs and
+allows bounded exact-execution history reads. Subject erasure includes
+decisions whose `approval_id` names an erased approval or whose `decided_by`
+names the erased subject; unrelated tenant decisions are retained. The
+approval request and decision remain distinct evidence from payment
+verification or settlement. This additive history does not expand the
+original capture audit's production-readiness conclusion to every Agent360 or
+Execution360 authority slot.

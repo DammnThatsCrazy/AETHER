@@ -19,7 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent import user_agents  # noqa: E402
 from actions.delegation.engine import DelegationDecision  # noqa: E402
-from shared.common.common import ForbiddenError  # noqa: E402
+from shared.common.common import BadRequestError, ForbiddenError  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -63,6 +63,28 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
 
     monkeypatch.setattr(user_agents, "_configs", ConfigRepository())
     monkeypatch.setattr(user_agents, "_executions", ExecutionRepository())
+    settings_module = __import__("config.settings", fromlist=["settings"])
+    ai_aggregation = __import__("value.economic.ai_aggregation", fromlist=["list_facts"])
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        SimpleNamespace(ai_economics=SimpleNamespace(execution_facts_enabled=True)),
+    )
+
+    async def list_facts(requested_tenant: str, **filters: Any) -> list[dict[str, Any]]:
+        assert requested_tenant == tenant_id
+        assert filters == {"action_id": "execution-id-a", "limit": 201}
+        return [
+            {
+                "tenant_id": tenant_id,
+                "agent_id": agent_id,
+                "action_id": "execution-id-a",
+                "workflow_run_id": "workflow-run-a",
+                "invocation_id": "invocation-a",
+            }
+        ]
+
+    monkeypatch.setattr(ai_aggregation, "list_facts", list_facts)
     request = SimpleNamespace(
         state=SimpleNamespace(
             tenant=SimpleNamespace(
@@ -76,6 +98,7 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
         action="transfer",
         resource="account:4",
         amount="25",
+        execution_id="execution-id-a",
         triggered_by_event_id="trigger-1",
     )
 
@@ -91,6 +114,8 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
 
     assert recorded["tenant_id"] == tenant_id
     assert recorded["initiating_principal_user_id"] == "authenticated-human-1"
+    assert recorded["workflow_run_id"] == "workflow-run-a"
+    assert recorded["workflow_run_invocation_ids"] == ["invocation-a"]
     assert recorded["delegation_id"] is None
     assert recorded["policy_log"]["delegation_check"] == {
         "allowed": False,
@@ -106,3 +131,40 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
     }
     assert len(published) == 1
     assert published[0].payload["execution_id"] == recorded["execution_id"]
+
+
+@pytest.mark.asyncio
+async def test_execute_refuses_reported_definition_without_exact_run_link(monkeypatch) -> None:
+    class ConfigRepository:
+        async def find_by_id(self, agent_id: str) -> dict[str, str]:
+            return {"agent_id": agent_id, "tenant_id": "tenant-run-link"}
+
+    class ExecutionRepository:
+        async def record(self, **kwargs: Any) -> dict[str, Any]:
+            pytest.fail("an unlinked definition reference must never be recorded")
+
+    async def no_workflow_link(**kwargs: Any) -> tuple[None, list[str]]:
+        return None, []
+
+    monkeypatch.setattr(user_agents, "_configs", ConfigRepository())
+    monkeypatch.setattr(user_agents, "_executions", ExecutionRepository())
+    monkeypatch.setattr(user_agents, "_canonical_workflow_run_link", no_workflow_link)
+    tenant = SimpleNamespace(
+        tenant_id="tenant-run-link",
+        user_id="authenticated-human-1",
+        require_permission=lambda permission: None,
+    )
+    body = user_agents.AgentExecute(
+        action="read",
+        resource="resource-1",
+        execution_id="execution-unlinked",
+        workflow_definition_id="workflow-1",
+        workflow_definition_revision=1,
+        workflow_definition_digest="a" * 64,
+    )
+
+    with pytest.raises(BadRequestError, match="exact run link"):
+        await user_agents.execute(
+            "agent-1", body, SimpleNamespace(state=SimpleNamespace(tenant=tenant)),
+            engine=None, graph=None, producer=None,
+        )

@@ -339,6 +339,47 @@ class TouchpointRepository:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
 
+    async def list_by_source_event(
+        self,
+        tenant_id: str,
+        source_event_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return exact tenant-scoped campaign touchpoints for one source event."""
+        if not tenant_id or not source_event_id:
+            return []
+        bounded_limit = min(max(int(limit), 1), 1001)
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row
+                for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("source_event_id") == source_event_id
+            ]
+            rows.sort(
+                key=lambda row: (
+                    row.get("occurred_at", ""),
+                    row.get("touchpoint_id", ""),
+                )
+            )
+            return rows[:bounded_limit]
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM silver_campaign_touchpoint_facts
+                WHERE tenant_id = $1 AND source_event_id = $2
+                ORDER BY occurred_at ASC, touchpoint_id ASC
+                LIMIT $3
+                """,
+                tenant_id,
+                source_event_id,
+                bounded_limit,
+            )
+            return [dict(row) for row in rows]
+
     async def population_summary(
         self,
         tenant_id: str,

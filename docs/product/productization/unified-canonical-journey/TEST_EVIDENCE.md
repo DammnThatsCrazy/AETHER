@@ -8,7 +8,7 @@ status: stable
 since_version: 0.1.0
 source_files: [tests/unit/test_canonical_activity.py, tests/unit/test_journey_compiler_v2.py, tests/unit/test_journey_step_repo.py, tests/unit/test_silver_adapters.py, tests/integration/test_unified_journey_e2e.py, tests/security/test_journey_tenant_isolation.py, services/api/tests/unit/test_commerce_reconciliation_as_of.py]
 source_hashes:
-  "services/api/tests/unit/test_commerce_reconciliation_as_of.py": "sha256:53ee1a2b1070c97d808e297cc56e7e7cd18a8f10a6696737c0a1ea0a03f10d33"
+  "services/api/tests/unit/test_commerce_reconciliation_as_of.py": "sha256:73eb713b0b5e6bdb91d0b6eedeaafc0ab4c991182010ec572d9758bff670c231"
   "tests/integration/test_unified_journey_e2e.py": "sha256:62aaddd11e18835842b0dca68228f4fca4357a487e8c303a43b371d829d0c221"
   "tests/security/test_journey_tenant_isolation.py": "sha256:d6dc20b7b16cfd586cee8114ea4baaf18a7e80b412e8fa0a0114432bd5edb902"
   "tests/unit/test_canonical_activity.py": "sha256:10e6ad2a87181ef2fd944924016b6b020d114be530a28681e1aa12252fbf9360"
@@ -26,11 +26,11 @@ source_hashes:
 | `test_canonical_activity.py` | 8 | Upsert idempotency, status lifecycle, tenant isolation, tombstone exclusion |
 | `test_journey_compiler_v2.py` | 16 | Cross-rail ordering, deterministic sort, transitions, reorg, consent, typed-identity collisions, empty profile |
 | `test_journey_step_repo.py` | 10 | Bulk insert, cursor pagination, family/wallet/session filters, adjacent steps, source-evidence persistence contract |
-| `test_silver_adapters.py` | 14 | All 11 silver table adapters + idempotency stability + unknown table |
-| `test_commerce_reconciliation_as_of.py` | 6 | Commerce knowledge-time reconstruction, tenant isolation, exact Stripe refund reversal, and explicit settlement-link evidence |
+| `test_silver_adapters.py` | 15 | All 11 silver table adapters + idempotency stability + unknown table |
+| `test_commerce_reconciliation_as_of.py` | 11 | Commerce knowledge-time reconstruction, tenant isolation, exact Stripe refund reversal, explicit settlement-link evidence, source-detail as-of/conflict behavior, and Stripe rail/onramp order-link validation |
 | `test_unified_journey_e2e.py` | 5 | Scenarios A (campaign→web2→web3→conversion), B (anonymous), F (reorg), G (multi-tenant wallet), H (late event replay) |
 | `test_journey_tenant_isolation.py` | 4 | Tenant A cannot read tenant B activity, steps, or profile journeys |
-| **Total** | **64** | |
+| **Total** | **69** | |
 
 ## Key Test Scenarios
 

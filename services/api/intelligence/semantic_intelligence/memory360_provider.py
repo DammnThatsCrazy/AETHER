@@ -33,6 +33,12 @@ from .memory_records import (
     ResolvedMemoryRecord,
     SemanticMemoryRecordRepository,
 )
+from .memory_authorities import (
+    MemoryAuthorityRead,
+    ResolvedContextCard,
+    ResolvedEmbeddingMetadata,
+    SemanticMemoryMetadataRepository,
+)
 
 _MEMORY_REQUIRED_SLOTS = (
     "semantic_summary",
@@ -84,6 +90,16 @@ class SemanticMemoryRead:
     memories_complete: bool = False
     memories_truncated: bool = False
     memories_next_offset: Optional[int] = None
+    cards: tuple[ResolvedContextCard, ...] = ()
+    cards_state: str = "unknown"
+    cards_complete: bool = False
+    cards_truncated: bool = False
+    cards_next_offset: Optional[int] = None
+    embeddings: tuple[ResolvedEmbeddingMetadata, ...] = ()
+    embeddings_state: str = "unknown"
+    embeddings_complete: bool = False
+    embeddings_truncated: bool = False
+    embeddings_next_offset: Optional[int] = None
     warnings: tuple[str, ...] = ()
 
 
@@ -107,10 +123,12 @@ class RepositorySemanticMemoryReader:
         gold_repository: Any = None,
         observation_repository: Any = None,
         memory_repository: Any = None,
+        metadata_repository: Any = None,
     ) -> None:
         self._gold_repository = gold_repository
         self._observation_repository = observation_repository
         self._memory_repository = memory_repository
+        self._metadata_repository = metadata_repository
 
     def _gold_repo(self) -> Any:
         if self._gold_repository is None:
@@ -134,6 +152,11 @@ class RepositorySemanticMemoryReader:
         if self._memory_repository is None:
             self._memory_repository = SemanticMemoryRecordRepository()
         return self._memory_repository
+
+    def _metadata_repo(self) -> Any:
+        if self._metadata_repository is None:
+            self._metadata_repository = SemanticMemoryMetadataRepository()
+        return self._metadata_repository
 
     async def read(
         self,
@@ -236,6 +259,16 @@ class RepositorySemanticMemoryReader:
             )
         warnings.extend(memory_page.warnings)
 
+        try:
+            metadata_page = await self._metadata_repo().read_for_subject(
+                tenant_id, entity_ref, offset=offset, limit=limit
+            )
+        except Exception:  # noqa: BLE001 - card/embedding authorities degrade independently
+            metadata_page = MemoryAuthorityRead(
+                warnings=("semantic_memory_metadata_reader_unavailable",)
+            )
+        warnings.extend(metadata_page.warnings)
+
         return SemanticMemoryRead(
             gold_state=gold_state,
             gold_state_state=gold_state_state,
@@ -249,6 +282,16 @@ class RepositorySemanticMemoryReader:
             memories_complete=memory_page.complete,
             memories_truncated=memory_page.truncated,
             memories_next_offset=memory_page.next_offset,
+            cards=metadata_page.cards,
+            cards_state=metadata_page.cards_state,
+            cards_complete=metadata_page.cards_complete,
+            cards_truncated=metadata_page.cards_truncated,
+            cards_next_offset=metadata_page.cards_next_offset,
+            embeddings=metadata_page.embeddings,
+            embeddings_state=metadata_page.embeddings_state,
+            embeddings_complete=metadata_page.embeddings_complete,
+            embeddings_truncated=metadata_page.embeddings_truncated,
+            embeddings_next_offset=metadata_page.embeddings_next_offset,
             warnings=tuple(warnings),
         )
 
@@ -336,7 +379,12 @@ class Memory360Provider:
 
         available_offsets = [
             value
-            for value in (read.observations_next_offset, read.memories_next_offset)
+            for value in (
+                read.observations_next_offset,
+                read.memories_next_offset,
+                read.cards_next_offset,
+                read.embeddings_next_offset,
+            )
             if value is not None
         ]
         next_offset = max(available_offsets) if available_offsets else None
@@ -345,7 +393,12 @@ class Memory360Provider:
                 nextCursor=(
                     f"{_PAGE_CURSOR_PREFIX}{next_offset}" if next_offset is not None else None
                 ),
-                hasNextPage=read.observations_truncated or read.memories_truncated,
+                hasNextPage=(
+                    read.observations_truncated
+                    or read.memories_truncated
+                    or read.cards_truncated
+                    or read.embeddings_truncated
+                ),
             )
             if request.page is not None
             else None
@@ -566,9 +619,37 @@ def _render_memory_slots(
     memory_state = read.memories_state
     memory_items: list[dict[str, Any]] = []
     memory_refs: list[EvidenceRef] = []
+    policy_decisions: list[dict[str, Any]] = []
+    policy_refs: list[EvidenceRef] = []
+    policy_join_incomplete = False
     for resolved in read.memories:
         record = resolved.record
         refs = list(resolved.evidence_refs)
+        decision_id = _text(getattr(record, "policy_decision_ref", None))
+        decision_ref = next(
+            (
+                ref
+                for ref in refs
+                if ref.source == "governance.consent_policy_decisions"
+                and ref.id == decision_id
+                and ref.uri
+                == (
+                    "store://consent_policy_decisions/"
+                    f"{quote(request.tenantId, safe='')}:{quote(decision_id or '', safe='')}"
+                )
+                and _timestamp(ref.observedAt) is not None
+            ),
+            None,
+        )
+        if (
+            getattr(record, "tenant_id", None) != request.tenantId
+            or getattr(record, "subject_ref", None) != request.subject.id
+            or not decision_id
+            or getattr(resolved, "policy_outcome", None) != "historical_allow"
+            or decision_ref is None
+        ):
+            policy_join_incomplete = True
+            continue
         memory_refs.extend(refs)
         memory_items.append(
             {
@@ -586,7 +667,20 @@ def _render_memory_slots(
                 "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
             }
         )
+        policy_refs.append(decision_ref)
+        policy_decisions.append(
+            {
+                "memoryId": record.memory_id,
+                "policyDecisionId": decision_id,
+                "outcomeAtWrite": "allowed",
+                "decidedAt": _timestamp(decision_ref.observedAt),
+                "evidenceRefs": [decision_ref.model_dump(mode="json")],
+            }
+        )
     memory_refs = _dedupe_refs(memory_refs)
+    policy_refs = _dedupe_refs(policy_refs)
+    if policy_join_incomplete and memory_state != "unknown":
+        memory_state = "degraded"
     latest_memory_created_at = max(
         (item["createdAt"] for item in memory_items if item["createdAt"]),
         default=None,
@@ -596,6 +690,9 @@ def _render_memory_slots(
         memory_items = []
         memory_refs = []
         latest_memory_created_at = None
+        policy_decisions = []
+        policy_refs = []
+        policy_join_incomplete = False
     memory_reason = (
         "exact_tenant_subject_memory_records_with_active_observation_and_policy_joins"
         if memory_state in {"available", "degraded"} and memory_items
@@ -630,13 +727,217 @@ def _render_memory_slots(
         },
     )
 
+    card_items: list[dict[str, Any]] = []
+    card_refs: list[EvidenceRef] = []
+    card_state = read.cards_state
+    card_join_incomplete = False
+    for resolved in read.cards:
+        card = resolved.card
+        expected_card_uri = (
+            "store://semantic_context_cards/"
+            f"{quote(request.tenantId, safe='')}:{quote(card.card_id, safe='')}"
+        )
+        card_ref = next(
+            (
+                ref
+                for ref in resolved.evidence_refs
+                if ref.id == card.card_id
+                and ref.source == "semantic_intelligence.semantic_context_cards"
+                and ref.uri == expected_card_uri
+                and _timestamp(ref.observedAt) is not None
+            ),
+            None,
+        )
+        policy_ref = next(
+            (
+                ref
+                for ref in resolved.evidence_refs
+                if ref.id == card.policy_decision_ref
+                and ref.source == "governance.consent_policy_decisions"
+                and ref.uri
+                == (
+                    "store://consent_policy_decisions/"
+                    f"{quote(request.tenantId, safe='')}:{quote(card.policy_decision_ref, safe='')}"
+                )
+                and _timestamp(ref.observedAt) is not None
+            ),
+            None,
+        )
+        if (
+            card.tenant_id != request.tenantId
+            or card.subject_ref != request.subject.id
+            or card.status not in {"classified", "partial"}
+            or resolved.policy_outcome != "historical_allow"
+            or card_ref is None
+            or policy_ref is None
+        ):
+            card_join_incomplete = True
+            continue
+        refs = _dedupe_refs(list(resolved.evidence_refs))
+        card_refs.extend(refs)
+        card_items.append(
+            {
+                "cardId": card.card_id,
+                "subjectRef": card.subject_ref,
+                "kind": card.card_kind,
+                "title": card.title,
+                "summary": card.summary,
+                "sourceMemoryIds": list(card.source_memory_ids),
+                "policyDecisionRef": card.policy_decision_ref,
+                "policyDecisionOutcomeAtWrite": resolved.policy_outcome,
+                "actorRef": card.actor_ref,
+                "retentionClass": card.retention_class,
+                "createdAt": _timestamp(card.created_at),
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+            }
+        )
+    card_refs = _dedupe_refs(card_refs)
+    if card_join_incomplete and card_state != "unknown":
+        card_state = "degraded"
+    if unsupported_subject or temporal_request_unsupported:
+        card_state = "unknown"
+        card_items = []
+        card_refs = []
+    card_coverage = (
+        "complete"
+        if card_state in {"available", "empty"} and read.cards_complete
+        else "partial"
+        if card_state == "degraded"
+        else "unknown"
+    )
+    card_content = _slot_content(
+        state=card_state,
+        coverage=card_coverage,
+        reason=(
+            "exact_registered_context_cards_with_memory_and_policy_joins"
+            if card_items and card_state in {"available", "degraded"}
+            else "no_registered_context_cards_for_exact_subject"
+            if card_state == "empty"
+            else "context_card_source_or_policy_join_incomplete"
+            if card_state == "degraded"
+            else "context_card_subject_or_temporal_read_not_supported"
+            if unsupported_subject or temporal_request_unsupported
+            else "canonical_context_card_authority_unavailable"
+        ),
+        evidence_refs=card_refs,
+        items=card_items,
+        observedCount=len(card_items),
+        freshness={
+            "state": "unknown",
+            "latestCardCreatedAt": max(
+                (item["createdAt"] for item in card_items if item["createdAt"]),
+                default=None,
+            ),
+            "evaluation": "context_card_staleness_threshold_not_configured",
+        },
+    )
+
+    embedding_items: list[dict[str, Any]] = []
+    embedding_refs: list[EvidenceRef] = []
+    embedding_state = read.embeddings_state
+    embedding_join_incomplete = False
+    for resolved in read.embeddings:
+        metadata = resolved.metadata
+        expected_uri = (
+            "store://semantic_embedding_metadata/"
+            f"{quote(request.tenantId, safe='')}:{quote(metadata.embedding_id, safe='')}"
+        )
+        metadata_ref = next(
+            (
+                ref
+                for ref in resolved.evidence_refs
+                if ref.id == metadata.embedding_id
+                and ref.source == "semantic_intelligence.semantic_embedding_metadata"
+                and ref.uri == expected_uri
+                and _timestamp(ref.observedAt) is not None
+            ),
+            None,
+        )
+        policy_ref = next(
+            (
+                ref
+                for ref in resolved.evidence_refs
+                if ref.id == metadata.policy_decision_ref
+                and ref.source == "governance.consent_policy_decisions"
+                and ref.uri
+                == (
+                    "store://consent_policy_decisions/"
+                    f"{quote(request.tenantId, safe='')}:{quote(metadata.policy_decision_ref, safe='')}"
+                )
+                and _timestamp(ref.observedAt) is not None
+            ),
+            None,
+        )
+        if (
+            metadata.tenant_id != request.tenantId
+            or metadata.subject_ref != request.subject.id
+            or metadata.status != "reported"
+            or resolved.policy_outcome != "historical_allow"
+            or metadata_ref is None
+            or policy_ref is None
+        ):
+            embedding_join_incomplete = True
+            continue
+        refs = _dedupe_refs(list(resolved.evidence_refs))
+        embedding_refs.extend(refs)
+        embedding_items.append(
+            {
+                "embeddingId": metadata.embedding_id,
+                "subjectRef": metadata.subject_ref,
+                "sourceCardIds": list(metadata.card_ids),
+                "providerId": metadata.provider_id,
+                "modelId": metadata.model_id,
+                "modelVersion": metadata.model_version,
+                "dimensions": metadata.dimensions,
+                "vectorStore": metadata.vector_store,
+                "namespace": metadata.namespace,
+                "vectorRef": metadata.vector_ref,
+                "producerReceiptId": metadata.producer_receipt_id,
+                "policyDecisionRef": metadata.policy_decision_ref,
+                "actorRef": metadata.actor_ref,
+                "observedAt": _timestamp(metadata.observed_at),
+                "reportedAt": _timestamp(metadata.created_at),
+                "artifactVerificationState": "unknown",
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+            }
+        )
+    embedding_refs = _dedupe_refs(embedding_refs)
+    if embedding_join_incomplete and embedding_state != "unknown":
+        embedding_state = "degraded"
+    if unsupported_subject or temporal_request_unsupported:
+        embedding_state = "unknown"
+        embedding_items = []
+        embedding_refs = []
+    if embedding_items:
+        embedding_state = "degraded"
+    embedding_content = _slot_content(
+        state=embedding_state,
+        coverage="partial" if embedding_items else "unknown",
+        reason=(
+            "explicit_embedding_metadata_reports_joined_to_cards_but_vector_existence_unverified"
+            if embedding_items
+            else "embedding_provider_inventory_or_vector_store_authority_unavailable"
+        ),
+        evidence_refs=embedding_refs,
+        items=embedding_items,
+        observedCount=len(embedding_items),
+        providerInventoryCoverage="unknown",
+        vectorArtifactExistence="not_independently_verified",
+        freshness={
+            "state": "unknown",
+            "latestReportedAt": max(
+                (item["reportedAt"] for item in embedding_items if item["reportedAt"]),
+                default=None,
+            ),
+            "evaluation": "embedding_metadata_staleness_threshold_not_configured",
+        },
+    )
+    trace_refs = _dedupe_refs([*evidence_refs, *card_refs, *embedding_refs])
+
     sections_content: dict[str, tuple[str, dict[str, Any]]] = {
         "semantic_summary": (summary_content["state"], summary_content),
         "memories": (memory_state, memories_content),
-        "cards": (
-            "unknown",
-            _unknown_slot_content("no_canonical_context_card_authority"),
-        ),
+        "cards": (card_state, card_content),
         "topics": (
             topic_state,
             _slot_content(
@@ -658,10 +959,7 @@ def _render_memory_slots(
                 epistemicState="inferred" if topic_items else "unknown",
             ),
         ),
-        "embeddings_meta": (
-            "unknown",
-            _unknown_slot_content("no_canonical_embedding_metadata_authority"),
-        ),
+        "embeddings_meta": (embedding_state, embedding_content),
         "source_links": (
             source_link_state,
             _slot_content(
@@ -721,13 +1019,47 @@ def _render_memory_slots(
             ),
         ),
         "policy_state": (
-            "unknown",
+            "unknown"
+            if read.memories_state == "unknown" or unsupported_subject or temporal_request_unsupported
+            else "degraded",
             _slot_content(
-                state="unknown",
-                coverage="unknown",
-                reason="historical_consent_and_policy_evaluation_authority_not_joined",
-                evidence_refs=[],
-                evaluation="not_performed",
+                state=(
+                    "unknown"
+                    if read.memories_state == "unknown"
+                    or unsupported_subject
+                    or temporal_request_unsupported
+                    else "degraded"
+                ),
+                coverage=(
+                    "unknown"
+                    if read.memories_state == "unknown"
+                    or unsupported_subject
+                    or temporal_request_unsupported
+                    else "partial"
+                ),
+                reason=(
+                    "historical_write_policy_decision_coverage_partial_current_policy_not_evaluated"
+                    if policy_join_incomplete or read.memories_state == "degraded"
+                    else "historical_write_policy_decisions_only_current_policy_not_evaluated"
+                    if policy_decisions
+                    else "no_historical_memory_policy_decisions_current_policy_not_evaluated"
+                    if read.memories_state == "empty"
+                    else "historical_memory_policy_decisions_unavailable_current_policy_not_evaluated"
+                ),
+                evidence_refs=policy_refs,
+                evaluation="historical_write_decisions_only_current_policy_not_evaluated",
+                currentConsentState="unknown",
+                currentPolicyState="not_evaluated",
+                historicalDecisionCoverage=(
+                    "partial"
+                    if policy_join_incomplete or read.memories_state == "degraded"
+                    else "complete"
+                    if read.memories_state in {"available", "empty"}
+                    and read.memories_complete
+                    else "unknown"
+                ),
+                historicalDecisionCount=len(policy_decisions),
+                historicalDecisions=policy_decisions,
                 stateFreshness="unknown",
                 sourceStatusesObserved=len(read.observations),
                 nonActiveRowsOmitted=retracted_count,
@@ -736,27 +1068,27 @@ def _render_memory_slots(
         ),
         "evidence_trace": (
             "available"
-            if evidence_refs
+            if trace_refs
             else "empty"
             if read.gold_state_state == "empty"
             else "unknown",
             _slot_content(
                 state="available"
-                if evidence_refs
+                if trace_refs
                 else "empty"
                 if read.gold_state_state == "empty"
                 else "unknown",
                 coverage="partial"
-                if evidence_refs
+                if trace_refs
                 else "empty"
                 if read.gold_state_state == "empty"
                 else "unknown",
                 reason=(
-                    "semantic_gold_record_lineage_and_active_observation_refs"
-                    if evidence_refs
+                    "semantic_gold_memory_card_embedding_and_source_evidence_refs"
+                    if trace_refs
                     else "no_semantic_evidence_records"
                 ),
-                evidence_refs=evidence_refs,
+                evidence_refs=trace_refs,
                 goldStateRef=state_ref.model_dump(mode="json") if state_ref is not None else None,
                 semanticLineageRefs=[ref.model_dump(mode="json") for ref in lineage_refs],
                 sourceObservationRefs=[ref.model_dump(mode="json") for ref in observation_refs],
@@ -776,6 +1108,13 @@ def _render_memory_slots(
             content=content,
             warnings=list(read.warnings) or None,
             canonicalAuthorityRefs=(
+                ["semantic_memory_records", "consent_policy_decisions", "evidence"]
+                if slot_id == "policy_state"
+                else ["semantic_context_cards", "semantic_memory_records", "consent_policy_decisions"]
+                if slot_id == "cards"
+                else ["semantic_embedding_metadata", "semantic_context_cards", "consent_policy_decisions"]
+                if slot_id == "embeddings_meta"
+                else
                 ["semantic_memory_graph"]
                 if slot_id
                 in {
@@ -839,6 +1178,46 @@ def _render_memory_slots(
                 domainSlotIds=["memories"],
             )
         )
+    for item in card_items:
+        refs = [
+            ref
+            for raw_ref in item["evidenceRefs"]
+            if (ref := _to_evidence_ref(raw_ref)) is not None
+        ]
+        if refs:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"memory360:{request.subject.id}:card:{item['cardId']}",
+                    kind="semantic_context_card_record",
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[
+                        "An explicitly authored context card is linked to exact active memory records and an allowed policy decision recorded at write time."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["cards", "evidence_trace"],
+                )
+            )
+    for item in embedding_items:
+        refs = [
+            ref
+            for raw_ref in item["evidenceRefs"]
+            if (ref := _to_evidence_ref(raw_ref)) is not None
+        ]
+        if refs:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"memory360:{request.subject.id}:embedding:{item['embeddingId']}",
+                    kind="semantic_embedding_metadata_report",
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[
+                        "A tenant-authored embedding metadata report is linked to exact context cards; the vector artifact and producer identity are not independently verified."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["embeddings_meta", "evidence_trace"],
+                )
+            )
     for link in source_links:
         refs = [ref for ref in observation_refs if ref.id == link["observationId"]]
         if not refs:

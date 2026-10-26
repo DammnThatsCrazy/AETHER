@@ -34,6 +34,7 @@ from shared.logger.logger import get_logger, metrics
 from .projectors.base import BaseProjector, ProjectionResult
 from .projectors import (
     ExposureProjector,
+    CommerceFlowProjector,
     OutcomeProjector,
     RevenueProjector,
     FrictionProjector,
@@ -76,6 +77,7 @@ _ALL_PROJECTORS: list[BaseProjector] = [
     IdentityEvidenceProjector(), # 2. identity evidence
     TouchpointProjector(),       # 3. campaign touchpoint
     ExposureProjector(),
+    CommerceFlowProjector(),   # source-reported cart and checkout facts
     OutcomeProjector(),
     RevenueProjector(),
     FrictionProjector(),

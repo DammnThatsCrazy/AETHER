@@ -61,6 +61,7 @@ _EVIDENCE_TYPES = {
     "annotation",
 }
 _SAFE_SLOT_STATES = {"available", "empty"}
+_USEFUL_SLOT_STATES = {*_SAFE_SLOT_STATES, "partial"}
 _UNAVAILABLE_STATES = {"missing", "unknown", "suppressed", "unavailable"}
 
 
@@ -476,6 +477,7 @@ def _compose_slot_content(
     source_policy_suppressed = False
     source_conflicted = False
     unsupported_binding_subject = False
+    claim_projection_ids: set[str] = set()
     section_payloads: list[dict[str, Any]] = []
     claims: list[ClaimEnvelope] = []
     provenance: list[Experience360ProjectionProvenance] = []
@@ -514,6 +516,23 @@ def _compose_slot_content(
             reasons,
             missing_projection_ids,
         )
+
+    required_claim_projection_ids = slot_definition.get("requiredClaimProjectionIds", [])
+    if (
+        not isinstance(required_claim_projection_ids, (list, tuple))
+        or not all(isinstance(value, str) and value for value in required_claim_projection_ids)
+        or len(set(required_claim_projection_ids)) != len(required_claim_projection_ids)
+    ):
+        reason = "invalid_required_claim_projection_ids"
+        return _slot_result("unknown", [*reasons, reason]), [*reasons, reason], missing_projection_ids
+    bound_projection_ids = {
+        binding.get("projectionId")
+        for binding in bindings
+        if isinstance(binding, Mapping) and isinstance(binding.get("projectionId"), str)
+    }
+    if not set(required_claim_projection_ids).issubset(bound_projection_ids):
+        reason = "required_claim_projection_not_bound"
+        return _slot_result("unknown", [*reasons, reason]), [*reasons, reason], missing_projection_ids
 
     for binding in bindings:
         if not isinstance(binding, Mapping):
@@ -657,6 +676,7 @@ def _compose_slot_content(
             if slot_id not in (claim.domainSlotIds or []):
                 continue
             claims.append(claim)
+            claim_projection_ids.add(projection_id)
             evidence_refs.extend(claim.evidenceRefs)
             provenance.append(
                 Experience360ProjectionProvenance(
@@ -770,6 +790,15 @@ def _compose_slot_content(
         evidence_refs = []
         provenance = []
         reasons.append("exact_slot_claim_missing")
+    elif content is not None and evidence_refs and (
+        set(required_claim_projection_ids) - claim_projection_ids
+    ):
+        slot_state = "unknown"
+        content = None
+        claims = []
+        evidence_refs = []
+        provenance = []
+        reasons.append("required_source_claim_missing")
     elif content is not None and evidence_refs:
         if incomplete_bound_source or missing_projection_ids:
             slot_state = "degraded"
@@ -930,7 +959,8 @@ def _aggregate_frame_state(slots: list[Experience360FrameSlot]) -> str:
     if "conflicted" in states:
         return "conflicted"
     useful = sum(
-        slot.state in _SAFE_SLOT_STATES or (slot.state == "degraded" and slot.content is not None)
+        slot.state in _USEFUL_SLOT_STATES
+        or (slot.state == "degraded" and slot.content is not None)
         for slot in evaluated_slots
     )
     incomplete = any(

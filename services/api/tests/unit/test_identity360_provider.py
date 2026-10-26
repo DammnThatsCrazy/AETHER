@@ -14,6 +14,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from identity.identity.identity360_provider import (
     Identity360Provider,
     IdentityBatchRead,
+    IdentityProviderRegistryRead,
     IdentityRecordRead,
     RepositoryIdentity360Source,
 )
@@ -137,6 +138,8 @@ class FakeIdentity360Source:
         self.force_truncate_aliases = False
         self.claim_read_called = False
         self.batch_reads: list[str] = []
+        self.provider_registry_reads: list[str] = []
+        self.provider_registry_entries: dict[str, dict[str, Any]] = {}
 
     async def canonical_entity(self, tenant_id: str, entity_id: str) -> IdentityRecordRead:
         return IdentityRecordRead(record=self.entity)
@@ -146,6 +149,16 @@ class FakeIdentity360Source:
 
     async def source_identity(self, tenant_id: str, source_identity_id: str) -> IdentityRecordRead:
         return IdentityRecordRead(record=self.source)
+
+    async def provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead:
+        self.provider_registry_reads.append(source_system_id)
+        entry = self.provider_registry_entries.get(source_system_id)
+        return IdentityProviderRegistryRead(
+            entry=entry,
+            reason=None if entry is not None else "provider_identity_not_registered",
+        )
 
     async def source_identities_for_entity(
         self, tenant_id: str, entity_id: str, *, limit: int
@@ -230,8 +243,13 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     ]
     assert result.state == "degraded"
     assert result.slot("identifier_inventory").state == "available"
-    assert result.slot("namespace_map").state == "available"
-    assert result.slot("namespace_map").content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
+    assert result.slot("namespace_map").state == "partial"
+    namespace_mapping = result.slot("namespace_map").content["mappings"][0]
+    assert namespace_mapping["sourceIdentityId"] == "source-row-1"
+    assert namespace_mapping["canonicalEntityId"] == "entity-1"
+    assert namespace_mapping["evidenceRef"]["id"] == "source-row-1"
+    assert namespace_mapping["evidenceRef"]["source"] == "identity_source_identities"
+    assert result.slot("namespace_map").content["canonicalNamespaceRegistryJoin"]["state"] == "partial"
     assert result.slot("match_evidence").state == "available"
     assert result.slot("match_evidence").content["semantics"] == (
         "recorded_identity_resolution_evidence_only"
@@ -241,7 +259,31 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     assert result.slot("confidence").state == "available"
     assert result.slot("confidence").content["compositeConfidence"] is None
     assert result.slot("aliases").state == "available"
-    assert result.slot("devices_sessions").state == "degraded"
+    devices_sessions = result.slot("devices_sessions")
+    assert devices_sessions.state == "partial"
+    assert devices_sessions.content["inventoryState"] == "unknown"
+    assert devices_sessions.content["observedIdentifierCount"] == 1
+    assert devices_sessions.content["sourceIdentityObservations"] == [
+        {
+            "sourceIdentityId": "source-row-1",
+            "identifierTypes": ["device_id", "session_id"],
+            "firstSeenAt": "2026-09-05T00:00:00Z",
+            "lastSeenAt": "2026-10-14T00:00:00Z",
+            "evidenceRef": {
+                "id": "source-row-1",
+                "type": "annotation",
+                "source": "identity_source_identities",
+                "observedAt": "2026-10-14T00:00:00Z",
+            },
+        }
+    ]
+    inventory_item = result.slot("identifier_inventory").content["sourceIdentities"][0]
+    assert inventory_item["id"] == "source-row-1"
+    assert inventory_item["canonicalEntityId"] == "entity-1"
+    assert inventory_item["evidenceRef"]["id"] == "source-row-1"
+    alias_item = result.slot("aliases").content["items"][0]
+    assert alias_item["evidenceRef"]["id"] == "alias-1"
+    assert alias_item["evidenceRef"]["source"] == "identity_aliases"
     assert result.slot("wallets").state == "unknown"
     assert result.slot("policy_redactions").state == "degraded"
     assert result.slot("policy_redactions").content["projectionRedaction"]["state"] == "applied"
@@ -270,6 +312,242 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     assert "identity_source_identities" in rendered
     assert "identity_verification_evidence" in rendered
     assert "identity_conflicts" in rendered
+
+
+@pytest.mark.asyncio
+async def test_device_session_observations_require_exact_lineage_evidence() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows = [
+        {
+            "tenant_id": "tenant-a",
+            "source_kind": "sdk",
+            "source_namespace": "sdk:web",
+            "canonical_entity_id": "entity-1",
+            "status": "resolved",
+            "device_id": "private-device-id",
+            "session_id": "private-session-id",
+            "first_seen_at": "2026-09-05T00:00:00Z",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"devices_sessions"}
+    )
+
+    devices_sessions = result.slot("devices_sessions")
+    assert devices_sessions.state == "degraded"
+    assert devices_sessions.reason == "identity_source_identities_evidence_ref_missing"
+    assert devices_sessions.content["inventoryState"] == "unknown"
+    assert devices_sessions.content["sourceIdentityObservations"] == []
+    assert devices_sessions.evidence_refs == ()
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "private-device-id" not in rendered
+    assert "private-session-id" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_inventory_and_namespace_rows_require_record_level_provenance() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows = [
+        {
+            "tenant_id": "tenant-a",
+            "source_kind": "connector",
+            "source_namespace": "crm:customers",
+            "canonical_entity_id": "entity-1",
+            "status": "resolved",
+            "external_id": "unproven-private-identifier",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a",
+        "entity",
+        "entity-1",
+        requested_slot_ids={"identifier_inventory", "namespace_map"},
+    )
+
+    inventory = result.slot("identifier_inventory")
+    namespaces = result.slot("namespace_map")
+    assert inventory.state == "degraded"
+    assert namespaces.state == "degraded"
+    assert inventory.content["sourceIdentities"] == []
+    assert namespaces.content["mappings"] == []
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "unproven-private-identifier" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_namespace_map_joins_only_exact_registered_source_system_identity() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows[0]["source_system_id"] = "shopify.admin.orders_read"
+    source.provider_registry_entries["shopify.admin.orders_read"] = {
+        "identityKey": "shopify.admin.orders_read",
+        "providerFamily": "shopify",
+        "productId": "admin",
+        "capabilityId": "orders_read",
+        "displayName": "Shopify Admin Orders Read",
+        "category": "commerce",
+        "credentialSecret": "must-not-escape-provider-registry",
+    }
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"namespace_map"}
+    )
+
+    namespaces = result.slot("namespace_map")
+    mapping = namespaces.content["mappings"][0]
+    assert source.provider_registry_reads == ["shopify.admin.orders_read"]
+    assert namespaces.state == "partial"
+    assert mapping["sourceNamespace"] == "crm:customers"
+    assert mapping["providerIdentity"] == "shopify.admin.orders_read"
+    assert mapping["provider"]["providerFamily"] == "shopify"
+    assert mapping["providerRegistryJoin"] == {"state": "resolved", "reason": None}
+    assert mapping["evidenceRef"]["id"] == "source-row-1"
+    summary = namespaces.content["canonicalNamespaceRegistryJoin"]
+    assert summary["joinState"] == "resolved"
+    assert summary["resolvedEntries"] == 1
+    assert summary["freshness"]["state"] == "unknown"
+    assert namespaces.reason == "provider_registry_freshness_unknown"
+    assert "must-not-escape-provider-registry" not in json.dumps(_payload(result))
+
+    # A namespace prefix that resembles a provider never substitutes for its
+    # exact source_system_id foreign-key claim.
+    source.source_rows[0]["source_system_id"] = "shopify"
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"namespace_map"}
+    )
+    mapping = result.slot("namespace_map").content["mappings"][0]
+    assert source.provider_registry_reads[-1] == "shopify"
+    assert mapping["providerIdentity"] is None
+    assert mapping["providerRegistryJoin"]["state"] == "unknown"
+    assert result.slot("namespace_map").state == "partial"
+
+
+@pytest.mark.asyncio
+async def test_repository_identity_source_uses_exact_runtime_provider_key(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from connectors.provider_runtime.registry import provider_registry
+
+    exact_key = "shopify.admin.orders_read"
+    plugin = SimpleNamespace(
+        identity=lambda: SimpleNamespace(key=exact_key),
+        manifest=lambda: SimpleNamespace(
+            identity_key=exact_key,
+            provider_family="shopify",
+            product_id="admin",
+            capability_id="orders_read",
+            display_name="Shopify Admin Orders Read",
+            category="commerce",
+        ),
+    )
+    monkeypatch.setattr(
+        provider_registry,
+        "get",
+        lambda requested: plugin if requested == exact_key else None,
+    )
+
+    source = RepositoryIdentity360Source(identity_repository=object())
+    registered = await source.provider_registry_entry(exact_key)
+    missing = await source.provider_registry_entry("shopify")
+
+    assert registered.available is True
+    assert registered.entry == {
+        "identityKey": exact_key,
+        "providerFamily": "shopify",
+        "productId": "admin",
+        "capabilityId": "orders_read",
+        "displayName": "Shopify Admin Orders Read",
+        "category": "commerce",
+    }
+    assert missing.available is True
+    assert missing.entry is None
+    assert missing.reason == "provider_identity_not_registered"
+
+
+@pytest.mark.asyncio
+async def test_namespace_provider_registry_is_not_read_when_slot_is_not_requested() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows[0]["source_system_id"] = "shopify.admin.orders_read"
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"identifier_inventory"}
+    )
+
+    assert result.slot("namespace_map").state == "unknown"
+    assert result.slot("namespace_map").reason == "identity_slot_not_requested"
+    assert source.provider_registry_reads == []
+
+
+@pytest.mark.asyncio
+async def test_namespace_map_does_not_join_provider_for_cross_tenant_identity_row() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows[0]["tenant_id"] = "tenant-b"
+    source.source_rows[0]["source_system_id"] = "shopify.admin.orders_read"
+    source.provider_registry_entries["shopify.admin.orders_read"] = {
+        "identityKey": "shopify.admin.orders_read",
+        "providerFamily": "shopify",
+    }
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"namespace_map"}
+    )
+
+    namespaces = result.slot("namespace_map")
+    assert namespaces.state == "degraded"
+    assert namespaces.content["mappings"] == []
+    assert source.provider_registry_reads == []
+    assert namespaces.reason == "identity_row_tenant_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_alias_records_require_their_own_evidence_reference() -> None:
+    source = FakeIdentity360Source()
+    source.aliases = [
+        {
+            "tenant_id": "tenant-a",
+            "canonical_entity_id": "entity-1",
+            "alias_type": "email_hash",
+            "alias_display_value_redacted": "j***@example.test",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"aliases"}
+    )
+
+    aliases = result.slot("aliases")
+    assert aliases.state == "degraded"
+    assert aliases.reason == "identity_aliases_evidence_ref_missing"
+    assert aliases.content["items"] == []
+    assert aliases.evidence_refs == ()
+
+
+@pytest.mark.asyncio
+async def test_missing_device_session_observations_remain_unknown_not_empty() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows = [
+        {
+            "id": "source-row-without-device-session",
+            "tenant_id": "tenant-a",
+            "source_kind": "connector",
+            "source_namespace": "crm:customers",
+            "canonical_entity_id": "entity-1",
+            "status": "resolved",
+            "external_id": "private-external-id",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"devices_sessions"}
+    )
+
+    devices_sessions = result.slot("devices_sessions")
+    assert devices_sessions.state == "unknown"
+    assert devices_sessions.content["inventoryState"] == "unknown"
+    assert devices_sessions.content["sourceIdentityObservations"] == []
+    assert devices_sessions.reason == "device_session_inventory_authority_not_joined"
+    assert "private-external-id" not in json.dumps(_payload(result), sort_keys=True)
 
 
 @pytest.mark.asyncio
@@ -323,11 +601,15 @@ async def test_source_subject_uses_exact_tenant_scoped_record_and_sanitized_clai
     namespaces = result.slot("namespace_map")
     evidence = result.slot("evidence_trace")
     assert inventory.state == "available"
-    assert namespaces.state == "available"
-    assert namespaces.content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
-    assert "source_provider_registry_join_not_performed" in result.warnings
+    assert namespaces.state == "partial"
+    assert namespaces.content["canonicalNamespaceRegistryJoin"]["state"] == "partial"
+    assert "source_system_id_not_recorded" in result.warnings
     assert inventory.content["sourceIdentities"][0]["identifierTypes"] == ["external_id"]
     assert inventory.content["claims"][0]["claimType"] == "email"
+    assert inventory.content["claims"][0]["evidenceRef"]["id"] == "claim-1"
+    assert inventory.content["sourceIdentities"][0]["id"] == "source-1"
+    assert inventory.content["sourceIdentities"][0]["canonicalEntityId"] is None
+    assert inventory.content["sourceIdentities"][0]["evidenceRef"]["id"] == "source-1"
     assert evidence.state == "available"
     assert result.slot("match_evidence").state == "unknown"
     assert result.slot("aliases").state == "unknown"
@@ -361,8 +643,44 @@ async def test_resolved_source_identity_joins_canonical_match_evidence() -> None
     assert result.slot("match_evidence").content["subjectResolution"]["state"] == "resolved"
     assert result.slot("aliases").state == "available"
     assert "aliases" in source.batch_reads
+    source_inventory_item = result.slot("identifier_inventory").content["sourceIdentities"][0]
+    assert source_inventory_item["id"] == "source-1"
+    assert source_inventory_item["canonicalEntityId"] == "entity-1"
+    assert source_inventory_item["evidenceRef"]["id"] == "source-1"
     rendered = json.dumps(_payload(result), sort_keys=True)
     assert "private-source-identifier" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_claim_records_without_record_evidence_degrade_inventory() -> None:
+    source = FakeIdentity360Source()
+    source.source = {
+        "id": "source-1",
+        "tenant_id": "tenant-a",
+        "source_kind": "sdk",
+        "source_namespace": "sdk:web",
+        "status": "unresolved",
+        "external_id": "private-source-identifier",
+    }
+    source.claims = [
+        {
+            "tenant_id": "tenant-a",
+            "source_identity_id": "source-1",
+            "claim_type": "email",
+            "raw_value": "private-claim-value",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "source", "source-1", requested_slot_ids={"identifier_inventory"}
+    )
+
+    inventory = result.slot("identifier_inventory")
+    assert inventory.state == "degraded"
+    assert inventory.content["claims"] == []
+    assert inventory.reason == "identity_claims_evidence_ref_missing"
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "private-claim-value" not in rendered
 
 
 @pytest.mark.asyncio
@@ -571,8 +889,202 @@ async def test_wallet_source_candidate_does_not_claim_wallet_ownership() -> None
     assert wallets.state == "unknown"
     assert wallets.content["ownershipState"] == "unknown"
     assert wallets.content["observedSourceCandidates"][0]["sourceKind"] == "sdk_wallet"
+    assert wallets.content["ownershipProofs"] == []
+    assert "verification" in source.batch_reads
     rendered = json.dumps(_payload(result), sort_keys=True)
     assert "private-wallet-hash" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_wallet_slot_reads_exact_entity_bound_proof_without_identifier_values() -> None:
+    source = FakeIdentity360Source()
+    source.verification = [
+        {
+            "id": "wallet-proof-1",
+            "tenant_id": "tenant-a",
+            "canonical_entity_id": "entity-1",
+            "evidence_type": "wallet_ownership_verified",
+            "identifier_type": "wallet",
+            "identifier_hash": "private-wallet-identifier-hash",
+            "verification_method": "wallet_signature",
+            "assurance_level": "verified",
+            "issuer": "aether",
+            "status": "active",
+            "proof_reference": "private-wallet-proof-reference",
+            "proof_digest": "private-wallet-proof-digest",
+            "subject_hint_ciphertext": "private-wallet-subject-ciphertext",
+            "metadata": {
+                "chain_namespace": "eip155:1",
+                "private_value": "private-wallet-metadata",
+            },
+            "verified_at": "2026-10-11T00:00:00Z",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "partial"
+    assert wallets.content["ownershipState"] == "unknown"
+    assert wallets.content["currentControl"] == "unknown"
+    assert wallets.content["ownershipProofs"] == [
+        {
+            "id": "wallet-proof-1",
+            "evidenceType": "wallet_ownership_verified",
+            "identifierType": "wallet",
+            "chainNamespace": "eip155:1",
+            "verificationMethod": "wallet_signature",
+            "assuranceLevel": "verified",
+            "issuer": "aether",
+            "status": "active",
+            "verifiedAt": "2026-10-11T00:00:00Z",
+            "expiresAt": None,
+            "revokedAt": None,
+        }
+    ]
+    assert [(ref.source, ref.id) for ref in wallets.evidence_refs] == [
+        ("identity_verification_evidence", "wallet-proof-1")
+    ]
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    for private_value in (
+        "private-wallet-identifier-hash",
+        "private-wallet-proof-reference",
+        "private-wallet-proof-digest",
+        "private-wallet-subject-ciphertext",
+        "private-wallet-metadata",
+    ):
+        assert private_value not in rendered
+
+
+@pytest.mark.asyncio
+async def test_wallet_slot_joins_exact_tenant_inventory_without_echoing_wallet_identifiers() -> None:
+    source = FakeIdentity360Source()
+    source.wallet_inventory_for_entity = _wallet_inventory_reader(
+        [
+            {
+                "id": "0xprivate-wallet-address",
+                "wallet_id": "0xprivate-wallet-address",
+                "owner_entity_id": "entity-1",
+                "tenant_id": "tenant-a",
+                "chain": "eip155:1",
+                "address": "0xprivate-wallet-address",
+                "linked_at": "2026-10-12T00:00:00Z",
+            }
+        ]
+    )
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "partial"
+    assert wallets.content["inventoryState"] == "available"
+    assert wallets.content["ownershipState"] == "unknown"
+    assert wallets.content["currentControl"] == "unknown"
+    assert wallets.content["linkedWallets"][0]["chain"] == "eip155:1"
+    assert wallets.content["linkedWallets"][0]["linkedAt"] == "2026-10-12T00:00:00Z"
+    assert wallets.evidence_refs[0].source == "entity_wallets"
+    assert wallets.evidence_refs[0].id.startswith("wallet-link:")
+    assert "0xprivate-wallet-address" not in json.dumps(_payload(result), sort_keys=True)
+
+
+@pytest.mark.asyncio
+async def test_wallet_slot_rejects_cross_tenant_inventory_rows() -> None:
+    source = FakeIdentity360Source()
+    source.wallet_inventory_for_entity = _wallet_inventory_reader(
+        [
+            {
+                "id": "foreign-wallet-record",
+                "owner_entity_id": "entity-1",
+                "tenant_id": "tenant-b",
+                "chain": "eip155:1",
+                "linked_at": "2026-10-12T00:00:00Z",
+            }
+        ]
+    )
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "degraded"
+    assert wallets.content["linkedWallets"] == []
+    assert wallets.reason == "identity_row_tenant_mismatch"
+    assert "foreign-wallet-record" not in json.dumps(_payload(result), sort_keys=True)
+
+
+@pytest.mark.asyncio
+async def test_repository_identity_source_reads_wallet_links_by_tenant_and_owner_entity() -> None:
+    class _WalletRepository:
+        def __init__(self) -> None:
+            self.calls: list[tuple[dict[str, str], int]] = []
+
+        async def find_many(self, *, filters, limit):
+            self.calls.append((filters, limit))
+            return [
+                {
+                    "id": "wallet-link-record",
+                    "tenant_id": "tenant-a",
+                    "owner_entity_id": "entity-1",
+                    "wallet_id": "private-wallet-id",
+                    "chain": "eip155:1",
+                    "address": "private-wallet-address",
+                    "linked_at": "2026-10-12T00:00:00Z",
+                }
+            ]
+
+    wallet_repository = _WalletRepository()
+    source = RepositoryIdentity360Source(wallet_repository=wallet_repository)
+
+    result = await source.wallet_inventory_for_entity(
+        "tenant-a", "entity-1", limit=17
+    )
+
+    assert wallet_repository.calls == [
+        ({"tenant_id": "tenant-a", "owner_entity_id": "entity-1"}, 18)
+    ]
+    assert result.available is True
+    assert result.truncated is False
+    assert result.rows[0]["owner_entity_id"] == "entity-1"
+
+
+def _wallet_inventory_reader(rows: list[dict[str, Any]]):
+    async def read(tenant_id: str, entity_id: str, *, limit: int) -> IdentityBatchRead:
+        assert tenant_id == "tenant-a"
+        assert entity_id == "entity-1"
+        return IdentityBatchRead(rows=tuple(rows[:limit]), truncated=len(rows) > limit)
+
+    return read
+
+
+@pytest.mark.asyncio
+async def test_wallet_slot_rejects_cross_tenant_verification_evidence() -> None:
+    source = FakeIdentity360Source()
+    source.verification = [
+        {
+            "id": "foreign-wallet-proof",
+            "tenant_id": "tenant-b",
+            "canonical_entity_id": "entity-1",
+            "evidence_type": "wallet_ownership_verified",
+            "identifier_type": "wallet",
+            "identifier_hash": "private-wallet-identifier-hash",
+            "status": "active",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "degraded"
+    assert wallets.content["ownershipProofs"] == []
+    assert wallets.reason == "identity_row_tenant_mismatch"
+    assert "private-wallet-identifier-hash" not in json.dumps(_payload(result), sort_keys=True)
 
 
 @pytest.mark.asyncio
