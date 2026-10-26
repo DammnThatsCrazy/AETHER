@@ -11,9 +11,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff75aeac1c2388f93514bfbfba398a6fdbf29b7dce29df7ddf617a97c9256e81"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:f86ad466463eba1f09400ba15ee70e608b0443c006f6476f3e2767ac96521305"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:198eeb0e7848c1a6c3b3baa145d69d7f60ddac355ad914efd16fc53ee5c33355"
+  "services/api/actions/agent/": "sha256:396471b83e8b5aa129242c5b729ba68606898bd62812ae8768d8089a5b450163"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -35,7 +35,7 @@ source_hashes:
   "services/api/intelligence/risk360/": "sha256:762ef5ac5e30355229599b49959ca43ec25cc408dd2c041e58af69009ea9ff99"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
-  "services/api/journeys/support360/": "sha256:08b79bc15c183192946f991f66f94a9bcae25c3f1be073e7033c6f5369553734"
+  "services/api/journeys/support360/": "sha256:566b316cb9d4381caf77c627e22fad1c6ea3a910d156ef48fbd7a674c48830b2"
   "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:e1d39238f595d91a69347c76418cb2e4d79e860c8e254cebb5720343be4928d4"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
@@ -469,6 +469,15 @@ typed, tenant-scoped poisoning evidence with lifecycle and restatement history,
 but no production detector currently writes those records. These additions
 close evidence-path pieces; they do not complete Agent360, Execution360,
 Risk360, or the full 18-surface contract.
+
+Execution360 additionally joins an admitted external Silver telemetry event
+to one exact tenant Bronze event when ID, event type, and occurrence time match
+the recorded observation envelope. It publishes sanitized ingress provenance
+and a Bronze evidence reference, with source identity and external execution
+still unknown. Support360's journey context can report an exact episode
+relation only if an EpisodeRecord cites the verified case journey-link event
+and names the same journey. No live producer currently writes that association;
+historical state, population completeness, and freshness are unproven.
 
 Execution360's `authority_check` now exposes the delegation-engine outcome
 stored in `agent_executions.policy_log.delegation_check` only when it joins to

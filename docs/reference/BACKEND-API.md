@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:61a66ab64af85c5f447768a0d4f4d976db352e835f5b3942623828896e7429a3"
+  "services/api/actions/": "sha256:414fe0c805a7a194f66ec52ec4eef55e79b39c143b1dc3bff11d65326e298edd"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:cbb27b5635537a2aea0370aaa468032d138c56efdca39c29523d604910aa4318"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
   "services/api/intelligence/": "sha256:37a7160b9be14a060e67494196222915bcc4e5a0287ea048ec4278ed0f6e4c0a"
-  "services/api/journeys/": "sha256:9e1f8da265ef3387e5998162b59bdbf3001f6ce94f3a3330f2f91a4913130515"
+  "services/api/journeys/": "sha256:bca7dc211340f2619958a5cb96406dbcd512d93e8ebaf93e28e20a0f7e8af406"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:b581ccc0719fd0cdc8e492a08ba0e5d5c6729500caa40e1f853f5cb786604891"
@@ -2113,6 +2113,17 @@ repository has no canonical context-card or embedding-metadata records;
 optional vector references and semantic pointers do not provide that authority.
 These gaps need tenant-scoped source records with evidence and policy/freshness
 semantics before providers can connect them.
+
+Execution360's evidence section now reads unique same-tenant Bronze records
+for admitted external Silver telemetry event IDs. It rechecks event type and
+time against the stored observation envelope and returns sanitized ingress
+provenance with the Bronze evidence reference. Source identity, external
+execution receipts, complete coverage, historical replay, and freshness remain
+unknown. Support360's case journey slot can also join an EpisodeRecord that
+both names the exact journey and cites the verified case journey-link event;
+shared journey ID alone is insufficient. This is a partial current-store read
+with no live producer of that episode relation and no population guarantee.
+Neither addition creates an HTTP route or completes a 360 surface.
 
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,

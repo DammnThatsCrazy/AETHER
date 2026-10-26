@@ -67,11 +67,11 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:0c6e4302135fbebf875592215087bac0a38d323c7aed8274907c7be62c85b06a"
+  "packages/shared/": "sha256:4eb69a2dbf83c41328712c6c949b1a6b25e0f39a868c9bf368eceac7519bb38a"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
-  "services/api/actions/agent/execution360_provider.py": "sha256:b1e18247d9099deeceeb80bf3cf045d08a25dd0da6859495d3a0b4cd60b25abd"
+  "services/api/actions/agent/execution360_provider.py": "sha256:d166db55e656eb508e84ec58945eee5fdae4da5fe487f27f87aa7e4b131b9810"
   "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
@@ -96,7 +96,7 @@ source_hashes:
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
-  "services/api/journeys/support360/": "sha256:08b79bc15c183192946f991f66f94a9bcae25c3f1be073e7033c6f5369553734"
+  "services/api/journeys/support360/": "sha256:566b316cb9d4381caf77c627e22fad1c6ea3a910d156ef48fbd7a674c48830b2"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
@@ -872,6 +872,16 @@ and telemetry crosswalks remain unknown. Support360's case path now joins
 communication metadata through the exact tenant, canonical provider
 connection, and source case key. Message bodies and participant IDs stay
 suppressed, and source-history completeness and freshness remain unknown.
+
+Execution360 can also resolve an admitted external telemetry event to a unique
+same-tenant Bronze event and its recorded observation envelope. The join checks
+event ID, type, and occurrence time and exposes only ingress provenance and a
+Bronze evidence reference. It does not identify the external executor, prove
+an external effect, cover all source telemetry, or establish a workflow-run
+telemetry crosswalk. Support360 can report an EpisodeRecord relation only when
+that record names the same canonical journey and cites the exact verified
+support-case journey-link event. There is no live producer for this relation;
+population, historical state, source authorship, and freshness remain unknown.
 
 The 2026-10-23 projection slice adds partial Social360 `influence_paths`: the
 provider exposes bounded consent-authorized directed FOLLOWS paths and accepts
