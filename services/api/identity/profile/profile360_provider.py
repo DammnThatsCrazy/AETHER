@@ -2196,6 +2196,7 @@ class Profile360Provider:
             MAX_PROFILE_PREDICTION_AGE,
             ProfilePredictionOutput,
             approved_production_artifact,
+            verify_prediction_policy_evidence,
         )
 
         valid_outputs: list[ProfilePredictionOutput] = []
@@ -2222,6 +2223,9 @@ class Profile360Provider:
                 continue
             if anchor - output.generated_at > MAX_PROFILE_PREDICTION_AGE:
                 stale_rows = True
+                continue
+            if not await verify_prediction_policy_evidence(output):
+                invalid_rows = True
                 continue
             artifact_key = (output.model_id, output.artifact_version)
             if artifact_key not in artifact_approval_cache:

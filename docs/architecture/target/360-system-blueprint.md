@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0e1a626c14f4a486458863dba3c571a6cf42be786b8ae67c2b47e45cd93fd082"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2c09ffe2cbd46a3a2f29331b58496bdd63cc1494fad34dafbb86cca25b829fd3"
 ---
 
 # 360 System Blueprint
@@ -77,6 +77,10 @@ tuple; action and resource policy and effective tool authorization remain
 unbound. Support360 `sla` now joins an operator-registered source policy revision
 to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.
+Profile360 `likely_next_states` rechecks the recorded inference decision against
+the tenant, actor, model, subject, policy version, and decision time; session
+models also require the exact current session identity binding. Current consent,
+historical identity state, calibration, and observed outcomes remain unproven.
 Campaign360 `anomalies` and Location360 `risk` bind bounded exact Risk360
 assessment reads, while producer coverage and whole-slot completeness remain
 unknown. Their exact

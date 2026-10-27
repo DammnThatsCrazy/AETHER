@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:ae487fffb48a5848a612e34bf8b8074b500fb4f6e62111a8af403f14487fdd64"
+  "services/api/identity/": "sha256:49fdf18cf09e5870dd3ce5aa60faea2e195138dba89407c4d9237df33580aeb5"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
   "services/api/intelligence/": "sha256:fe41be5093f3622829b03d2556582cf90cd04479590b0c6ca9c0cf769856a6e6"
   "services/api/journeys/": "sha256:b87b80b55579d4ad7983127b4c21e5e62bdfb6606d5fba3c4f441acd95570bf9"
@@ -1981,6 +1981,10 @@ timestamps and validity bounds are preserved without claiming a continuous
 physical trajectory; profile alias resolution, cross-surface completeness,
 historical point-in-time reconstruction, and Profile-specific freshness remain
 unknown, so the slot stays degraded.
+Profile360 `likely_next_states` rechecks the recorded inference decision and,
+for session models, the exact current identity binding before returning a
+prediction. This read does not re-evaluate current consent or establish
+historical identity, model calibration, or an observed outcome.
 Agent360's `evidence_trace` joins agentic compatibility rows to canonical
 Bronze only when tenant, agent, source-row ID, event ID, schema version, event
 type, and timestamp match exactly. Historical rows without the reciprocal link

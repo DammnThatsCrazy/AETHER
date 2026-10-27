@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:00672615af0424e98578524cf294b129b23217af9fc878fabf157a8f5e2beb32"
+  "packages/shared/": "sha256:68cede80b51a10e1ac94866e63a9930feca1f94735b960bfe634e8f8abd7f567"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:1ada1b047536e34b49bc3933891f3c800f2c5ae7b4fc2810ab30bf9bb4367b7f"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -675,6 +675,10 @@ provider marks recorded location observations explicitly; profile alias
 resolution, continuous trajectory, cross-surface completeness, historical
 point-in-time reconstruction, and Profile-specific freshness remain unknown,
 so the slot stays degraded.
+Profile360 future-state predictions also rejoin the recorded inference policy
+decision and, for session models, the exact current identity binding before
+projection. Current consent, historical identity, model calibration, and
+observed outcomes remain unresolved.
 Account360's required `communications` slot now reads Communication360
 evidence, interactions, and timeline only for an exact tenant-owned entity
 subject with matching endpoint identity-binding evidence. It does not fan out

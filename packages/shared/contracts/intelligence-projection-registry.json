@@ -4819,7 +4819,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "The writer and read path require exact future-state schema, production artifact version/checksum, policy decision, source events, validity interval, and a 24-hour freshness threshold; current serving outputs omit required fields and remain unknown. Separate revocation history, read-time consent re-evaluation, outcome verification, and model calibration remain unbound.",
+          "partialImplementationReason": "The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, in addition to the future-state schema, production artifact, validity interval, and freshness. Current serving outputs omit required fields. Historical identity, current consent, revocation history, outcome verification, and model calibration remain unknown.",
           "unboundCanonicalAuthorityRefs": [
             "model_governance",
             "outcome_facts"

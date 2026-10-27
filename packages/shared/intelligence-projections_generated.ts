@@ -4766,7 +4766,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['analytics_events', 'consent_policy_decisions', 'identity_source_identities', 'model_artifact_registry', 'model_governance', 'outcome_facts', 'profile_prediction_outputs'],
         description: 'Policy-admitted append-only future-state predictions for an exact canonical human entity, versioned state schema, active production artifact checksum, source event evidence, and bounded validity and freshness.',
         id: 'likely_next_states',
-        partialImplementationReason: 'The writer and read path require exact future-state schema, production artifact version/checksum, policy decision, source events, validity interval, and a 24-hour freshness threshold; current serving outputs omit required fields and remain unknown. Separate revocation history, read-time consent re-evaluation, outcome verification, and model calibration remain unbound.',
+        partialImplementationReason: 'The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, in addition to the future-state schema, production artifact, validity interval, and freshness. Current serving outputs omit required fields. Historical identity, current consent, revocation history, outcome verification, and model calibration remain unknown.',
         projectionBindings: [
           {
             projectionId: 'profile360',
