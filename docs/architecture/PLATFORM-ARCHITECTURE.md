@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:97e103a9fe9b9fb91823f962755abd90d97df73ea1109888a7347047bb80f0d9"
+  "packages/shared/": "sha256:0b2854612189b79484a5588bc212897fe2ea0d4fc54a19876b03bc87987b9150"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -646,6 +646,10 @@ Campaign360 also reads bounded Risk360 assessments for the exact tenant and
 campaign subject as a separate anomaly dimension. Assessment output is not
 inferred from RiskSignals; campaign producer coverage, source anomalies,
 policy, historical completeness, and freshness remain unknown.
+Location360 likewise keeps exact-subject RiskAssessment output separate from
+RiskSignals and admits an assessment only when its timestamped event evidence
+cites the exact location source observation. Causality, producer coverage,
+history, policy, and freshness remain unknown.
 Account360 `members` accepts a graph membership edge only when its exact tenant
 graph-mutation-ledger aggregate proves the edge is live and the member resolves
 to a canonical tenant entity; the bounded scans do not establish full roster

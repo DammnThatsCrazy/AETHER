@@ -429,6 +429,58 @@ class RepositoryGeographicRelatedAuthorityReader:
     async def _risk(
         self, tenant_id: str, subject_kind: str, subject_id: str, event_id: str
     ) -> dict[str, Any]:
+        signals = await self._risk_signals(tenant_id, subject_kind, subject_id, event_id)
+        assessments = await self._risk_assessments(
+            tenant_id, subject_kind, subject_id, event_id
+        )
+        signal_items = (signals.get("content") or {}).get("signals", [])
+        assessment_items = (assessments.get("content") or {}).get("assessments", [])
+        if not signal_items and not assessment_items:
+            return _slot(
+                state="unknown",
+                reason="no_risk_output_cites_exact_location_observation",
+                content={
+                    "dimensionStates": {
+                        "riskSignals": signals["state"],
+                        "riskAssessments": assessments["state"],
+                    },
+                    "producerCoverageState": "unknown",
+                },
+                authorities=("risk_signals", "risk_outputs"),
+            )
+        refs: dict[tuple[str, str], EvidenceRef] = {}
+        for result in (signals, assessments):
+            for raw in result["evidenceRefs"]:
+                ref = EvidenceRef.model_validate(raw)
+                refs[(ref.id, ref.source)] = ref
+        latest = max(
+            (result["freshness"].get("latestObservedAt") or "" for result in (signals, assessments)),
+            default="",
+        ) or None
+        return _slot(
+            state="degraded",
+            reason="location_risk_producer_policy_history_or_freshness_unresolved",
+            content={
+                "locationSpecific": True,
+                "subject": {"kind": subject_kind, "id": subject_id},
+                "matchedEventId": event_id,
+                "signals": signal_items,
+                "assessments": assessment_items,
+                "dimensionStates": {
+                    "riskSignals": signals["state"],
+                    "riskAssessments": assessments["state"],
+                },
+                "producerCoverageState": "unknown",
+                "historyState": "unknown",
+            },
+            evidence=list(refs.values()),
+            authorities=("risk_signals", "risk_outputs"),
+            latest_observed_at=latest,
+        )
+
+    async def _risk_signals(
+        self, tenant_id: str, subject_kind: str, subject_id: str, event_id: str
+    ) -> dict[str, Any]:
         if not event_id:
             return _unknown("risk_signals", "location_source_observation_unavailable")
         try:
@@ -496,6 +548,87 @@ class RepositoryGeographicRelatedAuthorityReader:
             evidence=list(evidence.values()),
             authorities=("risk_signals",),
             latest_observed_at=max((item["observedAt"] or "" for item in linked), default=None) or None,
+        )
+
+    async def _risk_assessments(
+        self, tenant_id: str, subject_kind: str, subject_id: str, event_id: str
+    ) -> dict[str, Any]:
+        if not event_id:
+            return _unknown("risk_outputs", "location_source_observation_unavailable")
+        try:
+            from intelligence.risk360.contracts import RiskAssessment
+            from intelligence.risk360.store import RiskAssessmentRepository
+
+            rows = await RiskAssessmentRepository().list_by_subject(
+                tenant_id, subject_kind, subject_id, limit=RELATED_LOCATION_READ_CAP + 1
+            )
+        except Exception:
+            return _unknown("risk_outputs", "risk_assessment_authority_unavailable")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return _unknown("risk_outputs", "risk_assessment_read_invalid")
+        if any(
+            row.get("tenant_id") != tenant_id
+            or row.get("subject_kind") != subject_kind
+            or str(row.get("subject_id") or "") != subject_id
+            for row in rows
+        ):
+            return _unknown("risk_outputs", "risk_assessment_subject_scope_mismatch")
+        try:
+            typed = [RiskAssessment.model_validate(row) for row in rows]
+        except Exception:
+            return _unknown("risk_outputs", "risk_assessment_contract_invalid")
+        ids = [item.assessment_id for item in typed]
+        if len(ids) != len(set(ids)) or any(not value or len(value) > 256 for value in ids):
+            return _unknown("risk_outputs", "risk_assessment_identity_ambiguous")
+
+        truncated = len(typed) > RELATED_LOCATION_READ_CAP
+        linked: list[dict[str, Any]] = []
+        evidence: dict[tuple[str, str], EvidenceRef] = {}
+        for assessment in typed[:RELATED_LOCATION_READ_CAP]:
+            assessed_at = _as_utc_text(assessment.assessed_at)
+            refs = [
+                ref for ref in assessment.evidence_refs
+                if ref.id == event_id and ref.type == "event" and _as_utc_text(ref.observedAt)
+            ]
+            if not assessed_at or not refs:
+                continue
+            assessment_ref = EvidenceRef(
+                id=assessment.assessment_id,
+                type="model_output",
+                source="risk_assessments",
+                observedAt=assessed_at,
+                uri=(
+                    "store://risk_assessments/"
+                    f"{quote(tenant_id, safe='')}:{quote(assessment.assessment_id, safe='')}"
+                ),
+            )
+            evidence[(assessment_ref.id, assessment_ref.source)] = assessment_ref
+            for ref in refs:
+                evidence[(ref.id, ref.source)] = ref
+            linked.append({
+                "assessmentId": assessment.assessment_id,
+                "assessedAt": assessed_at,
+                "dimensionsEvaluated": list(assessment.dimensions),
+                "claimState": assessment.claim_state.value,
+                "matchedEvidenceIds": [ref.id for ref in refs],
+                "policyState": "unknown",
+            })
+        if not linked:
+            return _unknown(
+                "risk_outputs",
+                "risk_assessment_read_truncated" if truncated
+                else "no_risk_assessment_cites_exact_location_observation",
+            )
+        evidence[(event_id, "canonical_location_source_observation")] = _source_event_ref(
+            event_id, None
+        )
+        return _slot(
+            state="degraded",
+            reason=("risk_assessment_read_truncated" if truncated else "risk_assessment_producer_coverage_unknown"),
+            content={"assessments": linked, "truncated": truncated},
+            evidence=list(evidence.values()),
+            authorities=("risk_outputs",),
+            latest_observed_at=max(item["assessedAt"] for item in linked),
         )
 
     async def _value(

@@ -30,7 +30,7 @@ source_hashes:
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
-  "services/api/graph/": "sha256:a6731cc3742863724966de3087f5217827ce5105853a193201a4a4f03828f4aa"
+  "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:ae487fffb48a5848a612e34bf8b8074b500fb4f6e62111a8af403f14487fdd64"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
   "services/api/intelligence/": "sha256:c15dbfa0325d810e6f96ab6fc0a246e27e321f50cd661212241fb7785a871beb"
@@ -2067,8 +2067,12 @@ findings with their targeting-observation and eligibility-snapshot evidence;
 it separately reads bounded canonical Risk360 assessments for the exact tenant
 and campaign subject, preserving assessment claim state and evidence. Campaign
 risk producer coverage, source anomalies, history, policy, and freshness remain
-unknown. Journey360's `stages` slot
-exposes only explicit `journey_role` markers from the exact current journey
+unknown.
+Location360's `risk` slot now also reads bounded canonical RiskAssessments for
+the exact typed subject only when timestamped event evidence cites the exact
+location source observation. It keeps RiskSignals separate; cause, producer
+coverage, history, policy, and freshness remain unknown. Journey360's `stages`
+slot exposes only explicit `journey_role` markers from the exact current journey
 version's steps, with stage taxonomy and completeness unknown. Location360's
 `normalization` slot exposes canonical location-fact source/evidence links but
 leaves normalization version, transformation time, and timezone unknown. These

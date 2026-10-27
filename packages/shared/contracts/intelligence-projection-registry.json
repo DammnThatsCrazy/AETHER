@@ -1122,6 +1122,7 @@
         "identity",
         "journeys",
         "locations",
+        "risk_outputs",
         "risk_signals",
         "temporal"
       ],
@@ -9830,11 +9831,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Risk signals join only when exact subject evidence cites the location observation; causal location risk, history, detector coverage, and freshness remain unknown.",
-          "unboundCanonicalAuthorityRefs": [
-            "risk_outputs"
-          ],
-          "authorityGapReason": "Risk signals join only when exact subject evidence cites the location observation; causal location risk, history, detector coverage, and freshness remain unknown."
+          "partialImplementationReason": "RiskSignals and canonical RiskAssessments join only when exact typed-subject evidence cites the location observation. Assessment output is separate from signal input; causal location risk, producer coverage, history, policy, and freshness remain unknown."
         },
         {
           "id": "normalization",

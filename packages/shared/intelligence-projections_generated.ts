@@ -836,7 +836,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/geographic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'population', 'source'],
-    canonicalAuthorities: ['campaign_facts', 'context_capsules', 'economic_facts', 'entity_graph', 'geo_observations', 'geo_temporal_timezone_assertions', 'gold_temporal_heatmap', 'identity', 'journeys', 'locations', 'risk_signals', 'temporal'],
+    canonicalAuthorities: ['campaign_facts', 'context_capsules', 'economic_facts', 'entity_graph', 'geo_observations', 'geo_temporal_timezone_assertions', 'gold_temporal_heatmap', 'identity', 'journeys', 'locations', 'risk_outputs', 'risk_signals', 'temporal'],
     hardDependencies: ['context_capsule_semantics', 'temporal_kernel'],
     projectionDependencies: ['profile360', 'temporal360'],
     optionalProjectionDependencies: [],
@@ -4311,11 +4311,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'Risk signals join only when exact subject evidence cites the location observation; causal location risk, history, detector coverage, and freshness remain unknown.',
         canonicalAuthorityRefs: ['locations', 'risk_outputs', 'risk_signals'],
         description: 'Risk outputs linked to place with evidence.',
         id: 'risk',
-        partialImplementationReason: 'Risk signals join only when exact subject evidence cites the location observation; causal location risk, history, detector coverage, and freshness remain unknown.',
+        partialImplementationReason: 'RiskSignals and canonical RiskAssessments join only when exact typed-subject evidence cites the location observation. Assessment output is separate from signal input; causal location risk, producer coverage, history, policy, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'geographic360',
@@ -4324,8 +4323,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['state']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['risk_outputs']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['geo_temporal_timezone_assertions', 'locations', 'temporal'],
