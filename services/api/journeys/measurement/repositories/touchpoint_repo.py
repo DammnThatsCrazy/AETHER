@@ -766,6 +766,33 @@ class TouchpointRepository:
             )
             return [dict(row) for row in rows]
 
+    async def classification_revision(
+        self, tenant_id: str, touchpoint_id: str, classification_id: str
+    ) -> list[dict[str, Any]]:
+        """Read at most two revisions by their exact tenant, touchpoint, and ID."""
+        if not all((tenant_id, touchpoint_id, classification_id)):
+            return []
+        pool = await self._pool()
+        if pool is None:
+            return [
+                dict(rev) for rev in _local_revisions
+                if rev.get("tenant_id") == tenant_id
+                and str(rev.get("touchpoint_id")) == touchpoint_id
+                and str(rev.get("classification_id")) == classification_id
+            ][:2]
+        touchpoint_uuid = _uuid_or_none(touchpoint_id)
+        classification_uuid = _uuid_or_none(classification_id)
+        if touchpoint_uuid is None or classification_uuid is None:
+            return []
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT * FROM touchpoint_source_classification_revisions
+                WHERE tenant_id=$1 AND touchpoint_id=$2 AND classification_id=$3
+                LIMIT 2""",
+                tenant_id, touchpoint_uuid, classification_uuid,
+            )
+            return [dict(row) for row in rows]
+
     async def source_classification_health(self, tenant_id: str) -> dict[str, Any]:
         """Return bounded operational counts for the existing Kyber surface."""
         pool = await self._pool()

@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:33cd434e1e96fbde28fee1e0743390c827f9a84d32f1a88217348b787ea550c3"
+  "packages/shared/": "sha256:67b334bcafb017e71308f78500d89f8c596785e7ce225affa433d1804abb89b6"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:039047067063620d0fc8a8536223e6db7fa5c593d1cd9a03ad360dae29a065a7"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -755,8 +755,10 @@ touchpoint event IDs to tenant-scoped canonical events; and Memory360
 consent-policy evidence. Episode activity/session completeness and observation
 policy/freshness remain unresolved; Campaign360 exact SDK Bronze observation joins are now available when the
 gateway-admitted row matches the touchpoint-linked canonical event by tenant,
-ID, type, and event time; broader observation producers, source facts, event
-coverage, and freshness remain unknown; Memory360 current
+ID, type, and event time. Exact current touchpoint classification revisions
+are verified by tenant, touchpoint, revision ID, class, classifier version, and
+time; campaign registry source, broader producer coverage, event completeness,
+and freshness remain unknown; Memory360 current
 consent and policy remain unevaluated. These are partial slot implementations,
 not completed 360 surfaces.
 The semantic memory producer now stamps an explicit nonempty list of required
@@ -767,6 +769,10 @@ does not evaluate current consent. Memory360 now carries this verified
 historical purpose list into its memory items and `policy_state` decisions;
 unavailable legacy purpose provenance stays explicitly unknown.
 
+Signals360 `quality` now separately reads a current tenant/site installation
+record for an accepted SDK observation carrying the authenticated server-stamped
+site namespace. The status is an observed site install signal, not event-time
+health, fleet health, source reliability, or a freshness SLA.
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,
 semantic classification, policy, and freshness remain unknown. Workflow360 now

@@ -788,6 +788,87 @@ async def test_exact_touchpoint_source_classification_is_degraded_and_evidenced(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("revision_change", "resolved"),
+    [
+        ({}, True),
+        ({"tenant_id": "tenant-b"}, False),
+        ({"touchpoint_id": "other-touchpoint"}, False),
+        ({"is_current": False}, False),
+        ({"classifier_version": "v2"}, False),
+        ({"source_class": "paid"}, False),
+        ({"classified_at": "2026-10-06T10:01:00Z"}, False),
+        ({"duplicate": True}, False),
+    ],
+)
+async def test_campaign_source_fact_requires_exact_current_classification_revision(
+    revision_change: dict[str, object], resolved: bool
+) -> None:
+    revision = {
+        "tenant_id": "tenant-a",
+        "touchpoint_id": "tp-classified",
+        "classification_id": "classification-1",
+        "classifier_version": "v1",
+        "classification": {"source_class": "owned"},
+        "classified_at": "2026-10-05T10:01:00Z",
+        "is_current": True,
+        "evidence": {"private": "must-not-be-projected"},
+    }
+    for field, value in revision_change.items():
+        if field == "source_class":
+            revision["classification"][field] = value
+        elif field != "duplicate":
+            revision[field] = value
+
+    class RevisionSource(FakeCampaign360Source):
+        async def source_classification_revisions(self, tenant_id, refs, *, limit):
+            assert (tenant_id, refs, limit) == (
+                "tenant-a", [("tp-classified", "classification-1")], 100
+            )
+            rows = [revision, revision] if revision_change.get("duplicate") else [revision]
+            return RowsRead(rows, available=True)
+
+    source = RevisionSource(
+        touchpoints=RowsRead([{
+            "touchpoint_id": "tp-classified",
+            "tenant_id": "tenant-a",
+            "campaign_id": CAMPAIGN_ID,
+            "occurred_at": "2026-10-05T10:00:00Z",
+            "source_event_id": "event-classified",
+            "source_class": "owned",
+            "source_classifier_version": "v1",
+            "source_classification_id": "classification-1",
+            "source_classified_at": "2026-10-05T10:01:00Z",
+        }], available=True),
+        signals=RowsRead([{
+            "event_id": "event-classified",
+            "tenant_id": "tenant-a",
+            "event_type": "campaign_conversion",
+            "source": "sdk",
+            "occurred_at": "2026-10-05T10:00:00Z",
+        }], available=True),
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+    signal = _section(result, "state").content["domainContexts"]["signal_sources"]
+    classification = _section(result, "state").content["domainContexts"]["source_classification"]
+    source_claims = [
+        claim for claim in result.claims
+        if claim.kind == "campaign_touchpoint_source_fact"
+    ]
+    if resolved:
+        assert signal["dimensionStates"]["sourceFacts"] == "available"
+        assert signal["sourceFacts"][0]["classificationId"] == "classification-1"
+        assert classification["touchpointClassifications"][0]["canonicalSourceFactState"] == "resolved"
+        assert len(source_claims) == 1
+        assert source_claims[0].domainSlotIds == ["source_classification", "signal_sources"]
+        assert "must-not-be-projected" not in str(result.model_dump())
+    else:
+        assert signal["dimensionStates"]["sourceFacts"] == "unknown"
+        assert signal["sourceFacts"] == []
+        assert not source_claims
+
+
+@pytest.mark.asyncio
 async def test_source_class_without_classification_revision_stays_unknown() -> None:
     result = await Campaign360Provider(FakeCampaign360Source()).project(
         _request(), _context()

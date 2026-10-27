@@ -280,6 +280,10 @@ class Campaign360Source(Protocol):
         self, tenant_id: str, event_ids: list[str], *, limit: int
     ) -> RowsRead: ...
 
+    async def source_classification_revisions(
+        self, tenant_id: str, refs: list[tuple[str, str]], *, limit: int
+    ) -> RowsRead: ...
+
     async def campaign_population_links(
         self, tenant_id: str, campaign_id: str, *, limit: int
     ) -> CampaignPopulationLinkRead: ...
@@ -587,6 +591,41 @@ class RepositoryCampaign360Source:
             rows=[row for page in pages for row in page],
             available=True,
         )
+
+    async def source_classification_revisions(
+        self, tenant_id: str, refs: list[tuple[str, str]], *, limit: int
+    ) -> RowsRead:
+        """Read exact immutable source-classification facts for touchpoints."""
+        if not tenant_id:
+            return RowsRead([], available=False, reason="source_fact_tenant_scope_missing")
+        safe_refs = [
+            (touchpoint_id, classification_id)
+            for touchpoint_id, classification_id in dict.fromkeys(refs)
+            if _safe_campaign_source_id(touchpoint_id)
+            and _safe_campaign_source_id(classification_id)
+        ][:min(max(limit, 0), MAX_CAMPAIGN_SIGNAL_EVENTS)]
+        if not safe_refs:
+            return RowsRead([], available=True)
+        try:
+            from journeys.measurement.repositories.touchpoint_repo import (
+                TouchpointRepository,
+            )
+
+            repository = TouchpointRepository()
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_one(ref: tuple[str, str]) -> list[dict[str, Any]]:
+                async with semaphore:
+                    return await repository.classification_revision(
+                        tenant_id, ref[0], ref[1]
+                    )
+
+            pages = await asyncio.gather(*(read_one(ref) for ref in safe_refs))
+        except Exception:  # noqa: BLE001 - source facts fail independently
+            return RowsRead([], available=False, reason="campaign_source_fact_authority_unavailable")
+        if any(not isinstance(page, list) for page in pages):
+            return RowsRead([], available=False, reason="campaign_source_fact_read_invalid")
+        return RowsRead([row for page in pages for row in page], available=True)
 
     async def campaign_population_links(
         self, tenant_id: str, campaign_id: str, *, limit: int
@@ -1187,6 +1226,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         campaign_facts: Optional[dict[str, Any]] = None
         touchpoint_items: list[dict[str, Any]] = []
         source_classification_items: list[dict[str, Any]] = []
+        source_facts_by_event: dict[str, list[dict[str, Any]]] = {}
         signal_touchpoint_evidence: dict[str, list[EvidenceRef]] = {}
         signal_reference_issues: list[str] = []
         signal_context: dict[str, Any] = {
@@ -1441,12 +1481,19 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                             claims=claims,
                             degraded_reasons=degraded_reasons,
                         )
+                        source_facts_by_event = await self._read_campaign_source_facts(
+                            request=request,
+                            classifications=source_classification_items,
+                            evidence_by_key=evidence_by_key,
+                            claims=claims,
+                        )
                         signal_context = await self._read_campaign_signal_context(
                             request=request,
                             context=context,
                             campaign_id=campaign_id,
                             temporal=temporal,
                             touchpoint_evidence_by_event=signal_touchpoint_evidence,
+                            source_facts_by_event=source_facts_by_event,
                             reference_issues=signal_reference_issues,
                             slot_states=slot_states,
                             evidence_by_key=evidence_by_key,
@@ -1458,12 +1505,12 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                                 "state": "degraded",
                                 "subject": {"kind": subject.kind, "id": subject.id},
                                 "touchpointClassifications": source_classification_items,
-                                "reason": "observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
+                                "reason": "exact_touchpoint_source_facts_campaign_registry_source_unresolved" if source_facts_by_event else "observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
                             }
                             slot_states[SLOT_SOURCE_CLASSIFICATION].update(
                                 state="degraded",
-                                reason="observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
-                                sourceAuthorities=["campaign_touchpoints", "source_provenance"],
+                                reason="exact_touchpoint_source_facts_campaign_registry_source_unresolved" if source_facts_by_event else "observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
+                                sourceAuthorities=["campaign_touchpoints", "source_facts", "source_provenance"],
                             )
                         await self._read_attribution(
                             request=request,
@@ -1817,7 +1864,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "domainSlotIds": [slot_id for slot_id, _ in _SLOT_REQUIREMENTS],
                     "limitations": [
                         "touchpoint source classifications do not classify campaign registry provenance",
-                        "signal_sources join exact touchpoint-linked events and matching gateway-admitted SDK observations; broader observations and source facts remain unknown",
+                        "signal_sources join exact touchpoint-linked events, matching gateway-admitted SDK observations, and verified current touchpoint classification revisions when available; broader source coverage remains unknown",
                         "communication content remains governed by communication360",
                         "conversion records are joined only through exact active campaign attribution credits; unattributed conversions remain outside this view",
                         "explicit campaign-population links are operator asserted; broader cohort and syndicate membership remains unknown",
@@ -2374,6 +2421,107 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "findingsTruncated": truncated,
         }
 
+    async def _read_campaign_source_facts(
+        self,
+        *,
+        request: ProjectionRequest,
+        classifications: list[dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Resolve touchpoint classification pointers to immutable source facts."""
+        reader = getattr(self._source, "source_classification_revisions", None)
+        if not classifications or not callable(reader):
+            return {}
+        refs = [
+            (item["touchpointId"], item["classificationId"])
+            for item in classifications[:MAX_CAMPAIGN_SIGNAL_EVENTS]
+        ]
+        try:
+            read = await reader(request.tenantId, refs, limit=MAX_CAMPAIGN_SIGNAL_EVENTS)
+        except Exception:  # noqa: BLE001 - independent source-fact read
+            return {}
+        if not isinstance(read, RowsRead) or not read.available or not isinstance(read.rows, list):
+            return {}
+        requested = {ref: item for ref, item in zip(refs, classifications)}
+        rows_by_key: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for row in read.rows:
+            if not isinstance(row, dict) or row.get("tenant_id") != request.tenantId:
+                return {}
+            key = (str(row.get("touchpoint_id")), str(row.get("classification_id")))
+            if key not in requested:
+                return {}
+            rows_by_key.setdefault(key, []).append(row)
+        if any(len(rows) != 1 for rows in rows_by_key.values()):
+            return {}
+
+        facts_by_event: dict[str, list[dict[str, Any]]] = {}
+        staged: list[tuple[dict[str, Any], EvidenceRef, EvidenceRef, dict[str, Any]]] = []
+        for key, rows in rows_by_key.items():
+            row = rows[0]
+            item = requested[key]
+            classification = row.get("classification")
+            classified_at = _string_or_none(row.get("classified_at"))
+            pointer_at = item.get("classifiedAt")
+            try:
+                times_match = (
+                    classified_at is not None
+                    and pointer_at is not None
+                    and _parse_instant(classified_at) == _parse_instant(pointer_at)
+                )
+            except (TypeError, ValueError):
+                times_match = False
+            if (
+                not row.get("is_current")
+                or not isinstance(classification, dict)
+                or classification.get("source_class") != item["sourceClass"]
+                or row.get("classifier_version") != item["classifierVersion"]
+                or not times_match
+            ):
+                return {}
+            touchpoint_ref = evidence_by_key.get((
+                "services/api/journeys/measurement/repositories/touchpoint_repo.py:silver_campaign_touchpoint_facts",
+                item["touchpointId"],
+            ))
+            if touchpoint_ref is None:
+                return {}
+            ref = EvidenceRef(
+                id=item["classificationId"],
+                type="event",
+                source="services/api/journeys/measurement/repositories/touchpoint_repo.py:touchpoint_source_classification_revisions",
+                observedAt=classified_at,
+                uri=f"store://touchpoint_source_classification_revisions/{quote(item['classificationId'], safe='')}",
+            )
+            fact = {
+                "sourceEventId": item["sourceEventId"],
+                "touchpointId": item["touchpointId"],
+                "classificationId": item["classificationId"],
+                "sourceClass": item["sourceClass"],
+                "classifierVersion": item["classifierVersion"],
+                "classifiedAt": classified_at,
+                "evidenceRefs": [
+                    touchpoint_ref.model_dump(by_alias=True, exclude_none=True),
+                    ref.model_dump(by_alias=True, exclude_none=True),
+                ],
+            }
+            staged.append((item, touchpoint_ref, ref, fact))
+        for item, touchpoint_ref, ref, fact in staged:
+            _add_evidence(evidence_by_key, ref)
+            item["canonicalSourceFactState"] = "resolved"
+            facts_by_event.setdefault(item["sourceEventId"], []).append(fact)
+            claims.append(ClaimEnvelope(
+                id=f"campaign360:{request.subject.id}:source-fact:{ref.id}",
+                kind="campaign_touchpoint_source_fact",
+                subject=request.subject,
+                evidenceRefs=[touchpoint_ref, ref],
+                claims=[
+                    "An exact current tenant touchpoint classification revision agrees with the campaign touchpoint's source class, classifier version, and classification time."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=[SLOT_SOURCE_CLASSIFICATION, SLOT_SIGNAL_SOURCES],
+            ))
+        return facts_by_event
+
     async def _read_campaign_signal_context(
         self,
         *,
@@ -2382,6 +2530,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         campaign_id: str,
         temporal: _TemporalScope,
         touchpoint_evidence_by_event: dict[str, list[EvidenceRef]],
+        source_facts_by_event: dict[str, list[dict[str, Any]]],
         reference_issues: list[str],
         slot_states: dict[str, dict[str, Any]],
         evidence_by_key: dict[tuple[str, str], EvidenceRef],
@@ -2400,6 +2549,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "subject": {"kind": request.subject.kind, "id": request.subject.id},
             "campaignId": campaign_id,
             "events": [],
+            "sourceFacts": [],
             "dimensionStates": {
                 "events": "unknown",
                 "observations": "unknown",
@@ -2599,6 +2749,10 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 if issues
                 else "campaign_touchpoint_event_record_not_resolved"
             )
+        source_facts = [
+            fact for item in event_items
+            for fact in source_facts_by_event.get(item["eventId"], [])
+        ]
         observation_context = await self._read_campaign_signal_observations(
             request=request,
             event_items=event_items,
@@ -2608,7 +2762,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         dimension_states = {
             "events": "available" if event_items else "unknown",
             "observations": observation_context["state"],
-            "sourceFacts": "unknown",
+            "sourceFacts": "available" if source_facts else "unknown",
         }
         if event_items and observation_context["items"]:
             reason = "campaign_signal_events_and_sdk_observations_partial"
@@ -2637,6 +2791,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             **base,
             "state": state,
             "events": event_items,
+            "sourceFacts": source_facts,
             "observations": observation_context["items"],
             "observationRead": {
                 key: value for key, value in observation_context.items() if key != "items"
@@ -2652,7 +2807,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             },
             "reason": reason,
             "limitations": [
-                "Only exact touchpoint-linked SDK observations are joined; broader observation and source-fact coverage remain unknown.",
+                "Only exact touchpoint-linked SDK observations and matching current touchpoint classification revisions are joined; broader observation and source-fact coverage remain unknown.",
                 *list(dict.fromkeys(issues)),
             ],
         }

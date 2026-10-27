@@ -282,7 +282,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/campaign360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'population', 'source'],
-    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_population_link_events', 'campaign_touchpoints', 'canonical_conversions', 'communication', 'economic', 'events', 'evidence', 'journeys', 'observations', 'outcomes', 'population', 'population_definitions', 'risk_outputs', 'source_provenance', 'spend_records', 'targeting_leakage_findings', 'touchpoints'],
+    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_population_link_events', 'campaign_touchpoints', 'canonical_conversions', 'communication', 'economic', 'events', 'evidence', 'journeys', 'observations', 'outcomes', 'population', 'population_definitions', 'risk_outputs', 'source_facts', 'source_provenance', 'spend_records', 'targeting_leakage_findings', 'touchpoints'],
     hardDependencies: ['attribution_architecture', 'contract_spine', 'measurement_outcome_contract'],
     projectionDependencies: ['communication360', 'economic360', 'episode360', 'outcome360', 'population360'],
     optionalProjectionDependencies: [],
@@ -1316,7 +1316,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'event', 'observation', 'signal', 'source', 'stream'],
-    canonicalAuthorities: ['behavioral_signals', 'campaign_facts', 'campaign_touchpoints', 'events', 'identity', 'observations', 'risk_outputs', 'silver_semantic_observations', 'source_provenance', 'source_schema'],
+    canonicalAuthorities: ['behavioral_signals', 'campaign_facts', 'campaign_touchpoints', 'events', 'identity', 'ingestion_health', 'observations', 'risk_outputs', 'silver_semantic_observations', 'source_provenance', 'source_schema'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -2584,11 +2584,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'Canonical source facts are not joined to the exact touchpoint-linked campaign event rows.',
         canonicalAuthorityRefs: ['events', 'observations', 'source_facts'],
         description: 'Tenant-scoped signal and source observations associated with the campaign.',
         id: 'signal_sources',
-        partialImplementationReason: 'Exact campaign touchpoint event references join tenant-scoped canonical events and matching gateway-admitted SDK Bronze observations. Broader observation producers, source-fact authority, complete event coverage, and a freshness SLA remain unresolved.',
+        partialImplementationReason: 'Exact campaign touchpoint event references join tenant-scoped canonical events, matching gateway-admitted SDK Bronze observations, and verified current touchpoint classification revisions as source facts. Broader observation and source-fact producers, complete event coverage, and a freshness SLA remain unresolved.',
         projectionBindings: [
           {
             projectionId: 'campaign360',
@@ -2597,15 +2596,13 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['state']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['source_facts']
+        requirement: 'required'
       },
       {
-        authorityGapReason: 'Touchpoint classification revisions do not classify the campaign registry source or every asserting source.',
         canonicalAuthorityRefs: ['campaign_touchpoints', 'source_facts', 'source_provenance'],
         description: 'Canonical classification of the source that asserted or synchronized campaign evidence.',
         id: 'source_classification',
-        partialImplementationReason: 'Only classified tenant campaign touchpoints on the requested page are joined; campaign registry provenance remains unknown.',
+        partialImplementationReason: 'Exact current tenant touchpoint classification revisions are read and verified against the touchpoint classification pointer, class, classifier version, and time. Only classified touchpoints on the requested page are joined; campaign registry provenance and other asserting sources remain unknown.',
         projectionBindings: [
           {
             projectionId: 'campaign360',
@@ -2614,8 +2611,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence', 'state']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['source_facts']
+        requirement: 'required'
       },
       {
         id: 'touchpoints',
@@ -5446,11 +5442,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'source_reliability_and_semantic_quality_authorities_not_joined',
         canonicalAuthorityRefs: ['ingestion_health', 'observations', 'source_schema'],
-        description: 'Exact SDK Bronze gateway acceptance for an event or observation; source reliability and semantic quality remain unknown.',
+        description: 'Exact SDK Bronze gateway acceptance and, for an authenticated site namespace, separately observed current site install-signal status; event and fleet health remain unknown.',
         id: 'quality',
-        partialImplementationReason: 'gateway_acceptance_only_no_reliability_semantic_quality_or_freshness_sla',
+        partialImplementationReason: 'Gateway acceptance and exact tenant/site install-signal status are separate observations. Mobile and tenant-wide events have no installation-health join; event-time health, fleet completeness, source reliability, semantic quality, and a freshness SLA remain unknown.',
         projectionBindings: [
           {
             projectionId: 'signals360',
@@ -5459,8 +5454,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['quality']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['ingestion_health']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['risk_outputs'],

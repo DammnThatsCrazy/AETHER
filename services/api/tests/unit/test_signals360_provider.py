@@ -28,6 +28,7 @@ from intelligence.signals.signals360_provider import (  # noqa: E402
     RepositorySignal360Source,
     SignalCampaignLink,
     SignalSummaryRead,
+    SiteInstallHealthRead,
     register_provider,
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
@@ -719,6 +720,114 @@ async def test_signals360_projects_only_gateway_quality_for_exact_observation(
     }
     assert all(claim.claimState == EpistemicStatus.OBSERVED for claim in result.claims)
     assert all(claim.evidenceRefs[0].id == observation_id for claim in result.claims)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("change", "expected_state"),
+    [
+        ({}, "observed"),
+        ({"row_tenant": "other-tenant"}, "unknown"),
+        ({"row_site": "site_other"}, "unknown"),
+        ({"row_type": "fleet"}, "unknown"),
+        ({"namespace": "tenant:tenant-signals-a"}, "unknown"),
+        ({"context_namespace": "site:site_other"}, "unknown"),
+    ],
+)
+async def test_signals360_quality_joins_only_exact_authenticated_site_install_health(
+    change: dict[str, str], expected_state: str
+) -> None:
+    event_id = "evt-site-health-1"
+    site_id = "site_exact"
+    namespace = change.get("namespace", f"site:{site_id}")
+    record = {
+        "tenant_id": TENANT_A,
+        "provider_record_id": event_id,
+        "source": "sdk",
+        "payload": {
+            "context": {
+                "identity_namespace": change.get("context_namespace", f"site:{site_id}")
+            },
+            "observation_envelope": {
+                "tenancy": {"tenant_id": TENANT_A},
+                "observation": {
+                    "observation_id": event_id,
+                    "ingested_at": "2026-10-18T10:01:00Z",
+                },
+                "source": {"source_type": "sdk", "source_instance": namespace},
+                "quality": {"validation_state": "gateway:accepted"},
+                "private": "must-not-be-projected",
+            },
+        },
+    }
+    install = {
+        "id": f"{TENANT_A}:{site_id}",
+        "tenant_id": change.get("row_tenant", TENANT_A),
+        "installation_id": site_id,
+        "site_id": change.get("row_site", site_id),
+        "record_type": change.get("row_type", "site_install"),
+        "status": "live",
+        "last_signal": "sdk_initialized",
+        "last_signal_at": "2026-10-18T10:00:00Z",
+        "private": "must-not-be-projected",
+    }
+
+    class SiteSource(FakeSignalSource):
+        def __init__(self) -> None:
+            super().__init__(
+                SignalSummaryRead((), available=False, complete=False),
+                ObservationQualityRead(record, available=True, complete=True),
+            )
+            self.site_calls: list[tuple[str, str]] = []
+
+        async def site_install_health(self, *, tenant_id, site_id):
+            self.site_calls.append((tenant_id, site_id))
+            return SiteInstallHealthRead(tenant_id, site_id, install, True)
+
+    source = SiteSource()
+    request = _request(subject_kind="event", subject_id=event_id).model_copy(
+        update={"includeSections": ["quality"]}
+    )
+    result = await Signals360Provider(source=source).project(request, _context())
+    quality = _sections(result)["quality"]
+    assert quality.state == "degraded"
+    assert quality.content["siteInstallHealth"]["state"] == expected_state
+    assert "must-not-be-projected" not in str(result.model_dump())
+    if expected_state == "observed":
+        assert source.site_calls == [(TENANT_A, site_id)]
+        assert quality.canonicalAuthorityRefs == ["observations", "ingestion_health"]
+        assert quality.content["siteInstallHealth"]["lastObservedInstallStatus"] == "live"
+        assert quality.content["siteInstallHealth"]["fleetHealth"] == "unknown"
+        assert {(ref.source, ref.id) for ref in result.claims[0].evidenceRefs} == {
+            ("bronze_sdk_events", event_id),
+            (
+                "repositories.sdk_repos.SDKInstallationRepository:sdk_installations",
+                f"{TENANT_A}:{site_id}",
+            ),
+        }
+    else:
+        assert quality.canonicalAuthorityRefs == ["observations"]
+        assert len(result.claims[0].evidenceRefs) == 1
+        if change.get("namespace") or change.get("context_namespace"):
+            assert source.site_calls == []
+
+
+@pytest.mark.asyncio
+async def test_repository_signals360_reads_exact_site_install_record() -> None:
+    class InstallRepo:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def get(self, tenant_id, site_id):
+            self.calls.append((tenant_id, site_id))
+            return {"id": f"{tenant_id}:{site_id}"}
+
+    repo = InstallRepo()
+    source = RepositorySignal360Source(site_installations=repo)
+    read = await source.site_install_health(tenant_id=TENANT_A, site_id="site_exact")
+    assert repo.calls == [(TENANT_A, "site_exact")]
+    assert read.available is True
+    assert read.record == {"id": f"{TENANT_A}:site_exact"}
 
 
 @pytest.mark.asyncio

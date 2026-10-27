@@ -33,8 +33,8 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:ae487fffb48a5848a612e34bf8b8074b500fb4f6e62111a8af403f14487fdd64"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:c15dbfa0325d810e6f96ab6fc0a246e27e321f50cd661212241fb7785a871beb"
-  "services/api/journeys/": "sha256:1d5d2077297ab050ab04950e17f8427025fb390850c9e1529e46e2523a18494b"
+  "services/api/intelligence/": "sha256:e38dde912f71269b72fe48ebe422f766b13bff9a82ef164da2f5e9bc41071f3d"
+  "services/api/journeys/": "sha256:0004ca6f24b5e5110c77a11ff973022cd7e2337174571a676c3395778ca9d7d0"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:b581ccc0719fd0cdc8e492a08ba0e5d5c6729500caa40e1f853f5cb786604891"
@@ -2107,8 +2107,10 @@ the episode. The live semantic pipeline does not yet supply the explicit
 episode association. Full activity and session coverage, policy, and freshness
 remain unresolved; Campaign360 now joins exact gateway-admitted SDK Bronze observations
 when tenant, event ID, type, and event time match the touchpoint-linked
-canonical event. Broader observations, source facts, event completeness, and
-freshness remain unknown; Memory360 does not evaluate current consent or policy. Its record
+canonical event. Exact current touchpoint classification revisions join by
+tenant, touchpoint, revision ID, class, classifier version, and time. Campaign
+registry source, broader source producers, event completeness, and freshness
+remain unknown; Memory360 does not evaluate current consent or policy. Its record
 producer stamps explicitly required purposes from the verified write-time
 decision, and exact reads suppress a stamped record if that decision no longer
 matches. The Memory360 memory item and historical policy decision now expose
@@ -2144,6 +2146,10 @@ shared journey ID alone is insufficient. This is a partial current-store read
 with no live producer of that episode relation and no population guarantee.
 Neither addition creates an HTTP route or completes a 360 surface.
 
+Signals360 `quality` now exposes a separate exact tenant/site installation
+status when an accepted SDK event carries the authenticated server-stamped site
+namespace. It preserves installation evidence while leaving event-time and
+fleet health, mobile installation linkage, and freshness unknown.
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,
 semantic classification, policy, and freshness remain unknown. Workflow360 now

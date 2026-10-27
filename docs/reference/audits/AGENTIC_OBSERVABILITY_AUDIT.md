@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:031b6b7d4fe6eabe42488b1b944279fb99e778fbf4173173c933078269f7dab4"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:5c23fca3787b18c0330e38aca3908ebf44d74fa4693aa9ac59da32b4ac9d05c7"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:e9f1eb519a8bd39cf4892fb490fcf0c1778d80ffca4d5c235ca891c66cddd185"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -206,17 +206,24 @@ supplies an explicit semantic authority marker and episode association.
 No live semantic-to-episode producer supplies that association yet. Broader
 activity/session inventory, policy disposition, and freshness remain unknown.
 Campaign360 `signal_sources` resolves exact canonical event IDs referenced
-by campaign touchpoints and matching gateway-admitted SDK Bronze observations.
-The observation join requires exact tenant, event ID, type, and event time;
-it exposes limited metadata with event and Bronze evidence. Campaign membership
+by campaign touchpoints, matching gateway-admitted SDK Bronze observations,
+and exact current touchpoint classification revisions. The observation join
+requires exact tenant, event ID, type, and event time. The source fact join
+requires tenant, touchpoint, revision ID, class, classifier version, and time;
+both expose limited metadata and canonical evidence. Campaign membership
 is not inferred from labels or event properties. Broader observation producers,
-source facts, complete event coverage, and freshness remain unknown. Memory360
+campaign registry source, broader source facts, complete event coverage, and
+freshness remain unknown. Memory360
 `policy_state` renders exact
 tenant-and-subject historical allow decisions with timestamped consent-policy
 evidence; this records the decision made at memory write time and does not
 evaluate current consent or policy. These joins are partial slot capabilities,
 not surface completion or authority to execute actions.
 
+Signals360 `quality` now exposes separate current site-install signal status
+only for an accepted SDK observation with an authenticated server-stamped site
+namespace and exact tenant/site installation record. This does not establish
+event-time health, fleet health, mobile linkage, or source reliability.
 A follow-up provider slice adds partial Signals360 `classification` evidence
 for exact tenant SDK event types and families after gateway acceptance and
 canonical event registry validation. It does not join tenant source attribution,

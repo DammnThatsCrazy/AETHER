@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:031b6b7d4fe6eabe42488b1b944279fb99e778fbf4173173c933078269f7dab4"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:5c23fca3787b18c0330e38aca3908ebf44d74fa4693aa9ac59da32b4ac9d05c7"
 ---
 
 # 360 System Blueprint
@@ -57,11 +57,14 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Fourteen slots declare at least one unbound canonical authority. Campaign360
-`signal_sources` now binds exact gateway-admitted SDK Bronze observations to
-touchpoint-linked canonical events; source facts and broader producer coverage
-remain unbound. Agent360 `risk_summary` exposes its exact canonical Agent identity
+Eleven slots declare at least one unbound canonical authority. Campaign360
+`signal_sources` now binds exact gateway-admitted SDK Bronze observations and
+current touchpoint classification revisions to touchpoint-linked canonical
+events; broader source-fact producer coverage remains unknown. Agent360 `risk_summary` exposes its exact canonical Agent identity
 join before the policy-scoped Risk360 read; social observations remain unbound.
+Signals360 `quality` also binds exact tenant/site installation status only when
+an accepted SDK observation carries the authenticated server-stamped site
+namespace. Event-time and fleet health remain unknown.
 Campaign360 `anomalies` and Location360 `risk` bind bounded exact Risk360
 assessment reads, while producer coverage and whole-slot completeness remain
 unknown. Their exact
