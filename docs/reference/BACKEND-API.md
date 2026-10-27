@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:ca6a3490b8d03eda6f6fc165503d6ceb13722c392f8d37ed22eac32dfe809b5b"
+  "services/api/actions/": "sha256:f93f63d8e0d67ce2a071b003b5c94a7df926c7538a8bd1e9bf4f389d03adedfd"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:49fdf18cf09e5870dd3ce5aa60faea2e195138dba89407c4d9237df33580aeb5"
+  "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:fe41be5093f3622829b03d2556582cf90cd04479590b0c6ca9c0cf769856a6e6"
-  "services/api/journeys/": "sha256:b87b80b55579d4ad7983127b4c21e5e62bdfb6606d5fba3c4f441acd95570bf9"
+  "services/api/intelligence/": "sha256:d40769eed1961ecce5ae80cc41c9166da216faa8b6598b8124980062cc407558"
+  "services/api/journeys/": "sha256:08732f0e85e92285c185a85931a0dc750474a823d8790a0009ae919130fcbeeb"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:eced9a44386d29bac4d3fd6c320107e3f23a09b3776576f9c33a8fe53fd7e506"
+  "services/api/value/": "sha256:f5c16a09ff882f5aa5d9edacaa2c0251b4d55e2928333b63d0de090d3742e995"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1927,6 +1927,14 @@ persists the caller-reported association. Workflow360 run frames revalidate
 those records and show a degraded `workflow_summary` with the definition
 record and execution evidence. Trigger, step, and external-effect execution
 remain unknown; historical run-definition replay is unavailable.
+
+The same endpoint accepts one `journey_action_reference` or
+`risk_action_reference`. The server validates the exact tenant, current journey
+intent or approved risk decision, action, and resource before recording the
+caller association on the lifecycle request. Slot-authorized Journey360 and
+Risk360 reads can show the recorded request with evidence; it does not prove
+dispatch or an external effect. For execution-bound x402 approvals, the decision
+also records the authenticated human's request-time `commerce:approve` check.
 
 Communication360 Agent authorship requires an exact tenant-owned canonical
 Agent author binding with provider scope, event-time role validity, and trusted

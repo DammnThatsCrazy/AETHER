@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2c09ffe2cbd46a3a2f29331b58496bdd63cc1494fad34dafbb86cca25b829fd3"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:89372d02c1b4db0fe67cadbdee96df3955655bbecdcdc946e750d58ef419f8a1"
 ---
 
 # 360 System Blueprint
@@ -77,10 +77,19 @@ tuple; action and resource policy and effective tool authorization remain
 unbound. Support360 `sla` now joins an operator-registered source policy revision
 to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.
+Campaign360 `cohorts_syndicates` can join an explicit campaign population link
+to a current exact cluster definition and consent-scoped cluster or cohort
+memberships backed by graph-ledger replay. Roster completeness, relationship
+topology, historical membership, and freshness remain unknown. Journey and Risk
+can expose an exact caller-associated agent lifecycle request after slot policy;
+dispatch and external effect remain unverified. Workflow approval decisions can
+carry a recorded human permission check; agent access remains unbound.
 Profile360 `likely_next_states` rechecks the recorded inference decision against
 the tenant, actor, model, subject, policy version, and decision time; session
-models also require the exact current session identity binding. Current consent,
-historical identity state, calibration, and observed outcomes remain unproven.
+models also require the exact current session identity binding. A current
+artifact-reported calibration metric can be shown with unknown dataset and
+evaluation scope. Current consent, historical identity state, independently
+validated calibration, and observed outcomes remain unproven.
 Campaign360 `anomalies` and Location360 `risk` bind bounded exact Risk360
 assessment reads, while producer coverage and whole-slot completeness remain
 unknown. Their exact

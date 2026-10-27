@@ -282,7 +282,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/campaign360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'population', 'source'],
-    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_population_link_events', 'campaign_touchpoints', 'canonical_conversions', 'communication', 'economic', 'events', 'evidence', 'journeys', 'observations', 'outcomes', 'population', 'population_definitions', 'risk_outputs', 'source_facts', 'source_provenance', 'spend_records', 'targeting_leakage_findings', 'touchpoints'],
+    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_population_link_events', 'campaign_touchpoints', 'canonical_conversions', 'cluster_definitions', 'cluster_membership', 'cohort_membership', 'communication', 'economic', 'events', 'evidence', 'journeys', 'observations', 'outcomes', 'population', 'population_definitions', 'risk_outputs', 'source_facts', 'source_provenance', 'spend_records', 'targeting_leakage_findings', 'touchpoints'],
     hardDependencies: ['attribution_architecture', 'contract_spine', 'measurement_outcome_contract'],
     projectionDependencies: ['communication360', 'economic360', 'episode360', 'outcome360', 'population360'],
     optionalProjectionDependencies: [],
@@ -2497,11 +2497,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        authorityGapReason: 'Explicit population links do not establish cohort, cluster or syndicate membership or relationship topology.',
+        authorityGapReason: 'Relationship-fact topology for linked populations and syndicates is not joined.',
         canonicalAuthorityRefs: ['campaign_facts', 'campaign_population_link_events', 'cluster_definitions', 'cluster_membership', 'cohort_membership', 'population_definitions', 'relationship_facts'],
-        description: 'Explicit tenant operator campaign-to-population association events validated against exact canonical campaign and population records.',
+        description: 'Explicit campaign-to-population associations with current versioned cluster definitions and consent-scoped membership evidence where exact tenant records resolve.',
         id: 'cohorts_syndicates',
-        partialImplementationReason: 'Exact bounded operator association state is available; derived memberships, syndicates, historical replay and freshness remain unknown.',
+        partialImplementationReason: 'Explicit links can resolve current exact cluster definition revisions and bounded consent-scoped cluster or cohort memberships backed by live graph ledger replay. Population and roster coverage, syndicates, relationship-fact topology, historical membership and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'campaign360',
@@ -2511,7 +2511,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           }
         ],
         requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['cluster_definitions', 'cluster_membership', 'cohort_membership', 'relationship_facts']
+        unboundCanonicalAuthorityRefs: ['relationship_facts']
       },
       {
         canonicalAuthorityRefs: ['attribution_credits', 'canonical_conversions', 'measurement_contract', 'outcome_facts'],
@@ -4023,7 +4023,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['actions', 'episode_journey_authority_records', 'journeys'],
         description: 'Exact current-journey-version non-executable action intent records validated against canonical journey and step evidence.',
         id: 'recommended_actions',
-        partialImplementationReason: 'Recorded current-version intents are visible; action policy re-evaluation, dispatch, outcomes, full recommendation inventory and freshness remain unknown.',
+        partialImplementationReason: 'Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy; action dispatch, external effects, policy replay, outcomes, full recommendation inventory and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'episode360',
@@ -4766,7 +4766,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['analytics_events', 'consent_policy_decisions', 'identity_source_identities', 'model_artifact_registry', 'model_governance', 'outcome_facts', 'profile_prediction_outputs'],
         description: 'Policy-admitted append-only future-state predictions for an exact canonical human entity, versioned state schema, active production artifact checksum, source event evidence, and bounded validity and freshness.',
         id: 'likely_next_states',
-        partialImplementationReason: 'The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, in addition to the future-state schema, production artifact, validity interval, and freshness. Current serving outputs omit required fields. Historical identity, current consent, revocation history, outcome verification, and model calibration remain unknown.',
+        partialImplementationReason: 'The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, alongside the future-state schema, current production artifact, validity interval, and freshness. An artifact-reported calibration metric may be exposed with unknown evaluation scope. Current serving outputs omit required fields; historical identity, current consent, revocation history, outcome verification, and independently validated model calibration remain unknown.',
         projectionBindings: [
           {
             projectionId: 'profile360',
@@ -5117,7 +5117,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['actions', 'risk_intervention_records', 'risk_outputs'],
         description: 'Recorded risk interventions and results.',
         id: 'interventions',
-        partialImplementationReason: 'Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown.',
+        partialImplementationReason: 'Exact-subject intervention decisions and reported outcomes can include slot-authorized, caller-associated agent lifecycle requests; dispatch, external effects, actor authority, producer coverage, independent outcome verification, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'risk360',
@@ -6571,7 +6571,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['agent_access', 'agent_executions', 'commerce'],
         description: 'Exact x402 approval requests and decisions referenced by tenant and run-linked AgentExecutions; workflow-wide approval coverage and authorization policy remain unknown.',
         id: 'approvals',
-        partialImplementationReason: 'Only exact x402 approval decisions referenced by admitted run-linked AgentExecutions are joined; workflow-level approval coverage and authorization remain unknown.',
+        partialImplementationReason: 'Exact x402 approval decisions referenced by admitted run-linked AgentExecutions can carry the recorded request-time human commerce approval permission check. Agent access, workflow-wide coverage, historical policy replay, and effective agent authorization remain unknown.',
         projectionBindings: [
           {
             projectionId: 'workflow360',

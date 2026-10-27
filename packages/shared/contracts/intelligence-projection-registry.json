@@ -1688,6 +1688,9 @@
         "campaign_population_link_events",
         "campaign_touchpoints",
         "canonical_conversions",
+        "cluster_definitions",
+        "cluster_membership",
+        "cohort_membership",
         "communication",
         "economic",
         "events",
@@ -4819,7 +4822,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, in addition to the future-state schema, production artifact, validity interval, and freshness. Current serving outputs omit required fields. Historical identity, current consent, revocation history, outcome verification, and model calibration remain unknown.",
+          "partialImplementationReason": "The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, alongside the future-state schema, current production artifact, validity interval, and freshness. An artifact-reported calibration metric may be exposed with unknown evaluation scope. Current serving outputs omit required fields; historical identity, current consent, revocation history, outcome verification, and independently validated model calibration remain unknown.",
           "unboundCanonicalAuthorityRefs": [
             "model_governance",
             "outcome_facts"
@@ -5816,7 +5819,7 @@
             "actions"
           ],
           "authorityGapReason": "A non-executable recommendation record does not join the canonical action execution authority.",
-          "partialImplementationReason": "Recorded current-version intents are visible; action policy re-evaluation, dispatch, outcomes, full recommendation inventory and freshness remain unknown."
+          "partialImplementationReason": "Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy; action dispatch, external effects, policy replay, outcomes, full recommendation inventory and freshness remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -6717,7 +6720,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
+          "partialImplementationReason": "Exact-subject intervention decisions and reported outcomes can include slot-authorized, caller-associated agent lifecycle requests; dispatch, external effects, actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
           "unboundCanonicalAuthorityRefs": [
             "actions"
           ],
@@ -8543,7 +8546,7 @@
         {
           "id": "cohorts_syndicates",
           "requirement": "required",
-          "description": "Explicit tenant operator campaign-to-population association events validated against exact canonical campaign and population records.",
+          "description": "Explicit campaign-to-population associations with current versioned cluster definitions and consent-scoped membership evidence where exact tenant records resolve.",
           "canonicalAuthorityRefs": [
             "campaign_facts",
             "campaign_population_link_events",
@@ -8566,13 +8569,10 @@
             }
           ],
           "unboundCanonicalAuthorityRefs": [
-            "cluster_definitions",
-            "cluster_membership",
-            "cohort_membership",
             "relationship_facts"
           ],
-          "authorityGapReason": "Explicit population links do not establish cohort, cluster or syndicate membership or relationship topology.",
-          "partialImplementationReason": "Exact bounded operator association state is available; derived memberships, syndicates, historical replay and freshness remain unknown."
+          "authorityGapReason": "Relationship-fact topology for linked populations and syndicates is not joined.",
+          "partialImplementationReason": "Explicit links can resolve current exact cluster definition revisions and bounded consent-scoped cluster or cohort memberships backed by live graph ledger replay. Population and roster coverage, syndicates, relationship-fact topology, historical membership and freshness remain unknown."
         },
         {
           "id": "performance",
@@ -10256,7 +10256,7 @@
             "agent_access"
           ],
           "authorityGapReason": "canonical_workflow_approval_authority_not_joined",
-          "partialImplementationReason": "Only exact x402 approval decisions referenced by admitted run-linked AgentExecutions are joined; workflow-level approval coverage and authorization remain unknown."
+          "partialImplementationReason": "Exact x402 approval decisions referenced by admitted run-linked AgentExecutions can carry the recorded request-time human commerce approval permission check. Agent access, workflow-wide coverage, historical policy replay, and effective agent authorization remain unknown."
         },
         {
           "id": "agent_steps",

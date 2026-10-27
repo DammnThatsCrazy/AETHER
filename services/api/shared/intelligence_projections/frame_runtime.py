@@ -300,6 +300,61 @@ async def build_experience360_frame(
             temporalMode=temporal_surface_mode,
         )
         read_authorizations: list[ProjectionReadAuthorization] = []
+        action_scope = {
+            ("journey360", "episode360"): "recommended_actions",
+            ("risk360", "risk360"): "interventions",
+        }.get((request.surfaceId, projection_id))
+        if action_scope is not None:
+            slot = slot_definitions.get(action_scope)
+            disposition = selected_policy.get(action_scope)
+            bindings = slot.get("projectionBindings", []) if isinstance(slot, Mapping) else []
+            bound = any(
+                isinstance(item, Mapping) and item.get("projectionId") == projection_id
+                and request.subject.kind in item.get("subjectKinds", [])
+                for item in bindings
+            )
+            agent = INTELLIGENCE_PROJECTION_DEFINITIONS.get("agent360", {})
+            if (
+                action_scope in readable_slot_ids and disposition is not None
+                and disposition.state == "allowed" and bound
+                and "agent360.read" in agent.get("capabilityKeys", [])
+                and agent.get("graphMutationPolicy") == "read_only"
+                and disposition.policyIds and disposition.evaluatedAt
+            ):
+                read_authorizations.append(ProjectionReadAuthorization(
+                    tenantId=request.tenantId, sourceSurfaceId=request.surfaceId,
+                    sourceSubject=request.subject, sourceSlotId=action_scope,
+                    consumerProjectionId=projection_id, targetProjectionId="agent360",
+                    capabilityKey="agent360.read", policyState="allowed",
+                    policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
+                ))
+        if request.surfaceId == "campaign360" and projection_id == "campaign360":
+            # A campaign slot permission does not itself imply permission to
+            # enumerate its linked population. Pass a scoped server decision
+            # only when the membership slot was explicitly allowed.
+            slot_id = "cohorts_syndicates"
+            slot = slot_definitions.get(slot_id)
+            disposition = selected_policy.get(slot_id)
+            bindings = slot.get("projectionBindings", []) if isinstance(slot, Mapping) else []
+            binding = next((item for item in bindings if isinstance(item, Mapping)
+                            and item.get("projectionId") == "campaign360"
+                            and request.subject.kind in item.get("subjectKinds", [])), None)
+            population = INTELLIGENCE_PROJECTION_DEFINITIONS.get("population360", {})
+            capabilities = population.get("capabilityKeys", [])
+            if (
+                slot_id in readable_slot_ids and disposition is not None
+                and disposition.state == "allowed" and isinstance(binding, Mapping)
+                and request.subject.kind == "campaign"
+                and isinstance(capabilities, (list, tuple)) and "population360.read" in capabilities
+                and population.get("graphMutationPolicy") == "read_only"
+            ):
+                read_authorizations.append(ProjectionReadAuthorization(
+                    tenantId=request.tenantId, sourceSurfaceId=request.surfaceId,
+                    sourceSubject=request.subject, sourceSlotId=slot_id,
+                    consumerProjectionId="campaign360", targetProjectionId="population360",
+                    capabilityKey="population360.read", policyState=disposition.state,
+                    policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
+                ))
         if request.surfaceId == "agent360" and projection_id == "agent360":
             # Agent360 can make a nested current Risk360 read while assembling
             # its broader state section. Carry the exact outer slot decision

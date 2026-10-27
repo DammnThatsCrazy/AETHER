@@ -892,6 +892,10 @@ class RepositoryWorkflow360Source:
                         "action": decision_data["action"],
                         "decided_by": decision_data["decided_by"],
                         "decided_at": decision_data.get("decided_at"),
+                        **(
+                            {"permission_receipt": decision_data["permission_receipt"]}
+                            if decision_data.get("permission_receipt") is not None else {}
+                        ),
                     }
                 )
             return WorkflowApprovalRead(
@@ -3085,6 +3089,32 @@ def _approvals_section(
             "decisionActorIdentityState": identity.get("state", "unresolved"),
             "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
         }
+        receipt = row.get("permission_receipt")
+        checked_at = _safe_timestamp(receipt.get("checked_at")) if isinstance(receipt, dict) else None
+        decided_at = _safe_timestamp(row.get("decided_at"))
+        checked_time = _parse_timestamp(checked_at) if checked_at else None
+        decided_time = _parse_timestamp(decided_at) if decided_at else None
+        receipt_valid = bool(
+            isinstance(receipt, dict)
+            and _safe_identifier(receipt.get("receipt_id"))
+            and receipt.get("tenant_id") == tenant_id
+            and receipt.get("approval_id") == approval_id
+            and receipt.get("execution_id") == execution_id
+            and receipt.get("principal_id") == row.get("decided_by")
+            and receipt.get("permission") == "commerce:approve"
+            and checked_time is not None and decided_time is not None
+            and checked_time <= decided_time
+        )
+        record["approverPermissionCheck"] = (
+            {
+                "state": "recorded",
+                "permission": "commerce:approve",
+                "checkedAt": checked_at,
+                "receiptId": receipt["receipt_id"],
+                "evidenceRef": refs[1].model_dump(mode="json"),
+            }
+            if receipt_valid else {"state": "unknown"}
+        )
         if canonical_decider is not None:
             record["decidedByCanonicalHumanEntityId"] = canonical_decider
         records.append(record)

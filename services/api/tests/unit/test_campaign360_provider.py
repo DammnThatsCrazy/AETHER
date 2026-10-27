@@ -39,6 +39,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
     ProjectionContext,
     ProjectionDependencyState,
     ProjectionRequest,
+    ProjectionReadAuthorization,
     ProjectionSubject,
 )
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
@@ -355,6 +356,18 @@ def _context(tenant_id: str = "tenant-a") -> ProjectionContext:
         ],
         warnings=[],
     )
+
+
+def _population_authorized_context() -> ProjectionContext:
+    context = _context()
+    context.experience360ReadAuthorizations = [ProjectionReadAuthorization(
+        tenantId="tenant-a", sourceSurfaceId="campaign360", sourceSubject=_request().subject,
+        sourceSlotId="cohorts_syndicates", consumerProjectionId="campaign360",
+        targetProjectionId="population360", capabilityKey="population360.read",
+        policyState="allowed", policyIds=["test-policy"],
+        policyEvaluatedAt="2026-10-05T10:00:00Z",
+    )]
+    return context
 
 
 def _section(result: object, section_id: str) -> object:
@@ -1721,3 +1734,206 @@ async def test_repository_signal_event_reader_queries_exact_tenant_and_event_ids
     ]
     assert result.available is True
     assert [row["event_id"] for row in result.rows] == ["event-a"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["exact", "foreign", "revision_mismatch", "definition_conflict", "non_cluster"])
+async def test_campaign_cluster_definition_requires_exact_linked_tenant_revision(mode):
+    from copy import deepcopy
+    from identity.population.models import make_definition_version_record
+    from journeys.campaign.campaign_cluster_definitions import CampaignClusterDefinitionRead
+
+    population_id = "cluster-1"
+    definition = {"private_rule": "never projected"}
+    population = {
+        "id": population_id, "tenant_id": "tenant-a", "population_type": "cluster",
+        "status": "active", "definition_version": "1", "definition": definition,
+    }
+    revision = make_definition_version_record(population_id, "1", definition, reason="test", created_by="test")
+    if mode == "foreign":
+        population["tenant_id"] = "tenant-b"
+    elif mode == "revision_mismatch":
+        revision["definition_hash"] = "f" * 64
+    elif mode == "definition_conflict":
+        population["definition"] = {"different": True}
+    elif mode == "non_cluster":
+        population["population_type"] = "cohort"
+    event = {
+        "tenant_id": "tenant-a", "campaign_id": CAMPAIGN_ID,
+        "population_id": population_id, "event_type": "linked", "link_event_id": "link-1",
+        "source_observed_at": "2026-10-05T10:00:00Z", "effective_at": "2026-10-05T10:00:00Z",
+        "evidence_refs": [
+            {"id": CAMPAIGN_ID, "type": "entity", "source": "services/api/journeys/campaign/repository.py:campaigns"},
+            {"id": population_id, "type": "entity", "source": "identity_populations"},
+        ],
+    }
+
+    class Source(PopulationLinkCampaign360Source):
+        async def campaign_cluster_definition(self, tenant_id, requested_population):
+            assert (tenant_id, requested_population) == ("tenant-a", population_id)
+            return CampaignClusterDefinitionRead(
+                tenant_id, requested_population, True, deepcopy(population), deepcopy(revision)
+            )
+
+    source = Source(CampaignPopulationLinkRead("tenant-a", CAMPAIGN_ID, (event,), available=True))
+    result = await Campaign360Provider(source).project(_request(), _population_authorized_context())
+    context = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]
+    claims = [claim for claim in result.claims if claim.kind == "campaign_linked_cluster_definition"]
+    if mode == "exact":
+        assert len(context["clusterDefinitions"]) == len(claims) == 1
+        denied = await Campaign360Provider(source).project(_request(), _context())
+        denied_context = _section(denied, "state").content["domainContexts"]["cohorts_syndicates"]
+        assert not denied_context["clusterDefinitions"]
+        assert not any(claim.kind == "campaign_linked_cluster_definition" for claim in denied.claims)
+        metadata = context["clusterDefinitions"][0]
+        assert metadata["populationId"] == population_id
+        assert metadata["revisionId"] == revision["id"]
+        assert metadata["definitionHash"] == revision["definition_hash"]
+        assert "private_rule" not in str(context)
+        assert {ref.source for ref in claims[0].evidenceRefs} >= {
+            "population_definition_versions", "campaign_population_link_events", "identity_populations"
+        }
+    else:
+        assert context["clusterDefinitions"] == []
+        assert claims == []
+
+
+@pytest.mark.asyncio
+async def test_campaign_cluster_definition_authority_reads_only_exact_tenant_revision(monkeypatch):
+    from identity.population import registry
+    from identity.population.models import make_definition_version_record
+    from journeys.campaign.campaign_cluster_definitions import CampaignClusterDefinitionAuthority
+
+    definition = {"dimension": "campaign"}
+    population = {"id": "cluster-1", "tenant_id": "tenant-a", "population_type": "cluster",
+                  "status": "active", "definition_version": "2", "definition": definition}
+    revision = make_definition_version_record("cluster-1", "2", definition, reason="test", created_by="test")
+    seen = []
+
+    class Populations:
+        async def find_by_id(self, population_id):
+            seen.append(("population", population_id))
+            return population
+
+    class Definitions:
+        async def find_by_id(self, revision_id):
+            seen.append(("definition", revision_id))
+            return revision
+
+    monkeypatch.setattr(registry, "population_repo", Populations())
+    monkeypatch.setattr(registry, "definition_repo", Definitions())
+    authority = CampaignClusterDefinitionAuthority()
+    result = await authority.read("tenant-a", "cluster-1")
+    assert result.available and result.revision == revision
+    assert seen == [("population", "cluster-1"), ("definition", revision["id"])]
+    seen.clear()
+    result = await authority.read("tenant-b", "cluster-1")
+    assert not result.available
+    assert seen == [("population", "cluster-1")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["exact", "denied", "foreign", "revoked", "capped"])
+async def test_linked_population_member_requires_consent_and_exact_live_ledger(monkeypatch, mode):
+    from types import SimpleNamespace
+    from governance.consent import authority as consent_authority
+    from identity.population import registry
+    from repositories import graph_mutation_ledger, repos
+    from journeys.campaign.campaign_population_membership import CampaignPopulationMembershipAuthority
+
+    population_id, entity_id = "population-1", "entity-1"
+    population = {"id": population_id, "tenant_id": "tenant-a", "population_type": "cohort",
+                  "status": "active", "consent_purpose": "analytics"}
+    row = {"tenant_id": "tenant-a", "population_id": population_id, "entity_id": entity_id,
+           "membership_state": "active"}
+    payload = {"kind": "edge", "edge_type": "MEMBER_OF", "from_vertex_id": entity_id,
+               "to_vertex_id": population_id, "properties": {"tenant_id": "tenant-a", "membership_state": "active"}}
+    edge = {"tenant_id": "tenant-a", "aggregate_type": "edge",
+            "aggregate_id": f"MEMBER_OF:{entity_id}:{population_id}", "operation": "edge_created",
+            "recorded_at": "2026-10-05T10:00:00Z", "ledger_offset": 1,
+            "mutation_id": "mutation-1", "payload": payload}
+    if mode == "foreign":
+        edge["tenant_id"] = "tenant-b"
+
+    class Populations:
+        async def find_by_id(self, key):
+            return population
+
+    class Memberships:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": "tenant-a", "population_id": population_id}
+            return [row]
+
+    class Entities:
+        async def find_many_for_tenant_entity_ids(self, tenant_id, ids):
+            assert (tenant_id, ids) == ("tenant-a", {entity_id})
+            return [{"tenant_id": tenant_id, "entity_id": entity_id}], False
+
+    class Ledger:
+        async def list_records(self, tenant_id, *, aggregate_id, limit):
+            assert (tenant_id, aggregate_id) == ("tenant-a", edge["aggregate_id"])
+            if mode == "capped":
+                return [edge] * limit
+            if mode == "revoked":
+                revoked = {**edge, "ledger_offset": 2, "mutation_id": "mutation-2",
+                           "operation": "edge_revoked", "payload": {**payload, "kind": "edge_revocation"}}
+                return [edge, revoked]
+            return [edge]
+
+    async def consent(tenant_id, subject_id, anonymous_id, purpose):
+        assert (tenant_id, subject_id, anonymous_id, purpose) == ("tenant-a", entity_id, None, "analytics")
+        return SimpleNamespace(allowed=mode != "denied", receipt_id="receipt-1")
+
+    monkeypatch.setattr(registry, "population_repo", Populations())
+    monkeypatch.setattr(registry, "membership_repo", Memberships())
+    monkeypatch.setattr(repos, "EntityRepository", Entities)
+    monkeypatch.setattr(graph_mutation_ledger, "GraphMutationLedgerRepository", Ledger)
+    monkeypatch.setattr(consent_authority, "evaluate_consent_with_receipt", consent)
+    result = await CampaignPopulationMembershipAuthority().read("tenant-a", population_id)
+    if mode == "exact":
+        assert result.available and result.rows[0]["ledger_mutation_id"] == "mutation-1"
+        assert result.rows[0]["consent_receipt_id"] == "receipt-1"
+    else:
+        assert result.rows == ()
+        assert not result.available if mode == "foreign" else result.truncated
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("population_type,foreign", [("cohort", False), ("cluster", False), ("cohort", True)])
+async def test_campaign_projects_only_consent_scoped_linked_population_members(population_type, foreign):
+    from journeys.campaign.campaign_population_membership import CampaignPopulationMembershipRead
+
+    population_id = "population-1"
+    link = {"tenant_id": "tenant-a", "campaign_id": CAMPAIGN_ID, "population_id": population_id,
+            "event_type": "linked", "link_event_id": "link-1", "source_observed_at": "2026-10-05T10:00:00Z",
+            "effective_at": "2026-10-05T10:00:00Z", "evidence_refs": [
+                {"id": CAMPAIGN_ID, "type": "entity", "source": "services/api/journeys/campaign/repository.py:campaigns"},
+                {"id": population_id, "type": "entity", "source": "identity_populations"},
+            ]}
+    member = {"tenant_id": "tenant-b" if foreign else "tenant-a", "population_id": population_id,
+              "population_type": population_type, "entity_id": "entity-1", "ledger_mutation_id": "mutation-1",
+              "recorded_at": "2026-10-05T10:00:00Z", "consent_receipt_id": "receipt-1", "consent_purpose": "analytics"}
+
+    class Source(PopulationLinkCampaign360Source):
+        async def campaign_population_memberships(self, tenant_id, requested_population):
+            return CampaignPopulationMembershipRead(tenant_id, requested_population, population_type,
+                                                    (member,), True)
+
+    result = await Campaign360Provider(Source(CampaignPopulationLinkRead(
+        "tenant-a", CAMPAIGN_ID, (link,), available=True))).project(_request(), _population_authorized_context())
+    context = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]
+    claims = [claim for claim in result.claims if claim.kind == "campaign_linked_population_membership"]
+    if foreign:
+        assert not context["populationMemberships"] and not claims
+    else:
+        assert len(context["populationMemberships"]) == len(claims) == 1
+        assert context["populationMemberships"][0]["entityId"] == "entity-1"
+        denied = await Campaign360Provider(Source(CampaignPopulationLinkRead(
+            "tenant-a", CAMPAIGN_ID, (link,), available=True))).project(_request(), _context())
+        denied_context = _section(denied, "state").content["domainContexts"]["cohorts_syndicates"]
+        assert not denied_context["populationMemberships"]
+        assert not any(claim.kind == "campaign_linked_population_membership" for claim in denied.claims)
+        assert {ref.source for ref in claims[0].evidenceRefs} >= {
+            "campaign_population_link_events", "identity_populations", "graph_mutation_ledger", "governance.consent.authority"
+        }
+        assert f"{population_type}_membership" in _slot(result, "cohorts_syndicates")["sourceAuthorities"]

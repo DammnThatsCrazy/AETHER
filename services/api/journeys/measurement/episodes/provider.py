@@ -3059,6 +3059,49 @@ class Episode360Provider:
             after=after,
             before=before,
         )
+        # The agent lifecycle is a separate canonical authority. It only
+        # contains an accepted caller association, not proof of dispatch.
+        from actions.agent.action_associations import (
+            action_association_read_authorized,
+            read_associated_executions,
+        )
+
+        action_authorized = action_association_read_authorized(
+            request, context, surface="journey360", slot="recommended_actions", consumer="episode360"
+        )
+        association_records = action_intents["records"] if action_authorized else []
+        if len(association_records) > 20:
+            action_intents["warnings"].append("journey_action_association_read_truncated")
+        for item in association_records[:20]:
+            try:
+                recorded_at = datetime.fromisoformat(item["recordedAt"].replace("Z", "+00:00"))
+                anchor = min(before, datetime.now(timezone.utc)) if before else datetime.now(timezone.utc)
+                rows, complete = await read_associated_executions(
+                    tenant_id=request.tenantId, kind="journey_action_intent",
+                    record_id=item["recordId"], subject_id=journey_id,
+                    version_id=str(journey.get("journey_version_id") or ""),
+                    action=item["actionKey"], recorded_at=recorded_at, as_of=anchor,
+                )
+                if after is not None:
+                    rows = [row for row in rows if datetime.fromisoformat(row["recordedAt"]) >= after]
+            except Exception:  # noqa: BLE001 - authority outage stays slot-local
+                rows, complete = [], False
+            item["agentActionRequests"] = rows
+            item["agentActionRequestRead"] = "complete_within_bound" if complete else "unknown"
+            for row in rows:
+                action_intents["evidenceRefs"].append(row["evidenceRef"])
+                item["evidenceRefs"].append(row["evidenceRef"])
+            if not complete:
+                action_intents["warnings"].append("journey_action_association_read_incomplete")
+        action_intents["actionRequestAssociation"] = {
+            "state": "degraded" if action_intents["warnings"] else "partial" if association_records else "unknown",
+            "semantics": "caller_associated_agent_lifecycle_not_dispatch_or_external_effect",
+            "coverage": "bounded_exact_record_only",
+        }
+        if action_intents["warnings"]:
+            action_intents["state"] = "degraded"
+            action_intents["count"] = None
+            action_intents["sourceReadComplete"] = False
         warnings.extend(action_intents["warnings"])
         dropoffs = _journey_dropoff_context(
             await self._load_journey_dropoffs(request.tenantId, journey_id),

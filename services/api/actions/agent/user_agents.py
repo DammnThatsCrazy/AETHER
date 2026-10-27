@@ -40,6 +40,11 @@ from repositories.repos import (
     DelegationRepository,
 )
 from actions.delegation.engine import DelegationEngine
+from actions.agent.action_associations import (
+    JourneyActionReference,
+    RiskActionReference,
+    validate_action_association,
+)
 
 logger = get_logger("aether.service.agent.user")
 router = APIRouter(prefix="/v1/agents", tags=["Profile 360 / Agents"])
@@ -90,6 +95,8 @@ class AgentExecute(BaseModel):
     # Optional stable execution ID. A workflow link is accepted only when the
     # canonical AI invocation fact explicitly carries this value as action_id.
     execution_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    journey_action_reference: Optional[JourneyActionReference] = None
+    risk_action_reference: Optional[RiskActionReference] = None
     # This is a caller-reported association with a registered definition,
     # never evidence that the definition's triggers or steps executed.
     workflow_definition_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
@@ -407,6 +414,13 @@ async def execute(
     ):
         raise BadRequestError("Execution ID does not match the approved execution")
     execution_id = approval_execution_id or body.execution_id or str(uuid.uuid4())
+    try:
+        action_association = await validate_action_association(
+            tenant_id=tenant.tenant_id, action=body.action, resource=body.resource,
+            journey=body.journey_action_reference, risk=body.risk_action_reference,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
     workflow_run_id, workflow_run_invocation_ids = await _canonical_workflow_run_link(
         tenant_id=tenant.tenant_id,
         agent_id=agent_id,
@@ -454,7 +468,8 @@ async def execute(
             error={"code": decision.reason},
             approval_id=body.approval_id,
             approval_decision_id=approval_decision_id,
-            create_only=approval_execution_id is not None or body.execution_id is not None,
+            action_association=action_association,
+            create_only=approval_execution_id is not None or body.execution_id is not None or action_association is not None,
         )
         await producer.publish(Event(
             topic=Topic.AGENT_EXECUTION_FAILED,
@@ -537,7 +552,8 @@ async def execute(
         started_at=started_at,
         approval_id=body.approval_id,
         approval_decision_id=approval_decision_id,
-        create_only=approval_execution_id is not None or body.execution_id is not None,
+        action_association=action_association,
+        create_only=approval_execution_id is not None or body.execution_id is not None or action_association is not None,
     )
 
     await producer.publish(started)

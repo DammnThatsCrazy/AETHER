@@ -271,7 +271,11 @@ async def test_profile360_likely_next_states_is_unknown_without_approved_rows():
 
 
 @pytest.mark.asyncio
-async def test_profile360_projects_only_valid_prediction_with_predicted_epistemics(monkeypatch):
+@pytest.mark.parametrize("metric,expected", [
+    (0.12, "reported"), (None, "unknown"), (True, "unknown"),
+    (float("nan"), "unknown"), (1.2, "unknown"), (10**400, "unknown"),
+])
+async def test_profile360_projects_only_valid_prediction_with_predicted_epistemics(monkeypatch, metric, expected):
     import identity.profile.prediction_authority as authority
 
     async def allowed_policy(_output):
@@ -291,6 +295,7 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
             synthetic_data=False,
             threshold_passed=True,
             production_allowed=True,
+            metrics={"calibration_error": metric},
         ),
     )
     output = _output()
@@ -319,6 +324,12 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
     assert section.id == "likely_next_states"
     assert section.state == "available"
     assert section.content["items"][0]["states"][0]["state"] == "at_risk"
+    governance = section.content["items"][0]["modelGovernance"]
+    assert governance["calibrationMetric"]["state"] == expected
+    assert governance["modelCalibrationVerified"] is False
+    if expected == "reported":
+        assert governance["calibrationMetric"]["value"] == 0.12
+        assert governance["calibrationMetric"]["datasetAndEvaluationScope"] == "unknown"
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]

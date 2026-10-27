@@ -45,6 +45,17 @@ from journeys.campaign.campaign_population_links import (
     CampaignPopulationLinkRead,
     MAX_CAMPAIGN_POPULATION_LINKS,
 )
+from journeys.campaign.campaign_cluster_definitions import (
+    CampaignClusterDefinitionAuthority,
+    CampaignClusterDefinitionRead,
+    exact_cluster_definition,
+)
+from journeys.campaign.campaign_population_membership import (
+    CampaignPopulationMembershipAuthority,
+    CampaignPopulationMembershipRead,
+    MAX_CAMPAIGN_POPULATION_MEMBERS,
+    MAX_CAMPAIGN_POPULATIONS,
+)
 
 
 PROJECTION_ID = "campaign360"
@@ -636,6 +647,16 @@ class RepositoryCampaign360Source:
             campaign_id,
             limit=min(max(limit, 1), MAX_CAMPAIGN_POPULATION_LINKS),
         )
+
+    async def campaign_cluster_definition(
+        self, tenant_id: str, population_id: str
+    ) -> CampaignClusterDefinitionRead:
+        return await CampaignClusterDefinitionAuthority().read(tenant_id, population_id)
+
+    async def campaign_population_memberships(
+        self, tenant_id: str, population_id: str
+    ) -> CampaignPopulationMembershipRead:
+        return await CampaignPopulationMembershipAuthority().read(tenant_id, population_id)
 
     async def campaign_spend(
         self,
@@ -1654,6 +1675,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 if campaign_found and temporal.observations_supported:
                     campaign_population_context = await self._read_campaign_population_links(
                         request=request,
+                        context=context,
                         campaign_id=campaign_id or "",
                         slot_states=slot_states,
                         evidence_by_key=evidence_by_key,
@@ -4195,6 +4217,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         self,
         *,
         request: ProjectionRequest,
+        context: ProjectionContext,
         campaign_id: str,
         slot_states: dict[str, dict[str, Any]],
         evidence_by_key: dict[tuple[str, str], EvidenceRef],
@@ -4364,6 +4387,151 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 )
             )
 
+        membership_authorized = (
+            context.tenantId == request.tenantId
+            and context.projectionId == "campaign360"
+            and any(
+                auth.tenantId == request.tenantId
+                and auth.sourceSurfaceId == "campaign360"
+                and auth.sourceSubject == request.subject
+                and auth.sourceSlotId == SLOT_COHORTS_SYNDICATES
+                and auth.consumerProjectionId == "campaign360"
+                and auth.targetProjectionId == "population360"
+                and auth.capabilityKey == "population360.read"
+                and auth.policyState == "allowed"
+                and bool(auth.policyIds)
+                and bool(auth.policyEvaluatedAt)
+                for auth in context.experience360ReadAuthorizations
+            )
+        )
+        cluster_definitions: list[dict[str, Any]] = []
+        definition_reader = getattr(self._source, "campaign_cluster_definition", None)
+        if membership_authorized and callable(definition_reader) and associations:
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_definition(population_id: str) -> Any:
+                async with semaphore:
+                    return await definition_reader(request.tenantId, population_id)
+
+            definition_reads = await asyncio.gather(
+                *(read_definition(association["populationId"]) for association in associations),
+                return_exceptions=True,
+            )
+            for association, definition_read in zip(associations, definition_reads):
+                if (
+                    not isinstance(definition_read, CampaignClusterDefinitionRead)
+                    or definition_read.tenant_id != request.tenantId
+                    or definition_read.population_id != association["populationId"]
+                ):
+                    continue
+                definition = exact_cluster_definition(definition_read)
+                if definition is None:
+                    continue
+                definition_ref = EvidenceRef(
+                    id=definition["revisionId"],
+                    type="document",
+                    source="population_definition_versions",
+                    uri=f"store://population_definition_versions/{definition['revisionId']}",
+                )
+                association_refs = [EvidenceRef.model_validate(ref) for ref in association["evidenceRefs"]]
+                link_ref = EvidenceRef(
+                    id=association["linkEventId"],
+                    type="event",
+                    source="campaign_population_link_events",
+                    uri=f"store://campaign_population_link_events/{quote(association['linkEventId'], safe='')}",
+                )
+                definition["evidenceRef"] = definition_ref.model_dump(by_alias=True, exclude_none=True)
+                cluster_definitions.append(definition)
+                _add_evidence(evidence_by_key, definition_ref)
+                _add_evidence(evidence_by_key, link_ref)
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"campaign360:{campaign_id}:cluster-definition:{definition['revisionId']}",
+                        kind="campaign_linked_cluster_definition",
+                        subject=request.subject,
+                        evidenceRefs=[*association_refs, link_ref, definition_ref],
+                        claims=[
+                            "The explicitly linked tenant cluster has this current versioned definition; membership and historical applicability remain unknown."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_COHORTS_SYNDICATES],
+                    )
+                )
+
+        population_memberships: list[dict[str, Any]] = []
+        membership_reader = getattr(self._source, "campaign_population_memberships", None)
+        selected_associations = associations[:MAX_CAMPAIGN_POPULATIONS]
+        if membership_authorized and callable(membership_reader) and selected_associations:
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_memberships(population_id: str) -> Any:
+                async with semaphore:
+                    return await membership_reader(request.tenantId, population_id)
+
+            membership_reads = await asyncio.gather(
+                *(read_memberships(item["populationId"]) for item in selected_associations),
+                return_exceptions=True,
+            )
+            for association, membership_read in zip(selected_associations, membership_reads):
+                if (
+                    not isinstance(membership_read, CampaignPopulationMembershipRead)
+                    or not membership_read.available
+                    or membership_read.tenant_id != request.tenantId
+                    or membership_read.population_id != association["populationId"]
+                    or membership_read.population_type not in {"cluster", "cohort"}
+                    or len(membership_read.rows) > MAX_CAMPAIGN_POPULATION_MEMBERS
+                ):
+                    continue
+                seen_entities: set[str] = set()
+                valid_rows = True
+                for row in membership_read.rows:
+                    if (
+                        not isinstance(row, dict)
+                        or row.get("tenant_id") != request.tenantId
+                        or row.get("population_id") != association["populationId"]
+                        or row.get("population_type") != membership_read.population_type
+                        or not _safe_campaign_source_id(row.get("entity_id"))
+                        or not _safe_campaign_source_id(row.get("ledger_mutation_id"))
+                        or not _safe_campaign_source_id(row.get("consent_receipt_id"))
+                        or not _safe_campaign_source_id(row.get("consent_purpose"))
+                        or row["entity_id"] in seen_entities
+                    ):
+                        valid_rows = False
+                        break
+                    seen_entities.add(row["entity_id"])
+                if not valid_rows:
+                    continue
+                for row in membership_read.rows:
+                    ledger_ref = EvidenceRef(
+                        id=row["ledger_mutation_id"], type="relationship", source="graph_mutation_ledger",
+                        observedAt=_string_or_none(row.get("recorded_at")),
+                    )
+                    consent_ref = EvidenceRef(
+                        id=row["consent_receipt_id"], type="event", source="governance.consent.authority",
+                        uri=f"store://consent_receipts/{quote(row['consent_receipt_id'], safe='')}",
+                    )
+                    link_ref = EvidenceRef(
+                        id=association["linkEventId"], type="event", source="campaign_population_link_events",
+                        uri=f"store://campaign_population_link_events/{quote(association['linkEventId'], safe='')}",
+                    )
+                    refs = [*(EvidenceRef.model_validate(ref) for ref in association["evidenceRefs"]),
+                            link_ref, ledger_ref, consent_ref]
+                    for ref in refs:
+                        _add_evidence(evidence_by_key, ref)
+                    population_memberships.append({
+                        "populationId": row["population_id"], "populationType": row["population_type"],
+                        "entityId": row["entity_id"], "membershipState": "observed_active",
+                        "consentPurpose": row["consent_purpose"],
+                        "evidenceRefs": [ref.model_dump(by_alias=True, exclude_none=True) for ref in refs],
+                    })
+                    claims.append(ClaimEnvelope(
+                        id=f"campaign360:{campaign_id}:membership:{row['ledger_mutation_id']}",
+                        kind="campaign_linked_population_membership", subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=["An explicitly linked population has an observed active member whose current consent was checked; source and roster coverage remain unknown."],
+                        claimState=EpistemicStatus.OBSERVED, domainSlotIds=[SLOT_COHORTS_SYNDICATES],
+                    ))
+
         explicit_state = "available" if associations else "empty"
         slot_state = "degraded" if read.truncated or local_reasons else "partial"
         reason = (
@@ -4388,12 +4556,19 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             explicitPopulationLinkCount=len(associations),
             linkReadTruncated=read.truncated,
         )
+        if cluster_definitions:
+            slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append("cluster_definitions")
+        for population_type, authority in (("cluster", "cluster_membership"), ("cohort", "cohort_membership")):
+            if any(item["populationType"] == population_type for item in population_memberships):
+                slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append(authority)
         if slot_state == "degraded":
             degraded_reasons.append(reason)
         return {
             **base,
             "state": slot_state,
             "associations": associations,
+            "clusterDefinitions": cluster_definitions,
+            "populationMemberships": population_memberships,
             "dimensionStates": dimensions,
             "coverage": "explicit_operator_links_only",
             "reason": reason,
