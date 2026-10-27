@@ -1817,7 +1817,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "domainSlotIds": [slot_id for slot_id, _ in _SLOT_REQUIREMENTS],
                     "limitations": [
                         "touchpoint source classifications do not classify campaign registry provenance",
-                        "signal_sources include exact touchpoint-linked events only; broader observations and source facts remain unknown",
+                        "signal_sources join exact touchpoint-linked events and matching gateway-admitted SDK observations; broader observations and source facts remain unknown",
                         "communication content remains governed by communication360",
                         "conversion records are joined only through exact active campaign attribution credits; unattributed conversions remain outside this view",
                         "explicit campaign-population links are operator asserted; broader cohort and syndicate membership remains unknown",
