@@ -1528,6 +1528,12 @@ class Agent360Provider:
         if risk_summary_row is not None and risk_summary_state == "partial":
             risk_summary_content.update(
                 {
+                    "canonicalAgentIdentityJoin": {
+                        "state": "resolved",
+                        "canonicalAgentEntityId": resolved_canonical_actor,
+                        "evidenceRefs": actor_identity_refs,
+                        "joinBasis": "exact_tenant_agent_identity_authority",
+                    },
                     "summary": risk_summary_row["summary"],
                     "dimensionStates": risk_summary_row["dimension_states"],
                     "assessmentCoverage": risk_summary_row["assessment_coverage"],

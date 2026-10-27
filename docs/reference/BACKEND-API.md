@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:c6b64a8e7bf5eee420ef0e1aa541d598c0c782c14d3206b0b7f69ade4d20acca"
+  "services/api/actions/": "sha256:84e43ed45f975dd41aac8f4a45ba40206ca773c6bfc705b42a2c35bcc5c13d73"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:ae487fffb48a5848a612e34bf8b8074b500fb4f6e62111a8af403f14487fdd64"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
   "services/api/intelligence/": "sha256:c15dbfa0325d810e6f96ab6fc0a246e27e321f50cd661212241fb7785a871beb"
-  "services/api/journeys/": "sha256:ccf2265191982d4e12b1a7e51b44c9a19500c4f269ac21e81c44a6ffb98d1b6c"
+  "services/api/journeys/": "sha256:81a4b0b57420d6c489240c05b7c796bff9b1613791b0df9fec611c107ef68201"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:b581ccc0719fd0cdc8e492a08ba0e5d5c6729500caa40e1f853f5cb786604891"
@@ -2105,9 +2105,10 @@ Silver observation ID and authority marker, the engine attempts an exact
 tenant, namespace, status, timestamp, and event-evidence link after persisting
 the episode. The live semantic pipeline does not yet supply the explicit
 episode association. Full activity and session coverage, policy, and freshness
-remain unresolved; Campaign360
-observation and source-fact dimensions, event completeness, and freshness remain
-unknown; Memory360 does not evaluate current consent or policy. Its record
+remain unresolved; Campaign360 now joins exact gateway-admitted SDK Bronze observations
+when tenant, event ID, type, and event time match the touchpoint-linked
+canonical event. Broader observations, source facts, event completeness, and
+freshness remain unknown; Memory360 does not evaluate current consent or policy. Its record
 producer stamps explicitly required purposes from the verified write-time
 decision, and exact reads suppress a stamped record if that decision no longer
 matches. The Memory360 memory item and historical policy decision now expose
@@ -2222,7 +2223,9 @@ The latest provider slice adds Agent360 `risk_summary`, Execution360
 `risk_events`, and Value360 `ltv` evidence without adding routes. Agent360 no
 longer reads raw `obs_agent_risk_signals`; its canonical Risk360 reader checks
 exact canonical Agent scope, current analytics consent with a receipt, and
-Risk360 claim/evidence scope. The product frame's separate Risk360 binding is
+Risk360 claim/evidence scope and exposes the exact canonical Agent identity
+join only for admitted risk output. Social observations remain unbound. The
+product frame's separate Risk360 binding is
 subject to the normal slot gate. The frame runtime passes a request-scoped
 authorization envelope to Agent360 only when `risk_summary` was requested and
 allowed, bound to Risk360, and the projection declares `risk360.read`. The

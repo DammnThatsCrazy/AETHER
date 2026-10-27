@@ -1424,6 +1424,96 @@ async def test_campaign_signal_sources_join_exact_touchpoint_event_with_partial_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("change", "expected_observations"),
+    [
+        ({}, "available"),
+        ({"tenant_id": "tenant-b"}, "unknown"),
+        ({"source": "provider"}, "unknown"),
+        ({"observation_type": "other"}, "unknown"),
+        ({"occurred_at": "2026-10-06T10:00:00Z"}, "unknown"),
+        ({"validation_state": "unvalidated"}, "unknown"),
+        ({"duplicate": True}, "unknown"),
+    ],
+)
+async def test_campaign_signal_observation_requires_exact_gateway_admitted_bronze_row(
+    change: dict[str, object], expected_observations: str
+) -> None:
+    event_id = "event-campaign-1"
+    row = {
+        "tenant_id": "tenant-a",
+        "source": "sdk",
+        "provider_record_id": event_id,
+        "payload": {
+            "observation_envelope": {
+                "observation": {
+                    "observation_id": event_id,
+                    "observation_type": "campaign_conversion",
+                    "occurred_at": "2026-10-05T10:00:00Z",
+                    "ingested_at": "2026-10-05T10:01:00Z",
+                },
+                "tenancy": {"tenant_id": "tenant-a"},
+                "source": {"source_type": "sdk"},
+                "quality": {"validation_state": "gateway:accepted"},
+                "private": "must-not-be-projected",
+            }
+        },
+    }
+    if "tenant_id" in change:
+        row["tenant_id"] = change["tenant_id"]
+    if "source" in change:
+        row["source"] = change["source"]
+    for field in ("observation_type", "occurred_at"):
+        if field in change:
+            row["payload"]["observation_envelope"]["observation"][field] = change[field]
+    if "validation_state" in change:
+        row["payload"]["observation_envelope"]["quality"]["validation_state"] = change["validation_state"]
+
+    class ObservationSource(FakeCampaign360Source):
+        async def signal_observations(self, tenant_id, event_ids, *, limit):
+            assert (tenant_id, event_ids, limit) == ("tenant-a", [event_id], 100)
+            return RowsRead([row, row] if change.get("duplicate") else [row], available=True)
+
+    source = ObservationSource(
+        touchpoints=RowsRead([{
+            "touchpoint_id": "tp-linked-event",
+            "tenant_id": "tenant-a",
+            "campaign_id": CAMPAIGN_ID,
+            "occurred_at": "2026-10-05T10:00:00Z",
+            "source_event_id": event_id,
+        }], available=True),
+        signals=RowsRead([{
+            "event_id": event_id,
+            "tenant_id": "tenant-a",
+            "event_type": "campaign_conversion",
+            "event_family": "conversion",
+            "source": "sdk",
+            "occurred_at": "2026-10-05T10:00:00Z",
+        }], available=True),
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+    context = _section(result, "state").content["domainContexts"]["signal_sources"]
+    assert context["dimensionStates"]["observations"] == expected_observations
+    observation_claims = [
+        claim for claim in result.claims
+        if claim.kind == "campaign_linked_sdk_observation"
+    ]
+    if expected_observations == "available":
+        assert len(observation_claims) == 1
+        assert context["observations"][0]["observationId"] == event_id
+        assert context["coverage"] == "exact_touchpoint_linked_events_and_sdk_observations_partial"
+        assert {(ref.source, ref.id) for ref in observation_claims[0].evidenceRefs} == {
+            ("bronze_sdk_events", event_id),
+            ("services/api/repositories/repos.py:events", event_id),
+        }
+        assert "must-not-be-projected" not in str(result.model_dump())
+    else:
+        assert not observation_claims
+        assert context["observations"] == []
+        assert context["coverage"] == "exact_touchpoint_linked_events_only"
+
+
+@pytest.mark.asyncio
 async def test_campaign_signal_sources_fail_closed_on_foreign_event_row() -> None:
     touchpoint = {
         "touchpoint_id": "tp-linked-event",

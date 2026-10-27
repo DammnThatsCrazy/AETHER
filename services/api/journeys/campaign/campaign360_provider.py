@@ -14,6 +14,7 @@ lazy, and ``register_provider`` is an explicit runtime wiring seam.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -272,6 +273,10 @@ class Campaign360Source(Protocol):
     ) -> CampaignRiskAssessmentRead: ...
 
     async def signal_events(
+        self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead: ...
+
+    async def signal_observations(
         self, tenant_id: str, event_ids: list[str], *, limit: int
     ) -> RowsRead: ...
 
@@ -547,6 +552,41 @@ class RepositoryCampaign360Source:
             return RowsRead(rows=rows, available=True)
         except Exception:  # noqa: BLE001 - event authority failure is slot-local
             return RowsRead([], available=False, reason="campaign_event_authority_unavailable")
+
+    async def signal_observations(
+        self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead:
+        """Read only exact tenant SDK Bronze observations named by event IDs."""
+        if not tenant_id:
+            return RowsRead([], available=False, reason="observation_tenant_scope_missing")
+        safe_ids = [
+            event_id for event_id in dict.fromkeys(event_ids)
+            if _safe_campaign_source_id(event_id)
+        ][:min(max(limit, 0), MAX_CAMPAIGN_SIGNAL_EVENTS)]
+        if not safe_ids:
+            return RowsRead([], available=True)
+        try:
+            from repositories.lake import BronzeRepository
+
+            repository = BronzeRepository("sdk_events")
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_one(event_id: str) -> list[dict[str, Any]]:
+                async with semaphore:
+                    return await repository.find_many(
+                        filters={"tenant_id": tenant_id, "provider_record_id": event_id},
+                        limit=2,
+                    )
+
+            pages = await asyncio.gather(*(read_one(event_id) for event_id in safe_ids))
+        except Exception:  # noqa: BLE001 - observation authority failure is slot-local
+            return RowsRead([], available=False, reason="campaign_observation_authority_unavailable")
+        if any(not isinstance(page, list) for page in pages):
+            return RowsRead([], available=False, reason="campaign_observation_read_invalid")
+        return RowsRead(
+            rows=[row for page in pages for row in page],
+            available=True,
+        )
 
     async def campaign_population_links(
         self, tenant_id: str, campaign_id: str, *, limit: int
@@ -2352,8 +2392,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
 
         This is intentionally a partial signal view. It does not infer signal
         membership from a campaign label or event properties, and it does not
-        substitute event records for the separate observation/source-fact
-        authorities declared by the product contract.
+        substitute event records for source-fact authority. An exact admitted
+        SDK Bronze observation may be joined, while broader coverage is unknown.
         """
         base: dict[str, Any] = {
             "state": "unknown",
@@ -2559,20 +2599,33 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 if issues
                 else "campaign_touchpoint_event_record_not_resolved"
             )
+        observation_context = await self._read_campaign_signal_observations(
+            request=request,
+            event_items=event_items,
+            evidence_by_key=evidence_by_key,
+            claims=claims,
+        )
         dimension_states = {
             "events": "available" if event_items else "unknown",
-            "observations": "unknown",
+            "observations": observation_context["state"],
             "sourceFacts": "unknown",
         }
+        if event_items and observation_context["items"]:
+            reason = "campaign_signal_events_and_sdk_observations_partial"
         if issues and event_items:
             reason = issues[0]
+        coverage = (
+            "exact_touchpoint_linked_events_and_sdk_observations_partial"
+            if observation_context["items"]
+            else "exact_touchpoint_linked_events_only"
+        )
         slot_states[SLOT_SIGNAL_SOURCES].update(
             state=state,
             reason=reason,
             sourceAuthorities=["events", "observations", "source_facts"],
             dimensionStates=dimension_states,
             eventCount=len(event_items) if event_items else None,
-            coverage="exact_touchpoint_linked_events_only",
+            coverage=coverage,
             broaderAuthorityState="unknown",
         )
         if state == "partial":
@@ -2584,7 +2637,12 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             **base,
             "state": state,
             "events": event_items,
+            "observations": observation_context["items"],
+            "observationRead": {
+                key: value for key, value in observation_context.items() if key != "items"
+            },
             "dimensionStates": dimension_states,
+            "coverage": coverage,
             "freshness": {
                 "state": "unknown",
                 "latestSourceTimestamp": max(timestamps) if timestamps else None,
@@ -2594,9 +2652,134 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             },
             "reason": reason,
             "limitations": [
-                "Campaign-tagged observations and source-fact classification are not joined.",
+                "Only exact touchpoint-linked SDK observations are joined; broader observation and source-fact coverage remain unknown.",
                 *list(dict.fromkeys(issues)),
             ],
+        }
+
+    async def _read_campaign_signal_observations(
+        self,
+        *,
+        request: ProjectionRequest,
+        event_items: list[dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, Any]:
+        """Join gateway-admitted SDK Bronze rows to exact canonical event IDs."""
+
+        def unknown(reason: str) -> dict[str, Any]:
+            return {"state": "unknown", "reason": reason, "items": []}
+
+        sdk_events = {
+            item["eventId"]: item for item in event_items
+            if item.get("source") == "sdk"
+            and item.get("eventType")
+            and item.get("occurredAt")
+        }
+        if not sdk_events:
+            return unknown("no_exact_sdk_event_available_for_observation_join")
+        source_read = getattr(self._source, "signal_observations", None)
+        if not callable(source_read):
+            return unknown("campaign_observation_authority_binding_unavailable")
+        try:
+            read = await source_read(
+                request.tenantId, list(sdk_events), limit=MAX_CAMPAIGN_SIGNAL_EVENTS
+            )
+        except Exception:  # noqa: BLE001 - independent observation read remains unknown
+            return unknown("campaign_observation_authority_unavailable")
+        if not isinstance(read, RowsRead) or not read.available:
+            return unknown("campaign_observation_authority_unavailable")
+        if not isinstance(read.rows, list) or any(not isinstance(row, dict) for row in read.rows):
+            return unknown("campaign_observation_result_invalid")
+        if any(
+            row.get("tenant_id") != request.tenantId
+            or row.get("provider_record_id") not in sdk_events
+            or row.get("source") != "sdk"
+            for row in read.rows
+        ):
+            return unknown("campaign_observation_scope_mismatch")
+        rows_by_id: dict[str, list[dict[str, Any]]] = {}
+        for row in read.rows:
+            rows_by_id.setdefault(row["provider_record_id"], []).append(row)
+        if any(len(rows) > 1 for rows in rows_by_id.values()):
+            return unknown("campaign_observation_identifier_ambiguous")
+
+        items: list[dict[str, Any]] = []
+        refs_and_claims: list[tuple[EvidenceRef, EvidenceRef, str]] = []
+        for event_id, rows in rows_by_id.items():
+            row = rows[0]
+            payload = row.get("payload")
+            envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+            observation = envelope.get("observation") if isinstance(envelope, dict) else None
+            tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+            quality = envelope.get("quality") if isinstance(envelope, dict) else None
+            source = envelope.get("source") if isinstance(envelope, dict) else None
+            event = sdk_events[event_id]
+            try:
+                event_at = _parse_instant(event["occurredAt"])
+                observation_at = _parse_instant(observation.get("occurred_at"))
+            except (TypeError, ValueError, AttributeError):
+                return unknown("campaign_observation_event_time_mismatch")
+            if (
+                not isinstance(observation, dict)
+                or observation.get("observation_id") != event_id
+                or observation.get("observation_type") != event["eventType"]
+                or observation_at != event_at
+                or not isinstance(tenancy, dict)
+                or tenancy.get("tenant_id") != request.tenantId
+                or not isinstance(source, dict)
+                or source.get("source_type") != "sdk"
+                or not isinstance(quality, dict)
+                or quality.get("validation_state") != "gateway:accepted"
+            ):
+                return unknown("campaign_observation_envelope_mismatch")
+            observed_at = _string_or_none(observation.get("ingested_at"))
+            if observed_at is None:
+                return unknown("campaign_observation_ingest_time_missing")
+            try:
+                _parse_instant(observed_at)
+            except ValueError:
+                return unknown("campaign_observation_ingest_time_invalid")
+            bronze_ref = EvidenceRef(
+                id=event_id,
+                type="event",
+                source="bronze_sdk_events",
+                observedAt=observed_at,
+                uri=f"store://sdk_events/{quote(request.tenantId, safe='')}:{quote(event_id, safe='')}",
+            )
+            event_ref = EvidenceRef.model_validate(event["evidenceRefs"][0])
+            refs_and_claims.append((bronze_ref, event_ref, event_id))
+            items.append({
+                "observationId": event_id,
+                "eventType": event["eventType"],
+                "validationState": "gateway:accepted",
+                "ingestedAt": observed_at,
+                "evidenceRefs": [
+                    bronze_ref.model_dump(by_alias=True, exclude_none=True),
+                    event_ref.model_dump(by_alias=True, exclude_none=True),
+                ],
+            })
+        for bronze_ref, event_ref, event_id in refs_and_claims:
+            _add_evidence(evidence_by_key, bronze_ref)
+            claims.append(ClaimEnvelope(
+                id=f"campaign360:{request.subject.id}:signal-observation:{event_id}",
+                kind="campaign_linked_sdk_observation",
+                subject=request.subject,
+                evidenceRefs=[bronze_ref, event_ref],
+                claims=[
+                    "A gateway-admitted SDK observation has the exact tenant, event ID, type, and occurrence time of a canonical event named by this campaign touchpoint."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=[SLOT_SIGNAL_SOURCES],
+            ))
+        return {
+            "state": "available" if items else "unknown",
+            "reason": (
+                "exact_touchpoint_linked_sdk_observations_only"
+                if items else "no_exact_sdk_observation_for_linked_events"
+            ),
+            "items": items,
+            "producerCoverageState": "unknown",
         }
 
     async def _read_campaign_journey_context(

@@ -1692,6 +1692,7 @@
         "events",
         "evidence",
         "journeys",
+        "observations",
         "outcomes",
         "population",
         "population_definitions",
@@ -3207,18 +3208,26 @@
                 "agent",
                 "entity"
               ]
+            },
+            {
+              "projectionId": "agent360",
+              "role": "supporting",
+              "sectionIds": [
+                "state"
+              ],
+              "subjectKinds": [
+                "agent"
+              ]
             }
           ],
           "implementationCrosswalk": [
             "risk_and_contagion"
           ],
           "unboundCanonicalAuthorityRefs": [
-            "agent_entities",
-            "identity",
             "social_observations"
           ],
-          "authorityGapReason": "agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined",
-          "partialImplementationReason": "Canonical Risk360 evidence requires resolved Agent identity and an affirmative current analytics receipt. The nested read proceeds only after the frame runtime forwards the exact allowed risk_summary slot decision and the bound risk360.read capability. Agent-specific freshness, historical replay, unbound identity and social authority joins, and causal contagion remain unknown."
+          "authorityGapReason": "agent_risk_summary_social_observation_and_contagion_authority_not_joined",
+          "partialImplementationReason": "The Agent360 supporting path resolves exact tenant canonical Agent identity with identity evidence before an allowed Risk360 read and exposes that join only for admitted partial risk output. The nested read requires the exact allowed risk_summary slot decision, bound risk360.read capability, and affirmative current analytics consent. Social observations, Agent-specific freshness, historical replay, and causal contagion remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -8416,11 +8425,10 @@
             }
           ],
           "unboundCanonicalAuthorityRefs": [
-            "observations",
             "source_facts"
           ],
-          "authorityGapReason": "Canonical observations and source facts are not joined to the exact touchpoint-linked campaign event rows.",
-          "partialImplementationReason": "Exact campaign touchpoint event references are joined to tenant-scoped canonical events; broader observation and source-fact authorities, complete event coverage, and a freshness SLA remain unresolved."
+          "authorityGapReason": "Canonical source facts are not joined to the exact touchpoint-linked campaign event rows.",
+          "partialImplementationReason": "Exact campaign touchpoint event references join tenant-scoped canonical events and matching gateway-admitted SDK Bronze observations. Broader observation producers, source-fact authority, complete event coverage, and a freshness SLA remain unresolved."
         },
         {
           "id": "touchpoints",

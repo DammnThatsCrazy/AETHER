@@ -282,7 +282,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/campaign360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'population', 'source'],
-    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_population_link_events', 'campaign_touchpoints', 'canonical_conversions', 'communication', 'economic', 'events', 'evidence', 'journeys', 'outcomes', 'population', 'population_definitions', 'risk_outputs', 'source_provenance', 'spend_records', 'targeting_leakage_findings', 'touchpoints'],
+    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_population_link_events', 'campaign_touchpoints', 'canonical_conversions', 'communication', 'economic', 'events', 'evidence', 'journeys', 'observations', 'outcomes', 'population', 'population_definitions', 'risk_outputs', 'source_provenance', 'spend_records', 'targeting_leakage_findings', 'touchpoints'],
     hardDependencies: ['attribution_architecture', 'contract_spine', 'measurement_outcome_contract'],
     projectionDependencies: ['communication360', 'economic360', 'episode360', 'outcome360', 'population360'],
     optionalProjectionDependencies: [],
@@ -2307,13 +2307,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined',
+        authorityGapReason: 'agent_risk_summary_social_observation_and_contagion_authority_not_joined',
         canonicalAuthorityRefs: ['agent_entities', 'identity', 'relationship_facts', 'risk_outputs', 'social_observations'],
         description: 'Required Agent 360 blueprint slot: risk summary.',
         id: 'risk_summary',
         implementationCrosswalk: ['risk_and_contagion'],
-        partialImplementationReason: 'Canonical Risk360 evidence requires resolved Agent identity and an affirmative current analytics receipt. The nested read proceeds only after the frame runtime forwards the exact allowed risk_summary slot decision and the bound risk360.read capability. Agent-specific freshness, historical replay, unbound identity and social authority joins, and causal contagion remain unknown.',
+        partialImplementationReason: 'The Agent360 supporting path resolves exact tenant canonical Agent identity with identity evidence before an allowed Risk360 read and exposes that join only for admitted partial risk output. The nested read requires the exact allowed risk_summary slot decision, bound risk360.read capability, and affirmative current analytics consent. Social observations, Agent-specific freshness, historical replay, and causal contagion remain unknown.',
         projectionBindings: [
+          {
+            projectionId: 'agent360',
+            role: 'supporting',
+            subjectKinds: ['agent'],
+            sectionIds: ['state']
+          },
           {
             projectionId: 'risk360',
             role: 'primary',
@@ -2322,7 +2328,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           }
         ],
         requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['agent_entities', 'identity', 'social_observations']
+        unboundCanonicalAuthorityRefs: ['social_observations']
       },
       {
         canonicalAuthorityRefs: ['graph', 'relationship_facts', 'temporal'],
@@ -2578,11 +2584,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'Canonical observations and source facts are not joined to the exact touchpoint-linked campaign event rows.',
+        authorityGapReason: 'Canonical source facts are not joined to the exact touchpoint-linked campaign event rows.',
         canonicalAuthorityRefs: ['events', 'observations', 'source_facts'],
         description: 'Tenant-scoped signal and source observations associated with the campaign.',
         id: 'signal_sources',
-        partialImplementationReason: 'Exact campaign touchpoint event references are joined to tenant-scoped canonical events; broader observation and source-fact authorities, complete event coverage, and a freshness SLA remain unresolved.',
+        partialImplementationReason: 'Exact campaign touchpoint event references join tenant-scoped canonical events and matching gateway-admitted SDK Bronze observations. Broader observation producers, source-fact authority, complete event coverage, and a freshness SLA remain unresolved.',
         projectionBindings: [
           {
             projectionId: 'campaign360',
@@ -2592,7 +2598,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           }
         ],
         requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['observations', 'source_facts']
+        unboundCanonicalAuthorityRefs: ['source_facts']
       },
       {
         authorityGapReason: 'Touchpoint classification revisions do not classify the campaign registry source or every asserting source.',

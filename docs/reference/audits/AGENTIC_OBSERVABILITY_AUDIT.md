@@ -11,9 +11,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:61a6b1bab4bf8a65d3b70641c80ff0cdb0afefc9803e1b81f12874ebefefb73e"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:031b6b7d4fe6eabe42488b1b944279fb99e778fbf4173173c933078269f7dab4"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:9814c0d73b972c14b4109faa4dce261851591705040222e0e28555a4a2123f18"
+  "services/api/actions/agent/": "sha256:e9f1eb519a8bd39cf4892fb490fcf0c1778d80ffca4d5c235ca891c66cddd185"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -125,7 +125,9 @@ Risk360 evidence under the product frame's risk-summary binding and does not
 compute a local risk score. Agent360 no longer reads raw `obs_agent_risk_signals`
 for this slot. Its provider-level nested Risk360 reader requires exact Agent
 identity, a current analytics-consent receipt, evidence lineage, and an
-explicit `risk_summary` plus `risk360.read` authorization decision. The frame
+explicit `risk_summary` plus `risk360.read` authorization decision. The Agent
+provider exposes its exact canonical identity join only for admitted risk output;
+social observations remain unbound. The frame
 runtime now forwards a request-scoped server-derived envelope only after the
 exact slot was requested and allowed, the binding targets Risk360, and the
 projection declares the required capability. The envelope carries the exact
@@ -203,11 +205,13 @@ source namespace; the EpisodeEngine can persist a typed link when a caller
 supplies an explicit semantic authority marker and episode association.
 No live semantic-to-episode producer supplies that association yet. Broader
 activity/session inventory, policy disposition, and freshness remain unknown.
-Campaign360 `signal_sources` resolves only exact canonical event IDs referenced
-by campaign touchpoints. It returns limited event metadata with touchpoint and
-event evidence; it does not infer campaign membership from labels or event
-properties, and the observation/source-fact dimensions, complete event coverage,
-and freshness remain unknown. Memory360 `policy_state` renders exact
+Campaign360 `signal_sources` resolves exact canonical event IDs referenced
+by campaign touchpoints and matching gateway-admitted SDK Bronze observations.
+The observation join requires exact tenant, event ID, type, and event time;
+it exposes limited metadata with event and Bronze evidence. Campaign membership
+is not inferred from labels or event properties. Broader observation producers,
+source facts, complete event coverage, and freshness remain unknown. Memory360
+`policy_state` renders exact
 tenant-and-subject historical allow decisions with timestamped consent-policy
 evidence; this records the decision made at memory write time and does not
 evaluate current consent or policy. These joins are partial slot capabilities,

@@ -520,6 +520,14 @@ async def test_agent360_risk_summary_requires_exact_outer_slot_authority_before_
     assert source.risk_signal_calls == 0
     assert risk_summary["state"] == "partial"
     assert risk_summary["subject"] == {"kind": "agent", "id": "canonical-agent-a"}
+    assert risk_summary["canonicalAgentIdentityJoin"]["state"] == "resolved"
+    assert risk_summary["canonicalAgentIdentityJoin"]["canonicalAgentEntityId"] == (
+        "canonical-agent-a"
+    )
+    assert {
+        (ref["source"], ref["id"])
+        for ref in risk_summary["canonicalAgentIdentityJoin"]["evidenceRefs"]
+    } == {("agent_deployment_identity_bindings", "binding-agent-a")}
     assert {
         (ref["source"], ref["id"]) for ref in risk_summary["evidenceRefs"]
     } >= {
@@ -747,6 +755,7 @@ async def test_agent360_risk_summary_skips_nested_read_when_identity_is_unresolv
     assert source.risk_summary_calls == []
     assert source.risk_signal_calls == 0
     assert risk_dimension["content"]["riskAssessment"]["state"] == "unknown"
+    assert "canonicalAgentIdentityJoin" not in risk_dimension["content"]["riskAssessment"]
 
 
 @pytest.mark.asyncio

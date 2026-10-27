@@ -67,9 +67,9 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:0b2854612189b79484a5588bc212897fe2ea0d4fc54a19876b03bc87987b9150"
+  "packages/shared/": "sha256:33cd434e1e96fbde28fee1e0743390c827f9a84d32f1a88217348b787ea550c3"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
+  "services/api/actions/agent/agent360_provider.py": "sha256:039047067063620d0fc8a8536223e6db7fa5c593d1cd9a03ad360dae29a065a7"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:9206827e764f0355b75ce853df3447a02bfc03a9134929f1a262299941b8da25"
   "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
@@ -753,8 +753,10 @@ tenant-scoped semantic Silver rows; Campaign360 `signal_sources` joins exact
 touchpoint event IDs to tenant-scoped canonical events; and Memory360
 `policy_state` exposes historical write-time allow decisions with timestamped
 consent-policy evidence. Episode activity/session completeness and observation
-policy/freshness remain unresolved; Campaign360 observation and source-fact
-dimensions, event coverage, and freshness remain unknown; Memory360 current
+policy/freshness remain unresolved; Campaign360 exact SDK Bronze observation joins are now available when the
+gateway-admitted row matches the touchpoint-linked canonical event by tenant,
+ID, type, and event time; broader observation producers, source facts, event
+coverage, and freshness remain unknown; Memory360 current
 consent and policy remain unevaluated. These are partial slot implementations,
 not completed 360 surfaces.
 The semantic memory producer now stamps an explicit nonempty list of required
@@ -857,8 +859,9 @@ The latest provider slice adds three evidence-bounded paths. Agent360's
 `risk_summary` no longer reads raw `obs_agent_risk_signals`; its canonical
 Risk360 path checks exact Agent scope, current analytics consent with a receipt,
 and claim/evidence lineage. The product slot also has a separate Risk360
-projection binding evaluated through the frame slot gate. The Agent360
-provider's nested reader receives a request-scoped authorization envelope only
+projection binding evaluated through the frame slot gate. The Agent360 provider exposes the exact canonical Agent identity join only
+for admitted risk output. Social observations remain unbound. The nested
+reader receives a request-scoped authorization envelope only
 when `risk_summary` was requested and allowed, the slot binds to Risk360, and
 the projection declares `risk360.read`. The envelope binds tenant, surface,
 subject, slot, consumer, target, capability, and evaluated policy IDs. No
