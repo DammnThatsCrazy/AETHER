@@ -23,6 +23,7 @@ from actions.agent.agent360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     RepositoryAgent360Source,
 )
+from actions.agent_access_intelligence.models import capability_id_for  # noqa: E402
 from actions.agentic_observability.provenance import (  # noqa: E402
     AgenticProvenanceQuery,
     build_agentic_provenance_record,
@@ -3081,3 +3082,41 @@ async def test_agent360_refuses_current_records_for_historical_request():
     assert all(
         "current rows are not served" in section.content["reason"] for section in result.sections
     )
+
+
+@pytest.mark.asyncio
+async def test_agent360_resolves_only_exact_observed_mcp_tool_catalog_identity():
+    class CatalogSource(FakeSource):
+        def __init__(self, *, exact: bool):
+            super().__init__()
+            self.exact = exact
+
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            capability = batch.rows[0]["profile"]["reach"]["capabilities"][0]
+            capability["capability_kind"] = "mcp_tool"
+            capability["capability_id"] = (
+                capability_id_for(tenant_id, "mcp", "mcp-main", "search")
+                if self.exact else "foreign-or-inconsistent-id"
+            )
+            return batch
+
+    async def tool_identity(exact: bool):
+        result = await Agent360Provider(CatalogSource(exact=exact)).project(
+            _request(), _context()
+        )
+        authority = next(
+            item for item in _sections(result)["state"].content["dimensions"]
+            if item["id"] == "authority_and_delegation"
+        )
+        return authority["content"]["capabilityAccessProfile"]["capabilities"][0]["toolIdentity"]
+
+    resolved = await tool_identity(True)
+    assert resolved["state"] == "resolved_observed_catalog"
+    assert resolved["evidenceRef"]["source"] == "capability_catalog"
+    assert resolved["effectiveToolAuthorization"] == "unknown"
+    inconsistent = await tool_identity(False)
+    assert inconsistent["state"] == "unknown"
+    assert inconsistent["evidenceRef"] is None

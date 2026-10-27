@@ -67,9 +67,9 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:67b334bcafb017e71308f78500d89f8c596785e7ce225affa433d1804abb89b6"
+  "packages/shared/": "sha256:00672615af0424e98578524cf294b129b23217af9fc878fabf157a8f5e2beb32"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:039047067063620d0fc8a8536223e6db7fa5c593d1cd9a03ad360dae29a065a7"
+  "services/api/actions/agent/agent360_provider.py": "sha256:1ada1b047536e34b49bc3933891f3c800f2c5ae7b4fc2810ab30bf9bb4367b7f"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:9206827e764f0355b75ce853df3447a02bfc03a9134929f1a262299941b8da25"
   "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
@@ -93,10 +93,10 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:4b133b60ba7a18037cd026481d712db6c55505b50806d8c2343d775e3c98daea"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:624596e71c20882086990c2f56c3067474927f84de0b343a1c55bc6e7d3103b3"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
-  "services/api/journeys/support360/": "sha256:566b316cb9d4381caf77c627e22fad1c6ea3a910d156ef48fbd7a674c48830b2"
+  "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
@@ -107,7 +107,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
   "services/api/value/commerce/routes.py": "sha256:9b68c0d975d7b81b530ff8eb91e95ee6c37e10034498dbf248f1889f026c5897"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:b44928e1f1bcd6ecec0cbb1be7c0613809887387fd242657bcf75ee8bc8c9342"
+  "services/api/value/economic/economic360_provider.py": "sha256:c4876df0c44da2b2322921a43301c8917d40e9dda50d986890b537b3a4e9e844"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
@@ -771,7 +771,9 @@ unavailable legacy purpose provenance stays explicitly unknown.
 
 Signals360 `quality` now separately reads a current tenant/site installation
 record for an accepted SDK observation carrying the authenticated server-stamped
-site namespace. The status is an observed site install signal, not event-time
+site namespace. `source_inventory` uses the same exact namespace to read the
+current tenant site registration as a source fact; historical status and fleet
+coverage remain unknown. The status is an observed site install signal, not event-time
 health, fleet health, source reliability, or a freshness SLA.
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,
@@ -900,6 +902,11 @@ and telemetry crosswalks remain unknown. Support360's case path now joins
 communication metadata through the exact tenant, canonical provider
 connection, and source case key. Message bodies and participant IDs stay
 suppressed, and source-history completeness and freshness remain unknown.
+Support360 can also join an operator-registered source SLA policy revision to
+an exact case timer with matching target, retaining contract evidence without
+inferring a breach or historical applicability. Value360 can include a
+persisted run/config lineage check; current configuration rows are mutable,
+and model approval and calibration remain unknown.
 
 Execution360 can also resolve an admitted external telemetry event to a unique
 same-tenant Bronze event and its recorded observation envelope. The join checks

@@ -58,6 +58,12 @@ from journeys.support360.context_authorities import (
     SupportCaseContextRead,
     SupportCaseContextRepository,
 )
+from journeys.support360.sla_measurement import (
+    SupportSLAMeasurementContract,
+    SupportSLAMeasurementContractRead,
+    SupportSLAMeasurementContractRepository,
+    contract_evidence,
+)
 from repositories.repos import EntityRepository
 
 PROJECTION_ID = "support360"
@@ -909,6 +915,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         agent_assignment_repository: Optional[SupportAgentAssignmentRepository] = None,
         canonical_agent_entity_repository: Any = None,
         case_context_repository: Optional[SupportCaseContextRepository] = None,
+        sla_measurement_repository: Optional[SupportSLAMeasurementContractRepository] = None,
         canonical_journey_repository: Any = None,
         canonical_episode_store: Any = None,
         risk_projection_registry: Any = None,
@@ -941,6 +948,11 @@ class Support360Provider(IntelligenceProjectionProvider):
             case_context_repository
             if case_context_repository is not None
             else SupportCaseContextRepository()
+        )
+        self._sla_measurement_repository = (
+            sla_measurement_repository
+            if sla_measurement_repository is not None
+            else SupportSLAMeasurementContractRepository()
         )
         self._canonical_journeys = canonical_journey_repository
         self._canonical_episodes = canonical_episode_store
@@ -1554,10 +1566,21 @@ class Support360Provider(IntelligenceProjectionProvider):
                 case_record=record,
                 entity_repository=self._canonical_agent_entities,
             )
+            try:
+                sla_contract_read = await self._sla_measurement_repository.read_for_case(
+                    request.tenantId,
+                    request.subject.id,
+                    str(record.get("source_connection_id") or ""),
+                )
+            except Exception:  # noqa: BLE001 - contract outage is slot-local
+                sla_contract_read = SupportSLAMeasurementContractRead(
+                    (), False, False, "support_sla_contract_read_unavailable"
+                )
             sla_slot, sla_evidence_refs, sla_reasons = _validated_support_sla_slot(
                 context_reads["sla"],
                 tenant_id=request.tenantId,
                 case_record=record,
+                contract_read=sla_contract_read,
             )
             (
                 journey_links_slot,
@@ -3421,6 +3444,7 @@ def _validated_support_sla_slot(
     *,
     tenant_id: str,
     case_record: dict[str, Any],
+    contract_read: Optional[SupportSLAMeasurementContractRead] = None,
 ) -> tuple[dict[str, Any], list[EvidenceRef], list[str]]:
     rows, refs, reasons, failure = _validated_support_context_events(
         read, kind="sla", tenant_id=tenant_id, case_record=case_record
@@ -3454,6 +3478,66 @@ def _validated_support_sla_slot(
         }
         for row in latest_timers.values()
     ]
+    joined_contracts = 0
+    contract_ref_by_id: dict[str, EvidenceRef] = {}
+    contract_reason = "support_sla_measurement_contract_unavailable"
+    if contract_read is not None and contract_read.available and contract_read.complete:
+        contract_reason = "support_sla_measurement_contract_not_registered_for_source_policy"
+        contracts_by_key: dict[tuple[str, str, str, str, Optional[str]], list[SupportSLAMeasurementContract]] = {}
+        valid_contracts = True
+        for raw in contract_read.rows:
+            try:
+                contract = SupportSLAMeasurementContract.model_validate(
+                    {key: value for key, value in raw.items() if key != "contract_id"}
+                )
+            except Exception:  # noqa: BLE001 - malformed authority remains unbound
+                valid_contracts = False
+                break
+            if (
+                raw.get("contract_id") != contract.contract_id
+                or contract.tenant_id != tenant_id
+                or contract.case_id != str(case_record.get("case_id"))
+                or contract.source_connection_id != case_record.get("source_connection_id")
+                or contract.source_provider_identity != case_record.get("source_provider_identity")
+            ):
+                valid_contracts = False
+                break
+            key = (contract.source_sla_id, contract.source_policy_id,
+                   contract.source_policy_version, contract.timer_kind,
+                   contract.custom_timer_name)
+            contracts_by_key.setdefault(key, []).append(contract)
+        if valid_contracts:
+            for timer in timers:
+                key = (timer["sourceSlaId"], timer["sourcePolicyId"],
+                       timer["sourcePolicyVersion"], timer["timerKind"],
+                       timer["customTimerName"])
+                matches = contracts_by_key.get(key, [])
+                if len(matches) != 1:
+                    continue
+                contract = matches[0]
+                if timer["targetDurationSeconds"] != contract.target_duration_seconds:
+                    contract_reason = "support_sla_source_target_conflicts_with_registered_contract"
+                    continue
+                evidence = contract_evidence(contract)
+                contract_ref_by_id[evidence.id] = evidence
+                timer["measurementContract"] = {
+                    "state": "bound",
+                    "contractId": contract.contract_id,
+                    "targetDurationSeconds": contract.target_duration_seconds,
+                    "registeredAt": contract.registered_at.isoformat(),
+                    "historicalApplicabilityState": "unknown",
+                    "evidenceRefs": [evidence.model_dump(mode="json", by_alias=True)],
+                }
+                timer["evidenceRefs"] = [*timer["evidenceRefs"], evidence.model_dump(mode="json", by_alias=True)]
+                joined_contracts += 1
+            if joined_contracts:
+                contract_reason = "exact_tenant_registered_source_policy_revision_join"
+        else:
+            contract_reason = "support_sla_measurement_contract_scope_or_payload_invalid"
+    elif contract_read is not None and not contract_read.complete:
+        contract_reason = contract_read.reason or "support_sla_measurement_contract_read_incomplete"
+    contract_refs = list(contract_ref_by_id.values())
+    refs = [*refs, *contract_refs]
     reasons = [_REASON_SLA_HISTORY_UNVERIFIED]
     if not rows:
         state = "empty"
@@ -3461,7 +3545,7 @@ def _validated_support_sla_slot(
         state = "degraded"
         reasons.extend(
             [
-                _REASON_SLA_POLICY_NOT_CANONICAL,
+                *([] if joined_contracts == len(timers) else [_REASON_SLA_POLICY_NOT_CANONICAL]),
                 _REASON_CONTEXT_SOURCE_AUTHENTICATION_UNVERIFIED,
                 "support_case_sla_freshness_sla_unavailable",
             ]
@@ -3474,7 +3558,16 @@ def _validated_support_sla_slot(
             "reasonCodes": reasons,
             "timers": timers,
             "events": rows,
-            "policyAuthority": "source_reported_not_joined_to_measurement_contract",
+            "policyAuthority": (
+                "tenant_registered_source_policy_revision_partial"
+                if joined_contracts else "source_reported_not_joined_to_measurement_contract"
+            ),
+            "measurementContractJoin": {
+                "state": "partial" if joined_contracts else "unknown",
+                "boundTimerCount": joined_contracts,
+                "reportedTimerCount": len(timers),
+                "reasonCode": contract_reason,
+            },
             "sourceAuthenticationState": "tenant_authorized_principal_only",
             "sourceHistoryComplete": False,
             "freshness": {"state": "unknown", "reasonCode": "support_case_sla_freshness_sla_unavailable"},

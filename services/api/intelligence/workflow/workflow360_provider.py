@@ -488,6 +488,12 @@ class RepositoryWorkflow360Source:
                 observedAt=called_at,
                 uri=f"store://graph_edges/{quote(event_ref, safe='')}",
             )
+            tool_evidence = EvidenceRef(
+                id=target_vertex_id,
+                type="entity",
+                source="graph_vertices",
+                uri=f"store://graph_vertices/{quote(target_vertex_id, safe='')}",
+            )
             rows.append(
                 {
                     "tenant_id": tenant_id,
@@ -497,6 +503,9 @@ class RepositoryWorkflow360Source:
                     "tool_id": tool_id,
                     "called_at": called_at,
                     "evidence_ref": evidence.model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    ),
+                    "tool_evidence_ref": tool_evidence.model_dump(
                         mode="json", by_alias=True, exclude_none=True
                     ),
                 }
@@ -2409,6 +2418,17 @@ def _workflow_actions_section(
             action_evidence = EvidenceRef.model_validate(raw_evidence)
         except Exception:  # noqa: BLE001 - malformed source evidence is omitted
             action_evidence = None
+        try:
+            tool_evidence = EvidenceRef.model_validate(raw.get("tool_evidence_ref"))
+        except Exception:  # noqa: BLE001 - legacy rows have no Tool vertex evidence
+            tool_evidence = None
+        if tool_evidence is not None and (
+            tool_evidence.source != "graph_vertices"
+            or tool_evidence.type != "entity"
+            or tool_evidence.id != f"{tenant_id}:tool:{tool_id}"
+        ):
+            tool_evidence = None
+            invalid_rows = True
         if (
             execution_evidence is None
             or action_evidence is None
@@ -2432,11 +2452,16 @@ def _workflow_actions_section(
             filtered_by_time_range = True
             continue
 
-        evidence_refs = [action_evidence, execution_evidence]
+        evidence_refs = [
+            action_evidence,
+            execution_evidence,
+            *([tool_evidence] if tool_evidence is not None else []),
+        ]
         actions.append(
             {
                 "executionId": execution_id,
                 "toolId": tool_id,
+                "toolIdentityState": "resolved" if tool_evidence is not None else "unknown",
                 "calledAt": called_at,
                 "observationKind": "tenant_scoped_execution_linked_tool_call_edge",
                 "operationState": "call_observed_external_effect_unknown",
@@ -2454,7 +2479,7 @@ def _workflow_actions_section(
                 subject=subject,
                 evidenceRefs=evidence_refs,
                 claims=[
-                    "A tenant-scoped CALLED_TOOL graph edge references an admitted execution linked to this workflow run; the edge does not establish action authorization, tool completion, or an external effect."
+                    "A tenant-scoped CALLED_TOOL graph edge references an admitted execution linked to this workflow run; an exact Tool vertex is evidenced only when separately resolved. The edge does not establish action authorization, tool completion, or an external effect."
                 ],
                 claimState=EpistemicStatus.OBSERVED,
                 domainSlotIds=["actions", "evidence_trace"],
@@ -2505,7 +2530,12 @@ def _workflow_actions_section(
             title="Observed workflow actions",
             content=content,
             warnings=[reason] if reason else None,
-            canonicalAuthorityRefs=["agent_executions", "graph_edges"] if actions else None,
+            canonicalAuthorityRefs=(
+                ["agent_executions", "graph_edges", *(
+                    ["tools"] if any(row["toolIdentityState"] == "resolved" for row in actions) else []
+                )]
+                if actions else None
+            ),
         ),
         claims,
     )

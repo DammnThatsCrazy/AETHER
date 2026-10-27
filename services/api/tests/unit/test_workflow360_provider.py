@@ -2031,6 +2031,8 @@ async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
     assert read.rows[0]["tool_id"] == "tool-a"
     assert read.rows[0]["evidence_ref"]["id"] == "tool-call-event-a"
     assert read.rows[0]["evidence_ref"]["source"] == "graph_edges"
+    assert read.rows[0]["tool_evidence_ref"]["id"] == f"{TENANT_A}:tool:tool-a"
+    assert read.rows[0]["tool_evidence_ref"]["source"] == "graph_vertices"
 
 
 @pytest.mark.asyncio
@@ -2054,6 +2056,12 @@ async def test_workflow_actions_project_observed_calls_without_inference() -> No
             "source": "graph_edges",
             "observedAt": "2026-10-18T10:00:01+00:00",
             "uri": "store://graph_edges/tool-call-event-a",
+        },
+        "tool_evidence_ref": {
+            "id": f"{TENANT_A}:tool:tool-a",
+            "type": "entity",
+            "source": "graph_vertices",
+            "uri": f"store://graph_vertices/{TENANT_A}%3Atool%3Atool-a",
         },
     }
 
@@ -2086,11 +2094,14 @@ async def test_workflow_actions_project_observed_calls_without_inference() -> No
     assert actions.content["actions"][0]["operationState"] == (
         "call_observed_external_effect_unknown"
     )
+    assert actions.content["actions"][0]["toolIdentityState"] == "resolved"
+    assert actions.canonicalAuthorityRefs == ["agent_executions", "graph_edges", "tools"]
     claim = next(claim for claim in result.claims if "actions" in claim.domainSlotIds)
     assert claim.claimState == EpistemicStatus.OBSERVED
     assert {ref.source for ref in claim.evidenceRefs} == {
         "graph_edges",
         "agent_executions",
+        "graph_vertices",
     }
     assert "does not establish" in claim.claims[0]
     assert _sections(result)["workflow_summary"].state == "unknown"

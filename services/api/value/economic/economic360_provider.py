@@ -461,6 +461,16 @@ def _attribution_credit_ref(credit_id: str, created_at: Optional[str]) -> Eviden
     )
 
 
+def _attribution_model_validation_ref(decision_id: str, created_at: Optional[str]) -> EvidenceRef:
+    return EvidenceRef(
+        id=decision_id,
+        type="model_output",
+        source="attribution_model_validation_decisions",
+        observedAt=created_at,
+        uri=f"store://attribution_model_validation_decisions/{quote(decision_id, safe='')}",
+    )
+
+
 def _campaign_touchpoint_ref(
     touchpoint_id: str,
     received_at: Optional[str],
@@ -539,9 +549,15 @@ class RepositoryAttributionCreditReader:
                 AttributionRunRepository,
             )
             from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+            from value.economic.attribution_model_validation import (
+                AttributionModelValidationRepository,
+                _decision_for,
+                _same_decision,
+            )
 
             repository = AttributionRunRepository()
             touchpoint_repository = TouchpointRepository()
+            validation_repository = AttributionModelValidationRepository()
             runs: list[dict[str, Any]] = []
             records: list[dict[str, Any]] = []
             refs: list[EvidenceRef] = []
@@ -577,6 +593,41 @@ class RepositoryAttributionCreditReader:
                     continue
                 completed_at = _attribution_timestamp(run.get("completed_at"))
                 run_ref = _attribution_run_ref(run_id, completed_at)
+                governance: dict[str, Any] = {
+                    "state": "unknown",
+                    "reason": "exact_model_validation_decision_unavailable",
+                    "calibrationState": "unvalidated",
+                }
+                config_id = _attribution_uuid(run.get("model_config_id"))
+                if config_id:
+                    try:
+                        decision = await validation_repository.get(tenant_id, run_id)
+                        config = await repository.get_model_config(tenant_id, config_id)
+                        expected = (
+                            _decision_for(tenant_id, run, config)
+                            if isinstance(config, dict) else None
+                        )
+                        if (
+                            isinstance(decision, dict)
+                            and expected is not None
+                            and _same_decision(decision, expected)
+                        ):
+                            decision_ref = _attribution_model_validation_ref(
+                                decision["decision_id"],
+                                _attribution_timestamp(decision.get("created_at")),
+                            )
+                            governance = {
+                                "state": "validated",
+                                "validationState": "exact_config_lineage_validated",
+                                "calibrationState": "unvalidated",
+                                "modelConfigId": config_id,
+                                "decisionId": decision["decision_id"],
+                                "configSnapshotSha256": decision["config_snapshot_sha256"],
+                                "evidenceRef": decision_ref.model_dump(mode="json"),
+                            }
+                            refs.append(decision_ref)
+                    except Exception:  # noqa: BLE001 - unavailable governance stays unknown
+                        governance["reason"] = "exact_model_validation_read_failed"
                 runs.append(
                     {
                         "tenantId": tenant_id,
@@ -588,6 +639,7 @@ class RepositoryAttributionCreditReader:
                         "completedAt": completed_at,
                         "dataWatermark": _attribution_timestamp(run.get("data_watermark")),
                         "modelConfidence": _attribution_confidence(run.get("model_confidence")),
+                        "modelGovernance": governance,
                         "evidenceRef": run_ref.model_dump(mode="json"),
                     }
                 )
@@ -763,6 +815,7 @@ class RepositoryAttributionCreditReader:
                             "modelConfidence": _attribution_confidence(
                                 credit.get("model_confidence")
                             ),
+                            "modelGovernance": governance,
                             "verificationLevel": _inventory_text(
                                 credit.get("verification_level"), limit=64
                             ),
@@ -773,6 +826,7 @@ class RepositoryAttributionCreditReader:
                             "evidenceRefs": [
                                 run_ref.model_dump(mode="json"),
                                 credit_ref.model_dump(mode="json"),
+                                *([governance["evidenceRef"]] if governance.get("state") == "validated" else []),
                                 *(
                                     [touchpoint_ref.model_dump(mode="json")]
                                     if touchpoint_ref is not None
@@ -1206,6 +1260,7 @@ def _attribution_evidence_refs(value: Any) -> list[EvidenceRef]:
         "canonical_conversions": "transaction",
         "attribution_runs": "model_output",
         "attribution_credits": "model_output",
+        "attribution_model_validation_decisions": "model_output",
         (
             "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
             "silver_campaign_touchpoint_facts"
@@ -4231,9 +4286,17 @@ class Economic360Provider:
                 )
                 confidence = _attribution_confidence(record.get("modelConfidence"))
                 model_lineage_reported = bool(model_type and model_version)
+                governance = record.get("modelGovernance") or {}
+                governance_note = (
+                    "; exact tenant run/model-config snapshot lineage validated by append-only decision "
+                    f"{governance.get('decisionId')}; model approval and calibration remain unvalidated"
+                    if governance.get("state") == "validated"
+                    else "; model governance validation is unavailable"
+                )
                 confidence_note = (
                     f"; model-reported attribution confidence {confidence:.3f} "
                     "(calibration and applicability to realized value are not independently validated)"
+                    f"{governance_note}"
                     if confidence is not None and model_lineage_reported
                     else ""
                 )
@@ -4583,6 +4646,38 @@ class Economic360Provider:
                 continue
             completed_at = _attribution_timestamp(raw_run.get("completedAt"))
             run_ref = _attribution_run_ref(run_id, completed_at)
+            raw_governance = raw_run.get("modelGovernance")
+            governance: dict[str, Any] = {
+                "state": "unknown",
+                "reason": "exact_model_validation_decision_unavailable",
+                "calibrationState": "unvalidated",
+            }
+            if isinstance(raw_governance, dict) and raw_governance.get("state") == "validated":
+                decision_id = _inventory_text(raw_governance.get("decisionId"), limit=64)
+                config_id = _attribution_uuid(raw_governance.get("modelConfigId"))
+                expected_ref = (
+                    _attribution_model_validation_ref(
+                        decision_id, _attribution_timestamp(
+                            (raw_governance.get("evidenceRef") or {}).get("observedAt")
+                        ),
+                    ) if decision_id and isinstance(raw_governance.get("evidenceRef"), dict) else None
+                )
+                if (
+                    decision_id and decision_id.startswith("amv_") and config_id
+                    and raw_governance.get("validationState") == "exact_config_lineage_validated"
+                    and raw_governance.get("calibrationState") == "unvalidated"
+                    and expected_ref is not None
+                    and raw_governance.get("evidenceRef") == expected_ref.model_dump(mode="json")
+                ):
+                    governance = {
+                        "state": "validated",
+                        "validationState": "exact_config_lineage_validated",
+                        "calibrationState": "unvalidated",
+                        "modelConfigId": config_id,
+                        "decisionId": decision_id,
+                        "configSnapshotSha256": raw_governance.get("configSnapshotSha256"),
+                        "evidenceRef": expected_ref.model_dump(mode="json"),
+                    }
             key = (conversion_id, run_id)
             runs_by_key[key] = {
                 "tenantId": request.tenantId,
@@ -4594,6 +4689,7 @@ class Economic360Provider:
                 "completedAt": completed_at,
                 "dataWatermark": _attribution_timestamp(raw_run.get("dataWatermark")),
                 "modelConfidence": _attribution_confidence(raw_run.get("modelConfidence")),
+                "modelGovernance": governance,
             }
             run_refs[key] = run_ref
             output_runs.append({**runs_by_key[key], "evidenceRef": run_ref.model_dump(mode="json")})
@@ -4718,6 +4814,11 @@ class Economic360Provider:
                         "evidenceRef": touchpoint_ref.model_dump(mode="json"),
                     }
             run = runs_by_key[key]
+            governance = run["modelGovernance"]
+            if governance.get("state") == "validated":
+                governance_ref = EvidenceRef.model_validate(governance["evidenceRef"])
+                row_refs.append(governance_ref)
+                evidence_refs.append(governance_ref)
             credit_confidence = _attribution_confidence(raw_record.get("modelConfidence"))
             output_records.append(
                 {
@@ -4767,6 +4868,7 @@ class Economic360Provider:
                     ),
                     "modelType": run.get("modelType"),
                     "modelVersion": run.get("modelVersion"),
+                    "modelGovernance": governance,
                     "createdAt": created_at,
                     "evidenceRefs": [ref.model_dump(mode="json") for ref in row_refs],
                 }

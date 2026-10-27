@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:5c23fca3787b18c0330e38aca3908ebf44d74fa4693aa9ac59da32b4ac9d05c7"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0e1a626c14f4a486458863dba3c571a6cf42be786b8ae67c2b47e45cd93fd082"
 ---
 
 # 360 System Blueprint
@@ -57,14 +57,26 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Eleven slots declare at least one unbound canonical authority. Campaign360
+Nine slots declare at least one unbound canonical authority after the exact
+bindings in this slice. Value360 can expose a recorded check of attribution run
+configuration lineage against the current config, while model governance and
+calibration remain unbound. Campaign360
 `signal_sources` now binds exact gateway-admitted SDK Bronze observations and
 current touchpoint classification revisions to touchpoint-linked canonical
 events; broader source-fact producer coverage remains unknown. Agent360 `risk_summary` exposes its exact canonical Agent identity
 join before the policy-scoped Risk360 read; social observations remain unbound.
-Signals360 `quality` also binds exact tenant/site installation status only when
-an accepted SDK observation carries the authenticated server-stamped site
-namespace. Event-time and fleet health remain unknown.
+Signals360 `quality` binds exact tenant/site installation status only when an
+accepted SDK observation carries the authenticated server-stamped site
+namespace. `source_inventory` also resolves the exact current site registration
+as a source fact for that namespace. Event-time status, fleet health, and
+source reliability remain unknown. Workflow360 `actions` preserves the exact
+tenant Tool vertex evidence for admitted execution-linked call edges; action
+results and resource authority remain unbound. Agent360 `capabilities` resolves
+observed MCP catalog tool identity only for an exact tenant/provider/server/tool
+tuple; action and resource policy and effective tool authorization remain
+unbound. Support360 `sla` now joins an operator-registered source policy revision
+to an exact case timer and target. Breach evaluation, historical applicability,
+source completeness, and freshness remain partial.
 Campaign360 `anomalies` and Location360 `risk` bind bounded exact Risk360
 assessment reads, while producer coverage and whole-slot completeness remain
 unknown. Their exact

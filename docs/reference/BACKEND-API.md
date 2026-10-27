@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:84e43ed45f975dd41aac8f4a45ba40206ca773c6bfc705b42a2c35bcc5c13d73"
+  "services/api/actions/": "sha256:ca6a3490b8d03eda6f6fc165503d6ceb13722c392f8d37ed22eac32dfe809b5b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,11 +33,11 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:ae487fffb48a5848a612e34bf8b8074b500fb4f6e62111a8af403f14487fdd64"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:e38dde912f71269b72fe48ebe422f766b13bff9a82ef164da2f5e9bc41071f3d"
-  "services/api/journeys/": "sha256:0004ca6f24b5e5110c77a11ff973022cd7e2337174571a676c3395778ca9d7d0"
+  "services/api/intelligence/": "sha256:fe41be5093f3622829b03d2556582cf90cd04479590b0c6ca9c0cf769856a6e6"
+  "services/api/journeys/": "sha256:b87b80b55579d4ad7983127b4c21e5e62bdfb6606d5fba3c4f441acd95570bf9"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:b581ccc0719fd0cdc8e492a08ba0e5d5c6729500caa40e1f853f5cb786604891"
+  "services/api/value/": "sha256:eced9a44386d29bac4d3fd6c320107e3f23a09b3776576f9c33a8fe53fd7e506"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1825,10 +1825,11 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 | GET | `/v1/profile/{entity_id}/economic/warnings` | Missing, stale and contradicting dimensions for the entity (profile service) |
 | GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
 | GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
+| POST | `/v1/economic/attribution-runs/{run_id}/model-validation` | Record a tenant-scoped check of a completed run's configuration lineage against the current model configuration; requires `write` |
 
 **Query params:** entity endpoints accept `?window=realtime|24h|7d|30d|90d|lifetime` (default `lifetime`; tenant overview defaults to `30d`).
 
-**Permissions:** `read` for all economic endpoints
+**Permissions:** `read` for economic reads; `write` for the model-lineage check. The check does not approve or calibrate the model, prove historic configuration immutability, or validate realized value.
 
 ---
 
@@ -2148,7 +2149,9 @@ Neither addition creates an HTTP route or completes a 360 surface.
 
 Signals360 `quality` now exposes a separate exact tenant/site installation
 status when an accepted SDK event carries the authenticated server-stamped site
-namespace. It preserves installation evidence while leaving event-time and
+namespace. `source_inventory` also joins the exact current tenant site registry
+record as a source fact, without claiming historical site status or fleet
+coverage. It preserves installation evidence while leaving event-time and
 fleet health, mobile installation linkage, and freshness unknown.
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,
@@ -2313,7 +2316,9 @@ the exact tenant-owned case before reading case-keyed RiskAssessment and
 RiskSignal records and preserves both risk and case evidence. Missing, expired,
 or ambiguous case identity suppresses the risk reads. Risk history, signal
 coverage, freshness, business outcome, and case contagion remain unknown.
-Callbacks, SLA timers, journeys, agent assignment and handoffs remain unjoined.
+Callback, SLA timer, journey-link, and agent-assignment records have bounded
+case-scoped joins; their upstream authorship, history completeness, and
+freshness remain unknown.
 
 The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or
@@ -2329,6 +2334,14 @@ completed, failed, and cancelled; stale events are retained without regressing
 current state. The endpoint does not verify a provider signature or establish
 writer actor identity. Support360 reads bounded case callback/event evidence;
 source-history completeness and freshness remain unknown.
+
+`POST /v1/support/cases/{case_id}/sla/contracts` lets a tenant ADMIN register
+one immutable source SLA policy revision and target duration for a canonical
+case on a verified provider connection. Support360 binds it to a source timer
+only when the tenant, case, connection, provider, source SLA and policy IDs,
+policy version, timer kind, and target duration agree. The response and frame
+carry the contract ID and evidence; registration does not evaluate breach,
+prove historical applicability, or establish complete source history.
 
 
 ---

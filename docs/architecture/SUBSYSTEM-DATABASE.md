@@ -37,7 +37,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
   "services/api/alembic/versions/20261024_risk_intervention_records.py": "sha256:f3fadd1672c15560cab018906246e307438035404f4fcbcb84c976cae9bdc3b7"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:624596e71c20882086990c2f56c3067474927f84de0b343a1c55bc6e7d3103b3"
   "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
   "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"

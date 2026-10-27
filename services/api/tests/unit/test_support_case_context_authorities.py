@@ -42,6 +42,13 @@ from journeys.support360.provider import (  # noqa: E402
     SupportFactsRead,
     _validated_case_journey_episodes,
 )
+from journeys.support360.sla_measurement import (  # noqa: E402
+    SupportSLAMeasurementContract,
+    SupportSLAMeasurementContractError,
+    SupportSLAMeasurementContractRepository,
+    SupportSLAMeasurementContractService,
+    reset_local_support_sla_contract_store,
+)
 from graph.operational_intelligence.models import EntityRef, EvidenceRef, TimeRangeFilter  # noqa: E402
 from shared.backend_interpretation.primitives import EpisodeRecord  # noqa: E402
 from shared.backend_interpretation.stores import EpisodePageRead  # noqa: E402
@@ -211,9 +218,11 @@ class RiskRegistry:
 def clear_support_stores():
     reset_local_support_case_store()
     reset_local_support_case_context_store()
+    reset_local_support_sla_contract_store()
     yield
     reset_local_support_case_store()
     reset_local_support_case_context_store()
+    reset_local_support_sla_contract_store()
 
 
 async def _case() -> tuple[SupportCaseRepository, dict]:
@@ -232,6 +241,90 @@ async def _case() -> tuple[SupportCaseRepository, dict]:
         observed_at=NOW,
     )
     return repository, record
+
+
+def _contract(case_id: str, *, target: int = 1800) -> SupportSLAMeasurementContract:
+    return SupportSLAMeasurementContract(
+        tenant_id=TENANT,
+        case_id=case_id,
+        source_connection_id=CONNECTION,
+        source_provider_identity=PROVIDER,
+        source_sla_id="source-sla-1",
+        source_policy_id="response-policy",
+        source_policy_version="v2",
+        timer_kind="first_response",
+        target_duration_seconds=target,
+        registered_by=ACTOR,
+        registered_at=NOW,
+    )
+
+
+@pytest.mark.asyncio
+async def test_registered_sla_contract_is_immutable_and_case_provider_scoped():
+    cases, case = await _case()
+    repository = SupportSLAMeasurementContractRepository()
+    service = SupportSLAMeasurementContractService(
+        repository=repository, cases=cases, connections=FakeConnections()
+    )
+    contract = _contract(case["case_id"])
+    assert (await service.register(contract)).contract_id == contract.contract_id
+    assert (await service.register(contract)).contract_id == contract.contract_id
+    replay = contract.model_copy(update={"registered_at": datetime.now(timezone.utc), "registered_by": "another-admin"})
+    stored = await service.register(replay)
+    assert stored.registered_at == contract.registered_at
+    assert stored.registered_by == contract.registered_by
+    read = await repository.read_for_case(TENANT, case["case_id"], CONNECTION)
+    assert read.available and read.complete and len(read.rows) == 1
+    assert read.rows[0]["target_duration_seconds"] == 1800
+    with pytest.raises(SupportSLAMeasurementContractError, match="immutable"):
+        await service.register(_contract(case["case_id"], target=1200))
+    with pytest.raises(SupportSLAMeasurementContractError, match="exact tenant case"):
+        await service.register(_contract(str(uuid4())))
+    assert not (await repository.read_for_case("foreign-tenant", case["case_id"], CONNECTION)).rows
+
+
+@pytest.mark.asyncio
+async def test_sla_contract_target_conflict_does_not_bind_source_timer():
+    cases, case = await _case()
+    context_repository = SupportCaseContextRepository()
+    await SupportCaseContextIngestionService(
+        repository=context_repository, cases=cases, connections=FakeConnections()
+    ).ingest(
+        "sla", TENANT, CONNECTION,
+        SupportSLAEventInput(
+            case_id=case["case_id"], source_sla_id="source-sla-1",
+            source_revision_id="sla-rev-1", source_event_id="sla-target-conflict",
+            event_type=SupportSLAEventType.TIMER_STARTED,
+            timer_kind=SupportSLATimerKind.FIRST_RESPONSE,
+            source_policy_id="response-policy", source_policy_version="v2",
+            source_timer_state="running", target_duration_seconds=1800,
+            source_observed_at=NOW, effective_at=NOW,
+        ), actor_id=ACTOR, actor_type="tenant_user",
+    )
+    contracts = SupportSLAMeasurementContractRepository()
+    await SupportSLAMeasurementContractService(
+        repository=contracts, cases=cases, connections=FakeConnections()
+    ).register(_contract(case["case_id"], target=1200))
+    request = ProjectionRequest(
+        projectionId="support360", tenantId=TENANT,
+        subject=ProjectionSubject(kind="support_case", id=case["case_id"]),
+    )
+    context = ProjectionContext(
+        projectionId="support360", tenantId=TENANT,
+        registryState="in_flight", dependencyState=[], warnings=[],
+    )
+    result = await Support360Provider(
+        EmptyCaseFactsSource(), case_repository=cases,
+        case_context_repository=context_repository, sla_measurement_repository=contracts,
+    ).project(request, context)
+    state = next(section.content for section in result.sections if section.id == "state")
+    sla = state["requiredSlots"]["sla"]
+    assert sla["policyAuthority"] == "source_reported_not_joined_to_measurement_contract"
+    assert sla["measurementContractJoin"]["boundTimerCount"] == 0
+    assert sla["measurementContractJoin"]["reasonCode"] == (
+        "support_sla_source_target_conflicts_with_registered_contract"
+    )
+    assert "measurementContract" not in sla["timers"][0]
 
 
 @pytest.mark.asyncio
@@ -355,6 +448,10 @@ def test_context_event_contract_rejects_tenant_actor_and_malformed_sla_claims():
 @pytest.mark.asyncio
 async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence_slots():
     cases, case = await _case()
+    sla_contract_repository = SupportSLAMeasurementContractRepository()
+    registered_contract = await SupportSLAMeasurementContractService(
+        repository=sla_contract_repository, cases=cases, connections=FakeConnections()
+    ).register(_contract(case["case_id"]))
     journey_id = str(uuid4())
     journeys = FakeJourneys(journey_id)
     entities = FakeEntities([{"tenant_id": TENANT, "entity_id": ENTITY, "entity_type": "user"}])
@@ -379,6 +476,7 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
             source_policy_id="response-policy",
             source_policy_version="v2",
             source_timer_state="running",
+            target_duration_seconds=1800,
             due_at=NOW + timedelta(minutes=30),
             source_observed_at=NOW,
             effective_at=NOW,
@@ -438,6 +536,7 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         EmptyCaseFactsSource(),
         case_repository=cases,
         case_context_repository=context_repo,
+        sla_measurement_repository=sla_contract_repository,
         canonical_agent_entity_repository=entities,
         canonical_journey_repository=journeys,
         canonical_episode_store=ExactEpisodeStore(),
@@ -454,6 +553,10 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
     assert slots["participants"]["sourceAuthenticationState"] == "tenant_webhook_hmac_verified"
     assert slots["sla"]["state"] == "degraded"
     assert slots["sla"]["timers"][0]["sourceTimerState"] == "running"
+    assert slots["sla"]["timers"][0]["measurementContract"]["contractId"] == registered_contract.contract_id
+    assert slots["sla"]["measurementContractJoin"]["boundTimerCount"] == 1
+    assert slots["sla"]["policyAuthority"] == "tenant_registered_source_policy_revision_partial"
+    assert any(ref.id == registered_contract.contract_id for ref in slots["sla"]["evidenceRefs"])
     assert slots["sla"]["breachEvaluation"] == "source_reported_only_no_local_timer_inference"
     assert slots["journey_links"]["links"][0]["canonicalJourneyId"] == journey_id
     episode_facts = slots["journey_links"]["episodeFacts"]

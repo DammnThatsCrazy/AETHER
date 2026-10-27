@@ -3614,12 +3614,15 @@ class Agent360Provider:
         reach = profile.get("reach")
         reach = reach if isinstance(reach, dict) else {}
         raw_capabilities = reach.get("capabilities")
+        from actions.agent_access_intelligence.models import capability_id_for
+
         capabilities = [
             {
                 "capabilityId": item.get("capability_id"),
                 "serverKey": item.get("server_key"),
                 "provider": item.get("provider"),
                 "toolName": item.get("tool_name"),
+                "capabilityKind": item.get("capability_kind"),
                 "basis": item.get("basis"),
                 "invokeGrantCoversCapability": None,
                 "activeGrantRecordIds": [],
@@ -3627,6 +3630,32 @@ class Agent360Provider:
             for item in raw_capabilities
             if isinstance(item, dict) and isinstance(item.get("capability_id"), str)
         ] if isinstance(raw_capabilities, list) else []
+
+        for capability in capabilities:
+            provider = capability["provider"]
+            server_key = capability["serverKey"]
+            tool_name = capability["toolName"]
+            exact_tool = (
+                capability["capabilityKind"] == "mcp_tool"
+                and isinstance(server_key, str) and bool(server_key)
+                and isinstance(tool_name, str) and bool(tool_name)
+                and (provider is None or isinstance(provider, str))
+                and capability["capabilityId"] == capability_id_for(
+                    tenant_id, provider, server_key, tool_name
+                )
+            )
+            capability["toolIdentity"] = {
+                "state": "resolved_observed_catalog" if exact_tool else "unknown",
+                "catalogCapabilityId": capability["capabilityId"] if exact_tool else None,
+                "evidenceRef": (
+                    EvidenceRef(
+                        id=capability["capabilityId"], type="entity",
+                        source="capability_catalog",
+                    ).model_dump(mode="json", exclude_none=True)
+                    if exact_tool else None
+                ),
+                "effectiveToolAuthorization": "unknown",
+            }
 
         canonical_agent_entity_id = row.get("canonical_agent_entity_id")
         grant_rows, grant_rows_valid = Agent360Provider._validate_capability_grant_records(

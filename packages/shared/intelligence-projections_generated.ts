@@ -222,7 +222,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/agent360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity'],
-    canonicalAuthorities: ['agent_access', 'agent_entities', 'agent_entity', 'agent_executions', 'delegations', 'economic_facts', 'entities', 'evidence', 'graph', 'identity', 'observations', 'outcome_facts', 'source_provenance'],
+    canonicalAuthorities: ['agent_access', 'agent_entities', 'agent_entity', 'agent_executions', 'delegations', 'economic_facts', 'entities', 'evidence', 'graph', 'identity', 'observations', 'outcome_facts', 'source_provenance', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'contract_spine', 'identity_resolution', 'temporal_kernel'],
     projectionDependencies: ['profile360'],
     optionalProjectionDependencies: ['economic360', 'outcome360'],
@@ -1316,7 +1316,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'event', 'observation', 'signal', 'source', 'stream'],
-    canonicalAuthorities: ['behavioral_signals', 'campaign_facts', 'campaign_touchpoints', 'events', 'identity', 'ingestion_health', 'observations', 'risk_outputs', 'silver_semantic_observations', 'source_provenance', 'source_schema'],
+    canonicalAuthorities: ['behavioral_signals', 'campaign_facts', 'campaign_touchpoints', 'events', 'identity', 'ingestion_health', 'observations', 'risk_outputs', 'silver_semantic_observations', 'source_facts', 'source_provenance', 'source_schema'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -1496,7 +1496,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/support360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['callback', 'entity', 'support_case'],
-    canonicalAuthorities: ['agent_entities', 'communication_facts', 'episode_facts', 'evidence', 'identity', 'journeys', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_cases'],
+    canonicalAuthorities: ['agent_entities', 'communication_facts', 'episode_facts', 'evidence', 'identity', 'journeys', 'measurement_contract', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_cases'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -1616,7 +1616,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['automation', 'run', 'trigger', 'workflow', 'workflow_run'],
-    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'evidence', 'execution_facts', 'graph_edges', 'identity', 'outcome_facts', 'risk_assessments', 'workflow_definition_revisions'],
+    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'evidence', 'execution_facts', 'graph_edges', 'identity', 'outcome_facts', 'risk_assessments', 'tools', 'workflow_definition_revisions'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -2159,10 +2159,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       {
         authorityGapReason: 'active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy',
         canonicalAuthorityRefs: ['actions', 'agent_access', 'resources', 'tools'],
-        description: 'Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent; action and resource authorization remains unknown.',
+        description: 'Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent and exact observed MCP tool catalog identity; action and resource authorization remains unknown.',
         id: 'capabilities',
         implementationCrosswalk: ['actions_tools_resources'],
-        partialImplementationReason: 'current_active_grant_join_is_bounded_to_2000_records_and_does_not_replay_historical_authority',
+        partialImplementationReason: 'Current active grant join is bounded to 2000 records. Observed catalog identity for an exact MCP tool does not prove remote ownership, effective tool authorization, action or resource policy, or historical authority.',
         projectionBindings: [
           {
             projectionId: 'agent360',
@@ -2172,7 +2172,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           }
         ],
         requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['actions', 'resources', 'tools']
+        unboundCanonicalAuthorityRefs: ['actions', 'resources']
       },
       {
         canonicalAuthorityRefs: ['communication_facts', 'observations'],
@@ -5486,11 +5486,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        authorityGapReason: 'This read is limited to authenticated Envelope-B metadata on one SDK event and does not join a tenant source registry or inventory.',
         canonicalAuthorityRefs: ['source_facts', 'source_provenance'],
-        description: 'Authenticated source metadata for an exact SDK event or observation; fleet inventory remains unknown.',
+        description: 'Authenticated source metadata for an exact SDK event or observation, with an exact current tenant site registration fact when its server-stamped site namespace resolves; fleet inventory remains unknown.',
         id: 'source_inventory',
-        partialImplementationReason: 'Only one exact SDK event or observation is described; the provider cannot enumerate sources or establish source reliability.',
+        partialImplementationReason: 'One exact SDK event or observation is described; authenticated site-scoped events may join the current canonical tenant site registry. Mobile and tenant-wide events, historical registration state, fleet inventory, and source reliability remain unknown.',
         projectionBindings: [
           {
             projectionId: 'signals360',
@@ -5499,8 +5498,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['source_inventory']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['source_facts']
+        requirement: 'required'
       }
     ],
     freshnessPolicy: {
@@ -6048,11 +6046,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        authorityGapReason: 'Source-reported SLA contract and timer events are exact case and connection scoped; no canonical measurement-contract evaluation, breach inference, history completeness, or freshness SLA is claimed.',
         canonicalAuthorityRefs: ['measurement_contract', 'support_case_context_events', 'support_cases'],
         description: 'Support service level contract and timer state.',
         id: 'sla',
-        partialImplementationReason: 'Source-reported SLA contract and timer events are exact case and connection scoped; no canonical measurement-contract evaluation, breach inference, history completeness, or freshness SLA is claimed.',
+        partialImplementationReason: 'Exact tenant-registered source policy revisions bind matching case timers and target durations, with contract evidence. Historical applicability, measured breach evaluation, source-history completeness, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'support360',
@@ -6061,8 +6058,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence', 'state']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['measurement_contract']
+        requirement: 'required'
       },
       {
         id: 'source_lineage_and_coverage',
@@ -6233,7 +6229,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'canonical_conversions', 'model_governance'],
         description: 'Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI.',
         id: 'confidence',
-        partialImplementationReason: 'Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated.',
+        partialImplementationReason: 'Exact conversion/run/credit-linked model-reported confidence may include a persisted check of recorded run configuration lineage against the current matching config. Model governance approval, calibration, historical config immutability, and applicability to realized value remain unvalidated.',
         projectionBindings: [
           {
             projectionId: 'economic360',
@@ -6528,7 +6524,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['actions', 'agent_executions', 'graph_edges', 'resources', 'tools'],
         description: 'Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices.',
         id: 'actions',
-        partialImplementationReason: 'Call edges are bounded to 200 execution rows and 10000 graph edges; authorization, completion, external effects, producer coverage, historical replay, and freshness remain unknown.',
+        partialImplementationReason: 'Call edges are bounded to 200 execution rows and 10000 graph edges. Exact tenant Tool vertices now have separate identity evidence when resolved; authorization, completion, external effects, resource results, producer coverage, historical replay, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'workflow360',
@@ -6538,7 +6534,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           }
         ],
         requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['actions', 'resources', 'tools']
+        unboundCanonicalAuthorityRefs: ['actions', 'resources']
       },
       {
         canonicalAuthorityRefs: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'identity'],

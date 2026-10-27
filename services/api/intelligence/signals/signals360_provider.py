@@ -92,6 +92,17 @@ class SiteInstallHealthRead:
 
 
 @dataclass(frozen=True)
+class SiteSourceFactRead:
+    """Current canonical site registration for one authenticated SDK site."""
+
+    tenant_id: str
+    site_id: str
+    record: Optional[dict[str, Any]]
+    available: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class SemanticEventRead:
     """Capped Silver model-output rows for one exact tenant SDK event."""
 
@@ -229,6 +240,10 @@ class Signal360Source(Protocol):
         self, *, tenant_id: str, site_id: str
     ) -> SiteInstallHealthRead: ...
 
+    async def site_source_fact(
+        self, *, tenant_id: str, site_id: str
+    ) -> SiteSourceFactRead: ...
+
     async def semantic_observations_for_event(
         self, *, tenant_id: str, event_id: str, limit: int
     ) -> SemanticEventRead: ...
@@ -265,6 +280,7 @@ class RepositorySignal360Source:
         source_authority_trace: Any = None,
         semantic_observations: Any = None,
         site_installations: Any = None,
+        sites: Any = None,
     ) -> None:
         self._bronze = bronze
         self._signals = signals
@@ -275,6 +291,24 @@ class RepositorySignal360Source:
         self._source_authority_trace = source_authority_trace
         self._semantic_observations = semantic_observations
         self._site_installations = site_installations
+        self._sites = sites
+
+    async def site_source_fact(
+        self, *, tenant_id: str, site_id: str
+    ) -> SiteSourceFactRead:
+        if not _safe_identifier(tenant_id) or not _safe_identifier(site_id):
+            return SiteSourceFactRead(tenant_id, site_id, None, False, "exact_site_scope_required")
+        try:
+            if self._sites is None:
+                from ingestion.sdk_distribution.sites import SDKSiteRepository
+
+                self._sites = SDKSiteRepository()
+            row = await self._sites.get(tenant_id, site_id)
+        except Exception:  # noqa: BLE001 - site registry is independent of Bronze
+            return SiteSourceFactRead(tenant_id, site_id, None, False, "site_registry_unavailable")
+        if row is not None and not isinstance(row, dict):
+            return SiteSourceFactRead(tenant_id, site_id, None, False, "site_registry_row_invalid")
+        return SiteSourceFactRead(tenant_id, site_id, row, True)
 
     async def site_install_health(
         self, *, tenant_id: str, site_id: str
@@ -1260,6 +1294,7 @@ class Signals360Provider(IntelligenceProjectionProvider):
                     semantic_skip_reason = "semantic_event_authority_not_joined"
 
         source_authority_read: Optional[ObservationSourceAuthorityRead] = None
+        site_source_fact_read: Optional[SiteSourceFactRead] = None
         if (
             "source_inventory" in requested_sections
             and quality_read is not None
@@ -1285,6 +1320,22 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         False,
                         "observation_source_authority_unavailable",
                     )
+            if request.asOf is None and request.timeRange is None:
+                site_id = _stamped_site_id(
+                    quality_read.record,
+                    tenant_id=tenant_id,
+                    observation_id=request.subject.id,
+                )
+                site_reader = getattr(self._source, "site_source_fact", None)
+                if site_id is not None and callable(site_reader):
+                    try:
+                        site_source_fact_read = await site_reader(
+                            tenant_id=tenant_id, site_id=site_id
+                        )
+                    except Exception:  # noqa: BLE001 - source fact is slot-local
+                        site_source_fact_read = SiteSourceFactRead(
+                            tenant_id, site_id, None, False, "site_registry_unavailable"
+                        )
 
         linked_read: Optional[LinkedEntitiesRead] = None
         if "linked_entities" in requested_sections:
@@ -1458,6 +1509,7 @@ class Signals360Provider(IntelligenceProjectionProvider):
                     tenant_id=tenant_id,
                     read=quality_read,
                     authority_read=source_authority_read,
+                    site_source_fact_read=site_source_fact_read,
                 )
                 sections.append(source_section)
                 if source_claim is not None:
@@ -2752,6 +2804,7 @@ def _source_inventory_section(
     tenant_id: str,
     read: Optional[ObservationQualityRead],
     authority_read: Optional[ObservationSourceAuthorityRead],
+    site_source_fact_read: Optional[SiteSourceFactRead] = None,
 ) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
     """Expose one SDK event's source facts and independently traced authority."""
     reason: Optional[str] = None
@@ -2880,6 +2933,51 @@ def _source_inventory_section(
             if not authority_read.available:
                 authority["state"] = "degraded"
     authority["reasonCode"] = authority_reason
+    site_source_fact: dict[str, Any] = {
+        "state": "unknown",
+        "reasonCode": "exact_authenticated_site_registry_fact_unavailable",
+    }
+    site_evidence: Optional[EvidenceRef] = None
+    expected_site = _stamped_site_id(
+        row, tenant_id=tenant_id, observation_id=subject.id
+    )
+    if expected_site is None:
+        site_source_fact["reasonCode"] = "no_authenticated_site_namespace_for_observation"
+    elif isinstance(site_source_fact_read, SiteSourceFactRead):
+        site_row = site_source_fact_read.record
+        if (
+            site_source_fact_read.available
+            and site_source_fact_read.tenant_id == tenant_id
+            and site_source_fact_read.site_id == expected_site
+            and isinstance(site_row, dict)
+            and site_row.get("id") == expected_site
+            and site_row.get("tenant_id") == tenant_id
+            and site_row.get("status") in {"active", "revoked"}
+            and _safe_timestamp(site_row.get("updated_at")) is not None
+        ):
+            updated_at = _safe_timestamp(site_row["updated_at"])
+            site_evidence = EvidenceRef(
+                id=expected_site,
+                type="document",
+                source="ingestion.sdk_distribution.sites.SDKSiteRepository:sdk_sites",
+                observedAt=updated_at,
+            )
+            site_source_fact = {
+                "state": "observed",
+                "siteId": expected_site,
+                "currentRegistrationStatus": site_row["status"],
+                "lastUpdatedAt": updated_at,
+                "coverage": "one_exact_authenticated_site_registration",
+                "eventTimeRegistrationStatus": "unknown",
+                "fleetInventory": "unknown",
+                "evidenceRefs": [site_evidence.model_dump(mode="json")],
+            }
+        else:
+            site_source_fact["reasonCode"] = (
+                site_source_fact_read.reason
+                if not site_source_fact_read.available and site_source_fact_read.reason
+                else "site_registry_record_scope_or_shape_invalid"
+            )
     item = {
         "observationId": subject.id,
         "sourceType": source_type,
@@ -2889,9 +2987,10 @@ def _source_inventory_section(
         "adapterVersion": adapter_version,
         "observedAt": observed_at,
         "sourceAuthority": authority,
+        "siteSourceFact": site_source_fact,
         "evidenceRefs": [evidence.model_dump(mode="json")],
     }
-    evidence_refs = [evidence, *authority_evidence]
+    evidence_refs = [evidence, *authority_evidence, *([site_evidence] if site_evidence else [])]
     section = ProjectionSection(
         id="source_inventory",
         state="available",
@@ -2910,7 +3009,9 @@ def _source_inventory_section(
             "one exact SDK observation is described; fleet inventory and source reliability remain unknown",
             authority_reason,
         ],
-        canonicalAuthorityRefs=["observations", "source_provenance"],
+        canonicalAuthorityRefs=[
+            "observations", "source_provenance", *(["source_facts"] if site_evidence else [])
+        ],
     )
     claim = ClaimEnvelope(
         id=f"signals360.source_inventory.{subject.id}",
@@ -2923,6 +3024,10 @@ def _source_inventory_section(
                 " Its recorded rights reference resolves to the same tenant's source grant."
                 if authority["state"] == "available"
                 else " Canonical source authority remains unverified."
+            )
+            + (
+                " Its authenticated site namespace resolves to a separately stored current tenant site registration."
+                if site_evidence else ""
             )
             + " Source reliability and fleet inventory completeness remain unknown."
         ],
@@ -3179,5 +3284,6 @@ __all__ = [
     "Signal360Source",
     "SignalSummaryRead",
     "SiteInstallHealthRead",
+    "SiteSourceFactRead",
     "register_provider",
 ]

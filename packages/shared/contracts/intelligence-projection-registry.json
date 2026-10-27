@@ -254,7 +254,8 @@
         "identity",
         "observations",
         "outcome_facts",
-        "source_provenance"
+        "source_provenance",
+        "tools"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -2280,6 +2281,7 @@
         "evidence",
         "identity",
         "journeys",
+        "measurement_contract",
         "provider_connections",
         "support_callback_events",
         "support_callbacks",
@@ -2488,6 +2490,7 @@
         "identity",
         "ingestion_health",
         "observations",
+        "source_facts",
         "source_provenance",
         "source_schema",
         "risk_outputs",
@@ -2815,6 +2818,7 @@
         "events",
         "risk_assessments",
         "graph_edges",
+        "tools",
         "workflow_definition_revisions"
       ],
       "hardDependencies": [
@@ -3046,7 +3050,7 @@
         {
           "id": "capabilities",
           "requirement": "required",
-          "description": "Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent; action and resource authorization remains unknown.",
+          "description": "Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent and exact observed MCP tool catalog identity; action and resource authorization remains unknown.",
           "canonicalAuthorityRefs": [
             "actions",
             "resources",
@@ -3072,11 +3076,10 @@
           ],
           "unboundCanonicalAuthorityRefs": [
             "actions",
-            "resources",
-            "tools"
+            "resources"
           ],
           "authorityGapReason": "active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy",
-          "partialImplementationReason": "current_active_grant_join_is_bounded_to_2000_records_and_does_not_replay_historical_authority"
+          "partialImplementationReason": "Current active grant join is bounded to 2000 records. Observed catalog identity for an exact MCP tool does not prove remote ownership, effective tool authorization, action or resource policy, or historical authority."
         },
         {
           "id": "execution_history",
@@ -7470,7 +7473,7 @@
             "model_governance"
           ],
           "authorityGapReason": "model_governance_calibration_and_validation_not_joined",
-          "partialImplementationReason": "Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated."
+          "partialImplementationReason": "Exact conversion/run/credit-linked model-reported confidence may include a persisted check of recorded run configuration lineage against the current matching config. Model governance approval, calibration, historical config immutability, and applicability to realized value remain unvalidated."
         },
         {
           "id": "evidence_trace",
@@ -8847,7 +8850,7 @@
         {
           "id": "source_inventory",
           "requirement": "required",
-          "description": "Authenticated source metadata for an exact SDK event or observation; fleet inventory remains unknown.",
+          "description": "Authenticated source metadata for an exact SDK event or observation, with an exact current tenant site registration fact when its server-stamped site namespace resolves; fleet inventory remains unknown.",
           "canonicalAuthorityRefs": [
             "source_facts",
             "source_provenance"
@@ -8865,11 +8868,7 @@
               ]
             }
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "source_facts"
-          ],
-          "authorityGapReason": "This read is limited to authenticated Envelope-B metadata on one SDK event and does not join a tenant source registry or inventory.",
-          "partialImplementationReason": "Only one exact SDK event or observation is described; the provider cannot enumerate sources or establish source reliability."
+          "partialImplementationReason": "One exact SDK event or observation is described; authenticated site-scoped events may join the current canonical tenant site registry. Mobile and tenant-wide events, historical registration state, fleet inventory, and source reliability remain unknown."
         },
         {
           "id": "classification",
@@ -10305,11 +10304,10 @@
               ]
             }
           ],
-          "partialImplementationReason": "Call edges are bounded to 200 execution rows and 10000 graph edges; authorization, completion, external effects, producer coverage, historical replay, and freshness remain unknown.",
+          "partialImplementationReason": "Call edges are bounded to 200 execution rows and 10000 graph edges. Exact tenant Tool vertices now have separate identity evidence when resolved; authorization, completion, external effects, resource results, producer coverage, historical replay, and freshness remain unknown.",
           "unboundCanonicalAuthorityRefs": [
             "actions",
-            "resources",
-            "tools"
+            "resources"
           ],
           "authorityGapReason": "Action and resource result authorities are not joined beyond the recorded execution to Tool call edge."
         },
@@ -11397,11 +11395,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Source-reported SLA contract and timer events are exact case and connection scoped; no canonical measurement-contract evaluation, breach inference, history completeness, or freshness SLA is claimed.",
-          "unboundCanonicalAuthorityRefs": [
-            "measurement_contract"
-          ],
-          "authorityGapReason": "Source-reported SLA contract and timer events are exact case and connection scoped; no canonical measurement-contract evaluation, breach inference, history completeness, or freshness SLA is claimed."
+          "partialImplementationReason": "Exact tenant-registered source policy revisions bind matching case timers and target durations, with contract evidence. Historical applicability, measured breach evaluation, source-history completeness, and freshness remain unknown."
         },
         {
           "id": "journey_links",
