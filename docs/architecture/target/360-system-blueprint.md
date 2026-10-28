@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:89372d02c1b4db0fe67cadbdee96df3955655bbecdcdc946e750d58ef419f8a1"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:61da29664a0d03b7bae580e0a66d18401fb88a21715e7b233889cd6c2b184f62"
 ---
 
 # 360 System Blueprint
@@ -57,7 +57,7 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Nine slots declare at least one unbound canonical authority after the exact
+Eight slots declare at least one unbound canonical authority after the exact
 bindings in this slice. Value360 can expose a recorded check of attribution run
 configuration lineage against the current config, while model governance and
 calibration remain unbound. Campaign360
@@ -81,8 +81,10 @@ to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link
 to a current exact cluster definition and consent-scoped cluster or cohort
-memberships backed by graph-ledger replay. Roster completeness, relationship
-topology, historical membership, and freshness remain unknown. Journey and Risk
+memberships backed by graph-ledger replay. A policy-authorized bounded graph
+read exposes current observed FOLLOWS edges between linked members with analytics
+consent receipts and relationship evidence. Roster completeness, other predicates,
+syndicates, historical membership, and freshness remain unknown. Journey and Risk
 can expose an exact caller-associated agent lifecycle request after slot policy.
 The request can include its matching, tenant-scoped, time-checked recorded delegation decision;
 current authorization, dispatch and external effect remain unverified. Workflow approval decisions can

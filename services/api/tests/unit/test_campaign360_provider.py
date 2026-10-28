@@ -749,6 +749,7 @@ async def test_campaign_population_links_bind_exact_explicit_cohort_association(
         "explicitPopulationLinks": "available",
         "broaderCohortMembership": "unknown",
         "syndicateMembership": "unknown",
+        "relationshipFacts": "unknown",
     }
     context = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]
     assert context["associations"][0]["populationId"] == "population-1"
@@ -1937,3 +1938,86 @@ async def test_campaign_projects_only_consent_scoped_linked_population_members(p
             "campaign_population_link_events", "identity_populations", "graph_mutation_ledger", "governance.consent.authority"
         }
         assert f"{population_type}_membership" in _slot(result, "cohorts_syndicates")["sourceAuthorities"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["valid", "denied", "foreign", "revoked", "truncated", "missing_evidence", "outsider", "future"])
+async def test_campaign_population_relationships_require_tenant_consent_and_edge_evidence(mode):
+    from types import SimpleNamespace
+    from journeys.campaign.campaign_population_relationships import CampaignPopulationRelationshipAuthority
+    from shared.graph.graph import Edge
+    from shared.relationship_spine.relationship_registry import live_graph_edge_type
+
+    edge = Edge(edge_type=live_graph_edge_type("FOLLOWS"), from_vertex_id="member-a", to_vertex_id="member-b",
+                properties={"tenant_id": "tenant-b" if mode == "foreign" else "tenant-a",
+                            "relationship_predicate": "FOLLOWS", "idempotency_key": "edge-1",
+                            "evidence_refs": ["fact-1"], "revoked": mode == "revoked"})
+    if mode == "missing_evidence":
+        edge.properties["evidence_refs"] = []
+    elif mode == "outsider":
+        edge.to_vertex_id = "not-a-member"
+    elif mode == "future":
+        edge.properties["valid_from"] = "2999-01-01T00:00:00Z"
+
+    class Graph:
+        async def get_edges_for_tenant(self, tenant_id, **kwargs):
+            assert tenant_id == "tenant-a"
+            return [edge], mode == "truncated"
+
+    async def consent(tenant_id, subject_id, anonymous_id, purpose):
+        assert tenant_id == "tenant-a" and purpose == "analytics" and anonymous_id is None
+        return SimpleNamespace(allowed=not (mode == "denied" and subject_id == "member-b"),
+                               receipt_id=f"receipt-{subject_id}")
+
+    result = await CampaignPopulationRelationshipAuthority(graph=Graph(), consent=consent).read(
+        "tenant-a", {"population-1": {"member-a", "member-b"}}
+    )
+    assert result.available
+    if mode in {"valid", "truncated"}:
+        assert len(result.rows) == 1 and result.rows[0]["fact_ids"] == ["fact-1"]
+    else:
+        assert result.rows == ()
+    assert result.truncated == (mode not in {"valid", "outsider"})
+
+
+@pytest.mark.asyncio
+async def test_campaign_projects_population_relationship_only_with_social_slot_authorization():
+    from journeys.campaign.campaign_population_membership import CampaignPopulationMembershipRead
+    from journeys.campaign.campaign_population_relationships import CampaignPopulationRelationshipRead
+
+    population_id = "population-1"
+    link = {"tenant_id": "tenant-a", "campaign_id": CAMPAIGN_ID, "population_id": population_id,
+            "event_type": "linked", "link_event_id": "link-1", "source_observed_at": "2026-10-05T10:00:00Z",
+            "effective_at": "2026-10-05T10:00:00Z", "evidence_refs": [
+                {"id": CAMPAIGN_ID, "type": "entity", "source": "services/api/journeys/campaign/repository.py:campaigns"},
+                {"id": population_id, "type": "entity", "source": "identity_populations"}]}
+    members = tuple({"tenant_id": "tenant-a", "population_id": population_id,
+                     "population_type": "cohort", "entity_id": member, "ledger_mutation_id": f"ledger-{member}",
+                     "consent_receipt_id": f"receipt-{member}", "consent_purpose": "analytics"}
+                    for member in ("member-a", "member-b"))
+    class Source(PopulationLinkCampaign360Source):
+        calls = 0
+        async def campaign_population_memberships(self, tenant_id, requested_population):
+            return CampaignPopulationMembershipRead(tenant_id, requested_population, "cohort", members, True)
+        async def campaign_population_relationships(self, tenant_id, memberships):
+            self.calls += 1
+            assert memberships == {population_id: {"member-a", "member-b"}}
+            return CampaignPopulationRelationshipRead(tenant_id, ({"tenant_id": tenant_id, "population_id": population_id,
+                "source_entity_id": "member-a", "target_entity_id": "member-b", "edge_id": "edge-1",
+                "fact_ids": ["fact-1"], "source_receipt_id": "consent-a", "target_receipt_id": "consent-b"},), True)
+
+    source = Source(CampaignPopulationLinkRead("tenant-a", CAMPAIGN_ID, (link,), available=True))
+    context = _population_authorized_context()
+    denied = await Campaign360Provider(source).project(_request(), context)
+    assert source.calls == 0
+    assert not _section(denied, "state").content["domainContexts"]["cohorts_syndicates"]["populationRelationships"]
+    context.experience360ReadAuthorizations.append(ProjectionReadAuthorization(
+        tenantId="tenant-a", sourceSurfaceId="campaign360", sourceSubject=_request().subject,
+        sourceSlotId="cohorts_syndicates", consumerProjectionId="campaign360", targetProjectionId="social360",
+        capabilityKey="social360.read", policyState="allowed", policyIds=["test-policy"],
+        policyEvaluatedAt="2026-10-05T10:00:00Z"))
+    result = await Campaign360Provider(source).project(_request(), context)
+    relationships = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]["populationRelationships"]
+    assert source.calls == 1 and len(relationships) == 1
+    claim = next(claim for claim in result.claims if claim.kind == "campaign_linked_population_relationship")
+    assert {ref.source for ref in claim.evidenceRefs} >= {"relationship_facts", "entity_graph", "graph_mutation_ledger", "governance.consent.authority"}

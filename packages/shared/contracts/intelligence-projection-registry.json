@@ -1700,6 +1700,7 @@
         "outcomes",
         "population",
         "population_definitions",
+        "relationship_facts",
         "risk_outputs",
         "source_facts",
         "source_provenance",
@@ -8568,11 +8569,7 @@
               ]
             }
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "relationship_facts"
-          ],
-          "authorityGapReason": "Relationship-fact topology for linked populations and syndicates is not joined.",
-          "partialImplementationReason": "Explicit links can resolve current exact cluster definition revisions and bounded consent-scoped cluster or cohort memberships backed by live graph ledger replay. Population and roster coverage, syndicates, relationship-fact topology, historical membership and freshness remain unknown."
+          "partialImplementationReason": "Explicit links can resolve current exact cluster definition revisions and bounded consent-scoped cluster or cohort memberships backed by live graph ledger replay. A separate policy-authorized read can expose current evidence-backed FOLLOWS edges between consented linked members. Population and roster coverage, other relationship predicates, syndicates, historical membership and freshness remain unknown."
         },
         {
           "id": "performance",

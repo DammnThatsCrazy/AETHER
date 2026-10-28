@@ -199,7 +199,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/campaign360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "population", "source"),
-        "canonicalAuthorities": ("attribution_credits", "campaign_facts", "campaign_population_link_events", "campaign_touchpoints", "canonical_conversions", "cluster_definitions", "cluster_membership", "cohort_membership", "communication", "economic", "events", "evidence", "journeys", "observations", "outcomes", "population", "population_definitions", "risk_outputs", "source_facts", "source_provenance", "spend_records", "targeting_leakage_findings", "touchpoints"),
+        "canonicalAuthorities": ("attribution_credits", "campaign_facts", "campaign_population_link_events", "campaign_touchpoints", "canonical_conversions", "cluster_definitions", "cluster_membership", "cohort_membership", "communication", "economic", "events", "evidence", "journeys", "observations", "outcomes", "population", "population_definitions", "relationship_facts", "risk_outputs", "source_facts", "source_provenance", "spend_records", "targeting_leakage_findings", "touchpoints"),
         "hardDependencies": ("attribution_architecture", "contract_spine", "measurement_outcome_contract"),
         "projectionDependencies": ("communication360", "economic360", "episode360", "outcome360", "population360"),
         "optionalProjectionDependencies": [],
@@ -2376,11 +2376,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Relationship-fact topology for linked populations and syndicates is not joined.",
                 "canonicalAuthorityRefs": ("campaign_facts", "campaign_population_link_events", "cluster_definitions", "cluster_membership", "cohort_membership", "population_definitions", "relationship_facts"),
                 "description": "Explicit campaign-to-population associations with current versioned cluster definitions and consent-scoped membership evidence where exact tenant records resolve.",
                 "id": "cohorts_syndicates",
-                "partialImplementationReason": "Explicit links can resolve current exact cluster definition revisions and bounded consent-scoped cluster or cohort memberships backed by live graph ledger replay. Population and roster coverage, syndicates, relationship-fact topology, historical membership and freshness remain unknown.",
+                "partialImplementationReason": "Explicit links can resolve current exact cluster definition revisions and bounded consent-scoped cluster or cohort memberships backed by live graph ledger replay. A separate policy-authorized read can expose current evidence-backed FOLLOWS edges between consented linked members. Population and roster coverage, other relationship predicates, syndicates, historical membership and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "campaign360",
@@ -2389,8 +2388,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("outcomes",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("relationship_facts",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("attribution_credits", "canonical_conversions", "measurement_contract", "outcome_facts"),

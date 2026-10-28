@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:b95abcea1c22ea3671f7fc81ab1ab0da4b10c8f9bab67b9d627ef3a1bf459aa0"
+  "packages/shared/": "sha256:d1a2cf4eb3e5a040fef74759ec7d0320dc1dcfde04e4317e380bc2c1eabfefe1"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:5b1acad0e80d002be6097c056edafd09f3c94d089fc574f6e6c4cedf5c276127"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -101,7 +101,7 @@ source_hashes:
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:72c113ab2395dc491ad620f20244d6d0c50705fbc9d6fb0614f9b519255d86ae"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:e983b63092580139a5bcf215d9a2408275d2b68e301e0eedd5c7d1caa0b6a393"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
   "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
@@ -646,6 +646,11 @@ Campaign360 also reads bounded Risk360 assessments for the exact tenant and
 campaign subject as a separate anomaly dimension. Assessment output is not
 inferred from RiskSignals; campaign producer coverage, source anomalies,
 policy, historical completeness, and freshness remain unknown.
+Campaign360 can also read bounded current FOLLOWS edges between verified
+members of an explicitly linked population after slot authorization and
+analytics consent for both endpoints. Graph and relationship references are
+retained; complete topology, other predicates, syndicates, and history remain
+unknown.
 Location360 likewise keeps exact-subject RiskAssessment output separate from
 RiskSignals and admits an assessment only when its timestamped event evidence
 cites the exact location source observation. Causality, producer coverage,

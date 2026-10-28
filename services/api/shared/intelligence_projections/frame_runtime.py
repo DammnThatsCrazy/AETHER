@@ -355,6 +355,16 @@ async def build_experience360_frame(
                     capabilityKey="population360.read", policyState=disposition.state,
                     policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
                 ))
+                social = INTELLIGENCE_PROJECTION_DEFINITIONS.get("social360", {})
+                if ("social360.read" in social.get("capabilityKeys", [])
+                        and social.get("graphMutationPolicy") == "read_only"):
+                    read_authorizations.append(ProjectionReadAuthorization(
+                        tenantId=request.tenantId, sourceSurfaceId=request.surfaceId,
+                        sourceSubject=request.subject, sourceSlotId=slot_id,
+                        consumerProjectionId="campaign360", targetProjectionId="social360",
+                        capabilityKey="social360.read", policyState=disposition.state,
+                        policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
+                    ))
         if request.surfaceId == "agent360" and projection_id == "agent360":
             # Agent360 can make a nested current Risk360 read while assembling
             # its broader state section. Carry the exact outer slot decision

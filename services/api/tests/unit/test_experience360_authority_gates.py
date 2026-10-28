@@ -14,6 +14,7 @@ from shared.intelligence_projections.generated_registry import INTELLIGENCE_PROJ
 @pytest.mark.asyncio
 @pytest.mark.parametrize("surface,kind,slot,consumer,target,capability", [
     ("campaign360", "campaign", "cohorts_syndicates", "campaign360", "population360", "population360.read"),
+    ("campaign360", "campaign", "cohorts_syndicates", "campaign360", "social360", "social360.read"),
     ("journey360", "journey", "recommended_actions", "episode360", "agent360", "agent360.read"),
     ("risk360", "agent", "interventions", "risk360", "agent360", "agent360.read"),
 ])
@@ -47,7 +48,8 @@ async def test_nested_authority_requires_exact_allowed_slot(surface, kind, slot,
             )
 
     await build_experience360_frame(request, policy_evaluator=Policy("allowed"), projection_runtime=Runtime())
-    matches = [item for item in seen if item.sourceSlotId == slot and item.consumerProjectionId == consumer]
+    matches = [item for item in seen if item.sourceSlotId == slot and item.consumerProjectionId == consumer
+               and item.targetProjectionId == target]
     assert len(matches) == 1
     assert (matches[0].targetProjectionId, matches[0].capabilityKey) == (target, capability)
     assert matches[0].sourceSubject == subject and matches[0].tenantId == "tenant-a"

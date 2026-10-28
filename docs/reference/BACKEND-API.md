@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
   "services/api/intelligence/": "sha256:d40769eed1961ecce5ae80cc41c9166da216faa8b6598b8124980062cc407558"
-  "services/api/journeys/": "sha256:08732f0e85e92285c185a85931a0dc750474a823d8790a0009ae919130fcbeeb"
+  "services/api/journeys/": "sha256:2291264ffaed152bd75e79e1a246fe9254b798543dee19f06336dc4deb60ab87"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:f5c16a09ff882f5aa5d9edacaa2c0251b4d55e2928333b63d0de090d3742e995"
@@ -2080,6 +2080,11 @@ findings with their targeting-observation and eligibility-snapshot evidence;
 it separately reads bounded canonical Risk360 assessments for the exact tenant
 and campaign subject, preserving assessment claim state and evidence. Campaign
 risk producer coverage, source anomalies, history, policy, and freshness remain
+unknown.
+Campaign360 `cohorts_syndicates` can return bounded current FOLLOWS edges
+between verified members of an explicitly linked population after slot policy
+and analytics consent for both endpoints. The result preserves graph and
+relationship evidence; complete topology, other predicates and history remain
 unknown.
 Location360's `risk` slot now also reads bounded canonical RiskAssessments for
 the exact typed subject only when timestamped event evidence cites the exact

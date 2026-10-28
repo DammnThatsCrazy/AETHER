@@ -56,6 +56,10 @@ from journeys.campaign.campaign_population_membership import (
     MAX_CAMPAIGN_POPULATION_MEMBERS,
     MAX_CAMPAIGN_POPULATIONS,
 )
+from journeys.campaign.campaign_population_relationships import (
+    CampaignPopulationRelationshipAuthority,
+    CampaignPopulationRelationshipRead,
+)
 
 
 PROJECTION_ID = "campaign360"
@@ -657,6 +661,11 @@ class RepositoryCampaign360Source:
         self, tenant_id: str, population_id: str
     ) -> CampaignPopulationMembershipRead:
         return await CampaignPopulationMembershipAuthority().read(tenant_id, population_id)
+
+    async def campaign_population_relationships(
+        self, tenant_id: str, memberships: dict[str, set[str]]
+    ) -> CampaignPopulationRelationshipRead:
+        return await CampaignPopulationRelationshipAuthority().read(tenant_id, memberships)
 
     async def campaign_spend(
         self,
@@ -4532,6 +4541,76 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         claimState=EpistemicStatus.OBSERVED, domainSlotIds=[SLOT_COHORTS_SYNDICATES],
                     ))
 
+        relationships: list[dict[str, Any]] = []
+        relationship_state = "unknown"
+        social_authorized = membership_authorized and any(
+            auth.tenantId == request.tenantId and auth.sourceSurfaceId == "campaign360"
+            and auth.sourceSubject == request.subject and auth.sourceSlotId == SLOT_COHORTS_SYNDICATES
+            and auth.consumerProjectionId == "campaign360" and auth.targetProjectionId == "social360"
+            and auth.capabilityKey == "social360.read" and auth.policyState == "allowed"
+            and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
+            for auth in context.experience360ReadAuthorizations
+        )
+        relationship_reader = getattr(self._source, "campaign_population_relationships", None)
+        member_map: dict[str, set[str]] = {}
+        for item in population_memberships:
+            member_map.setdefault(item["populationId"], set()).add(item["entityId"])
+        if social_authorized and callable(relationship_reader) and member_map:
+            try:
+                relationship_read = await relationship_reader(request.tenantId, member_map)
+            except Exception:  # noqa: BLE001 - graph or consent failure is slot-local
+                relationship_read = None
+            if (isinstance(relationship_read, CampaignPopulationRelationshipRead)
+                    and relationship_read.available and relationship_read.tenant_id == request.tenantId
+                    and len(relationship_read.rows) <= 500):
+                relationship_state = "partial"
+                seen_relationships: set[tuple[str, str]] = set()
+                for row in relationship_read.rows:
+                    if not isinstance(row, dict):
+                        relationship_state = "degraded"
+                        local_reasons.add("campaign_relationship_row_invalid")
+                        continue
+                    population, source, target, edge = (row.get(key) for key in
+                        ("population_id", "source_entity_id", "target_entity_id", "edge_id"))
+                    facts = row.get("fact_ids")
+                    if (row.get("tenant_id") != request.tenantId or population not in member_map
+                            or source not in member_map[population] or target not in member_map[population]
+                            or source == target or not _safe_campaign_source_id(edge)
+                            or not _safe_campaign_source_id(row.get("source_receipt_id"))
+                            or not _safe_campaign_source_id(row.get("target_receipt_id"))
+                            or not isinstance(facts, list) or not facts or len(facts) > 20
+                            or any(not _safe_campaign_source_id(fact) for fact in facts)
+                            or (population, edge) in seen_relationships):
+                        relationship_state = "degraded"
+                        local_reasons.add("campaign_relationship_scope_or_evidence_invalid")
+                        continue
+                    seen_relationships.add((population, edge))
+                    refs = [EvidenceRef.model_validate(ref) for member in population_memberships
+                            if member["populationId"] == population and member["entityId"] in {source, target}
+                            for ref in member["evidenceRefs"]]
+                    refs.extend([EvidenceRef(id=edge, type="relationship", source="entity_graph",
+                                             observedAt=_string_or_none(row.get("observed_at"))),
+                                 *(EvidenceRef(id=fact, type="event", source="relationship_facts") for fact in facts),
+                                 *(EvidenceRef(id=row[key], type="event", source="governance.consent.authority")
+                                   for key in ("source_receipt_id", "target_receipt_id"))])
+                    for ref in refs:
+                        _add_evidence(evidence_by_key, ref)
+                    relationships.append({"populationId": population, "sourceEntityId": source,
+                                          "targetEntityId": target, "predicate": "FOLLOWS",
+                                          "evidenceRefs": [ref.model_dump(by_alias=True, exclude_none=True) for ref in refs]})
+                    claims.append(ClaimEnvelope(
+                        id=f"campaign360:{campaign_id}:relationship:{edge}:{population}",
+                        kind="campaign_linked_population_relationship", subject=request.subject,
+                        evidenceRefs=refs, claims=["A current observed FOLLOWS edge links two consented members of this explicitly linked population; influence and complete topology are not established."],
+                        claimState=EpistemicStatus.OBSERVED, domainSlotIds=[SLOT_COHORTS_SYNDICATES],
+                    ))
+                if relationship_read.truncated:
+                    relationship_state = "degraded"
+                    local_reasons.add("campaign_relationship_read_partial")
+            else:
+                relationship_state = "degraded"
+                local_reasons.add("campaign_relationship_authority_unavailable")
+
         explicit_state = "available" if associations else "empty"
         slot_state = "degraded" if read.truncated or local_reasons else "partial"
         reason = (
@@ -4547,6 +4626,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             else explicit_state,
             "broaderCohortMembership": "unknown",
             "syndicateMembership": "unknown",
+            "relationshipFacts": relationship_state,
         }
         slot_states[SLOT_COHORTS_SYNDICATES].update(
             state=slot_state,
@@ -4558,6 +4638,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         )
         if cluster_definitions:
             slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append("cluster_definitions")
+        if relationship_state == "partial":
+            slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append("relationship_facts")
         for population_type, authority in (("cluster", "cluster_membership"), ("cohort", "cohort_membership")):
             if any(item["populationType"] == population_type for item in population_memberships):
                 slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append(authority)
@@ -4569,6 +4651,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "associations": associations,
             "clusterDefinitions": cluster_definitions,
             "populationMemberships": population_memberships,
+            "populationRelationships": relationships,
             "dimensionStates": dimensions,
             "coverage": "explicit_operator_links_only",
             "reason": reason,
@@ -4580,7 +4663,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 ),
             },
             "limitations": [
-                "population membership is not expanded here",
+                "membership and relationship reads are bounded and incomplete",
                 "broader cohort, cluster, and syndicate authorities remain unknown",
                 "historical campaign-to-population link replay is unsupported",
             ],
