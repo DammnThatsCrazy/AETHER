@@ -1583,6 +1583,12 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
     assert access_profile["capabilities"][0]["activeGrantRecordIds"] == [
         "capability-grant-1"
     ]
+    assert access_profile["capabilities"][0]["invokeGrantScopes"] == [{
+        "grantRecordId": "capability-grant-1",
+        "actions": ["invoke"],
+        "resources": ["capability:capability-search"],
+        "evidenceRef": {"id": "capability-grant-1", "type": "document", "source": "delegations"},
+    }]
     assert any(
         ref["id"] == "capability-grant-1" and ref["source"] == "delegations"
         for ref in access_profile["evidenceRefs"]
@@ -1862,6 +1868,7 @@ async def test_agent360_keeps_capability_coverage_partial_without_exact_canonica
     assert access_profile["authorization"]["known"] is False
     assert access_profile["authorization"]["activeGrantCount"] is None
     assert access_profile["capabilities"][0]["invokeGrantCoversCapability"] is None
+    assert access_profile["capabilities"][0]["invokeGrantScopes"] == []
     assert access_profile["authorization"]["activeGrantRecordIds"] == []
     assert "canonical_capability_grant_read_incomplete" in access_profile["missingInputs"]
     assert not any(claim.domainSlotIds == ["capabilities"] for claim in result.claims)
@@ -3120,3 +3127,18 @@ async def test_agent360_resolves_only_exact_observed_mcp_tool_catalog_identity()
     inconsistent = await tool_identity(False)
     assert inconsistent["state"] == "unknown"
     assert inconsistent["evidenceRef"] is None
+
+
+def test_capability_grant_rejects_ambiguous_capability_and_server_scope():
+    grant = {
+        "tenant_id": "tenant-a", "agent_id": "agent-a", "grantee_entity_id": "agent-a",
+        "authorization_id": "grant-1", "authorization_kind": "capability",
+        "capability_id": "capability-a", "server_ref": "server-a",
+        "scope": {"actions": ["invoke"], "resources": ["capability:capability-a"]},
+        "state": "active",
+    }
+    rows, complete = Agent360Provider._validate_capability_grant_records(
+        [grant], "tenant-a", "agent-a"
+    )
+    assert rows == []
+    assert complete is False

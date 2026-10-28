@@ -73,8 +73,10 @@ source reliability remain unknown. Workflow360 `actions` preserves the exact
 tenant Tool vertex evidence for admitted execution-linked call edges; action
 results and resource authority remain unbound. Agent360 `capabilities` resolves
 observed MCP catalog tool identity only for an exact tenant/provider/server/tool
-tuple; action and resource policy and effective tool authorization remain
-unbound. Support360 `sla` now joins an operator-registered source policy revision
+tuple. For a complete canonical grant read, it also exposes the exact recorded
+invoke action and capability or server resource with delegation evidence;
+ambiguous grant scopes fail closed. Action and resource policy and effective
+tool authorization remain unbound. Support360 `sla` now joins an operator-registered source policy revision
 to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link

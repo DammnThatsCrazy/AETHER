@@ -69,7 +69,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:b95abcea1c22ea3671f7fc81ab1ab0da4b10c8f9bab67b9d627ef3a1bf459aa0"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:1ada1b047536e34b49bc3933891f3c800f2c5ae7b4fc2810ab30bf9bb4367b7f"
+  "services/api/actions/agent/agent360_provider.py": "sha256:327991233d2b94ca3d5deb9b64e5ec6605f14ae62073d55046247a1ac17ee9df"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:9206827e764f0355b75ce853df3447a02bfc03a9134929f1a262299941b8da25"
   "services/api/actions/agent/user_agents.py": "sha256:bd566d129d9ce5e5dee7dbca7c46e51314ff664c6a22c0cd6b8dd0b35f9cbdea"
@@ -1036,6 +1036,10 @@ one tenant event record without disclosing its payload. Automatic anomaly
 detection, event coverage, cause, and freshness remain open. Agent360 can show
 bounded observed delegation scopes after exact
 identity and party joins, with `effectiveAuthorization=unknown`. Agent360
+exposes exact active capability invoke-grant action and resource scopes with
+delegation evidence only after a complete canonical grant read. Grants that
+specify both a capability and a server are rejected; these recorded scopes do
+not establish effective authorization or policy at execution time. Agent360
 also requires one resolved tenant-owned canonical Agent before reading
 source-asserted inbox/message observations into its communications slot.
 Claims cite the exact identity, inbox, and message evidence; the read does

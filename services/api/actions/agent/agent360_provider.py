@@ -3476,6 +3476,7 @@ class Agent360Provider:
                 and isinstance(record_id, str)
                 and record_id
                 and record_id not in seen_ids
+                and bool(capability_id) != bool(server_ref)
                 and isinstance(actions, list)
                 and actions == ["invoke"]
                 and isinstance(resources, list)
@@ -3696,6 +3697,19 @@ class Agent360Provider:
                 )
             ]
             capability["activeGrantRecordIdsTruncated"] = len(matching) > MAX_READ_LIMIT
+            capability["invokeGrantScopes"] = [
+                {
+                    "grantRecordId": _first(grant, "authorization_id", "delegation_id", "id"),
+                    "actions": list(grant["scope"]["actions"]),
+                    "resources": list(grant["scope"]["resources"]),
+                    "evidenceRef": EvidenceRef(
+                        id=_first(grant, "authorization_id", "delegation_id", "id"),
+                        type="document",
+                        source="delegations",
+                    ).model_dump(mode="json", exclude_none=True),
+                }
+                for grant in matching[:MAX_READ_LIMIT]
+            ] if grant_read_complete else []
 
         evidence_refs: list[dict[str, Any]] = []
         identity = profile.get("identity")
