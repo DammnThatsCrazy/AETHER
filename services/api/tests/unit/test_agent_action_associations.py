@@ -17,7 +17,8 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent.action_associations import (  # noqa: E402
-    JourneyActionReference, RiskActionReference, action_association_read_authorized, read_associated_executions,
+    JourneyActionReference, RiskActionReference, _recorded_delegation_decision,
+    action_association_read_authorized, read_associated_executions,
     validate_action_association,
 )
 from journeys.measurement.episodes.related_authorities import (  # noqa: E402
@@ -29,6 +30,37 @@ from repositories.repos import AgentExecutionRepository  # noqa: E402
 
 NOW = datetime.now(timezone.utc)
 TENANT = "tenant-action-association-tests"
+
+
+@pytest.mark.parametrize("change", ["none", "foreign_grant", "future", "missing_time", "contradictory_status"])
+def test_recorded_action_decision_requires_matching_grant_and_time(change):
+    decision = {"allowed": True, "delegation_id": "grant-1",
+                "evaluated_at": (NOW - timedelta(seconds=1)).isoformat()}
+    row = {"execution_id": "exec-1", "status": "running", "delegation_id": "grant-1",
+           "policy_log": {"delegation_check": decision}}
+    if change == "foreign_grant":
+        decision["delegation_id"] = "grant-2"
+    elif change == "future":
+        decision["evaluated_at"] = (NOW + timedelta(seconds=1)).isoformat()
+    elif change == "missing_time":
+        decision.pop("evaluated_at")
+    elif change == "contradictory_status":
+        row["status"] = "revoked"
+    result = _recorded_delegation_decision(row, NOW, NOW)
+    if change == "none":
+        assert result["decision"] == "allow"
+        assert result["delegationId"] == "grant-1"
+        assert result["evidenceRef"]["source"] == "agent_executions"
+    else:
+        assert result is None
+
+
+def test_recorded_denial_and_temporal_cutoff():
+    row = {"execution_id": "exec-2", "status": "revoked", "delegation_id": None,
+           "policy_log": {"delegation_check": {"allowed": False, "delegation_id": None,
+                                                 "evaluated_at": NOW.isoformat()}}}
+    assert _recorded_delegation_decision(row, NOW, NOW)["decision"] == "deny"
+    assert _recorded_delegation_decision(row, NOW, NOW - timedelta(seconds=1)) is None
 
 
 def test_action_association_requires_exact_slot_policy():
@@ -96,8 +128,10 @@ async def test_journey_association_validates_authority_and_reads_server_lifecycl
     repo = AgentExecutionRepository()
     execution_id = f"association-{uuid4()}"
     await repo.record(
-        execution_id=execution_id, tenant_id=TENANT, agent_id="agent-1", delegation_id=None,
+        execution_id=execution_id, tenant_id=TENANT, agent_id="agent-1", delegation_id="grant-1",
         triggered_by_event_id=None, status="running", action_association=association,
+        policy_log={"delegation_check": {"allowed": True, "delegation_id": "grant-1",
+                                         "evaluated_at": NOW.isoformat()}},
         input_snapshot={"action": "send_notice", "resource": "journey-1"}, create_only=True,
     )
     rows, complete = await read_associated_executions(
@@ -107,6 +141,7 @@ async def test_journey_association_validates_authority_and_reads_server_lifecycl
     )
     assert complete and [row["executionId"] for row in rows] == [execution_id]
     assert rows[0]["dispatchState"] == "not_established"
+    assert rows[0]["recordedDelegationDecision"]["delegationId"] == "grant-1"
     assert rows[0]["externalEffectState"] == "unknown"
     rows, complete = await read_associated_executions(
         tenant_id="other", kind="journey_action_intent", record_id=intent.record_id,

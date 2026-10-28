@@ -11,6 +11,38 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+def _recorded_delegation_decision(row: dict[str, Any], created: datetime,
+                                  as_of: datetime) -> dict[str, Any] | None:
+    """Return only the execution's time-scoped recorded decision, not a new authorization."""
+    from shared.temporal.instant import parse_instant_strict
+
+    policy = row.get("policy_log")
+    decision = policy.get("delegation_check") if isinstance(policy, dict) else None
+    if not isinstance(decision, dict) or not isinstance(decision.get("allowed"), bool):
+        return None
+    try:
+        evaluated = parse_instant_strict(decision.get("evaluated_at"))
+    except (TypeError, ValueError):
+        return None
+    delegation_id = decision.get("delegation_id")
+    if (
+        evaluated > created or evaluated > as_of
+        or delegation_id != row.get("delegation_id")
+        or (decision["allowed"] and (not isinstance(delegation_id, str) or not delegation_id.strip()))
+        or (not decision["allowed"] and row.get("status") != "revoked")
+        or (decision["allowed"] and row.get("status") == "revoked")
+    ):
+        return None
+    return {
+        "decision": "allow" if decision["allowed"] else "deny",
+        "evaluatedAt": evaluated.isoformat(),
+        "delegationId": delegation_id,
+        "semantics": "recorded_request_time_decision_not_current_authorization",
+        "evidenceRef": {"id": row["execution_id"], "type": "event", "source": "agent_executions",
+                        "observedAt": created.isoformat()},
+    }
+
+
 def action_association_read_authorized(request: Any, context: Any, *, surface: str, slot: str, consumer: str) -> bool:
     """Require the frame runtime's exact slot-scoped authorization."""
     return bool(
@@ -182,6 +214,7 @@ async def read_associated_executions(
         projected.append({
             "executionId": execution_id,
             "recordedAt": created.isoformat(), "associationState": "caller_associated",
+            "recordedDelegationDecision": _recorded_delegation_decision(row, created, as_of),
             "dispatchState": "not_established", "externalEffectState": "unknown",
             "evidenceRef": {"id": execution_id, "type": "event", "source": "agent_executions",
                             "observedAt": created.isoformat(),
