@@ -18,7 +18,8 @@ def _recorded_delegation_decision(row: dict[str, Any], created: datetime,
 
     policy = row.get("policy_log")
     decision = policy.get("delegation_check") if isinstance(policy, dict) else None
-    if not isinstance(decision, dict) or not isinstance(decision.get("allowed"), bool):
+    if (not isinstance(decision, dict) or not isinstance(decision.get("allowed"), bool)
+            or not row.get("tenant_id") or policy.get("delegation_check_tenant_id") != row["tenant_id"]):
         return None
     try:
         evaluated = parse_instant_strict(decision.get("evaluated_at"))

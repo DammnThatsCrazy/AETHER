@@ -165,6 +165,7 @@ class FakeSource:
                     "triggered_by_event_id": "event-1",
                     "initiating_principal_user_id": "authenticated-user-1",
                     "policy_log": {
+                        "delegation_check_tenant_id": tenant_id,
                         "tools_used": ["search"],
                         "resources": ["doc-1"],
                         "delegation_check": {
@@ -3075,6 +3076,22 @@ async def test_agent360_does_not_read_agent_sources_for_unverified_entity_subjec
     assert all(section.state == "unknown" for section in result.sections)
     assert result.degradedReasons == ["agent_entity_subject_unresolved"]
     assert "tenant-owned canonical Agent" in result.sections[0].content["reason"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tenant_scope", [None, "foreign-tenant"])
+async def test_agent360_suppresses_decisions_without_exact_recorded_tenant(tenant_scope):
+    class Source(FakeSource):
+        async def executions(self, tenant_id, agent_id, limit):
+            rows = await super().executions(tenant_id, agent_id, limit)
+            rows[0]["policy_log"]["delegation_check_tenant_id"] = tenant_scope
+            return rows
+
+    result = await Agent360Provider(Source()).project(_request(), _context())
+    authority = next(item for item in _sections(result)["state"].content["dimensions"]
+                     if item["id"] == "authority_and_delegation")
+    assert authority["content"]["actionScopedDecisions"] == []
+    assert not any(claim.kind == "server_recorded_delegation_decision" for claim in result.claims)
 
 
 @pytest.mark.asyncio

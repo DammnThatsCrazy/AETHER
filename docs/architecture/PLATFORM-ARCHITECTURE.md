@@ -69,10 +69,10 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:b95abcea1c22ea3671f7fc81ab1ab0da4b10c8f9bab67b9d627ef3a1bf459aa0"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:327991233d2b94ca3d5deb9b64e5ec6605f14ae62073d55046247a1ac17ee9df"
+  "services/api/actions/agent/agent360_provider.py": "sha256:5b1acad0e80d002be6097c056edafd09f3c94d089fc574f6e6c4cedf5c276127"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
-  "services/api/actions/agent/execution360_provider.py": "sha256:9206827e764f0355b75ce853df3447a02bfc03a9134929f1a262299941b8da25"
-  "services/api/actions/agent/user_agents.py": "sha256:bd566d129d9ce5e5dee7dbca7c46e51314ff664c6a22c0cd6b8dd0b35f9cbdea"
+  "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
+  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -975,7 +975,11 @@ Agent360/Execution360 consume only that exact decision-log timestamp after
 checking it against the execution record time. Missing legacy timestamps stay
 unknown; malformed or later-than-execution values degrade. This records when
 the action/resource-scoped evaluation was observed and does not establish
-current or standing authority.
+current or standing authority. Agent execution now supplies the request tenant
+to the delegation engine and records that scope with the decision. The
+Journey360 and Risk360 association reader and Agent360 and Execution360
+providers withhold decisions from older execution records that lack this
+recorded tenant scope.
 If the persisted AgentExecution delegation reference conflicts with the
 delegation reference in its stored policy decision, Execution360 degrades the
 authority scope and omits that decision and its observed authority claim. The

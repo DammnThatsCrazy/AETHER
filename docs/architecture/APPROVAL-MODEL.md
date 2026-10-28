@@ -16,7 +16,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:bd566d129d9ce5e5dee7dbca7c46e51314ff664c6a22c0cd6b8dd0b35f9cbdea"
+  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
   "services/api/value/x402/approvals.py": "sha256:a91ab84affb2e46db240f218f428dd342539327abc1ce3e896cbc2a7ca523fd3"
   "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
   "services/api/value/x402/commerce_routes.py": "sha256:e9cbbefee1efb189141bace31cd793b551089e7263924046fc7846cbc51a55a8"
@@ -125,6 +125,7 @@ Each decision is retained as a typed commerce decision record and the approval
 keeps a pointer to its latest decision. `POST /v1/agents/{agent_id}/execute`
 with `approval_id` rechecks tenant, agent, action, resource, amount, current
 approval status, and the exact latest decision before it records the run. A
-revoked or mismatched approval is rejected. This linkage currently covers the
+revoked or mismatched approval is rejected. The subsequent delegation check
+uses the request tenant and records that tenant with its decision. This linkage currently covers the
 x402 commerce approval path; it does not make every agent action approval-bound
 or prove that an external action occurred.

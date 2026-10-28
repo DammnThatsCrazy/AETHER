@@ -439,6 +439,7 @@ async def execute(
         action=body.action,
         resource=body.resource,
         amount=body.amount,
+        tenant_id=tenant.tenant_id,
     )
     if not decision.allowed:
         # Reject is recorded as a failed execution row so the timeline is complete.
@@ -458,6 +459,7 @@ async def execute(
             confidence=0.0,
             policy_log={
                 "delegation_check": decision.to_dict(),
+                "delegation_check_tenant_id": tenant.tenant_id,
                 "constraints": config.get("constraints"),
             },
             input_snapshot={
@@ -541,6 +543,7 @@ async def execute(
         confidence=body.confidence,
         policy_log={
             "delegation_check": decision.to_dict(),
+            "delegation_check_tenant_id": tenant.tenant_id,
             "constraints": config.get("constraints"),
         },
         input_snapshot={

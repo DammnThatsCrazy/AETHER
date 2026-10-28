@@ -2258,6 +2258,8 @@ async def _resolve_server_delegation_reference(
         return {"canonical_delegation_resolution_status": "not_recorded"}
     policy = row.get("policy_log")
     policy = policy if isinstance(policy, dict) else {}
+    if policy.get("delegation_check_tenant_id") != tenant_id:
+        return {"canonical_delegation_resolution_status": "policy_tenant_scope_unverified"}
     decision = policy.get("delegation_check")
     decision = decision if isinstance(decision, dict) else {}
     if not isinstance(decision.get("allowed"), bool):
@@ -2488,7 +2490,10 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
     policy = raw_policy
     policy = policy if isinstance(policy, dict) else {}
     raw_decision = policy.get("delegation_check")
-    decision = raw_decision if isinstance(raw_decision, dict) else {}
+    decision = (
+        raw_decision if isinstance(raw_decision, dict) and row.get("tenant_id")
+        and policy.get("delegation_check_tenant_id") == row["tenant_id"] else {}
+    )
     recorded_delegation_id = _safe_text(row.get("delegation_id"))
     canonical_delegation_id = _safe_text(row.get("canonical_delegation_id"))
     policy_delegation_id = _safe_text(decision.get("delegation_id"))

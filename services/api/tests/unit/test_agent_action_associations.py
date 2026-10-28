@@ -32,14 +32,16 @@ NOW = datetime.now(timezone.utc)
 TENANT = "tenant-action-association-tests"
 
 
-@pytest.mark.parametrize("change", ["none", "foreign_grant", "future", "missing_time", "contradictory_status"])
+@pytest.mark.parametrize("change", ["none", "foreign_grant", "foreign_tenant", "future", "missing_time", "contradictory_status"])
 def test_recorded_action_decision_requires_matching_grant_and_time(change):
     decision = {"allowed": True, "delegation_id": "grant-1",
                 "evaluated_at": (NOW - timedelta(seconds=1)).isoformat()}
-    row = {"execution_id": "exec-1", "status": "running", "delegation_id": "grant-1",
-           "policy_log": {"delegation_check": decision}}
+    row = {"execution_id": "exec-1", "tenant_id": TENANT, "status": "running", "delegation_id": "grant-1",
+           "policy_log": {"delegation_check": decision, "delegation_check_tenant_id": TENANT}}
     if change == "foreign_grant":
         decision["delegation_id"] = "grant-2"
+    elif change == "foreign_tenant":
+        row["policy_log"]["delegation_check_tenant_id"] = "tenant-other"
     elif change == "future":
         decision["evaluated_at"] = (NOW + timedelta(seconds=1)).isoformat()
     elif change == "missing_time":
@@ -56,9 +58,10 @@ def test_recorded_action_decision_requires_matching_grant_and_time(change):
 
 
 def test_recorded_denial_and_temporal_cutoff():
-    row = {"execution_id": "exec-2", "status": "revoked", "delegation_id": None,
+    row = {"execution_id": "exec-2", "tenant_id": TENANT, "status": "revoked", "delegation_id": None,
            "policy_log": {"delegation_check": {"allowed": False, "delegation_id": None,
-                                                 "evaluated_at": NOW.isoformat()}}}
+                                                 "evaluated_at": NOW.isoformat()},
+                          "delegation_check_tenant_id": TENANT}}
     assert _recorded_delegation_decision(row, NOW, NOW)["decision"] == "deny"
     assert _recorded_delegation_decision(row, NOW, NOW - timedelta(seconds=1)) is None
 
@@ -130,7 +133,8 @@ async def test_journey_association_validates_authority_and_reads_server_lifecycl
     await repo.record(
         execution_id=execution_id, tenant_id=TENANT, agent_id="agent-1", delegation_id="grant-1",
         triggered_by_event_id=None, status="running", action_association=association,
-        policy_log={"delegation_check": {"allowed": True, "delegation_id": "grant-1",
+        policy_log={"delegation_check_tenant_id": TENANT,
+                    "delegation_check": {"allowed": True, "delegation_id": "grant-1",
                                          "evaluated_at": NOW.isoformat()}},
         input_snapshot={"action": "send_notice", "resource": "journey-1"}, create_only=True,
     )

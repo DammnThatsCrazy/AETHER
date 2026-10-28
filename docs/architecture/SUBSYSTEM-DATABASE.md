@@ -29,7 +29,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
   - {'commit': '30d10ccb6', 'reason': 'Reviewed CSV import rights-lineage persistence. The body now documents the additive Bronze metadata and silver_import_facts JSONB refs/record IDs; other repository and database dispatch behavior is unchanged.'}
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:bd566d129d9ce5e5dee7dbca7c46e51314ff664c6a22c0cd6b8dd0b35f9cbdea"
+  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"

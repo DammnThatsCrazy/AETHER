@@ -4504,6 +4504,8 @@ class Agent360Provider:
         canonical_delegations: dict[str, dict[str, Any]],
     ) -> Optional[dict[str, Any]]:
         policy_log = row.get("policy_log") if isinstance(row.get("policy_log"), dict) else {}
+        if not row.get("tenant_id") or policy_log.get("delegation_check_tenant_id") != row["tenant_id"]:
+            return None
         decision = policy_log.get("delegation_check")
         if not isinstance(decision, dict) or not isinstance(decision.get("allowed"), bool):
             return None
@@ -4969,9 +4971,10 @@ class Agent360Provider:
                     )
             policy_log = row.get("policy_log") if isinstance(row.get("policy_log"), dict) else {}
             delegation_check = policy_log.get("delegation_check")
-            if isinstance(delegation_check, dict) and isinstance(
+            if (row.get("tenant_id") and policy_log.get("delegation_check_tenant_id") == row["tenant_id"]
+                and isinstance(delegation_check, dict) and isinstance(
                 delegation_check.get("allowed"), bool
-            ):
+            )):
                 decision = "allow" if delegation_check["allowed"] else "deny"
                 snapshot = row.get("input_snapshot")
                 snapshot = snapshot if isinstance(snapshot, dict) else {}

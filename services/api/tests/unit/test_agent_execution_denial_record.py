@@ -18,8 +18,24 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent import user_agents  # noqa: E402
-from actions.delegation.engine import DelegationDecision  # noqa: E402
+from actions.delegation.engine import DelegationDecision, DelegationEngine  # noqa: E402
 from shared.common.common import BadRequestError, ForbiddenError  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_delegation_evaluation_selects_only_request_tenant():
+    class TenantGrants:
+        async def active_for(self, grantee: str, tenant: str) -> list[dict[str, Any]]:
+            assert grantee == "agent-shared"
+            return [{"delegation_id": "grant-a", "scope": {
+                "actions": ["transfer"], "resources": ["account:4"]
+            }}] if tenant == "tenant-a" else []
+
+    engine = DelegationEngine(TenantGrants())
+    allowed = await engine.evaluate("agent-shared", "transfer", "account:4", tenant_id="tenant-a")
+    denied = await engine.evaluate("agent-shared", "transfer", "account:4", tenant_id="tenant-b")
+    assert allowed.allowed and allowed.delegation_id == "grant-a"
+    assert not denied.allowed and denied.reason == "no_active_delegation"
 
 
 @pytest.mark.asyncio
@@ -51,6 +67,7 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
                 "action": "transfer",
                 "resource": "account:4",
                 "amount": "25",
+                "tenant_id": tenant_id,
             }
             return DelegationDecision(
                 allowed=False,
@@ -124,6 +141,7 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
         "matched_scope": None,
     }
     assert recorded["policy_log"]["constraints"] == {"max_amount": "10"}
+    assert recorded["policy_log"]["delegation_check_tenant_id"] == tenant_id
     assert recorded["input_snapshot"] == {
         "action": "transfer",
         "resource": "account:4",

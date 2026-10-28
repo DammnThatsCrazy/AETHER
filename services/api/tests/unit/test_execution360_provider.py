@@ -105,7 +105,8 @@ def _server_row(tenant_id: str = TENANT, agent_id: str = AGENT) -> dict:
             "resource": "account:4",
             "payload": {"secret": "must-not-appear"},
         },
-        "policy_log": {"delegation_check": {"allowed": True, "delegation_id": "deleg-1"}},
+        "policy_log": {"delegation_check_tenant_id": tenant_id,
+                       "delegation_check": {"allowed": True, "delegation_id": "deleg-1"}},
         "reasoning": "must-not-appear",
         "output": {"secret": "must-not-appear"},
     }
@@ -3621,6 +3622,7 @@ async def test_recorded_denial_without_matching_grant_reaches_agent_frame() -> N
         "canonical_delegation_matched": False,
         "status": "revoked",
         "policy_log": {
+            "delegation_check_tenant_id": TENANT,
             "delegation_check": {
                 "allowed": False,
                 "delegation_id": None,
@@ -3732,6 +3734,7 @@ async def test_execution_authority_check_exposes_persisted_evaluation_timestamp(
         **_server_row(),
         "created_at": "2026-10-16T10:00:03+00:00",
         "policy_log": {
+            "delegation_check_tenant_id": TENANT,
             "delegation_check": {
                 "allowed": True,
                 "delegation_id": "deleg-1",
@@ -3769,6 +3772,7 @@ async def test_execution_authority_check_rejects_decision_timestamp_after_record
         **_server_row(),
         "created_at": "2026-10-16T10:00:03+00:00",
         "policy_log": {
+            "delegation_check_tenant_id": TENANT,
             "delegation_check": {
                 "allowed": True,
                 "delegation_id": "deleg-1",
@@ -3823,6 +3827,12 @@ async def test_execution_authority_check_rejects_ambiguous_or_malformed_decision
     assert duplicate_authority["joinedActionScopedDecisions"] == []
 
     malformed_rows = []
+    legacy = _server_row()
+    legacy["policy_log"].pop("delegation_check_tenant_id")
+    malformed_rows.append(legacy)
+    foreign_scope = _server_row()
+    foreign_scope["policy_log"]["delegation_check_tenant_id"] = "foreign-tenant"
+    malformed_rows.append(foreign_scope)
     malformed_decision = _server_row()
     malformed_decision["policy_log"]["delegation_check"]["allowed"] = "true"
     malformed_rows.append(malformed_decision)

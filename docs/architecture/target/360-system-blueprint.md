@@ -84,7 +84,7 @@ to a current exact cluster definition and consent-scoped cluster or cohort
 memberships backed by graph-ledger replay. Roster completeness, relationship
 topology, historical membership, and freshness remain unknown. Journey and Risk
 can expose an exact caller-associated agent lifecycle request after slot policy.
-The request can include its matching, time-checked recorded delegation decision;
+The request can include its matching, tenant-scoped, time-checked recorded delegation decision;
 current authorization, dispatch and external effect remain unverified. Workflow approval decisions can
 carry a recorded human permission check; agent access remains unbound.
 Profile360 `likely_next_states` rechecks the recorded inference decision against
