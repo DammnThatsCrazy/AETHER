@@ -28,6 +28,7 @@ from config.settings import settings
 from dependencies.providers import get_registry
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
+from actions.agent.action_associations import JourneyActionReference, RiskActionReference, validate_action_association
 from repositories.lake import gold_identity, gold_market
 from shared.common.common import APIResponse, BadRequestError, utc_now
 from shared.events import Event, Topic
@@ -536,6 +537,8 @@ class DispatchActionRequest(BaseModel):
     payload_overrides: dict[str, Any] = Field(default_factory=dict)
     approval_metadata: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None
+    journey_action_reference: JourneyActionReference | None = None
+    risk_action_reference: RiskActionReference | None = None
 
 
 class DeliveryReceiptRequest(BaseModel):
@@ -984,7 +987,36 @@ async def update_action_integration(config_id: str, body: IntegrationConfigReque
 async def _dispatch_action(action_id: str, body: DispatchActionRequest, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("write")
+    if body.journey_action_reference and body.risk_action_reference:
+        raise BadRequestError("Only one dispatch association may be supplied")
     action, decision, recommendation = await _load_dispatch_context(tenant.tenant_id, action_id)
+    replay_dispatch = None
+    if body.idempotency_key:
+        existing = await _dispatches.find_many(
+            {"tenant_id": tenant.tenant_id, "action_id": action_id, "idempotency_key": body.idempotency_key},
+            limit=1,
+        )
+        if existing and (existing[0].get("risk_action_association") or body.risk_action_reference):
+            association = existing[0].get("risk_action_association")
+            reference = body.risk_action_reference
+            if (not isinstance(association, dict) or reference is None
+                    or association.get("record_id") != reference.record_id
+                    or association.get("subject_id") != reference.subject_id
+                    or association.get("subject_kind") != reference.subject_kind
+                    or body.journey_action_reference or existing[0].get("journey_action_association")):
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different risk association")
+            replay_dispatch = existing[0]
+        if existing and (existing[0].get("journey_action_association") or body.journey_action_reference):
+            association = existing[0].get("journey_action_association")
+            reference = body.journey_action_reference
+            if (not isinstance(association, dict) or reference is None
+                    or association.get("record_id") != reference.record_id
+                    or association.get("subject_id") != reference.journey_id
+                    or association.get("version_id") != reference.journey_version_id):
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different journey association")
+            replay_dispatch = existing[0]
     if decision.get("decision_status") != "approved":
         raise BadRequestError("Actions can only be dispatched for approved decisions")
     # Governance policy: elevated/critical dispatch requires an approval_id. This
@@ -992,6 +1024,55 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     # security policy engine (which records a SecurityAuditEvent on block).
     from governance.security.policy_engine import policy_engine
     selected_action = decision.get("selected_action") or {}
+    journey_association = None
+    risk_association = None
+    if body.journey_action_reference is not None and replay_dispatch is None:
+        action_key, action_type = selected_action.get("action_key"), selected_action.get("action_type")
+        recommendation_id = recommendation.get("recommendation_id")
+        if (not isinstance(action_key, str) or not action_key
+                or not isinstance(action_type, str) or not action_type
+                or not isinstance(recommendation_id, str) or not recommendation_id
+                or action.get("action_type") != action_type
+                or decision.get("recommendation_id") != recommendation_id
+                or action.get("recommendation_id") != recommendation_id):
+            raise BadRequestError("Journey dispatch requires exact selected action and recommendation")
+        try:
+            journey_association = await validate_action_association(
+                tenant_id=tenant.tenant_id, action=action_key,
+                resource=body.journey_action_reference.journey_id,
+                journey=body.journey_action_reference,
+                recommendation_id=recommendation_id, action_type=action_type,
+            )
+            journey_association.update(recommendation_id=recommendation_id, action_type=action_type)
+        except ValueError as exc:
+            raise BadRequestError(str(exc)) from exc
+    if body.risk_action_reference is not None and replay_dispatch is None:
+        from actions.agent.risk_dispatch_association import recommendation_matches_risk_subject
+
+        action_key, action_type = selected_action.get("action_key"), selected_action.get("action_type")
+        recommendation_id = recommendation.get("recommendation_id")
+        if (not all(isinstance(value, str) and value for value in (action_key, action_type, recommendation_id))
+                or action.get("tenant_id") != tenant.tenant_id or decision.get("tenant_id") != tenant.tenant_id
+                or recommendation.get("tenant_id") != tenant.tenant_id or action.get("action_id") != action_id
+                or not isinstance(decision.get("decision_id"), str) or not decision.get("decision_id")
+                or action.get("action_type") != action_type
+                or action.get("decision_id") != decision.get("decision_id")
+                or decision.get("recommendation_id") != recommendation_id
+                or action.get("recommendation_id") != recommendation_id
+                or not recommendation_matches_risk_subject(
+                    recommendation, body.risk_action_reference.subject_kind, body.risk_action_reference.subject_id
+                )):
+            raise BadRequestError("Risk dispatch requires exact selected action and recommendation")
+        try:
+            risk_association = await validate_action_association(
+                tenant_id=tenant.tenant_id, action=action_key,
+                resource=body.risk_action_reference.subject_id, risk=body.risk_action_reference,
+            )
+            from actions.agent.risk_dispatch_association import validate_current_risk_decision
+            await validate_current_risk_decision(tenant.tenant_id, risk_association)
+            risk_association.update(recommendation_id=recommendation_id, action_type=action_type)
+        except ValueError as exc:
+            raise BadRequestError(str(exc)) from exc
     approval_level = selected_action.get("requires_approval_level", "none")
     approval_id = (
         (body.approval_metadata or {}).get("approval_id")
@@ -1004,6 +1085,10 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     )
     if not dispatch_policy.allowed:
         raise BadRequestError(dispatch_policy.reason)
+    if replay_dispatch is not None:
+        receipts = await _delivery_receipts.find_many({"dispatch_id": replay_dispatch.get("dispatch_id")}, limit=1)
+        return APIResponse(data={"dispatch": replay_dispatch, "receipt": receipts[0] if receipts else None,
+                                 "replayed": True}).to_dict()
     config = None
     if body.config_id:
         raw_config = await _integrations.find_by_id_or_fail(body.config_id)
@@ -1037,6 +1122,10 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         payload=payload,
         approval_metadata=body.approval_metadata,
         idempotency_key=body.idempotency_key,
+        journey_action_association_record_id=(journey_association or {}).get("record_id"),
+        journey_action_association=journey_association,
+        risk_action_association_record_id=(risk_association or {}).get("record_id"),
+        risk_action_association=risk_association,
         created_at=utc_now().isoformat(),
     )
     # Reserve the tenant/action/key before invoking any connector.  A retry or
@@ -1050,6 +1139,12 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
             dispatch.model_dump(),
         )
         if not created:
+            if saved_dispatch.get("journey_action_association") != journey_association:
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different journey association")
+            if saved_dispatch.get("risk_action_association") != risk_association:
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different risk association")
             receipts = await _delivery_receipts.find_many(
                 {"dispatch_id": saved_dispatch.get("dispatch_id")}, limit=1
             )

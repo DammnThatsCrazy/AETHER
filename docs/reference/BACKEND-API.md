@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:e757937553a5867833832460a39bc4c09c714440b53c9252e5bd2a83863dfb59"
+  "services/api/actions/": "sha256:6f166997b2d441ce52c1e238d8e3148c125ae7fe32a22b5a0a0279efa18670e5"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,11 +33,11 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:c9fbf5364195588b0d5abc5a4b9941103cc696ed84d77bba2508e74339549569"
-  "services/api/journeys/": "sha256:2291264ffaed152bd75e79e1a246fe9254b798543dee19f06336dc4deb60ab87"
+  "services/api/intelligence/": "sha256:b89b7959055504bfa895b9abdc71760f265ed5ecab709f4ecd11914fe8a27028"
+  "services/api/journeys/": "sha256:e38ae77e64ebcffe1073921c61727b802aeebdd2d06a232789861129375f0836"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:f5c16a09ff882f5aa5d9edacaa2c0251b4d55e2928333b63d0de090d3742e995"
+  "services/api/value/": "sha256:4ba49ac2d971c4320513f9a4ae2dfba5935819dae3fae40d60f03aa3aa331fa0"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification

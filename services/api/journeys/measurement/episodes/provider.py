@@ -3098,6 +3098,51 @@ class Episode360Provider:
             "semantics": "caller_associated_agent_lifecycle_not_dispatch_or_external_effect",
             "coverage": "bounded_exact_record_only",
         }
+        dispatch_claims: list[tuple[str, list[EvidenceRef]]] = []
+        dispatch_authorized = (
+            context.tenantId == request.tenantId and context.projectionId == "episode360"
+            and request.asOf is None and context.asOf is None and request.timeRange is None
+            and request.temporalMode not in {"as_of", "compare", "relative"}
+            and any(auth.tenantId == request.tenantId and auth.sourceSurfaceId == "journey360"
+                    and auth.sourceSubject == request.subject and auth.sourceSlotId == "recommended_actions"
+                    and auth.consumerProjectionId == "episode360" and auth.targetProjectionId == "episode360"
+                    and auth.capabilityKey == "actions.dispatch.read" and auth.policyState == "allowed"
+                    and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
+                    for auth in context.experience360ReadAuthorizations)
+        )
+        if dispatch_authorized:
+            from actions.agent.journey_dispatch_association import read_journey_dispatches
+
+            if len(action_intents["records"]) > 20:
+                action_intents["warnings"].append("journey_action_dispatch_read_truncated")
+            for item in action_intents["records"][:20]:
+                try:
+                    rows, complete = await read_journey_dispatches(
+                        tenant_id=request.tenantId, journey_id=journey_id,
+                        version_id=str(journey.get("journey_version_id") or ""),
+                        record_id=item["recordId"], action_key=item["actionKey"],
+                        action_type=item["actionType"], recommendation_id=item["recommendationId"],
+                        recorded_at=datetime.fromisoformat(item["recordedAt"].replace("Z", "+00:00")),
+                    )
+                except Exception:  # noqa: BLE001 - authority failures degrade this slot
+                    rows, complete = [], False
+                item["actionDispatches"] = rows
+                item["actionDispatchRead"] = "complete_within_bound" if complete else "unknown"
+                intent_refs = list(item["evidenceRefs"])
+                for row in rows:
+                    refs = _dedupe_evidence_refs([
+                        *(EvidenceRef.model_validate(ref) for ref in intent_refs),
+                        *(EvidenceRef.model_validate(ref) for ref in row["evidenceRefs"]),
+                    ])
+                    item["evidenceRefs"].extend(row["evidenceRefs"])
+                    action_intents["evidenceRefs"].extend(row["evidenceRefs"])
+                    dispatch_claims.append((row["dispatchId"], refs))
+                if not complete:
+                    action_intents["warnings"].append("journey_action_dispatch_read_incomplete")
+        elif action_intents["records"]:
+            for item in action_intents["records"]:
+                item["actionDispatchRead"] = "unknown"
+            action_intents["warnings"].append("journey_action_dispatch_authority_unavailable")
         if action_intents["warnings"]:
             action_intents["state"] = "degraded"
             action_intents["count"] = None
@@ -3156,6 +3201,14 @@ class Episode360Provider:
             if request.includeClaims is not False and steps_available and not scope_mismatch
             else []
         )
+        if request.includeClaims is not False and steps_available and not scope_mismatch:
+            for dispatch_id, refs in dispatch_claims:
+                claims.append(ClaimEnvelope(
+                    id=f"episode360:{quote(journey_id, safe='')}:dispatch:{quote(dispatch_id, safe='')}",
+                    kind="journey_linked_action_dispatch", subject=request.subject, evidenceRefs=refs,
+                    claims=["An explicit tenant journey intent is linked to this canonical action dispatch and its decision records; dispatch status does not independently prove an external effect."],
+                    claimState=EpistemicStatus.OBSERVED, domainSlotIds=["recommended_actions", "evidence_trace"],
+                ))
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=request.tenantId,

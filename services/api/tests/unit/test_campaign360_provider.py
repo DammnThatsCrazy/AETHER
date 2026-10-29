@@ -806,6 +806,8 @@ async def test_exact_touchpoint_source_classification_is_degraded_and_evidenced(
     ("revision_change", "resolved"),
     [
         ({}, True),
+        ({"classification": '{"source_class":"owned"}'}, True),
+        ({"classification": '{invalid'}, False),
         ({"tenant_id": "tenant-b"}, False),
         ({"touchpoint_id": "other-touchpoint"}, False),
         ({"is_current": False}, False),
@@ -1523,6 +1525,8 @@ async def test_campaign_signal_sources_join_exact_touchpoint_event_with_partial_
     ("change", "expected_observations"),
     [
         ({}, "available"),
+        ({"typed_event": True}, "available"),
+        ({"conflicting_event": True}, "unknown"),
         ({"tenant_id": "tenant-b"}, "unknown"),
         ({"source": "provider"}, "unknown"),
         ({"observation_type": "other"}, "unknown"),
@@ -1554,6 +1558,10 @@ async def test_campaign_signal_observation_requires_exact_gateway_admitted_bronz
             }
         },
     }
+    if change.get("typed_event"):
+        row["event_id"] = row.pop("provider_record_id")
+    if change.get("conflicting_event"):
+        row["event_id"] = "other-event"
     if "tenant_id" in change:
         row["tenant_id"] = change["tenant_id"]
     if "source" in change:
@@ -1691,6 +1699,35 @@ async def test_campaign_signal_sources_do_not_read_when_projection_tenant_disagr
     assert _slot(result, "signal_sources")["state"] == "unknown"
     context = _section(result, "state").content["domainContexts"]["signal_sources"]
     assert context["reason"] == "projection_context_tenant_scope_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_repository_observation_reader_queries_both_bronze_id_shapes(monkeypatch):
+    from repositories import lake
+
+    calls = []
+    legacy = {"tenant_id": "tenant-a", "provider_record_id": "event-a"}
+    typed = {"tenant_id": "tenant-a", "event_id": "event-a"}
+    both = {"tenant_id": "tenant-a", "event_id": "event-a", "provider_record_id": "event-a"}
+
+    class FakeBronzeRepository:
+        def __init__(self, name):
+            assert name == "sdk_events"
+
+        async def find_many(self, *, filters, limit):
+            calls.append((filters, limit))
+            return [legacy, both] if "provider_record_id" in filters else [typed, both]
+
+    monkeypatch.setattr(lake, "BronzeRepository", FakeBronzeRepository)
+    result = await RepositoryCampaign360Source().signal_observations(
+        "tenant-a", ["event-a"], limit=1
+    )
+
+    assert calls == [
+        ({"tenant_id": "tenant-a", "provider_record_id": "event-a"}, 2),
+        ({"tenant_id": "tenant-a", "event_id": "event-a"}, 2),
+    ]
+    assert result.available and result.rows == [legacy, both, typed]
 
 
 @pytest.mark.asyncio

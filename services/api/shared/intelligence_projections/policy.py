@@ -149,6 +149,41 @@ class RequestAccessPolicyEvaluator:
     def __init__(self, request: Request) -> None:
         self._request = request
 
+    async def evaluate_risk_dispatch_read(self, frame_request: Experience360FrameRequest) -> Experience360PolicyDisposition:
+        actor = tenant_actor(self._request)
+        if actor.tenant_id != frame_request.tenantId or frame_request.surfaceId != "risk360":
+            raise ValueError("risk dispatch policy scope mismatch")
+        decision = await access_control.evaluate(
+            actor_id=actor.actor_id, actor_type=actor.actor_type, roles=actor.roles,
+            domain="actions", action="read", actor_tenant=actor.tenant_id,
+            target_tenant=frame_request.tenantId, resource_type="risk_intervention_dispatch",
+            resource_id=frame_request.subject.id, ip_address=actor.ip_address, user_agent=actor.user_agent,
+        )
+        return Experience360PolicyDisposition(
+            state="allowed" if decision.allowed else "denied", policyIds=[decision.policy_key],
+            reasonCodes=["access_granted" if decision.allowed else "access_denied"], evaluatedAt=_utc_now_iso(),
+        )
+
+    async def evaluate_journey_dispatch_read(
+        self, frame_request: Experience360FrameRequest
+    ) -> Experience360PolicyDisposition:
+        actor = tenant_actor(self._request)
+        if (actor.tenant_id != frame_request.tenantId or frame_request.surfaceId != "journey360"
+                or frame_request.subject.kind != "journey"):
+            raise ValueError("journey dispatch policy scope mismatch")
+        decision = await access_control.evaluate(
+            actor_id=actor.actor_id, actor_type=actor.actor_type, roles=actor.roles,
+            domain="actions", action="read", actor_tenant=actor.tenant_id,
+            target_tenant=frame_request.tenantId, resource_type="journey_action_dispatch",
+            resource_id=frame_request.subject.id, ip_address=actor.ip_address,
+            user_agent=actor.user_agent,
+        )
+        return Experience360PolicyDisposition(
+            state="allowed" if decision.allowed else "denied", policyIds=[decision.policy_key],
+            reasonCodes=["access_granted" if decision.allowed else "access_denied"],
+            evaluatedAt=_utc_now_iso(),
+        )
+
     async def evaluate(
         self, frame_request: Experience360FrameRequest
     ) -> Experience360PolicyEvaluation:

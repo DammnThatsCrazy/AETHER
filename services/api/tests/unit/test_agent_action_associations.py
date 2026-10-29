@@ -158,6 +158,12 @@ async def test_journey_association_validates_authority_and_reads_server_lifecycl
             tenant_id=TENANT, action="other", resource="journey-1", journey=ref,
             journey_authority=Intents(intent), journey_repository=Journeys(), now=NOW,
         )
+    for mismatch in ({"recommendation_id": "other"}, {"action_type": "other"}):
+        with pytest.raises(ValueError):
+            await validate_action_association(
+                tenant_id=TENANT, action="send_notice", resource="journey-1", journey=ref,
+                journey_authority=Intents(intent), journey_repository=Journeys(), now=NOW, **mismatch,
+            )
 
 
 @pytest.mark.asyncio

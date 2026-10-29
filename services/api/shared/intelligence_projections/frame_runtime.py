@@ -173,6 +173,25 @@ async def build_experience360_frame(
     else:
         readable_slot_ids = set()
 
+    journey_dispatch_policy = None
+    risk_dispatch_policy = None
+    risk_dispatch_evaluator = getattr(evaluator, "evaluate_risk_dispatch_read", None)
+    if (request.surfaceId == "risk360" and "interventions" in readable_slot_ids
+            and callable(risk_dispatch_evaluator)):
+        try:
+            risk_dispatch_policy = Experience360PolicyDisposition.model_validate(await risk_dispatch_evaluator(request))
+        except Exception:  # noqa: BLE001
+            risk_dispatch_policy = None
+    dispatch_evaluator = getattr(evaluator, "evaluate_journey_dispatch_read", None)
+    if (request.surfaceId == "journey360" and request.subject.kind == "journey"
+            and "recommended_actions" in readable_slot_ids and callable(dispatch_evaluator)):
+        try:
+            journey_dispatch_policy = Experience360PolicyDisposition.model_validate(
+                await dispatch_evaluator(request)
+            )
+        except Exception:  # noqa: BLE001 - missing authority fails closed
+            journey_dispatch_policy = None
+
     account_policy: Optional[dict[str, Experience360PolicyDisposition]] = None
     account_identity_read: Optional[Any] = None
     if request.surfaceId == "account360" and readable_slot_ids:
@@ -328,6 +347,31 @@ async def build_experience360_frame(
                     consumerProjectionId=projection_id, targetProjectionId="agent360",
                     capabilityKey="agent360.read", policyState="allowed",
                     policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
+                ))
+            if (request.surfaceId == "journey360" and projection_id == "episode360"
+                    and action_scope in readable_slot_ids and disposition is not None
+                    and disposition.state == "allowed" and bound
+                    and journey_dispatch_policy is not None
+                    and journey_dispatch_policy.state == "allowed"
+                    and journey_dispatch_policy.policyIds and journey_dispatch_policy.evaluatedAt):
+                read_authorizations.append(ProjectionReadAuthorization(
+                    tenantId=request.tenantId, sourceSurfaceId="journey360",
+                    sourceSubject=request.subject, sourceSlotId="recommended_actions",
+                    consumerProjectionId="episode360", targetProjectionId="episode360",
+                    capabilityKey="actions.dispatch.read", policyState="allowed",
+                    policyIds=list(journey_dispatch_policy.policyIds),
+                    policyEvaluatedAt=journey_dispatch_policy.evaluatedAt,
+                ))
+            if (request.surfaceId == "risk360" and projection_id == "risk360"
+                    and action_scope in readable_slot_ids and disposition is not None
+                    and disposition.state == "allowed" and bound and risk_dispatch_policy is not None
+                    and risk_dispatch_policy.state == "allowed" and risk_dispatch_policy.policyIds
+                    and risk_dispatch_policy.evaluatedAt):
+                read_authorizations.append(ProjectionReadAuthorization(
+                    tenantId=request.tenantId, sourceSurfaceId="risk360", sourceSubject=request.subject,
+                    sourceSlotId="interventions", consumerProjectionId="risk360", targetProjectionId="risk360",
+                    capabilityKey="actions.dispatch.read", policyState="allowed",
+                    policyIds=list(risk_dispatch_policy.policyIds), policyEvaluatedAt=risk_dispatch_policy.evaluatedAt,
                 ))
         if request.surfaceId == "workflow360" and projection_id == "workflow360":
             slot_id = "actions"

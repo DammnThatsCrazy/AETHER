@@ -148,3 +148,94 @@ def _context(action_id: str = "action-1") -> tuple[dict, dict, dict]:
 
 async def _async_context(action_id: str = "action-1") -> tuple[dict, dict, dict]:
     return _context(action_id)
+
+
+async def test_journey_dispatch_link_is_validated_and_idempotency_cannot_rebind(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from actions.agent.action_associations import validate_action_association
+    from journeys.measurement.episodes.related_authorities import AuthorityFactRead, JourneyActionIntentRecord
+    from graph.operational_intelligence.models import EvidenceRef
+    from shared.common.common import ConflictError
+
+    now = datetime.now(timezone.utc)
+    intent = JourneyActionIntentRecord(record_id="intent-record-1", tenant_id="tenant-a", journey_id="journey-1",
+        journey_version_id="version-1", action_intent_id="intent-1", recommendation_id="rec-1", action_key="review",
+        action_type="review", label="Review", actor_ref="user-a", occurred_at=now-timedelta(seconds=2),
+        recorded_at=now-timedelta(seconds=1), evidence_refs=[EvidenceRef(id="version-1", type="event", source="journey_versions"),
+                                                            EvidenceRef(id="step-1", type="event", source="journey_steps")])
+    class Journeys:
+        async def get_current(self, tenant_id, journey_id):
+            return {"tenant_id": tenant_id, "journey_id": journey_id, "journey_version_id": "version-1", "is_current": True}
+    class Intents:
+        async def list_for_subject(self, *args, **kwargs):
+            return AuthorityFactRead(records=(intent.model_dump(mode="json"),), available=True, complete=True)
+    async def validate(**kwargs):
+        return await validate_action_association(**kwargs, journey_authority=Intents(), journey_repository=Journeys())
+    async def context(_tenant, action_id):
+        action, decision, recommendation = _context(action_id)
+        action["recommendation_id"] = "rec-1"
+        decision["selected_action"]["action_key"] = "review"
+        return action, decision, recommendation
+    target = _Target()
+    monkeypatch.setattr(routes._action_targets, "get", lambda _name: target)
+    monkeypatch.setattr(routes, "_load_dispatch_context", context)
+    monkeypatch.setattr(routes, "validate_action_association", validate)
+    action, decision, recommendation = await context("tenant-a", "action-1")
+    await routes._actions.insert("action-1", action)
+    await routes._decisions.insert("decision-1", decision)
+    await routes._recommendations.insert("rec-1", recommendation)
+    reference = {"journey_id": "journey-1", "journey_version_id": "version-1", "record_id": "intent-record-1"}
+    body = routes.DispatchActionRequest(target_type="test", idempotency_key="journey-key", journey_action_reference=reference)
+    result = await routes._dispatch_action("action-1", body, _request("tenant-a"))
+    dispatch = result["data"]["dispatch"]
+    assert dispatch["journey_action_association_record_id"] == "intent-record-1"
+    assert dispatch["journey_action_association"]["recommendation_id"] == "rec-1"
+    from actions.agent.journey_dispatch_association import read_journey_dispatches
+    rows, complete = await read_journey_dispatches(tenant_id="tenant-a", journey_id="journey-1", version_id="version-1",
+        record_id="intent-record-1", action_key="review", action_type="review", recommendation_id="rec-1",
+        recorded_at=intent.recorded_at)
+    assert complete and rows[0]["dispatchId"] == dispatch["dispatch_id"]
+    assert rows[0]["externalEffect"] == "not_independently_verified"
+    async def unavailable_validation(**kwargs):
+        raise ValueError("journey intent is no longer current")
+    monkeypatch.setattr(routes, "validate_action_association", unavailable_validation)
+    assert (await routes._dispatch_action("action-1", body, _request("tenant-a")))["data"]["replayed"]
+    with pytest.raises(ConflictError):
+        await routes._dispatch_action("action-1", routes.DispatchActionRequest(target_type="test", idempotency_key="journey-key"), _request("tenant-a"))
+    assert target.calls == 1
+
+
+async def test_risk_dispatch_binding_replays_without_revalidating_and_rejects_rebinding(monkeypatch):
+    from actions.agent import risk_dispatch_association
+    from shared.common.common import ConflictError
+
+    target = _Target()
+    async def context(_tenant, action_id):
+        action, decision, recommendation = _context(action_id)
+        action["recommendation_id"] = "rec-1"
+        decision["selected_action"]["action_key"] = "review"
+        recommendation["entity_id"] = "entity-1"
+        return action, decision, recommendation
+    async def validate(**kwargs):
+        return {"kind": "risk_intervention", "record_id": "risk-1", "subject_id": "entity-1",
+                "subject_kind": "entity", "intervention_id": "intervention-1", "action_key": "review",
+                "link_state": "caller_associated"}
+    async def current(*args):
+        return None
+    monkeypatch.setattr(routes._action_targets, "get", lambda _name: target)
+    monkeypatch.setattr(routes, "_load_dispatch_context", context)
+    monkeypatch.setattr(routes, "validate_action_association", validate)
+    monkeypatch.setattr(risk_dispatch_association, "validate_current_risk_decision", current)
+    action, _, _ = await context("tenant-a", "action-1")
+    await routes._actions.insert("action-1", action)
+    reference = {"record_id": "risk-1", "subject_kind": "entity", "subject_id": "entity-1"}
+    body = routes.DispatchActionRequest(target_type="test", idempotency_key="risk-key", risk_action_reference=reference)
+    result = await routes._dispatch_action("action-1", body, _request("tenant-a"))
+    assert result["data"]["dispatch"]["risk_action_association"]["recommendation_id"] == "rec-1"
+    async def unavailable(*args, **kwargs):
+        raise AssertionError("replay must use stored binding")
+    monkeypatch.setattr(routes, "validate_action_association", unavailable)
+    assert (await routes._dispatch_action("action-1", body, _request("tenant-a")))["data"]["replayed"]
+    with pytest.raises(ConflictError):
+        await routes._dispatch_action("action-1", routes.DispatchActionRequest(target_type="test", idempotency_key="risk-key"), _request("tenant-a"))
+    assert target.calls == 1

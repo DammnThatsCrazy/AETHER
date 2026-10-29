@@ -85,6 +85,7 @@ async def validate_action_association(
     risk: RiskActionReference | None = None,
     journey_authority: Any = None, journey_repository: Any = None,
     risk_repository: Any = None, now: datetime | None = None,
+    recommendation_id: str | None = None, action_type: str | None = None,
 ) -> dict[str, str] | None:
     """Resolve and validate exactly one caller reference against owning records."""
     if journey is not None and risk is not None:
@@ -123,6 +124,8 @@ async def validate_action_association(
             record.tenant_id != tenant_id or record.journey_id != journey.journey_id
             or record.journey_version_id != journey.journey_version_id
             or record.action_key != action or record.status != "proposed"
+            or (recommendation_id is not None and record.recommendation_id != recommendation_id)
+            or (action_type is not None and record.action_type != action_type)
             or record.occurred_at > anchor or record.recorded_at > anchor
         ):
             raise ValueError("journey intent does not match action or scope")

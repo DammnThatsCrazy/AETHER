@@ -1536,6 +1536,32 @@ class Risk360Provider:
                     interventions_degraded = True
                     interventions_reason = interventions_reason or "risk_action_association_read_incomplete"
 
+        intervention_dispatches: dict[str, list[dict[str, Any]]] = {}
+        dispatch_authorized = (
+            context.tenantId == request.tenantId and context.projectionId == "risk360"
+            and _is_current_subject_read(request, context)
+            and any(auth.tenantId == request.tenantId and auth.sourceSurfaceId == "risk360"
+                    and auth.sourceSubject == request.subject and auth.sourceSlotId == "interventions"
+                    and auth.consumerProjectionId == "risk360" and auth.targetProjectionId == "risk360"
+                    and auth.capabilityKey == "actions.dispatch.read" and auth.policyState == "allowed"
+                    and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
+                    for auth in context.experience360ReadAuthorizations)
+        )
+        if dispatch_authorized and interventions and intervention_anchor_reason is None:
+            from actions.agent.risk_dispatch_association import read_risk_dispatches
+
+            eligible = [record for record in interventions if record.record_kind == "decision"
+                        and record.decision_state == "approved"]
+            if len(eligible) > 20:
+                interventions_degraded = True
+                interventions_reason = interventions_reason or "risk_dispatch_read_truncated"
+            for record in eligible[:20]:
+                rows, complete = await read_risk_dispatches(tenant_id=tenant_id, record=record)
+                intervention_dispatches[record.record_id] = rows
+                if not complete:
+                    interventions_degraded = True
+                    interventions_reason = interventions_reason or "risk_dispatch_read_incomplete"
+
         evidence = self._collect_evidence(
             assessment,
             signals,
@@ -1549,6 +1575,8 @@ class Risk360Provider:
             *evidence,
             *(EvidenceRef.model_validate(row["evidenceRef"])
               for rows in intervention_actions.values() for row in rows),
+            *(EvidenceRef.model_validate(ref) for rows in intervention_dispatches.values()
+              for row in rows for ref in row["evidenceRefs"]),
         ])
         if support_case_evidence:
             evidence = _dedupe_evidence([*evidence, *support_case_evidence])
@@ -1643,10 +1671,18 @@ class Risk360Provider:
                 linked = intervention_actions.get(row.get("recordId"), [])
                 row["agentActionRequests"] = linked
                 row["evidenceRefs"].extend(item["evidenceRef"] for item in linked)
+                dispatch_rows = intervention_dispatches.get(row.get("recordId"), [])
+                row["dispatches"] = dispatch_rows
+                row["evidenceRefs"].extend(ref for item in dispatch_rows for ref in item["evidenceRefs"])
             summary["actionRequestAssociation"] = {
                 "state": "degraded" if interventions_degraded else "partial" if intervention_actions else "unknown",
                 "semantics": "caller_associated_agent_lifecycle_not_dispatch_or_external_effect",
                 "coverage": "bounded_exact_approved_decisions_only",
+            }
+            summary["dispatchAssociation"] = {
+                "state": "degraded" if interventions_degraded else "partial" if dispatch_authorized else "unknown",
+                "semantics": "caller_associated_recorded_lifecycle_not_external_effect_or_event_time_authority",
+                "coverage": "unknown",
             }
         claims = self._build_claims(
             request,

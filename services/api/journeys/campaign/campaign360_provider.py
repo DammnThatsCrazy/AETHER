@@ -592,10 +592,24 @@ class RepositoryCampaign360Source:
 
             async def read_one(event_id: str) -> list[dict[str, Any]]:
                 async with semaphore:
-                    return await repository.find_many(
+                    legacy = await repository.find_many(
                         filters={"tenant_id": tenant_id, "provider_record_id": event_id},
                         limit=2,
                     )
+                    typed = await repository.find_many(
+                        filters={"tenant_id": tenant_id, "event_id": event_id},
+                        limit=2,
+                    )
+                    if not isinstance(legacy, list) or not isinstance(typed, list):
+                        raise ValueError("invalid Bronze result")
+                    remaining = list(legacy)
+                    extra = []
+                    for row in typed:
+                        if row in remaining:
+                            remaining.remove(row)
+                        else:
+                            extra.append(row)
+                    return legacy + extra
 
             pages = await asyncio.gather(*(read_one(event_id) for event_id in safe_ids))
         except Exception:  # noqa: BLE001 - observation authority failure is slot-local
@@ -2492,6 +2506,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             row = rows[0]
             item = requested[key]
             classification = row.get("classification")
+            if isinstance(classification, str):
+                try:
+                    classification = json.loads(classification)
+                except (TypeError, ValueError):
+                    return {}
             classified_at = _string_or_none(row.get("classified_at"))
             pointer_at = item.get("classifiedAt")
             try:
@@ -2879,14 +2898,16 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             return unknown("campaign_observation_result_invalid")
         if any(
             row.get("tenant_id") != request.tenantId
-            or row.get("provider_record_id") not in sdk_events
+            or (row.get("provider_record_id") or row.get("event_id")) not in sdk_events
+            or (row.get("provider_record_id") and row.get("event_id")
+                and row["provider_record_id"] != row["event_id"])
             or row.get("source") != "sdk"
             for row in read.rows
         ):
             return unknown("campaign_observation_scope_mismatch")
         rows_by_id: dict[str, list[dict[str, Any]]] = {}
         for row in read.rows:
-            rows_by_id.setdefault(row["provider_record_id"], []).append(row)
+            rows_by_id.setdefault(row.get("provider_record_id") or row["event_id"], []).append(row)
         if any(len(rows) > 1 for rows in rows_by_id.values()):
             return unknown("campaign_observation_identifier_ambiguous")
 

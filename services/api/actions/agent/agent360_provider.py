@@ -3526,6 +3526,11 @@ class Agent360Provider:
             resources = scope.get("resources") if isinstance(scope, dict) else None
             capability_id = row.get("capability_id")
             server_ref = row.get("server_ref")
+            boundaries_valid = all(
+                value is None
+                or (isinstance(value, str) and try_parse_instant(value)[0] is not None)
+                for value in (row.get("starts_at"), row.get("ends_at"), row.get("revoked_at"))
+            )
             expected_resource = (
                 f"capability:{capability_id}"
                 if isinstance(capability_id, str) and capability_id
@@ -3542,11 +3547,18 @@ class Agent360Provider:
                 and record_id
                 and record_id not in seen_ids
                 and bool(capability_id) != bool(server_ref)
+                and all(
+                    value is None or (isinstance(value, str) and value == value.strip())
+                    for value in (capability_id, server_ref)
+                )
                 and isinstance(actions, list)
                 and actions == ["invoke"]
                 and isinstance(resources, list)
                 and expected_resource is not None
                 and resources == [expected_resource]
+                and expected_resource == expected_resource.strip()
+                and "*" not in expected_resource
+                and boundaries_valid
                 and row.get("state") in {"active", "pending", "revoked", "expired"}
             )
             if not exact:

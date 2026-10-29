@@ -164,6 +164,10 @@ class ActionDispatch(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     approval_metadata: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None
+    journey_action_association_record_id: str | None = None
+    journey_action_association: dict[str, str] | None = None
+    risk_action_association_record_id: str | None = None
+    risk_action_association: dict[str, str] | None = None
     created_at: str
     dispatched_at: str | None = None
     updated_at: str | None = None
