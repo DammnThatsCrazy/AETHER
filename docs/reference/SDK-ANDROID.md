@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:34861c102093d8d86446051343f020f21df62a5d2674f3c43534568468f85f27"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:0f65cda990c9aa4559dc08fced6a7cbeac7c1c26f411dab1439bef8accf81bfe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
+  "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
+  "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -504,6 +504,8 @@ explicit source namespace; missing or invalid namespace remains unresolved and
 does not inherit the actor's namespace. Consent and
 active tenant deployment validation still apply. Other wrapper/type-exposed
 events are not publicly SDK-emittable under the current registry contract.
+
+Separately, the 37 agent behavior taxonomy types added for agent behavioral intelligence (objectives, decisions, candidates, authorization, tool retry/switch, execution, quotes and transactions, information and memory references) are `sdkEmitable` for the server agent SDK. Ingestion accepts them, and `agent_subagent_spawned`, only with a validated deployment context; see the [external agent telemetry plane](source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md).
 
 ## x402 Lifecycle Emitters
 

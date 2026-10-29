@@ -24,7 +24,7 @@ owners below agree with the
 [runtime authority map](../blueprints/architecture-reset/runtime-authority-map.md),
 which remains the authority for L0–L8 runtime ownership.
 
-Related: [ADRs](../decisions/agent-behavior/README.md) ·
+Related: [ADRs](../decisions/agent-behavior/README.md) · [work-order status](02-work-order-status.md) ·
 [golden scenarios](01-golden-scenarios.md).
 
 ## 1. What already exists for agents

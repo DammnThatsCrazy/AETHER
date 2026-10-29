@@ -1040,6 +1040,19 @@
       "since_version": "0.1.0-alpha.0"
     },
     {
+      "path": "docs/architecture/agent-behavior/02-work-order-status.md",
+      "title": "Agent Behavioral Intelligence — Work-Order Status",
+      "slug": "architecture/agent-behavior/work-order-status",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
       "path": "docs/architecture/blueprints/SDK_PRODUCTIZATION_CLOSE_OUT_AND_CERTIFICATION_BLUEPRINT.md",
       "title": "SDK Productization Close-Out Blueprint",
       "slug": "blueprints/sdk-close-out",
@@ -2232,6 +2245,19 @@
       "path": "docs/architecture/decisions/agent-behavior/ADR-AB-010-placement-follows-current-owners.md",
       "title": "ADR-AB-010: Schema paths follow current post-#734 ownership",
       "slug": "decisions/agent-behavior/adr-ab-010-placement-follows-current-owners",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-011-trust-under-risk.md",
+      "title": "ADR-AB-011: Agent trust and reputation live under Risk, kept apart",
+      "slug": "decisions/agent-behavior/adr-ab-011-trust-under-risk",
       "section": "architecture",
       "visibility": "I",
       "audience": [

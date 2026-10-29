@@ -47,22 +47,18 @@ Today the current expectations cover:
 
 - Silver facts in `silver_agent_execution_facts`.
 - Spawn lineage: agent count, depth, per-child tools and outcomes, and the source event behind each spawn edge.
-- Tool results and their status.
-- Policy decisions.
+- Tool results and their status, and GS-D's failure resolution (retry, then switch, then resolved).
+- Policy decisions, and GS-C's DecisionEnvelope, OpportunityEnvelope and ActionDisposition (`constrained_non_action`).
 - Fleet hypotheses: status, priority, person link, confidence cap, competing explanations.
-- `AGENT_USED_TOOL_OBS` graph edges.
+- `AGENT_USED_TOOL_OBS` and `SPAWNED_SUBAGENT` graph edges.
 - The handoff link.
 
-Every scenario also has pending blocks:
+Still pending:
 
-- DecisionEnvelope (WO-050)
-- AgentJourney (WO-060)
-- A read model (WO-093 or WO-110 to WO-112)
-
-GS-A and GS-B add pending `SPAWNED_SUBAGENT` and `HUMAN_DELEGATED_TO_AGENT`
-edges (WO-021). GS-C adds pending OpportunityEnvelope (WO-045) and
-ActionDisposition (WO-046) blocks. GS-D adds a pending failure-resolution
-block (WO-073).
+- DecisionEnvelopes for GS-A, GS-B and GS-D (WO-050). These need explicit decision events, which those scenarios do not emit.
+- AgentJourney join to the human journey (WO-060). GS-A emits no `journeyId`.
+- Scenario read models (WO-093, WO-110 – WO-112).
+- The `HUMAN_DELEGATED_TO_AGENT` grant edge (WO-021).
 
 ## Rules for the fixture
 
