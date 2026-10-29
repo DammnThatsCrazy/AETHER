@@ -10,7 +10,7 @@ since_version: 0.1.0
 # Event Registry
 
 **Canonical source of truth:** `packages/shared/contracts/event-registry.json`  
-(416 event types across 25 families, contract v0.1.0-alpha.0, schema v2.2.0)  
+(453 event types across 25 families, contract v0.1.0-alpha.0, schema v2.2.0)  
 **Generated artifacts:** `packages/shared/events.ts` (TypeScript — `EventType`,
 `EventFamily`, `EVENT_FAMILY`, `EVENT_CONSENT_PURPOSE`, field-trust / semantic-level
 maps) and
@@ -19,12 +19,12 @@ maps) and
 (`Aether.swift` / `Aether.kt`) and the web consent map.  
 **Regenerate with:** `python scripts/generate_contracts.py`  
 **Authoritative per-event reference:** `docs/_generated/event-registry-table.md`
-— every one of the 416 types with **Family | Required Purposes | Privacy Class |
+— every one of the 453 types with **Family | Required Purposes | Privacy Class |
 Retention Class | Description** (deprecated events are marked).
 
 Every `EventType` the SDK is permitted to emit must appear in the JSON registry.
 Emitting anything outside this list will be dropped by the backend validator.
-Of the 416 types, 412 are `active` and 4 are `deprecated` (kept for backward
+Of the 453 types, 449 are `active` and 4 are `deprecated` (kept for backward
 compatibility); 164 are client-SDK-emittable (`sdkEmitable: true`), the rest are
 backend / observation-plane events (see
 [Families](#event-families-contract-v010-alpha0)).
@@ -67,7 +67,7 @@ Two of the "SDK-emittable" families are only partially client-emittable:
 are backend-derived (`sdkEmitable: false`), as is `reward_action_queued` (reward
 actions are queued by the backend). The generated table is authoritative for the
 full per-type metadata — required purposes, privacy class, retention class, and
-status — on every one of the 416 events; do not hand-maintain that enumeration
+status — on every one of the 453 events; do not hand-maintain that enumeration
 in prose.
 
 Privacy classes in use: `behavioral`, `identity`, `governance`, `financial`,

@@ -86,7 +86,7 @@ Do not add agent-behavior work to any of these:
 
 ## 4. Event versioning
 
-- One registry: `packages/shared/contracts/event-registry.json` (`schemaVersion` 2.2.0, `contractVersion` 0.1.0-alpha.0). It has 416 event rows today.
+- One registry: `packages/shared/contracts/event-registry.json` (`schemaVersion` 2.2.0, `contractVersion` 0.1.0-alpha.0). It has 453 event rows today (416 before WO-030).
 - Each row declares `type`, `family`, `semanticLevel`, `sdkEmitable`, `requiredPurposes`, `privacyClass`, `retentionClass`, `silverProjection`, `graphProjection`, `status`, `introducedVersion` and per-field `fieldTrust`.
 - Event types are **snake_case** (`agent_tool_invocation_observed`, `agent_subagent_spawned`). The work orders' dotted names (`agent.tool.invoked`) are a design vocabulary. WO-030 must map them onto registry rows. It must not add a parallel dotted namespace. Observed external-agent facts use the `_observed` suffix.
 - The registry already has 64 event types whose name contains `agent`, including `agent_task_*`, `agent_decision`, `agent_delegated_task`, `agent_subagent_spawned`, `agent_tool_*`, `agent_policy_evaluated`, `agent_authorized` / `agent_deauthorized`, `agent_capability_granted` / `agent_capability_revoked`, `agent_handoff`, `agent_escalated_to_human`, `agent_outcome_recorded`, `agent_human_override_observed`, agent messaging and agent trading.

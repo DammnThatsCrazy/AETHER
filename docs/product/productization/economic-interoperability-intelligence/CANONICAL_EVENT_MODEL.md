@@ -23,7 +23,7 @@ source_hashes:
 
 # Canonical Event Model
 
-416 events across 25 families in
+453 events across 25 families in
 `packages/shared/contracts/event-registry.json` (single source of truth;
 `scripts/generate_contracts.py` emits TS/Python/doc artifacts). The
 economic-interoperability families:

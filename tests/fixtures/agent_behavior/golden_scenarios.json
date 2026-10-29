@@ -217,8 +217,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsa-orch",
             "to": "gsa-wkr-flights",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsa-evt-0002"
@@ -228,8 +227,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsa-orch",
             "to": "gsa-wkr-hotels",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsa-evt-0003"
@@ -285,7 +283,7 @@
       },
       "known_gaps": [
         "Handoff and agent run are not joined by any canonical record; join_basis stays unknown until WO-060.",
-        "Spawn lineage is Silver-only; no SPAWNED_SUBAGENT graph edge is emitted for SDK spawn facts (WO-021).",
+        "The human-to-orchestrator grant is a delegation record, not a graph edge: no HUMAN_DELEGATED_TO_AGENT edge is emitted when a grant is recorded (WO-021).",
         "Agent refs are source-reported, not resolved identities (WO-011/WO-013)."
       ]
     },
@@ -1384,8 +1382,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-00",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0001"
@@ -1395,8 +1392,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-01",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0002"
@@ -1406,8 +1402,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-02",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0003"
@@ -1417,8 +1412,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-03",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0004"
@@ -1428,8 +1422,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-04",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0005"
@@ -1439,8 +1432,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-05",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0006"
@@ -1450,8 +1442,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-06",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0007"
@@ -1461,8 +1452,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-07",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0008"
@@ -1472,8 +1462,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-08",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0009"
@@ -1483,8 +1472,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-09",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0010"
@@ -1494,8 +1482,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-10",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0011"
@@ -1505,8 +1492,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-11",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0012"
@@ -1516,8 +1502,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-12",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0013"
@@ -1527,8 +1512,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-13",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0014"
@@ -1538,8 +1522,7 @@
             "type": "SPAWNED_SUBAGENT",
             "from": "gsb-swarm-root",
             "to": "gsb-scan-14",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
             "epistemic_status": "observed",
             "evidence_event_ids": [
               "gsb-evt-0015"

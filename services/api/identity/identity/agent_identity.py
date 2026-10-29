@@ -131,7 +131,9 @@ def agent_identity(
     spawns_children = any(f.event_type == "agent_subagent_spawned" and f.parent_agent_ref == agent_ref
                           for f in facts if f.tenant_id == tenant_id)
     agent_class = "orchestrator" if spawns_children else ("worker" if spawned_by else "unknown")
-    terminated = any(f.event_type == "agent_terminated" for f in mine)
+    # Lifecycle claims count only from a validated deployment (ingestion
+    # rejects them otherwise); a stray unvalidated row cannot end an agent.
+    terminated = any(f.event_type == "agent_terminated" and f.deployment_id for f in mine)
     runs = {f.run_id for f in mine if f.run_id}
     persistence = "ephemeral" if spawned_by and len(runs) <= 1 else ("persistent" if len(runs) > 1 else "unknown")
     times = sorted(f.occurred_at for f in mine if f.occurred_at)
@@ -207,13 +209,15 @@ def agent_continuity(*, tenant_id: str, agent_ref: str, facts: Iterable[Any]) ->
     relations = []
     for f in mine:
         relation = f.attr("continuityRelation", "continuity_relation")
+        validated = bool(f.deployment_id)
         if f.event_type == "agent_terminated":
             relations.append({"relation": "terminated", "from": agent_ref, "to": None,
-                              "basis": "observed", "evidence": f.event_id, "at": f.occurred_at})
+                              "basis": "observed", "validated_source": validated,
+                              "evidence": f.event_id, "at": f.occurred_at})
         elif relation in CONTINUITY_RELATIONS:
             relations.append({"relation": relation, "from": f.attr("fromAgentId", "from_agent_id"),
-                              "to": agent_ref, "basis": "declared", "evidence": f.event_id,
-                              "at": f.occurred_at})
+                              "to": agent_ref, "basis": "declared", "validated_source": validated,
+                              "evidence": f.event_id, "at": f.occurred_at})
     return {
         "logical_agent": agent_ref,
         "configuration_versions": configs,
@@ -234,7 +238,8 @@ def classify_relationship(a: dict[str, Any], b: dict[str, Any]) -> str:
     relations are used; similarity alone never makes two agents "the same".
     """
     for rel in b.get("relations", []):
-        if rel["from"] == a["logical_agent"]:
+        # Only relations declared through a validated deployment count.
+        if rel.get("validated_source") and rel["from"] == a["logical_agent"]:
             if rel["relation"] in {"clone", "fork"}:
                 return "cloned"
             if rel["relation"] in {"restore", "checkpoint"}:

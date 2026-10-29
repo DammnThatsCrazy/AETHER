@@ -96,11 +96,15 @@ def test_recognition_states_do_not_overclaim():
 
 
 def test_continuity_separates_model_runtime_and_declared_relations():
+    clone = row("agent_registered", "a2", at="2026-10-22T12:00:00Z", continuityRelation="clone", fromAgentId="a1")
+    unvalidated_clone = row("agent_registered", "a3", at="2026-10-22T12:00:01Z",
+                            continuityRelation="clone", fromAgentId="a1")
+    end = row("agent_terminated", "a1", at="2026-10-22T13:00:00Z")
+    clone["deployment_id"] = end["deployment_id"] = "dep-1"
     facts = _facts(
         row("agent_task_started", "a1", at="2026-10-22T10:00:00Z", runId="r1", modelId="m1"),
         row("agent_task_started", "a1", at="2026-10-22T11:00:00Z", runId="r2", modelId="m2"),
-        row("agent_registered", "a2", at="2026-10-22T12:00:00Z", continuityRelation="clone", fromAgentId="a1"),
-        row("agent_terminated", "a1", at="2026-10-22T13:00:00Z"),
+        clone, unvalidated_clone, end,
     )
     a1 = agent_continuity(tenant_id=T, agent_ref="a1", facts=facts)
     assert [v["model_id"] for v in a1["configuration_versions"]] == ["m1", "m2"]
@@ -111,6 +115,11 @@ def test_continuity_separates_model_runtime_and_declared_relations():
     assert a2["relations"][0]["basis"] == "declared"
     assert classify_relationship(a1, a2) == "cloned"
     assert classify_relationship(a1, a1) == "same_agent_new_model"
+    a3 = agent_continuity(tenant_id=T, agent_ref="a3", facts=facts)
+    assert classify_relationship(a1, a3) == "unrelated", "an unvalidated clone claim must not count"
+    assert agent_identity(tenant_id=T, agent_ref="a1", facts=facts).status == "terminated"
+    stray = _facts(row("agent_terminated", "a9"))
+    assert agent_identity(tenant_id=T, agent_ref="a9", facts=stray).status == "active"
     assert classify_relationship(a1, agent_continuity(tenant_id=T, agent_ref="zz", facts=facts)) == "unrelated"
 
 
@@ -171,6 +180,13 @@ def test_wallet_and_generic_adapters():
 
 
 # --- Bronze secrets and Silver facts (WO-032, WO-033) --------------------------
+
+def test_behavior_taxonomy_types_require_a_validated_deployment():
+    from ingestion.ingestion.validation import _DEPLOYMENT_REQUIRED_AGENT_EVENTS
+    for event_type, _ in DOTTED_TO_CANONICAL.values():
+        if REGISTRY[event_type]["introducedVersion"] == "0.1.0-alpha.0":
+            assert event_type in _DEPLOYMENT_REQUIRED_AGENT_EVENTS, event_type
+
 
 def test_agent_payload_secrets_are_scrubbed_at_ingestion():
     props = {"toolName": "pay", "privateKey": "k", "apiKey": "x", "accessToken": "t",
