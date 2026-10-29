@@ -13,7 +13,7 @@ source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:fc77f774237dce31e98b96cf8ba177d159a8fdbbb6663d6b9f6a97799ed7d0c4"
+  "services/api/actions/agent/": "sha256:589485898f306cc222684c747bccd3f5f57a5ba9a4271059b2db689d363ef5c3"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -118,7 +118,8 @@ recorded tenant scope stay unknown. This does not establish current
 authorization, dispatch or external effects.
 Separately, Journey360 and Risk360 can read exact associated dispatch lifecycle
 records after an explicit actions-domain policy decision. Risk dispatch joins
-require an exact entity recommendation binding. These bounded reads do not
+require an exact entity recommendation binding and an approved decision observed,
+recorded, and effective no later than the dispatch. These bounded reads do not
 establish event-time authorization, complete coverage, or an external effect;
 the corresponding registry authorities remain unbound.
 Agent360 and Execution360 also suppress decision claims when that recorded

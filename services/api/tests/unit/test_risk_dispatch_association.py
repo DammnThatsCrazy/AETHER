@@ -40,7 +40,9 @@ async def test_current_decision_rejects_supersession_ambiguity_and_incomplete_hi
 async def test_reader_validates_exact_joins_and_fails_closed():
     now = datetime.now(timezone.utc)
     record = SimpleNamespace(tenant_id="t", record_id="r", subject_id="s", subject_kind="entity",
-                             intervention_id="i", intervention_type="review", recorded_at=now - timedelta(seconds=2))
+                             intervention_id="i", intervention_type="review", record_kind="decision",
+                             decision_state="approved", recorded_at=now - timedelta(seconds=2),
+                             observed_at=now - timedelta(seconds=2), effective_at=now - timedelta(seconds=2))
     link = {"kind": "risk_intervention", "link_state": "caller_associated", "record_id": "r",
             "subject_id": "s", "subject_kind": "entity", "intervention_id": "i", "action_key": "review",
             "action_type": "review", "recommendation_id": "rec"}
@@ -55,6 +57,17 @@ async def test_reader_validates_exact_joins_and_fails_closed():
                   decisions=Repository({"dec": decision}), recommendations=Repository({"rec": recommendation}))
     rows, complete = await read_risk_dispatches(**kwargs)
     assert complete and rows[0]["externalEffect"] == "not_independently_verified"
+    for field in ("recorded_at", "observed_at", "effective_at"):
+        original = getattr(record, field)
+        setattr(record, field, now + timedelta(seconds=1))
+        assert await read_risk_dispatches(**kwargs) == ([], False)
+        setattr(record, field, original)
+    record.decision_state = "rejected"
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    record.decision_state = "approved"
+    record.record_kind = "outcome"
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    record.record_kind = "decision"
     recommendation["entity_id"] = "other"
     assert await read_risk_dispatches(**kwargs) == ([], False)
     recommendation["entity_id"] = "s"

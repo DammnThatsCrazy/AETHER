@@ -64,7 +64,8 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
             dispatch_id, action_id, decision_id, recommendation_id = (row.get(key) for key in
                 ("dispatch_id", "action_id", "decision_id", "recommendation_id"))
             if (not isinstance(link, dict) or row.get("tenant_id") != tenant_id
-                    or record.tenant_id != tenant_id or row.get("id") != dispatch_id
+                    or record.tenant_id != tenant_id or record.record_kind != "decision"
+                    or record.decision_state != "approved" or row.get("id") != dispatch_id
                     or not all(isinstance(value, str) and value.strip() for value in
                                (dispatch_id, action_id, decision_id, recommendation_id))
                     or dispatch_id in seen or row.get("risk_action_association_record_id") != record.record_id
@@ -75,7 +76,8 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
                     or row.get("status") not in {"queued", "dispatched", "delivered", "failed", "cancelled"}):
                 return [], False
             created = parse_instant_strict(row.get("created_at"))
-            if created < record.recorded_at or created > datetime.now(timezone.utc):
+            if (created < record.recorded_at or created < record.observed_at
+                    or created < record.effective_at or created > datetime.now(timezone.utc)):
                 return [], False
             action = await actions.find_by_id(action_id)
             decision = await decisions.find_by_id(decision_id)
