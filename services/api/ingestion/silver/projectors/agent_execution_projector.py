@@ -93,7 +93,72 @@ _AGENT_TYPES = frozenset({
     "agentic_account_connected_observed",
     "agentic_account_disconnected_observed",
     "agentic_account_observed",
+    # Agent behavior taxonomy (WO-030). Dotted design names map onto these in
+    # intelligence/agent_behavior/taxonomy.py.
+    "agent_objective_created",
+    "agent_objective_started",
+    "agent_objective_modified",
+    "agent_objective_completed",
+    "agent_objective_failed",
+    "agent_objective_abandoned",
+    "agent_information_retrieved",
+    "agent_source_consulted",
+    "agent_context_received",
+    "agent_decision_started",
+    "agent_candidate_considered",
+    "agent_candidate_rejected",
+    "agent_action_selected",
+    "agent_decision_completed",
+    "agent_authorization_requested",
+    "agent_authorization_granted",
+    "agent_authorization_denied",
+    "agent_tool_retried",
+    "agent_tool_switched",
+    "agent_terminated",
+    "agent_task_returned",
+    "agent_execution_started",
+    "agent_execution_succeeded",
+    "agent_execution_failed",
+    "agent_execution_aborted",
+    "agent_quote_received",
+    "agent_price_evaluated",
+    "agent_transaction_initiated",
+    "agent_transaction_authorized",
+    "agent_transaction_settled",
+    "agent_transaction_failed",
+    "agent_message_generated",
+    "agent_memory_created",
+    "agent_memory_retrieved",
+    "agent_memory_updated",
+    "agent_memory_invalidated",
+    "agent_memory_expired",
 })
+
+
+def _bounded_int(value: Any) -> int | None:
+    """Non-negative integer source measurement, or None."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if 0 <= number <= 10**9 else None
+
+
+def _decimal_text(value: Any) -> str | None:
+    """Keep a source amount as a decimal string; never coerce through float."""
+    if isinstance(value, bool) or value is None:
+        return None
+    text = str(value).strip()
+    if not text or len(text) > 64:
+        return None
+    try:
+        from decimal import Decimal, InvalidOperation
+        Decimal(text)
+    except (InvalidOperation, ValueError):
+        return None
+    return text
 
 
 class AgentExecutionProjector(BaseProjector):
@@ -262,5 +327,26 @@ class AgentExecutionProjector(BaseProjector):
             "total_value": p.get("totalValue"),
             "external_order_id": p.get("externalOrderId"),
             "account_kind": p.get("accountKind"),
+            # Agent behavior references (WO-033). Source-reported references
+            # only; behavior projectors decide what they mean.
+            "objective_ref": _source_reference(p.get("objectiveId") or p.get("objective_id")),
+            "parent_objective_ref": _source_reference(
+                p.get("parentObjectiveId") or p.get("parent_objective_id")
+            ),
+            "candidate_ref": _source_reference(p.get("candidateId") or p.get("candidate_id")),
+            "previous_tool_name": _source_reference(
+                p.get("fromToolName") or p.get("previousToolName") or p.get("from_tool_name")
+            ),
+            "attempt": _bounded_int(p.get("attempt")),
+            "latency_ms": _bounded_int(p.get("latencyMs") or p.get("latency_ms")),
+            "memory_ref": _source_reference(p.get("memoryId") or p.get("memory_id")),
+            "information_source_ref": _source_reference(
+                p.get("sourceRef") or p.get("source_ref") or p.get("sourceId")
+            ),
+            "authorization_ref": _source_reference(
+                p.get("authorizationId") or p.get("authorization_id")
+            ),
+            "amount": _decimal_text(p.get("amount")),
+            "currency": _source_reference(p.get("currency")),
         })
         return ProjectionResult(table="silver_agent_execution_facts", rows=[row])

@@ -281,6 +281,43 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case agent_grounding_observed
     case agent_guardrail_observed
     case agent_human_override_observed
+    case agent_objective_created
+    case agent_objective_started
+    case agent_objective_modified
+    case agent_objective_completed
+    case agent_objective_failed
+    case agent_objective_abandoned
+    case agent_information_retrieved
+    case agent_source_consulted
+    case agent_context_received
+    case agent_decision_started
+    case agent_candidate_considered
+    case agent_candidate_rejected
+    case agent_action_selected
+    case agent_decision_completed
+    case agent_authorization_requested
+    case agent_authorization_granted
+    case agent_authorization_denied
+    case agent_tool_retried
+    case agent_tool_switched
+    case agent_terminated
+    case agent_task_returned
+    case agent_execution_started
+    case agent_execution_succeeded
+    case agent_execution_failed
+    case agent_execution_aborted
+    case agent_quote_received
+    case agent_price_evaluated
+    case agent_transaction_initiated
+    case agent_transaction_authorized
+    case agent_transaction_settled
+    case agent_transaction_failed
+    case agent_message_generated
+    case agent_memory_created
+    case agent_memory_retrieved
+    case agent_memory_updated
+    case agent_memory_invalidated
+    case agent_memory_expired
     // reward
     case reward_action_queued
     case reward_proof_generated
@@ -1031,6 +1068,43 @@ public final class Aether: NSObject {
         .agent_grounding_observed: "agent",
         .agent_guardrail_observed: "agent",
         .agent_human_override_observed: "agent",
+        .agent_objective_created: "agent",
+        .agent_objective_started: "agent",
+        .agent_objective_modified: "agent",
+        .agent_objective_completed: "agent",
+        .agent_objective_failed: "agent",
+        .agent_objective_abandoned: "agent",
+        .agent_information_retrieved: "agent",
+        .agent_source_consulted: "agent",
+        .agent_context_received: "agent",
+        .agent_decision_started: "agent",
+        .agent_candidate_considered: "agent",
+        .agent_candidate_rejected: "agent",
+        .agent_action_selected: "agent",
+        .agent_decision_completed: "agent",
+        .agent_authorization_requested: "agent",
+        .agent_authorization_granted: "agent",
+        .agent_authorization_denied: "agent",
+        .agent_tool_retried: "agent",
+        .agent_tool_switched: "agent",
+        .agent_terminated: "agent",
+        .agent_task_returned: "agent",
+        .agent_execution_started: "agent",
+        .agent_execution_succeeded: "agent",
+        .agent_execution_failed: "agent",
+        .agent_execution_aborted: "agent",
+        .agent_quote_received: "financial_activity",
+        .agent_price_evaluated: "financial_activity",
+        .agent_transaction_initiated: "financial_activity",
+        .agent_transaction_authorized: "financial_activity",
+        .agent_transaction_settled: "financial_activity",
+        .agent_transaction_failed: "financial_activity",
+        .agent_message_generated: "agent",
+        .agent_memory_created: "agent",
+        .agent_memory_retrieved: "agent",
+        .agent_memory_updated: "agent",
+        .agent_memory_invalidated: "agent",
+        .agent_memory_expired: "agent",
         // reward
         .reward_action_queued: "commerce",
         .reward_proof_generated: "commerce",
