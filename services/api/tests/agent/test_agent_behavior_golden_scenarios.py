@@ -361,3 +361,16 @@ def test_current_decision_envelopes_match(sid):
             want = expected[key]["design"]
             got = env["opportunity"] if key == "opportunity_envelope" else env["disposition"]
             assert {k: got[k] for k in want} == want
+
+
+def test_gs_d_failure_resolution_is_current():
+    from intelligence.agent_behavior.activity import failure_resolution
+    from intelligence.agent_behavior.facts import normalize_rows
+
+    want = SCENARIOS["GS-D"]["expected"]["failure_resolution"]
+    assert want["status"] == "current"
+    [episode] = failure_resolution(normalize_rows(_project(SCENARIOS["GS-D"]), TENANT))
+    design = want["design"]
+    assert [{"tool": r["tool"], "event_id": r["event_id"]} for r in episode["retries"]] == design["retries"]
+    assert [{k: s[k] for k in ("from_tool", "to_tool", "event_id")} for s in episode["switches"]] == design["switches"]
+    assert episode["resolved"] is design["resolved"] and episode["basis"] == design["basis"]

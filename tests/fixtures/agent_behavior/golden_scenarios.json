@@ -1848,8 +1848,7 @@
           }
         ],
         "failure_resolution": {
-          "status": "pending",
-          "owner_work_order": "WO-073",
+          "status": "current",
           "design": {
             "retries": [
               {
@@ -1882,8 +1881,8 @@
         }
       },
       "known_gaps": [
-        "No canonical retry or switch event exists; retry/switch must be derived from ordered tool facts (WO-030, WO-061).",
-        "Lineage counts failed calls as calls; success rate is not computed (WO-061)."
+        "The runtime did not emit agent_tool_retried / agent_tool_switched, so retry and switch are derived from ordered tool results.",
+        "Lineage counts failed calls as calls; per-tool success rate lives in the tool entity (WO-061)."
       ]
     }
   ]
