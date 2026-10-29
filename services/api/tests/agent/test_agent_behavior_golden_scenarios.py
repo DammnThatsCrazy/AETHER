@@ -316,3 +316,48 @@ async def test_gs_a_mobile_to_web_handoff_is_explicit_and_does_not_merge():
         assert link["from"]["platform"] == src["platform"] and link["to"]["platform"] == dst["platform"]
     finally:
         journey_handoff_repo.reset_journey_handoff_memory()
+
+
+@pytest.mark.asyncio
+async def test_lineage_edge_cannot_be_planted_for_another_agent(monkeypatch):
+    emitted = []
+
+    async def capture_edge(edge, *, subject_id=""):
+        emitted.append((edge.edge_type, edge.from_vertex_id, edge.to_vertex_id))
+
+    async def noop(*a, **k):
+        return None
+
+    monkeypatch.setattr(sgp, "_emit", capture_edge)
+    monkeypatch.setattr(sgp, "_emit_vertex", noop)
+    monkeypatch.setattr(sgp.SilverGraphProjector, "_emit_external_agent_run", noop)
+    event = {"messageId": "forge-1", "type": "agent_subagent_spawned", "tenantId": TENANT,
+             "timestamp": "2026-10-22T10:00:00Z",
+             "properties": {"agentId": "attacker", "parentAgentId": "victim-orch", "childAgentId": "x"}}
+    await sgp.SilverGraphProjector()._emit_agent_execution(AgentExecutionProjector().project(event), event)
+    assert emitted == []
+
+
+@pytest.mark.parametrize("sid", [s for s in SCENARIOS
+                                 if SCENARIOS[s]["expected"]["decision_envelope"]["status"] == "current"])
+def test_current_decision_envelopes_match(sid):
+    from intelligence.agent_behavior.decisions import build_envelope, group_decisions
+    from intelligence.agent_behavior.facts import normalize_rows
+
+    expected = SCENARIOS[sid]["expected"]
+    design = expected["decision_envelope"]["design"]
+    facts = normalize_rows(_project(SCENARIOS[sid]), TENANT)
+    env = build_envelope(design["decision_id"], group_decisions(facts)[design["decision_id"]], facts).to_dict()
+    assert env["decision_actor"]["value"] == design["decision_actor"]
+    assert env["objective"]["value"] == design["objective_ref"]
+    assert [c["candidate"] for c in env["candidates"]["candidates"]] == design["candidates"]
+    assert [c["ref"] for c in env["constraints"]] == design["constraint_refs"]
+    assert env["disposition"]["disposition"] == design["disposition"]
+    assert design["authority_check_event_id"] in env["evidence"]
+    assert env["outcome"]["evidence"] == [design["outcome_event_id"]]
+    assert env["status"] == design["status"]
+    for key in ("opportunity_envelope", "action_disposition"):
+        if expected.get(key, {}).get("status") == "current":
+            want = expected[key]["design"]
+            got = env["opportunity"] if key == "opportunity_envelope" else env["disposition"]
+            assert {k: got[k] for k in want} == want

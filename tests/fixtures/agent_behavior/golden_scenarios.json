@@ -1670,25 +1670,25 @@
           }
         ],
         "decision_envelope": {
-          "status": "pending",
-          "owner_work_order": "WO-050",
+          "status": "current",
           "design": {
+            "decision_id": "derived:gsc-buyer:gsc-task-buy",
             "decision_actor": "gsc-buyer",
-            "objective_ref": "gsc-task-buy",
+            "objective_ref": "task:gsc-task-buy",
             "candidates": [
               "product:sku-123"
             ],
             "constraint_refs": [
               "gsc-pol-spend@3"
             ],
-            "disposition": "abstained",
+            "disposition": "constrained_non_action",
             "authority_check_event_id": "gsc-evt-0003",
-            "outcome_event_id": "gsc-evt-0004"
+            "outcome_event_id": "gsc-evt-0004",
+            "status": "closed"
           }
         },
         "opportunity_envelope": {
-          "status": "pending",
-          "owner_work_order": "WO-045",
+          "status": "current",
           "design": {
             "available": [
               "product:sku-123"
@@ -1698,8 +1698,7 @@
           }
         },
         "action_disposition": {
-          "status": "pending",
-          "owner_work_order": "WO-046",
+          "status": "current",
           "design": {
             "disposition": "constrained_non_action"
           }

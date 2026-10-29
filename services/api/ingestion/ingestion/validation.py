@@ -89,6 +89,7 @@ _DEPLOYMENT_REQUIRED_AGENT_EVENTS = frozenset(
         "agent_outcome_recorded",
         "agent_policy_evaluated",
         "agent_delegated_task",
+        "agent_subagent_spawned",
     }
 ) | frozenset(
     {

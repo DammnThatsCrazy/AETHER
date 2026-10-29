@@ -538,7 +538,12 @@ class SilverGraphProjector:
                 # and cites the first source event that supports it.
                 target = row.get("child_agent_ref") if event_name == "agent_subagent_spawned" \
                     else row.get("delegated_to_ref")
-                parent = row.get("parent_agent_ref") or agent_id
+                # The edge source is the reporting agent itself. A payload that
+                # names a different parent cannot plant an edge for another agent.
+                parent = agent_id
+                claimed_parent = row.get("parent_agent_ref")
+                if claimed_parent and str(claimed_parent) != parent:
+                    continue
                 if target and str(target) != str(parent):
                     await _emit(
                         _bounded_edge(
