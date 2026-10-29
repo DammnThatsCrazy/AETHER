@@ -3080,7 +3080,8 @@ class Episode360Provider:
                     tenant_id=request.tenantId, kind="journey_action_intent",
                     record_id=item["recordId"], subject_id=journey_id,
                     version_id=str(journey.get("journey_version_id") or ""),
-                    action=item["actionKey"], recorded_at=recorded_at, as_of=anchor,
+                    action=item["actionKey"], recorded_at=recorded_at,
+                    source_valid_at=datetime.fromisoformat(item["occurredAt"].replace("Z", "+00:00")), as_of=anchor,
                 )
                 if after is not None:
                     rows = [row for row in rows if datetime.fromisoformat(row["recordedAt"]) >= after]

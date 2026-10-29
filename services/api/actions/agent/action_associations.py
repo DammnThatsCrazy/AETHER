@@ -141,7 +141,7 @@ async def validate_action_association(
         or record.record_kind != "decision" or record.decision_state != "approved"
         or record.subject_kind != risk.subject_kind or record.subject_id != risk.subject_id
         or record.intervention_type != action or resource != risk.subject_id
-        or record.effective_at > anchor or record.recorded_at > anchor
+        or record.effective_at > anchor or record.recorded_at > anchor or record.observed_at > anchor
     ):
         raise ValueError("exact approved risk intervention decision and action scope required")
     return {"kind": "risk_intervention", "record_id": record.record_id,
@@ -152,7 +152,7 @@ async def validate_action_association(
 
 async def read_associated_executions(
     *, tenant_id: str, kind: str, record_id: str, subject_id: str, action: str,
-    recorded_at: datetime, as_of: datetime, version_id: str | None = None,
+    recorded_at: datetime, source_valid_at: datetime, as_of: datetime, version_id: str | None = None,
     subject_kind: str | None = None, intervention_id: str | None = None,
     repository: Any = None, limit: int = 20,
 ) -> tuple[list[dict[str, Any]], bool]:
@@ -205,7 +205,7 @@ async def read_associated_executions(
             or link.get("subject_id") != subject_id or link.get("action_key") != action
             or link.get("link_state") != "caller_associated"
             or snapshot.get("action") != action or snapshot.get("resource") != subject_id
-            or created < recorded_at
+            or created < recorded_at or created < source_valid_at
             or (kind == "journey_action_intent" and link.get("version_id") != version_id)
             or (kind == "risk_intervention" and (
                 link.get("subject_kind") != subject_kind or link.get("intervention_id") != intervention_id

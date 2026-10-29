@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:ae4e46f53634990751437fef402d8167b4aa22358ad57e5d96092d1224371ed4"
+  "services/api/actions/": "sha256:14e5192e59b1b825728aaa18fef784f917f5ca4aaf41e72be50890979c04ffc4"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,8 +33,8 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:b89b7959055504bfa895b9abdc71760f265ed5ecab709f4ecd11914fe8a27028"
-  "services/api/journeys/": "sha256:3105f8940d264a2ee443ad5b8317b454f6541453c2303f7906f08accf49eaa67"
+  "services/api/intelligence/": "sha256:e7fdd3ac3b46b14fd0c1867e91c971f6c24dedf967d09c1b6715b3b37b177261"
+  "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:4ba49ac2d971c4320513f9a4ae2dfba5935819dae3fae40d60f03aa3aa331fa0"
@@ -2262,6 +2262,8 @@ Journey360 and Risk360 can also include an associated agent execution's
 recorded delegation decision when its tenant, grant reference, status and decision time
 match the execution record. The execute endpoint supplies the request tenant to
 the delegation engine and records that scope; older records without it stay unknown.
+Associated lifecycle requests must not predate the Journey intent's occurrence
+or the Risk decision's observation and effective time, or their recording time.
 Agent360 and Execution360 likewise suppress recorded decision claims without
 matching tenant scope.
 The decision describes that request-time check;

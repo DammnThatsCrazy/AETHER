@@ -141,16 +141,23 @@ async def test_journey_association_validates_authority_and_reads_server_lifecycl
     rows, complete = await read_associated_executions(
         tenant_id=TENANT, kind="journey_action_intent", record_id=intent.record_id,
         subject_id="journey-1", version_id="version-1", action="send_notice",
-        recorded_at=intent.recorded_at, as_of=datetime.now(timezone.utc), repository=repo,
+        recorded_at=intent.recorded_at, source_valid_at=intent.occurred_at, as_of=datetime.now(timezone.utc), repository=repo,
     )
     assert complete and [row["executionId"] for row in rows] == [execution_id]
     assert rows[0]["dispatchState"] == "not_established"
     assert rows[0]["recordedDelegationDecision"]["delegationId"] == "grant-1"
     assert rows[0]["externalEffectState"] == "unknown"
     rows, complete = await read_associated_executions(
+        tenant_id=TENANT, kind="journey_action_intent", record_id=intent.record_id,
+        subject_id="journey-1", version_id="version-1", action="send_notice",
+        recorded_at=intent.recorded_at, source_valid_at=datetime.now(timezone.utc) + timedelta(minutes=1),
+        as_of=datetime.now(timezone.utc), repository=repo,
+    )
+    assert not complete and rows == []
+    rows, complete = await read_associated_executions(
         tenant_id="other", kind="journey_action_intent", record_id=intent.record_id,
         subject_id="journey-1", version_id="version-1", action="send_notice",
-        recorded_at=intent.recorded_at, as_of=datetime.now(timezone.utc), repository=repo,
+        recorded_at=intent.recorded_at, source_valid_at=intent.occurred_at, as_of=datetime.now(timezone.utc), repository=repo,
     )
     assert complete and rows == []
     with pytest.raises(ValueError):
@@ -172,7 +179,7 @@ async def test_risk_association_requires_exact_approved_decision_and_resource():
         tenant_id=TENANT, record_id="risk-1", record_kind="decision", decision_state="approved",
         subject_kind="entity", subject_id="entity-1", intervention_id="intervention-1",
         intervention_type="disable_agent_action", effective_at=NOW - timedelta(minutes=2),
-        recorded_at=NOW - timedelta(minutes=1),
+        recorded_at=NOW - timedelta(minutes=1), observed_at=NOW - timedelta(minutes=1),
     )
 
     class Risks:
@@ -195,14 +202,28 @@ async def test_risk_association_requires_exact_approved_decision_and_resource():
     rows, complete = await read_associated_executions(
         tenant_id=TENANT, kind="risk_intervention", record_id="risk-1", subject_id="entity-1",
         subject_kind="entity", intervention_id="intervention-1", action="disable_agent_action",
-        recorded_at=decision.recorded_at, as_of=datetime.now(timezone.utc), repository=repo,
+        recorded_at=decision.recorded_at, source_valid_at=max(decision.observed_at, decision.effective_at), as_of=datetime.now(timezone.utc), repository=repo,
     )
     assert complete and [row["executionId"] for row in rows] == [execution_id]
     assert rows[0]["dispatchState"] == "not_established"
     rows, complete = await read_associated_executions(
         tenant_id=TENANT, kind="risk_intervention", record_id="risk-1", subject_id="entity-1",
+        subject_kind="entity", intervention_id="intervention-1", action="disable_agent_action",
+        recorded_at=decision.recorded_at, source_valid_at=datetime.now(timezone.utc) + timedelta(minutes=1),
+        as_of=datetime.now(timezone.utc), repository=repo,
+    )
+    assert not complete and rows == []
+    decision.observed_at = NOW + timedelta(minutes=1)
+    with pytest.raises(ValueError):
+        await validate_action_association(
+            tenant_id=TENANT, action="disable_agent_action", resource="entity-1", risk=ref,
+            risk_repository=Risks(), now=NOW,
+        )
+    decision.observed_at = NOW - timedelta(minutes=1)
+    rows, complete = await read_associated_executions(
+        tenant_id=TENANT, kind="risk_intervention", record_id="risk-1", subject_id="entity-1",
         subject_kind="entity", intervention_id="other", action="disable_agent_action",
-        recorded_at=decision.recorded_at, as_of=datetime.now(timezone.utc), repository=repo,
+        recorded_at=decision.recorded_at, source_valid_at=max(decision.observed_at, decision.effective_at), as_of=datetime.now(timezone.utc), repository=repo,
     )
     assert not complete and rows == []
     decision.decision_state = "rejected"

@@ -1529,6 +1529,7 @@ class Risk360Provider:
                     subject_id=record.subject_id, subject_kind=record.subject_kind,
                     intervention_id=record.intervention_id, action=record.intervention_type,
                     recorded_at=record.recorded_at,
+                    source_valid_at=max(record.observed_at, record.effective_at),
                     as_of=interventions_as_of or datetime.now(timezone.utc),
                 )
                 intervention_actions[record.record_id] = rows

@@ -13,7 +13,7 @@ source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:1607e36bab6422993e1af682a4bbda0eb6544fa79876ae1306a9697c4a2296a0"
+  "services/api/actions/agent/": "sha256:1a7bca1e31dc66d58cb10f564954eec480f16ef964b2b3383925a4f965ef1ae9"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -32,7 +32,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/": "sha256:251c696b2af7fb2e194d7809a19c4b1460cc92dfcf79ee940d79fac84384a25c"
+  "services/api/intelligence/risk360/": "sha256:c2c29d0bfcab2ed393a5f68ffc1a2fb6e03b7bcfe5c167956bddf5c09195bbd9"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:faea869afaddcfee82abf3d618e845de8018ee9127edc71214cc94d760cae0ef"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
@@ -116,6 +116,8 @@ tenant-scoped, time-checked recorded delegation decision. The execute endpoint
 supplies the request tenant to the delegation engine; older decisions without
 recorded tenant scope stay unknown. This does not establish current
 authorization, dispatch or external effects.
+Associated lifecycle requests cannot predate the Journey intent's occurrence or
+the Risk decision's observation and effective time, or their recording time.
 Separately, Journey360 and Risk360 can read exact associated dispatch lifecycle
 records after an explicit actions-domain policy decision. Journey dispatch joins
 require the intent to have occurred and been recorded by dispatch time. Risk dispatch joins
