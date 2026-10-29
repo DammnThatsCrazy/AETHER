@@ -2662,3 +2662,59 @@ async def test_workflow_approval_agent_access_requires_exact_slot_and_joins_gran
     history = await Workflow360Provider(source=source).project(historical, context)
     assert Grants.calls == 1
     assert _sections(history)["approvals"].content["approvals"][0]["agentAccess"]["state"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_workflow_action_authorities_require_slot_envelopes_and_keep_effect_unknown(monkeypatch):
+    import uuid
+    from intelligence.workflow import action_authorities, approval_agent_access
+    from shared.intelligence_projections.contracts import ProjectionReadAuthorization
+
+    execution = _agent_execution_row()
+    execution.update({"created_at": "2026-10-18T10:00:00Z", "ended_at": "2026-10-18T10:00:03Z",
+                      "id": "agent-execution-a",
+                      "approval_id": "approval-a", "approval_decision_id": "decision-a",
+                      "outcome_event_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"aether:agent-execution:{TENANT_A}:agent-execution-a:completed")),
+                      "outcome_event_published": True})
+    action = {"tenant_id": TENANT_A, "workflow_run_id": RUN_ID, "execution_id": "agent-execution-a",
+              "agent_id": "canonical-agent-a", "tool_id": "tool-a", "called_at": "2026-10-18T10:00:01Z",
+              "evidence_ref": {"id": "call-a", "type": "event", "source": "graph_edges", "observedAt": "2026-10-18T10:00:01Z"},
+              "tool_evidence_ref": {"id": f"{TENANT_A}:tool:tool-a", "type": "entity", "source": "graph_vertices"}}
+    approval = {"tenant_id": TENANT_A, "workflow_run_id": RUN_ID, "execution_id": "agent-execution-a",
+                "approval_id": "approval-a", "decision_id": "decision-a", "action": "approve",
+                "decided_by": "operator-a", "decided_at": "2026-10-18T10:00:00Z"}
+    class Source(FakeWorkflowSource):
+        async def run_execution_actions(self, **kwargs): return WorkflowActionRead((action,), True, True)
+    source = Source(WorkflowRunInvocationRead((_row("invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"),), True, True),
+                    agent_executions=WorkflowAgentExecutionRead((execution,), True, True), approvals=WorkflowApprovalRead((approval,), True, True))
+    calls = []
+    async def access(**kwargs):
+        calls.append("access")
+        return approval_agent_access.ApprovalAgentAccessRead(({"tenant_id": TENANT_A, "workflow_run_id": RUN_ID,
+            "execution_id": "agent-execution-a", "approval_id": "approval-a", "decision_id": "decision-a",
+            "delegation_id": "delegation-a", "requested_resource": "resource-a", "evaluated_at": "2026-10-18T10:00:00Z"},), True, True)
+    async def resources(**kwargs):
+        calls.append("resource")
+        return [{"execution_id": "agent-execution-a", "resource_id": "resource-a", "approval_id": "approval-a",
+                 "decision_id": "decision-a", "delegation_id": "delegation-a", "registered_at": "2026-10-18T09:00:00Z"}]
+    monkeypatch.setattr(approval_agent_access, "read_approval_agent_access", access)
+    monkeypatch.setattr(action_authorities, "approved_resources", resources)
+    request = _request()
+    denied = await Workflow360Provider(source=source).project(request, _context())
+    assert calls == []
+    assert _sections(denied)["actions"].content["actions"][0]["executionResult"]["state"] == "unknown"
+    context = _context()
+    context.experience360ReadAuthorizations = [ProjectionReadAuthorization(
+        tenantId=TENANT_A, sourceSurfaceId="workflow360", sourceSubject=request.subject, sourceSlotId="actions",
+        consumerProjectionId="workflow360", targetProjectionId=target, capabilityKey=capability,
+        policyState="allowed", policyIds=["policy-1"], policyEvaluatedAt="2026-10-18T10:01:00Z")
+        for target, capability in (("agent360", "agent360.read"), ("commerce360", "commerce360.read"))]
+    result = await Workflow360Provider(source=source).project(request, context)
+    projected = _sections(result)["actions"].content["actions"][0]
+    assert calls == ["access", "resource"]
+    assert projected["executionResult"]["state"] == "recorded_executor_completion"
+    assert projected["executionResult"]["toolResult"] == "unknown"
+    assert projected["approvedResource"]["resourceId"] == "resource-a"
+    assert projected["approvedResource"]["resourceOperation"] == "unknown"
+    assert {claim.kind for claim in result.claims} >= {"workflow_linked_executor_result", "workflow_linked_approved_resource"}
+    assert _sections(result)["approvals"].content["approvals"][0]["agentAccess"]["state"] == "unknown"

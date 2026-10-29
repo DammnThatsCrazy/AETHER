@@ -1518,20 +1518,28 @@ class Workflow360Provider:
         from intelligence.workflow.approval_agent_access import read_approval_agent_access
 
         approval_agent_access_rows: list[dict[str, Any]] = []
+        action_agent_access_rows: list[dict[str, Any]] = []
+        approval_access_allowed = action_association_read_authorized(
+            request, context, surface="workflow360", slot="approvals", consumer="workflow360"
+        )
+        action_access_allowed = action_association_read_authorized(
+            request, context, surface="workflow360", slot="actions", consumer="workflow360"
+        )
         if (approval_rows and subject.kind in _RUN_SUBJECT_KINDS
                 and request.asOf is None and context.asOf is None
                 and request.temporalMode not in {"as_of", "compare", "relative"}
-                and (request.includeSections is None or "approvals" in request.includeSections)
-                and action_association_read_authorized(
-                    request, context, surface="workflow360", slot="approvals", consumer="workflow360"
-                )):
+                and ((approval_access_allowed and (request.includeSections is None or "approvals" in request.includeSections))
+                     or (action_access_allowed and (request.includeSections is None or "actions" in request.includeSections)))):
             try:
                 access_read = await read_approval_agent_access(
                     tenant_id=tenant_id, workflow_run_id=subject.id,
                     executions=agent_execution_rows, approvals=approval_rows,
                 )
                 if access_read.available:
-                    approval_agent_access_rows = list(access_read.rows)
+                    if approval_access_allowed:
+                        approval_agent_access_rows = list(access_read.rows)
+                    if action_access_allowed:
+                        action_agent_access_rows = list(access_read.rows)
             except Exception:  # noqa: BLE001 - access evidence fails closed independently
                 pass
         risk_requested = (
@@ -1694,6 +1702,23 @@ class Workflow360Provider:
             historical=historical_risk_scope,
             subject_supported=subject.kind in _RUN_SUBJECT_KINDS,
         )
+        from intelligence.workflow.action_authorities import approved_resources
+
+        commerce_authorized = (action_access_allowed and context.tenantId == tenant_id
+            and context.projectionId == "workflow360" and any(
+                auth.tenantId == tenant_id and auth.sourceSurfaceId == "workflow360"
+                and auth.sourceSubject == subject and auth.sourceSlotId == "actions"
+                and auth.consumerProjectionId == "workflow360" and auth.targetProjectionId == "commerce360"
+                and auth.capabilityKey == "commerce360.read" and auth.policyState == "allowed"
+                and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
+                for auth in context.experience360ReadAuthorizations))
+        resource_rows: list[dict[str, str]] = []
+        if commerce_authorized and not historical_action_scope and actions_requested and action_agent_access_rows:
+            try:
+                resource_rows = await approved_resources(tenant_id=tenant_id, workflow_run_id=subject.id,
+                                                         access_rows=action_agent_access_rows)
+            except Exception:  # noqa: BLE001 - resource authority remains unknown
+                pass
         actions_section, action_claims = _workflow_actions_section(
             subject,
             tenant_id=tenant_id,
@@ -1704,6 +1729,8 @@ class Workflow360Provider:
             time_range=request.timeRange,
             requested=actions_requested,
             historical=historical_action_scope,
+            execution_results_authorized=action_access_allowed,
+            resource_rows=resource_rows,
         )
         registrar_identity_read = WorkflowPrincipalIdentityRead(
             (), False, False, reason="definition_registrar_identity_not_read"
@@ -2331,6 +2358,8 @@ def _workflow_actions_section(
     time_range: Any,
     requested: bool,
     historical: bool,
+    execution_results_authorized: bool,
+    resource_rows: list[dict[str, str]],
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     """Project exact observed tool-call edges without upgrading them to effects."""
     reason = (
@@ -2487,6 +2516,24 @@ def _workflow_actions_section(
             execution_evidence,
             *([tool_evidence] if tool_evidence is not None else []),
         ]
+        from intelligence.workflow.action_authorities import execution_result
+
+        outcome = (execution_result(tenant_id=tenant_id, workflow_run_id=subject.id,
+                                    execution=execution_by_id[execution_id], called_at=called_at)
+                   if execution_results_authorized else None)
+        resource = next((row for row in resource_rows if row.get("execution_id") == execution_id), None)
+        resource_view: dict[str, Any] = {"state": "unknown"}
+        if (resource is not None and all(_safe_identifier(resource.get(key)) for key in
+                ("resource_id", "approval_id", "decision_id", "delegation_id"))):
+            resource_ref = EvidenceRef(id=resource["resource_id"], type="entity", source="commerce_resources",
+                                       observedAt=resource.get("registered_at"))
+            authority_refs = [resource_ref, EvidenceRef(id=resource["approval_id"], type="event", source="commerce_approvals"),
+                              EvidenceRef(id=resource["decision_id"], type="event", source="commerce_approval_decisions"),
+                              EvidenceRef(id=resource["delegation_id"], type="relationship", source="delegations")]
+            evidence_refs = _dedupe_evidence_refs([*evidence_refs, *authority_refs])
+            resource_view = {"state": "resolved_current_approved_resource", "resourceId": resource["resource_id"],
+                             "evidenceRef": resource_ref.model_dump(mode="json", by_alias=True, exclude_none=True),
+                             "resourceOperation": "unknown"}
         actions.append(
             {
                 "executionId": execution_id,
@@ -2496,6 +2543,8 @@ def _workflow_actions_section(
                 "observationKind": "tenant_scoped_execution_linked_tool_call_edge",
                 "operationState": "call_observed_external_effect_unknown",
                 "authorityDecision": "not_established_by_tool_call_edge",
+                "executionResult": outcome or {"state": "unknown"},
+                "approvedResource": resource_view,
                 "evidenceRefs": [
                     ref.model_dump(mode="json", by_alias=True, exclude_none=True)
                     for ref in evidence_refs
@@ -2515,6 +2564,21 @@ def _workflow_actions_section(
                 domainSlotIds=["actions", "evidence_trace"],
             )
         )
+        if outcome is not None:
+            claims.append(ClaimEnvelope(
+                id=f"workflow360.execution_result.{quote(execution_id, safe='')}:{quote(action_evidence.id, safe='')}",
+                kind="workflow_linked_executor_result", subject=subject,
+                evidenceRefs=[execution_evidence, action_evidence],
+                claims=["The linked AgentExecution records a published executor completion or failure; this does not establish the result of the observed tool call or an external effect."],
+                claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
+            ))
+        if resource_view["state"] == "resolved_current_approved_resource":
+            claims.append(ClaimEnvelope(
+                id=f"workflow360.approved_resource.{quote(execution_id, safe='')}:{quote(action_evidence.id, safe='')}",
+                kind="workflow_linked_approved_resource", subject=subject, evidenceRefs=evidence_refs,
+                claims=["The linked execution's approved request names this current tenant resource; the tool edge does not establish that the resource was acted upon."],
+                claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
+            ))
 
     source_incomplete = bool(
         not read.complete or read.scope_mismatch or invalid_rows or not execution_inventory_complete
@@ -2563,7 +2627,8 @@ def _workflow_actions_section(
             canonicalAuthorityRefs=(
                 ["agent_executions", "graph_edges", *(
                     ["tools"] if any(row["toolIdentityState"] == "resolved" for row in actions) else []
-                )]
+                ), *(["actions"] if any(row["executionResult"]["state"] != "unknown" for row in actions) else []),
+                 *(["resources"] if any(row["approvedResource"]["state"] != "unknown" for row in actions) else [])]
                 if actions else None
             ),
         ),

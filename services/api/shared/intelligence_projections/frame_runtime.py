@@ -329,6 +329,25 @@ async def build_experience360_frame(
                     capabilityKey="agent360.read", policyState="allowed",
                     policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
                 ))
+        if request.surfaceId == "workflow360" and projection_id == "workflow360":
+            slot_id = "actions"
+            slot = slot_definitions.get(slot_id)
+            disposition = selected_policy.get(slot_id)
+            bindings = slot.get("projectionBindings", []) if isinstance(slot, Mapping) else []
+            bound = any(isinstance(item, Mapping) and item.get("projectionId") == "workflow360"
+                        and request.subject.kind in item.get("subjectKinds", []) for item in bindings)
+            if slot_id in readable_slot_ids and disposition is not None and disposition.state == "allowed" and bound:
+                for target, capability in (("agent360", "agent360.read"), ("commerce360", "commerce360.read")):
+                    target_definition = INTELLIGENCE_PROJECTION_DEFINITIONS.get(target, {})
+                    if (capability in target_definition.get("capabilityKeys", [])
+                            and target_definition.get("graphMutationPolicy") == "read_only"):
+                        read_authorizations.append(ProjectionReadAuthorization(
+                            tenantId=request.tenantId, sourceSurfaceId=request.surfaceId,
+                            sourceSubject=request.subject, sourceSlotId=slot_id,
+                            consumerProjectionId="workflow360", targetProjectionId=target,
+                            capabilityKey=capability, policyState=disposition.state,
+                            policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
+                        ))
         if request.surfaceId == "campaign360" and projection_id == "campaign360":
             # A campaign slot permission does not itself imply permission to
             # enumerate its linked population. Pass a scoped server decision

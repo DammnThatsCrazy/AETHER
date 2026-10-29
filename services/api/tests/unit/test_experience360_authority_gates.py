@@ -18,6 +18,8 @@ from shared.intelligence_projections.generated_registry import INTELLIGENCE_PROJ
     ("journey360", "journey", "recommended_actions", "episode360", "agent360", "agent360.read"),
     ("risk360", "agent", "interventions", "risk360", "agent360", "agent360.read"),
     ("workflow360", "workflow_run", "approvals", "workflow360", "agent360", "agent360.read"),
+    ("workflow360", "workflow_run", "actions", "workflow360", "agent360", "agent360.read"),
+    ("workflow360", "workflow_run", "actions", "workflow360", "commerce360", "commerce360.read"),
     ("agent360", "agent", "risk_summary", "agent360", "social360", "social360.read"),
 ])
 async def test_nested_authority_requires_exact_allowed_slot(surface, kind, slot, consumer, target, capability):

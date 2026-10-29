@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:56e4b17b9173a71172dd1eed4ffde540155b2add2e99cb62b1ea6318ec746b4d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
 ---
 
 # 360 System Blueprint
@@ -72,8 +72,10 @@ accepted SDK observation carries the authenticated server-stamped site
 namespace. `source_inventory` also resolves the exact current site registration
 as a source fact for that namespace. Event-time status, fleet health, and
 source reliability remain unknown. Workflow360 `actions` preserves the exact
-tenant Tool vertex evidence for admitted execution-linked call edges; action
-results and resource authority remain unbound. Agent360 `capabilities` resolves
+tenant Tool vertex evidence for admitted execution-linked call edges. Under
+slot policy it may also expose the linked execution's recorded executor result
+and an exact current approved resource; tool results and resource operations
+remain unbound. Agent360 `capabilities` resolves
 observed MCP catalog tool identity only for an exact tenant/provider/server/tool
 tuple. For a complete canonical grant read, it also exposes the exact recorded
 invoke action and capability or server resource with delegation evidence;

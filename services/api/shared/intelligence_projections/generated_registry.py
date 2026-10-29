@@ -6395,11 +6395,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Workflow 360",
         "domainSlots": [
             {
-                "authorityGapReason": "Action and resource result authorities are not joined beyond the recorded execution to Tool call edge.",
+                "authorityGapReason": "Tool-call results and resource-operation outcomes are not joined; execution callbacks and current approved resource records are bounded context only.",
                 "canonicalAuthorityRefs": ("actions", "agent_executions", "graph_edges", "resources", "tools"),
                 "description": "Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices.",
                 "id": "actions",
-                "partialImplementationReason": "Call edges are bounded to 200 execution rows and 10000 graph edges. Exact tenant Tool vertices now have separate identity evidence when resolved; authorization, completion, external effects, resource results, producer coverage, historical replay, and freshness remain unknown.",
+                "partialImplementationReason": "Bounded call edges may include an exact linked execution's published executor completion or failure and a current approved tenant resource joined through approval and delegation evidence after slot policy. These records do not establish the tool result, resource operation, external effect, complete producer coverage, historical replay, or freshness.",
                 "projectionBindings": [
                     {
                         "projectionId": "workflow360",

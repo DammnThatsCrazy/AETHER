@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:228dfd9b04bb4d45f94c012bc180ef2d3e33891737864e1a55c64e22cdac2e62"
+  "packages/shared/": "sha256:55d386f6c5638989f51f459947da4f03e78c46efe32ab8c8b76892b8c3740154"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:f141ecb1caeafb1794cd91938b1dab4b137b1173b9518e72a97466ce6018385d"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -93,7 +93,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:7f3c7f239ef57e9ffc7837974c517dca9e51b386c1c3546aa1300d72ea610714"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:31ec09a5f5bf68e63ffc161dcbe1ac5cc40d81701509586b5ec1a0262f376e27"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:faea869afaddcfee82abf3d618e845de8018ee9127edc71214cc94d760cae0ef"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
@@ -101,7 +101,7 @@ source_hashes:
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:18fa6b0d667d1fc98e488851ae92755121bdebda015360692ebf37a6963640e5"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:7ae4c92d2fd6e3f7e69e6f318b13ed8ae0e8287d3cdca58123ddd591c2fe144f"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
   "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
@@ -797,6 +797,10 @@ For an allowed approval slot, Workflow360 can also rejoin the recorded human
 permission check and agent request-time delegation decision to the matching
 current tenant grant and exact approved agent, action, resource, and amount.
 This does not establish current authorization or historical policy replay.
+For an allowed actions slot, the same execution may expose a recorded executor
+completion or failure and an exact current approved tenant resource. Neither
+record establishes that the observed tool call succeeded or operated on the
+resource.
 Workflow definition-to-run linkage, complete actor and step coverage, workflow-wide approval authority,
 policy, and freshness remain unknown. Account360 adds bounded member Risk360 frames from
 exact tenant-owned `MEMBER_OF` edges after account-slot and per-member policy
