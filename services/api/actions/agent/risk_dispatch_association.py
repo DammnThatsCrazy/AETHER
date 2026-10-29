@@ -25,13 +25,19 @@ async def validate_current_risk_decision(tenant_id: str, link: dict[str, str], r
         result = await (repository or RiskInterventionRepository()).list_for_subject(
             tenant_id, link["subject_kind"], link["subject_id"], as_of=now, limit=500
         )
+        if any(row.tenant_id != tenant_id or row.subject_kind != link["subject_kind"]
+               or row.subject_id != link["subject_id"] or row.recorded_at > now or row.observed_at > now
+               for row in result.records):
+            raise ValueError("risk intervention decision history out of scope")
         decisions = [row for row in result.records if row.record_kind == "decision"
                      and row.intervention_id == link["intervention_id"] and row.effective_at <= now]
         if not result.complete or not decisions:
             raise ValueError("risk intervention decision history incomplete")
         latest = max(row.effective_at for row in decisions)
         current = [row for row in decisions if row.effective_at == latest]
-        if len(current) != 1 or current[0].record_id != link["record_id"] or current[0].decision_state != "approved":
+        if (len(current) != 1 or current[0].record_id != link["record_id"]
+                or current[0].decision_state != "approved"
+                or current[0].intervention_type != link["action_key"]):
             raise ValueError("risk intervention is not the current approved decision")
     except ValueError:
         raise
@@ -52,6 +58,9 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
     recommendations = recommendations or RecommendationRepository()
     bounded = min(max(limit, 1), 20)
     try:
+        if (record.tenant_id != tenant_id or record.record_kind != "decision"
+                or record.decision_state != "approved"):
+            return [], False
         rows = await dispatches.find_many(filters={"tenant_id": tenant_id,
             "risk_action_association_record_id": record.record_id}, limit=bounded + 1)
         if not isinstance(rows, list) or len(rows) > bounded:
@@ -64,8 +73,7 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
             dispatch_id, action_id, decision_id, recommendation_id = (row.get(key) for key in
                 ("dispatch_id", "action_id", "decision_id", "recommendation_id"))
             if (not isinstance(link, dict) or row.get("tenant_id") != tenant_id
-                    or record.tenant_id != tenant_id or record.record_kind != "decision"
-                    or record.decision_state != "approved" or row.get("id") != dispatch_id
+                    or row.get("id") != dispatch_id
                     or not all(isinstance(value, str) and value.strip() for value in
                                (dispatch_id, action_id, decision_id, recommendation_id))
                     or dispatch_id in seen or row.get("risk_action_association_record_id") != record.record_id

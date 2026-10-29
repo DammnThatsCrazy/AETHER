@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:14e5192e59b1b825728aaa18fef784f917f5ca4aaf41e72be50890979c04ffc4"
+  "services/api/actions/": "sha256:f5620428069e5517c34d19388b09791343618da4571d9ce73e8cc0edcb2fc730"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:e7fdd3ac3b46b14fd0c1867e91c971f6c24dedf967d09c1b6715b3b37b177261"
+  "services/api/intelligence/": "sha256:060ee548eb92e7287c8d53b55a4e12e91f2afe9deb13696b697fe1f856b01f07"
   "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -1936,7 +1936,9 @@ The join does not establish current authorization or external execution.
 Workflow360 actions may additionally show the linked execution's recorded
 executor result and an exact current resource named by its approved request,
 after the actions slot is allowed. Tool results and resource operations remain
-unknown.
+unknown. Resource evidence excludes oversized reads, incomplete identifiers,
+future evaluations, and conflicting resolved associations; repeated identical
+evidence is deduplicated.
 
 The same endpoint accepts one `journey_action_reference` or
 `risk_action_reference`. The server validates the exact tenant, current journey
@@ -2271,6 +2273,12 @@ current authorization, worker dispatch and external effects remain unverified.
 Separately authorized Journey360 dispatch evidence requires the associated intent
 to have occurred and been recorded by dispatch time. This recorded lifecycle
 state does not establish an external effect or complete dispatch coverage.
+Risk360 can separately read associated dispatch lifecycle records after an
+actions-domain policy decision. The join requires an exact entity recommendation
+and an approved intervention observed, recorded, and effective by dispatch time.
+Current-decision validation rejects out-of-scope or future-observed or recorded
+history, and invalid decisions cannot yield a complete empty dispatch read.
+This evidence does not establish event-time authorization or an external effect.
 
 The latest provider slice adds Agent360 `risk_summary`, Execution360
 `risk_events`, and Value360 `ltv` evidence without adding routes. Agent360 no

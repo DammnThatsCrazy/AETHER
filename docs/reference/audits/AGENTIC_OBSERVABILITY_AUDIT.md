@@ -13,7 +13,7 @@ source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:1a7bca1e31dc66d58cb10f564954eec480f16ef964b2b3383925a4f965ef1ae9"
+  "services/api/actions/agent/": "sha256:9255f80b14391563cc75dde395aa2621019a3eec56bc0560f32fdd9e2ca2de92"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -125,6 +125,12 @@ require an exact entity recommendation binding and an approved decision observed
 recorded, and effective no later than the dispatch. These bounded reads do not
 establish event-time authorization, complete coverage, or an external effect;
 the corresponding registry authorities remain unbound.
+Risk decision-history validation rejects out-of-scope or future-observed or
+future-recorded rows and requires the current approved intervention type to match
+the associated action. Invalid decision records do not produce a complete empty
+dispatch read. Workflow resource evidence rejects oversized inputs, future
+evaluations, incomplete identifiers, and conflicting resolved associations; it
+deduplicates replayed evidence without asserting a resource operation occurred.
 Agent360 and Execution360 also suppress decision claims when that recorded
 scope is absent or mismatched.
 

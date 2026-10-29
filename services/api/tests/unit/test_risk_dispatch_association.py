@@ -24,16 +24,28 @@ class Repository:
 async def test_current_decision_rejects_supersession_ambiguity_and_incomplete_history():
     now = datetime.now(timezone.utc)
     decision = SimpleNamespace(record_kind="decision", intervention_id="i", effective_at=now - timedelta(seconds=2),
-                               record_id="r", decision_state="approved")
-    link = {"subject_kind": "agent", "subject_id": "s", "intervention_id": "i", "record_id": "r"}
+                               record_id="r", decision_state="approved", tenant_id="t", subject_kind="agent",
+                               subject_id="s", intervention_type="review", recorded_at=now, observed_at=now)
+    link = {"subject_kind": "agent", "subject_id": "s", "intervention_id": "i", "record_id": "r",
+            "action_key": "review"}
     await validate_current_risk_decision("t", link, Repository(SimpleNamespace(records=[decision], complete=True)))
     newer = SimpleNamespace(record_kind="decision", intervention_id="i", effective_at=now - timedelta(seconds=1),
-                            record_id="r2", decision_state="rejected")
+                            record_id="r2", decision_state="rejected", tenant_id="t", subject_kind="agent",
+                            subject_id="s", intervention_type="review", recorded_at=now, observed_at=now)
     for result in (SimpleNamespace(records=[decision, newer], complete=True),
                    SimpleNamespace(records=[decision, decision], complete=True),
                    SimpleNamespace(records=[decision], complete=False)):
         with pytest.raises(ValueError):
             await validate_current_risk_decision("t", link, Repository(result))
+
+    for field, value in (("tenant_id", "other"), ("subject_id", "other"), ("subject_kind", "entity"),
+                         ("intervention_type", "other"), ("recorded_at", now + timedelta(days=1)),
+                         ("observed_at", now + timedelta(days=1))):
+        original = getattr(decision, field)
+        setattr(decision, field, value)
+        with pytest.raises(ValueError):
+            await validate_current_risk_decision("t", link, Repository(SimpleNamespace(records=[decision], complete=True)))
+        setattr(decision, field, original)
 
 
 @pytest.mark.asyncio
@@ -76,3 +88,15 @@ async def test_reader_validates_exact_joins_and_fails_closed():
     recommendation.pop("population_id")
     action["tenant_id"] = "other"
     assert await read_risk_dispatches(**kwargs) == ([], False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tenant,kind,state", [("other", "decision", "approved"),
+                                              ("t", "outcome", "approved"),
+                                              ("t", "decision", "rejected")])
+async def test_empty_dispatches_do_not_validate_invalid_record(tenant, kind, state):
+    record = SimpleNamespace(tenant_id=tenant, record_kind=kind, decision_state=state, record_id="r")
+    rows, complete = await read_risk_dispatches(tenant_id="t", record=record, dispatches=Repository([]),
+                                                actions=Repository({}), decisions=Repository({}),
+                                                recommendations=Repository({}))
+    assert rows == [] and not complete
