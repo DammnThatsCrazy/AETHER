@@ -229,3 +229,94 @@ def build_risk_signal(
     if context is not None:
         signal["context"] = context
     return signal
+
+
+# Agent behavior taxonomy (WO-030 / WO-120). Mirrors the registry rows
+# introduced for agent behavioral intelligence; the parity test keeps it equal.
+AGENT_BEHAVIOR_EVENT_TYPES: frozenset[str] = frozenset({
+    "agent_objective_created",
+    "agent_objective_started",
+    "agent_objective_modified",
+    "agent_objective_completed",
+    "agent_objective_failed",
+    "agent_objective_abandoned",
+    "agent_information_retrieved",
+    "agent_source_consulted",
+    "agent_context_received",
+    "agent_decision_started",
+    "agent_candidate_considered",
+    "agent_candidate_rejected",
+    "agent_action_selected",
+    "agent_decision_completed",
+    "agent_authorization_requested",
+    "agent_authorization_granted",
+    "agent_authorization_denied",
+    "agent_tool_retried",
+    "agent_tool_switched",
+    "agent_terminated",
+    "agent_task_returned",
+    "agent_execution_started",
+    "agent_execution_succeeded",
+    "agent_execution_failed",
+    "agent_execution_aborted",
+    "agent_quote_received",
+    "agent_price_evaluated",
+    "agent_transaction_initiated",
+    "agent_transaction_authorized",
+    "agent_transaction_settled",
+    "agent_transaction_failed",
+    "agent_message_generated",
+    "agent_memory_created",
+    "agent_memory_retrieved",
+    "agent_memory_updated",
+    "agent_memory_invalidated",
+    "agent_memory_expired",
+})
+
+# Content keys are never sent: behavior is reconstructed from references and
+# measurements, not from prompts, responses, messages or memory contents.
+_CONTENT_KEYS = frozenset({
+    "prompt", "completion", "response", "content", "messages", "body", "text",
+    "reasoning", "thoughts", "chain_of_thought", "chainOfThought",
+})
+
+
+def build_behavior_event(
+    *,
+    event_type: str,
+    agent_id: str,
+    message_id: str,
+    timestamp: str,
+    properties: Optional[dict[str, Any]] = None,
+    deployment: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """A canonical ``/v1/batch`` event for one agent behavior step.
+
+    ``deployment`` is required: ingestion only accepts these types from a
+    validated deployment. Amounts must be decimal strings.
+    """
+    if event_type not in AGENT_BEHAVIOR_EVENT_TYPES:
+        raise ValueError(f"{event_type!r} is not an agent behavior event type")
+    if not deployment:
+        raise ValueError("agent behavior events require a deployment context")
+    props = dict(properties or {})
+    leaked = sorted(_CONTENT_KEYS & set(props))
+    if leaked:
+        raise ValueError(f"content keys are not accepted: {', '.join(leaked)}")
+    amount = props.get("amount")
+    if amount is not None and (not isinstance(amount, str) or not _is_decimal(amount)):
+        raise ValueError("amount must be a decimal string")
+    props["agentId"] = agent_id
+    return {
+        "type": event_type,
+        "messageId": message_id,
+        "timestamp": timestamp,
+        "properties": props,
+        "context": _deployment_wrapper(deployment),
+    }
+
+
+def _is_decimal(text: str) -> bool:
+    import re
+    return bool(re.fullmatch(r"-?\d+(\.\d+)?", text))
+

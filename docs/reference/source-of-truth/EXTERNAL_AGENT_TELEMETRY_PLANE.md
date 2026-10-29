@@ -112,6 +112,14 @@ Construction requires a validated `AgentDeploymentContext`; every event gets
 | `delegatedTask({delegationId, delegatedToAgentId})` | `agent_delegated_task`; both IDs remain source references |
 | `outcomeRecorded({paymentIntentId?, settlementEventId?, ...})` | `agent_outcome_recorded`; optional payment IDs are caller-reported references |
 | `riskSignal(...)` | `agent_risk_signal_observed` |
+| `objective({status})` | `agent_objective_created` / `_started` / `_modified` / `_completed` / `_failed` / `_abandoned` |
+| `decision({phase})` | `agent_decision_started`, `agent_candidate_considered`, `agent_candidate_rejected`, `agent_action_selected`, `agent_decision_completed` |
+| `authorization({status})` | `agent_authorization_requested` / `_granted` / `_denied` |
+| `toolAdaptation({kind})` | `agent_tool_retried` / `agent_tool_switched` |
+| `execution({status})` | `agent_execution_started` / `_succeeded` / `_failed` / `_aborted` |
+| `economic({kind})` | `agent_quote_received`, `agent_price_evaluated`, `agent_transaction_*`; amounts are decimal strings and stay agent-reported |
+| `information({kind})` / `memory({op})` | `agent_information_retrieved`, `agent_source_consulted`, `agent_context_received`, `agent_memory_*`; references only, never content |
+| `spawned(...)` / `terminated()` | `agent_subagent_spawned` (parent is the deployment's agent) / `agent_terminated` |
 
 Payment and settlement references resolve only to exact tenant-scoped records
 whose provenance comes from the server-owned x402 commerce event registry.
@@ -123,7 +131,7 @@ does not identity-match the deployment to either party or evaluate grant
 scope. These links express correlation; they do not establish causality,
 grant-scope authorization, or payment finality.
 
-Python (`packages/sdk/python/aether_agentic`): `build_deployment_context(...)`
+Python (`packages/sdk/python/aether_agentic`): `build_behavior_event(...)` emits the same behavior types (deployment required, content keys and float amounts rejected); `build_deployment_context(...)`
 plus an optional `deployment=` parameter on all envelope builders; emits the
 same camelCase `agentDeployment` wire shape. `execution_by_aether` remains
 hard-`False`.
