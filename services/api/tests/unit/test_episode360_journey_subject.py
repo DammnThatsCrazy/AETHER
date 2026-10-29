@@ -187,6 +187,7 @@ async def test_journey_dispatch_claims_require_exact_authority_and_isolate_evide
     dispatch_claims = [claim for claim in result.claims if claim.kind == "journey_linked_action_dispatch"]
     assert bool(calls) == (scope in {"allowed", "failure"})
     if scope == "allowed":
+        assert calls[0]["occurred_at"].isoformat() == intent["occurred_at"].replace("Z", "+00:00")
         assert len(dispatch_claims) == 2
         for claim, own, other in zip(dispatch_claims, ("dispatch-1", "dispatch-2"), ("dispatch-2", "dispatch-1")):
             evidence_ids = {ref.id for ref in claim.evidenceRefs}

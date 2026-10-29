@@ -6,7 +6,7 @@ from actions.agent.journey_dispatch_association import read_journey_dispatches
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", ["valid", "foreign", "wrong_version", "wrong_recommendation", "wrong_action", "foreign_decision", "unapproved", "future", "truncated"])
+@pytest.mark.parametrize("case", ["valid", "foreign", "wrong_version", "wrong_recommendation", "wrong_action", "foreign_decision", "unapproved", "future", "before_occurrence", "before_recording", "truncated"])
 async def test_exact_journey_dispatch_chain(case):
     link = {"kind": "journey_action_intent", "link_state": "caller_associated", "record_id": "intent-1",
             "subject_id": "journey-1", "version_id": "version-1", "action_key": "notice",
@@ -27,6 +27,7 @@ async def test_exact_journey_dispatch_chain(case):
     if case == "foreign_decision": decision["tenant_id"] = "tenant-b"
     if case == "unapproved": decision["decision_status"] = "rejected"
     if case == "future": dispatch["created_at"] = "2999-10-18T10:00:02Z"
+    if case in {"before_occurrence", "before_recording"}: dispatch["created_at"] = "2026-10-18T09:59:59Z"
     class Dispatches:
         async def find_many(self, *, filters, limit):
             assert filters == {"tenant_id": "tenant-a", "journey_action_association_record_id": "intent-1"}
@@ -36,7 +37,8 @@ async def test_exact_journey_dispatch_chain(case):
         async def find_by_id(self, key): return self.row
     rows, complete = await read_journey_dispatches(tenant_id="tenant-a", journey_id="journey-1", version_id="version-1",
         record_id="intent-1", action_key="notice", action_type="send", recommendation_id="rec-1",
-        recorded_at=datetime(2026, 10, 18, 10, tzinfo=timezone.utc), dispatches=Dispatches(),
+        recorded_at=datetime(2026, 10, 18, 9 if case == "before_occurrence" else 10, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 10, 18, 9 if case == "before_recording" else 10, tzinfo=timezone.utc), dispatches=Dispatches(),
         actions=Record(action), decisions=Record(decision), recommendations=Record(recommendation))
     if case == "valid":
         assert complete and rows[0]["status"] == "delivered"

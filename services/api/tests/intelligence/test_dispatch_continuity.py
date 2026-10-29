@@ -193,7 +193,7 @@ async def test_journey_dispatch_link_is_validated_and_idempotency_cannot_rebind(
     from actions.agent.journey_dispatch_association import read_journey_dispatches
     rows, complete = await read_journey_dispatches(tenant_id="tenant-a", journey_id="journey-1", version_id="version-1",
         record_id="intent-record-1", action_key="review", action_type="review", recommendation_id="rec-1",
-        recorded_at=intent.recorded_at)
+        recorded_at=intent.recorded_at, occurred_at=intent.occurred_at)
     assert complete and rows[0]["dispatchId"] == dispatch["dispatch_id"]
     assert rows[0]["externalEffect"] == "not_independently_verified"
     async def unavailable_validation(**kwargs):

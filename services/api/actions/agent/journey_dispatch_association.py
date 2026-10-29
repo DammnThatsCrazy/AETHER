@@ -10,7 +10,7 @@ from shared.temporal.instant import parse_instant_strict
 
 async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id: str,
                                   record_id: str, action_key: str, action_type: str,
-                                  recommendation_id: str, recorded_at: datetime,
+                                  recommendation_id: str, recorded_at: datetime, occurred_at: datetime,
                                   dispatches: Any = None, actions: Any = None,
                                   decisions: Any = None, recommendations: Any = None,
                                   limit: int = 20) -> tuple[list[dict[str, Any]], bool]:
@@ -49,7 +49,7 @@ async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id
                     or row.get("status") not in {"queued", "dispatched", "delivered", "failed", "cancelled"}):
                 return [], False
             created = parse_instant_strict(row.get("created_at"))
-            if created < recorded_at or created > datetime.now(timezone.utc):
+            if created < recorded_at or created < occurred_at or created > datetime.now(timezone.utc):
                 return [], False
             action = await actions.find_by_id(action_id)
             decision = await decisions.find_by_id(decision_id)

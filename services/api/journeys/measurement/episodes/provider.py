@@ -3123,6 +3123,7 @@ class Episode360Provider:
                         record_id=item["recordId"], action_key=item["actionKey"],
                         action_type=item["actionType"], recommendation_id=item["recommendationId"],
                         recorded_at=datetime.fromisoformat(item["recordedAt"].replace("Z", "+00:00")),
+                        occurred_at=datetime.fromisoformat(item["occurredAt"].replace("Z", "+00:00")),
                     )
                 except Exception:  # noqa: BLE001 - authority failures degrade this slot
                     rows, complete = [], False
