@@ -303,6 +303,7 @@ async def build_experience360_frame(
         action_scope = {
             ("journey360", "episode360"): "recommended_actions",
             ("risk360", "risk360"): "interventions",
+            ("workflow360", "workflow360"): "approvals",
         }.get((request.surfaceId, projection_id))
         if action_scope is not None:
             slot = slot_definitions.get(action_scope)

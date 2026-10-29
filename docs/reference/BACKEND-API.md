@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:d40769eed1961ecce5ae80cc41c9166da216faa8b6598b8124980062cc407558"
+  "services/api/intelligence/": "sha256:c65b51d82b5b0bcd41f709da53a4eb5f3ba1d9d822700820bcc5567f1862d71c"
   "services/api/journeys/": "sha256:2291264ffaed152bd75e79e1a246fe9254b798543dee19f06336dc4deb60ab87"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -1927,6 +1927,11 @@ persists the caller-reported association. Workflow360 run frames revalidate
 those records and show a degraded `workflow_summary` with the definition
 record and execution evidence. Trigger, step, and external-effect execution
 remain unknown; historical run-definition replay is unavailable.
+
+With the approval slot policy allowed, Workflow360 can also join an approved
+execution's recorded human permission check and agent delegation decision to
+the matching current tenant grant and exact agent, action, resource, and amount.
+The join does not establish current authorization or external execution.
 
 The same endpoint accepts one `journey_action_reference` or
 `risk_action_reference`. The server validates the exact tenant, current journey

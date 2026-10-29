@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:61da29664a0d03b7bae580e0a66d18401fb88a21715e7b233889cd6c2b184f62"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6157920282f762a616a124492314b6262954844d5756edc6de4bf4fad62e9e2d"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:7e99e973a1aaf780ba9babba775033fc9f65338ea8c5a5916270df34fedd6693"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -33,11 +33,11 @@ source_hashes:
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/": "sha256:66a5a736aff42b93557bfcaad96f5edd4de95eef7e6c7b6b266866a40f76c364"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:f7a5280ba5cb263ddcfe717adfb580cfcdb1c1ee6e78009e231fe63fc943d462"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:31ec09a5f5bf68e63ffc161dcbe1ac5cc40d81701509586b5ec1a0262f376e27"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:e983b63092580139a5bcf215d9a2408275d2b68e301e0eedd5c7d1caa0b6a393"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:bbced9da056d94d9e998fb43f5703657dc5a3a0bbf9ab69ec9a7c33f87f1ef3a"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
@@ -245,6 +245,9 @@ USER_ID aliases and joins exact x402 approvals referenced by run-linked
 AgentExecutions. The writer stores workflow and invocation references only when
 a unique tenant-scoped AI invocation has `action_id` equal to the stable
 execution ID; Workflow360 rechecks tenant, run, agent, and action equality.
+An allowed approvals slot can join the human permission receipt and exact
+recorded agent delegation decision to its current matching grant. This is
+request-time evidence, not current authorization or historical policy replay.
 Workflow definition-to-run linkage, complete actor and step coverage,
 workflow-wide approval authority, policy, and freshness remain unknown.
 Workflow360 `triggers` now

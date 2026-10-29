@@ -2811,6 +2811,7 @@
         "workflow_run"
       ],
       "canonicalAuthorities": [
+        "agent_access",
         "ai_execution_facts",
         "agent_entities",
         "agent_executions",
@@ -10249,11 +10250,7 @@
               ]
             }
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "agent_access"
-          ],
-          "authorityGapReason": "canonical_workflow_approval_authority_not_joined",
-          "partialImplementationReason": "Exact x402 approval decisions referenced by admitted run-linked AgentExecutions can carry the recorded request-time human commerce approval permission check. Agent access, workflow-wide coverage, historical policy replay, and effective agent authorization remain unknown."
+          "partialImplementationReason": "Exact x402 approval decisions referenced by admitted run-linked AgentExecutions can carry the recorded human permission check and a matching request-time agent delegation decision with exact current grant, agent, action, resource and amount evidence. Workflow-wide coverage, historical policy replay, and current effective agent authorization remain unknown."
         },
         {
           "id": "agent_steps",

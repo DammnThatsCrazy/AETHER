@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:61da29664a0d03b7bae580e0a66d18401fb88a21715e7b233889cd6c2b184f62"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6157920282f762a616a124492314b6262954844d5756edc6de4bf4fad62e9e2d"
 ---
 
 # 360 System Blueprint
@@ -57,7 +57,7 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Eight slots declare at least one unbound canonical authority after the exact
+Seven slots declare at least one unbound canonical authority after the exact
 bindings in this slice. Value360 can expose a recorded check of attribution run
 configuration lineage against the current config, while model governance and
 calibration remain unbound. Campaign360
@@ -88,7 +88,9 @@ syndicates, historical membership, and freshness remain unknown. Journey and Ris
 can expose an exact caller-associated agent lifecycle request after slot policy.
 The request can include its matching, tenant-scoped, time-checked recorded delegation decision;
 current authorization, dispatch and external effect remain unverified. Workflow approval decisions can
-carry a recorded human permission check; agent access remains unbound.
+carry a recorded human permission check and the matching request-time agent
+delegation decision joined to its current grant. Workflow-wide coverage,
+historical policy replay, and current authorization remain unknown.
 Profile360 `likely_next_states` rechecks the recorded inference decision against
 the tenant, actor, model, subject, policy version, and decision time; session
 models also require the exact current session identity binding. A current

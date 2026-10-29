@@ -890,6 +890,11 @@ class RepositoryWorkflow360Source:
                         "approval_id": approval_id,
                         "decision_id": decision_id,
                         "action": decision_data["action"],
+                        "requester_id": approval_data.get("requester_id"),
+                        "requester_type": approval_data.get("requester_type"),
+                        "execution_action": approval_data.get("execution_action"),
+                        "resource_id": approval_data.get("resource_id"),
+                        "approved_amount_usd": approval_data.get("amount_usd"),
                         "decided_by": decision_data["decided_by"],
                         "decided_at": decision_data.get("decided_at"),
                         **(
@@ -1509,6 +1514,26 @@ class Workflow360Provider:
             and not approval_read.scope_mismatch
             and not approval_scope_mismatch
         )
+        from actions.agent.action_associations import action_association_read_authorized
+        from intelligence.workflow.approval_agent_access import read_approval_agent_access
+
+        approval_agent_access_rows: list[dict[str, Any]] = []
+        if (approval_rows and subject.kind in _RUN_SUBJECT_KINDS
+                and request.asOf is None and context.asOf is None
+                and request.temporalMode not in {"as_of", "compare", "relative"}
+                and (request.includeSections is None or "approvals" in request.includeSections)
+                and action_association_read_authorized(
+                    request, context, surface="workflow360", slot="approvals", consumer="workflow360"
+                )):
+            try:
+                access_read = await read_approval_agent_access(
+                    tenant_id=tenant_id, workflow_run_id=subject.id,
+                    executions=agent_execution_rows, approvals=approval_rows,
+                )
+                if access_read.available:
+                    approval_agent_access_rows = list(access_read.rows)
+            except Exception:  # noqa: BLE001 - access evidence fails closed independently
+                pass
         risk_requested = (
             request.includeSections is None or "risk" in request.includeSections
         )
@@ -1614,6 +1639,7 @@ class Workflow360Provider:
                 else _safe_reason(approval_read.reason)
             ),
             principal_identity_read=principal_identity_read,
+            agent_access_rows=approval_agent_access_rows,
         )
         agent_steps_section, agent_step_claims = _agent_steps_section(
             subject,
@@ -3038,6 +3064,7 @@ def _approvals_section(
     complete: bool,
     reason: Optional[str],
     principal_identity_read: WorkflowPrincipalIdentityRead,
+    agent_access_rows: list[dict[str, Any]],
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     execution_evidence = {ref.id: ref for ref in execution_refs}
     principal_ids = {
@@ -3115,6 +3142,25 @@ def _approvals_section(
             }
             if receipt_valid else {"state": "unknown"}
         )
+        agent_access = next((item for item in agent_access_rows
+                             if item.get("tenant_id") == tenant_id
+                             and item.get("workflow_run_id") == subject.id
+                             and item.get("execution_id") == execution_id
+                             and item.get("approval_id") == approval_id
+                             and item.get("decision_id") == decision_id
+                             and _safe_identifier(item.get("delegation_id"))
+                             and _safe_timestamp(item.get("evaluated_at"))), None)
+        record["agentAccess"] = {"state": "unknown"}
+        if agent_access is not None:
+            grant_ref = EvidenceRef(id=agent_access["delegation_id"], type="relationship",
+                                    source="delegations", observedAt=agent_access["evaluated_at"])
+            evidence_refs = _dedupe_evidence_refs([*evidence_refs, grant_ref])
+            record["agentAccess"] = {
+                "state": "recorded_request_time_allow", "delegationId": agent_access["delegation_id"],
+                "evaluatedAt": agent_access["evaluated_at"],
+                "evidenceRef": grant_ref.model_dump(mode="json"),
+                "currentAuthorization": "unknown", "externalEffect": "unknown",
+            }
         if canonical_decider is not None:
             record["decidedByCanonicalHumanEntityId"] = canonical_decider
         records.append(record)
@@ -3164,6 +3210,8 @@ def _approvals_section(
     if records:
         content["canonicalApprovalDecisionCount"] = len(records)
     refs = ["agent_executions", "commerce"]
+    if any(record["agentAccess"]["state"] == "recorded_request_time_allow" for record in records):
+        refs.append("agent_access")
     return (
         ProjectionSection(
             id="approvals",

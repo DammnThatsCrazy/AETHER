@@ -1913,6 +1913,11 @@ async def test_repository_source_reads_only_exact_execution_approval_references(
             "approval_id": "approval-source-a",
             "decision_id": "decision-source-a",
             "action": action,
+            "requester_id": "canonical-agent-a",
+            "requester_type": "agent",
+            "execution_action": "pay",
+            "resource_id": "resource-source-a",
+            "approved_amount_usd": 1.0,
             "decided_by": "approval-user-a",
             "decided_at": decision.decided_at,
         },
@@ -2603,3 +2608,57 @@ async def test_workflow_run_definition_link_fails_closed_on_conflicts_and_incomp
         item.kind == "workflow_run_reported_definition_association"
         for item in missing_run_link.claims
     )
+
+
+@pytest.mark.asyncio
+async def test_workflow_approval_agent_access_requires_exact_slot_and_joins_grant(monkeypatch):
+    from shared.intelligence_projections.contracts import ProjectionReadAuthorization
+    from repositories import repos
+
+    execution = _agent_execution_row()
+    scope = {"actions": ["pay"], "resources": ["order:1"], "max_amount": "10"}
+    execution.update({"approval_id": "approval-a", "approval_decision_id": "decision-a",
+                      "created_at": "2026-10-18T10:00:03Z",
+                      "input_snapshot": {"action": "pay", "resource": "order:1", "amount": "5"},
+                      "policy_log": {"delegation_check_tenant_id": TENANT_A, "delegation_check": {
+                          "allowed": True, "delegation_id": "delegation-a", "matched_scope": scope,
+                          "evaluated_at": "2026-10-18T10:00:02Z"}}})
+    approval = {"tenant_id": TENANT_A, "workflow_run_id": RUN_ID, "execution_id": "agent-execution-a",
+                "approval_id": "approval-a", "decision_id": "decision-a", "action": "approve",
+                "requester_id": "canonical-agent-a", "requester_type": "agent", "execution_action": "pay",
+                "resource_id": "order:1", "approved_amount_usd": 5, "decided_by": "operator-a",
+                "decided_at": "2026-10-18T10:00:01Z", "permission_receipt": {
+                    "receipt_id": "receipt-a", "tenant_id": TENANT_A, "approval_id": "approval-a",
+                    "execution_id": "agent-execution-a", "principal_id": "operator-a",
+                    "permission": "commerce:approve", "checked_at": "2026-10-18T10:00:00Z"}}
+    class Grants:
+        calls = 0
+        async def find_by_id(self, grant_id):
+            type(self).calls += 1
+            assert grant_id == "delegation-a"
+            return {"tenant_id": TENANT_A, "delegation_id": grant_id, "grantee_entity_id": "canonical-agent-a", "grantor_entity_id": "owner-a",
+                    "scope": scope, "created_at": "2026-10-18T09:00:00Z"}
+    monkeypatch.setattr(repos, "DelegationRepository", Grants)
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((_row("invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"),), True, True),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        approvals=WorkflowApprovalRead((approval,), True, True))
+    request = _request()
+    denied = await Workflow360Provider(source=source).project(request, _context())
+    assert Grants.calls == 0
+    assert _sections(denied)["approvals"].content["approvals"][0]["agentAccess"]["state"] == "unknown"
+    context = _context()
+    context.experience360ReadAuthorizations = [ProjectionReadAuthorization(
+        tenantId=TENANT_A, sourceSurfaceId="workflow360", sourceSubject=request.subject,
+        sourceSlotId="approvals", consumerProjectionId="workflow360", targetProjectionId="agent360",
+        capabilityKey="agent360.read", policyState="allowed", policyIds=["policy-1"],
+        policyEvaluatedAt="2026-10-18T10:01:00Z")]
+    result = await Workflow360Provider(source=source).project(request, context)
+    access = _sections(result)["approvals"].content["approvals"][0]["agentAccess"]
+    assert Grants.calls == 1 and access["state"] == "recorded_request_time_allow"
+    assert access["delegationId"] == "delegation-a" and access["currentAuthorization"] == "unknown"
+    assert "agent_access" in _sections(result)["approvals"].canonicalAuthorityRefs
+    historical = request.model_copy(update={"asOf": "2026-10-18T10:01:00Z"})
+    history = await Workflow360Provider(source=source).project(historical, context)
+    assert Grants.calls == 1
+    assert _sections(history)["approvals"].content["approvals"][0]["agentAccess"]["state"] == "unknown"

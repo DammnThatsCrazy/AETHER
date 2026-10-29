@@ -1533,7 +1533,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("automation", "run", "trigger", "workflow", "workflow_run"),
-        "canonicalAuthorities": ("agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "graph_edges", "identity", "outcome_facts", "risk_assessments", "tools", "workflow_definition_revisions"),
+        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "graph_edges", "identity", "outcome_facts", "risk_assessments", "tools", "workflow_definition_revisions"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -6444,11 +6444,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "canonical_workflow_approval_authority_not_joined",
                 "canonicalAuthorityRefs": ("agent_access", "agent_executions", "commerce"),
                 "description": "Exact x402 approval requests and decisions referenced by tenant and run-linked AgentExecutions; workflow-wide approval coverage and authorization policy remain unknown.",
                 "id": "approvals",
-                "partialImplementationReason": "Exact x402 approval decisions referenced by admitted run-linked AgentExecutions can carry the recorded request-time human commerce approval permission check. Agent access, workflow-wide coverage, historical policy replay, and effective agent authorization remain unknown.",
+                "partialImplementationReason": "Exact x402 approval decisions referenced by admitted run-linked AgentExecutions can carry the recorded human permission check and a matching request-time agent delegation decision with exact current grant, agent, action, resource and amount evidence. Workflow-wide coverage, historical policy replay, and current effective agent authorization remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "workflow360",
@@ -6457,8 +6456,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("approvals",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("agent_access",)
+                "requirement": "required"
             },
             {
                 "id": "evidence_trace",
