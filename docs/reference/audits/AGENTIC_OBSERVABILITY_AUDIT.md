@@ -11,9 +11,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6157920282f762a616a124492314b6262954844d5756edc6de4bf4fad62e9e2d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:56e4b17b9173a71172dd1eed4ffde540155b2add2e99cb62b1ea6318ec746b4d"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:7e99e973a1aaf780ba9babba775033fc9f65338ea8c5a5916270df34fedd6693"
+  "services/api/actions/agent/": "sha256:0a189ec0e865f24bff44d392f6b876f88aa55b7786503565caa33206bfec6121"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -37,7 +37,7 @@ source_hashes:
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:bbced9da056d94d9e998fb43f5703657dc5a3a0bbf9ab69ec9a7c33f87f1ef3a"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:18fa6b0d667d1fc98e488851ae92755121bdebda015360692ebf37a6963640e5"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
@@ -136,8 +136,9 @@ compute a local risk score. Agent360 no longer reads raw `obs_agent_risk_signals
 for this slot. Its provider-level nested Risk360 reader requires exact Agent
 identity, a current analytics-consent receipt, evidence lineage, and an
 explicit `risk_summary` plus `risk360.read` authorization decision. The Agent
-provider exposes its exact canonical identity join only for admitted risk output;
-social observations remain unbound. The frame
+provider exposes its exact canonical identity join only for admitted risk output.
+A slot-authorized Social360 read may add consent-gated, evidence-linked
+risk-context correlations; social coverage and contagion remain unknown. The frame
 runtime now forwards a request-scoped server-derived envelope only after the
 exact slot was requested and allowed, the binding targets Risk360, and the
 projection declares the required capability. The envelope carries the exact

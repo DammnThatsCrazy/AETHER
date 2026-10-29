@@ -67,9 +67,9 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:8a2618e61e0de917e61adbc501586e14b273abdff2daea9c45532497892cbd5b"
+  "packages/shared/": "sha256:228dfd9b04bb4d45f94c012bc180ef2d3e33891737864e1a55c64e22cdac2e62"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:5b1acad0e80d002be6097c056edafd09f3c94d089fc574f6e6c4cedf5c276127"
+  "services/api/actions/agent/agent360_provider.py": "sha256:f141ecb1caeafb1794cd91938b1dab4b137b1173b9518e72a97466ce6018385d"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
@@ -101,7 +101,7 @@ source_hashes:
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:bbced9da056d94d9e998fb43f5703657dc5a3a0bbf9ab69ec9a7c33f87f1ef3a"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:18fa6b0d667d1fc98e488851ae92755121bdebda015360692ebf37a6963640e5"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
   "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
@@ -881,7 +881,9 @@ The latest provider slice adds three evidence-bounded paths. Agent360's
 Risk360 path checks exact Agent scope, current analytics consent with a receipt,
 and claim/evidence lineage. The product slot also has a separate Risk360
 projection binding evaluated through the frame slot gate. The Agent360 provider exposes the exact canonical Agent identity join only
-for admitted risk output. Social observations remain unbound. The nested
+for admitted risk output. A slot-authorized Social360 read can add correlated
+risk-context evidence involving the resolved Agent after endpoint consent; it
+does not establish causal contagion. The nested
 reader receives a request-scoped authorization envelope only
 when `risk_summary` was requested and allowed, the slot binds to Risk360, and
 the projection declares `risk360.read`. The envelope binds tenant, surface,

@@ -1487,7 +1487,14 @@ class Agent360Provider:
             consent_evidence = EvidenceRef.model_validate(
                 risk_summary_row["consent_evidence_ref"]
             )
-            canonical_risk_claims = list(risk_summary_row["claims"])
+            identity_refs = [EvidenceRef.model_validate(ref) for ref in actor_identity_refs]
+            canonical_risk_claims = [
+                claim.model_copy(update={
+                    "subject": request.subject,
+                    "evidenceRefs": _dedupe_refs([*identity_refs, consent_evidence, *claim.evidenceRefs]),
+                })
+                for claim in risk_summary_row["claims"]
+            ]
         risk_evidence_refs = _dedupe_refs(
             [
                 *(EvidenceRef.model_validate(ref) for ref in actor_identity_refs),
@@ -1495,6 +1502,58 @@ class Agent360Provider:
                 *([consent_evidence] if consent_evidence is not None else []),
             ]
         )
+        social_risk_claims: list[ClaimEnvelope] = []
+        social_authorized = (risk_policy_allowed and context.tenantId == tenant_id
+                             and context.projectionId == "agent360" and any(
+            authorization.tenantId == tenant_id
+            and authorization.sourceSurfaceId == "agent360"
+            and authorization.sourceSubject == request.subject
+            and authorization.sourceSlotId == "risk_summary"
+            and authorization.consumerProjectionId == "agent360"
+            and authorization.targetProjectionId == "social360"
+            and authorization.capabilityKey == "social360.read"
+            and authorization.policyState == "allowed"
+            and bool(authorization.policyIds) and bool(authorization.policyEvaluatedAt)
+            for authorization in context.experience360ReadAuthorizations
+        ))
+        if (social_authorized and resolved_canonical_actor
+                and request.temporalMode not in {"as_of", "compare", "relative"}):
+            from actions.agent.social_risk_context import read_agent_social_risk_context
+
+            try:
+                social_rows = await read_agent_social_risk_context(
+                    tenant_id=tenant_id, canonical_agent_id=resolved_canonical_actor
+                )
+            except Exception:  # noqa: BLE001 - social risk is independently fail-closed
+                social_rows = []
+            seen_social_ids: set[str] = set()
+            for social_row in social_rows[:MAX_READ_LIMIT] if isinstance(social_rows, list) else []:
+                if (not isinstance(social_row, dict) or social_row.get("tenant_id") != tenant_id
+                        or social_row.get("canonical_agent_entity_id") != resolved_canonical_actor
+                        or not isinstance(social_row.get("social_claim_id"), str)
+                        or not social_row["social_claim_id"].strip()
+                        or len(social_row["social_claim_id"]) > 256
+                        or social_row["social_claim_id"] in seen_social_ids
+                        or not isinstance(social_row.get("evidence_refs"), list)):
+                    continue
+                try:
+                    refs = [EvidenceRef.model_validate(ref) for ref in social_row["evidence_refs"]]
+                except Exception:  # noqa: BLE001 - invalid evidence must not be projected
+                    continue
+                sources = {ref.source for ref in refs}
+                if ("entity_graph" not in sources or "relationship_facts" not in sources
+                        or not any(source.startswith("risk_signals:") for source in sources)
+                        or any(not ref.id or not ref.source for ref in refs)):
+                    continue
+                seen_social_ids.add(social_row["social_claim_id"])
+                refs = _dedupe_refs([*(EvidenceRef.model_validate(ref) for ref in actor_identity_refs), *refs])
+                risk_evidence_refs = _dedupe_refs([*risk_evidence_refs, *refs])
+                social_risk_claims.append(ClaimEnvelope(
+                    id=f"agent360:{social_row['social_claim_id']}", kind="agent_social_risk_context",
+                    subject=request.subject, evidenceRefs=refs,
+                    claims=["A registered social risk-context edge and a tenant risk signal share evidence involving this resolved Agent. This correlation does not establish risk causation, propagation, contagion, or loss."],
+                    claimState=EpistemicStatus.CORRELATED, domainSlotIds=["risk_summary"],
+                ))
         risk_summary_content: dict[str, Any] = {
             "state": risk_summary_state,
             "tenantId": tenant_id,
@@ -1523,6 +1582,11 @@ class Agent360Provider:
                     if risk_summary_row is not None
                     else "risk_slot_authority_not_available"
                 ),
+            },
+            "socialRiskContext": {
+                "state": "partial" if social_risk_claims else "unknown",
+                "observedCorrelationCount": len(social_risk_claims) if social_risk_claims else None,
+                "causalContagion": "unknown",
             },
         }
         if risk_summary_row is not None and risk_summary_state == "partial":
@@ -2825,6 +2889,7 @@ class Agent360Provider:
         )
         if not invalid_window:
             claims.extend(canonical_risk_claims)
+            claims.extend(social_risk_claims)
         if claim_evidence_refs:
             claims.append(
                 ClaimEnvelope(

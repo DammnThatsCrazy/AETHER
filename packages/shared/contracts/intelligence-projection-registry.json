@@ -254,6 +254,7 @@
         "identity",
         "observations",
         "outcome_facts",
+        "social_observations",
         "source_provenance",
         "tools"
       ],
@@ -3226,18 +3227,15 @@
                 "state"
               ],
               "subjectKinds": [
-                "agent"
+                "agent",
+                "entity"
               ]
             }
           ],
           "implementationCrosswalk": [
             "risk_and_contagion"
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "social_observations"
-          ],
-          "authorityGapReason": "agent_risk_summary_social_observation_and_contagion_authority_not_joined",
-          "partialImplementationReason": "The Agent360 supporting path resolves exact tenant canonical Agent identity with identity evidence before an allowed Risk360 read and exposes that join only for admitted partial risk output. The nested read requires the exact allowed risk_summary slot decision, bound risk360.read capability, and affirmative current analytics consent. Social observations, Agent-specific freshness, historical replay, and causal contagion remain unknown."
+          "partialImplementationReason": "The Agent360 supporting path resolves exact tenant canonical Agent identity before policy-authorized Risk360 and Social360 reads. Social risk-context edges require consent and shared risk-signal evidence and are correlated context only. Agent-specific freshness, historical replay, social observation coverage, and causal contagion remain unknown."
         },
         {
           "id": "evidence_trace",

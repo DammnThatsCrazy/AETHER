@@ -422,6 +422,16 @@ async def build_experience360_frame(
                         policyEvaluatedAt=risk_disposition.evaluatedAt,
                     )
                 )
+                social = INTELLIGENCE_PROJECTION_DEFINITIONS.get("social360", {})
+                if ("social360.read" in social.get("capabilityKeys", [])
+                        and social.get("graphMutationPolicy") == "read_only"):
+                    read_authorizations.append(ProjectionReadAuthorization(
+                        tenantId=request.tenantId, sourceSurfaceId=request.surfaceId,
+                        sourceSubject=request.subject, sourceSlotId=risk_slot_id,
+                        consumerProjectionId="agent360", targetProjectionId="social360",
+                        capabilityKey="social360.read", policyState=risk_disposition.state,
+                        policyIds=list(risk_disposition.policyIds), policyEvaluatedAt=risk_disposition.evaluatedAt,
+                    ))
         if request.surfaceId == "profile360" and projection_id == "profile360":
             # Profile360 can read Relationship360 only for the exact entity
             # subject of an explicitly allowed relationships slot. The

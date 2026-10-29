@@ -540,7 +540,10 @@ async def test_agent360_risk_summary_requires_exact_outer_slot_authority_before_
     claim = next(
         claim for claim in result.claims if claim.kind == "canonical_agent_risk_assessment"
     )
-    assert claim.subject.id == "canonical-agent-a"
+    assert claim.subject.id == AGENT
+    assert {ref.source for ref in claim.evidenceRefs} >= {
+        "agent_deployment_identity_bindings", "governance.consent.authority"
+    }
     assert claim.domainSlotIds == ["risk_summary"]
 
 
@@ -3159,3 +3162,69 @@ def test_capability_grant_rejects_ambiguous_capability_and_server_scope():
     )
     assert rows == []
     assert complete is False
+
+
+@pytest.mark.asyncio
+async def test_agent_social_risk_requires_exact_outer_authority_and_preserves_correlation(monkeypatch):
+    from actions.agent import social_risk_context
+    calls = []
+    async def read(**kwargs):
+        calls.append(kwargs)
+        return [{"tenant_id": TENANT, "canonical_agent_entity_id": "canonical-agent-a", "social_claim_id": "social-1",
+                 "evidence_refs": [{"id": "edge-1", "type": "relationship", "source": "entity_graph"},
+                                   {"id": "fact-1", "type": "event", "source": "relationship_facts"},
+                                   {"id": "risk-1", "type": "model_output", "source": "risk_signals:observed"}]}]
+    monkeypatch.setattr(social_risk_context, "read_agent_social_risk_context", read)
+    async def allow(**kwargs): return True
+    request = _request()
+    result = await Agent360Provider(FakeSource(), risk_slot_authorizer=allow).project(request, _context())
+    assert calls == []
+    assert not any(claim.kind == "agent_social_risk_context" for claim in result.claims)
+    context = _context()
+    context.experience360ReadAuthorizations = [ProjectionReadAuthorization(
+        tenantId=TENANT, sourceSurfaceId="agent360", sourceSubject=request.subject, sourceSlotId="risk_summary",
+        consumerProjectionId="agent360", targetProjectionId="social360", capabilityKey="social360.read",
+        policyState="allowed", policyIds=["policy-1"], policyEvaluatedAt="2026-10-18T10:00:00Z")]
+    result = await Agent360Provider(FakeSource(), risk_slot_authorizer=allow).project(request, context)
+    assert calls == [{"tenant_id": TENANT, "canonical_agent_id": "canonical-agent-a"}]
+    claim = next(claim for claim in result.claims if claim.kind == "agent_social_risk_context")
+    assert claim.subject == request.subject and claim.claimState == EpistemicStatus.CORRELATED
+    assert {ref.source for ref in claim.evidenceRefs} >= {"entity_graph", "relationship_facts", "risk_signals:observed"}
+    assert "contagion" in claim.claims[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("subject_kind", ["agent", "entity"])
+async def test_agent_social_risk_reaches_allowed_frame_slot(monkeypatch, subject_kind):
+    from actions.agent import social_risk_context
+    async def read(**kwargs):
+        return [{"tenant_id": TENANT, "canonical_agent_entity_id": "canonical-agent-a", "social_claim_id": "social-frame-1",
+                 "evidence_refs": [{"id": "edge-1", "type": "relationship", "source": "entity_graph"},
+                                   {"id": "fact-1", "type": "event", "source": "relationship_facts"},
+                                   {"id": "risk-1", "type": "model_output", "source": "risk_signals:observed"}]}]
+    monkeypatch.setattr(social_risk_context, "read_agent_social_risk_context", read)
+    class Allow:
+        async def evaluate(self, frame_request):
+            return Experience360PolicyEvaluation(surfaceId="agent360", tenantId=TENANT,
+                evaluatedAt="2026-10-23T14:00:00Z", frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={"risk_summary": Experience360PolicyDisposition(state="allowed", policyIds=["policy-1"],
+                                                                                 evaluatedAt="2026-10-23T14:00:00Z")})
+    registry = ProviderRegistry()
+    class Source(FakeSource):
+        async def actor_identity(self, tenant_id, agent_id):
+            if subject_kind == "agent":
+                return await super().actor_identity(tenant_id, agent_id)
+            return Agent360ReadBatch(rows=[{"tenant_id": tenant_id, "agent_id": agent_id,
+                "canonical_agent_entity_id": "canonical-agent-a", "identity_evidence_id": "canonical-agent-a",
+                "identity_evidence_source": "entities", "identity_binding_authority": "canonical_agent_entity",
+                "identity_bound_at": "2026-10-01T00:00:00Z"}])
+    registry.register(Agent360Provider(Source()), source="test")
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(surfaceId="agent360", tenantId=TENANT,
+            subject=ProjectionSubject(kind=subject_kind, id=AGENT if subject_kind == "agent" else "canonical-agent-a"),
+            requestedSlotIds=["risk_summary"], includeEvidence=True),
+        policy_evaluator=Allow(), projection_runtime=ProjectionRuntime(executor=ProjectionExecutor(registry=registry)))
+    slot = frame.slots[0]
+    assert any(claim.kind == "agent_social_risk_context" for claim in slot.claims)
+    assert any(ref.source == "relationship_facts" for ref in slot.evidenceRefs)
+    assert slot.state == "degraded"

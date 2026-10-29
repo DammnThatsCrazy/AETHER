@@ -139,7 +139,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/agent360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity"),
-        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_entity", "agent_executions", "delegations", "economic_facts", "entities", "evidence", "graph", "identity", "observations", "outcome_facts", "source_provenance", "tools"),
+        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_entity", "agent_executions", "delegations", "economic_facts", "entities", "evidence", "graph", "identity", "observations", "outcome_facts", "social_observations", "source_provenance", "tools"),
         "hardDependencies": ("agentic_runtime_access", "contract_spine", "identity_resolution", "temporal_kernel"),
         "projectionDependencies": ("profile360",),
         "optionalProjectionDependencies": ("economic360", "outcome360"),
@@ -2186,17 +2186,16 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "agent_risk_summary_social_observation_and_contagion_authority_not_joined",
                 "canonicalAuthorityRefs": ("agent_entities", "identity", "relationship_facts", "risk_outputs", "social_observations"),
                 "description": "Required Agent 360 blueprint slot: risk summary.",
                 "id": "risk_summary",
                 "implementationCrosswalk": ("risk_and_contagion",),
-                "partialImplementationReason": "The Agent360 supporting path resolves exact tenant canonical Agent identity with identity evidence before an allowed Risk360 read and exposes that join only for admitted partial risk output. The nested read requires the exact allowed risk_summary slot decision, bound risk360.read capability, and affirmative current analytics consent. Social observations, Agent-specific freshness, historical replay, and causal contagion remain unknown.",
+                "partialImplementationReason": "The Agent360 supporting path resolves exact tenant canonical Agent identity before policy-authorized Risk360 and Social360 reads. Social risk-context edges require consent and shared risk-signal evidence and are correlated context only. Agent-specific freshness, historical replay, social observation coverage, and causal contagion remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "agent360",
                         "role": "supporting",
-                        "subjectKinds": ("agent",),
+                        "subjectKinds": ("agent", "entity"),
                         "sectionIds": ("state",)
                     },
                     {
@@ -2206,8 +2205,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "findings")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("social_observations",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("graph", "relationship_facts", "temporal"),
