@@ -1014,6 +1014,32 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/agent-behavior/00-current-architecture-map.md",
+      "title": "Agent Behavioral Intelligence — Current Architecture Map (WO-000)",
+      "slug": "architecture/agent-behavior/current-architecture-map",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/agent-behavior/01-golden-scenarios.md",
+      "title": "Agent Behavioral Intelligence — Golden Scenarios (WO-002)",
+      "slug": "architecture/agent-behavior/golden-scenarios",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
       "path": "docs/architecture/blueprints/SDK_PRODUCTIZATION_CLOSE_OUT_AND_CERTIFICATION_BLUEPRINT.md",
       "title": "SDK Productization Close-Out Blueprint",
       "slug": "blueprints/sdk-close-out",
@@ -2084,6 +2110,149 @@
       "status": "stable",
       "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-001-bounded-intelligence-domain.md",
+      "title": "ADR-AB-001: Agent behavior is a bounded intelligence domain, not a platform",
+      "slug": "decisions/agent-behavior/adr-ab-001-bounded-intelligence-domain",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-002-behavior-model-is-derived.md",
+      "title": "ADR-AB-002: AgentBehaviorModel is derived and rebuildable",
+      "slug": "decisions/agent-behavior/adr-ab-002-behavior-model-is-derived",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-003-decision-envelope-immutable.md",
+      "title": "ADR-AB-003: DecisionEnvelope is evidence-qualified and immutable after closure",
+      "slug": "decisions/agent-behavior/adr-ab-003-decision-envelope-immutable",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-004-opportunity-envelope.md",
+      "title": "ADR-AB-004: OpportunityEnvelope separates availability from preference",
+      "slug": "decisions/agent-behavior/adr-ab-004-opportunity-envelope",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-005-responsibility-roles-separate.md",
+      "title": "ADR-AB-005: Actor, authority, decision and execution roles are separate",
+      "slug": "decisions/agent-behavior/adr-ab-005-responsibility-roles-separate",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-006-no-chain-of-thought.md",
+      "title": "ADR-AB-006: Chain-of-thought is neither required nor treated as evidence",
+      "slug": "decisions/agent-behavior/adr-ab-006-no-chain-of-thought",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-007-internal-vs-observed-agents.md",
+      "title": "ADR-AB-007: Internal Aether agents are separate from observed agents",
+      "slug": "decisions/agent-behavior/adr-ab-007-internal-vs-observed-agents",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-008-inference-never-writes-facts.md",
+      "title": "ADR-AB-008: Behavioral inference never writes back into canonical facts",
+      "slug": "decisions/agent-behavior/adr-ab-008-inference-never-writes-facts",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-009-unknown-and-not-observed.md",
+      "title": "ADR-AB-009: Unknown and not-observed semantics are mandatory",
+      "slug": "decisions/agent-behavior/adr-ab-009-unknown-and-not-observed",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-010-placement-follows-current-owners.md",
+      "title": "ADR-AB-010: Schema paths follow current post-#734 ownership",
+      "slug": "decisions/agent-behavior/adr-ab-010-placement-follows-current-owners",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/README.md",
+      "title": "Agent Behavioral Intelligence — ADR index",
+      "slug": "decisions/agent-behavior",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
     },
     {
       "path": "docs/architecture/integration-control-plane/ARCHITECTURE_DECISIONS.md",
