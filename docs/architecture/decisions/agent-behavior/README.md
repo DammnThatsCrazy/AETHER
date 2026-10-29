@@ -26,3 +26,4 @@ break the program's invariants. Owners are listed in the
 | [ADR-AB-008](ADR-AB-008-inference-never-writes-facts.md) | Behavioral inference never writes back into canonical facts |
 | [ADR-AB-009](ADR-AB-009-unknown-and-not-observed.md) | Unknown and not-observed semantics are mandatory |
 | [ADR-AB-010](ADR-AB-010-placement-follows-current-owners.md) | Schema paths follow current post-#734 ownership |
+| [ADR-AB-011](ADR-AB-011-trust-under-risk.md) | Agent trust and reputation live under Risk, kept apart |

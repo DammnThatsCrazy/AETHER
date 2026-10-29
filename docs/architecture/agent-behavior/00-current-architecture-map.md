@@ -61,7 +61,7 @@ concern adds to this owner. A parallel owner needs an ADR
 | Projections / read models (L5) | `services/api/shared/intelligence_projections/{contracts,registry,provider,frame_runtime}.py`, registry `packages/shared/contracts/intelligence-projection-registry.json` | `ProjectionRequest → ProjectionResult` of `ProjectionSection`s carrying `ClaimEnvelope`s. Agent360 is `actions/agent/agent360_provider.py`; Execution360 is `actions/agent/execution360_provider.py`; Profile360 is `identity/profile/profile360_provider.py`; Relationship360 is `identity/relationship_intelligence/relationship360_provider.py`. |
 | Intelligence (L6) | `services/api/intelligence/` | `intelligence/intelligence/decision_models.py` holds Aether's **own** recommendation `DecisionRecord`. It is not an observed agent's decision (see ADR-AB-003). `intelligence/behavior/` and `intelligence/behavioral/` hold **human** Profile360 behavior signals. |
 | Risk | `services/api/intelligence/risk360/`, `intelligence/fraud360/`, `intelligence/fraud_networks/` | Fleet hypotheses and Risk360/Fraud360 projections live here. |
-| Trust / reputation | **No code owner exists.** Product naming (`naming-truth.md`) puts trust exposure under Risk. | WO-094 must carry an ADR that either places Trust under Risk or justifies a separate owner. |
+| Trust / reputation | `services/api/intelligence/risk360/agent_trust.py` (ADR-AB-011) | Trust and reputation are separate profiles under Risk; product naming (`naming-truth.md`) already puts trust exposure under Risk. |
 | Actions / execution (L7) | `services/api/actions/delivery/`, `intelligence/intelligence/routes.py` | Aether-executed actions only. Observed agents' actions are facts, not Aether actions. `execution_by_aether` stays `False` (ADR-011). |
 | Agentic observability | `services/api/actions/agentic_observability/` (normalizer, provenance, risk signals, graph mutations) | Provider-framework normalization for agent accounts, inboxes and trading. Adapters only; no behavioral inference. |
 | Query / access | `services/api/intelligence/noesis/` (natural-language graph intelligence), `packages/access-kit/` (CLI and MCP read bridge), `services/api/governance/kyber/access/` (operator access) | No cross-domain "query orchestrator" module exists by that name. WO-115 extends Noesis capability registration and the Access Kit closed read list. |
@@ -152,7 +152,7 @@ package.
 | WO-090 – WO-091 Attribution and influence | Intelligence plus graph | Influence edges are inferred `MutationIntent`s with evidence. |
 | WO-092 Value | Value | `services/api/value/` consumes behavior facts. Value math never goes inside DecisionEnvelope. |
 | WO-093 Risk | Risk | `intelligence/risk360/` and `fraud_networks/` consume behavior signals. |
-| WO-094 Trust | **No owner (needs an ADR)** | — |
+| WO-094 Trust | Risk | `intelligence/risk360/agent_trust.py` (ADR-AB-011). |
 | WO-100 – WO-103 Drift and counterfactuals | Intelligence | `intelligence/agent_behavior/`. |
 | WO-110 – WO-113 Read models | Projections | Extend the Agent360 and Profile360 providers and the projection registry. |
 | WO-114 Graph UI | Frontend | `apps/aether-web/src/features/agent360/`. |
