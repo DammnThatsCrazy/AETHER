@@ -327,6 +327,17 @@ which agent references spawned which, never who controls them. Silver stores
 the event type as `source_event_type`; the readers accept `event_name` only for
 locally held rows.
 
+Spawn and delegation facts reported by an agent without a validated
+deployment also project one bounded `SPAWNED_SUBAGENT` / `DELEGATED_TO`
+graph edge per (parent, child) through the mutation gateway. The edge source
+is always the reporting agent; a payload naming a different parent emits no
+edge. At ingestion, `agent_subagent_spawned` and every agent behavior taxonomy
+type (objectives, decisions, authority, execution, economic, memory) require a
+validated deployment context. Behavior read models over these facts are
+`GET /v1/agent/agents/{agent_ref}/behavior` and
+`/decisions/{decision_id}`; see the
+[agent behavior architecture map](../../architecture/agent-behavior/00-current-architecture-map.md).
+
 ## Known limitations / non-goals
 
 - No Aether-operated marketplace, listing submissions/review/distribution, or

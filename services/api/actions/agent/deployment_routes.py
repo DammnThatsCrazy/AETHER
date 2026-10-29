@@ -26,7 +26,7 @@ from actions.agent.deployments import (
 from actions.agentic_observability.foundation import require_permission as _require_perm
 from actions.agent_marketplace.models import AgentMarketplaceOrigin
 from repositories.repos import EntityRepository
-from shared.common.common import APIResponse, BadRequestError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.agent.deployments.routes")
@@ -627,6 +627,63 @@ async def agent_spawn_lineage(
             "tree": None,
         }
     return APIResponse(data=shape).to_dict()
+
+
+BEHAVIOR_FACT_LIMIT = 1000
+
+
+async def _behavior_facts(tenant_id: str, agent_ref: str) -> tuple[list[Any], bool]:
+    """Bounded tenant-scoped Silver facts for one agent and its spawn edges."""
+    from dependencies.providers import get_cache
+    from intelligence.agent_behavior.facts import normalize_rows
+    from repositories.repos import AnalyticsRepository
+
+    analytics = AnalyticsRepository(get_cache())
+    rows = await analytics.query_silver(
+        "silver_agent_execution_facts", {"tenant_id": tenant_id, "agent_id": agent_ref},
+        limit=BEHAVIOR_FACT_LIMIT + 1,
+    )
+    truncated = len(rows) > BEHAVIOR_FACT_LIMIT
+    spawns = await analytics.query_silver(
+        "silver_agent_execution_facts",
+        {"tenant_id": tenant_id, "source_event_type": "agent_subagent_spawned"}, limit=BEHAVIOR_FACT_LIMIT,
+    )
+    return normalize_rows(rows[:BEHAVIOR_FACT_LIMIT] + spawns, tenant_id), truncated
+
+
+@lineage_router.get("/{agent_ref}/behavior")
+async def agent_behavior_read_model(agent_ref: str, request: Request):
+    """Agent360 behavior read model: rebuildable, evidence-qualified, with what
+    Aether cannot see. Source-reported agent refs; not an identity resolution."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    try:
+        facts, truncated = await _behavior_facts(tenant.tenant_id, agent_ref)
+        data = agent360_behavior(facts, agent_ref, truncated=truncated)
+    except Exception as exc:
+        logger.warning("agent behavior read model unavailable",
+                       extra={"tenant_id": tenant.tenant_id, "error": type(exc).__name__})
+        data = {"agent_ref": agent_ref, "source_status": "unavailable", "sections": None}
+    return APIResponse(data=data).to_dict()
+
+
+@lineage_router.get("/{agent_ref}/decisions/{decision_id}")
+async def agent_decision_detail(agent_ref: str, decision_id: str, request: Request):
+    """One reconstructed DecisionEnvelope with attribution, responsibility roles
+    and a labelled counterfactual."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.read_models import decision_detail
+    from repositories.repos import DelegationRepository
+
+    facts, _ = await _behavior_facts(tenant.tenant_id, agent_ref)
+    grants = await DelegationRepository().active_for(agent_ref, tenant.tenant_id)
+    detail = decision_detail(facts, decision_id, grants=grants)
+    if detail is None or detail["envelope"]["decision_actor"].get("value") != agent_ref:
+        raise NotFoundError("decision not found")
+    return APIResponse(data=detail).to_dict()
 
 
 @deployments_router.get("/{deployment_id}/runs")

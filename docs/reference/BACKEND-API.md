@@ -3647,6 +3647,11 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 
 - `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
 
+### Agent behavior read models
+
+- `GET /v1/agent/agents/{agent_ref}/behavior` — `agent:manage`, registry flag. Agent360 behavior read model rebuilt from the agent's Silver facts: usual tools and dispositions, features with sample sizes and confidence intervals, capabilities and competencies, preferences (only over observed, permitted alternatives), failure resolution, journey, influence graph and an observability envelope listing what Aether cannot see. Each section reports `available`, `partial` (the 1,000-fact read was capped) or `unavailable` with a reason. Agent refs are source-reported; this is not an identity resolution.
+- `GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}` — `agent:manage`, registry flag. One reconstructed DecisionEnvelope (open or closed, with missing parts listed), its evidence-association attribution, the nine responsibility roles, and a counterfactual labelled `counterfactual — not observed`. Returns 404 when the decision is not the named agent's or belongs to another tenant.
+
 ### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
 
 - `POST /sdk/journey-handoff` — SDK key (a site-bound publishable key may call it). Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID. Identifiers are trimmed; blank ones are a 422.
