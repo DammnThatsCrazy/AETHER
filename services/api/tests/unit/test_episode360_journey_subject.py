@@ -1453,6 +1453,142 @@ async def test_journey_attribution_uses_exact_tenant_journey_run_and_evidence() 
     assert any("not independent causal proof" in item for item in claim.claims)
 
 
+async def test_journey_attribution_resolves_exact_current_canonical_subjects_once() -> None:
+    conversions = FakeJourneyConversionSource(
+        {
+            "conversion-recorded": {
+                "tenant_id": TENANT,
+                "conversion_id": "conversion-recorded",
+                "conversion_status": "confirmed",
+                "attribution_eligible": True,
+                "occurred_at": "2026-10-16T09:50:00+00:00",
+                "observed_at": "2026-10-16T09:51:00+00:00",
+                "profile_id": "private-profile-id",
+            }
+        }
+    )
+    touchpoints = FakeJourneyTouchpointSource(
+        {
+            "touchpoint-recorded": {
+                "tenant_id": TENANT,
+                "touchpoint_id": "touchpoint-recorded",
+                "campaign_id": "campaign-1",
+                "attribution_eligible": True,
+                "privacy_class": "standard",
+                "occurred_at": "2026-10-16T09:45:00+00:00",
+                "profile_id": "private-profile-id",
+            }
+        }
+    )
+    attribution = FakeJourneyAttributionSource(
+        [
+            _journey_attribution_credit(),
+            _journey_attribution_credit(credit_id="attribution-credit-2"),
+        ]
+    )
+    result = await Episode360Provider(
+        journey_source=FakeJourneySource(
+            journey=_journey(
+                conversion_ids=[], touchpoint_ids=[],
+                entry_touchpoint_id=None, exit_touchpoint_id=None,
+            ),
+            steps=[],
+        ),
+        conversion_source=conversions,
+        touchpoint_source=touchpoints,
+        attribution_source=attribution,
+    ).project(_request(), _context())
+
+    assert conversions.calls == [(TENANT, "conversion-recorded")]
+    assert touchpoints.calls == [(TENANT, "touchpoint-recorded")]
+    section = _section(result, "journey_attribution")
+    assert section.state == "available"
+    assert section.canonicalAuthorityRefs == [
+        "attribution_runs", "attribution_credits", "canonical_conversions", "touchpoints"
+    ]
+    assert len(section.content["credits"]) == 2
+    for credit in section.content["credits"]:
+        assert credit["conversionResolutionState"] == "current_exact_id"
+        assert credit["touchpointResolutionState"] == "current_exact_id"
+        assert {ref["id"] for ref in credit["evidenceRefs"]} == {
+            "attribution-run-1", "attribution-credit-1" if credit["creditId"] == "attribution-credit-1" else "attribution-credit-2",
+            "conversion-recorded", "touchpoint-recorded",
+        }
+    claim = next(item for item in result.claims if item.kind == "journey_attribution_credit")
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        VERSION_ID, "attribution-run-1", "attribution-credit-1",
+        "conversion-recorded", "touchpoint-recorded",
+    }
+    assert section.content["history"]["state"] == "unknown"
+    assert section.content["freshness"]["state"] == "unknown"
+    assert section.content["policy"]["state"] == "unknown"
+    assert "private-profile-id" not in json.dumps(result.model_dump(mode="json"))
+
+
+@pytest.mark.parametrize(
+    ("conversion_override", "touchpoint_override", "conversion_reason", "touchpoint_reason"),
+    [
+        ({"tenant_id": "foreign"}, {}, "canonical_conversion_scope_mismatch", "current_exact_tenant_touchpoint_id"),
+        ({"conversion_status": "reversed"}, {}, "canonical_conversion_current_status_ineligible", "current_exact_tenant_touchpoint_id"),
+        ({"occurred_at": "2026-10-16T10:05:00+00:00"}, {}, "canonical_conversion_run_time_conflict", "current_exact_tenant_touchpoint_id"),
+        ({}, {"privacy_class": "deleted"}, "current_exact_tenant_conversion_id", "canonical_touchpoint_current_status_ineligible"),
+        ({}, {"campaign_id": "other-campaign"}, "current_exact_tenant_conversion_id", "canonical_touchpoint_campaign_conflict"),
+        ({}, {"occurred_at": "2026-10-16T10:05:00+00:00"}, "current_exact_tenant_conversion_id", "canonical_touchpoint_run_time_conflict"),
+    ],
+)
+async def test_journey_attribution_subject_resolution_fail_closed_independently(
+    conversion_override: dict, touchpoint_override: dict,
+    conversion_reason: str, touchpoint_reason: str,
+) -> None:
+    conversion_row = {
+        "tenant_id": TENANT,
+        "conversion_id": "conversion-recorded",
+        "conversion_status": "confirmed",
+        "attribution_eligible": True,
+        "occurred_at": "2026-10-16T09:50:00+00:00",
+    }
+    conversion_row.update(conversion_override)
+    touchpoint_row = {
+        "tenant_id": TENANT,
+        "touchpoint_id": "touchpoint-recorded",
+        "campaign_id": "campaign-1",
+        "attribution_eligible": True,
+        "occurred_at": "2026-10-16T09:45:00+00:00",
+    }
+    touchpoint_row.update(touchpoint_override)
+    result = await Episode360Provider(
+        journey_source=FakeJourneySource(
+            journey=_journey(
+                conversion_ids=[], touchpoint_ids=[],
+                entry_touchpoint_id=None, exit_touchpoint_id=None,
+            ),
+            steps=[],
+        ),
+        conversion_source=FakeJourneyConversionSource({"conversion-recorded": conversion_row}),
+        touchpoint_source=FakeJourneyTouchpointSource({"touchpoint-recorded": touchpoint_row}),
+        attribution_source=FakeJourneyAttributionSource([_journey_attribution_credit()]),
+    ).project(_request(), _context())
+
+    section = _section(result, "journey_attribution")
+    assert section.state == "available"  # the canonical model-output credit still exists
+    credit = section.content["credits"][0]
+    assert credit["conversionResolutionReason"] == conversion_reason
+    assert credit["touchpointResolutionReason"] == touchpoint_reason
+    assert credit["conversionResolutionState"] == (
+        "current_exact_id" if conversion_reason.startswith("current_exact") else "unknown"
+    )
+    assert credit["touchpointResolutionState"] == (
+        "current_exact_id" if touchpoint_reason.startswith("current_exact") else "unknown"
+    )
+    claim = next(item for item in result.claims if item.kind == "journey_attribution_credit")
+    assert ("conversion-recorded" in {ref.id for ref in claim.evidenceRefs}) == (
+        credit["conversionResolutionState"] == "current_exact_id"
+    )
+    assert ("touchpoint-recorded" in {ref.id for ref in claim.evidenceRefs}) == (
+        credit["touchpointResolutionState"] == "current_exact_id"
+    )
+
+
 async def test_journey_attribution_is_not_read_or_exposed_when_slot_is_not_requested() -> None:
     source = FakeJourneySource(journey=_journey(conversion_ids=[]), steps=[])
     attribution = FakeJourneyAttributionSource([_journey_attribution_credit()])

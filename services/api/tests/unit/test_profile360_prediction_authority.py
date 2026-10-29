@@ -48,6 +48,7 @@ def _output(
         artifact_approval_state="promoted",
         feature_schema_hash="schema-hash-v1",
         feature_digest="0123456789abcdef",
+        state_schema_version="profile_future_state.v1",
         policy_decision_id="cpd-1",
         policy_version="consent-v2",
         actor_id="actor-1",
@@ -63,7 +64,7 @@ def _output(
                 observed_at=NOW - timedelta(minutes=2),
             ),
             PredictionAuthorityEvidence(
-                id="churn_prediction@v-production-2",
+                id=f"churn_prediction@v-production-2:{'a' * 64}",
                 type="model_output",
                 source="model_artifact_registry",
             ),
@@ -189,7 +190,9 @@ async def test_prediction_writer_records_only_exact_policy_artifact_and_event_ev
         policy_allowed=True,
         model_result={
             "artifact_version": "v-production-2",
-            "likely_next_states": [{"state": "at_risk", "probability": 0.73}],
+            "artifact_checksum_sha256": "a" * 64,
+            "state_schema_version": "profile_future_state.v1",
+            "likely_next_states": [{"state": "at_risk", "probability": 0.73, "rank": 1}],
             "valid_from": (NOW - timedelta(minutes=1)).isoformat(),
             "valid_until": (NOW + timedelta(hours=1)).isoformat(),
             "evidence_refs": [
@@ -263,13 +266,22 @@ async def test_profile360_likely_next_states_is_unknown_without_approved_rows():
     section = result.sections[0]
     assert section.id == "likely_next_states"
     assert section.state == "unknown"
-    assert section.content["reasonCode"] == "no_approved_prediction_valid_at_anchor"
+    assert section.content["reasonCode"] == "no_fresh_approved_prediction_valid_at_anchor"
     assert not result.claims
 
 
 @pytest.mark.asyncio
-async def test_profile360_projects_only_valid_prediction_with_predicted_epistemics(monkeypatch):
+@pytest.mark.parametrize("metric,expected", [
+    (0.12, "reported"), (None, "unknown"), (True, "unknown"),
+    (float("nan"), "unknown"), (1.2, "unknown"), (10**400, "unknown"),
+])
+async def test_profile360_projects_only_valid_prediction_with_predicted_epistemics(monkeypatch, metric, expected):
     import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
 
     monkeypatch.setattr(
         authority,
@@ -283,6 +295,7 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
             synthetic_data=False,
             threshold_passed=True,
             production_allowed=True,
+            metrics={"calibration_error": metric},
         ),
     )
     output = _output()
@@ -311,6 +324,12 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
     assert section.id == "likely_next_states"
     assert section.state == "available"
     assert section.content["items"][0]["states"][0]["state"] == "at_risk"
+    governance = section.content["items"][0]["modelGovernance"]
+    assert governance["calibrationMetric"]["state"] == expected
+    assert governance["modelCalibrationVerified"] is False
+    if expected == "reported":
+        assert governance["calibrationMetric"]["value"] == 0.12
+        assert governance["calibrationMetric"]["datasetAndEvaluationScope"] == "unknown"
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]
@@ -338,6 +357,11 @@ async def test_profile360_suppresses_predictions_without_current_exact_artifact(
     monkeypatch, artifact
 ):
     import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
 
     calls = []
 
@@ -375,6 +399,99 @@ async def test_profile360_suppresses_predictions_without_current_exact_artifact(
     assert section.content["items"] == []
     assert section.content["reasonCode"] == "profile_prediction_records_invalid"
     assert not result.claims
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", [
+    {}, {"tenant_id": "other"}, {"subject_ref": "other"},
+    {"resource_id": "other"}, {"allowed": False}, {"actor_id": "other"},
+    {"created_at": (NOW + timedelta(seconds=1)).isoformat()},
+])
+async def test_prediction_policy_evidence_requires_exact_inference_decision(monkeypatch, mutation):
+    import governance.policy.repositories as policy_repositories
+    from identity.profile.prediction_authority import verify_prediction_policy_evidence
+
+    decision = {
+        "policy_decision_id": "cpd-1", "tenant_id": TENANT, "actor_id": "actor-1",
+        "subject_ref": ENTITY, "resource_type": "ml_model", "resource_id": "churn_prediction",
+        "action": "serve_inference", "consent_policy_version": "consent-v2", "allowed": True,
+        "created_at": NOW.isoformat(), **mutation,
+    }
+
+    class Policies:
+        async def find_by_id(self, decision_id):
+            assert decision_id == "cpd-1"
+            return decision
+
+    monkeypatch.setattr(policy_repositories, "ConsentPolicyDecisionRepository", Policies)
+    assert await verify_prediction_policy_evidence(_output()) is (not bool(mutation))
+
+
+@pytest.mark.asyncio
+async def test_prediction_reader_suppresses_missing_policy_evidence(monkeypatch):
+    import identity.profile.prediction_authority as authority
+
+    async def unavailable_policy(_output):
+        return False
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", unavailable_policy)
+    request = ProjectionRequest(
+        projectionId="profile360", tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY), temporalMode="as_of",
+        asOf=NOW.isoformat(), includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([_output().model_dump(mode="python")], available=True, scope_known=True)
+    ))
+    context = await ProviderRegistry().build_context("profile360", request)
+    result = await provider.project(request, context)
+    assert result.sections[0].state == "degraded"
+    assert result.sections[0].content["items"] == []
+    assert not result.claims
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("binding", ["exact", "foreign", "ambiguous", "wrong_entity"])
+async def test_session_prediction_policy_requires_exact_current_identity(monkeypatch, binding):
+    import governance.policy.repositories as policy_repositories
+    import identity.identity.repository as identity_repository
+    from identity.profile.prediction_authority import verify_prediction_policy_evidence
+
+    payload = _output().model_dump(mode="python")
+    payload["model_id"] = "intent_prediction"
+    payload["evidence_refs"][1]["id"] = f"intent_prediction@v-production-2:{'a' * 64}"
+    payload["evidence_refs"].append({
+        "id": "identity-1", "type": "entity", "source": "identity_source_identities"
+    })
+    output = ProfilePredictionOutput.model_validate(payload)
+    decision = {
+        "policy_decision_id": "cpd-1", "tenant_id": TENANT, "actor_id": "actor-1",
+        "subject_ref": "session-1", "resource_type": "ml_model", "resource_id": "intent_prediction",
+        "action": "serve_inference", "consent_policy_version": "consent-v2", "allowed": True,
+        "created_at": NOW.isoformat(),
+    }
+    row = {"id": "identity-1", "tenant_id": TENANT, "session_id": "session-1",
+           "status": "resolved", "canonical_entity_id": ENTITY}
+    if binding == "foreign":
+        row["tenant_id"] = "other"
+    if binding == "wrong_entity":
+        row["canonical_entity_id"] = "other"
+
+    class Policies:
+        async def find_by_id(self, _decision_id):
+            return decision
+
+    class Identities:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": TENANT, "session_id": "session-1", "status": "resolved"}
+            assert limit == 2
+            return [row, row] if binding == "ambiguous" else [row]
+
+    monkeypatch.setattr(policy_repositories, "ConsentPolicyDecisionRepository", Policies)
+    monkeypatch.setattr(identity_repository, "IdentityResolutionRepository", lambda: SimpleNamespace(
+        _source_identities=Identities()
+    ))
+    assert await verify_prediction_policy_evidence(output) is (binding == "exact")
 
 
 @pytest.mark.asyncio

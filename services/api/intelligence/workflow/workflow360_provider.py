@@ -488,6 +488,12 @@ class RepositoryWorkflow360Source:
                 observedAt=called_at,
                 uri=f"store://graph_edges/{quote(event_ref, safe='')}",
             )
+            tool_evidence = EvidenceRef(
+                id=target_vertex_id,
+                type="entity",
+                source="graph_vertices",
+                uri=f"store://graph_vertices/{quote(target_vertex_id, safe='')}",
+            )
             rows.append(
                 {
                     "tenant_id": tenant_id,
@@ -497,6 +503,9 @@ class RepositoryWorkflow360Source:
                     "tool_id": tool_id,
                     "called_at": called_at,
                     "evidence_ref": evidence.model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    ),
+                    "tool_evidence_ref": tool_evidence.model_dump(
                         mode="json", by_alias=True, exclude_none=True
                     ),
                 }
@@ -881,8 +890,17 @@ class RepositoryWorkflow360Source:
                         "approval_id": approval_id,
                         "decision_id": decision_id,
                         "action": decision_data["action"],
+                        "requester_id": approval_data.get("requester_id"),
+                        "requester_type": approval_data.get("requester_type"),
+                        "execution_action": approval_data.get("execution_action"),
+                        "resource_id": approval_data.get("resource_id"),
+                        "approved_amount_usd": approval_data.get("amount_usd"),
                         "decided_by": decision_data["decided_by"],
                         "decided_at": decision_data.get("decided_at"),
+                        **(
+                            {"permission_receipt": decision_data["permission_receipt"]}
+                            if decision_data.get("permission_receipt") is not None else {}
+                        ),
                     }
                 )
             return WorkflowApprovalRead(
@@ -1496,6 +1514,34 @@ class Workflow360Provider:
             and not approval_read.scope_mismatch
             and not approval_scope_mismatch
         )
+        from actions.agent.action_associations import action_association_read_authorized
+        from intelligence.workflow.approval_agent_access import read_approval_agent_access
+
+        approval_agent_access_rows: list[dict[str, Any]] = []
+        action_agent_access_rows: list[dict[str, Any]] = []
+        approval_access_allowed = action_association_read_authorized(
+            request, context, surface="workflow360", slot="approvals", consumer="workflow360"
+        )
+        action_access_allowed = action_association_read_authorized(
+            request, context, surface="workflow360", slot="actions", consumer="workflow360"
+        )
+        if (approval_rows and subject.kind in _RUN_SUBJECT_KINDS
+                and request.asOf is None and context.asOf is None
+                and request.temporalMode not in {"as_of", "compare", "relative"}
+                and ((approval_access_allowed and (request.includeSections is None or "approvals" in request.includeSections))
+                     or (action_access_allowed and (request.includeSections is None or "actions" in request.includeSections)))):
+            try:
+                access_read = await read_approval_agent_access(
+                    tenant_id=tenant_id, workflow_run_id=subject.id,
+                    executions=agent_execution_rows, approvals=approval_rows,
+                )
+                if access_read.available:
+                    if approval_access_allowed:
+                        approval_agent_access_rows = list(access_read.rows)
+                    if action_access_allowed:
+                        action_agent_access_rows = list(access_read.rows)
+            except Exception:  # noqa: BLE001 - access evidence fails closed independently
+                pass
         risk_requested = (
             request.includeSections is None or "risk" in request.includeSections
         )
@@ -1601,6 +1647,7 @@ class Workflow360Provider:
                 else _safe_reason(approval_read.reason)
             ),
             principal_identity_read=principal_identity_read,
+            agent_access_rows=approval_agent_access_rows,
         )
         agent_steps_section, agent_step_claims = _agent_steps_section(
             subject,
@@ -1655,6 +1702,23 @@ class Workflow360Provider:
             historical=historical_risk_scope,
             subject_supported=subject.kind in _RUN_SUBJECT_KINDS,
         )
+        from intelligence.workflow.action_authorities import approved_resources
+
+        commerce_authorized = (action_access_allowed and context.tenantId == tenant_id
+            and context.projectionId == "workflow360" and any(
+                auth.tenantId == tenant_id and auth.sourceSurfaceId == "workflow360"
+                and auth.sourceSubject == subject and auth.sourceSlotId == "actions"
+                and auth.consumerProjectionId == "workflow360" and auth.targetProjectionId == "commerce360"
+                and auth.capabilityKey == "commerce360.read" and auth.policyState == "allowed"
+                and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
+                for auth in context.experience360ReadAuthorizations))
+        resource_rows: list[dict[str, str]] = []
+        if commerce_authorized and not historical_action_scope and actions_requested and action_agent_access_rows:
+            try:
+                resource_rows = await approved_resources(tenant_id=tenant_id, workflow_run_id=subject.id,
+                                                         access_rows=action_agent_access_rows)
+            except Exception:  # noqa: BLE001 - resource authority remains unknown
+                pass
         actions_section, action_claims = _workflow_actions_section(
             subject,
             tenant_id=tenant_id,
@@ -1665,6 +1729,8 @@ class Workflow360Provider:
             time_range=request.timeRange,
             requested=actions_requested,
             historical=historical_action_scope,
+            execution_results_authorized=action_access_allowed,
+            resource_rows=resource_rows,
         )
         registrar_identity_read = WorkflowPrincipalIdentityRead(
             (), False, False, reason="definition_registrar_identity_not_read"
@@ -2292,6 +2358,8 @@ def _workflow_actions_section(
     time_range: Any,
     requested: bool,
     historical: bool,
+    execution_results_authorized: bool,
+    resource_rows: list[dict[str, str]],
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     """Project exact observed tool-call edges without upgrading them to effects."""
     reason = (
@@ -2409,6 +2477,17 @@ def _workflow_actions_section(
             action_evidence = EvidenceRef.model_validate(raw_evidence)
         except Exception:  # noqa: BLE001 - malformed source evidence is omitted
             action_evidence = None
+        try:
+            tool_evidence = EvidenceRef.model_validate(raw.get("tool_evidence_ref"))
+        except Exception:  # noqa: BLE001 - legacy rows have no Tool vertex evidence
+            tool_evidence = None
+        if tool_evidence is not None and (
+            tool_evidence.source != "graph_vertices"
+            or tool_evidence.type != "entity"
+            or tool_evidence.id != f"{tenant_id}:tool:{tool_id}"
+        ):
+            tool_evidence = None
+            invalid_rows = True
         if (
             execution_evidence is None
             or action_evidence is None
@@ -2432,15 +2511,40 @@ def _workflow_actions_section(
             filtered_by_time_range = True
             continue
 
-        evidence_refs = [action_evidence, execution_evidence]
+        evidence_refs = [
+            action_evidence,
+            execution_evidence,
+            *([tool_evidence] if tool_evidence is not None else []),
+        ]
+        from intelligence.workflow.action_authorities import execution_result
+
+        outcome = (execution_result(tenant_id=tenant_id, workflow_run_id=subject.id,
+                                    execution=execution_by_id[execution_id], called_at=called_at)
+                   if execution_results_authorized else None)
+        resource = next((row for row in resource_rows if row.get("execution_id") == execution_id), None)
+        resource_view: dict[str, Any] = {"state": "unknown"}
+        if (resource is not None and all(_safe_identifier(resource.get(key)) for key in
+                ("resource_id", "approval_id", "decision_id", "delegation_id"))):
+            resource_ref = EvidenceRef(id=resource["resource_id"], type="entity", source="commerce_resources",
+                                       observedAt=resource.get("registered_at"))
+            authority_refs = [resource_ref, EvidenceRef(id=resource["approval_id"], type="event", source="commerce_approvals"),
+                              EvidenceRef(id=resource["decision_id"], type="event", source="commerce_approval_decisions"),
+                              EvidenceRef(id=resource["delegation_id"], type="relationship", source="delegations")]
+            evidence_refs = _dedupe_evidence_refs([*evidence_refs, *authority_refs])
+            resource_view = {"state": "resolved_current_approved_resource", "resourceId": resource["resource_id"],
+                             "evidenceRef": resource_ref.model_dump(mode="json", by_alias=True, exclude_none=True),
+                             "resourceOperation": "unknown"}
         actions.append(
             {
                 "executionId": execution_id,
                 "toolId": tool_id,
+                "toolIdentityState": "resolved" if tool_evidence is not None else "unknown",
                 "calledAt": called_at,
                 "observationKind": "tenant_scoped_execution_linked_tool_call_edge",
                 "operationState": "call_observed_external_effect_unknown",
                 "authorityDecision": "not_established_by_tool_call_edge",
+                "executionResult": outcome or {"state": "unknown"},
+                "approvedResource": resource_view,
                 "evidenceRefs": [
                     ref.model_dump(mode="json", by_alias=True, exclude_none=True)
                     for ref in evidence_refs
@@ -2454,12 +2558,27 @@ def _workflow_actions_section(
                 subject=subject,
                 evidenceRefs=evidence_refs,
                 claims=[
-                    "A tenant-scoped CALLED_TOOL graph edge references an admitted execution linked to this workflow run; the edge does not establish action authorization, tool completion, or an external effect."
+                    "A tenant-scoped CALLED_TOOL graph edge references an admitted execution linked to this workflow run; an exact Tool vertex is evidenced only when separately resolved. The edge does not establish action authorization, tool completion, or an external effect."
                 ],
                 claimState=EpistemicStatus.OBSERVED,
                 domainSlotIds=["actions", "evidence_trace"],
             )
         )
+        if outcome is not None:
+            claims.append(ClaimEnvelope(
+                id=f"workflow360.execution_result.{quote(execution_id, safe='')}:{quote(action_evidence.id, safe='')}",
+                kind="workflow_linked_executor_result", subject=subject,
+                evidenceRefs=[execution_evidence, action_evidence],
+                claims=["The linked AgentExecution records a published executor completion or failure; this does not establish the result of the observed tool call or an external effect."],
+                claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
+            ))
+        if resource_view["state"] == "resolved_current_approved_resource":
+            claims.append(ClaimEnvelope(
+                id=f"workflow360.approved_resource.{quote(execution_id, safe='')}:{quote(action_evidence.id, safe='')}",
+                kind="workflow_linked_approved_resource", subject=subject, evidenceRefs=evidence_refs,
+                claims=["The linked execution's approved request names this current tenant resource; the tool edge does not establish that the resource was acted upon."],
+                claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
+            ))
 
     source_incomplete = bool(
         not read.complete or read.scope_mismatch or invalid_rows or not execution_inventory_complete
@@ -2505,7 +2624,13 @@ def _workflow_actions_section(
             title="Observed workflow actions",
             content=content,
             warnings=[reason] if reason else None,
-            canonicalAuthorityRefs=["agent_executions", "graph_edges"] if actions else None,
+            canonicalAuthorityRefs=(
+                ["agent_executions", "graph_edges", *(
+                    ["tools"] if any(row["toolIdentityState"] == "resolved" for row in actions) else []
+                ), *(["actions"] if any(row["executionResult"]["state"] != "unknown" for row in actions) else []),
+                 *(["resources"] if any(row["approvedResource"]["state"] != "unknown" for row in actions) else [])]
+                if actions else None
+            ),
         ),
         claims,
     )
@@ -3004,6 +3129,7 @@ def _approvals_section(
     complete: bool,
     reason: Optional[str],
     principal_identity_read: WorkflowPrincipalIdentityRead,
+    agent_access_rows: list[dict[str, Any]],
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     execution_evidence = {ref.id: ref for ref in execution_refs}
     principal_ids = {
@@ -3055,6 +3181,51 @@ def _approvals_section(
             "decisionActorIdentityState": identity.get("state", "unresolved"),
             "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
         }
+        receipt = row.get("permission_receipt")
+        checked_at = _safe_timestamp(receipt.get("checked_at")) if isinstance(receipt, dict) else None
+        decided_at = _safe_timestamp(row.get("decided_at"))
+        checked_time = _parse_timestamp(checked_at) if checked_at else None
+        decided_time = _parse_timestamp(decided_at) if decided_at else None
+        receipt_valid = bool(
+            isinstance(receipt, dict)
+            and _safe_identifier(receipt.get("receipt_id"))
+            and receipt.get("tenant_id") == tenant_id
+            and receipt.get("approval_id") == approval_id
+            and receipt.get("execution_id") == execution_id
+            and receipt.get("principal_id") == row.get("decided_by")
+            and receipt.get("permission") == "commerce:approve"
+            and checked_time is not None and decided_time is not None
+            and checked_time <= decided_time
+        )
+        record["approverPermissionCheck"] = (
+            {
+                "state": "recorded",
+                "permission": "commerce:approve",
+                "checkedAt": checked_at,
+                "receiptId": receipt["receipt_id"],
+                "evidenceRef": refs[1].model_dump(mode="json"),
+            }
+            if receipt_valid else {"state": "unknown"}
+        )
+        agent_access = next((item for item in agent_access_rows
+                             if item.get("tenant_id") == tenant_id
+                             and item.get("workflow_run_id") == subject.id
+                             and item.get("execution_id") == execution_id
+                             and item.get("approval_id") == approval_id
+                             and item.get("decision_id") == decision_id
+                             and _safe_identifier(item.get("delegation_id"))
+                             and _safe_timestamp(item.get("evaluated_at"))), None)
+        record["agentAccess"] = {"state": "unknown"}
+        if agent_access is not None:
+            grant_ref = EvidenceRef(id=agent_access["delegation_id"], type="relationship",
+                                    source="delegations", observedAt=agent_access["evaluated_at"])
+            evidence_refs = _dedupe_evidence_refs([*evidence_refs, grant_ref])
+            record["agentAccess"] = {
+                "state": "recorded_request_time_allow", "delegationId": agent_access["delegation_id"],
+                "evaluatedAt": agent_access["evaluated_at"],
+                "evidenceRef": grant_ref.model_dump(mode="json"),
+                "currentAuthorization": "unknown", "externalEffect": "unknown",
+            }
         if canonical_decider is not None:
             record["decidedByCanonicalHumanEntityId"] = canonical_decider
         records.append(record)
@@ -3104,6 +3275,8 @@ def _approvals_section(
     if records:
         content["canonicalApprovalDecisionCount"] = len(records)
     refs = ["agent_executions", "commerce"]
+    if any(record["agentAccess"]["state"] == "recorded_request_time_allow" for record in records):
+        refs.append("agent_access")
     return (
         ProjectionSection(
             id="approvals",

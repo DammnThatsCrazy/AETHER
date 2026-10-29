@@ -16,6 +16,7 @@ from shared.logger.logger import get_logger, metrics
 
 from .commerce_models import (
     ApprovalDecision,
+    ApprovalPermissionReceipt,
     ApprovalPriority,
     ApprovalRequest,
     ApprovalStatus,
@@ -134,6 +135,7 @@ class ApprovalService:
         decided_by: str,
         reason: str,
         is_override: bool = False,
+        permission_receipt: Optional[ApprovalPermissionReceipt] = None,
     ) -> ApprovalRequest:
         """action: approve|reject|escalate"""
         approval = await self._require(tenant_id, approval_id)
@@ -155,6 +157,19 @@ class ApprovalService:
             )
             raise ValueError("Approval has expired")
 
+        if action not in {"approve", "reject", "escalate"}:
+            raise ValueError(f"Unknown action: {action}")
+        decision = ApprovalDecision(
+            approval_id=approval_id,
+            tenant_id=tenant_id,
+            execution_id=approval.execution_id,
+            action=action,
+            decided_by=decided_by,
+            reason=reason,
+            is_override=is_override,
+            permission_receipt=permission_receipt,
+        )
+
         if action == "approve":
             approval.status = ApprovalStatus.APPROVED
             topic = Topic.COMMERCE_APPROVAL_APPROVED
@@ -165,22 +180,10 @@ class ApprovalService:
             approval.status = ApprovalStatus.ESCALATED
             approval.escalation_chain.append(decided_by)
             topic = Topic.COMMERCE_APPROVAL_ESCALATED
-        else:
-            raise ValueError(f"Unknown action: {action}")
-
-        approval.decided_at = _iso(_now())
+        approval.decided_at = decision.decided_at
         approval.decided_by = decided_by
         approval.decision_reason = reason
         approval.is_override = is_override
-        decision = ApprovalDecision(
-            approval_id=approval_id,
-            tenant_id=tenant_id,
-            execution_id=approval.execution_id,
-            action=action,
-            decided_by=decided_by,
-            reason=reason,
-            is_override=is_override,
-        )
         approval.last_decision_id = decision.decision_id
         await self._store.put_approval_decision(decision)
         await self._store.put_approval(approval)

@@ -42,6 +42,10 @@ from shared.intelligence_projections.generated_registry import (
 )
 from shared.intelligence_projections.registry import ProviderRegistry
 from graph.operational_intelligence.models import EvidenceRef
+from actions.agent.execution360_provenance import (
+    ExecutionSourceProvenanceRead,
+    read_execution_source_provenance,
+)
 
 
 PROJECTION_ID = "execution360"
@@ -379,6 +383,11 @@ class Execution360Source(Protocol):
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
     ) -> ExecutionRead:
         """Read telemetry facts whose actor has been canonically resolved."""
+
+    async def source_provenance(
+        self, *, tenant_id: str, events: tuple[tuple[str, str], ...]
+    ) -> ExecutionSourceProvenanceRead:
+        """Read exact Bronze provenance for admitted source telemetry events."""
 
     async def execution_risk_events(
         self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
@@ -1329,6 +1338,11 @@ class RepositoryExecution360Source:
             subject_event_ids=scope.event_ids if scope is not None else (),
         )
 
+    async def source_provenance(
+        self, *, tenant_id: str, events: tuple[tuple[str, str], ...]
+    ) -> ExecutionSourceProvenanceRead:
+        return await read_execution_source_provenance(tenant_id=tenant_id, events=events)
+
     async def execution_risk_events(
         self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
     ) -> ExecutionRiskEventRead:
@@ -2244,6 +2258,8 @@ async def _resolve_server_delegation_reference(
         return {"canonical_delegation_resolution_status": "not_recorded"}
     policy = row.get("policy_log")
     policy = policy if isinstance(policy, dict) else {}
+    if policy.get("delegation_check_tenant_id") != tenant_id:
+        return {"canonical_delegation_resolution_status": "policy_tenant_scope_unverified"}
     decision = policy.get("delegation_check")
     decision = decision if isinstance(decision, dict) else {}
     if not isinstance(decision.get("allowed"), bool):
@@ -2474,7 +2490,10 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
     policy = raw_policy
     policy = policy if isinstance(policy, dict) else {}
     raw_decision = policy.get("delegation_check")
-    decision = raw_decision if isinstance(raw_decision, dict) else {}
+    decision = (
+        raw_decision if isinstance(raw_decision, dict) and row.get("tenant_id")
+        and policy.get("delegation_check_tenant_id") == row["tenant_id"] else {}
+    )
     recorded_delegation_id = _safe_text(row.get("delegation_id"))
     canonical_delegation_id = _safe_text(row.get("canonical_delegation_id"))
     policy_delegation_id = _safe_text(decision.get("delegation_id"))
@@ -2533,6 +2552,11 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
             "delegation_check" in policy
             or (raw_policy is not None and not isinstance(raw_policy, dict))
         ),
+        "_delegationReferenceConflict": (
+            recorded_delegation_id is not None
+            and policy_delegation_id is not None
+            and recorded_delegation_id != policy_delegation_id
+        ),
         "recordedDelegationDecision": (
             decision.get("allowed") if isinstance(decision.get("allowed"), bool) else None
         ),
@@ -2563,8 +2587,8 @@ def _execution_authority_context(
     """Project stored policy outcomes without replaying the authority engine.
 
     The delegation check and its action/resource are co-recorded on one
-    tenant-scoped ``agent_executions`` row. The policy check has no independent
-    timestamp; time windows therefore select the parent lifecycle row only.
+    tenant-scoped ``agent_executions`` row. Time windows select the parent
+    lifecycle row only, even when the policy check has a recorded timestamp.
     """
     if temporal_unavailable:
         return ExecutionAuthorityContext(
@@ -2601,6 +2625,9 @@ def _execution_authority_context(
     for row in internal:
         execution_id = _safe_text(row.get("executionId"))
         if execution_id is None or execution_id in ambiguous:
+            continue
+        if row.get("_delegationReferenceConflict") is True:
+            invalid_record = True
             continue
         if not isinstance(row.get("recordedDelegationDecision"), bool):
             if row.get("_delegationDecisionPresent") is True:
@@ -3125,6 +3152,15 @@ class Execution360Provider:
             external = []
             plan_decompositions = []
 
+        source_provenance = await self._safe_source_provenance_read(
+            tenant_id,
+            tuple(
+                (row["sourceEventId"], row["eventName"])
+                for row in external
+                if row.get("sourceEventId") and row.get("eventName")
+            ),
+        )
+
         admitted_execution_ids = {
             row["executionId"] for row in internal if row.get("executionId")
         }
@@ -3333,6 +3369,7 @@ class Execution360Provider:
             approval_chain,
             authority_check,
             latency_cost,
+            source_provenance,
         )
         claims = (
             self._claims(
@@ -3366,6 +3403,7 @@ class Execution360Provider:
             approval_chain,
             authority_check,
             latency_cost,
+            source_provenance,
         )
 
         return ProjectionResult(
@@ -3404,6 +3442,94 @@ class Execution360Provider:
                 scope_known=False,
                 reason=f"{method}_unavailable",
             )
+
+    async def _safe_source_provenance_read(
+        self, tenant_id: str, events: tuple[tuple[str, str], ...]
+    ) -> ExecutionSourceProvenanceRead:
+        if not events:
+            return ExecutionSourceProvenanceRead(
+                [], True, False, reason="no_admitted_source_telemetry"
+            )
+        reader = getattr(self._sources, "source_provenance", None)
+        if reader is None:
+            return ExecutionSourceProvenanceRead(
+                [], False, False, reason="source_provenance_reader_unavailable"
+            )
+        try:
+            read = await reader(tenant_id=tenant_id, events=events)
+        except Exception:  # noqa: BLE001 - optional authority is fail isolated
+            return ExecutionSourceProvenanceRead(
+                [], False, False, reason="source_provenance_read_unavailable"
+            )
+        if not isinstance(read, ExecutionSourceProvenanceRead):
+            return ExecutionSourceProvenanceRead(
+                [], False, False, reason="source_provenance_read_invalid"
+            )
+        expected = set(events)
+        seen: set[tuple[str, str]] = set()
+        scoped: list[dict[str, Any]] = []
+        mismatch = False
+        for raw in read.rows:
+            if not isinstance(raw, dict):
+                mismatch = True
+                continue
+            event_id = _safe_text(raw.get("sourceEventId"))
+            event_name = _safe_text(raw.get("eventName"))
+            key = (event_id or "", event_name or "")
+            try:
+                ref = EvidenceRef.model_validate(raw.get("evidenceRef"))
+            except Exception:  # noqa: BLE001 - invalid Bronze evidence is omitted
+                mismatch = True
+                continue
+            if (
+                raw.get("tenantId") != tenant_id
+                or key not in expected
+                or key in seen
+                or ref.id != event_id
+                or ref.source != "bronze_sdk_events"
+                or not (ref.uri or "").startswith("store://bronze_sdk_events/")
+                or ref.observedAt != raw.get("observedAt")
+            ):
+                mismatch = True
+                continue
+            seen.add(key)
+            scoped.append(
+                {
+                    "tenantId": tenant_id,
+                    "sourceEventId": event_id,
+                    "eventName": event_name,
+                    "bronzeSchemaVersion": _safe_text(raw.get("bronzeSchemaVersion")),
+                    "sourceId": _safe_text(raw.get("sourceId")),
+                    "sourceProviderClaim": _safe_text(raw.get("sourceProviderClaim")),
+                    "sourceTrust": _safe_text(raw.get("sourceTrust")),
+                    "credentialClass": _safe_text(raw.get("credentialClass")),
+                    "signatureStatus": _safe_text(raw.get("signatureStatus")),
+                    "adapter": _safe_text(raw.get("adapter")),
+                    "adapterVersion": _safe_text(raw.get("adapterVersion")),
+                    "observedAt": raw.get("observedAt"),
+                    "evidenceRef": ref.model_dump(mode="json", by_alias=True, exclude_none=True),
+                    "classification": "bronze_recorded_ingress_envelope",
+                    "sourceIdentityVerified": False,
+                    "externalExecutionVerified": False,
+                }
+            )
+        complete = read.scope_known and not mismatch and seen == expected
+        return ExecutionSourceProvenanceRead(
+            scoped,
+            read.available,
+            complete,
+            truncated=read.truncated,
+            reason=(
+                "source_provenance_response_scope_mismatch"
+                if mismatch
+                else read.reason
+                if read.reason
+                else "source_provenance_exact_join_incomplete"
+                if seen != expected
+                else None
+            ),
+            unmatched_count=len(expected - seen),
+        )
 
     async def _safe_execution_risk_read(
         self, tenant_id: str, execution_ids: tuple[str, ...], limit: int
@@ -3560,6 +3686,7 @@ class Execution360Provider:
         approval_chain: ExecutionApprovalContext,
         authority_check: ExecutionAuthorityContext,
         latency_cost: dict[str, Any],
+        source_provenance: ExecutionSourceProvenanceRead,
     ) -> list[EvidenceRef]:
         refs: list[EvidenceRef] = []
         seen: set[tuple[str, str]] = set()
@@ -3641,6 +3768,14 @@ class Execution360Provider:
                     continue
                 if (ref.id, ref.source) in seen:
                     continue
+                seen.add((ref.id, ref.source))
+                refs.append(ref)
+        for record in source_provenance.rows:
+            try:
+                ref = EvidenceRef.model_validate(record.get("evidenceRef"))
+            except Exception:  # noqa: BLE001 - malformed provenance cannot back evidence
+                continue
+            if (ref.id, ref.source) not in seen:
                 seen.add((ref.id, ref.source))
                 refs.append(ref)
         return refs
@@ -3861,7 +3996,7 @@ class Execution360Provider:
                     subject=subject,
                     evidenceRefs=[evidence_ref],
                     claims=[
-                        f"AETHER's tenant-scoped agent_executions record stores a {outcome} delegation-engine decision for action {decision['action']} on resource {decision['resource']} in execution {decision['executionId']}. The policy decision has no separate timestamp, so lifecycle timestamps locate the parent execution record only; this request-time result does not establish current or standing authority or prove external execution."
+                        f"AETHER's tenant-scoped agent_executions record stores a {outcome} delegation-engine decision for action {decision['action']} on resource {decision['resource']} in execution {decision['executionId']}. The decision timestamp is reported separately when persisted; lifecycle timestamps locate the parent execution record. This request-time result does not establish current or standing authority or prove external execution."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=[
@@ -4135,6 +4270,7 @@ class Execution360Provider:
         approval_chain: ExecutionApprovalContext,
         authority_check: ExecutionAuthorityContext,
         latency_cost: dict[str, Any],
+        source_provenance: ExecutionSourceProvenanceRead,
     ) -> list[ProjectionSection]:
         episode_context = server.episode_context or ExecutionEpisodeContextRead(
             "degraded" if not server.available else "unknown",
@@ -4274,6 +4410,35 @@ class Execution360Provider:
             "externalExecutionReceipt": {
                 "state": "unknown",
                 "reason": "no_server_authoritative_external_execution_receipt_is_joined_by_this_provider",
+            },
+        }
+        provenance_content = {
+            "state": (
+                "unavailable"
+                if not source_provenance.available
+                else "degraded"
+                if source_provenance.truncated
+                or (not source_provenance.scope_known and source_provenance.rows)
+                else "partial"
+                if source_provenance.rows
+                else "unknown"
+            ),
+            "readAuthority": "bronze_sdk_events.observation_envelope",
+            "join": "exact_tenant_and_bronze_event_id_to_admitted_silver_telemetry",
+            "records": source_provenance.rows,
+            "count": (
+                len(source_provenance.rows)
+                if source_provenance.available and source_provenance.scope_known
+                else None
+            ),
+            "unmatchedAdmittedEventCount": source_provenance.unmatched_count,
+            "truncated": source_provenance.truncated,
+            "reason": source_provenance.reason,
+            "sourceCoverage": "unknown",
+            "externalExecutionReceipt": "unknown",
+            "freshness": {
+                "state": "unknown",
+                "reason": "no_execution_source_provenance_freshness_threshold_is_configured",
             },
         }
         worker_linkage = {
@@ -4521,9 +4686,11 @@ class Execution360Provider:
                     "evidence": [
                         ref.model_dump(by_alias=True, exclude_none=True) for ref in evidence
                     ],
+                    "sourceProvenance": provenance_content,
                     "sourceLineage": [
                         _INTERNAL_SOURCE if internal else None,
                         _SILVER_SOURCE if external else None,
+                        "bronze_sdk_events" if source_provenance.rows else None,
                         "ai_execution_facts"
                         if latency_cost.get("cost", {}).get("invocations")
                         else None,

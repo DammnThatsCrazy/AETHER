@@ -232,6 +232,65 @@ def consent_policy_version() -> Optional[str]:
         return None
 
 
+async def verify_prediction_policy_evidence(output: ProfilePredictionOutput) -> bool:
+    """Rejoin the inference decision and any session identity binding.
+
+    The decision is historical evidence; current consent and historical
+    identity state are not established by this read.
+    """
+    try:
+        from governance.policy.repositories import ConsentPolicyDecisionRepository
+
+        decision = await ConsentPolicyDecisionRepository().find_by_id(output.policy_decision_id)
+        if not isinstance(decision, dict):
+            return False
+        subject = decision.get("subject_ref")
+        decision_at = _utc(decision.get("created_at"))
+        if (
+            decision.get("tenant_id") != output.tenant_id
+            or decision.get("policy_decision_id") != output.policy_decision_id
+            or decision.get("actor_id") != output.actor_id
+            or decision.get("action") != "serve_inference"
+            or decision.get("resource_type") != "ml_model"
+            or decision.get("resource_id") != output.model_id
+            or decision.get("consent_policy_version") != output.policy_version
+            or decision.get("allowed") is not True
+            or decision_at is None
+            or decision_at > output.generated_at
+            or not isinstance(subject, str)
+            or not subject.strip()
+        ):
+            return False
+        if output.model_id in _IDENTITY_MODEL_IDS:
+            return subject == output.entity_id
+        if output.model_id not in _SESSION_MODEL_IDS:
+            return False
+        identity_refs = [
+            ref.id for ref in output.evidence_refs
+            if ref.source == "identity_source_identities" and ref.type == "entity"
+        ]
+        if len(identity_refs) != 1:
+            return False
+        from identity.identity.repository import IdentityResolutionRepository
+
+        rows = await IdentityResolutionRepository()._source_identities.find_many(
+            filters={"tenant_id": output.tenant_id, "session_id": subject, "status": "resolved"},
+            limit=2,
+        )
+        if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+            return False
+        row = rows[0]
+        return (
+            row.get("tenant_id") == output.tenant_id
+            and row.get("session_id") == subject
+            and row.get("status") == "resolved"
+            and str(row.get("canonical_entity_id") or "") == output.entity_id
+            and str(row.get("id") or row.get("source_identity_id") or "") == identity_refs[0]
+        )
+    except Exception:  # noqa: BLE001 - inaccessible evidence fails closed
+        return False
+
+
 class ProfilePredictionOutputRepository(TypedTableRepository):
     """Append-only typed repository for approved profile prediction outputs."""
 

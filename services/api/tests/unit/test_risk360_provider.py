@@ -1538,6 +1538,54 @@ async def test_risk_intervention_authority_projects_decisions_and_reported_outco
 
 
 @pytest.mark.asyncio
+async def test_risk_intervention_joins_only_exact_server_recorded_action_request() -> None:
+    from actions.agent.action_associations import RiskActionReference, validate_action_association
+    from repositories.repos import AgentExecutionRepository
+    from uuid import uuid4
+
+    repository = RiskInterventionRepository()
+    decision = _risk_intervention_record(
+        f"decision-{uuid4()}", observed_at=datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    )
+    await repository.create(decision)
+    association = await validate_action_association(
+        tenant_id=TENANT_A, action=decision.intervention_type, resource=decision.subject_id,
+        risk=RiskActionReference(record_id=decision.record_id, subject_kind=decision.subject_kind,
+                                 subject_id=decision.subject_id),
+        risk_repository=repository,
+    )
+    execution_id = f"risk-action-{uuid4()}"
+    await AgentExecutionRepository().record(
+        execution_id=execution_id, agent_id="agent-1", tenant_id=TENANT_A,
+        delegation_id=None, triggered_by_event_id=None, status="running", create_only=True,
+        action_association=association,
+        input_snapshot={"action": decision.intervention_type, "resource": decision.subject_id},
+    )
+    request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    from shared.intelligence_projections.contracts import ProjectionReadAuthorization
+
+    context = await _context(_available_registry())
+    denied = await Risk360Provider().project(request, context)
+    denied_evidence = next(section for section in denied.sections if section.id == "evidence")
+    assert not any(row["id"] == execution_id for row in denied_evidence.content["evidence"])
+    context.experience360ReadAuthorizations = [ProjectionReadAuthorization(
+        tenantId=TENANT_A, sourceSurfaceId="risk360", sourceSubject=request.subject,
+        sourceSlotId="interventions", consumerProjectionId="risk360",
+        targetProjectionId="agent360", capabilityKey="agent360.read", policyState="allowed",
+        policyIds=["test-policy"], policyEvaluatedAt="2026-10-20T12:00:00Z",
+    )]
+    result = await Risk360Provider().project(request, context)
+    findings = next(section for section in result.sections if section.id == "findings")
+    record = next(row for row in findings.content["interventions"]["records"]
+                  if row["recordId"] == decision.record_id)
+    assert record["agentActionRequests"][0]["executionId"] == execution_id
+    assert record["agentActionRequests"][0]["dispatchState"] == "not_established"
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(row["id"] == execution_id and row["source"] == "agent_executions"
+               for row in evidence.content["evidence"])
+
+
+@pytest.mark.asyncio
 async def test_risk_interventions_degrade_on_scope_mismatch_and_suppress_historical_claims() -> None:
     mismatched = _risk_intervention_record("foreign-record", tenant_id=TENANT_B)
     reader = _FakeReader(interventions=[mismatched])

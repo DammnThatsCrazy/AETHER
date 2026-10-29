@@ -14,7 +14,7 @@ source_hashes:
   "services/api/journeys/campaign/campaign_population_links.py": "sha256:edb58c750b362e6a0441c88225007acd563e9f9fb105b31629cd8653a6dea894"
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
   "services/api/journeys/campaign/routes.py": "sha256:43cafac0205f69a989aa26ba63b89075b9d4acbacfdeb672f5768099c19a4bd9"
-  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:d08121dd99500425f59f0ea5d283a271e4769d5c60bf303868e6b23dc4565f31"
+  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:98bb17dd43058e20aef6b5430e1d33f69efbd66558a7ac58afd3e460ca63f20e"
 ---
 
 # Campaign 360 API Reference
@@ -389,6 +389,10 @@ classification-ID, and verified-referral-link provenance. The route accepts
 `model`, `start_date`, and `end_date`; date-only `end_date` is inclusive by
 normalizing it to an exclusive next-day UTC boundary. Datetimes without an
 offset are interpreted as UTC.
+The backend 360 read uses the exact tenant, touchpoint, and classification ID
+to verify an immutable source-classification revision before projecting that
+revision as a source fact. This adds no public endpoint or new attribution
+credit field.
 
 ---
 

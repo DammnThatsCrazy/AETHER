@@ -2352,3 +2352,24 @@ async def test_repository_social_risk_edge_reader_filters_tenant_and_requires_gr
         "canonical_risk_edge_endpoint_scope_unverified",
         "canonical_risk_edge_scope_mismatch",
     )
+
+
+@pytest.mark.asyncio
+async def test_agent_social_risk_reader_uses_social360_consent_and_shared_evidence():
+    from actions.agent.social_risk_context import read_agent_social_risk_context
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True))
+    signal_reader = FakeSocialRiskSignalReader({"entity-a": SocialRiskSignalRead(
+        TENANT, "entity-a", (_risk_signal_row(),), available=True)})
+    provider = Social360Provider(source=FakeSocialSource(), consent_reader=_allow_consent,
+                                 risk_context_edge_reader=edge_reader, risk_signal_reader=signal_reader)
+    rows = await read_agent_social_risk_context(tenant_id=TENANT, canonical_agent_id="entity-a", provider=provider)
+    assert len(rows) == 1
+    assert {ref["source"] for ref in rows[0]["evidence_refs"]} >= {"entity_graph", "relationship_facts", "risk_signals:fraud.detector.relationship"}
+
+    async def deny_target(tenant_id, entity_id, anonymous_id, purpose):
+        return (entity_id != "entity-b", "test")
+    denied_provider = Social360Provider(source=FakeSocialSource(), consent_reader=deny_target,
+                                        risk_context_edge_reader=edge_reader, risk_signal_reader=signal_reader)
+    denied = await read_agent_social_risk_context(tenant_id=TENANT, canonical_agent_id="entity-a", provider=denied_provider)
+    assert denied == []

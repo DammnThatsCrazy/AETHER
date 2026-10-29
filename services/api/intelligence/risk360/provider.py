@@ -1504,6 +1504,38 @@ class Risk360Provider:
                 await self._safe_social_contagion_evidence(request, context)
             )
 
+        # Join only lifecycle requests whose server-stamped caller association
+        # names this exact approved intervention decision. A lifecycle request
+        # is not evidence of dispatch or an external effect.
+        intervention_actions: dict[str, list[dict[str, Any]]] = {}
+        from actions.agent.action_associations import (
+            action_association_read_authorized,
+            read_associated_executions,
+        )
+
+        action_authorized = action_association_read_authorized(
+            request, context, surface="risk360", slot="interventions", consumer="risk360"
+        )
+        if action_authorized and interventions and intervention_anchor_reason is None:
+
+            eligible = [record for record in interventions if record.record_kind == "decision"
+                        and record.decision_state == "approved"]
+            if len(eligible) > 20:
+                interventions_degraded = True
+                interventions_reason = interventions_reason or "risk_action_association_read_truncated"
+            for record in eligible[:20]:
+                rows, complete = await read_associated_executions(
+                    tenant_id=tenant_id, kind="risk_intervention", record_id=record.record_id,
+                    subject_id=record.subject_id, subject_kind=record.subject_kind,
+                    intervention_id=record.intervention_id, action=record.intervention_type,
+                    recorded_at=record.recorded_at,
+                    as_of=interventions_as_of or datetime.now(timezone.utc),
+                )
+                intervention_actions[record.record_id] = rows
+                if not complete:
+                    interventions_degraded = True
+                    interventions_reason = interventions_reason or "risk_action_association_read_incomplete"
+
         evidence = self._collect_evidence(
             assessment,
             signals,
@@ -1513,6 +1545,11 @@ class Risk360Provider:
             agent_policy_flags,
             interventions,
         )
+        evidence = _dedupe_evidence([
+            *evidence,
+            *(EvidenceRef.model_validate(row["evidenceRef"])
+              for rows in intervention_actions.values() for row in rows),
+        ])
         if support_case_evidence:
             evidence = _dedupe_evidence([*evidence, *support_case_evidence])
         if financial_link is not None:
@@ -1596,6 +1633,21 @@ class Risk360Provider:
                 interventions_reason,
             ),
         ]
+        for section in sections:
+            if section.id != "findings":
+                continue
+            summary = section.content.get("interventions")
+            if not isinstance(summary, dict):
+                continue
+            for row in summary.get("records", []):
+                linked = intervention_actions.get(row.get("recordId"), [])
+                row["agentActionRequests"] = linked
+                row["evidenceRefs"].extend(item["evidenceRef"] for item in linked)
+            summary["actionRequestAssociation"] = {
+                "state": "degraded" if interventions_degraded else "partial" if intervention_actions else "unknown",
+                "semantics": "caller_associated_agent_lifecycle_not_dispatch_or_external_effect",
+                "coverage": "bounded_exact_approved_decisions_only",
+            }
         claims = self._build_claims(
             request,
             assessment,
