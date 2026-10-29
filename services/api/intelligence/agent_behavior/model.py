@@ -44,6 +44,7 @@ def confidence_envelope(successes: int, n: int, *, method: str = "wilson_95",
     """A rate with its uncertainty. Below MIN_SAMPLE the value is withheld."""
     low, high = wilson(successes, n)
     enough = n >= MIN_SAMPLE
+    reason = None if enough else f"fewer than {MIN_SAMPLE} observations (n={n})"
     return {
         "value": round(successes / n, 4) if n and enough else None,
         "n": n,
@@ -53,6 +54,7 @@ def confidence_envelope(successes: int, n: int, *, method: str = "wilson_95",
         "sufficiency": "sufficient" if enough else "insufficient_evidence",
         "basis": c.DERIVED if enough else c.UNKNOWN,
         "evidence": list(evidence)[:25],
+        **({"reason": reason} if reason else {}),
     }
 
 
