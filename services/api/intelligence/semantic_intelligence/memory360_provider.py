@@ -650,6 +650,10 @@ def _render_memory_slots(
         ):
             policy_join_incomplete = True
             continue
+        required_purposes = record.required_consent_purposes_at_write
+        historical_purposes = (
+            list(required_purposes) if required_purposes is not None else None
+        )
         memory_refs.extend(refs)
         memory_items.append(
             {
@@ -662,6 +666,7 @@ def _render_memory_slots(
                 "sourceObservationIds": list(record.source_observation_ids),
                 "policyDecisionRef": record.policy_decision_ref,
                 "policyDecisionOutcomeAtWrite": resolved.policy_outcome,
+                "requiredConsentPurposesAtWrite": historical_purposes,
                 "retentionClass": record.retention_class,
                 "createdAt": _timestamp(record.created_at),
                 "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
@@ -673,6 +678,7 @@ def _render_memory_slots(
                 "memoryId": record.memory_id,
                 "policyDecisionId": decision_id,
                 "outcomeAtWrite": "allowed",
+                "requiredConsentPurposesAtWrite": historical_purposes,
                 "decidedAt": _timestamp(decision_ref.observedAt),
                 "evidenceRefs": [decision_ref.model_dump(mode="json")],
             }

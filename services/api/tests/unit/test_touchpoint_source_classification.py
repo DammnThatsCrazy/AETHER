@@ -96,6 +96,24 @@ async def test_ingestion_creates_one_current_immutable_revision() -> None:
 
 
 @pytest.mark.asyncio
+async def test_exact_classification_revision_read_is_tenant_and_touchpoint_scoped() -> None:
+    repo = TouchpointRepository()
+    stored = await repo.upsert(_initial_touchpoint())
+    tenant_id = stored["tenant_id"]
+    touchpoint_id = stored["touchpoint_id"]
+    classification_id = stored["source_classification_id"]
+
+    rows = await repo.classification_revision(
+        tenant_id, touchpoint_id, classification_id
+    )
+    assert len(rows) == 1
+    assert rows[0]["classification_id"] == classification_id
+    assert await repo.classification_revision("tenant-b", touchpoint_id, classification_id) == []
+    assert await repo.classification_revision(tenant_id, str(uuid4()), classification_id) == []
+    assert await repo.classification_revision(tenant_id, touchpoint_id, str(uuid4())) == []
+
+
+@pytest.mark.asyncio
 async def test_reclassification_appends_and_links_revision_without_rewriting_prior() -> None:
     repo = TouchpointRepository()
     row = _initial_touchpoint()

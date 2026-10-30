@@ -11,7 +11,7 @@ related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
   "services/api/identity/profile/routes.py": "sha256:73c002b436a26ade807bfa2b0ff77a2ee574021ce86dadbdf4ff055b821c0dce"
-  "services/api/value/economic/routes.py": "sha256:b606e1038bf147686e2dc1a30575fb94132be5488ed146d4981a5f8030dc9897"
+  "services/api/value/economic/routes.py": "sha256:aadfa8101b7fc4fdcd267f643d7817442d4ed32b5ddef31f086b545abcc7eba2"
 ---
 
 # Aether — Kyber Economic Observability
@@ -66,6 +66,7 @@ The Kyber operator console surfaces economic observability for platform operator
 ```
 GET /v1/economic/overview                    → Tenant economic overview
 GET /v1/economic/warnings                    → Tenant-wide warnings
+POST /v1/economic/attribution-runs/{run_id}/model-validation → Record an exact run/config lineage check
 GET /v1/profile/{id}/economic                → Economic profile: financials and on-chain asset composition (profile service)
 GET /v1/profile/{id}/economic/web2           → TradFi signals; requires `credit` consent, 403 without it (profile service)
 GET /v1/profile/{id}/economic/web3           → Asset composition, PNL and trading profile (profile service)
@@ -74,7 +75,8 @@ GET /v1/profile/{id}/economic/campaigns      → Campaign-attributed value
 GET /v1/profile/{id}/economic/warnings       → Missing, stale and contradicting dimensions (profile service)
 ```
 
-Every route requires the `read` permission. `/economic/agentic`, `/economic/campaigns`
+The GET routes require `read`; the lineage check requires `write`. It does not
+approve or calibrate the model. `/economic/agentic`, `/economic/campaigns`
 and the two `/v1/economic` routes are served by `services/api/value/economic/routes.py`; the
 other four profile routes are served by `services/api/identity/profile/routes.py`. Each URL has
 exactly one handler (`tests/unit/test_route_conflicts.py`).

@@ -18,6 +18,7 @@ are filtered by valid-time when bounded and labelled as ledger transitions.
 from __future__ import annotations
 
 import asyncio
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
@@ -2196,6 +2197,7 @@ class Profile360Provider:
             MAX_PROFILE_PREDICTION_AGE,
             ProfilePredictionOutput,
             approved_production_artifact,
+            verify_prediction_policy_evidence,
         )
 
         valid_outputs: list[ProfilePredictionOutput] = []
@@ -2222,6 +2224,9 @@ class Profile360Provider:
                 continue
             if anchor - output.generated_at > MAX_PROFILE_PREDICTION_AGE:
                 stale_rows = True
+                continue
+            if not await verify_prediction_policy_evidence(output):
+                invalid_rows = True
                 continue
             artifact_key = (output.model_id, output.artifact_version)
             if artifact_key not in artifact_approval_cache:
@@ -2259,6 +2264,15 @@ class Profile360Provider:
         items: list[dict[str, Any]] = []
         claims: list[ClaimEnvelope] = []
         for output in valid_outputs:
+            artifact = artifact_approval_cache[(output.model_id, output.artifact_version)]
+            metrics = getattr(artifact, "metrics", None)
+            calibration = metrics.get("calibration_error") if isinstance(metrics, dict) else None
+            calibration_valid = (
+                isinstance(calibration, (int, float))
+                and not isinstance(calibration, bool)
+                and 0.0 <= calibration <= 1.0
+                and math.isfinite(calibration)
+            )
             evidence_refs = [
                 EvidenceRef(
                     id=ref.id,
@@ -2294,6 +2308,23 @@ class Profile360Provider:
                 "featureSchemaHash": output.feature_schema_hash,
                 "featureDigest": output.feature_digest,
                 "stateSchemaVersion": output.state_schema_version,
+                "modelGovernance": {
+                    "calibrationMetric": (
+                        {
+                            "state": "reported",
+                            "metric": "calibration_error",
+                            "value": float(calibration),
+                            "source": "current_model_artifact_metadata",
+                            "datasetAndEvaluationScope": "unknown",
+                            "predictionApplicability": "unknown",
+                        }
+                        if calibration_valid else {
+                            "state": "unknown",
+                            "reason": "artifact_calibration_metric_unavailable_or_invalid",
+                        }
+                    ),
+                    "modelCalibrationVerified": False,
+                },
                 "evidenceRefs": [ref.model_dump(mode="json") for ref in claim_refs],
                 "epistemicStatus": EpistemicStatus.PREDICTED.value,
             }

@@ -23,6 +23,7 @@ from actions.agent.agent360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     RepositoryAgent360Source,
 )
+from actions.agent_access_intelligence.models import capability_id_for  # noqa: E402
 from actions.agentic_observability.provenance import (  # noqa: E402
     AgenticProvenanceQuery,
     build_agentic_provenance_record,
@@ -164,6 +165,7 @@ class FakeSource:
                     "triggered_by_event_id": "event-1",
                     "initiating_principal_user_id": "authenticated-user-1",
                     "policy_log": {
+                        "delegation_check_tenant_id": tenant_id,
                         "tools_used": ["search"],
                         "resources": ["doc-1"],
                         "delegation_check": {
@@ -520,6 +522,14 @@ async def test_agent360_risk_summary_requires_exact_outer_slot_authority_before_
     assert source.risk_signal_calls == 0
     assert risk_summary["state"] == "partial"
     assert risk_summary["subject"] == {"kind": "agent", "id": "canonical-agent-a"}
+    assert risk_summary["canonicalAgentIdentityJoin"]["state"] == "resolved"
+    assert risk_summary["canonicalAgentIdentityJoin"]["canonicalAgentEntityId"] == (
+        "canonical-agent-a"
+    )
+    assert {
+        (ref["source"], ref["id"])
+        for ref in risk_summary["canonicalAgentIdentityJoin"]["evidenceRefs"]
+    } == {("agent_deployment_identity_bindings", "binding-agent-a")}
     assert {
         (ref["source"], ref["id"]) for ref in risk_summary["evidenceRefs"]
     } >= {
@@ -530,7 +540,10 @@ async def test_agent360_risk_summary_requires_exact_outer_slot_authority_before_
     claim = next(
         claim for claim in result.claims if claim.kind == "canonical_agent_risk_assessment"
     )
-    assert claim.subject.id == "canonical-agent-a"
+    assert claim.subject.id == AGENT
+    assert {ref.source for ref in claim.evidenceRefs} >= {
+        "agent_deployment_identity_bindings", "governance.consent.authority"
+    }
     assert claim.domainSlotIds == ["risk_summary"]
 
 
@@ -747,6 +760,7 @@ async def test_agent360_risk_summary_skips_nested_read_when_identity_is_unresolv
     assert source.risk_summary_calls == []
     assert source.risk_signal_calls == 0
     assert risk_dimension["content"]["riskAssessment"]["state"] == "unknown"
+    assert "canonicalAgentIdentityJoin" not in risk_dimension["content"]["riskAssessment"]
 
 
 @pytest.mark.asyncio
@@ -1573,6 +1587,12 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
     assert access_profile["capabilities"][0]["activeGrantRecordIds"] == [
         "capability-grant-1"
     ]
+    assert access_profile["capabilities"][0]["invokeGrantScopes"] == [{
+        "grantRecordId": "capability-grant-1",
+        "actions": ["invoke"],
+        "resources": ["capability:capability-search"],
+        "evidenceRef": {"id": "capability-grant-1", "type": "document", "source": "delegations"},
+    }]
     assert any(
         ref["id"] == "capability-grant-1" and ref["source"] == "delegations"
         for ref in access_profile["evidenceRefs"]
@@ -1852,6 +1872,7 @@ async def test_agent360_keeps_capability_coverage_partial_without_exact_canonica
     assert access_profile["authorization"]["known"] is False
     assert access_profile["authorization"]["activeGrantCount"] is None
     assert access_profile["capabilities"][0]["invokeGrantCoversCapability"] is None
+    assert access_profile["capabilities"][0]["invokeGrantScopes"] == []
     assert access_profile["authorization"]["activeGrantRecordIds"] == []
     assert "canonical_capability_grant_read_incomplete" in access_profile["missingInputs"]
     assert not any(claim.domainSlotIds == ["capabilities"] for claim in result.claims)
@@ -3061,6 +3082,22 @@ async def test_agent360_does_not_read_agent_sources_for_unverified_entity_subjec
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("tenant_scope", [None, "foreign-tenant"])
+async def test_agent360_suppresses_decisions_without_exact_recorded_tenant(tenant_scope):
+    class Source(FakeSource):
+        async def executions(self, tenant_id, agent_id, limit):
+            rows = await super().executions(tenant_id, agent_id, limit)
+            rows[0]["policy_log"]["delegation_check_tenant_id"] = tenant_scope
+            return rows
+
+    result = await Agent360Provider(Source()).project(_request(), _context())
+    authority = next(item for item in _sections(result)["state"].content["dimensions"]
+                     if item["id"] == "authority_and_delegation")
+    assert authority["content"]["actionScopedDecisions"] == []
+    assert not any(claim.kind == "server_recorded_delegation_decision" for claim in result.claims)
+
+
+@pytest.mark.asyncio
 async def test_agent360_refuses_current_records_for_historical_request():
     result = await Agent360Provider(FakeSource()).project(
         _request(temporal_mode="as_of", time_range={"from": "2026-10-01T00:00:00Z"}),
@@ -3072,3 +3109,122 @@ async def test_agent360_refuses_current_records_for_historical_request():
     assert all(
         "current rows are not served" in section.content["reason"] for section in result.sections
     )
+
+
+@pytest.mark.asyncio
+async def test_agent360_resolves_only_exact_observed_mcp_tool_catalog_identity():
+    class CatalogSource(FakeSource):
+        def __init__(self, *, exact: bool):
+            super().__init__()
+            self.exact = exact
+
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            capability = batch.rows[0]["profile"]["reach"]["capabilities"][0]
+            capability["capability_kind"] = "mcp_tool"
+            capability["capability_id"] = (
+                capability_id_for(tenant_id, "mcp", "mcp-main", "search")
+                if self.exact else "foreign-or-inconsistent-id"
+            )
+            return batch
+
+    async def tool_identity(exact: bool):
+        result = await Agent360Provider(CatalogSource(exact=exact)).project(
+            _request(), _context()
+        )
+        authority = next(
+            item for item in _sections(result)["state"].content["dimensions"]
+            if item["id"] == "authority_and_delegation"
+        )
+        return authority["content"]["capabilityAccessProfile"]["capabilities"][0]["toolIdentity"]
+
+    resolved = await tool_identity(True)
+    assert resolved["state"] == "resolved_observed_catalog"
+    assert resolved["evidenceRef"]["source"] == "capability_catalog"
+    assert resolved["effectiveToolAuthorization"] == "unknown"
+    inconsistent = await tool_identity(False)
+    assert inconsistent["state"] == "unknown"
+    assert inconsistent["evidenceRef"] is None
+
+
+def test_capability_grant_rejects_ambiguous_capability_and_server_scope():
+    grant = {
+        "tenant_id": "tenant-a", "agent_id": "agent-a", "grantee_entity_id": "agent-a",
+        "authorization_id": "grant-1", "authorization_kind": "capability",
+        "capability_id": "capability-a", "server_ref": "server-a",
+        "scope": {"actions": ["invoke"], "resources": ["capability:capability-a"]},
+        "state": "active",
+    }
+    rows, complete = Agent360Provider._validate_capability_grant_records(
+        [grant], "tenant-a", "agent-a"
+    )
+    assert rows == []
+    assert complete is False
+
+
+@pytest.mark.asyncio
+async def test_agent_social_risk_requires_exact_outer_authority_and_preserves_correlation(monkeypatch):
+    from actions.agent import social_risk_context
+    calls = []
+    async def read(**kwargs):
+        calls.append(kwargs)
+        return [{"tenant_id": TENANT, "canonical_agent_entity_id": "canonical-agent-a", "social_claim_id": "social-1",
+                 "evidence_refs": [{"id": "edge-1", "type": "relationship", "source": "entity_graph"},
+                                   {"id": "fact-1", "type": "event", "source": "relationship_facts"},
+                                   {"id": "risk-1", "type": "model_output", "source": "risk_signals:observed"}]}]
+    monkeypatch.setattr(social_risk_context, "read_agent_social_risk_context", read)
+    async def allow(**kwargs): return True
+    request = _request()
+    result = await Agent360Provider(FakeSource(), risk_slot_authorizer=allow).project(request, _context())
+    assert calls == []
+    assert not any(claim.kind == "agent_social_risk_context" for claim in result.claims)
+    context = _context()
+    context.experience360ReadAuthorizations = [ProjectionReadAuthorization(
+        tenantId=TENANT, sourceSurfaceId="agent360", sourceSubject=request.subject, sourceSlotId="risk_summary",
+        consumerProjectionId="agent360", targetProjectionId="social360", capabilityKey="social360.read",
+        policyState="allowed", policyIds=["policy-1"], policyEvaluatedAt="2026-10-18T10:00:00Z")]
+    result = await Agent360Provider(FakeSource(), risk_slot_authorizer=allow).project(request, context)
+    assert calls == [{"tenant_id": TENANT, "canonical_agent_id": "canonical-agent-a"}]
+    claim = next(claim for claim in result.claims if claim.kind == "agent_social_risk_context")
+    assert claim.subject == request.subject and claim.claimState == EpistemicStatus.CORRELATED
+    assert {ref.source for ref in claim.evidenceRefs} >= {"entity_graph", "relationship_facts", "risk_signals:observed"}
+    assert "contagion" in claim.claims[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("subject_kind", ["agent", "entity"])
+async def test_agent_social_risk_reaches_allowed_frame_slot(monkeypatch, subject_kind):
+    from actions.agent import social_risk_context
+    async def read(**kwargs):
+        return [{"tenant_id": TENANT, "canonical_agent_entity_id": "canonical-agent-a", "social_claim_id": "social-frame-1",
+                 "evidence_refs": [{"id": "edge-1", "type": "relationship", "source": "entity_graph"},
+                                   {"id": "fact-1", "type": "event", "source": "relationship_facts"},
+                                   {"id": "risk-1", "type": "model_output", "source": "risk_signals:observed"}]}]
+    monkeypatch.setattr(social_risk_context, "read_agent_social_risk_context", read)
+    class Allow:
+        async def evaluate(self, frame_request):
+            return Experience360PolicyEvaluation(surfaceId="agent360", tenantId=TENANT,
+                evaluatedAt="2026-10-23T14:00:00Z", frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={"risk_summary": Experience360PolicyDisposition(state="allowed", policyIds=["policy-1"],
+                                                                                 evaluatedAt="2026-10-23T14:00:00Z")})
+    registry = ProviderRegistry()
+    class Source(FakeSource):
+        async def actor_identity(self, tenant_id, agent_id):
+            if subject_kind == "agent":
+                return await super().actor_identity(tenant_id, agent_id)
+            return Agent360ReadBatch(rows=[{"tenant_id": tenant_id, "agent_id": agent_id,
+                "canonical_agent_entity_id": "canonical-agent-a", "identity_evidence_id": "canonical-agent-a",
+                "identity_evidence_source": "entities", "identity_binding_authority": "canonical_agent_entity",
+                "identity_bound_at": "2026-10-01T00:00:00Z"}])
+    registry.register(Agent360Provider(Source()), source="test")
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(surfaceId="agent360", tenantId=TENANT,
+            subject=ProjectionSubject(kind=subject_kind, id=AGENT if subject_kind == "agent" else "canonical-agent-a"),
+            requestedSlotIds=["risk_summary"], includeEvidence=True),
+        policy_evaluator=Allow(), projection_runtime=ProjectionRuntime(executor=ProjectionExecutor(registry=registry)))
+    slot = frame.slots[0]
+    assert any(claim.kind == "agent_social_risk_context" for claim in slot.claims)
+    assert any(ref.source == "relationship_facts" for ref in slot.evidenceRefs)
+    assert slot.state == "degraded"

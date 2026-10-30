@@ -14,6 +14,7 @@ lazy, and ``register_provider`` is an explicit runtime wiring seam.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -43,6 +44,21 @@ from journeys.campaign.campaign_population_links import (
     CampaignPopulationLinkAuthority,
     CampaignPopulationLinkRead,
     MAX_CAMPAIGN_POPULATION_LINKS,
+)
+from journeys.campaign.campaign_cluster_definitions import (
+    CampaignClusterDefinitionAuthority,
+    CampaignClusterDefinitionRead,
+    exact_cluster_definition,
+)
+from journeys.campaign.campaign_population_membership import (
+    CampaignPopulationMembershipAuthority,
+    CampaignPopulationMembershipRead,
+    MAX_CAMPAIGN_POPULATION_MEMBERS,
+    MAX_CAMPAIGN_POPULATIONS,
+)
+from journeys.campaign.campaign_population_relationships import (
+    CampaignPopulationRelationshipAuthority,
+    CampaignPopulationRelationshipRead,
 )
 
 
@@ -150,6 +166,7 @@ _TARGETING_ANOMALY_SOURCE = (
 _TARGETING_ANOMALY_EVIDENCE_SOURCES = frozenset(
     {"targeting_observation", "eligibility_snapshot"}
 )
+_CAMPAIGN_RISK_ASSESSMENT_SOURCE = "risk_assessments"
 
 
 @dataclass(frozen=True)
@@ -192,6 +209,16 @@ class ConversionRecordRead:
 @dataclass(frozen=True)
 class CampaignAnomalyRead:
     """Exact campaign-scoped targeting findings with explicit completeness."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CampaignRiskAssessmentRead:
+    """Exact campaign Risk360 assessments; producer coverage is unverified."""
 
     rows: list[dict[str, Any]]
     available: bool
@@ -256,8 +283,20 @@ class Campaign360Source(Protocol):
         self, tenant_id: str, campaign_id: str, *, limit: int
     ) -> CampaignAnomalyRead: ...
 
+    async def campaign_risk_assessments(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignRiskAssessmentRead: ...
+
     async def signal_events(
         self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead: ...
+
+    async def signal_observations(
+        self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead: ...
+
+    async def source_classification_revisions(
+        self, tenant_id: str, refs: list[tuple[str, str]], *, limit: int
     ) -> RowsRead: ...
 
     async def campaign_population_links(
@@ -475,6 +514,22 @@ class RepositoryCampaign360Source:
             complete=len(rows) < limit,
         )
 
+    async def campaign_risk_assessments(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignRiskAssessmentRead:
+        """Read only Risk360 assessments for the exact tenant/campaign subject."""
+        try:
+            from intelligence.risk360.store import RiskAssessmentRepository
+
+            rows = await RiskAssessmentRepository().list_by_subject(
+                tenant_id, "campaign", campaign_id, limit=limit
+            )
+        except Exception:  # noqa: BLE001 - independent risk output remains unknown
+            return CampaignRiskAssessmentRead([], False, False, "campaign_risk_assessment_read_unavailable")
+        return CampaignRiskAssessmentRead(
+            rows=list(rows), available=True, complete=len(rows) < limit
+        )
+
     async def signal_events(
         self, tenant_id: str, event_ids: list[str], *, limit: int
     ) -> RowsRead:
@@ -517,6 +572,90 @@ class RepositoryCampaign360Source:
         except Exception:  # noqa: BLE001 - event authority failure is slot-local
             return RowsRead([], available=False, reason="campaign_event_authority_unavailable")
 
+    async def signal_observations(
+        self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead:
+        """Read only exact tenant SDK Bronze observations named by event IDs."""
+        if not tenant_id:
+            return RowsRead([], available=False, reason="observation_tenant_scope_missing")
+        safe_ids = [
+            event_id for event_id in dict.fromkeys(event_ids)
+            if _safe_campaign_source_id(event_id)
+        ][:min(max(limit, 0), MAX_CAMPAIGN_SIGNAL_EVENTS)]
+        if not safe_ids:
+            return RowsRead([], available=True)
+        try:
+            from repositories.lake import BronzeRepository
+
+            repository = BronzeRepository("sdk_events")
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_one(event_id: str) -> list[dict[str, Any]]:
+                async with semaphore:
+                    legacy = await repository.find_many(
+                        filters={"tenant_id": tenant_id, "provider_record_id": event_id},
+                        limit=2,
+                    )
+                    typed = await repository.find_many(
+                        filters={"tenant_id": tenant_id, "event_id": event_id},
+                        limit=2,
+                    )
+                    if not isinstance(legacy, list) or not isinstance(typed, list):
+                        raise ValueError("invalid Bronze result")
+                    remaining = list(legacy)
+                    extra = []
+                    for row in typed:
+                        if row in remaining:
+                            remaining.remove(row)
+                        else:
+                            extra.append(row)
+                    return legacy + extra
+
+            pages = await asyncio.gather(*(read_one(event_id) for event_id in safe_ids))
+        except Exception:  # noqa: BLE001 - observation authority failure is slot-local
+            return RowsRead([], available=False, reason="campaign_observation_authority_unavailable")
+        if any(not isinstance(page, list) for page in pages):
+            return RowsRead([], available=False, reason="campaign_observation_read_invalid")
+        return RowsRead(
+            rows=[row for page in pages for row in page],
+            available=True,
+        )
+
+    async def source_classification_revisions(
+        self, tenant_id: str, refs: list[tuple[str, str]], *, limit: int
+    ) -> RowsRead:
+        """Read exact immutable source-classification facts for touchpoints."""
+        if not tenant_id:
+            return RowsRead([], available=False, reason="source_fact_tenant_scope_missing")
+        safe_refs = [
+            (touchpoint_id, classification_id)
+            for touchpoint_id, classification_id in dict.fromkeys(refs)
+            if _safe_campaign_source_id(touchpoint_id)
+            and _safe_campaign_source_id(classification_id)
+        ][:min(max(limit, 0), MAX_CAMPAIGN_SIGNAL_EVENTS)]
+        if not safe_refs:
+            return RowsRead([], available=True)
+        try:
+            from journeys.measurement.repositories.touchpoint_repo import (
+                TouchpointRepository,
+            )
+
+            repository = TouchpointRepository()
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_one(ref: tuple[str, str]) -> list[dict[str, Any]]:
+                async with semaphore:
+                    return await repository.classification_revision(
+                        tenant_id, ref[0], ref[1]
+                    )
+
+            pages = await asyncio.gather(*(read_one(ref) for ref in safe_refs))
+        except Exception:  # noqa: BLE001 - source facts fail independently
+            return RowsRead([], available=False, reason="campaign_source_fact_authority_unavailable")
+        if any(not isinstance(page, list) for page in pages):
+            return RowsRead([], available=False, reason="campaign_source_fact_read_invalid")
+        return RowsRead([row for page in pages for row in page], available=True)
+
     async def campaign_population_links(
         self, tenant_id: str, campaign_id: str, *, limit: int
     ) -> CampaignPopulationLinkRead:
@@ -526,6 +665,21 @@ class RepositoryCampaign360Source:
             campaign_id,
             limit=min(max(limit, 1), MAX_CAMPAIGN_POPULATION_LINKS),
         )
+
+    async def campaign_cluster_definition(
+        self, tenant_id: str, population_id: str
+    ) -> CampaignClusterDefinitionRead:
+        return await CampaignClusterDefinitionAuthority().read(tenant_id, population_id)
+
+    async def campaign_population_memberships(
+        self, tenant_id: str, population_id: str
+    ) -> CampaignPopulationMembershipRead:
+        return await CampaignPopulationMembershipAuthority().read(tenant_id, population_id)
+
+    async def campaign_population_relationships(
+        self, tenant_id: str, memberships: dict[str, set[str]]
+    ) -> CampaignPopulationRelationshipRead:
+        return await CampaignPopulationRelationshipAuthority().read(tenant_id, memberships)
 
     async def campaign_spend(
         self,
@@ -1116,6 +1270,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         campaign_facts: Optional[dict[str, Any]] = None
         touchpoint_items: list[dict[str, Any]] = []
         source_classification_items: list[dict[str, Any]] = []
+        source_facts_by_event: dict[str, list[dict[str, Any]]] = {}
         signal_touchpoint_evidence: dict[str, list[EvidenceRef]] = {}
         signal_reference_issues: list[str] = []
         signal_context: dict[str, Any] = {
@@ -1370,12 +1525,19 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                             claims=claims,
                             degraded_reasons=degraded_reasons,
                         )
+                        source_facts_by_event = await self._read_campaign_source_facts(
+                            request=request,
+                            classifications=source_classification_items,
+                            evidence_by_key=evidence_by_key,
+                            claims=claims,
+                        )
                         signal_context = await self._read_campaign_signal_context(
                             request=request,
                             context=context,
                             campaign_id=campaign_id,
                             temporal=temporal,
                             touchpoint_evidence_by_event=signal_touchpoint_evidence,
+                            source_facts_by_event=source_facts_by_event,
                             reference_issues=signal_reference_issues,
                             slot_states=slot_states,
                             evidence_by_key=evidence_by_key,
@@ -1387,12 +1549,12 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                                 "state": "degraded",
                                 "subject": {"kind": subject.kind, "id": subject.id},
                                 "touchpointClassifications": source_classification_items,
-                                "reason": "observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
+                                "reason": "exact_touchpoint_source_facts_campaign_registry_source_unresolved" if source_facts_by_event else "observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
                             }
                             slot_states[SLOT_SOURCE_CLASSIFICATION].update(
                                 state="degraded",
-                                reason="observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
-                                sourceAuthorities=["campaign_touchpoints", "source_provenance"],
+                                reason="exact_touchpoint_source_facts_campaign_registry_source_unresolved" if source_facts_by_event else "observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
+                                sourceAuthorities=["campaign_touchpoints", "source_facts", "source_provenance"],
                             )
                         await self._read_attribution(
                             request=request,
@@ -1536,6 +1698,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 if campaign_found and temporal.observations_supported:
                     campaign_population_context = await self._read_campaign_population_links(
                         request=request,
+                        context=context,
                         campaign_id=campaign_id or "",
                         slot_states=slot_states,
                         evidence_by_key=evidence_by_key,
@@ -1746,12 +1909,12 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "domainSlotIds": [slot_id for slot_id, _ in _SLOT_REQUIREMENTS],
                     "limitations": [
                         "touchpoint source classifications do not classify campaign registry provenance",
-                        "signal_sources include exact touchpoint-linked events only; broader observations and source facts remain unknown",
+                        "signal_sources join exact touchpoint-linked events, matching gateway-admitted SDK observations, and verified current touchpoint classification revisions when available; broader source coverage remains unknown",
                         "communication content remains governed by communication360",
                         "conversion records are joined only through exact active campaign attribution credits; unattributed conversions remain outside this view",
                         "explicit campaign-population links are operator asserted; broader cohort and syndicate membership remains unknown",
                         "campaign spend coverage is not attested, so full-period totals and ROAS remain unknown",
-                        "targeting leakage findings are a partial anomaly source; broader risk outputs and source anomalies remain unresolved",
+                        "exact campaign Risk360 assessments and targeting leakage findings have separate partial coverage; source anomalies and campaign risk producer completeness remain unresolved",
                         "actor attribution, delegation, and authority are not resolved by this provider",
                         "current campaign state is not a historical snapshot",
                     ],
@@ -1845,6 +2008,147 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             degradation=degradation,
         )
 
+    async def _read_campaign_risk_assessments(
+        self,
+        *,
+        request: ProjectionRequest,
+        campaign_id: str,
+        temporal: _TemporalScope,
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, Any]:
+        """Expose exact Risk360 output as assessments, not inferred anomalies."""
+        source_read = getattr(self._source, "campaign_risk_assessments", None)
+        if not callable(source_read):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_binding_unavailable", "items": []}
+        try:
+            read = await source_read(
+                request.tenantId, campaign_id, limit=MAX_CAMPAIGN_ANOMALIES + 1
+            )
+        except Exception:  # noqa: BLE001 - risk authority failure is dimension-local
+            read = None
+        if not isinstance(read, CampaignRiskAssessmentRead) or not read.available:
+            return {"state": "unavailable", "reason": "campaign_risk_assessment_authority_unavailable", "items": []}
+        if not isinstance(read.rows, list) or any(not isinstance(row, dict) for row in read.rows):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_result_invalid", "items": []}
+        if any(
+            row.get("tenant_id") != request.tenantId
+            or row.get("subject_kind") != "campaign"
+            or row.get("subject_id") != campaign_id
+            for row in read.rows
+        ):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_scope_mismatch", "items": []}
+        try:
+            from intelligence.risk360.contracts import RiskAssessment
+
+            assessments = [RiskAssessment.model_validate(row) for row in read.rows]
+        except Exception:  # noqa: BLE001 - malformed canonical output cannot be projected
+            return {"state": "unknown", "reason": "campaign_risk_assessment_contract_invalid", "items": []}
+        assessment_ids = [assessment.assessment_id for assessment in assessments]
+        if len(assessment_ids) != len(set(assessment_ids)) or any(
+            not _safe_campaign_source_id(value) for value in assessment_ids
+        ):
+            return {"state": "unknown", "reason": "campaign_risk_assessment_id_ambiguous", "items": []}
+
+        truncated = not read.complete or len(assessments) > MAX_CAMPAIGN_ANOMALIES
+        items: list[dict[str, Any]] = []
+        pending_refs: list[EvidenceRef] = []
+        pending_claims: list[ClaimEnvelope] = []
+        missing_time_or_evidence = False
+        for assessment in assessments[:MAX_CAMPAIGN_ANOMALIES]:
+            assessed_at = _scalar(assessment.assessed_at)
+            try:
+                at = _parse_instant(assessed_at) if isinstance(assessed_at, str) else None
+            except ValueError:
+                at = None
+            if at is None:
+                missing_time_or_evidence = True
+                continue
+            if (temporal.start is not None and at < temporal.start) or (
+                temporal.end is not None and at >= temporal.end
+            ):
+                continue
+            source_refs: list[EvidenceRef] = []
+            for ref in assessment.evidence_refs:
+                if (
+                    not _safe_campaign_source_id(ref.id)
+                    or not _safe_campaign_source_id(ref.source)
+                    or ref.observedAt is None
+                ):
+                    break
+                try:
+                    _parse_instant(ref.observedAt)
+                except ValueError:
+                    break
+                source_refs.append(
+                    EvidenceRef(
+                        id=ref.id,
+                        type=ref.type,
+                        source=ref.source,
+                        observedAt=ref.observedAt,
+                    )
+                )
+            else:
+                if source_refs:
+                    assessment_ref = EvidenceRef(
+                        id=assessment.assessment_id,
+                        type="model_output",
+                        source=_CAMPAIGN_RISK_ASSESSMENT_SOURCE,
+                        observedAt=at.isoformat(),
+                        uri=(
+                            "store://risk_assessments/"
+                            f"{quote(request.tenantId, safe='')}:{quote(assessment.assessment_id, safe='')}"
+                        ),
+                    )
+                    refs = [assessment_ref, *source_refs]
+                    pending_refs.extend(refs)
+                    items.append(
+                        {
+                            "assessmentId": assessment.assessment_id,
+                            "assessedAt": at.isoformat(),
+                            "dimensionsEvaluated": list(assessment.dimensions),
+                            "claimState": assessment.claim_state.value,
+                            "policyState": "unknown",
+                            "evidenceRefs": [
+                                ref.model_dump(by_alias=True, exclude_none=True) for ref in refs
+                            ],
+                            "domainSlotIds": [SLOT_ANOMALIES],
+                        }
+                    )
+                    pending_claims.append(
+                        ClaimEnvelope(
+                            id=f"campaign360:{campaign_id}:risk-assessment:{assessment.assessment_id}",
+                            kind="campaign_risk_assessment_exact_subject",
+                            subject=request.subject,
+                            evidenceRefs=refs,
+                            claims=[
+                                "A canonical Risk360 assessment names this exact tenant and campaign; this does not establish complete risk producer coverage, an anomaly finding, or current policy authorization."
+                            ],
+                            claimState=assessment.claim_state,
+                            domainSlotIds=[SLOT_ANOMALIES],
+                        )
+                    )
+                    continue
+            missing_time_or_evidence = True
+        for ref in pending_refs:
+            _add_evidence(evidence_by_key, ref)
+        claims.extend(pending_claims)
+        state = (
+            "truncated" if truncated else "partial" if missing_time_or_evidence
+            else "available" if items else "empty"
+        )
+        return {
+            "state": state,
+            "reason": (
+                "campaign_risk_assessment_read_truncated" if truncated
+                else "campaign_risk_assessment_time_or_evidence_missing" if missing_time_or_evidence
+                else "exact_campaign_risk_assessments_producer_coverage_unknown"
+            ),
+            "items": items,
+            "readCompleteForExactSubject": not truncated and not missing_time_or_evidence,
+            "producerCoverageState": "unknown",
+        }
+
     async def _read_campaign_anomalies(
         self,
         *,
@@ -1856,12 +2160,11 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         claims: list[ClaimEnvelope],
         degraded_reasons: list[str],
     ) -> dict[str, Any]:
-        """Project exact campaign-targeting leakage findings as partial anomalies.
+        """Project exact targeting findings and separate campaign risk assessments.
 
-        This joins one existing canonical finding authority by its exact
-        ``(tenantId, campaignId)`` key. It does not turn the absence of targeting
-        leakage into an all-risk clear state: general risk outputs and source
-        anomalies remain explicit unknown dimensions.
+        Both reads use the exact tenant/campaign key. A Risk360 assessment is
+        its own output, never inferred from a signal or targeting finding. An
+        empty read cannot establish all-risk clear or complete producer coverage.
         """
         base: dict[str, Any] = {
             "subject": {"kind": request.subject.kind, "id": request.subject.id},
@@ -1880,6 +2183,18 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 "toExclusive": True,
             },
         }
+        risk_output = await self._read_campaign_risk_assessments(
+            request=request,
+            campaign_id=campaign_id,
+            temporal=temporal,
+            evidence_by_key=evidence_by_key,
+            claims=claims,
+        )
+        base["riskAssessments"] = risk_output["items"]
+        base["riskAssessmentRead"] = {
+            key: value for key, value in risk_output.items() if key != "items"
+        }
+        base["dimensionStates"]["riskOutputs"] = risk_output["state"]
         source_read = getattr(self._source, "campaign_anomalies", None)
         if not callable(source_read):
             reason = "targeting_anomaly_authority_binding_unavailable"
@@ -2092,6 +2407,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             reason = (
                 "campaign_targeting_leakage_findings_have_unplaced_timestamps"
                 if missing_window_timestamps
+                else "exact_campaign_risk_assessments_and_targeting_findings_partial_coverage"
+                if risk_output["items"]
                 else "targeting_leakage_findings_only_other_anomaly_authorities_unresolved"
             )
             targeting_state = (
@@ -2109,7 +2426,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         source_timestamp = max(timestamps, key=lambda pair: pair[0])[1] if timestamps else None
         dimension_states = {
             "targetingLeakageFindings": targeting_state,
-            "riskOutputs": "unknown",
+            "riskOutputs": risk_output["state"],
             "sourceAnomalies": "unknown",
         }
         slot_states[SLOT_ANOMALIES].update(
@@ -2122,6 +2439,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             ],
             dimensionStates=dimension_states,
             findingCount=len(anomaly_items),
+            riskAssessmentCount=len(risk_output["items"]),
             freshnessState=freshness_state,
             sourceTimestamp=source_timestamp,
             findingsTruncated=truncated,
@@ -2140,9 +2458,119 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 "missingTimestamp": "unknown",
             },
             "reason": reason,
-            "coverage": "targeting_leakage_findings_only",
+            "coverage": (
+                "exact_targeting_findings_and_campaign_risk_assessments_partial"
+                if risk_output["items"]
+                else "targeting_leakage_findings_only"
+            ),
             "findingsTruncated": truncated,
         }
+
+    async def _read_campaign_source_facts(
+        self,
+        *,
+        request: ProjectionRequest,
+        classifications: list[dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Resolve touchpoint classification pointers to immutable source facts."""
+        reader = getattr(self._source, "source_classification_revisions", None)
+        if not classifications or not callable(reader):
+            return {}
+        refs = [
+            (item["touchpointId"], item["classificationId"])
+            for item in classifications[:MAX_CAMPAIGN_SIGNAL_EVENTS]
+        ]
+        try:
+            read = await reader(request.tenantId, refs, limit=MAX_CAMPAIGN_SIGNAL_EVENTS)
+        except Exception:  # noqa: BLE001 - independent source-fact read
+            return {}
+        if not isinstance(read, RowsRead) or not read.available or not isinstance(read.rows, list):
+            return {}
+        requested = {ref: item for ref, item in zip(refs, classifications)}
+        rows_by_key: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for row in read.rows:
+            if not isinstance(row, dict) or row.get("tenant_id") != request.tenantId:
+                return {}
+            key = (str(row.get("touchpoint_id")), str(row.get("classification_id")))
+            if key not in requested:
+                return {}
+            rows_by_key.setdefault(key, []).append(row)
+        if any(len(rows) != 1 for rows in rows_by_key.values()):
+            return {}
+
+        facts_by_event: dict[str, list[dict[str, Any]]] = {}
+        staged: list[tuple[dict[str, Any], EvidenceRef, EvidenceRef, dict[str, Any]]] = []
+        for key, rows in rows_by_key.items():
+            row = rows[0]
+            item = requested[key]
+            classification = row.get("classification")
+            if isinstance(classification, str):
+                try:
+                    classification = json.loads(classification)
+                except (TypeError, ValueError):
+                    return {}
+            classified_at = _string_or_none(row.get("classified_at"))
+            pointer_at = item.get("classifiedAt")
+            try:
+                times_match = (
+                    classified_at is not None
+                    and pointer_at is not None
+                    and _parse_instant(classified_at) == _parse_instant(pointer_at)
+                )
+            except (TypeError, ValueError):
+                times_match = False
+            if (
+                not row.get("is_current")
+                or not isinstance(classification, dict)
+                or classification.get("source_class") != item["sourceClass"]
+                or row.get("classifier_version") != item["classifierVersion"]
+                or not times_match
+            ):
+                return {}
+            touchpoint_ref = evidence_by_key.get((
+                "services/api/journeys/measurement/repositories/touchpoint_repo.py:silver_campaign_touchpoint_facts",
+                item["touchpointId"],
+            ))
+            if touchpoint_ref is None:
+                return {}
+            ref = EvidenceRef(
+                id=item["classificationId"],
+                type="event",
+                source="services/api/journeys/measurement/repositories/touchpoint_repo.py:touchpoint_source_classification_revisions",
+                observedAt=classified_at,
+                uri=f"store://touchpoint_source_classification_revisions/{quote(item['classificationId'], safe='')}",
+            )
+            fact = {
+                "sourceEventId": item["sourceEventId"],
+                "touchpointId": item["touchpointId"],
+                "classificationId": item["classificationId"],
+                "sourceClass": item["sourceClass"],
+                "classifierVersion": item["classifierVersion"],
+                "classifiedAt": classified_at,
+                "evidenceRefs": [
+                    touchpoint_ref.model_dump(by_alias=True, exclude_none=True),
+                    ref.model_dump(by_alias=True, exclude_none=True),
+                ],
+            }
+            staged.append((item, touchpoint_ref, ref, fact))
+        for item, touchpoint_ref, ref, fact in staged:
+            _add_evidence(evidence_by_key, ref)
+            item["canonicalSourceFactState"] = "resolved"
+            facts_by_event.setdefault(item["sourceEventId"], []).append(fact)
+            claims.append(ClaimEnvelope(
+                id=f"campaign360:{request.subject.id}:source-fact:{ref.id}",
+                kind="campaign_touchpoint_source_fact",
+                subject=request.subject,
+                evidenceRefs=[touchpoint_ref, ref],
+                claims=[
+                    "An exact current tenant touchpoint classification revision agrees with the campaign touchpoint's source class, classifier version, and classification time."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=[SLOT_SOURCE_CLASSIFICATION, SLOT_SIGNAL_SOURCES],
+            ))
+        return facts_by_event
 
     async def _read_campaign_signal_context(
         self,
@@ -2152,6 +2580,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         campaign_id: str,
         temporal: _TemporalScope,
         touchpoint_evidence_by_event: dict[str, list[EvidenceRef]],
+        source_facts_by_event: dict[str, list[dict[str, Any]]],
         reference_issues: list[str],
         slot_states: dict[str, dict[str, Any]],
         evidence_by_key: dict[tuple[str, str], EvidenceRef],
@@ -2162,14 +2591,15 @@ class Campaign360Provider(IntelligenceProjectionProvider):
 
         This is intentionally a partial signal view. It does not infer signal
         membership from a campaign label or event properties, and it does not
-        substitute event records for the separate observation/source-fact
-        authorities declared by the product contract.
+        substitute event records for source-fact authority. An exact admitted
+        SDK Bronze observation may be joined, while broader coverage is unknown.
         """
         base: dict[str, Any] = {
             "state": "unknown",
             "subject": {"kind": request.subject.kind, "id": request.subject.id},
             "campaignId": campaign_id,
             "events": [],
+            "sourceFacts": [],
             "dimensionStates": {
                 "events": "unknown",
                 "observations": "unknown",
@@ -2369,20 +2799,37 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 if issues
                 else "campaign_touchpoint_event_record_not_resolved"
             )
+        source_facts = [
+            fact for item in event_items
+            for fact in source_facts_by_event.get(item["eventId"], [])
+        ]
+        observation_context = await self._read_campaign_signal_observations(
+            request=request,
+            event_items=event_items,
+            evidence_by_key=evidence_by_key,
+            claims=claims,
+        )
         dimension_states = {
             "events": "available" if event_items else "unknown",
-            "observations": "unknown",
-            "sourceFacts": "unknown",
+            "observations": observation_context["state"],
+            "sourceFacts": "available" if source_facts else "unknown",
         }
+        if event_items and observation_context["items"]:
+            reason = "campaign_signal_events_and_sdk_observations_partial"
         if issues and event_items:
             reason = issues[0]
+        coverage = (
+            "exact_touchpoint_linked_events_and_sdk_observations_partial"
+            if observation_context["items"]
+            else "exact_touchpoint_linked_events_only"
+        )
         slot_states[SLOT_SIGNAL_SOURCES].update(
             state=state,
             reason=reason,
             sourceAuthorities=["events", "observations", "source_facts"],
             dimensionStates=dimension_states,
             eventCount=len(event_items) if event_items else None,
-            coverage="exact_touchpoint_linked_events_only",
+            coverage=coverage,
             broaderAuthorityState="unknown",
         )
         if state == "partial":
@@ -2394,7 +2841,13 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             **base,
             "state": state,
             "events": event_items,
+            "sourceFacts": source_facts,
+            "observations": observation_context["items"],
+            "observationRead": {
+                key: value for key, value in observation_context.items() if key != "items"
+            },
             "dimensionStates": dimension_states,
+            "coverage": coverage,
             "freshness": {
                 "state": "unknown",
                 "latestSourceTimestamp": max(timestamps) if timestamps else None,
@@ -2404,9 +2857,136 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             },
             "reason": reason,
             "limitations": [
-                "Campaign-tagged observations and source-fact classification are not joined.",
+                "Only exact touchpoint-linked SDK observations and matching current touchpoint classification revisions are joined; broader observation and source-fact coverage remain unknown.",
                 *list(dict.fromkeys(issues)),
             ],
+        }
+
+    async def _read_campaign_signal_observations(
+        self,
+        *,
+        request: ProjectionRequest,
+        event_items: list[dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, Any]:
+        """Join gateway-admitted SDK Bronze rows to exact canonical event IDs."""
+
+        def unknown(reason: str) -> dict[str, Any]:
+            return {"state": "unknown", "reason": reason, "items": []}
+
+        sdk_events = {
+            item["eventId"]: item for item in event_items
+            if item.get("source") == "sdk"
+            and item.get("eventType")
+            and item.get("occurredAt")
+        }
+        if not sdk_events:
+            return unknown("no_exact_sdk_event_available_for_observation_join")
+        source_read = getattr(self._source, "signal_observations", None)
+        if not callable(source_read):
+            return unknown("campaign_observation_authority_binding_unavailable")
+        try:
+            read = await source_read(
+                request.tenantId, list(sdk_events), limit=MAX_CAMPAIGN_SIGNAL_EVENTS
+            )
+        except Exception:  # noqa: BLE001 - independent observation read remains unknown
+            return unknown("campaign_observation_authority_unavailable")
+        if not isinstance(read, RowsRead) or not read.available:
+            return unknown("campaign_observation_authority_unavailable")
+        if not isinstance(read.rows, list) or any(not isinstance(row, dict) for row in read.rows):
+            return unknown("campaign_observation_result_invalid")
+        if any(
+            row.get("tenant_id") != request.tenantId
+            or (row.get("provider_record_id") or row.get("event_id")) not in sdk_events
+            or (row.get("provider_record_id") and row.get("event_id")
+                and row["provider_record_id"] != row["event_id"])
+            or row.get("source") != "sdk"
+            for row in read.rows
+        ):
+            return unknown("campaign_observation_scope_mismatch")
+        rows_by_id: dict[str, list[dict[str, Any]]] = {}
+        for row in read.rows:
+            rows_by_id.setdefault(row.get("provider_record_id") or row["event_id"], []).append(row)
+        if any(len(rows) > 1 for rows in rows_by_id.values()):
+            return unknown("campaign_observation_identifier_ambiguous")
+
+        items: list[dict[str, Any]] = []
+        refs_and_claims: list[tuple[EvidenceRef, EvidenceRef, str]] = []
+        for event_id, rows in rows_by_id.items():
+            row = rows[0]
+            payload = row.get("payload")
+            envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+            observation = envelope.get("observation") if isinstance(envelope, dict) else None
+            tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+            quality = envelope.get("quality") if isinstance(envelope, dict) else None
+            source = envelope.get("source") if isinstance(envelope, dict) else None
+            event = sdk_events[event_id]
+            try:
+                event_at = _parse_instant(event["occurredAt"])
+                observation_at = _parse_instant(observation.get("occurred_at"))
+            except (TypeError, ValueError, AttributeError):
+                return unknown("campaign_observation_event_time_mismatch")
+            if (
+                not isinstance(observation, dict)
+                or observation.get("observation_id") != event_id
+                or observation.get("observation_type") != event["eventType"]
+                or observation_at != event_at
+                or not isinstance(tenancy, dict)
+                or tenancy.get("tenant_id") != request.tenantId
+                or not isinstance(source, dict)
+                or source.get("source_type") != "sdk"
+                or not isinstance(quality, dict)
+                or quality.get("validation_state") != "gateway:accepted"
+            ):
+                return unknown("campaign_observation_envelope_mismatch")
+            observed_at = _string_or_none(observation.get("ingested_at"))
+            if observed_at is None:
+                return unknown("campaign_observation_ingest_time_missing")
+            try:
+                _parse_instant(observed_at)
+            except ValueError:
+                return unknown("campaign_observation_ingest_time_invalid")
+            bronze_ref = EvidenceRef(
+                id=event_id,
+                type="event",
+                source="bronze_sdk_events",
+                observedAt=observed_at,
+                uri=f"store://sdk_events/{quote(request.tenantId, safe='')}:{quote(event_id, safe='')}",
+            )
+            event_ref = EvidenceRef.model_validate(event["evidenceRefs"][0])
+            refs_and_claims.append((bronze_ref, event_ref, event_id))
+            items.append({
+                "observationId": event_id,
+                "eventType": event["eventType"],
+                "validationState": "gateway:accepted",
+                "ingestedAt": observed_at,
+                "evidenceRefs": [
+                    bronze_ref.model_dump(by_alias=True, exclude_none=True),
+                    event_ref.model_dump(by_alias=True, exclude_none=True),
+                ],
+            })
+        for bronze_ref, event_ref, event_id in refs_and_claims:
+            _add_evidence(evidence_by_key, bronze_ref)
+            claims.append(ClaimEnvelope(
+                id=f"campaign360:{request.subject.id}:signal-observation:{event_id}",
+                kind="campaign_linked_sdk_observation",
+                subject=request.subject,
+                evidenceRefs=[bronze_ref, event_ref],
+                claims=[
+                    "A gateway-admitted SDK observation has the exact tenant, event ID, type, and occurrence time of a canonical event named by this campaign touchpoint."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=[SLOT_SIGNAL_SOURCES],
+            ))
+        return {
+            "state": "available" if items else "unknown",
+            "reason": (
+                "exact_touchpoint_linked_sdk_observations_only"
+                if items else "no_exact_sdk_observation_for_linked_events"
+            ),
+            "items": items,
+            "producerCoverageState": "unknown",
         }
 
     async def _read_campaign_journey_context(
@@ -3667,6 +4247,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         self,
         *,
         request: ProjectionRequest,
+        context: ProjectionContext,
         campaign_id: str,
         slot_states: dict[str, dict[str, Any]],
         evidence_by_key: dict[tuple[str, str], EvidenceRef],
@@ -3836,6 +4417,221 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 )
             )
 
+        membership_authorized = (
+            context.tenantId == request.tenantId
+            and context.projectionId == "campaign360"
+            and any(
+                auth.tenantId == request.tenantId
+                and auth.sourceSurfaceId == "campaign360"
+                and auth.sourceSubject == request.subject
+                and auth.sourceSlotId == SLOT_COHORTS_SYNDICATES
+                and auth.consumerProjectionId == "campaign360"
+                and auth.targetProjectionId == "population360"
+                and auth.capabilityKey == "population360.read"
+                and auth.policyState == "allowed"
+                and bool(auth.policyIds)
+                and bool(auth.policyEvaluatedAt)
+                for auth in context.experience360ReadAuthorizations
+            )
+        )
+        cluster_definitions: list[dict[str, Any]] = []
+        definition_reader = getattr(self._source, "campaign_cluster_definition", None)
+        if membership_authorized and callable(definition_reader) and associations:
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_definition(population_id: str) -> Any:
+                async with semaphore:
+                    return await definition_reader(request.tenantId, population_id)
+
+            definition_reads = await asyncio.gather(
+                *(read_definition(association["populationId"]) for association in associations),
+                return_exceptions=True,
+            )
+            for association, definition_read in zip(associations, definition_reads):
+                if (
+                    not isinstance(definition_read, CampaignClusterDefinitionRead)
+                    or definition_read.tenant_id != request.tenantId
+                    or definition_read.population_id != association["populationId"]
+                ):
+                    continue
+                definition = exact_cluster_definition(definition_read)
+                if definition is None:
+                    continue
+                definition_ref = EvidenceRef(
+                    id=definition["revisionId"],
+                    type="document",
+                    source="population_definition_versions",
+                    uri=f"store://population_definition_versions/{definition['revisionId']}",
+                )
+                association_refs = [EvidenceRef.model_validate(ref) for ref in association["evidenceRefs"]]
+                link_ref = EvidenceRef(
+                    id=association["linkEventId"],
+                    type="event",
+                    source="campaign_population_link_events",
+                    uri=f"store://campaign_population_link_events/{quote(association['linkEventId'], safe='')}",
+                )
+                definition["evidenceRef"] = definition_ref.model_dump(by_alias=True, exclude_none=True)
+                cluster_definitions.append(definition)
+                _add_evidence(evidence_by_key, definition_ref)
+                _add_evidence(evidence_by_key, link_ref)
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"campaign360:{campaign_id}:cluster-definition:{definition['revisionId']}",
+                        kind="campaign_linked_cluster_definition",
+                        subject=request.subject,
+                        evidenceRefs=[*association_refs, link_ref, definition_ref],
+                        claims=[
+                            "The explicitly linked tenant cluster has this current versioned definition; membership and historical applicability remain unknown."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_COHORTS_SYNDICATES],
+                    )
+                )
+
+        population_memberships: list[dict[str, Any]] = []
+        membership_reader = getattr(self._source, "campaign_population_memberships", None)
+        selected_associations = associations[:MAX_CAMPAIGN_POPULATIONS]
+        if membership_authorized and callable(membership_reader) and selected_associations:
+            semaphore = asyncio.Semaphore(4)
+
+            async def read_memberships(population_id: str) -> Any:
+                async with semaphore:
+                    return await membership_reader(request.tenantId, population_id)
+
+            membership_reads = await asyncio.gather(
+                *(read_memberships(item["populationId"]) for item in selected_associations),
+                return_exceptions=True,
+            )
+            for association, membership_read in zip(selected_associations, membership_reads):
+                if (
+                    not isinstance(membership_read, CampaignPopulationMembershipRead)
+                    or not membership_read.available
+                    or membership_read.tenant_id != request.tenantId
+                    or membership_read.population_id != association["populationId"]
+                    or membership_read.population_type not in {"cluster", "cohort"}
+                    or len(membership_read.rows) > MAX_CAMPAIGN_POPULATION_MEMBERS
+                ):
+                    continue
+                seen_entities: set[str] = set()
+                valid_rows = True
+                for row in membership_read.rows:
+                    if (
+                        not isinstance(row, dict)
+                        or row.get("tenant_id") != request.tenantId
+                        or row.get("population_id") != association["populationId"]
+                        or row.get("population_type") != membership_read.population_type
+                        or not _safe_campaign_source_id(row.get("entity_id"))
+                        or not _safe_campaign_source_id(row.get("ledger_mutation_id"))
+                        or not _safe_campaign_source_id(row.get("consent_receipt_id"))
+                        or not _safe_campaign_source_id(row.get("consent_purpose"))
+                        or row["entity_id"] in seen_entities
+                    ):
+                        valid_rows = False
+                        break
+                    seen_entities.add(row["entity_id"])
+                if not valid_rows:
+                    continue
+                for row in membership_read.rows:
+                    ledger_ref = EvidenceRef(
+                        id=row["ledger_mutation_id"], type="relationship", source="graph_mutation_ledger",
+                        observedAt=_string_or_none(row.get("recorded_at")),
+                    )
+                    consent_ref = EvidenceRef(
+                        id=row["consent_receipt_id"], type="event", source="governance.consent.authority",
+                        uri=f"store://consent_receipts/{quote(row['consent_receipt_id'], safe='')}",
+                    )
+                    link_ref = EvidenceRef(
+                        id=association["linkEventId"], type="event", source="campaign_population_link_events",
+                        uri=f"store://campaign_population_link_events/{quote(association['linkEventId'], safe='')}",
+                    )
+                    refs = [*(EvidenceRef.model_validate(ref) for ref in association["evidenceRefs"]),
+                            link_ref, ledger_ref, consent_ref]
+                    for ref in refs:
+                        _add_evidence(evidence_by_key, ref)
+                    population_memberships.append({
+                        "populationId": row["population_id"], "populationType": row["population_type"],
+                        "entityId": row["entity_id"], "membershipState": "observed_active",
+                        "consentPurpose": row["consent_purpose"],
+                        "evidenceRefs": [ref.model_dump(by_alias=True, exclude_none=True) for ref in refs],
+                    })
+                    claims.append(ClaimEnvelope(
+                        id=f"campaign360:{campaign_id}:membership:{row['ledger_mutation_id']}",
+                        kind="campaign_linked_population_membership", subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=["An explicitly linked population has an observed active member whose current consent was checked; source and roster coverage remain unknown."],
+                        claimState=EpistemicStatus.OBSERVED, domainSlotIds=[SLOT_COHORTS_SYNDICATES],
+                    ))
+
+        relationships: list[dict[str, Any]] = []
+        relationship_state = "unknown"
+        social_authorized = membership_authorized and any(
+            auth.tenantId == request.tenantId and auth.sourceSurfaceId == "campaign360"
+            and auth.sourceSubject == request.subject and auth.sourceSlotId == SLOT_COHORTS_SYNDICATES
+            and auth.consumerProjectionId == "campaign360" and auth.targetProjectionId == "social360"
+            and auth.capabilityKey == "social360.read" and auth.policyState == "allowed"
+            and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
+            for auth in context.experience360ReadAuthorizations
+        )
+        relationship_reader = getattr(self._source, "campaign_population_relationships", None)
+        member_map: dict[str, set[str]] = {}
+        for item in population_memberships:
+            member_map.setdefault(item["populationId"], set()).add(item["entityId"])
+        if social_authorized and callable(relationship_reader) and member_map:
+            try:
+                relationship_read = await relationship_reader(request.tenantId, member_map)
+            except Exception:  # noqa: BLE001 - graph or consent failure is slot-local
+                relationship_read = None
+            if (isinstance(relationship_read, CampaignPopulationRelationshipRead)
+                    and relationship_read.available and relationship_read.tenant_id == request.tenantId
+                    and len(relationship_read.rows) <= 500):
+                relationship_state = "partial"
+                seen_relationships: set[tuple[str, str]] = set()
+                for row in relationship_read.rows:
+                    if not isinstance(row, dict):
+                        relationship_state = "degraded"
+                        local_reasons.add("campaign_relationship_row_invalid")
+                        continue
+                    population, source, target, edge = (row.get(key) for key in
+                        ("population_id", "source_entity_id", "target_entity_id", "edge_id"))
+                    facts = row.get("fact_ids")
+                    if (row.get("tenant_id") != request.tenantId or population not in member_map
+                            or source not in member_map[population] or target not in member_map[population]
+                            or source == target or not _safe_campaign_source_id(edge)
+                            or not _safe_campaign_source_id(row.get("source_receipt_id"))
+                            or not _safe_campaign_source_id(row.get("target_receipt_id"))
+                            or not isinstance(facts, list) or not facts or len(facts) > 20
+                            or any(not _safe_campaign_source_id(fact) for fact in facts)
+                            or (population, edge) in seen_relationships):
+                        relationship_state = "degraded"
+                        local_reasons.add("campaign_relationship_scope_or_evidence_invalid")
+                        continue
+                    seen_relationships.add((population, edge))
+                    refs = [EvidenceRef.model_validate(ref) for member in population_memberships
+                            if member["populationId"] == population and member["entityId"] in {source, target}
+                            for ref in member["evidenceRefs"]]
+                    refs.extend([EvidenceRef(id=edge, type="relationship", source="entity_graph",
+                                             observedAt=_string_or_none(row.get("observed_at"))),
+                                 *(EvidenceRef(id=fact, type="event", source="relationship_facts") for fact in facts),
+                                 *(EvidenceRef(id=row[key], type="event", source="governance.consent.authority")
+                                   for key in ("source_receipt_id", "target_receipt_id"))])
+                    for ref in refs:
+                        _add_evidence(evidence_by_key, ref)
+                    relationships.append({"populationId": population, "sourceEntityId": source,
+                                          "targetEntityId": target, "predicate": "FOLLOWS",
+                                          "evidenceRefs": [ref.model_dump(by_alias=True, exclude_none=True) for ref in refs]})
+                    claims.append(ClaimEnvelope(
+                        id=f"campaign360:{campaign_id}:relationship:{edge}:{population}",
+                        kind="campaign_linked_population_relationship", subject=request.subject,
+                        evidenceRefs=refs, claims=["A current observed FOLLOWS edge links two consented members of this explicitly linked population; influence and complete topology are not established."],
+                        claimState=EpistemicStatus.OBSERVED, domainSlotIds=[SLOT_COHORTS_SYNDICATES],
+                    ))
+                if relationship_read.truncated:
+                    relationship_state = "degraded"
+                    local_reasons.add("campaign_relationship_read_partial")
+            else:
+                relationship_state = "degraded"
+                local_reasons.add("campaign_relationship_authority_unavailable")
+
         explicit_state = "available" if associations else "empty"
         slot_state = "degraded" if read.truncated or local_reasons else "partial"
         reason = (
@@ -3851,6 +4647,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             else explicit_state,
             "broaderCohortMembership": "unknown",
             "syndicateMembership": "unknown",
+            "relationshipFacts": relationship_state,
         }
         slot_states[SLOT_COHORTS_SYNDICATES].update(
             state=slot_state,
@@ -3860,12 +4657,22 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             explicitPopulationLinkCount=len(associations),
             linkReadTruncated=read.truncated,
         )
+        if cluster_definitions:
+            slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append("cluster_definitions")
+        if relationship_state == "partial":
+            slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append("relationship_facts")
+        for population_type, authority in (("cluster", "cluster_membership"), ("cohort", "cohort_membership")):
+            if any(item["populationType"] == population_type for item in population_memberships):
+                slot_states[SLOT_COHORTS_SYNDICATES]["sourceAuthorities"].append(authority)
         if slot_state == "degraded":
             degraded_reasons.append(reason)
         return {
             **base,
             "state": slot_state,
             "associations": associations,
+            "clusterDefinitions": cluster_definitions,
+            "populationMemberships": population_memberships,
+            "populationRelationships": relationships,
             "dimensionStates": dimensions,
             "coverage": "explicit_operator_links_only",
             "reason": reason,
@@ -3877,7 +4684,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 ),
             },
             "limitations": [
-                "population membership is not expanded here",
+                "membership and relationship reads are bounded and incomplete",
                 "broader cohort, cluster, and syndicate authorities remain unknown",
                 "historical campaign-to-population link replay is unsupported",
             ],

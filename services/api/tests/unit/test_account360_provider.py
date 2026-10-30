@@ -2117,6 +2117,30 @@ async def test_repository_account_contract_source_uses_tenant_and_exact_account_
 
 
 @pytest.mark.asyncio
+async def test_repository_account_contract_source_requires_explicit_contract_profile_id(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from billing.billing.revops import TenantContractProfileRepository
+
+    async def find_many(self, *, filters, limit=50, **_kwargs):
+        return [{
+            "id": "generic-storage-row-id",
+            "tenant_id": TENANT_ID,
+            "account_id": SUBJECT.id,
+            "updated_at": "2026-10-17T09:00:00Z",
+        }]
+
+    monkeypatch.setattr(TenantContractProfileRepository, "find_many", find_many)
+    result = await RepositoryAccount360Source().account_contracts(
+        TENANT_ID, SUBJECT.id, limit=7
+    )
+
+    assert result.state == "unknown"
+    assert result.records == ()
+    assert result.reason_codes == ("account_contract_record_identity_missing",)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("field", "value"),
     [

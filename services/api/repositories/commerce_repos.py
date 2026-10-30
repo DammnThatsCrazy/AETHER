@@ -8,6 +8,7 @@ consistency.  All extend BaseRepository from repos.py.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
@@ -130,6 +131,30 @@ class ApprovalDecisionsRepository(BaseRepository):
 
     def __init__(self) -> None:
         super().__init__("commerce_approval_decisions")
+
+    async def insert_immutable(self, record_id: str, data: dict[str, Any]) -> bool:
+        """Insert once, with conflicts resolved atomically in PostgreSQL."""
+        payload = dict(data)
+        payload["id"] = record_id
+        now = utc_now().isoformat()
+        payload["created_at"] = now
+        payload["updated_at"] = now
+        pool = await self._ensure_pool()
+        if pool is None:
+            if record_id in self._store:
+                return False
+            self._store[record_id] = payload
+            return True
+        await self._ensure_table()
+        if not self._jsonb_mode:
+            raise RuntimeError("commerce_approval_decisions must use the JSONB repository schema")
+        row = await pool.fetchrow(
+            f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING RETURNING id""",
+            record_id, json.dumps(payload, default=str), payload.get("tenant_id"),
+        )
+        return row is not None
 
     async def list_for_executions(
         self, *, tenant_id: str, execution_ids: list[str], limit: int = 1000

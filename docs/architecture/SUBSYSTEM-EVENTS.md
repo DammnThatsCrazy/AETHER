@@ -19,7 +19,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
   "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
   "services/api/actions/agent/deployment_routes.py": "sha256:b393e76e5def6836f628d195b3315439460164b91d70713e2da37c69fc635cc2"
-  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
+  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -28,11 +28,11 @@ source_hashes:
   "services/api/ingestion/ingestion/validation.py": "sha256:b643b9e467899a1b1ed5b73e7be21cfdc3ab79f9c962067ffdda71d55c2abff1"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:0f2e0ac53d5ed9c4c62ee6cf110ee2bcb5ba5691f4ef246cb093eeb1c1c1fc8b"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:c9af48ff73ec21e1c48a91249d97931bd3317b24dc19beb0be84c8be2eb8d8cd"
-  "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
-  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
+  "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
+  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/value/x402/commerce_models.py": "sha256:d7f9d68aa51eff1f92b358d695c0f745c38cb59ac3df390aad2afd06e2ebe383"
-  "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
+  "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 
@@ -166,7 +166,8 @@ keeps that receipt separate from provider-reported identity and consent fields.
 
 When AETHER's own execution endpoint creates an `agent_executions` row, it
 records the authenticated initiating principal separately from the target
-agent and stores the server-recorded delegation decision and constraints. A
+agent and stores the server-recorded delegation decision, evaluated tenant,
+and constraints. A
 rejected attempt is still an execution-denial record; this local policy record
 does not assert that an external tool or business action occurred.
 

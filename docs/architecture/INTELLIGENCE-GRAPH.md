@@ -57,7 +57,7 @@ source_hashes:
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:0f2e0ac53d5ed9c4c62ee6cf110ee2bcb5ba5691f4ef246cb093eeb1c1c1fc8b"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:c9af48ff73ec21e1c48a91249d97931bd3317b24dc19beb0be84c8be2eb8d8cd"
-  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
+  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/shared/graph/": "sha256:d546cc1d95ecc2a8ef5eb8d79d7accde685e354aabe41d148130903651b86ec7"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"

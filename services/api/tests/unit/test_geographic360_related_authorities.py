@@ -243,6 +243,97 @@ async def test_risk_and_value_require_exact_source_event_evidence(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_location_risk_assessment_requires_exact_subject_and_event_evidence(monkeypatch):
+    from intelligence.risk360 import store as risk_store
+
+    calls = []
+
+    class FakeRiskSignals:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
+    class FakeRiskAssessments:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [
+                {
+                    "assessment_id": "location-assessment-1",
+                    "tenant_id": TENANT,
+                    "subject_kind": "entity",
+                    "subject_id": ENTITY,
+                    "dimensions": ["geographic"],
+                    "vector": {"components": []},
+                    "claim_state": "derived",
+                    "assessed_at": "2026-10-24T10:10:00Z",
+                    "evidence_refs": [
+                        {
+                            "id": EVENT,
+                            "type": "event",
+                            "source": "canonical.events",
+                            "observedAt": "2026-10-24T10:00:00Z",
+                        }
+                    ],
+                },
+                {
+                    "assessment_id": "unlinked-assessment",
+                    "tenant_id": TENANT,
+                    "subject_kind": "entity",
+                    "subject_id": ENTITY,
+                    "vector": {"components": []},
+                    "assessed_at": "2026-10-24T10:11:00Z",
+                    "evidence_refs": [
+                        {"id": "other-event", "type": "event", "source": "canonical.events"}
+                    ],
+                },
+            ]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", FakeRiskSignals)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", FakeRiskAssessments)
+    risk = await RepositoryGeographicRelatedAuthorityReader()._risk(
+        TENANT, "entity", ENTITY, EVENT
+    )
+
+    assert calls == [(TENANT, "entity", ENTITY, 101)]
+    assert risk["state"] == "degraded"
+    assert risk["content"]["signals"] == []
+    assert [item["assessmentId"] for item in risk["content"]["assessments"]] == [
+        "location-assessment-1"
+    ]
+    assert risk["content"]["assessments"][0]["claimState"] == "derived"
+    assert risk["content"]["producerCoverageState"] == "unknown"
+    assert "unlinked-assessment" not in str(risk)
+
+
+@pytest.mark.asyncio
+async def test_location_risk_assessment_rejects_foreign_scope(monkeypatch):
+    from intelligence.risk360 import store as risk_store
+
+    class FakeRiskSignals:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return []
+
+    class FakeRiskAssessments:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            return [{
+                "assessment_id": "foreign-assessment",
+                "tenant_id": "other-tenant",
+                "subject_kind": "entity",
+                "subject_id": ENTITY,
+                "vector": {"components": []},
+            }]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", FakeRiskSignals)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", FakeRiskAssessments)
+    risk = await RepositoryGeographicRelatedAuthorityReader()._risk(
+        TENANT, "entity", ENTITY, EVENT
+    )
+
+    assert risk["state"] == "unknown"
+    assert risk["content"]["dimensionStates"]["riskAssessments"] == "unknown"
+    assert "foreign-assessment" not in str(risk)
+
+
+@pytest.mark.asyncio
 async def test_historical_related_reads_remain_unknown_without_bitemporal_sources():
     slots = await RepositoryGeographicRelatedAuthorityReader().related_slots(
         **_scope(as_of=datetime(2026, 10, 1, tzinfo=timezone.utc))

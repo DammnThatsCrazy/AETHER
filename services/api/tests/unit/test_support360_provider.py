@@ -423,6 +423,8 @@ async def test_canonical_support_case_subject_reads_exact_case_summary_with_evid
     assert slots["participants"]["state"] == "unknown"
     assert slots["sla"]["state"] == "empty"
     assert slots["journey_links"]["state"] == "empty"
+    assert "episode_facts" not in sections["state"].canonicalAuthorityRefs
+    assert "episode_facts" not in sections["evidence"].canonicalAuthorityRefs
     assert slots["risk"]["state"] == "unknown"
     assert slots["resolution"]["state"] == "observed"
     assert slots["agents"]["state"] == "degraded"

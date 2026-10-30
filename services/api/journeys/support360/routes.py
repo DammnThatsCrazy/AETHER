@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from governance.security.request_context import tenant_actor
 from shared.auth.auth import Permissions
@@ -41,8 +41,96 @@ from journeys.support360.context_authorities import (
     SupportJourneyLinkEventInput,
     SupportSLAEventInput,
 )
+from journeys.support360.sla_measurement import (
+    SupportSLAMeasurementContract,
+    SupportSLAMeasurementContractError,
+    SupportSLAMeasurementContractService,
+)
 
 router = APIRouter(prefix="/v1/support/cases", tags=["Support Cases"])
+
+
+class SupportSLAMeasurementContractBody(BaseModel):
+    """Operator-adopted exact source policy revision; no source timer verdict."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    connection_id: str = Field(min_length=1, max_length=256)
+    source_sla_id: str = Field(min_length=1, max_length=256)
+    source_policy_id: str = Field(min_length=1, max_length=256)
+    source_policy_version: str = Field(min_length=1, max_length=128)
+    timer_kind: str = Field(pattern="^(first_response|resolution|custom)$")
+    custom_timer_name: str | None = Field(default=None, max_length=128)
+    target_duration_seconds: int = Field(ge=1, le=315360000)
+
+
+@router.post("/{case_id}/sla/contracts")
+async def register_support_sla_measurement_contract(
+    case_id: str, request: Request, body: SupportSLAMeasurementContractBody
+) -> dict[str, Any]:
+    """Register an immutable tenant policy binding for one support case timer."""
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.ADMIN)
+    actor = tenant_actor(request)
+    if actor.tenant_id != tenant.tenant_id or not actor.actor_id:
+        raise HTTPException(status_code=403, detail="authenticated tenant operator required")
+    from connectors.provider_runtime.connection import ProviderConnectionRepository
+
+    connection = await ProviderConnectionRepository().find(body.connection_id)
+    connection_tenant = (
+        connection.get("tenant_id") if isinstance(connection, dict)
+        else getattr(connection, "tenant_id", None)
+    )
+    connection_state = (
+        connection.get("state") if isinstance(connection, dict)
+        else getattr(connection, "state", None)
+    )
+    connection_state = getattr(connection_state, "value", connection_state)
+    verified_at = (
+        connection.get("last_verified_at") if isinstance(connection, dict)
+        else getattr(connection, "last_verified_at", None)
+    )
+    provider_identity = (
+        connection.get("provider_identity") if isinstance(connection, dict)
+        else getattr(connection, "provider_identity", None)
+    )
+    if (
+        connection_tenant != tenant.tenant_id
+        or connection_state not in {"verified", "connected"}
+        or not provider_identity
+        or not verified_at
+    ):
+        raise HTTPException(status_code=403, detail="verified provider connection required")
+    try:
+        contract = SupportSLAMeasurementContract(
+            tenant_id=tenant.tenant_id,
+            case_id=case_id,
+            source_connection_id=body.connection_id,
+            source_provider_identity=provider_identity,
+            source_sla_id=body.source_sla_id,
+            source_policy_id=body.source_policy_id,
+            source_policy_version=body.source_policy_version,
+            timer_kind=body.timer_kind,
+            custom_timer_name=body.custom_timer_name,
+            target_duration_seconds=body.target_duration_seconds,
+            registered_by=actor.actor_id,
+            registered_at=datetime.now(timezone.utc),
+        )
+        stored = await SupportSLAMeasurementContractService().register(contract)
+    except SupportSLAMeasurementContractError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail="invalid support SLA measurement contract") from exc
+    return APIResponse(data={
+        "contract_id": stored.contract_id,
+        "case_id": stored.case_id,
+        "source_sla_id": stored.source_sla_id,
+        "source_policy_id": stored.source_policy_id,
+        "source_policy_version": stored.source_policy_version,
+        "timer_kind": stored.timer_kind,
+        "target_duration_seconds": stored.target_duration_seconds,
+        "registered_at": stored.registered_at.isoformat(),
+    }).to_dict()
 
 
 class SupportCaseIngestBody(BaseModel):

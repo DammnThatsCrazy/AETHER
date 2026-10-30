@@ -15,7 +15,7 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff75aeac1c2388f93514bfbfba398a6fdbf29b7dce29df7ddf617a97c9256e81"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
   "services/api/actions/agent/deployment_routes.py": "sha256:b393e76e5def6836f628d195b3315439460164b91d70713e2da37c69fc635cc2"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -31,13 +31,13 @@ source_hashes:
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:0f2e0ac53d5ed9c4c62ee6cf110ee2bcb5ba5691f4ef246cb093eeb1c1c1fc8b"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:c9af48ff73ec21e1c48a91249d97931bd3317b24dc19beb0be84c8be2eb8d8cd"
-  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
+  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:b44928e1f1bcd6ecec0cbb1be7c0613809887387fd242657bcf75ee8bc8c9342"
+  "services/api/value/economic/economic360_provider.py": "sha256:c4876df0c44da2b2322921a43301c8917d40e9dda50d986890b537b3a4e9e844"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:a92283788ffc7dab83f99071da7dc9de7cd695eb5a46fb614afa5cbdbdadb708"
+  "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification

@@ -103,7 +103,9 @@ def test_value_financial_risk_catalog_requires_both_exact_subject_projections() 
         "economic360": {"agent", "cluster", "entity", "source"},
         "risk360": {"agent", "cluster", "entity", "source"},
     }
-    assert {"economic_facts", "risk_outputs"} == set(slot["canonicalAuthorityRefs"])
+    assert {"economic_facts", "ai_execution_facts", "risk_outputs"} == set(
+        slot["canonicalAuthorityRefs"]
+    )
     assert {"risk360.explore", "risk360.read"}.issubset(
         set(surface["backendCapabilities"]["projectionCapabilityKeys"])
     )
@@ -1161,7 +1163,9 @@ def test_partial_financial_contagion_claim_does_not_complete_risk_slot() -> None
 
     assert slot.state == "degraded"
     assert "slot_partial_implementation" in slot.reasonCodes
-    assert "causal_contagion_exposure_and_loss_model_not_available" in slot.reasonCodes
+    assert any(
+        "Causal contagion, exposure, loss" in reason for reason in slot.reasonCodes
+    )
     assert slot.evidenceRefs == [EVIDENCE]
 
 
@@ -1215,7 +1219,10 @@ def test_value_conversion_inventory_routes_exact_conversion_claim_with_partial_s
 
     assert slot.state == "degraded"
     assert "slot_partial_implementation" in slot.reasonCodes
-    assert "value_subject_wallet_cluster_and_historical_inventory_joins_not_available" in slot.reasonCodes
+    assert any(
+        "wallet-cluster crosswalks, historical replay" in reason
+        for reason in slot.reasonCodes
+    )
     assert [claim.kind for claim in slot.claims] == ["canonical_conversion_inventory"]
     assert slot.evidenceRefs == [conversion_ref]
 

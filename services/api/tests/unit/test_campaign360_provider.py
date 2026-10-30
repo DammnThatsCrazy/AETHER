@@ -21,6 +21,7 @@ os.environ.setdefault("JWT_SECRET", "campaign360-test-secret")
 from journeys.campaign.campaign360_provider import (  # noqa: E402
     AttributionRead,
     CampaignAnomalyRead,
+    CampaignRiskAssessmentRead,
     Campaign360Provider,
     CampaignRead,
     CampaignSpendRead,
@@ -38,6 +39,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
     ProjectionContext,
     ProjectionDependencyState,
     ProjectionRequest,
+    ProjectionReadAuthorization,
     ProjectionSubject,
 )
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
@@ -354,6 +356,18 @@ def _context(tenant_id: str = "tenant-a") -> ProjectionContext:
         ],
         warnings=[],
     )
+
+
+def _population_authorized_context() -> ProjectionContext:
+    context = _context()
+    context.experience360ReadAuthorizations = [ProjectionReadAuthorization(
+        tenantId="tenant-a", sourceSurfaceId="campaign360", sourceSubject=_request().subject,
+        sourceSlotId="cohorts_syndicates", consumerProjectionId="campaign360",
+        targetProjectionId="population360", capabilityKey="population360.read",
+        policyState="allowed", policyIds=["test-policy"],
+        policyEvaluatedAt="2026-10-05T10:00:00Z",
+    )]
+    return context
 
 
 def _section(result: object, section_id: str) -> object:
@@ -735,6 +749,7 @@ async def test_campaign_population_links_bind_exact_explicit_cohort_association(
         "explicitPopulationLinks": "available",
         "broaderCohortMembership": "unknown",
         "syndicateMembership": "unknown",
+        "relationshipFacts": "unknown",
     }
     context = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]
     assert context["associations"][0]["populationId"] == "population-1"
@@ -784,6 +799,89 @@ async def test_exact_touchpoint_source_classification_is_degraded_and_evidenced(
     )
     assert claim.domainSlotIds == ["source_classification"]
     assert {ref.id for ref in claim.evidenceRefs} == {"tp-classified", "classification-1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("revision_change", "resolved"),
+    [
+        ({}, True),
+        ({"classification": '{"source_class":"owned"}'}, True),
+        ({"classification": '{invalid'}, False),
+        ({"tenant_id": "tenant-b"}, False),
+        ({"touchpoint_id": "other-touchpoint"}, False),
+        ({"is_current": False}, False),
+        ({"classifier_version": "v2"}, False),
+        ({"source_class": "paid"}, False),
+        ({"classified_at": "2026-10-06T10:01:00Z"}, False),
+        ({"duplicate": True}, False),
+    ],
+)
+async def test_campaign_source_fact_requires_exact_current_classification_revision(
+    revision_change: dict[str, object], resolved: bool
+) -> None:
+    revision = {
+        "tenant_id": "tenant-a",
+        "touchpoint_id": "tp-classified",
+        "classification_id": "classification-1",
+        "classifier_version": "v1",
+        "classification": {"source_class": "owned"},
+        "classified_at": "2026-10-05T10:01:00Z",
+        "is_current": True,
+        "evidence": {"private": "must-not-be-projected"},
+    }
+    for field, value in revision_change.items():
+        if field == "source_class":
+            revision["classification"][field] = value
+        elif field != "duplicate":
+            revision[field] = value
+
+    class RevisionSource(FakeCampaign360Source):
+        async def source_classification_revisions(self, tenant_id, refs, *, limit):
+            assert (tenant_id, refs, limit) == (
+                "tenant-a", [("tp-classified", "classification-1")], 100
+            )
+            rows = [revision, revision] if revision_change.get("duplicate") else [revision]
+            return RowsRead(rows, available=True)
+
+    source = RevisionSource(
+        touchpoints=RowsRead([{
+            "touchpoint_id": "tp-classified",
+            "tenant_id": "tenant-a",
+            "campaign_id": CAMPAIGN_ID,
+            "occurred_at": "2026-10-05T10:00:00Z",
+            "source_event_id": "event-classified",
+            "source_class": "owned",
+            "source_classifier_version": "v1",
+            "source_classification_id": "classification-1",
+            "source_classified_at": "2026-10-05T10:01:00Z",
+        }], available=True),
+        signals=RowsRead([{
+            "event_id": "event-classified",
+            "tenant_id": "tenant-a",
+            "event_type": "campaign_conversion",
+            "source": "sdk",
+            "occurred_at": "2026-10-05T10:00:00Z",
+        }], available=True),
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+    signal = _section(result, "state").content["domainContexts"]["signal_sources"]
+    classification = _section(result, "state").content["domainContexts"]["source_classification"]
+    source_claims = [
+        claim for claim in result.claims
+        if claim.kind == "campaign_touchpoint_source_fact"
+    ]
+    if resolved:
+        assert signal["dimensionStates"]["sourceFacts"] == "available"
+        assert signal["sourceFacts"][0]["classificationId"] == "classification-1"
+        assert classification["touchpointClassifications"][0]["canonicalSourceFactState"] == "resolved"
+        assert len(source_claims) == 1
+        assert source_claims[0].domainSlotIds == ["source_classification", "signal_sources"]
+        assert "must-not-be-projected" not in str(result.model_dump())
+    else:
+        assert signal["dimensionStates"]["sourceFacts"] == "unknown"
+        assert signal["sourceFacts"] == []
+        assert not source_claims
 
 
 @pytest.mark.asyncio
@@ -955,6 +1053,127 @@ def _targeting_leakage_finding(
         ],
         "computedAt": computed_at,
     }
+
+
+def _campaign_risk_assessment(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "assessment_id": "campaign-risk-assessment-1",
+        "tenant_id": "tenant-a",
+        "subject_kind": "campaign",
+        "subject_id": CAMPAIGN_ID,
+        "dimensions": ["economic"],
+        "vector": {"components": []},
+        "claim_state": "derived",
+        "policy_id": "policy-risk-1",
+        "assessed_at": "2026-10-05T10:10:00Z",
+        "evidence_refs": [
+            {
+                "id": "risk-source-event-1",
+                "type": "event",
+                "source": "campaign_risk_detector",
+                "observedAt": "2026-10-05T10:00:00Z",
+            }
+        ],
+    }
+    row.update(overrides)
+    return row
+
+
+class RiskAssessmentCampaign360Source(FakeCampaign360Source):
+    def __init__(self, read: CampaignRiskAssessmentRead) -> None:
+        super().__init__()
+        self.risk_read = read
+        self.risk_calls: list[tuple[str, str, int]] = []
+
+    async def campaign_risk_assessments(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignRiskAssessmentRead:
+        self.risk_calls.append((tenant_id, campaign_id, limit))
+        return self.risk_read
+
+
+@pytest.mark.asyncio
+async def test_campaign_risk_assessment_exact_subject_is_independent_partial_output() -> None:
+    source = RiskAssessmentCampaign360Source(
+        CampaignRiskAssessmentRead([_campaign_risk_assessment()], True, True)
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    assert source.risk_calls == [("tenant-a", CAMPAIGN_ID, 101)]
+    context = _section(result, "state").content["domainContexts"]["anomalies"]
+    assert context["dimensionStates"] == {
+        "targetingLeakageFindings": "empty",
+        "riskOutputs": "available",
+        "sourceAnomalies": "unknown",
+    }
+    assert context["state"] == "partial"
+    assert context["riskAssessmentRead"]["producerCoverageState"] == "unknown"
+    assert context["riskAssessments"][0]["assessmentId"] == "campaign-risk-assessment-1"
+    assert context["riskAssessments"][0]["claimState"] == "derived"
+    assert context["riskAssessments"][0]["policyState"] == "unknown"
+    assert "policy-risk-1" not in str(context)
+    claim = next(
+        item for item in result.claims
+        if item.kind == "campaign_risk_assessment_exact_subject"
+    )
+    assert claim.claimState.value == "derived"
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        "campaign-risk-assessment-1", "risk-source-event-1"
+    }
+    assert _slot(result, "anomalies")["state"] == "partial"
+
+
+@pytest.mark.parametrize(
+    ("rows", "reason"),
+    [
+        ([_campaign_risk_assessment(tenant_id="tenant-other")], "campaign_risk_assessment_scope_mismatch"),
+        ([_campaign_risk_assessment(subject_id="other-campaign")], "campaign_risk_assessment_scope_mismatch"),
+        ([_campaign_risk_assessment(), _campaign_risk_assessment()], "campaign_risk_assessment_id_ambiguous"),
+        ([_campaign_risk_assessment(evidence_refs=[])], "campaign_risk_assessment_time_or_evidence_missing"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_campaign_risk_assessment_bad_scope_or_evidence_is_not_exposed(
+    rows: list[dict[str, object]], reason: str
+) -> None:
+    source = RiskAssessmentCampaign360Source(CampaignRiskAssessmentRead(rows, True, True))
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    context = _section(result, "state").content["domainContexts"]["anomalies"]
+    assert context["riskAssessments"] == []
+    assert context["riskAssessmentRead"]["reason"] == reason
+    assert not any(
+        item.kind == "campaign_risk_assessment_exact_subject" for item in result.claims
+    )
+    assert "risk-source-event-1" not in str(_section(result, "evidence").content)
+
+
+@pytest.mark.asyncio
+async def test_campaign_risk_assessment_truncation_and_half_open_time_scope() -> None:
+    source = RiskAssessmentCampaign360Source(
+        CampaignRiskAssessmentRead(
+            [
+                _campaign_risk_assessment(),
+                _campaign_risk_assessment(
+                    assessment_id="campaign-risk-assessment-2",
+                    assessed_at="2026-10-11T00:00:00Z",
+                ),
+            ],
+            True,
+            False,
+        )
+    )
+    result = await Campaign360Provider(source).project(
+        _request(time_range={"from": "2026-10-01T00:00:00Z", "to": "2026-10-11T00:00:00Z"}),
+        _context(),
+    )
+
+    context = _section(result, "state").content["domainContexts"]["anomalies"]
+    assert context["dimensionStates"]["riskOutputs"] == "truncated"
+    assert [item["assessmentId"] for item in context["riskAssessments"]] == [
+        "campaign-risk-assessment-1"
+    ]
+    assert context["riskAssessmentRead"]["readCompleteForExactSubject"] is False
 
 
 @pytest.mark.asyncio
@@ -1135,6 +1354,32 @@ async def test_repository_campaign_anomaly_source_uses_exact_tenant_and_campaign
 
 
 @pytest.mark.asyncio
+async def test_repository_campaign_risk_assessments_read_exact_campaign_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class _RiskAssessments:
+        async def list_by_subject(
+            self, tenant_id: str, subject_kind: str, subject_id: str, limit: int
+        ) -> list[dict[str, object]]:
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [_campaign_risk_assessment()]
+
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", _RiskAssessments)
+    read = await RepositoryCampaign360Source().campaign_risk_assessments(
+        "tenant-a", CAMPAIGN_ID, limit=101
+    )
+
+    assert calls == [("tenant-a", "campaign", CAMPAIGN_ID, 101)]
+    assert read.available is True
+    assert read.complete is True
+    assert read.rows[0]["assessment_id"] == "campaign-risk-assessment-1"
+
+
+@pytest.mark.asyncio
 async def test_campaign_journey_context_uses_exact_tenant_campaign_membership_and_evidence() -> None:
     source = ContextCampaign360Source()
     result = await Campaign360Provider(source).project(
@@ -1276,6 +1521,102 @@ async def test_campaign_signal_sources_join_exact_touchpoint_event_with_partial_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("change", "expected_observations"),
+    [
+        ({}, "available"),
+        ({"typed_event": True}, "available"),
+        ({"conflicting_event": True}, "unknown"),
+        ({"tenant_id": "tenant-b"}, "unknown"),
+        ({"source": "provider"}, "unknown"),
+        ({"observation_type": "other"}, "unknown"),
+        ({"occurred_at": "2026-10-06T10:00:00Z"}, "unknown"),
+        ({"validation_state": "unvalidated"}, "unknown"),
+        ({"duplicate": True}, "unknown"),
+    ],
+)
+async def test_campaign_signal_observation_requires_exact_gateway_admitted_bronze_row(
+    change: dict[str, object], expected_observations: str
+) -> None:
+    event_id = "event-campaign-1"
+    row = {
+        "tenant_id": "tenant-a",
+        "source": "sdk",
+        "provider_record_id": event_id,
+        "payload": {
+            "observation_envelope": {
+                "observation": {
+                    "observation_id": event_id,
+                    "observation_type": "campaign_conversion",
+                    "occurred_at": "2026-10-05T10:00:00Z",
+                    "ingested_at": "2026-10-05T10:01:00Z",
+                },
+                "tenancy": {"tenant_id": "tenant-a"},
+                "source": {"source_type": "sdk"},
+                "quality": {"validation_state": "gateway:accepted"},
+                "private": "must-not-be-projected",
+            }
+        },
+    }
+    if change.get("typed_event"):
+        row["event_id"] = row.pop("provider_record_id")
+    if change.get("conflicting_event"):
+        row["event_id"] = "other-event"
+    if "tenant_id" in change:
+        row["tenant_id"] = change["tenant_id"]
+    if "source" in change:
+        row["source"] = change["source"]
+    for field in ("observation_type", "occurred_at"):
+        if field in change:
+            row["payload"]["observation_envelope"]["observation"][field] = change[field]
+    if "validation_state" in change:
+        row["payload"]["observation_envelope"]["quality"]["validation_state"] = change["validation_state"]
+
+    class ObservationSource(FakeCampaign360Source):
+        async def signal_observations(self, tenant_id, event_ids, *, limit):
+            assert (tenant_id, event_ids, limit) == ("tenant-a", [event_id], 100)
+            return RowsRead([row, row] if change.get("duplicate") else [row], available=True)
+
+    source = ObservationSource(
+        touchpoints=RowsRead([{
+            "touchpoint_id": "tp-linked-event",
+            "tenant_id": "tenant-a",
+            "campaign_id": CAMPAIGN_ID,
+            "occurred_at": "2026-10-05T10:00:00Z",
+            "source_event_id": event_id,
+        }], available=True),
+        signals=RowsRead([{
+            "event_id": event_id,
+            "tenant_id": "tenant-a",
+            "event_type": "campaign_conversion",
+            "event_family": "conversion",
+            "source": "sdk",
+            "occurred_at": "2026-10-05T10:00:00Z",
+        }], available=True),
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+    context = _section(result, "state").content["domainContexts"]["signal_sources"]
+    assert context["dimensionStates"]["observations"] == expected_observations
+    observation_claims = [
+        claim for claim in result.claims
+        if claim.kind == "campaign_linked_sdk_observation"
+    ]
+    if expected_observations == "available":
+        assert len(observation_claims) == 1
+        assert context["observations"][0]["observationId"] == event_id
+        assert context["coverage"] == "exact_touchpoint_linked_events_and_sdk_observations_partial"
+        assert {(ref.source, ref.id) for ref in observation_claims[0].evidenceRefs} == {
+            ("bronze_sdk_events", event_id),
+            ("services/api/repositories/repos.py:events", event_id),
+        }
+        assert "must-not-be-projected" not in str(result.model_dump())
+    else:
+        assert not observation_claims
+        assert context["observations"] == []
+        assert context["coverage"] == "exact_touchpoint_linked_events_only"
+
+
+@pytest.mark.asyncio
 async def test_campaign_signal_sources_fail_closed_on_foreign_event_row() -> None:
     touchpoint = {
         "touchpoint_id": "tp-linked-event",
@@ -1361,6 +1702,35 @@ async def test_campaign_signal_sources_do_not_read_when_projection_tenant_disagr
 
 
 @pytest.mark.asyncio
+async def test_repository_observation_reader_queries_both_bronze_id_shapes(monkeypatch):
+    from repositories import lake
+
+    calls = []
+    legacy = {"tenant_id": "tenant-a", "provider_record_id": "event-a"}
+    typed = {"tenant_id": "tenant-a", "event_id": "event-a"}
+    both = {"tenant_id": "tenant-a", "event_id": "event-a", "provider_record_id": "event-a"}
+
+    class FakeBronzeRepository:
+        def __init__(self, name):
+            assert name == "sdk_events"
+
+        async def find_many(self, *, filters, limit):
+            calls.append((filters, limit))
+            return [legacy, both] if "provider_record_id" in filters else [typed, both]
+
+    monkeypatch.setattr(lake, "BronzeRepository", FakeBronzeRepository)
+    result = await RepositoryCampaign360Source().signal_observations(
+        "tenant-a", ["event-a"], limit=1
+    )
+
+    assert calls == [
+        ({"tenant_id": "tenant-a", "provider_record_id": "event-a"}, 2),
+        ({"tenant_id": "tenant-a", "event_id": "event-a"}, 2),
+    ]
+    assert result.available and result.rows == [legacy, both, typed]
+
+
+@pytest.mark.asyncio
 async def test_repository_signal_event_reader_queries_exact_tenant_and_event_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1402,3 +1772,289 @@ async def test_repository_signal_event_reader_queries_exact_tenant_and_event_ids
     ]
     assert result.available is True
     assert [row["event_id"] for row in result.rows] == ["event-a"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["exact", "foreign", "revision_mismatch", "definition_conflict", "non_cluster"])
+async def test_campaign_cluster_definition_requires_exact_linked_tenant_revision(mode):
+    from copy import deepcopy
+    from identity.population.models import make_definition_version_record
+    from journeys.campaign.campaign_cluster_definitions import CampaignClusterDefinitionRead
+
+    population_id = "cluster-1"
+    definition = {"private_rule": "never projected"}
+    population = {
+        "id": population_id, "tenant_id": "tenant-a", "population_type": "cluster",
+        "status": "active", "definition_version": "1", "definition": definition,
+    }
+    revision = make_definition_version_record(population_id, "1", definition, reason="test", created_by="test")
+    if mode == "foreign":
+        population["tenant_id"] = "tenant-b"
+    elif mode == "revision_mismatch":
+        revision["definition_hash"] = "f" * 64
+    elif mode == "definition_conflict":
+        population["definition"] = {"different": True}
+    elif mode == "non_cluster":
+        population["population_type"] = "cohort"
+    event = {
+        "tenant_id": "tenant-a", "campaign_id": CAMPAIGN_ID,
+        "population_id": population_id, "event_type": "linked", "link_event_id": "link-1",
+        "source_observed_at": "2026-10-05T10:00:00Z", "effective_at": "2026-10-05T10:00:00Z",
+        "evidence_refs": [
+            {"id": CAMPAIGN_ID, "type": "entity", "source": "services/api/journeys/campaign/repository.py:campaigns"},
+            {"id": population_id, "type": "entity", "source": "identity_populations"},
+        ],
+    }
+
+    class Source(PopulationLinkCampaign360Source):
+        async def campaign_cluster_definition(self, tenant_id, requested_population):
+            assert (tenant_id, requested_population) == ("tenant-a", population_id)
+            return CampaignClusterDefinitionRead(
+                tenant_id, requested_population, True, deepcopy(population), deepcopy(revision)
+            )
+
+    source = Source(CampaignPopulationLinkRead("tenant-a", CAMPAIGN_ID, (event,), available=True))
+    result = await Campaign360Provider(source).project(_request(), _population_authorized_context())
+    context = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]
+    claims = [claim for claim in result.claims if claim.kind == "campaign_linked_cluster_definition"]
+    if mode == "exact":
+        assert len(context["clusterDefinitions"]) == len(claims) == 1
+        denied = await Campaign360Provider(source).project(_request(), _context())
+        denied_context = _section(denied, "state").content["domainContexts"]["cohorts_syndicates"]
+        assert not denied_context["clusterDefinitions"]
+        assert not any(claim.kind == "campaign_linked_cluster_definition" for claim in denied.claims)
+        metadata = context["clusterDefinitions"][0]
+        assert metadata["populationId"] == population_id
+        assert metadata["revisionId"] == revision["id"]
+        assert metadata["definitionHash"] == revision["definition_hash"]
+        assert "private_rule" not in str(context)
+        assert {ref.source for ref in claims[0].evidenceRefs} >= {
+            "population_definition_versions", "campaign_population_link_events", "identity_populations"
+        }
+    else:
+        assert context["clusterDefinitions"] == []
+        assert claims == []
+
+
+@pytest.mark.asyncio
+async def test_campaign_cluster_definition_authority_reads_only_exact_tenant_revision(monkeypatch):
+    from identity.population import registry
+    from identity.population.models import make_definition_version_record
+    from journeys.campaign.campaign_cluster_definitions import CampaignClusterDefinitionAuthority
+
+    definition = {"dimension": "campaign"}
+    population = {"id": "cluster-1", "tenant_id": "tenant-a", "population_type": "cluster",
+                  "status": "active", "definition_version": "2", "definition": definition}
+    revision = make_definition_version_record("cluster-1", "2", definition, reason="test", created_by="test")
+    seen = []
+
+    class Populations:
+        async def find_by_id(self, population_id):
+            seen.append(("population", population_id))
+            return population
+
+    class Definitions:
+        async def find_by_id(self, revision_id):
+            seen.append(("definition", revision_id))
+            return revision
+
+    monkeypatch.setattr(registry, "population_repo", Populations())
+    monkeypatch.setattr(registry, "definition_repo", Definitions())
+    authority = CampaignClusterDefinitionAuthority()
+    result = await authority.read("tenant-a", "cluster-1")
+    assert result.available and result.revision == revision
+    assert seen == [("population", "cluster-1"), ("definition", revision["id"])]
+    seen.clear()
+    result = await authority.read("tenant-b", "cluster-1")
+    assert not result.available
+    assert seen == [("population", "cluster-1")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["exact", "denied", "foreign", "revoked", "capped"])
+async def test_linked_population_member_requires_consent_and_exact_live_ledger(monkeypatch, mode):
+    from types import SimpleNamespace
+    from governance.consent import authority as consent_authority
+    from identity.population import registry
+    from repositories import graph_mutation_ledger, repos
+    from journeys.campaign.campaign_population_membership import CampaignPopulationMembershipAuthority
+
+    population_id, entity_id = "population-1", "entity-1"
+    population = {"id": population_id, "tenant_id": "tenant-a", "population_type": "cohort",
+                  "status": "active", "consent_purpose": "analytics"}
+    row = {"tenant_id": "tenant-a", "population_id": population_id, "entity_id": entity_id,
+           "membership_state": "active"}
+    payload = {"kind": "edge", "edge_type": "MEMBER_OF", "from_vertex_id": entity_id,
+               "to_vertex_id": population_id, "properties": {"tenant_id": "tenant-a", "membership_state": "active"}}
+    edge = {"tenant_id": "tenant-a", "aggregate_type": "edge",
+            "aggregate_id": f"MEMBER_OF:{entity_id}:{population_id}", "operation": "edge_created",
+            "recorded_at": "2026-10-05T10:00:00Z", "ledger_offset": 1,
+            "mutation_id": "mutation-1", "payload": payload}
+    if mode == "foreign":
+        edge["tenant_id"] = "tenant-b"
+
+    class Populations:
+        async def find_by_id(self, key):
+            return population
+
+    class Memberships:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": "tenant-a", "population_id": population_id}
+            return [row]
+
+    class Entities:
+        async def find_many_for_tenant_entity_ids(self, tenant_id, ids):
+            assert (tenant_id, ids) == ("tenant-a", {entity_id})
+            return [{"tenant_id": tenant_id, "entity_id": entity_id}], False
+
+    class Ledger:
+        async def list_records(self, tenant_id, *, aggregate_id, limit):
+            assert (tenant_id, aggregate_id) == ("tenant-a", edge["aggregate_id"])
+            if mode == "capped":
+                return [edge] * limit
+            if mode == "revoked":
+                revoked = {**edge, "ledger_offset": 2, "mutation_id": "mutation-2",
+                           "operation": "edge_revoked", "payload": {**payload, "kind": "edge_revocation"}}
+                return [edge, revoked]
+            return [edge]
+
+    async def consent(tenant_id, subject_id, anonymous_id, purpose):
+        assert (tenant_id, subject_id, anonymous_id, purpose) == ("tenant-a", entity_id, None, "analytics")
+        return SimpleNamespace(allowed=mode != "denied", receipt_id="receipt-1")
+
+    monkeypatch.setattr(registry, "population_repo", Populations())
+    monkeypatch.setattr(registry, "membership_repo", Memberships())
+    monkeypatch.setattr(repos, "EntityRepository", Entities)
+    monkeypatch.setattr(graph_mutation_ledger, "GraphMutationLedgerRepository", Ledger)
+    monkeypatch.setattr(consent_authority, "evaluate_consent_with_receipt", consent)
+    result = await CampaignPopulationMembershipAuthority().read("tenant-a", population_id)
+    if mode == "exact":
+        assert result.available and result.rows[0]["ledger_mutation_id"] == "mutation-1"
+        assert result.rows[0]["consent_receipt_id"] == "receipt-1"
+    else:
+        assert result.rows == ()
+        assert not result.available if mode == "foreign" else result.truncated
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("population_type,foreign", [("cohort", False), ("cluster", False), ("cohort", True)])
+async def test_campaign_projects_only_consent_scoped_linked_population_members(population_type, foreign):
+    from journeys.campaign.campaign_population_membership import CampaignPopulationMembershipRead
+
+    population_id = "population-1"
+    link = {"tenant_id": "tenant-a", "campaign_id": CAMPAIGN_ID, "population_id": population_id,
+            "event_type": "linked", "link_event_id": "link-1", "source_observed_at": "2026-10-05T10:00:00Z",
+            "effective_at": "2026-10-05T10:00:00Z", "evidence_refs": [
+                {"id": CAMPAIGN_ID, "type": "entity", "source": "services/api/journeys/campaign/repository.py:campaigns"},
+                {"id": population_id, "type": "entity", "source": "identity_populations"},
+            ]}
+    member = {"tenant_id": "tenant-b" if foreign else "tenant-a", "population_id": population_id,
+              "population_type": population_type, "entity_id": "entity-1", "ledger_mutation_id": "mutation-1",
+              "recorded_at": "2026-10-05T10:00:00Z", "consent_receipt_id": "receipt-1", "consent_purpose": "analytics"}
+
+    class Source(PopulationLinkCampaign360Source):
+        async def campaign_population_memberships(self, tenant_id, requested_population):
+            return CampaignPopulationMembershipRead(tenant_id, requested_population, population_type,
+                                                    (member,), True)
+
+    result = await Campaign360Provider(Source(CampaignPopulationLinkRead(
+        "tenant-a", CAMPAIGN_ID, (link,), available=True))).project(_request(), _population_authorized_context())
+    context = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]
+    claims = [claim for claim in result.claims if claim.kind == "campaign_linked_population_membership"]
+    if foreign:
+        assert not context["populationMemberships"] and not claims
+    else:
+        assert len(context["populationMemberships"]) == len(claims) == 1
+        assert context["populationMemberships"][0]["entityId"] == "entity-1"
+        denied = await Campaign360Provider(Source(CampaignPopulationLinkRead(
+            "tenant-a", CAMPAIGN_ID, (link,), available=True))).project(_request(), _context())
+        denied_context = _section(denied, "state").content["domainContexts"]["cohorts_syndicates"]
+        assert not denied_context["populationMemberships"]
+        assert not any(claim.kind == "campaign_linked_population_membership" for claim in denied.claims)
+        assert {ref.source for ref in claims[0].evidenceRefs} >= {
+            "campaign_population_link_events", "identity_populations", "graph_mutation_ledger", "governance.consent.authority"
+        }
+        assert f"{population_type}_membership" in _slot(result, "cohorts_syndicates")["sourceAuthorities"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["valid", "denied", "foreign", "revoked", "truncated", "missing_evidence", "outsider", "future"])
+async def test_campaign_population_relationships_require_tenant_consent_and_edge_evidence(mode):
+    from types import SimpleNamespace
+    from journeys.campaign.campaign_population_relationships import CampaignPopulationRelationshipAuthority
+    from shared.graph.graph import Edge
+    from shared.relationship_spine.relationship_registry import live_graph_edge_type
+
+    edge = Edge(edge_type=live_graph_edge_type("FOLLOWS"), from_vertex_id="member-a", to_vertex_id="member-b",
+                properties={"tenant_id": "tenant-b" if mode == "foreign" else "tenant-a",
+                            "relationship_predicate": "FOLLOWS", "idempotency_key": "edge-1",
+                            "evidence_refs": ["fact-1"], "revoked": mode == "revoked"})
+    if mode == "missing_evidence":
+        edge.properties["evidence_refs"] = []
+    elif mode == "outsider":
+        edge.to_vertex_id = "not-a-member"
+    elif mode == "future":
+        edge.properties["valid_from"] = "2999-01-01T00:00:00Z"
+
+    class Graph:
+        async def get_edges_for_tenant(self, tenant_id, **kwargs):
+            assert tenant_id == "tenant-a"
+            return [edge], mode == "truncated"
+
+    async def consent(tenant_id, subject_id, anonymous_id, purpose):
+        assert tenant_id == "tenant-a" and purpose == "analytics" and anonymous_id is None
+        return SimpleNamespace(allowed=not (mode == "denied" and subject_id == "member-b"),
+                               receipt_id=f"receipt-{subject_id}")
+
+    result = await CampaignPopulationRelationshipAuthority(graph=Graph(), consent=consent).read(
+        "tenant-a", {"population-1": {"member-a", "member-b"}}
+    )
+    assert result.available
+    if mode in {"valid", "truncated"}:
+        assert len(result.rows) == 1 and result.rows[0]["fact_ids"] == ["fact-1"]
+    else:
+        assert result.rows == ()
+    assert result.truncated == (mode not in {"valid", "outsider"})
+
+
+@pytest.mark.asyncio
+async def test_campaign_projects_population_relationship_only_with_social_slot_authorization():
+    from journeys.campaign.campaign_population_membership import CampaignPopulationMembershipRead
+    from journeys.campaign.campaign_population_relationships import CampaignPopulationRelationshipRead
+
+    population_id = "population-1"
+    link = {"tenant_id": "tenant-a", "campaign_id": CAMPAIGN_ID, "population_id": population_id,
+            "event_type": "linked", "link_event_id": "link-1", "source_observed_at": "2026-10-05T10:00:00Z",
+            "effective_at": "2026-10-05T10:00:00Z", "evidence_refs": [
+                {"id": CAMPAIGN_ID, "type": "entity", "source": "services/api/journeys/campaign/repository.py:campaigns"},
+                {"id": population_id, "type": "entity", "source": "identity_populations"}]}
+    members = tuple({"tenant_id": "tenant-a", "population_id": population_id,
+                     "population_type": "cohort", "entity_id": member, "ledger_mutation_id": f"ledger-{member}",
+                     "consent_receipt_id": f"receipt-{member}", "consent_purpose": "analytics"}
+                    for member in ("member-a", "member-b"))
+    class Source(PopulationLinkCampaign360Source):
+        calls = 0
+        async def campaign_population_memberships(self, tenant_id, requested_population):
+            return CampaignPopulationMembershipRead(tenant_id, requested_population, "cohort", members, True)
+        async def campaign_population_relationships(self, tenant_id, memberships):
+            self.calls += 1
+            assert memberships == {population_id: {"member-a", "member-b"}}
+            return CampaignPopulationRelationshipRead(tenant_id, ({"tenant_id": tenant_id, "population_id": population_id,
+                "source_entity_id": "member-a", "target_entity_id": "member-b", "edge_id": "edge-1",
+                "fact_ids": ["fact-1"], "source_receipt_id": "consent-a", "target_receipt_id": "consent-b"},), True)
+
+    source = Source(CampaignPopulationLinkRead("tenant-a", CAMPAIGN_ID, (link,), available=True))
+    context = _population_authorized_context()
+    denied = await Campaign360Provider(source).project(_request(), context)
+    assert source.calls == 0
+    assert not _section(denied, "state").content["domainContexts"]["cohorts_syndicates"]["populationRelationships"]
+    context.experience360ReadAuthorizations.append(ProjectionReadAuthorization(
+        tenantId="tenant-a", sourceSurfaceId="campaign360", sourceSubject=_request().subject,
+        sourceSlotId="cohorts_syndicates", consumerProjectionId="campaign360", targetProjectionId="social360",
+        capabilityKey="social360.read", policyState="allowed", policyIds=["test-policy"],
+        policyEvaluatedAt="2026-10-05T10:00:00Z"))
+    result = await Campaign360Provider(source).project(_request(), context)
+    relationships = _section(result, "state").content["domainContexts"]["cohorts_syndicates"]["populationRelationships"]
+    assert source.calls == 1 and len(relationships) == 1
+    claim = next(claim for claim in result.claims if claim.kind == "campaign_linked_population_relationship")
+    assert {ref.source for ref in claim.evidenceRefs} >= {"relationship_facts", "entity_graph", "graph_mutation_ledger", "governance.consent.authority"}

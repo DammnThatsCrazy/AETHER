@@ -1487,7 +1487,14 @@ class Agent360Provider:
             consent_evidence = EvidenceRef.model_validate(
                 risk_summary_row["consent_evidence_ref"]
             )
-            canonical_risk_claims = list(risk_summary_row["claims"])
+            identity_refs = [EvidenceRef.model_validate(ref) for ref in actor_identity_refs]
+            canonical_risk_claims = [
+                claim.model_copy(update={
+                    "subject": request.subject,
+                    "evidenceRefs": _dedupe_refs([*identity_refs, consent_evidence, *claim.evidenceRefs]),
+                })
+                for claim in risk_summary_row["claims"]
+            ]
         risk_evidence_refs = _dedupe_refs(
             [
                 *(EvidenceRef.model_validate(ref) for ref in actor_identity_refs),
@@ -1495,6 +1502,58 @@ class Agent360Provider:
                 *([consent_evidence] if consent_evidence is not None else []),
             ]
         )
+        social_risk_claims: list[ClaimEnvelope] = []
+        social_authorized = (risk_policy_allowed and context.tenantId == tenant_id
+                             and context.projectionId == "agent360" and any(
+            authorization.tenantId == tenant_id
+            and authorization.sourceSurfaceId == "agent360"
+            and authorization.sourceSubject == request.subject
+            and authorization.sourceSlotId == "risk_summary"
+            and authorization.consumerProjectionId == "agent360"
+            and authorization.targetProjectionId == "social360"
+            and authorization.capabilityKey == "social360.read"
+            and authorization.policyState == "allowed"
+            and bool(authorization.policyIds) and bool(authorization.policyEvaluatedAt)
+            for authorization in context.experience360ReadAuthorizations
+        ))
+        if (social_authorized and resolved_canonical_actor
+                and request.temporalMode not in {"as_of", "compare", "relative"}):
+            from actions.agent.social_risk_context import read_agent_social_risk_context
+
+            try:
+                social_rows = await read_agent_social_risk_context(
+                    tenant_id=tenant_id, canonical_agent_id=resolved_canonical_actor
+                )
+            except Exception:  # noqa: BLE001 - social risk is independently fail-closed
+                social_rows = []
+            seen_social_ids: set[str] = set()
+            for social_row in social_rows[:MAX_READ_LIMIT] if isinstance(social_rows, list) else []:
+                if (not isinstance(social_row, dict) or social_row.get("tenant_id") != tenant_id
+                        or social_row.get("canonical_agent_entity_id") != resolved_canonical_actor
+                        or not isinstance(social_row.get("social_claim_id"), str)
+                        or not social_row["social_claim_id"].strip()
+                        or len(social_row["social_claim_id"]) > 256
+                        or social_row["social_claim_id"] in seen_social_ids
+                        or not isinstance(social_row.get("evidence_refs"), list)):
+                    continue
+                try:
+                    refs = [EvidenceRef.model_validate(ref) for ref in social_row["evidence_refs"]]
+                except Exception:  # noqa: BLE001 - invalid evidence must not be projected
+                    continue
+                sources = {ref.source for ref in refs}
+                if ("entity_graph" not in sources or "relationship_facts" not in sources
+                        or not any(source.startswith("risk_signals:") for source in sources)
+                        or any(not ref.id or not ref.source for ref in refs)):
+                    continue
+                seen_social_ids.add(social_row["social_claim_id"])
+                refs = _dedupe_refs([*(EvidenceRef.model_validate(ref) for ref in actor_identity_refs), *refs])
+                risk_evidence_refs = _dedupe_refs([*risk_evidence_refs, *refs])
+                social_risk_claims.append(ClaimEnvelope(
+                    id=f"agent360:{social_row['social_claim_id']}", kind="agent_social_risk_context",
+                    subject=request.subject, evidenceRefs=refs,
+                    claims=["A registered social risk-context edge and a tenant risk signal share evidence involving this resolved Agent. This correlation does not establish risk causation, propagation, contagion, or loss."],
+                    claimState=EpistemicStatus.CORRELATED, domainSlotIds=["risk_summary"],
+                ))
         risk_summary_content: dict[str, Any] = {
             "state": risk_summary_state,
             "tenantId": tenant_id,
@@ -1524,10 +1583,21 @@ class Agent360Provider:
                     else "risk_slot_authority_not_available"
                 ),
             },
+            "socialRiskContext": {
+                "state": "partial" if social_risk_claims else "unknown",
+                "observedCorrelationCount": len(social_risk_claims) if social_risk_claims else None,
+                "causalContagion": "unknown",
+            },
         }
         if risk_summary_row is not None and risk_summary_state == "partial":
             risk_summary_content.update(
                 {
+                    "canonicalAgentIdentityJoin": {
+                        "state": "resolved",
+                        "canonicalAgentEntityId": resolved_canonical_actor,
+                        "evidenceRefs": actor_identity_refs,
+                        "joinBasis": "exact_tenant_agent_identity_authority",
+                    },
                     "summary": risk_summary_row["summary"],
                     "dimensionStates": risk_summary_row["dimension_states"],
                     "assessmentCoverage": risk_summary_row["assessment_coverage"],
@@ -2819,6 +2889,7 @@ class Agent360Provider:
         )
         if not invalid_window:
             claims.extend(canonical_risk_claims)
+            claims.extend(social_risk_claims)
         if claim_evidence_refs:
             claims.append(
                 ClaimEnvelope(
@@ -3455,6 +3526,11 @@ class Agent360Provider:
             resources = scope.get("resources") if isinstance(scope, dict) else None
             capability_id = row.get("capability_id")
             server_ref = row.get("server_ref")
+            boundaries_valid = all(
+                value is None
+                or (isinstance(value, str) and try_parse_instant(value)[0] is not None)
+                for value in (row.get("starts_at"), row.get("ends_at"), row.get("revoked_at"))
+            )
             expected_resource = (
                 f"capability:{capability_id}"
                 if isinstance(capability_id, str) and capability_id
@@ -3470,11 +3546,19 @@ class Agent360Provider:
                 and isinstance(record_id, str)
                 and record_id
                 and record_id not in seen_ids
+                and bool(capability_id) != bool(server_ref)
+                and all(
+                    value is None or (isinstance(value, str) and value == value.strip())
+                    for value in (capability_id, server_ref)
+                )
                 and isinstance(actions, list)
                 and actions == ["invoke"]
                 and isinstance(resources, list)
                 and expected_resource is not None
                 and resources == [expected_resource]
+                and expected_resource == expected_resource.strip()
+                and "*" not in expected_resource
+                and boundaries_valid
                 and row.get("state") in {"active", "pending", "revoked", "expired"}
             )
             if not exact:
@@ -3608,12 +3692,15 @@ class Agent360Provider:
         reach = profile.get("reach")
         reach = reach if isinstance(reach, dict) else {}
         raw_capabilities = reach.get("capabilities")
+        from actions.agent_access_intelligence.models import capability_id_for
+
         capabilities = [
             {
                 "capabilityId": item.get("capability_id"),
                 "serverKey": item.get("server_key"),
                 "provider": item.get("provider"),
                 "toolName": item.get("tool_name"),
+                "capabilityKind": item.get("capability_kind"),
                 "basis": item.get("basis"),
                 "invokeGrantCoversCapability": None,
                 "activeGrantRecordIds": [],
@@ -3621,6 +3708,32 @@ class Agent360Provider:
             for item in raw_capabilities
             if isinstance(item, dict) and isinstance(item.get("capability_id"), str)
         ] if isinstance(raw_capabilities, list) else []
+
+        for capability in capabilities:
+            provider = capability["provider"]
+            server_key = capability["serverKey"]
+            tool_name = capability["toolName"]
+            exact_tool = (
+                capability["capabilityKind"] == "mcp_tool"
+                and isinstance(server_key, str) and bool(server_key)
+                and isinstance(tool_name, str) and bool(tool_name)
+                and (provider is None or isinstance(provider, str))
+                and capability["capabilityId"] == capability_id_for(
+                    tenant_id, provider, server_key, tool_name
+                )
+            )
+            capability["toolIdentity"] = {
+                "state": "resolved_observed_catalog" if exact_tool else "unknown",
+                "catalogCapabilityId": capability["capabilityId"] if exact_tool else None,
+                "evidenceRef": (
+                    EvidenceRef(
+                        id=capability["capabilityId"], type="entity",
+                        source="capability_catalog",
+                    ).model_dump(mode="json", exclude_none=True)
+                    if exact_tool else None
+                ),
+                "effectiveToolAuthorization": "unknown",
+            }
 
         canonical_agent_entity_id = row.get("canonical_agent_entity_id")
         grant_rows, grant_rows_valid = Agent360Provider._validate_capability_grant_records(
@@ -3661,6 +3774,19 @@ class Agent360Provider:
                 )
             ]
             capability["activeGrantRecordIdsTruncated"] = len(matching) > MAX_READ_LIMIT
+            capability["invokeGrantScopes"] = [
+                {
+                    "grantRecordId": _first(grant, "authorization_id", "delegation_id", "id"),
+                    "actions": list(grant["scope"]["actions"]),
+                    "resources": list(grant["scope"]["resources"]),
+                    "evidenceRef": EvidenceRef(
+                        id=_first(grant, "authorization_id", "delegation_id", "id"),
+                        type="document",
+                        source="delegations",
+                    ).model_dump(mode="json", exclude_none=True),
+                }
+                for grant in matching[:MAX_READ_LIMIT]
+            ] if grant_read_complete else []
 
         evidence_refs: list[dict[str, Any]] = []
         identity = profile.get("identity")
@@ -4455,6 +4581,8 @@ class Agent360Provider:
         canonical_delegations: dict[str, dict[str, Any]],
     ) -> Optional[dict[str, Any]]:
         policy_log = row.get("policy_log") if isinstance(row.get("policy_log"), dict) else {}
+        if not row.get("tenant_id") or policy_log.get("delegation_check_tenant_id") != row["tenant_id"]:
+            return None
         decision = policy_log.get("delegation_check")
         if not isinstance(decision, dict) or not isinstance(decision.get("allowed"), bool):
             return None
@@ -4920,9 +5048,10 @@ class Agent360Provider:
                     )
             policy_log = row.get("policy_log") if isinstance(row.get("policy_log"), dict) else {}
             delegation_check = policy_log.get("delegation_check")
-            if isinstance(delegation_check, dict) and isinstance(
+            if (row.get("tenant_id") and policy_log.get("delegation_check_tenant_id") == row["tenant_id"]
+                and isinstance(delegation_check, dict) and isinstance(
                 delegation_check.get("allowed"), bool
-            ):
+            )):
                 decision = "allow" if delegation_check["allowed"] else "deny"
                 snapshot = row.get("input_snapshot")
                 snapshot = snapshot if isinstance(snapshot, dict) else {}

@@ -37,6 +37,16 @@ history as current-store coverage only; complete source history and freshness
 remain unknown. Case resolution describes observed lifecycle state and does not
 establish a separately attributed business outcome.
 
+Case-scoped callback, assignment and handoff, SLA, and journey context events
+are retained by their own append-only support authorities. The projection
+rechecks exact tenant, case, provider connection, event, and canonical identity
+links where applicable. A source-reported SLA timer is not a measured breach;
+a journey link does not by itself prove an episode relationship. When an
+EpisodeRecord explicitly cites the verified case journey-link event and names
+the same journey, the provider can report that exact relation as partial
+evidence. These reads do not establish upstream event authorship, complete
+source history, or historical state.
+
 ## Runtime contract
 
 - The mounted `/v1/experience360/frames` route evaluates frame and slot policy
@@ -54,16 +64,25 @@ establish a separately attributed business outcome.
   case-keyed assessments and signals with risk and case evidence. This path does
   not establish complete risk history, signal coverage, a freshness SLA,
   business outcome, or contagion authority.
+- `callbacks`, `agents`, `participants`, `sla`, and `journey_links` expose only
+  the exact records admitted by their respective tenant and case joins.
+  `sla` still lacks canonical measurement-contract evaluation. The optional
+  episode relation requires the episode to cite the exact case journey-link
+  event; shared journey ID alone is insufficient.
 - Results must retain tenant scope, source timestamps, section state, evidence
   provenance, and explicit provider limitations. Policy suppression must not
   be inferred as absence.
 
 ## Explicit gaps
 
-- Callback scheduling, SLA timers, case-to-journey links, agent assignments,
-  and handoffs lack canonical provider paths.
-- Participant identity and message content policy authorities are not joined;
-  participant IDs and message bodies remain suppressed.
+- Callback and assignment source authorship, complete history, historical
+  replay, and freshness are not established. SLA timer observations lack a
+  canonical measurement contract and breach evaluation. Episode relations
+  require a producer to persist exact case event evidence; population coverage
+  remains unknown.
+- Participant identity is limited to exact current provider account bindings;
+  historical membership and message-content policy remain unproven. Message
+  bodies remain suppressed.
 - Communication source-history completeness, a support-specific freshness
   service level, and historical replay are unavailable.
 - No authoritative support business outcome attribution is connected.

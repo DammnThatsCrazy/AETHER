@@ -38,13 +38,27 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from identity.profile.economic import AgentProfile360EconomicComposer
-from shared.common.common import APIResponse, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, log_event, metrics
 from shared.observability import trace_request, emit_latency
 
 logger = get_logger("aether.service.economic")
 
 router = APIRouter(tags=["Economic Intelligence"])
+
+
+@router.post("/v1/economic/attribution-runs/{run_id}/model-validation")
+async def validate_attribution_model_run(request: Request, run_id: str):
+    """Record exact run/config lineage; this does not approve or calibrate a model."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from value.economic.attribution_model_validation import validate_attribution_run_model
+
+    try:
+        decision = await validate_attribution_run_model(tenant.tenant_id, run_id)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=decision).to_dict()
 
 
 # ── Response Models ──────────────────────────────────────────────────

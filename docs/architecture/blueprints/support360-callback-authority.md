@@ -19,13 +19,13 @@ reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the current Support360 registry, callback authority, provider, routes, and focused tests. The callback slot contract remains as documented; later provider joins for other Support360 slots do not change callback schedule or event semantics."
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff75aeac1c2388f93514bfbfba398a6fdbf29b7dce29df7ddf617a97c9256e81"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/journeys/support360/callbacks.py": "sha256:166e3f6c0092cf8e113ce7c89893290afa057f0ec89cbd48d6babb11b7debfe8"
   "services/api/journeys/support360/cases.py": "sha256:7ba654bcec070de5f707fc1c566cf07ec147ce2dab6b5771fec4edc555629c79"
-  "services/api/journeys/support360/provider.py": "sha256:9a34ee6ecae44d0fb4b43dd513b2e0a129cc530ded24d16a7b0e0b2b0bd1bb01"
-  "services/api/journeys/support360/routes.py": "sha256:0c25c20156e1de76380c61c31d079f789891d247bf829e6088b4aeb39eb5aac0"
-  "services/api/tests/unit/test_support360_provider.py": "sha256:58c84ca0fd9bebc1c9359da2b1707d29fbea6af03bf8cb3489d7c1e2a973e865"
+  "services/api/journeys/support360/provider.py": "sha256:8493861c106c9562f9bd750171e21e012df4a993487a33304762e8cf51cc04b9"
+  "services/api/journeys/support360/routes.py": "sha256:087ed716370a181aa912d73414ac0f432609d025c5e4e37830b0e12f07c01294"
+  "services/api/tests/unit/test_support360_provider.py": "sha256:83215235bc753ec8bff941168648395bf7ccc1694aed22f2f493312817bd8374"
   "services/api/tests/unit/test_support_callback_authority.py": "sha256:01fd2b33c2a736aff0ae359dbb739ccd068e5afb00aaac12d6e2c23bbe0cf3d1"
 canonical_owner: support@aether
 estimated_read_minutes: 8

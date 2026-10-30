@@ -443,10 +443,14 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
         policy_decision_ref="cpd-memory-foreign-1",
         summary="must-not-leak-foreign-memory",
     )
-    record_repo = FakeFactRepository([_memory_record(), denied_memory, foreign_memory])
+    record_repo = FakeFactRepository([
+        _memory_record(required_consent_purposes_at_write=["analytics", "personalization"]),
+        denied_memory,
+        foreign_memory,
+    ])
     policy_repo = FakePolicyRepository(
         [
-            _policy_decision(),
+            _policy_decision(required_purposes=["personalization", "analytics"]),
             _policy_decision(
                 policy_decision_id="cpd-memory-denied-1",
                 resource_id="mem-record-denied-0001",
@@ -483,6 +487,7 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
     assert item["subjectType"] == "profile"
     assert item["policyDecisionRef"] == "cpd-memory-0001"
     assert item["policyDecisionOutcomeAtWrite"] == "historical_allow"
+    assert item["requiredConsentPurposesAtWrite"] == ["analytics", "personalization"]
     assert memories.content["freshness"] == {
         "state": "unknown",
         "latestMemoryCreatedAt": "2026-10-19T12:00:00+00:00",
@@ -512,6 +517,7 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
             "memoryId": "mem-record-0001",
             "policyDecisionId": "cpd-memory-0001",
             "outcomeAtWrite": "allowed",
+            "requiredConsentPurposesAtWrite": ["analytics", "personalization"],
             "decidedAt": "2026-10-19T11:59:00+00:00",
             "evidenceRefs": [
                 {
@@ -606,6 +612,83 @@ async def test_memory_record_creation_refuses_non_exact_or_denied_policy_decisio
     with pytest.raises(ValueError, match="memory_policy_decision_not_exact_allowed_authority"):
         await repository.create(record)
 
+    assert record_repo.rows == []
+
+
+async def test_memory_record_stamps_only_verified_required_purposes_and_checks_both_reads() -> None:
+    record_repo = FakeFactRepository([])
+    policy_repo = FakePolicyRepository(
+        [_policy_decision(required_purposes=["personalization", "analytics"])]
+    )
+    repository = SemanticMemoryRecordRepository(
+        record_repository=record_repo,
+        observation_repository=FakeFactRepository(
+            [_observation("semantic-observation-memory-1", "source-event-memory-1")]
+        ),
+        policy_repository=policy_repo,
+    )
+    input_record = SemanticMemoryRecord.model_validate(_memory_record())
+
+    created = await repository.create(input_record)
+    assert input_record.required_consent_purposes_at_write is None
+    assert created.required_consent_purposes_at_write == ["analytics", "personalization"]
+    assert record_repo.rows[0]["required_consent_purposes_at_write"] == [
+        "analytics", "personalization"
+    ]
+    assert (await repository.create(input_record)) == created  # idempotent enrichment
+    by_subject = await repository.read_for_subject(TENANT, ENTITY, offset=0, limit=10)
+    by_id = await repository.read_for_ids(TENANT, ENTITY, ["mem-record-0001"])
+    assert by_subject.state == by_id.state == "available"
+    assert by_subject.records[0].record.required_consent_purposes_at_write == [
+        "analytics", "personalization"
+    ]
+    assert by_id.records[0].record.required_consent_purposes_at_write == [
+        "analytics", "personalization"
+    ]
+
+    policy_repo.rows["cpd-memory-0001"]["required_purposes"] = ["analytics"]
+    by_subject = await repository.read_for_subject(TENANT, ENTITY, offset=0, limit=10)
+    by_id = await repository.read_for_ids(TENANT, ENTITY, ["mem-record-0001"])
+    for page in (by_subject, by_id):
+        assert page.records == ()
+        assert page.state == "degraded"
+        assert "semantic_memory_policy_purpose_stamp_mismatch" in page.warnings
+
+
+async def test_legacy_memory_without_purpose_stamp_preserves_explicit_unknown() -> None:
+    policy_repo = FakePolicyRepository([_policy_decision(required_purposes=["analytics"])])
+    repository = SemanticMemoryRecordRepository(
+        record_repository=FakeFactRepository([_memory_record()]),
+        observation_repository=FakeFactRepository(
+            [_observation("semantic-observation-memory-1", "source-event-memory-1")]
+        ),
+        policy_repository=policy_repo,
+    )
+
+    by_subject = await repository.read_for_subject(TENANT, ENTITY, offset=0, limit=10)
+    by_id = await repository.read_for_ids(TENANT, ENTITY, ["mem-record-0001"])
+    assert by_subject.state == by_id.state == "available"
+    assert by_subject.records[0].record.required_consent_purposes_at_write is None
+    assert by_id.records[0].record.required_consent_purposes_at_write is None
+
+
+async def test_memory_create_rejects_unverified_caller_purpose_stamp() -> None:
+    record_repo = FakeFactRepository([])
+    repository = SemanticMemoryRecordRepository(
+        record_repository=record_repo,
+        observation_repository=FakeFactRepository(
+            [_observation("semantic-observation-memory-1", "source-event-memory-1")]
+        ),
+        policy_repository=FakePolicyRepository(
+            [_policy_decision(required_purposes=["analytics"])]
+        ),
+    )
+    record = SemanticMemoryRecord.model_validate(
+        _memory_record(required_consent_purposes_at_write=["personalization"])
+    )
+
+    with pytest.raises(ValueError, match="memory_policy_required_purposes_not_exact_authority"):
+        await repository.create(record)
     assert record_repo.rows == []
 
 
