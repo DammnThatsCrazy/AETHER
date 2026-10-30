@@ -7,7 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from shared.intelligence_projections.contracts import ProjectionRequest, ProjectionSubject
+from shared.intelligence_projections.contracts import (
+    ProjectionReadAuthorization,
+    ProjectionRequest,
+    ProjectionSubject,
+)
 from shared.intelligence_projections.registry import ProviderRegistry
 from identity.profile.prediction_authority import (
     PredictionAuthorityEvidence,
@@ -29,6 +33,32 @@ from shared.backend_interpretation.primitives import OutcomeTruthRecord
 TENANT = "tenant_profile_prediction"
 ENTITY = "human-profile-1"
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
+
+
+async def _context(request, *, outcome_authorized=True):
+    authorizations = (
+        [
+            ProjectionReadAuthorization(
+                tenantId=request.tenantId,
+                sourceSurfaceId="profile360",
+                sourceSubject=request.subject,
+                sourceSlotId="likely_next_states",
+                consumerProjectionId="profile360",
+                targetProjectionId="outcome360",
+                capabilityKey="outcome_facts.read",
+                policyState="allowed",
+                policyIds=["outcomes-policy"],
+                policyEvaluatedAt=NOW.isoformat(),
+            )
+        ]
+        if outcome_authorized
+        else []
+    )
+    return await ProviderRegistry().build_context(
+        "profile360",
+        request,
+        experience360_read_authorizations=authorizations,
+    )
 
 
 def _output(
@@ -312,7 +342,7 @@ async def test_profile360_likely_next_states_is_unknown_without_approved_rows():
             PredictionOutputRead([], available=True, scope_known=True)
         )
     )
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
 
     result = await provider.project(request, context)
 
@@ -355,7 +385,7 @@ async def test_profile360_reader_rejects_prediction_outside_exact_subject_scope(
             PredictionOutputRead([raw], available=True, scope_known=True)
         )
     )
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
 
     result = await provider.project(request, context)
 
@@ -412,7 +442,7 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
             )
         )
     )
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
 
     result = await provider.project(request, context)
 
@@ -486,7 +516,7 @@ async def test_profile360_reports_only_exact_versioned_outcome_association(monke
         PredictionOutputRead([prediction.model_dump(mode="python")], True, True),
         PredictionOutcomeRead([exact], True, True),
     ))
-    result = await provider.project(request, await ProviderRegistry().build_context("profile360", request))
+    result = await provider.project(request, await _context(request))
 
     item = result.sections[0].content["items"][0]
     associations = item["reportedOutcomeAssociations"]
@@ -497,6 +527,109 @@ async def test_profile360_reports_only_exact_versioned_outcome_association(monke
     assert "correctness" in associations["interpretation"]
     assert item["epistemicStatus"] == "predicted"
     assert all("correct" not in " ".join(claim.claims).lower() for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_profile360_does_not_read_outcomes_without_separate_policy_authorization(
+    monkeypatch,
+):
+    import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority,
+        "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model,
+            artifact_version=version,
+            checksum_sha256="a" * 64,
+            promotion_state="promoted",
+            disabled=False,
+            synthetic_data=False,
+            threshold_passed=True,
+            production_allowed=True,
+            metrics={},
+        ),
+    )
+    source = _PredictionSource(
+        PredictionOutputRead([_output().model_dump(mode="python")], True, True),
+        PredictionOutcomeRead([_reported_outcome()], True, True),
+    )
+
+    async def unexpected_outcome_read(*args, **kwargs):
+        pytest.fail("outcome read must require its separate server policy decision")
+
+    monkeypatch.setattr(source, "reported_outcomes_for_prediction", unexpected_outcome_read)
+    request = ProjectionRequest(
+        projectionId="profile360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of",
+        asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    result = await Profile360Provider(source=source).project(
+        request, await _context(request, outcome_authorized=False)
+    )
+
+    associations = result.sections[0].content["items"][0]["reportedOutcomeAssociations"]
+    assert associations["facts"] == []
+    assert associations["reasonCode"] == "profile_outcome_read_authorization_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_profile360_suppresses_outcome_outside_prediction_validity(monkeypatch):
+    import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority,
+        "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model,
+            artifact_version=version,
+            checksum_sha256="a" * 64,
+            promotion_state="promoted",
+            disabled=False,
+            synthetic_data=False,
+            threshold_passed=True,
+            production_allowed=True,
+            metrics={},
+        ),
+    )
+    prediction = _output(
+        generated_at=NOW - timedelta(minutes=1),
+        valid_from=NOW - timedelta(seconds=20),
+        valid_until=NOW + timedelta(minutes=1),
+    )
+    request = ProjectionRequest(
+        projectionId="profile360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of",
+        asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(
+        source=_PredictionSource(
+            PredictionOutputRead([prediction.model_dump(mode="python")], True, True),
+            PredictionOutcomeRead(
+                [_reported_outcome(observed_at=NOW - timedelta(seconds=30))], True, True
+            ),
+        )
+    )
+
+    result = await provider.project(request, await _context(request))
+
+    associations = result.sections[0].content["items"][0]["reportedOutcomeAssociations"]
+    assert associations["facts"] == []
+    assert associations["reasonCode"] == "profile_outcome_truth_records_invalid"
 
 
 @pytest.mark.asyncio
@@ -534,7 +667,7 @@ async def test_profile360_suppresses_future_ambiguous_or_truncated_outcomes(monk
     provider = Profile360Provider(source=_PredictionSource(
         PredictionOutputRead([_output().model_dump(mode="python")], True, True), read,
     ))
-    result = await provider.project(request, await ProviderRegistry().build_context("profile360", request))
+    result = await provider.project(request, await _context(request))
 
     associations = result.sections[0].content["items"][0]["reportedOutcomeAssociations"]
     assert associations["facts"] == []
@@ -596,7 +729,7 @@ async def test_profile360_suppresses_predictions_without_current_exact_artifact(
             )
         )
     )
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
 
     result = await provider.project(request, context)
 
@@ -650,7 +783,7 @@ async def test_prediction_reader_suppresses_missing_policy_evidence(monkeypatch)
     provider = Profile360Provider(source=_PredictionSource(
         PredictionOutputRead([_output().model_dump(mode="python")], available=True, scope_known=True)
     ))
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
     result = await provider.project(request, context)
     assert result.sections[0].state == "degraded"
     assert result.sections[0].content["items"] == []

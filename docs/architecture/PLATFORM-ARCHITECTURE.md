@@ -105,7 +105,7 @@ source_hashes:
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:0bcf70a96d1dce09ddc04921b7328b5b87b453a13dbb1bd78da661e126ea3b4d"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
   "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
@@ -686,8 +686,11 @@ point-in-time reconstruction, and Profile-specific freshness remain unknown,
 so the slot stays degraded.
 Profile360 future-state predictions also rejoin the recorded inference policy
 decision and, for session models, the exact current identity binding before
-projection. Current consent, historical identity, model calibration, and
-observed outcomes remain unresolved.
+projection. A bounded outcome-fact association additionally requires an
+independent outcomes-domain read authorization and exact prediction-ID and
+validity-window checks; it remains reported association evidence, not a
+prediction evaluation. Current consent, historical identity, model calibration,
+verified outcomes, and complete outcome coverage remain unresolved.
 Account360's required `communications` slot now reads Communication360
 evidence, interactions, and timeline only for an exact tenant-owned entity
 subject with matching endpoint identity-binding evidence. It does not fan out

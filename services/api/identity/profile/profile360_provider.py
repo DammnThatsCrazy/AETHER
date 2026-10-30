@@ -3,8 +3,10 @@
 This provider is deliberately narrower than the legacy Kyber profile route.
 It reads the tenant-scoped identity profile repository and canonical entity
 registry, plus tenant-scoped analytics events and ``graph_history_replay`` when
-requested sections need those authorities. It does not resolve arbitrary
-identifiers, compute risk, join financial/outcome projections, infer semantic
+requested sections need those authorities. Profile predictions may include
+exactly linked reported outcome facts after a separate outcomes-domain policy
+check; these are associations, not adjudications. It does not resolve arbitrary
+identifiers, compute risk, join financial projections, infer semantic
 interactions, or evaluate field-level policy. Missing authorities remain
 explicit in the section states and findings.
 
@@ -27,6 +29,7 @@ from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
     ClaimEnvelope,
     ProjectionContext,
+    ProjectionReadAuthorization,
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
@@ -1878,7 +1881,7 @@ class Profile360Provider:
             )
         if needs_likely_next_states:
             prediction_section, prediction_claims = await self._likely_next_states(
-                request, temporal
+                request, temporal, context
             )
             base_claims = (
                 result.claims
@@ -2189,6 +2192,7 @@ class Profile360Provider:
         self,
         request: ProjectionRequest,
         temporal: _TemporalRequest,
+        context: ProjectionContext,
     ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
         """Project only persisted, governed future-state model outputs."""
 
@@ -2338,6 +2342,7 @@ class Profile360Provider:
         claims: list[ClaimEnvelope] = []
         outcome_read_incomplete = False
         outcome_lookup_truncated = False
+        outcome_authority_read = False
         outcome_section_reason: Optional[str] = None
         for output in valid_outputs:
             artifact = artifact_approval_cache[(output.model_id, output.artifact_version)]
@@ -2372,7 +2377,11 @@ class Profile360Provider:
             outcome_read = await self._read_reported_outcomes(
                 request.tenantId,
                 output,
+                context=context,
                 limit=MAX_PROFILE_REPORTED_OUTCOME_READ,
+            )
+            outcome_authority_read = outcome_authority_read or self._outcome_read_authorized(
+                request.tenantId, output, context
             )
             outcome_facts: list[dict[str, Any]] = []
             outcome_invalid = outcome_read.invalid_records
@@ -2401,8 +2410,13 @@ class Profile360Provider:
                         or getattr(outcome.subject, "id", None) != request.subject.id
                         or observed_at > anchor
                         or observed_at < output.generated_at
+                        or observed_at < output.valid_from
+                        or observed_at > output.valid_until
                         or (achieved_at is not None and (
-                            achieved_at > anchor or achieved_at < output.generated_at
+                            achieved_at > anchor
+                            or achieved_at < output.generated_at
+                            or achieved_at < output.valid_from
+                            or achieved_at > output.valid_until
                         ))
                         or outcome.state == "superseded"
                         or outcome.superseded_by is not None
@@ -2539,7 +2553,7 @@ class Profile360Provider:
                 "model_artifact_registry",
                 "consent_policy_decisions",
                 "analytics_events",
-                "outcome_facts",
+                *(["outcome_facts"] if outcome_authority_read else []),
             ],
         )
         return section, claims
@@ -2549,9 +2563,14 @@ class Profile360Provider:
         tenant_id: str,
         output: Any,
         *,
+        context: ProjectionContext,
         limit: int,
     ) -> PredictionOutcomeRead:
         """Read only the versioned explicit association for one prediction."""
+        if not self._outcome_read_authorized(tenant_id, output, context):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_read_authorization_unavailable"
+            )
         method = getattr(self._source, "reported_outcomes_for_prediction", None)
         if not callable(method):
             return PredictionOutcomeRead(
@@ -2574,6 +2593,29 @@ class Profile360Provider:
                 [], False, False, reason="profile_outcome_truth_invalid_response"
             )
         return result
+
+    @staticmethod
+    def _outcome_read_authorized(
+        tenant_id: str, output: Any, context: ProjectionContext
+    ) -> bool:
+        return (
+            context.projectionId == PROJECTION_ID
+            and context.tenantId == tenant_id
+            and any(
+                authorization.tenantId == tenant_id
+                and authorization.sourceSurfaceId == "profile360"
+                and authorization.sourceSubject
+                == ProjectionSubject(kind="entity", id=output.entity_id)
+                and authorization.sourceSlotId == SLOT_LIKELY_NEXT_STATES
+                and authorization.consumerProjectionId == PROJECTION_ID
+                and authorization.targetProjectionId == "outcome360"
+                and authorization.capabilityKey == "outcome_facts.read"
+                and authorization.policyState == "allowed"
+                and bool(authorization.policyIds)
+                and bool(authorization.policyEvaluatedAt)
+                for authorization in context.experience360ReadAuthorizations
+            )
+        )
 
     async def _syndicates(
         self,
