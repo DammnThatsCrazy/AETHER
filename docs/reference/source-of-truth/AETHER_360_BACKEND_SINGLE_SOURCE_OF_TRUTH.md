@@ -11,6 +11,17 @@ This document replaces the prior broad 360 architecture blueprint as the impleme
 
 This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository has partial provider paths across required slots, with the remaining limits recorded explicitly; no product surface is complete:
 
+Review remediation (2026-10-30) joins the authority migrations into one head and
+registers invocation claims/receipts under legal-preservation storage policies.
+PostgreSQL evaluation readers decode both metric and sample-reference JSONB;
+Value approval inserts use the table's primary-key conflict target. Ingestion
+supplies the server-owned Profile adjudication policy and rechecks persisted
+inference evidence rather than trusting caller assertions. MCP tool and resource
+operations decode JSON or SSE using exact response IDs. Dispatch authorization
+persistence failures retain a recoverable reservation, and retried evaluation
+failures restore it without calling a connector. These repairs do not close
+additional registry authority references or establish calibration certification.
+
 - **Episode360 `timeline`:** resolves only observation IDs explicitly recorded by an episode through tenant-scoped semantic Silver rows. Untyped source namespaces, complete activity/session coverage, policy, and freshness remain unresolved.
 - **Episode360 `risk_flags`:** reads current RiskSignals only for the exact tenant-scoped, typed primary subject on an EpisodeRecord, preserving signal and component evidence. Risk history, complete signal coverage, policy, freshness, and causality remain unknown; an empty read does not establish absence.
 - **Campaign360 `signal_sources` and `source_classification`:** join exact campaign touchpoint event references to tenant-scoped canonical events, matching gateway-admitted SDK Bronze observations, and current touchpoint source-classification revisions verified by tenant, touchpoint, revision ID, class, classifier version, and time. Campaign registry source, broader source-fact and observation producers, complete event coverage, and freshness remain unresolved.

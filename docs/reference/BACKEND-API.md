@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:6e0c7460eeb6f270f51935b2567e50dc03391f6fbf29cbcf009ca8686fdd5081"
+  "services/api/actions/": "sha256:979d247d6edc88d2de235db949064c406da903589f4b2980cf318bd9138378e8"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:3dd593027d97ad10ab66370ea2c735c4cc5ea0f7655f9564dd1b76aa80e04a83"
-  "services/api/ingestion/": "sha256:3cf77ddb5cc178b6effc001d0936a5a29a7f86f0ac232c14ef79b6fa53199ace"
-  "services/api/intelligence/": "sha256:0ad23c5a51cc2761bc0a285c85299483531f2d17a0e4a8f219b4e3514408a776"
-  "services/api/journeys/": "sha256:303c85a6afa8495a82a02fe59b17bcd9d5075c232919800b14e0cc1ea001cc72"
+  "services/api/ingestion/": "sha256:e0f728400c34a5123aa0cebef7799c945003314916470645f37177ec38c44e5b"
+  "services/api/intelligence/": "sha256:9c734b35466479143e1568314736aad8e630b61356fd9d54ba1d22242a457163"
+  "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:e777a712969c6cf6e1a09aa3bd1b767c958f09ca5f76bbcfaca36f7f47dca3c8"
+  "services/api/value/": "sha256:875bbf8ca5e61e8158d68460b7061f40556aa04b2b1056d86f6bddd3fccdd7ba"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1471,6 +1471,12 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | GET | `/v1/agent/{id}/graph` | Agent's graph neighborhood within the caller's tenant (404 unless the agent's vertex belongs to it) |
 | GET | `/v1/agent/{id}/trust` | Agent trust score + history (404 unless the agent's vertex belongs to the caller's tenant) |
 | POST | `/v1/agent/{id}/a2h` | Record agent-to-human interaction (notification, recommendation, delivery, escalation) |
+
+The Silver ingestion worker supplies the server-owned Profile adjudication
+policy version. The durable outcome recorder rechecks persisted prediction
+inference-policy evidence and exact tenant, subject, event, contract and time
+bindings; caller-supplied adjudication state cannot establish an observed claim.
+Persisted evaluation reads decode metric and sample-reference JSONB together.
 
 ### Diagnostics Service (Platform Operators Only)
 
