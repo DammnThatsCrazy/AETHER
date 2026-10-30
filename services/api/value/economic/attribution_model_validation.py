@@ -181,6 +181,8 @@ class AttributionModelValidationRepository:
 
 
 def _same_decision(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if left.get("tenant_id") != right.get("tenant_id"):
+        return False
     if _uuid(left.get("model_config_id")) != _uuid(right.get("model_config_id")):
         return False
     if _uuid(left.get("attribution_run_id")) != _uuid(right.get("attribution_run_id")):

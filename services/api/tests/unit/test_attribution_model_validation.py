@@ -58,6 +58,7 @@ def test_exact_decision_is_deterministic_and_uncalibrated():
         {**first, "attribution_run_id": UUID(first["attribution_run_id"]),
          "model_config_id": UUID(first["model_config_id"])}, first
     )
+    assert not _same_decision({**first, "tenant_id": "tenant-b"}, first)
 
 
 @pytest.mark.parametrize("mutation", [
@@ -165,6 +166,10 @@ async def test_attribution_reader_joins_only_matching_decision(monkeypatch):
     monkeypatch.setattr(validation, "AttributionModelValidationRepository", Decisions)
     result = await RepositoryAttributionCreditReader().read("tenant-a", [conversion_id])
     assert result["runs"][0]["modelGovernance"]["decisionId"] == decision["decision_id"]
+    decision["tenant_id"] = "tenant-b"
+    result = await RepositoryAttributionCreditReader().read("tenant-a", [conversion_id])
+    assert result["runs"][0]["modelGovernance"]["state"] == "unknown"
+    decision["tenant_id"] = "tenant-a"
     config["model_version"] = "changed"
     result = await RepositoryAttributionCreditReader().read("tenant-a", [conversion_id])
     assert result["runs"][0]["modelGovernance"]["state"] == "unknown"
