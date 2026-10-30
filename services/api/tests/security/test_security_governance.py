@@ -99,14 +99,24 @@ async def test_elevated_dispatch_requires_approval_id():
     eng = PolicyEngine()
     d = await eng.check_action_dispatch(
         actor_id="u1", actor_type='tenant_user', tenant_id='t1',
-        decision_status='approved', is_elevated=True, approval_id=None,
+        decision_status='approved', has_dispatch_permission=True, is_elevated=True, approval_id=None,
     )
     assert d.allowed is False and d.policy_key == 'action.elevated_dispatch'
     ok = await eng.check_action_dispatch(
         actor_id="u1", actor_type='tenant_user', tenant_id='t1',
-        decision_status='approved', is_elevated=True, approval_id='appr_1',
+        decision_status='approved', has_dispatch_permission=True, is_elevated=True, approval_id='appr_1',
     )
     assert ok.allowed is True
+
+
+async def test_dispatch_requires_actor_permission():
+    eng = PolicyEngine()
+    d = await eng.check_action_dispatch(
+        actor_id="u1", actor_type='tenant_user', tenant_id='t1',
+        decision_status='approved', action_id='a1', has_dispatch_permission=False,
+    )
+    assert d.allowed is False
+    assert "lacks tenant dispatch permission" in d.reason
 
 
 async def test_cross_tenant_access_denied():

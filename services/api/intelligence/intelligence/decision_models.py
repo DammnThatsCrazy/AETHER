@@ -161,6 +161,7 @@ class ActionDispatch(BaseModel):
     target_type: str
     config_id: str | None = None
     status: Literal["queued", "dispatched", "delivered", "failed", "cancelled"] = "queued"
+    dispatch_policy_decision_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     approval_metadata: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None

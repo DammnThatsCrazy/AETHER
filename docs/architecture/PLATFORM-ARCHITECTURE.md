@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:55d386f6c5638989f51f459947da4f03e78c46efe32ab8c8b76892b8c3740154"
+  "packages/shared/": "sha256:c17fc659d3a24b75c401cf018996669d3d42f2ce3ca4ce1f057c30175162fc69"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:a4a99e1b7f75401f596da29b4ccc29bc11c986f8fed2cc44853a0e4f23e8145f"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"

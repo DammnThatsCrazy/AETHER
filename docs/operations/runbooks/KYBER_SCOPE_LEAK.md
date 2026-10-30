@@ -13,7 +13,7 @@ source_files: [services/api/governance/kyber/access/scopes.py, services/api/gove
 source_hashes:
   "services/api/governance/kyber/access/dependencies.py": "sha256:f986bb81414a354fa8d53b033fd4cb133fc1866c61a0665cfbf5790a08bbda9a"
   "services/api/governance/kyber/access/scopes.py": "sha256:851875a8d4e61cc8fb770ce57edcad14df39f74dbf985f8bb31bb96de313c9f5"
-  "services/api/governance/security/policy_engine.py": "sha256:1ac65aa8233ac33ab77f342858579fd7d1fd5388dc2408d3e482bfa0e936e01b"
+  "services/api/governance/security/policy_engine.py": "sha256:a086aa9ec1dca46b6663ec5878fae5d4e8bbf0551905bf0bfda703a2604073b7"
 ---
 
 # Runbook — Kyber Tenant Scope Leak

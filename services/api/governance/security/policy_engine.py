@@ -152,11 +152,20 @@ class PolicyEngine:
     async def check_action_dispatch(
         self, *, actor_id: str, actor_type: ActorType, tenant_id: str,
         decision_status: str, action_id: Optional[str] = None,
+        has_dispatch_permission: bool = False,
         is_elevated: bool = False, approval_id: Optional[str] = None,
         **audit: Any,
     ) -> PolicyDecision:
-        """Block dispatch unless the underlying decision is approved; block
-        elevated/critical dispatch when no approval_id is present."""
+        """Record dispatch permission and approval checks; block missing authority."""
+        if not has_dispatch_permission:
+            d = self._decision(
+                policy_key="action.dispatch", actor_id=actor_id, actor_type=actor_type,
+                action="dispatch", resource_type="action", tenant_id=tenant_id,
+                resource_id=action_id, allowed=False, severity='block',
+                reason="actor lacks tenant dispatch permission",
+                required_action="obtain tenant write permission before dispatch",
+            )
+            return await self._finalize(d, actor_type=actor_type, **audit)
         if decision_status != "approved":
             d = self._decision(
                 policy_key="action.dispatch", actor_id=actor_id, actor_type=actor_type,
@@ -178,7 +187,8 @@ class PolicyEngine:
         d = self._decision(
             policy_key="action.dispatch", actor_id=actor_id, actor_type=actor_type,
             action="dispatch", resource_type="action", tenant_id=tenant_id,
-            resource_id=action_id, allowed=True, reason="decision approved",
+            resource_id=action_id, allowed=True,
+            reason="tenant dispatch permission and approved decision validated",
         )
         return await self._finalize(d, actor_type=actor_type, **audit)
 

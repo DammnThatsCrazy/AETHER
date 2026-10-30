@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d5f7449dc449eebdd744d1a8ca665b3d1b33d1291f2038627d7fd3e7131a8e9d"
 ---
 
 # 360 System Blueprint
@@ -91,7 +91,11 @@ consent receipts and relationship evidence. Roster completeness, other predicate
 syndicates, historical membership, and freshness remain unknown. Journey and Risk
 can expose an exact caller-associated agent lifecycle request after slot policy.
 The request can include its matching, tenant-scoped, time-checked recorded delegation decision;
-current authorization, dispatch and external effect remain unverified. Workflow approval decisions can
+current authorization, dispatch and external effect remain unverified. Journey360
+and Risk360 dispatch reads also require the persisted tenant `action.dispatch`
+policy decision for the exact action before dispatch creation. Connector
+execution, external effect, independent outcome verification, and full dispatch
+coverage remain unknown. Workflow approval decisions can
 carry a recorded human permission check and the matching request-time agent
 delegation decision joined to its current grant. Workflow-wide coverage,
 historical policy replay, and current authorization remain unknown.

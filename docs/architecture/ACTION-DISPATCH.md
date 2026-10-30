@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/action_targets/base.py": "sha256:455280d204f34cf4b774550f1d46024b320ae8e0f2f77eed44b3db8b6b7c2672"
   "services/api/intelligence/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "services/api/intelligence/intelligence/routes.py": "sha256:dd995bcc1ae4e96d6c073e81c3c2fa28b681bce23ce18a02b1941683625839a5"
+  "services/api/intelligence/intelligence/routes.py": "sha256:ba0580bcc071a5d6ed6463960ab942092a46106d228721ce3860045312e40589"
 ---
 
 # Governed Action Dispatch
@@ -82,4 +82,11 @@ Integration secrets such as `auth_secret`, `secret`, `api_key`, and `webhook_sec
 
 ## Governance
 
-Dispatch requires an approved decision. The dispatch payload includes the action, decision, recommendation, expected value, expected outcome, and policy flags so downstream systems can preserve audit context.
+Dispatch requires tenant write permission and an approved decision; elevated and
+critical actions also require an approval ID. The allowed tenant permission
+decision is persisted on the dispatch and joined by Journey360 and Risk360 before
+they report the dispatch chain as complete. This evidence records the application
+permission check and decision gate; it does not verify connector execution or an
+external effect. The dispatch payload includes the action, decision,
+recommendation, expected value, expected outcome, and policy flags so downstream
+systems can preserve audit context.

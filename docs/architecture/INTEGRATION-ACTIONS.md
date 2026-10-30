@@ -13,8 +13,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/api/intelligence/intelligence/decision_models.py": "sha256:d620c4d0e42e135bed4ab50120a0bae2da67521399cdc6ac9bd915b9ca0464ae"
-  "services/api/intelligence/intelligence/routes.py": "sha256:dd995bcc1ae4e96d6c073e81c3c2fa28b681bce23ce18a02b1941683625839a5"
+  "services/api/intelligence/intelligence/decision_models.py": "sha256:019dc89f216807ca260aa7831ff2a59f64c7b33e061baf72a964992fd847bc93"
+  "services/api/intelligence/intelligence/routes.py": "sha256:ba0580bcc071a5d6ed6463960ab942092a46106d228721ce3860045312e40589"
 ---
 # Integration Actions
 
@@ -38,7 +38,13 @@ creating a second dispatch. See [ADR-001](adr-001-canonical-delivery-pipeline.md
 
 ## Controls
 
-Integration actions require an approved decision before queued or executed status. Elevated and critical actions still require `authorization_metadata.approval_id`. Every action creates an `ActionFeedback` record, emits the action lifecycle event, supports later outcome observation, preserves tenant isolation, and remains auditable.
+Integration actions require tenant write permission and an approved decision
+before dispatch. Elevated and critical actions still require
+`authorization_metadata.approval_id`. The persisted allowed dispatch decision is
+joined to the dispatch by tenant and action ID in Journey360 and Risk360. Every
+action creates an `ActionFeedback` record, emits the action lifecycle event,
+supports later outcome observation, preserves tenant isolation, and remains
+auditable.
 
 When the action originated from a finding-backed investigation, its optional
 `finding_id` and `investigation_id` links are inherited from the decision and

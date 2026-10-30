@@ -145,7 +145,9 @@ async def test_producer_dispatch_reaches_only_authorized_subject(scope):
         assert [item["dispatchId"] for item in row["dispatches"]] == [dispatch["dispatch_id"]]
         assert row["dispatches"][0]["externalEffect"] == "not_independently_verified"
         assert {item["source"] for item in row["dispatches"][0]["evidenceRefs"]} == {
-            "action_dispatches", "action_feedback", "decision_records", "recommendations"}
+            "action_dispatches", "action_feedback", "decision_records", "recommendations",
+            "security_policy_decisions"}
+        assert dispatch["dispatch_policy_decision_id"]
     else:
         assert row["dispatches"] == []
         assert summary["dispatchAssociation"]["state"] == "unknown"

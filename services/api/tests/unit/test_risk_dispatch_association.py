@@ -60,15 +60,22 @@ async def test_reader_validates_exact_joins_and_fails_closed():
             "action_type": "review", "recommendation_id": "rec"}
     row = {"id": "d", "dispatch_id": "d", "tenant_id": "t", "action_id": "a", "decision_id": "dec",
            "recommendation_id": "rec", "risk_action_association_record_id": "r", "risk_action_association": link,
-           "status": "queued", "created_at": now.isoformat()}
+           "dispatch_policy_decision_id": "policy", "status": "queued",
+           "created_at": (now - timedelta(seconds=1)).isoformat()}
     action = {"tenant_id": "t", "action_id": "a", "decision_id": "dec", "recommendation_id": "rec", "action_type": "review"}
     decision = {"tenant_id": "t", "decision_id": "dec", "recommendation_id": "rec", "decision_status": "approved",
                 "selected_action": {"action_key": "review", "action_type": "review"}}
     recommendation = {"tenant_id": "t", "recommendation_id": "rec", "entity_id": "s"}
+    policy_decision = {"decision_id": "policy", "tenant_id": "t", "policy_key": "action.dispatch",
+                       "actor_id": "user", "actor_type": "tenant_user", "action": "dispatch",
+                       "resource_type": "action", "resource_id": "a", "allowed": True,
+                       "evaluated_at": (now - timedelta(seconds=2)).isoformat()}
     kwargs = dict(tenant_id="t", record=record, dispatches=Repository([row]), actions=Repository({"a": action}),
-                  decisions=Repository({"dec": decision}), recommendations=Repository({"rec": recommendation}))
+                  decisions=Repository({"dec": decision}), recommendations=Repository({"rec": recommendation}),
+                  policy_decisions=Repository({"policy": policy_decision}))
     rows, complete = await read_risk_dispatches(**kwargs)
     assert complete and rows[0]["externalEffect"] == "not_independently_verified"
+    assert rows[0]["dispatchAuthorization"]["decision_id"] == "policy"
     for field in ("recorded_at", "observed_at", "effective_at"):
         original = getattr(record, field)
         setattr(record, field, now + timedelta(seconds=1))
@@ -86,6 +93,9 @@ async def test_reader_validates_exact_joins_and_fails_closed():
     recommendation["population_id"] = "population"
     assert await read_risk_dispatches(**kwargs) == ([], False)
     recommendation.pop("population_id")
+    policy_decision["resource_id"] = "other-action"
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["resource_id"] = "a"
     action["tenant_id"] = "other"
     assert await read_risk_dispatches(**kwargs) == ([], False)
 

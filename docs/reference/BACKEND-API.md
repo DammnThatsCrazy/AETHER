@@ -25,15 +25,15 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:f5620428069e5517c34d19388b09791343618da4571d9ce73e8cc0edcb2fc730"
+  "services/api/actions/": "sha256:c603f4f91494119bcc69eb48202c83c60b5aa46dc8d4f751a66fc47c7f64943e"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
+  "services/api/governance/": "sha256:54c23c8d05a0d07a841a90550986a6f0f36fe44bf4bfff70efacd6bac6534d36"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:060ee548eb92e7287c8d53b55a4e12e91f2afe9deb13696b697fe1f856b01f07"
+  "services/api/intelligence/": "sha256:7aee167e09a32ad500e3efd389104339fe43aae01df9520db78b8b45bdac9bff"
   "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -2276,9 +2276,12 @@ state does not establish an external effect or complete dispatch coverage.
 Risk360 can separately read associated dispatch lifecycle records after an
 actions-domain policy decision. The join requires an exact entity recommendation
 and an approved intervention observed, recorded, and effective by dispatch time.
+It also requires the persisted tenant action-dispatch policy decision to be
+allowed for the same action no later than dispatch creation.
 Current-decision validation rejects out-of-scope or future-observed or recorded
 history, and invalid decisions cannot yield a complete empty dispatch read.
-This evidence does not establish event-time authorization or an external effect.
+The persisted dispatch check records the tenant write permission and approved
+decision gate; it does not establish connector execution or an external effect.
 
 The latest provider slice adds Agent360 `risk_summary`, Execution360
 `risk_events`, and Value360 `ltv` evidence without adding routes. Agent360 no

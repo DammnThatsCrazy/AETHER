@@ -1081,6 +1081,7 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     dispatch_policy = await policy_engine.check_action_dispatch(
         actor_id=tenant.user_id or tenant.tenant_id, actor_type='tenant_user',
         tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
+        has_dispatch_permission=True,
         is_elevated=approval_level in {"elevated", "critical"}, approval_id=approval_id,
     )
     if not dispatch_policy.allowed:
@@ -1119,6 +1120,7 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         target_type=body.target_type,
         config_id=body.config_id,
         status="queued",
+        dispatch_policy_decision_id=dispatch_policy.decision_id,
         payload=payload,
         approval_metadata=body.approval_metadata,
         idempotency_key=body.idempotency_key,

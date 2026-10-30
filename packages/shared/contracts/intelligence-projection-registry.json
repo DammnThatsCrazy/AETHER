@@ -5819,7 +5819,7 @@
             "actions"
           ],
           "authorityGapReason": "A non-executable recommendation record does not join the canonical action execution authority.",
-          "partialImplementationReason": "Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy; action dispatch, external effects, policy replay, outcomes, full recommendation inventory and freshness remain unknown."
+          "partialImplementationReason": "Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy. Exact dispatches join their persisted tenant action-dispatch permission decision; external effects, independent outcome verification, full recommendation inventory and freshness remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -6720,11 +6720,11 @@
               ]
             }
           ],
-          "partialImplementationReason": "Exact-subject intervention decisions and reported outcomes can include slot-authorized, caller-associated agent lifecycle requests; dispatch, external effects, actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
+          "partialImplementationReason": "Exact-subject intervention decisions and reported outcomes can include slot-authorized lifecycle requests and exact dispatches joined to their persisted tenant action-dispatch permission decision; external effects, producer coverage, independent outcome verification, and freshness remain unknown.",
           "unboundCanonicalAuthorityRefs": [
             "actions"
           ],
-          "authorityGapReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown."
+          "authorityGapReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; dispatch-side actor permission evidence does not establish external effects, producer coverage, independently verified outcomes, or freshness."
         },
         {
           "id": "audit_history",
