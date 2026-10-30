@@ -651,6 +651,26 @@ async def _behavior_facts(tenant_id: str, agent_ref: str) -> tuple[list[Any], bo
     return normalize_rows(rows[:BEHAVIOR_FACT_LIMIT] + spawns, tenant_id), truncated
 
 
+async def _agent_continuity_reviews(tenant_id: str, agent_ref: str) -> list[dict[str, Any]]:
+    """Open agent continuity review items touching this agent's source identities."""
+    from identity.identity.pending_review import PendingIdentityReviewRepository
+    from identity.identity.routes import get_identity_resolver
+
+    repo = getattr(get_identity_resolver(), "_repo", None)
+    if repo is None:
+        return []
+    ids = {str(row.get("id")) for row in await repo.list_source_identities_by_identifier(
+        tenant_id, "agent_id", agent_ref, limit=20)}
+    items = await PendingIdentityReviewRepository().list_for_review(
+        tenant_id, entry_type="agent_continuity_candidate")
+    return [
+        {k: item.get(k) for k in ("id", "status", "reason_codes", "candidate_source_identity_ids",
+                                  "identify_source_identity_id", "created_at", "seen_count")}
+        for item in items
+        if ids & ({item.get("identify_source_identity_id")} | set(item.get("candidate_source_identity_ids") or []))
+    ]
+
+
 @lineage_router.get("/{agent_ref}/behavior")
 async def agent_behavior_read_model(agent_ref: str, request: Request):
     """Agent360 behavior read model: rebuildable, evidence-qualified, with what
@@ -663,7 +683,8 @@ async def agent_behavior_read_model(agent_ref: str, request: Request):
     try:
         facts, truncated = await _behavior_facts(tenant.tenant_id, agent_ref)
         grants = await DelegationRepository().active_for(agent_ref, tenant.tenant_id)
-        data = agent360_behavior(facts, agent_ref, truncated=truncated, grants=grants)
+        data = agent360_behavior(facts, agent_ref, truncated=truncated, grants=grants,
+                                 queued_reviews=await _agent_continuity_reviews(tenant.tenant_id, agent_ref))
     except Exception as exc:
         logger.warning("agent behavior read model unavailable",
                        extra={"tenant_id": tenant.tenant_id, "error": type(exc).__name__})

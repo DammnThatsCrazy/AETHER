@@ -55,7 +55,8 @@ def _observed_action(f: AgentFact):
 
 
 def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
-                grants: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+                grants: list[dict[str, Any]],
+                queued_reviews: Optional[list[dict[str, Any]]] = None) -> dict[str, dict[str, Any]]:
     """Identity, authority, Value, Risk, Trust and market sections from their
     owning domains (WO-013, WO-020, WO-092–WO-094, WO-144, WO-161). This module
     only composes; each owner decides its own meaning."""
@@ -92,6 +93,7 @@ def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
             "continuity": agent_continuity(tenant_id=tenant, agent_ref=agent_ref, facts=facts),
             "resolver_claims": claims,
             "review_items": [h for h in continuity_hypotheses(tenant, facts) if h["subject"] == agent_ref],
+            "queued_reviews": queued_reviews if queued_reviews is not None else [],
         }) if mine else _section("unavailable", None, "no facts for this agent"),
         "authority": _section("available" if checks else "unavailable", checks,
                               None if checks else "no value-moving actions observed"),
@@ -111,9 +113,10 @@ def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
 
 def agent360_behavior(facts: list[AgentFact], agent_ref: str, *, identity: Optional[dict[str, Any]] = None,
                       handoffs: Iterable[dict[str, Any]] = (), truncated: bool = False,
-                      grants: Iterable[dict[str, Any]] = ()) -> dict[str, Any]:
+                      grants: Iterable[dict[str, Any]] = (),
+                      queued_reviews: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
     model = build_behavior_model(facts, agent_ref, identity=identity)
-    governance = _governance(facts, agent_ref, model, list(grants))
+    governance = _governance(facts, agent_ref, model, list(grants), queued_reviews)
     decisions = [d for d in project_decisions([f for f in facts if f.agent_ref == agent_ref])["decisions"]
                  if d["decision_actor"].get("value") == agent_ref]
     partial = "partial" if truncated else "available"

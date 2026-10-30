@@ -156,3 +156,35 @@ def test_governance_sections_compose_owner_seams():
     assert sec["trust"]["data"]["trust"]["authority_compliance"]["outside"] == 1
     assert sec["trust"]["data"]["reputation"]["kind"] == "reputation"
     assert sec["market"]["data"][0]["target"] == "merchant:shop-1"
+
+
+@pytest.mark.asyncio
+async def test_behavior_route_shows_queued_agent_continuity_reviews(_routes, monkeypatch):
+    from actions.agent.deployments import get_deployment_repository
+    from config.settings import settings
+    from identity.identity import ingestion_worker
+    from shared.events.events import Event, Topic
+
+    monkeypatch.setattr(settings, "identity_continuity",
+                        dataclasses.replace(settings.identity_continuity, resolution_enabled=True))
+    deps = [await get_deployment_repository().create(T, {
+        "agent_id": "dup-agent", "display_name": "bot", "external_platform": platform,
+        "environment": "production", "consent_mode": "tenant_managed"}, actor="t", request_id="r")
+        for platform in ("web_widget", "slack_app")]
+
+    class _Producer:
+        async def publish(self, event):
+            return None
+
+    for i, dep in enumerate(deps):
+        await ingestion_worker.resolve_sdk_observation(Event(
+            topic=Topic.SDK_EVENTS_VALIDATED, tenant_id=T,
+            payload={"event_id": f"q-{i}", "event_type": "agent_tool_invocation_observed", "tenant_id": T,
+                     "properties": {}, "context": {},
+                     "validated_agent_deployment": {"deployment_id": dep["id"], "agent_id": "dup-agent"}}),
+            _Producer())
+    await _persist([_extra(1, "agent_tool_invocation_observed", "dup-agent", toolName="t", status="succeeded")])
+    data = (await agent_routes.agent_behavior_read_model("dup-agent", _request()))["data"]
+    [review] = data["sections"]["identity"]["data"]["queued_reviews"]
+    assert review["reason_codes"] == ["agent_ref_reported_by_multiple_deployments"]
+    assert review["status"] == "open"

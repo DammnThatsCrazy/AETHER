@@ -25,15 +25,15 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:4ce3be4c14074c8bfaf6475758c8be1990975724c058c5539d7a9ec9d2321632"
+  "services/api/actions/": "sha256:7bc9bd627c6de3dd6351e10f2eb2fff02dd057cbd42f3e6a9f8f5d98d396b250"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
   "services/api/graph/": "sha256:a6731cc3742863724966de3087f5217827ce5105853a193201a4a4f03828f4aa"
-  "services/api/identity/": "sha256:dd376d49d6a7255d9fe407151f7bf2816187c382139588b7731252fc079a0327"
+  "services/api/identity/": "sha256:de2aaab4cd87d9ff96c9b83d6b52afcc1250f4bc138cc1e93d96c79c618b1a72"
   "services/api/ingestion/": "sha256:c4d9da43a31bacace8c0b651c13fd1d5fe69b80c717196b1c86e057fe196c6eb"
-  "services/api/intelligence/": "sha256:849c922204d6b5cf43e4b9ed92e7582887fe6521379ba5dc1f91bc9b1e76ebb1"
+  "services/api/intelligence/": "sha256:86502ecc731d317c244fb7ebe3a1f55667559bd627b1b06e7f14fd385966872a"
   "services/api/journeys/": "sha256:9e1f8da265ef3387e5998162b59bdbf3001f6ce94f3a3330f2f91a4913130515"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -3649,7 +3649,7 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 
 ### Agent behavior read models
 
-- `GET /v1/agent/agents/{agent_ref}/behavior` — `agent:manage`, registry flag. Agent360 behavior read model rebuilt from the agent's Silver facts: usual tools and dispositions, features with sample sizes and confidence intervals, capabilities and competencies, preferences (only over observed, permitted alternatives), failure resolution, journey, influence graph and an observability envelope listing what Aether cannot see. It also composes owner-supplied sections: `identity` (recognition state, continuity, non-merge-eligible resolver claims and review items), `authority` (each value-moving action checked against the agent's active grants: `inside`, `outside` or `unknown`), `value` (agent-selected/executed/influenced totals per currency, `reported` until a rail confirms), `risk` (Risk360 signals, not findings), `trust` (kept separate from reputation) and `market` (per-merchant agent compatibility). Each section reports `available`, `partial` (the 1,000-fact read was capped) or `unavailable` with a reason. Agent refs are source-reported; this is not an identity resolution.
+- `GET /v1/agent/agents/{agent_ref}/behavior` — `agent:manage`, registry flag. Agent360 behavior read model rebuilt from the agent's Silver facts: usual tools and dispositions, features with sample sizes and confidence intervals, capabilities and competencies, preferences (only over observed, permitted alternatives), failure resolution, journey, influence graph and an observability envelope listing what Aether cannot see. It also composes owner-supplied sections: `identity` (recognition state, continuity, non-merge-eligible resolver claims, derived review items and queued `agent_continuity_candidate` reviews), `authority` (each value-moving action checked against the agent's active grants: `inside`, `outside` or `unknown`), `value` (agent-selected/executed/influenced totals per currency, `reported` until a rail confirms), `risk` (Risk360 signals, not findings), `trust` (kept separate from reputation) and `market` (per-merchant agent compatibility). Each section reports `available`, `partial` (the 1,000-fact read was capped) or `unavailable` with a reason. Agent refs are source-reported; this is not an identity resolution.
 - `GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}` — `agent:manage`, registry flag. One reconstructed DecisionEnvelope (open or closed, with missing parts listed), its evidence-association attribution, the nine responsibility roles, and a counterfactual labelled `counterfactual — not observed`. Returns 404 when the decision is not the named agent's or belongs to another tenant.
 
 ### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)

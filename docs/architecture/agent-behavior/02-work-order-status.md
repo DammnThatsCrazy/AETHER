@@ -26,7 +26,7 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 |---|---|---|---|
 | WO-000 – WO-002 baseline, ADRs, golden scenarios | Built | `docs/architecture/agent-behavior/`, `docs/architecture/decisions/agent-behavior/`, `tests/fixtures/agent_behavior/` | `test_agent_behavior_golden_scenarios.py` |
 | WO-010 ActorRef | Built | `services/api/identity/identity/actor_ref.py` | `test_agent_behavior_foundation.py` |
-| WO-011 – WO-013 agent identity, continuity, resolution claims | Built. Validated agents are registered as unresolved source identities by the identity ingestion worker; continuity review items appear in Agent 360 but are not yet queued for review | `identity/identity/agent_identity.py` | same |
+| WO-011 – WO-013 agent identity, continuity, resolution claims | Built. Validated agents are registered as unresolved source identities by the identity ingestion worker; one agent ref reported by several deployments queues an `agent_continuity_candidate` review shown in Agent 360 | `identity/identity/agent_identity.py` | same |
 | WO-020 authority boundary | Built | `actions/delegation/authority_boundary.py` | `test_agent_behavior_authority.py` |
 | WO-021 delegation and lineage edges | Built. Spawn/delegation edges come from Silver; the human→agent grant edge is the delegation authority's existing `DELEGATES` edge (no duplicate edge type) | `ingestion/silver/projectors/silver_graph_projector.py` | golden test (edges marked current and pending) |
 | WO-022 – WO-023 responsibility roles, influence | Built | `intelligence/agent_behavior/responsibility.py` | `test_agent_behavior_authority.py` |
@@ -58,7 +58,7 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 
 ## Open items
 
-1. **Continuity review queue.** Validated agents are registered as source identities at ingestion. Continuity review items are shown in Agent 360 but not yet written to the identity pending-review queue.
+1. **Continuity review decisions.** Agent continuity items are queued and visible in Agent 360, but there is no approve or reject action for them yet. The existing late-binding approve and merge routes deliberately cannot load them.
 2. **Pipeline wiring.** Value, Risk and Trust are composed into the Agent 360 read model. No Value 360 provider or Risk360 pipeline run consumes them yet, and Noesis has no behavior intent.
 3. **Persistence.** Behavior models, snapshots and DecisionEnvelopes are rebuilt on read from at most 1,000 recent facts per agent. Longer histories need a stored, replayable projection. That decision goes through the projection registry.
 4. **Access Kit.** See WO-123 above.

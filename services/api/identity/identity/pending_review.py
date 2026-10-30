@@ -66,6 +66,11 @@ class _PendingIdentityReviewStore(BaseRepository):
         return result is not None
 
 
+#: Review entry kinds. ``agent_continuity_candidate``: one agent ref reported
+#: by several validated deployments (WO-013); review context only, no merge.
+ENTRY_TYPES = frozenset({"late_binding_candidate", "agent_continuity_candidate"})
+
+
 class PendingIdentityReviewRepository:
     """Persist unresolved SDK-to-import candidate decisions idempotently.
 
@@ -99,7 +104,10 @@ class PendingIdentityReviewRepository:
         candidate_source_identity_ids: list[str],
         reason_codes: list[str],
         evidence: list[dict[str, Any]],
+        entry_type: str = "late_binding_candidate",
     ) -> dict[str, Any]:
+        if entry_type not in ENTRY_TYPES:
+            raise ValueError(f"unknown pending review entry type {entry_type!r}")
         candidates = sorted({str(value) for value in candidate_source_identity_ids if value})
         if not tenant_id or not identify_source_identity_id or not candidates:
             raise ValueError("tenant, identify source, and candidate references are required")
@@ -144,7 +152,7 @@ class PendingIdentityReviewRepository:
         row = {
             "id": record_id,
             "tenant_id": tenant_id,
-            "entry_type": "late_binding_candidate",
+            "entry_type": entry_type,
             "identify_source_identity_id": identify_source_identity_id,
             "candidate_source_identity_ids": candidates,
             "reason_codes": safe_reasons,
@@ -158,7 +166,9 @@ class PendingIdentityReviewRepository:
         }
         return await self._store.insert(record_id, row)
 
-    async def list_for_review(self, tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_for_review(
+        self, tenant_id: str, limit: int = 50, *, entry_type: str = "late_binding_candidate",
+    ) -> list[dict[str, Any]]:
         """Return tenant-owned candidates whose disposition still needs attention.
 
         An approval can outlive the request that started it. Keep its durable
@@ -166,7 +176,7 @@ class PendingIdentityReviewRepository:
         in-flight decision from one that can be safely retried.
         """
         rows = await self._store.find_many(
-            filters={"tenant_id": tenant_id, "entry_type": "late_binding_candidate"},
+            filters={"tenant_id": tenant_id, "entry_type": entry_type},
             limit=limit,
             sort_by="created_at",
             sort_order="desc",
@@ -181,9 +191,16 @@ class PendingIdentityReviewRepository:
         """Backward-compatible name for the tenant review queue query."""
         return await self.list_for_review(tenant_id, limit=limit)
 
-    async def get(self, tenant_id: str, record_id: str) -> dict[str, Any] | None:
+    async def get(
+        self, tenant_id: str, record_id: str, *, entry_type: str = "late_binding_candidate",
+    ) -> dict[str, Any] | None:
+        """One tenant item of ``entry_type``. The default keeps every existing
+        caller -- including approve/merge -- on late-binding candidates only, so
+        an agent continuity item can never be approved into a merge."""
         row = await self._store.find_by_id(record_id)
         if not row or row.get("tenant_id") != tenant_id:
+            return None
+        if row.get("entry_type", "late_binding_candidate") != entry_type:
             return None
         return row
 
