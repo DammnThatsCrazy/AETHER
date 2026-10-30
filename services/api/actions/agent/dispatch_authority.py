@@ -22,6 +22,7 @@ async def read_dispatch_authorization(
     try:
         evaluated = parse_instant_strict(decision.get("evaluated_at"))
         created = parse_instant_strict(dispatch.get("created_at"))
+        dispatched = parse_instant_strict(dispatch.get("dispatched_at")) if dispatch.get("dispatched_at") else created
     except (TypeError, ValueError):
         return None
     now = datetime.now(timezone.utc)
@@ -60,7 +61,9 @@ async def read_dispatch_authorization(
         }
         or (dispatch.get("dispatch_requires_elevation") is True
             and not dispatch.get("dispatch_approval_id"))
-        or evaluated > created
+        # A recoverable authorization-persistence retry can evaluate policy
+        # after the reservation was created. It must still precede delivery.
+        or evaluated > dispatched
         or created > now
     ):
         return None

@@ -129,6 +129,62 @@ async def test_dispatch_policy_uses_tenant_permission_and_binds_denial_to_durabl
     assert policy["context"]["target_type"] == row["target_type"] == "test"
 
 
+@pytest.mark.parametrize("failure", ["policy persistence", "audit persistence"])
+async def test_dispatch_authorization_persistence_failure_can_retry_without_duplicate_delivery(monkeypatch, failure):
+    from governance.security import policy_engine as policy_engine_module
+
+    target = _Target()
+    monkeypatch.setattr(routes._action_targets, "get", lambda _name: target)
+    monkeypatch.setattr(routes, "_load_dispatch_context", lambda _tenant, action_id: _async_context(action_id))
+    await routes._actions.insert("action-1", {
+        "action_id": "action-1", "tenant_id": "tenant-a", "decision_id": "decision-1",
+        "action_type": "review", "status": "planned",
+    })
+    calls = 0
+    if failure == "policy persistence":
+        from governance.security.repositories import PolicyDecisionRepository
+        original_write = PolicyDecisionRepository.insert
+
+        async def fail_policy_once(repository, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("policy persistence unavailable")
+            return await original_write(repository, *args, **kwargs)
+
+        monkeypatch.setattr(PolicyDecisionRepository, "insert", fail_policy_once)
+    else:
+        audit_ledger = policy_engine_module.audit_ledger
+        original_write = audit_ledger.record
+
+        async def fail_audit_once(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("audit persistence unavailable")
+            return await original_write(*args, **kwargs)
+
+        monkeypatch.setattr(audit_ledger, "record", fail_audit_once)
+    body = routes.DispatchActionRequest(target_type="test", idempotency_key="retry-key")
+    with pytest.raises(RuntimeError, match="unavailable"):
+        await routes._dispatch_action("action-1", body, _request("tenant-a"))
+    reserved = (await routes._dispatches.find_many(
+        {"tenant_id": "tenant-a", "action_id": "action-1", "idempotency_key": "retry-key"}, limit=1
+    ))[0]
+    assert reserved["status"] == "authorization_pending"
+    assert target.calls == 0
+
+    result = await routes._dispatch_action("action-1", body, _request("tenant-a"))
+    assert result["data"]["dispatch"]["dispatch_id"] == reserved["dispatch_id"]
+    assert result["data"]["dispatch"]["status"] == "delivered"
+    assert target.calls == 1
+    assert calls == 2
+
+    replay = await routes._dispatch_action("action-1", body, _request("tenant-a"))
+    assert replay["data"]["replayed"] is True
+    assert target.calls == 1
+
+
 async def test_missing_connector_keeps_auditable_plan_without_delivery_claim(monkeypatch):
     target = routes._action_targets.get("agent_assist")
     monkeypatch.setattr(routes._action_targets, "get", lambda _name: target)

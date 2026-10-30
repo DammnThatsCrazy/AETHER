@@ -1247,11 +1247,13 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     # concurrent request therefore observes the durable queued plan and cannot
     # produce a second external side effect.
     if body.idempotency_key:
+        reservation_data = dispatch.model_dump()
+        reservation_data["status"] = "authorization_pending"
         saved_dispatch, created = await _dispatches.reserve(
             tenant.tenant_id,
             action_id,
             body.idempotency_key,
-            dispatch.model_dump(),
+            reservation_data,
         )
         if not created:
             if saved_dispatch.get("journey_action_association") != journey_association:
@@ -1262,26 +1264,56 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
                 raise ConflictError("Idempotent dispatch has a different risk association")
             from actions.agent.dispatch_authority import read_dispatch_authorization
             if (saved_dispatch.get("dispatch_actor_id") != principal_id
-                    or await read_dispatch_authorization(
-                        tenant_id=tenant.tenant_id, action_id=action_id, dispatch=saved_dispatch,
-                    ) is None):
+                    or (saved_dispatch.get("status") != "authorization_pending"
+                        and await read_dispatch_authorization(
+                            tenant_id=tenant.tenant_id, action_id=action_id, dispatch=saved_dispatch,
+                        ) is None)):
                 from shared.common.common import ConflictError
                 raise ConflictError("Idempotent dispatch authority does not match this actor or context")
-            receipts = await _delivery_receipts.find_many(
-                {"dispatch_id": saved_dispatch.get("dispatch_id")}, limit=1
-            )
-            return APIResponse(data={
-                "dispatch": saved_dispatch,
-                "receipt": receipts[0] if receipts else None,
-                "replayed": True,
-            }).to_dict()
+            if saved_dispatch.get("status") == "authorization_pending":
+                if not await _dispatches.claim_authorization(saved_dispatch["dispatch_id"]):
+                    from shared.common.common import ConflictError
+                    raise ConflictError("Idempotent dispatch authorization is already in progress")
+                # Reuse the reserved dispatch identity and its exact policy binding.
+                dispatch = ActionDispatch(**{**saved_dispatch, "status": "queued"})
+                dispatch_id = dispatch.dispatch_id
+                dispatch_policy = await policy_engine.check_action_dispatch(
+                    actor_id=principal_id, actor_type='tenant_user',
+                    tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
+                    has_dispatch_permission=dispatch_permission, dispatch_id=dispatch.dispatch_id,
+                    target_type=dispatch.target_type, selected_action_key=dispatch.dispatch_action_key,
+                    selected_action_type=dispatch.dispatch_action_type,
+                    association_record_id=(journey_association or risk_association or {}).get("record_id"),
+                    is_elevated=dispatch.dispatch_requires_elevation,
+                    approval_id=dispatch.dispatch_approval_id, persist=False,
+                )
+                dispatch_policy.decision_id = dispatch.dispatch_policy_decision_id
+            else:
+                receipts = await _delivery_receipts.find_many(
+                    {"dispatch_id": saved_dispatch.get("dispatch_id")}, limit=1
+                )
+                return APIResponse(data={
+                    "dispatch": saved_dispatch,
+                    "receipt": receipts[0] if receipts else None,
+                    "replayed": True,
+                }).to_dict()
+        elif not await _dispatches.claim_authorization(saved_dispatch["dispatch_id"]):
+            from shared.common.common import ConflictError
+            raise ConflictError("Dispatch authorization could not be claimed")
     else:
         saved_dispatch = await _dispatches.insert(dispatch.dispatch_id, dispatch.model_dump())
 
-    await policy_engine.persist_action_dispatch_decision(dispatch_policy)
+    try:
+        await policy_engine.persist_action_dispatch_decision(dispatch_policy)
+    except Exception:
+        await _dispatches.update(dispatch.dispatch_id, {
+            "status": "authorization_pending", "updated_at": utc_now().isoformat(),
+        })
+        raise
     dispatch.dispatch_policy_decision_id = dispatch_policy.decision_id
     saved_dispatch = await _dispatches.update(dispatch_id, {
-        **({"status": "failed", "error": dispatch_policy.reason} if not dispatch_policy.allowed else {}),
+        "status": "queued" if dispatch_policy.allowed else "failed",
+        **({"error": dispatch_policy.reason} if not dispatch_policy.allowed else {}),
     })
     if not dispatch_policy.allowed:
         raise BadRequestError(dispatch_policy.reason)
