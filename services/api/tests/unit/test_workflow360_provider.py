@@ -2002,6 +2002,12 @@ async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
             "execution_id": execution["execution_id"],
             "called_at": "2026-10-18T10:00:01Z",
             "idempotency_key": "tool-call-event-a",
+            "action": "delete",
+            "resource_id": "foreign-resource",
+            "policy_decision": {"allowed": True, "action": "delete"},
+            "tool_result": {"status": "succeeded"},
+            "resource_operation": {"status": "succeeded"},
+            "external_effect": "confirmed",
         },
     )
 
@@ -2038,6 +2044,31 @@ async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
     assert read.rows[0]["evidence_ref"]["source"] == "graph_edges"
     assert read.rows[0]["tool_evidence_ref"]["id"] == f"{TENANT_A}:tool:tool-a"
     assert read.rows[0]["tool_evidence_ref"]["source"] == "graph_vertices"
+
+
+@pytest.mark.asyncio
+async def test_repository_source_marks_truncated_action_edge_scan_incomplete(monkeypatch) -> None:
+    import shared.graph.graph as graph_module
+
+    class TruncatedGraph:
+        async def get_edges_for_tenant(self, tenant_id: str, *, limit: int, edge_types: list[Any]):
+            assert tenant_id == TENANT_A
+            assert edge_types == [graph_module.EdgeType.CALLED_TOOL]
+            return [], True
+
+    monkeypatch.setattr(graph_module, "GraphClient", TruncatedGraph)
+    read = await RepositoryWorkflow360Source().run_execution_actions(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(_agent_execution_row(),),
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.rows == ()
+    assert read.complete is False
+    assert read.scope_mismatch is False
+    assert read.reason == "canonical_workflow_action_graph_read_truncated"
 
 
 @pytest.mark.asyncio
@@ -2168,6 +2199,10 @@ async def test_workflow_actions_project_observed_calls_without_inference() -> No
         "call_observed_external_effect_unknown"
     )
     assert actions.content["actions"][0]["toolIdentityState"] == "resolved"
+    assert actions.content["actions"][0]["executionResult"] == {"state": "unknown"}
+    assert actions.content["actions"][0]["approvedResource"] == {"state": "unknown"}
+    assert actions.content["actions"][0]["authorityDecision"] == "not_established_by_tool_call_edge"
+    assert actions.content["actions"][0]["approvedResource"].get("resourceOperation", "unknown") == "unknown"
     assert actions.canonicalAuthorityRefs == ["agent_executions", "graph_edges", "tools"]
     claim = next(claim for claim in result.claims if "actions" in claim.domainSlotIds)
     assert claim.claimState == EpistemicStatus.OBSERVED

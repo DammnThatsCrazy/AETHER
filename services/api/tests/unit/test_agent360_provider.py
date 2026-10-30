@@ -1891,6 +1891,66 @@ async def test_agent360_does_not_treat_action_or_resource_policy_rows_as_invoke_
 
 
 @pytest.mark.asyncio
+async def test_agent360_tool_observation_and_incomplete_policy_history_keep_action_authority_unknown():
+    class ObservedToolAndIncompletePolicySource(FakeSource):
+        async def tools(self, tenant_id, agent_id, limit):
+            return [{
+                "tenant_id": tenant_id,
+                "agent_id": agent_id,
+                "invocation_id": "observed-call-1",
+                "tool_name": "search",
+                "status": "succeeded",
+                "result": {"resourceOperation": "delete_succeeded"},
+                "execution_by_aether": False,
+            }]
+
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "policy-for-other-subject",
+                "tenant_id": tenant_id,
+                "policy_key": "capability.invoke",
+                "actor_type": "tenant_user",
+                "resource_type": "capability",
+                "resource_id": "capability-search",
+                "action": "invoke",
+                "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {
+                    "agent_id": "different-agent",
+                    "capability_id": "capability-search",
+                    "capability_grant_record_id": "capability-grant-1",
+                    "capability_observed": True,
+                },
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = False
+            return batch
+
+    result = await Agent360Provider(ObservedToolAndIncompletePolicySource()).project(
+        _request(), _context()
+    )
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    profile = authority["capabilityAccessProfile"]
+
+    assert profile["actionResourceAuthority"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["effectiveToolAuthorization"] == "unknown"
+    assert profile["actionResourceAuthority"]["actions"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["resources"]["state"] == "unknown"
+    assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert all(
+        not capability["invokePolicyEvaluations"]
+        and capability["toolIdentity"]["effectiveToolAuthorization"] == "unknown"
+        for capability in profile["capabilities"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_agent360_resolves_configured_owner_without_delegation_records():
     class OwnerOnlySource(FakeSource):
         async def incoming_delegations(self, tenant_id, canonical_agent_entity_id, limit):
