@@ -1093,7 +1093,12 @@ observed MCP calls and do not establish current authorization. A dedicated
 authenticated resource-read route now performs exact MCP reads under a dedicated
 read grant and records invocation-bound receipts with provider result digests
 for successful reads. Mutation authority and external effects remain unknown;
-the receipt does not prove either. The capability slot remains partial.
+the receipt does not prove either. Valid exact resource-read grants are checked
+without degrading invoke-grant coverage. Invocation responses use JSON-RPC 2.0
+messages whose IDs exactly match the request, including initialization and
+resource list/read calls over JSON or Streamable HTTP SSE; unrelated stream
+messages are ignored, and ambiguous or missing matches fail closed. The
+capability slot remains partial.
 also requires one resolved tenant-owned canonical Agent before reading
 source-asserted inbox/message observations into its communications slot.
 Claims cite the exact identity, inbox, and message evidence; the read does

@@ -42,6 +42,14 @@ available, with `planned: true` and `external_side_effect: false` in the
 response. Connector failures remain durable and retryable rather than silently
 creating a second dispatch. See [ADR-001](adr-001-canonical-delivery-pipeline.md).
 
+For authorization, a new idempotent reservation remains
+`authorization_pending` until its policy decision is persisted. A single
+atomic `authorizing` claim prevents concurrent retries from repeating the
+authorization work. If policy or audit persistence fails, the same reservation
+returns to the pending state; a later retry can persist authorization and
+deliver using the original dispatch ID. No connector call occurs before that
+persistence succeeds.
+
 Journey360 and Risk360 read worker delivery evidence through the canonical
 intent → job → provider receipt → external-resource link chain. A receipt on
 the intelligence dispatch endpoint is not itself that worker-chain evidence.

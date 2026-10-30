@@ -22,6 +22,13 @@ source_files:
   - services/api/alembic/versions/20261022_execution_approval_decisions.py
   - services/api/alembic/versions/20261022_risk_poisoning_evidence.py
   - services/api/alembic/versions/20261024_risk_intervention_records.py
+  - services/api/alembic/versions/20261030_agent_invocation_receipts.py
+  - services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py
+  - services/api/alembic/versions/20261030_merge_authority_heads.py
+  - services/api/actions/agent/invocation_runtime.py
+  - services/api/intelligence/model_governance/evaluations.py
+  - services/api/value/economic/attribution_model_validation.py
+  - config/storage_policies.yaml
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
@@ -475,6 +482,15 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
   `{tenant}:fleet_hyp:{hash}`. Each record carries a `revision`; every write
   after the first is a compare-and-set on it (the first is insert-if-absent), so
   concurrent reviews and rebuilds cannot overwrite one another.
+
+The invocation claim and completion-receipt tables use PostgreSQL as their
+authoritative and metadata store, with legal retention and `preserve` deletion
+behavior; adaptive materialization and object externalization are disabled.
+Model-governance evaluation reads decode both JSONB `metrics` and `sample_refs`
+when returned in encoded form. Value-model approval inserts conflict on the
+migration's `decision_id` primary key. The invocation and governance migration
+heads are joined by `20261030_merge_authority_heads`; it adds no schema of its
+own.
 
 These migrations are authored in the branch; this page does not claim they
 have been applied.

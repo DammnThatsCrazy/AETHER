@@ -44,7 +44,10 @@ durable dispatch. A successful record is bound to its dispatch ID, tenant,
 authenticated principal, selected action, target, elevation and approval
 context, and Journey or Risk association record. Journey360 and Risk360 rejoin
 and validate those exact fields, as well as requiring policy evaluation to
-precede dispatch creation. This records the application permission decision; it
+precede delivery. For idempotent dispatches, an `authorization_pending`
+reservation is claimed atomically before policy persistence. A persistence
+failure returns it to the retryable pending state, preserving the dispatch ID;
+only the successful claimant can proceed to delivery. This records the application permission decision; it
 does not prove event-time authority, connector execution, or an external effect.
 
 ## Graph relationships

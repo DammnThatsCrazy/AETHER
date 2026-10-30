@@ -55,6 +55,14 @@ existing durable dispatch and latest receipt with `replayed: true`; it does not
 invoke a connector a second time, and the same key on another action or tenant
 does not alias the reservation.
 
+An idempotent reservation starts as `authorization_pending`. One request
+atomically claims it as `authorizing` before persisting the `action.dispatch`
+policy decision. If policy or audit decision persistence fails, the reservation
+returns to `authorization_pending`; a later retry can complete authorization
+using the same dispatch ID. The target is not called until authorization
+persistence succeeds, and concurrent retries cannot claim the reservation or
+cause a second connector call.
+
 Optional Journey intent or Risk intervention references are validated before a
 new dispatch and retained on its reservation. Reusing a key cannot rebind that
 reservation. Risk association currently supports exact entity subjects only;

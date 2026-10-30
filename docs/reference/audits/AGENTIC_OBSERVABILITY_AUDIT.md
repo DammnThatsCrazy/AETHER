@@ -306,6 +306,11 @@ still reports approved-resource read availability, completeness, and
 truncation. It exposes validated run-bound provider receipts separately from
 observed action edges; an edge without an exact receipt link retains unknown
 execution-receipt authority.
+The invocation client accepts JSON and Streamable HTTP SSE replies only when
+exactly one JSON-RPC 2.0 response matches the expected request ID. This check
+also applies to initialization and resource list/read exchanges; unrelated SSE
+messages cannot be mistaken for the provider result. Valid resource-read grants
+are checked in the canonical grant set but do not count as invoke-grant coverage.
 Workflow definition-to-run linkage, complete actor and step coverage,
 workflow-wide approval authority, policy, and freshness remain unknown.
 Workflow360 `triggers` now

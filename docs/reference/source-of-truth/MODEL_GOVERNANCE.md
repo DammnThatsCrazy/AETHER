@@ -66,6 +66,15 @@ writer requires the authenticated inference actor to match the actor on that
 exact tenant-scoped policy decision. This binds the output to its recorded
 inference request; it does not verify model calibration or observed outcomes.
 
+For Profile360 outcome adjudication, the Silver ingestion worker selects the
+server-owned adjudication policy version. The truth recorder resolves the exact
+tenant prediction and verifies its persisted inference-policy evidence before
+recording an outcome claim. Event properties cannot supply an allowed policy
+state, and an outcome observation remains a derived claim rather than proof of
+prediction correctness. PostgreSQL readers decode both `metrics` and
+`sample_refs` when those JSONB values arrive as encoded strings; evaluation
+sample references remain persisted provenance for the recorded evaluation.
+
 Required serving purposes are resolved from the ML registry governance metadata
 (`ModelEntry.required_inference_purposes` — the serving scope, distinct from the
 training scope `ModelEntry.allowed_training_purposes`) via

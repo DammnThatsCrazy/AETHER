@@ -258,6 +258,13 @@ an entity and re-stamps `canonical_entity_id` and `identity_aliases`. This is
 an operator action; it does not re-invoke `POST /v1/batch`.
 ## Canonical validation boundary
 
+The Silver outcome worker may submit canonical outcome facts for Profile360
+adjudication. It supplies the server-owned policy version; the truth recorder
+re-reads the exact prediction and verifies persisted inference-policy evidence
+before recording a derived claim. Caller event fields cannot authorize
+adjudication. A recorded claim does not by itself establish predicted-state
+correctness.
+
 Both the legacy and transactional-outbox batch branches call
 `services/api/ingestion/ingestion/validation.py` before any Bronze write or downstream
 publish. The shared result owns schema/type validation, execution-claim
