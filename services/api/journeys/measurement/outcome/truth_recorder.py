@@ -30,6 +30,11 @@ from shared.backend_interpretation.stores import OutcomeTruthStore
 
 logger = logging.getLogger("aether.outcome.truth_recorder")
 
+# Version of the server-owned rule that admits Profile state adjudication.
+# This is intentionally independent of caller/event properties and the
+# inference consent policy version recorded on a prediction.
+PROFILE_OUTCOME_ADJUDICATION_POLICY_VERSION = "profile-outcome-adjudication.v1"
+
 # Outcome event types -> outcome-truth state (finality ladder values; matches
 # the measurement Outcome contract vocabulary, no second enum).
 _STATE_BY_OUTCOME_TYPE: dict[str, str] = {
@@ -129,9 +134,10 @@ async def record_from_silver_outcome(
     prediction_id = row.get("prediction_id")
     label_contract = row.get("prediction_label_contract_version")
     claim_type = "derived"
-    # A contract string is only a declaration. Admit it as adjudication truth
-    # only when the exact persisted prediction, subject, outcome event, and
-    # closed prediction horizon all bind. Otherwise preserve it as derived.
+    # A contract string is only a declaration. Re-evaluate the exact persisted
+    # prediction, its server-side inference policy evidence, subject, outcome
+    # event, and closed prediction horizon here. Never trust a policy-state
+    # assertion from the producer or projected event.
     try:
         from intelligence.model_governance.evaluations import (
             PROFILE_LABEL_CONTRACT, PROFILE_OUTCOME_TO_STATE,
@@ -151,7 +157,7 @@ async def record_from_silver_outcome(
         occurred_at = parse_instant_strict(row.get("occurred_at"))
         generated_at = prediction.generated_at.astimezone(timezone.utc) if prediction else None
         valid_until = prediction.valid_until.astimezone(timezone.utc) if prediction else None
-        if (
+        policy_state = "allowed" if (
             prediction is not None
             and prediction.tenant_id == tenant_id
             and subject is not None
@@ -167,9 +173,10 @@ async def record_from_silver_outcome(
             and row.get("source_event_type") == outcome_type
             and occurred_at is not None and generated_at is not None and valid_until is not None
             and generated_at <= occurred_at <= valid_until
-            and row.get("adjudication_policy_state") == "allowed"
-            and isinstance(policy_version, str) and bool(policy_version.strip())
-        ):
+            and policy_version == PROFILE_OUTCOME_ADJUDICATION_POLICY_VERSION
+            and await _verify_profile_outcome_policy(prediction)
+        ) else "denied"
+        if policy_state == "allowed":
             claim_type = "observed"
     except (ImportError, TypeError, ValueError, AttributeError):
         pass
@@ -201,6 +208,16 @@ async def record_from_silver_outcome(
     return await persist_outcome_truth(record, store=store)
 
 
+async def _verify_profile_outcome_policy(prediction: Any) -> bool:
+    """Recheck the persisted prediction's server-owned inference decision."""
+    try:
+        from identity.profile.prediction_authority import verify_prediction_policy_evidence
+
+        return await verify_prediction_policy_evidence(prediction) is True
+    except Exception:  # noqa: BLE001 - unavailable authority fails closed
+        return False
+
+
 def _safe_str(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -222,4 +239,8 @@ def _to_evidence_list(refs: list[dict[str, Any]]) -> list[Any]:
     ]
 
 
-__all__ = ["persist_outcome_truth", "record_from_silver_outcome"]
+__all__ = [
+    "PROFILE_OUTCOME_ADJUDICATION_POLICY_VERSION",
+    "persist_outcome_truth",
+    "record_from_silver_outcome",
+]
