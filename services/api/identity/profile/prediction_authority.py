@@ -372,6 +372,7 @@ async def record_eligible_profile_prediction(
     *,
     tenant_id: str,
     requested_subject_id: str,
+    actor_id: str,
     model_id: str,
     feature_digest: Optional[str],
     feature_schema_hash: Optional[str],
@@ -394,7 +395,7 @@ async def record_eligible_profile_prediction(
     def skip(reason: str) -> ProfilePredictionWrite:
         return ProfilePredictionWrite(output=None, stored=False, reason=reason)
 
-    if not tenant_id.strip() or not requested_subject_id.strip():
+    if not tenant_id.strip() or not requested_subject_id.strip() or not actor_id.strip():
         return skip("prediction_tenant_or_subject_missing")
     if not isinstance(model_result, dict):
         return skip("prediction_model_result_not_object")
@@ -515,9 +516,9 @@ async def record_eligible_profile_prediction(
         or policy_decision.get("resource_type") != "ml_model"
         or policy_decision.get("resource_id") != model_id
         or policy_decision.get("subject_ref") != requested_subject_id
+        or policy_decision.get("actor_id") != actor_id
         or policy_decision.get("allowed") is not True
         or policy_decision.get("consent_policy_version") != policy_version
-        or not str(policy_decision.get("actor_id") or "").strip()
     ):
         return skip("prediction_policy_decision_scope_or_version_invalid")
 
@@ -651,7 +652,7 @@ async def record_eligible_profile_prediction(
             state_schema_version=PROFILE_FUTURE_STATE_SCHEMA_VERSION,
             policy_decision_id=policy_decision_id,
             policy_version=policy_version,
-            actor_id=str(policy_decision["actor_id"]),
+            actor_id=actor_id,
             generated_at=generated_at,
             valid_from=valid_from,
             valid_until=valid_until,

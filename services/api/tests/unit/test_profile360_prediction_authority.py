@@ -108,6 +108,7 @@ async def test_prediction_writer_skips_scores_without_explicit_future_state():
     result = await record_eligible_profile_prediction(
         tenant_id=TENANT,
         requested_subject_id=ENTITY,
+        actor_id="actor-1",
         model_id="churn_prediction",
         feature_digest="0123456789abcdef",
         feature_schema_hash="schema-hash-v1",
@@ -182,6 +183,7 @@ async def test_prediction_writer_records_only_exact_policy_artifact_and_event_ev
     result = await record_eligible_profile_prediction(
         tenant_id=TENANT,
         requested_subject_id=ENTITY,
+        actor_id="actor-1",
         model_id="churn_prediction",
         feature_digest="0123456789abcdef",
         feature_schema_hash="schema-hash-v1",
@@ -219,6 +221,40 @@ async def test_prediction_writer_records_only_exact_policy_artifact_and_event_ev
         "cpd-1",
         "churn_prediction@v-production-2:" + "a" * 64,
     }
+
+    mismatched_actor = await record_eligible_profile_prediction(
+        tenant_id=TENANT,
+        requested_subject_id=ENTITY,
+        actor_id="different-actor",
+        model_id="churn_prediction",
+        feature_digest="0123456789abcdef",
+        feature_schema_hash="schema-hash-v1",
+        policy_decision_id="cpd-1",
+        policy_version="consent-v2",
+        policy_allowed=True,
+        model_result={
+            "artifact_version": "v-production-2",
+            "artifact_checksum_sha256": "a" * 64,
+            "state_schema_version": "profile_future_state.v1",
+            "likely_next_states": [{"state": "at_risk", "probability": 0.73, "rank": 1}],
+            "valid_from": (NOW - timedelta(minutes=1)).isoformat(),
+            "valid_until": (NOW + timedelta(hours=1)).isoformat(),
+            "evidence_refs": [
+                {"type": "event", "source": "analytics_events", "id": "event-1"}
+            ],
+        },
+        cache="cache",
+        repository=repository,
+        artifact_resolver=lambda model, version: SimpleNamespace(
+            model_id=model,
+            artifact_version=version,
+            feature_schema_hash="schema-hash-v1",
+            checksum_sha256="a" * 64,
+            created_at=NOW.isoformat(),
+        ),
+    )
+    assert mismatched_actor.stored is False
+    assert mismatched_actor.reason == "prediction_policy_decision_scope_or_version_invalid"
 
 
 @pytest.mark.asyncio

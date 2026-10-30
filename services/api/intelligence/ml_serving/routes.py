@@ -424,12 +424,12 @@ async def predict(
     # 0. Model-governance inference policy gate (§3.9).
     #    Always records a serve_inference consent evidence decision; blocks only
     #    under enforcement (ML_INFERENCE_POLICY_ENFORCE or a fail-closed model).
+    inference_actor_id = getattr(tenant, "user_id", None) or tenant.tenant_id
     try:
         from intelligence.model_governance import inference_policy_gate
-        actor_id = getattr(tenant, "user_id", None) or tenant.tenant_id
         gate = await inference_policy_gate.evaluate(
             tenant_id=tenant.tenant_id,
-            actor_id=actor_id,
+            actor_id=inference_actor_id,
             model_id=canonical_id,
             granted_purposes=body.consent_purposes,
             subject_ref=body.entity_id,
@@ -569,6 +569,7 @@ async def predict(
                 persisted = await record_eligible_profile_prediction(
                     tenant_id=tenant.tenant_id,
                     requested_subject_id=body.entity_id,
+                    actor_id=inference_actor_id,
                     model_id=canonical_id,
                     feature_digest=envelope.get("feature_digest"),
                     feature_schema_hash=envelope.get("feature_schema_hash"),
