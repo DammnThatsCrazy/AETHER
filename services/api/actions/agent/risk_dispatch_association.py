@@ -111,6 +111,10 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
             )
             if dispatch_authorization is None:
                 return [], False
+            authorization_at = parse_instant_strict(dispatch_authorization.get("evaluated_at"))
+            risk_decision_at = max(record.recorded_at, record.observed_at, record.effective_at)
+            if authorization_at < risk_decision_at:
+                return [], False
             evidence, delivery_complete = await (delivery_evidence_reader or read_action_delivery_evidence)(
                 tenant_id=tenant_id, dispatch=row,
             )

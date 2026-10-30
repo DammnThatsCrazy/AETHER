@@ -99,9 +99,13 @@ can expose an exact caller-associated agent lifecycle request after slot policy.
 The request can include its matching, tenant-scoped, time-checked recorded delegation decision;
 current authorization, dispatch and external effect remain unverified. Journey360
 and Risk360 dispatch reads also require the persisted tenant `action.dispatch`
-policy decision for the exact action before dispatch creation. Connector
-execution, external effect, independent outcome verification, and full dispatch
-coverage remain unknown. Workflow approval decisions can
+policy decision for the exact action before dispatch creation. Risk360 also
+rejects a permission decision evaluated before the associated risk decision's
+recorded, observed, or effective time. These dispatch associations are
+caller-supplied links; the permission record is not a canonical producer for
+tool results or resource operations. Connector execution, external effect,
+independent outcome verification, complete dispatch producer coverage, and
+freshness remain unknown. Workflow approval decisions can
 carry a recorded human permission check and the matching request-time agent
 delegation decision joined to its current grant. Workflow-wide coverage,
 historical policy replay, and current authorization remain unknown.

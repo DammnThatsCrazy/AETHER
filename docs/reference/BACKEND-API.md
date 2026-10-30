@@ -2312,6 +2312,8 @@ It also requires the persisted tenant action-dispatch policy decision to be
 allowed for this exact dispatch, tenant, authenticated principal, selected
 action, target, elevation/approval context, and association record, with policy
 evaluation no later than dispatch creation.
+The Risk decision must also be recorded, observed, and effective by the
+authorization evaluation time.
 Current-decision validation rejects out-of-scope or future-observed or recorded
 history, and invalid decisions cannot yield a complete empty dispatch read.
 The persisted dispatch check records the tenant dispatch permission and approved

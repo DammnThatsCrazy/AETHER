@@ -135,8 +135,10 @@ the authenticated principal's tenant `dispatch` permission check. Journey360
 and Risk360 require that decision to match the dispatch ID, tenant, principal,
 selected action, target, elevation/approval context, association, allowed
 result, and dispatch time before treating the dispatch chain as complete. This
-records an application permission decision; it does not establish event-time
-authority, connector execution, or an external effect.
+For Risk360, the authorization evaluation must also be no earlier than the
+associated risk decision's recorded, observed, and effective times. These
+records establish an application permission decision, not event-time authority,
+connector execution, or an external effect.
 Risk decision-history validation rejects out-of-scope or future-observed or
 future-recorded rows and requires the current approved intervention type to match
 the associated action. Invalid decision records do not produce a complete empty

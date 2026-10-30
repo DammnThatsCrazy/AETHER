@@ -84,6 +84,10 @@ async def test_reader_validates_exact_joins_and_fails_closed():
     assert rows[0]["connectorReceiptRead"] == "unknown"
     assert rows[0]["connectorReceiptReason"] == "action_delivery_evidence_missing"
     assert rows[0]["dispatchAuthorization"]["decision_id"] == "policy"
+    original_evaluated_at = policy_decision["evaluated_at"]
+    policy_decision["evaluated_at"] = (record.effective_at - timedelta(seconds=1)).isoformat()
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["evaluated_at"] = original_evaluated_at
     for field in ("recorded_at", "observed_at", "effective_at"):
         original = getattr(record, field)
         setattr(record, field, now + timedelta(seconds=1))
