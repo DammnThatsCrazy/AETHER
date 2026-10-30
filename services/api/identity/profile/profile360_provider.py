@@ -88,6 +88,8 @@ MAX_COMMUNICATION_LIMIT = 100
 MAX_SYNDICATE_MEMBERSHIPS = 100
 MAX_SYNDICATE_LEDGER_ROWS = 1_000
 MAX_PROFILE_PREDICTION_READ = 100
+MAX_PROFILE_REPORTED_OUTCOME_READ = 50
+PROFILE_OUTCOME_LABEL_CONTRACT_VERSION = "profile-outcome-labels.v1"
 
 
 @dataclass(frozen=True)
@@ -197,6 +199,18 @@ class PredictionOutputRead:
     available: bool
     scope_known: bool
     truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PredictionOutcomeRead:
+    """Bounded exact tenant/prediction/label-contract outcome read."""
+
+    rows: list[Any]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    invalid_records: bool = False
     reason: Optional[str] = None
 
 
@@ -340,6 +354,15 @@ class Profile360Source(Protocol):
         as_of: datetime,
         limit: int,
     ) -> PredictionOutputRead: ...
+
+    async def reported_outcomes_for_prediction(
+        self,
+        tenant_id: str,
+        prediction_id: str,
+        label_contract_version: str,
+        *,
+        limit: int,
+    ) -> PredictionOutcomeRead: ...
 
     async def subject_history(
         self,
@@ -986,6 +1009,56 @@ class RepositoryProfile360Source:
             available=True,
             scope_known=True,
             truncated=truncated,
+        )
+
+    async def reported_outcomes_for_prediction(
+        self,
+        tenant_id: str,
+        prediction_id: str,
+        label_contract_version: str,
+        *,
+        limit: int,
+    ) -> PredictionOutcomeRead:
+        """Read explicit outcome associations from canonical outcome truth."""
+        try:
+            from shared.backend_interpretation.flags import outcome_truth_store_enabled
+            from shared.backend_interpretation.stores import OutcomeTruthStore
+
+            if not outcome_truth_store_enabled():
+                return PredictionOutcomeRead(
+                    [], False, False, reason="outcome_truth_store_disabled"
+                )
+            rows, truncated, invalid_records = await OutcomeTruthStore().list_for_prediction(
+                tenant_id,
+                prediction_id,
+                label_contract_version,
+                limit=min(max(limit, 1), MAX_PROFILE_REPORTED_OUTCOME_READ),
+            )
+        except Exception as exc:  # noqa: BLE001 - canonical outcome read fails closed
+            return PredictionOutcomeRead(
+                [], False, False,
+                reason=f"profile_outcome_truth_authority_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_truth_invalid_response"
+            )
+        if any(
+            getattr(row, "tenant_id", None) != tenant_id
+            or getattr(row, "prediction_id", None) != prediction_id
+            or getattr(row, "prediction_label_contract_version", None)
+            != label_contract_version
+            for row in rows
+        ):
+            return PredictionOutcomeRead(
+                [], True, False, reason="profile_outcome_truth_scope_mismatch"
+            )
+        return PredictionOutcomeRead(
+            rows,
+            True,
+            True,
+            truncated=truncated,
+            invalid_records=invalid_records,
         )
 
     async def identity_binding(
@@ -2263,6 +2336,9 @@ class Profile360Provider:
 
         items: list[dict[str, Any]] = []
         claims: list[ClaimEnvelope] = []
+        outcome_read_incomplete = False
+        outcome_lookup_truncated = False
+        outcome_section_reason: Optional[str] = None
         for output in valid_outputs:
             artifact = artifact_approval_cache[(output.model_id, output.artifact_version)]
             metrics = getattr(artifact, "metrics", None)
@@ -2293,6 +2369,80 @@ class Profile360Provider:
                 observedAt=to_iso_utc(output.generated_at),
             )
             claim_refs = [output_ref, *evidence_refs]
+            outcome_read = await self._read_reported_outcomes(
+                request.tenantId,
+                output,
+                limit=MAX_PROFILE_REPORTED_OUTCOME_READ,
+            )
+            outcome_facts: list[dict[str, Any]] = []
+            outcome_invalid = outcome_read.invalid_records
+            ambiguous = len(outcome_read.rows) > 1
+            if outcome_read.available and outcome_read.scope_known and not (
+                outcome_read.truncated or ambiguous or outcome_invalid
+            ):
+                for outcome in outcome_read.rows:
+                    observed_raw = getattr(outcome, "observed_at", None)
+                    achieved_raw = getattr(outcome, "achieved_at", None)
+                    try:
+                        observed_at = parse_instant_strict(observed_raw)
+                        achieved_at = (
+                            parse_instant_strict(achieved_raw)
+                            if achieved_raw is not None else None
+                        )
+                    except (TypeError, ValueError):
+                        outcome_invalid = True
+                        continue
+                    if (
+                        outcome.tenant_id != request.tenantId
+                        or outcome.prediction_id != output.prediction_id
+                        or outcome.prediction_label_contract_version
+                        != PROFILE_OUTCOME_LABEL_CONTRACT_VERSION
+                        or getattr(outcome.subject, "kind", None) != "user"
+                        or getattr(outcome.subject, "id", None) != request.subject.id
+                        or observed_at > anchor
+                        or observed_at < output.generated_at
+                        or (achieved_at is not None and (
+                            achieved_at > anchor or achieved_at < output.generated_at
+                        ))
+                        or outcome.state == "superseded"
+                        or outcome.superseded_by is not None
+                    ):
+                        outcome_invalid = True
+                        continue
+                    outcome_facts.append({
+                        "outcomeId": outcome.outcome_id,
+                        "definitionRef": outcome.definition_ref,
+                        "state": outcome.state,
+                        "observedAt": to_iso_utc(observed_at),
+                        "achievedAt": to_iso_utc(achieved_at) if achieved_at else None,
+                        "claimType": outcome.claim_type,
+                        "evidenceRefs": [
+                            ref.model_dump(mode="json") for ref in outcome.evidence_refs
+                        ],
+                    })
+            if outcome_read.reason:
+                outcome_reason = outcome_read.reason
+            elif outcome_read.truncated:
+                outcome_reason = "profile_outcome_truth_read_truncated"
+            elif ambiguous:
+                outcome_reason = "profile_outcome_truth_ambiguous"
+            elif outcome_invalid:
+                outcome_reason = "profile_outcome_truth_records_invalid"
+            elif outcome_read.available and outcome_read.scope_known:
+                outcome_reason = None
+            else:
+                outcome_reason = "profile_outcome_truth_unavailable"
+            outcome_complete = (
+                outcome_read.available
+                and outcome_read.scope_known
+                and not outcome_read.truncated
+                and not ambiguous
+                and not outcome_invalid
+            )
+            outcome_read_incomplete = outcome_read_incomplete or not outcome_complete
+            outcome_lookup_truncated = outcome_lookup_truncated or outcome_read.truncated
+            if outcome_section_reason is None and outcome_reason is not None:
+                outcome_section_reason = outcome_reason
             item = {
                 "predictionId": output.prediction_id,
                 "states": [state.model_dump(mode="json") for state in output.states],
@@ -2327,6 +2477,18 @@ class Profile360Provider:
                 },
                 "evidenceRefs": [ref.model_dump(mode="json") for ref in claim_refs],
                 "epistemicStatus": EpistemicStatus.PREDICTED.value,
+                "reportedOutcomeAssociations": {
+                    "labelContractVersion": PROFILE_OUTCOME_LABEL_CONTRACT_VERSION,
+                    "facts": outcome_facts,
+                    "coverage": "bounded_exact_lookup" if outcome_complete else "partial_or_unknown",
+                    "complete": outcome_complete,
+                    "truncated": outcome_read.truncated,
+                    "producerCoverage": "unknown",
+                    "reasonCode": outcome_reason,
+                    "interpretation": (
+                        "Explicitly linked reported outcome facts; association does not establish prediction correctness."
+                    ),
+                },
             }
             items.append(item)
             claims.append(
@@ -2345,7 +2507,9 @@ class Profile360Provider:
                 )
             )
 
-        degraded = invalid_rows or stale_rows or source_read.truncated
+        degraded = (
+            invalid_rows or stale_rows or source_read.truncated or outcome_read_incomplete
+        )
         section = ProjectionSection(
             id=SLOT_LIKELY_NEXT_STATES,
             state="degraded" if degraded else "available",
@@ -2355,11 +2519,12 @@ class Profile360Provider:
                 "asOf": to_iso_utc(anchor),
                 "coverage": "partial" if degraded else "bounded_exact_subject",
                 "complete": not degraded,
-                "truncated": source_read.truncated,
+                "truncated": source_read.truncated or outcome_lookup_truncated,
                 "reasonCode": (
                     "profile_prediction_records_invalid" if invalid_rows
                     else "profile_prediction_outputs_stale" if stale_rows
                     else "profile_prediction_read_truncated" if source_read.truncated
+                    else outcome_section_reason if outcome_read_incomplete
                     else None
                 ),
                 "freshness": {
@@ -2374,9 +2539,41 @@ class Profile360Provider:
                 "model_artifact_registry",
                 "consent_policy_decisions",
                 "analytics_events",
+                "outcome_facts",
             ],
         )
         return section, claims
+
+    async def _read_reported_outcomes(
+        self,
+        tenant_id: str,
+        output: Any,
+        *,
+        limit: int,
+    ) -> PredictionOutcomeRead:
+        """Read only the versioned explicit association for one prediction."""
+        method = getattr(self._source, "reported_outcomes_for_prediction", None)
+        if not callable(method):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_truth_authority_unavailable"
+            )
+        try:
+            result = await method(
+                tenant_id,
+                output.prediction_id,
+                PROFILE_OUTCOME_LABEL_CONTRACT_VERSION,
+                limit=limit,
+            )
+        except Exception as exc:  # noqa: BLE001 - this evidence is optional and fail-closed
+            return PredictionOutcomeRead(
+                [], False, False,
+                reason=f"profile_outcome_truth_authority_{type(exc).__name__}",
+            )
+        if not isinstance(result, PredictionOutcomeRead):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_truth_invalid_response"
+            )
+        return result
 
     async def _syndicates(
         self,

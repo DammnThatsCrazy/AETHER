@@ -113,8 +113,11 @@ Profile360 `likely_next_states` rechecks the recorded inference decision against
 the tenant, actor, model, subject, policy version, and decision time; session
 models also require the exact current session identity binding. A current
 artifact-reported calibration metric can be shown with unknown dataset and
-evaluation scope. Current consent, historical identity state, independently
-validated calibration, and observed outcomes remain unproven.
+evaluation scope. Explicit prediction-ID and versioned-label-contract outcome
+links may be shown as reported associations after exact tenant, subject, and
+time checks; they do not establish prediction correctness. Current consent,
+historical identity state, independently validated calibration, complete
+outcome coverage, and outcome verification remain unproven.
 Campaign360 `anomalies` and Location360 `risk` bind bounded exact Risk360
 assessment reads, while producer coverage and whole-slot completeness remain
 unknown. Their exact

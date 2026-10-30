@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:f89fa77d2f74a0f920cf00f4b2cf3448167181ecb9099900b7b4952d6eb02bb6"
+  "services/api/identity/": "sha256:74279e91472154d933e63edce42a194fd6e4cf47569f942d5f1fb17e41165354"
   "services/api/ingestion/": "sha256:650191a96737a36132506125778a8bd36bff5ff1a0d1a41d2b8d4be7ffc35ea7"
   "services/api/intelligence/": "sha256:f3ed31b70e08cf7931599c3193c1c01a26b7d94786ba80feb10afbfa35b327c4"
   "services/api/journeys/": "sha256:ae21ca01f4b29e4543f764b7f58605e3d1cdbd194442d38dfb4f588a008bc1de"
@@ -2032,8 +2032,15 @@ historical point-in-time reconstruction, and Profile-specific freshness remain
 unknown, so the slot stays degraded.
 Profile360 `likely_next_states` rechecks the recorded inference decision and,
 for session models, the exact current identity binding before returning a
-prediction. This read does not re-evaluate current consent or establish
-historical identity, model calibration, or an observed outcome.
+prediction. It reads outcome truth only through the exact tenant, prediction
+ID, and `profile-outcome-labels.v1` contract. A unique same-subject fact whose
+observed time is at or after prediction generation and no later than the
+request anchor is returned under `reportedOutcomeAssociations` with its
+evidence references. The association is reported evidence, not an evaluation
+of predicted-state success or correctness; ambiguous, invalid, future, and
+truncated reads do not return linked facts and report incomplete coverage. This
+read does not re-evaluate current consent or establish historical identity,
+model calibration, complete outcome coverage, or outcome verification.
 Agent360's `evidence_trace` joins agentic compatibility rows to canonical
 Bronze only when tenant, agent, source-row ID, event ID, schema version, event
 type, and timestamp match exactly. Historical rows without the reciprocal link
