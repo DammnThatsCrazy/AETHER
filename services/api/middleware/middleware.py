@@ -63,7 +63,15 @@ _ACCESS_KIT_CAPABILITIES = {
     ("GET", "/v1/billing/usage/summary"): "billing.usage.summary.read",
     ("POST", "/v1/continuations"): "continuations.create",
     ("GET", "/v1/continuations/{continuation_id}"): "continuations.get",
+    ("POST", "/v1/experience360/frames"): "experience360.frame.read",
 }
+# POST routes that carry a read body but have no write effect. They are checked
+# against the ``read`` permission, attributed as reads, and (for delegated MCP
+# tokens) eligible for the read-route allowlist. Keep this set exact: a route
+# belongs here only if its handler performs no mutation.
+_READ_SEMANTIC_POST_ROUTES = frozenset({
+    ("POST", "/v1/experience360/frames"),
+})
 _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # A delegated MCP token is accepted only for these named read routes. The
 # request header selects this path only when a per-request assertion from the
@@ -71,7 +79,8 @@ _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # scope, user, membership, and tenant status.
 _MCP_OAUTH_READ_ROUTES = frozenset(
     path for (method, path), capability in _ACCESS_KIT_CAPABILITIES.items()
-    if method == "GET" and capability not in {"auth.sessions.list", "continuations.get"}
+    if (method == "GET" and capability not in {"auth.sessions.list", "continuations.get"})
+    or (method, path) in _READ_SEMANTIC_POST_ROUTES
 )
 
 
@@ -117,10 +126,13 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         "blocked": "access.interaction.blocked",
         "failed": "access.interaction.failed",
     }[outcome]
-    operation = {
-        "DELETE": "revoke",
-        "POST": "write",
-    }.get(request.method.upper(), "read")
+    if (request.method.upper(), route_template) in _READ_SEMANTIC_POST_ROUTES:
+        operation = "read"
+    else:
+        operation = {
+            "DELETE": "revoke",
+            "POST": "write",
+        }.get(request.method.upper(), "read")
     metadata = {
         "surface": surface,
         "capability_id": capability_id,
@@ -1316,7 +1328,12 @@ def _evaluate_route_policy(
 
         method = getattr(request, "method", "GET").upper()
         if method in {"POST", "PUT", "PATCH", "DELETE"}:
-            permission = "ingest" if path in ("/v1/batch", "/v1/track") or path.startswith("/v1/ingest") else "write"
+            if (method, path) in _READ_SEMANTIC_POST_ROUTES:
+                permission = "read"
+            elif path in ("/v1/batch", "/v1/track") or path.startswith("/v1/ingest"):
+                permission = "ingest"
+            else:
+                permission = "write"
             if not context.has_permission(permission):
                 return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
         elif pol.tenant_scoped and credential_class != "legacy" and not context.has_permission("read"):
@@ -1452,7 +1469,12 @@ async def _authenticate_async(
             if not verify_mcp_service_assertion(request, token):
                 raise UnauthorizedError("MCP service assertion is invalid")
             route = getattr(request.state, "access_route_template", request.url.path)
-            if request.method.upper() not in {"GET"} or route not in _MCP_OAUTH_READ_ROUTES:
+            method = request.method.upper()
+            if (
+                method not in {"GET", "POST"}
+                or route not in _MCP_OAUTH_READ_ROUTES
+                or (method == "POST" and (method, route) not in _READ_SEMANTIC_POST_ROUTES)
+            ):
                 raise UnauthorizedError("MCP OAuth token is not valid for this route")
             return await _resolve_mcp_oauth_token(token)
         if _token_declares_mcp_audience(token):

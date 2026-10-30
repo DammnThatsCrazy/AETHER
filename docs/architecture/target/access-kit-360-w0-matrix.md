@@ -52,19 +52,21 @@ orchestrator wants it. A frame existing is not a claim that a surface is complet
 | Item | State |
 |---|---|
 | PR838 / PR839 | Merged into `origin/development` (`46cbb7141`). This branch is based on `50bb9ec10` (#837) and does not contain them. `routes.py` and `contracts.py` were reported byte-identical, so the adapter is believed compatible. Rebase onto `development` before opening a PR. |
-| Hosted MCP OAuth | `_MCP_OAUTH_READ_ROUTES` is GET-only (`middleware.py`), so delegated MCP tokens are rejected on this POST route. Needs a reviewed server change. |
-| POST permission | Middleware requires `write` for any POST, though the route checks only `read`. A read-only key may get 403. Unconfirmed against a live route policy. |
-| Audit / usage IDs | No `_ACCESS_KIT_CAPABILITIES` entry for this route, so no audit/usage IDs are returned. The adapter reports them absent. A naive registration would label the read as `write`. |
+| Hosted MCP OAuth | Fixed in `services/api/middleware/middleware.py`: `_READ_SEMANTIC_POST_ROUTES` (exactly `POST /v1/experience360/frames`) joins `_MCP_OAUTH_READ_ROUTES`. The service assertion already binds method and target. Fixture-tested only; no live hosted-MCP login run. |
+| POST permission | Fixed: the same set makes route policy require `read`, not `write`, for that route. Other POSTs still require `write`. |
+| Audit / usage IDs | Fixed: the route now has an `_ACCESS_KIT_CAPABILITIES` entry (`experience360.frame.read`) and is attributed as a read, so audit and usage IDs come back when the surface header is sent. Usage stays non-billable. |
 | Catalog table | The adapter's allowlist is hand-maintained, guarded by a drift test against `packages/shared/contracts/intelligence-projection-registry.json`. Generating it is a follow-up. |
 | Source-linked docs | `mcp-api-cli-access-kit.md` links this package and needs review and restamp. |
-| W1, W3, W4, W5, W6 | Not attempted. They need hosted CI, staging, real credentials, and owner contracts. |
+| W1 triage | On unmodified `origin/development` (`46cbb7141`), 4 of 310 tests in `-k "experience360 or economic360 or cross_360 or intelligence_projection"` fail identically with and without this branch: `test_experience360_agent_outcomes_frame::test_agent360_business_outcomes_reads_exact_agent_truth_with_evidence` ("projection result is not bound to a requested 360 slot"), and `test_experience360_composition::{test_signals360_unjoined_risk_flags_do_not_query_risk360, test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360, test_profile_relationships_routes_exact_entity_to_relationship360_after_policy}` (composition routing mismatches). They are pre-existing logic divergences, not environment flakes. Economic360 suites pass. Not fixed: they need the 360 composition owner. Hosted `ci / verdict` and the payment/spending-limit status were not checked. |
+| W2 server gaps | Fixed (see above). |
+| W3, W4, W5, W6 | Not attempted. They need hosted CI, staging, real credentials, and owner contracts. |
 
 ## Evidence matrix
 
 | Level | Status |
 |---|---|
 | E1 code present | Yes (working tree; not committed) |
-| E2 local focused | Access Kit `npm test`: 68 pass, 0 fail. API contract test (Python 3.11): 19 pass |
+| E2 local focused | Access Kit `npm test`: 68 pass, 0 fail. API tests (Python 3.11): contract 19 pass, read-semantic POST 5 pass. `test_usage_summary_itself_is_not_metered` fails on unmodified `development` (no exclusion exists in `_record_access_interaction`), so it predates this work |
 | E3 fixture integration | Mock-fetch parity across Node/CLI/MCP, with negative controls |
 | E4 hosted `ci / verdict` | Not run |
 | E5 staging | Not run |
