@@ -307,6 +307,49 @@ async def test_profile360_likely_next_states_is_unknown_without_approved_rows():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scope_change", [
+    {"tenant_id": "tenant-other"},
+    {"entity_id": "entity-other"},
+])
+async def test_profile360_reader_rejects_prediction_outside_exact_subject_scope(
+    monkeypatch, scope_change
+):
+    import identity.profile.prediction_authority as authority
+
+    async def unexpected_policy_check(_output):
+        pytest.fail("out-of-scope prediction must be rejected before governance reads")
+
+    def unexpected_artifact_lookup(_model, _version):
+        pytest.fail("out-of-scope prediction must be rejected before artifact lookup")
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", unexpected_policy_check)
+    monkeypatch.setattr(authority, "approved_production_artifact", unexpected_artifact_lookup)
+    raw = _output(**scope_change).model_dump(mode="python")
+    request = ProjectionRequest(
+        projectionId="profile360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of",
+        asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(
+        source=_PredictionSource(
+            PredictionOutputRead([raw], available=True, scope_known=True)
+        )
+    )
+    context = await ProviderRegistry().build_context("profile360", request)
+
+    result = await provider.project(request, context)
+
+    section = result.sections[0]
+    assert section.state == "degraded"
+    assert section.content["items"] == []
+    assert section.content["reasonCode"] == "profile_prediction_records_invalid"
+    assert not result.claims
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("metric,expected", [
     (0.12, "reported"), (None, "unknown"), (True, "unknown"),
     (float("nan"), "unknown"), (1.2, "unknown"), (10**400, "unknown"),

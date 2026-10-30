@@ -631,6 +631,67 @@ async def test_value_attribution_credit_discards_cross_tenant_run_and_credit_row
     assert not any(claim.kind == "canonical_attribution_credit" for claim in result.claims)
 
 
+async def test_value_confidence_reader_rejects_validation_id_from_other_scope() -> None:
+    conversion_id = "00000000-0000-4000-8000-000000000311"
+    run_id = "00000000-0000-4000-8000-000000000312"
+    config_id = "00000000-0000-4000-8000-000000000313"
+    conversion_ref = EvidenceRef(
+        id=conversion_id,
+        type="transaction",
+        source="canonical_conversions",
+        uri=f"store://canonical_conversions/{conversion_id}",
+    ).model_dump(mode="json")
+    wrong_scope_governance = {
+        "state": "validated",
+        "validationState": "exact_config_lineage_validated",
+        "calibrationState": "unvalidated",
+        "modelConfigId": config_id,
+        "decisionId": "amv_" + "a" * 32,
+        "configSnapshotSha256": "b" * 64,
+        "evidenceRef": {
+            "id": "amv_" + "a" * 32,
+            "type": "model_output",
+            "source": "attribution_model_validation_decisions",
+            "observedAt": None,
+            "uri": "store://attribution_model_validation_decisions/amv_" + "a" * 32,
+        },
+    }
+    reader = FakeAttributionCredits(
+        {
+            "tenantId": "tenant-a",
+            "conversionIds": [conversion_id],
+            "state": "available",
+            "completeness": "complete",
+            "runs": [
+                {
+                    "tenantId": "tenant-a",
+                    "conversionId": conversion_id,
+                    "attributionRunId": run_id,
+                    "status": "complete",
+                    "modelGovernance": wrong_scope_governance,
+                }
+            ],
+            "records": [],
+        }
+    )
+    provider = Economic360Provider(
+        sources=FakeSource([]), attribution_credit_reader=reader
+    )
+
+    result = await provider._safe_attribution_credits(
+        _request(),
+        {
+            "state": "available",
+            "completeness": "complete",
+            "records": [{"conversionId": conversion_id}],
+            "evidenceRefs": [conversion_ref],
+        },
+    )
+
+    assert result["runs"][0]["modelGovernance"]["state"] == "unknown"
+    assert result["runs"][0]["modelGovernance"]["calibrationState"] == "unvalidated"
+
+
 async def test_repository_attribution_reader_uses_tenant_and_exact_conversion(monkeypatch) -> None:
     from journeys.measurement.repositories import attribution_run_repo
     from journeys.measurement.repositories import touchpoint_repo

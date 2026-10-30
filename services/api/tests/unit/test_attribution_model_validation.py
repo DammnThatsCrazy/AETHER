@@ -18,6 +18,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from value.economic.attribution_model_validation import (  # noqa: E402
     _decision_for,
+    _decision_id_for_scope,
     _same_decision,
     validate_attribution_run_model,
 )
@@ -59,6 +60,26 @@ def test_exact_decision_is_deterministic_and_uncalibrated():
          "model_config_id": UUID(first["model_config_id"])}, first
     )
     assert not _same_decision({**first, "tenant_id": "tenant-b"}, first)
+
+
+@pytest.mark.parametrize("binding_change", [
+    {"tenant_id": "tenant-b"},
+    {"attribution_run_id": str(uuid4())},
+    {"model_config_id": str(uuid4())},
+    {"config_snapshot_sha256": "f" * 64},
+    {"config_snapshot_sha256": "not-a-sha256"},
+])
+def test_decision_id_is_bound_to_exact_tenant_run_config_and_snapshot(binding_change):
+    run, config = _fixtures()
+    decision = _decision_for("tenant-a", run, config)
+    binding = {
+        "tenant_id": "tenant-a",
+        "attribution_run_id": run["attribution_run_id"],
+        "model_config_id": run["model_config_id"],
+        "config_snapshot_sha256": decision["config_snapshot_sha256"],
+    }
+    assert _decision_id_for_scope(**binding) == decision["decision_id"]
+    assert _decision_id_for_scope(**(binding | binding_change)) != decision["decision_id"]
 
 
 @pytest.mark.parametrize("mutation", [

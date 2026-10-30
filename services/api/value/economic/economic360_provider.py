@@ -4630,6 +4630,8 @@ class Economic360Provider:
         run_refs: dict[tuple[str, str], EvidenceRef] = {}
         output_runs: list[dict[str, Any]] = []
         invalid_rows = 0
+        from value.economic.attribution_model_validation import _decision_id_for_scope
+
         for raw_run in result["runs"]:
             if not isinstance(raw_run, dict) or raw_run.get("tenantId") != request.tenantId:
                 invalid_rows += 1
@@ -4663,7 +4665,14 @@ class Economic360Provider:
                     ) if decision_id and isinstance(raw_governance.get("evidenceRef"), dict) else None
                 )
                 if (
-                    decision_id and decision_id.startswith("amv_") and config_id
+                    decision_id
+                    and decision_id == _decision_id_for_scope(
+                        request.tenantId,
+                        run_id,
+                        config_id,
+                        raw_governance.get("configSnapshotSha256"),
+                    )
+                    and config_id
                     and raw_governance.get("validationState") == "exact_config_lineage_validated"
                     and raw_governance.get("calibrationState") == "unvalidated"
                     and expected_ref is not None

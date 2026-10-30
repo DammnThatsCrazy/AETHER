@@ -45,6 +45,30 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def _decision_id_for_scope(
+    tenant_id: str,
+    attribution_run_id: Any,
+    model_config_id: Any,
+    config_snapshot_sha256: Any,
+) -> Optional[str]:
+    """Return the deterministic decision ID only for a complete exact scope."""
+    run_id = _uuid(attribution_run_id)
+    config_id = _uuid(model_config_id)
+    if (
+        not tenant_id
+        or run_id is None
+        or config_id is None
+        or not isinstance(config_snapshot_sha256, str)
+        or len(config_snapshot_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in config_snapshot_sha256)
+    ):
+        return None
+    digest = hashlib.sha256(
+        f"{tenant_id}:{run_id}:{config_id}:{config_snapshot_sha256}".encode("utf-8")
+    ).hexdigest()[:32]
+    return f"amv_{digest}"
+
+
 def _utc(value: Any) -> Optional[datetime]:
     if isinstance(value, datetime):
         result = value
@@ -105,9 +129,8 @@ def _decision_for(
         raise ValueError("attribution model configuration lineage is not exact and complete")
     snapshot_json = _canonical(snap)
     snapshot_hash = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
-    decision_id = "amv_" + hashlib.sha256(
-        f"{tenant_id}:{run_id}:{config_id}:{snapshot_hash}".encode("utf-8")
-    ).hexdigest()[:32]
+    decision_id = _decision_id_for_scope(tenant_id, run_id, config_id, snapshot_hash)
+    assert decision_id is not None
     return {
         "decision_id": decision_id,
         "tenant_id": tenant_id,
