@@ -34,7 +34,7 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:c4876df0c44da2b2322921a43301c8917d40e9dda50d986890b537b3a4e9e844"
+  "services/api/value/economic/economic360_provider.py": "sha256:cf57b951f85d0f92df302d710e363c1628874d58e186da2a8fa35c16074e253b"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
@@ -95,6 +95,16 @@ was known earlier. These are bounded authority and provenance additions to
 the original design below. The proposed graph-as-lifecycle-truth and broader
 operator control flows in this build specification remain design targets;
 the 360 providers compose governed reads from the owning records.
+
+Economic360 attribution governance is a separate bounded evidence path: a
+validation decision is accepted only for the exact tenant and completed run,
+and only when its model configuration and recorded snapshot match the current
+effective configuration lineage. The decision is deterministic and unique per
+tenant/run; the projection exposes its evidence reference and records
+`exact_config_lineage_validated` while calibration remains `unvalidated`.
+This validates configuration lineage only; it does not approve the model or
+validate its performance or calibration. This attribution governance does not
+change the commerce operation links described above.
 
 ---
 

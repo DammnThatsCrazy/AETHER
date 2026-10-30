@@ -48,7 +48,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/actions/delivery/adapters/webhook.py": "sha256:e3ecc854d8b57fa74ba2a88b0867a81e40ce3f2a1a08dc675dd525085c3bc7f5"
-  "services/api/actions/delivery/outcome_processor.py": "sha256:41f3f3623ba08361567fe7b17b13b6f39592358b5b0384ff9df52a66d305e79e"
+  "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
@@ -634,6 +634,17 @@ callback route still answers 200. The Jira inbound webhook and the Telegram
 callback have no per-connection secret yet, so they answer 404 until
 `INBOUND_JIRA_WEBHOOK_ENABLED` / `INBOUND_TELEGRAM_CALLBACK_ENABLED` is set to
 `true`.
+
+The manual `POST /v1/delivery/outcomes/ingest` path records outcomes with
+`producer_provenance="caller_asserted"` and no signature authority; the
+caller-provided outcome is not signature-verified evidence. For inbox
+callbacks, a valid provider signature alone does not establish trusted outcome
+provenance. `verified_callback` is recorded only when the callback also binds
+to exactly one canonical stored receipt and job with matching tenant, intent,
+provider, and external ID. Missing, conflicting, or ambiguous binding
+candidates are rejected as `unbound_delivery`; a legacy callback binding that
+does not satisfy the complete receipt/job checks can retain its routing
+behavior but its outcome remains caller-asserted.
 
 ### Before deploying
 
