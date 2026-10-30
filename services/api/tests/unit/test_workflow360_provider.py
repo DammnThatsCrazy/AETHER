@@ -2047,6 +2047,9 @@ async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
         ("tenant_id", f" {TENANT_A}"),
         ("execution_id", " agent-execution-a "),
         ("idempotency_key", " tool-call-event-a"),
+        ("to_vertex_id", f" {TENANT_A}:tool:tool-a"),
+        ("tool_vertex_tenant_id", f"{TENANT_A} "),
+        ("tool_vertex_tool_id", " tool-a"),
     ],
 )
 async def test_repository_source_rejects_padded_tool_call_join_identifiers(
@@ -2063,11 +2066,21 @@ async def test_repository_source_rejects_padded_tool_call_join_identifiers(
         "called_at": "2026-10-18T10:00:01Z",
         "idempotency_key": "tool-call-event-a",
     }
-    properties[field] = value
+    vertex_tenant_id = TENANT_A
+    vertex_tool_id = "tool-a"
+    target_vertex_id = f"{TENANT_A}:tool:tool-a"
+    if field == "to_vertex_id":
+        target_vertex_id = value
+    elif field == "tool_vertex_tenant_id":
+        vertex_tenant_id = value
+    elif field == "tool_vertex_tool_id":
+        vertex_tool_id = value
+    else:
+        properties[field] = value
     edge = SimpleNamespace(
         edge_type=graph_module.EdgeType.CALLED_TOOL,
         from_vertex_id=f"{TENANT_A}:agent:{execution['agent_id']}",
-        to_vertex_id=f"{TENANT_A}:tool:tool-a",
+        to_vertex_id=target_vertex_id,
         properties=properties,
     )
 
@@ -2078,7 +2091,7 @@ async def test_repository_source_rejects_padded_tool_call_join_identifiers(
         async def get_vertex_for_tenant(self, tenant_id: str, vertex_id: str):
             return SimpleNamespace(
                 vertex_type="Tool",
-                properties={"tenant_id": tenant_id, "tool_id": "tool-a"},
+                properties={"tenant_id": vertex_tenant_id, "tool_id": vertex_tool_id},
             )
 
     monkeypatch.setattr(graph_module, "GraphClient", FakeGraph)

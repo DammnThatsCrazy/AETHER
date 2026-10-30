@@ -452,7 +452,7 @@ class RepositoryWorkflow360Source:
 
             expected_agent_id = execution_agents[execution_id]
             expected_agent_vertex = f"{tenant_id}:agent:{expected_agent_id}"
-            target_vertex_id = _safe_identifier(getattr(edge, "to_vertex_id", None))
+            target_vertex_id = _exact_identifier(getattr(edge, "to_vertex_id", None))
             tool_prefix = f"{tenant_id}:tool:"
             if (
                 getattr(edge, "from_vertex_id", None) != expected_agent_vertex
@@ -480,10 +480,10 @@ class RepositoryWorkflow360Source:
                 tool_vertex is None
                 or getattr(tool_vertex, "vertex_type", None) != "Tool"
                 or not isinstance(tool_properties, dict)
-                or _safe_identifier(
+                or _exact_identifier(
                     tool_properties.get("tenant_id") or tool_properties.get("tenantId")
                 ) != tenant_id
-                or _safe_identifier(tool_properties.get("tool_id")) != tool_id
+                or _exact_identifier(tool_properties.get("tool_id")) != tool_id
             ):
                 scope_mismatch = True
                 continue

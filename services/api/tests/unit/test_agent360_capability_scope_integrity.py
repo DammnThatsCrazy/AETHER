@@ -100,6 +100,7 @@ def test_capability_policy_decision_requires_exact_tenant_agent_resource_and_tim
     )[1] is True
     for field, value in (("tenant_id", "tenant-b"), ("resource_id", "tool-b"),
                          ("actor_type", "agent"),
+                         ("resource_id", " tool-a "),
                          ("evaluated_at", (datetime.now(timezone.utc) + timedelta(days=1)).isoformat())):
         candidate = {**decision, field: value}
         assert Agent360Provider._validate_capability_policy_decisions(

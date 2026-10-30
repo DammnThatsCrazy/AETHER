@@ -3615,6 +3615,7 @@ class Agent360Provider:
                 and row.get("action") == "invoke"
                 and isinstance(row.get("allowed"), bool)
                 and isinstance(capability_id, str) and capability_id.strip()
+                and capability_id == capability_id.strip()
                 and isinstance(context, dict)
                 and context.get("agent_id") == canonical_agent_entity_id
                 and context.get("capability_id") == capability_id
