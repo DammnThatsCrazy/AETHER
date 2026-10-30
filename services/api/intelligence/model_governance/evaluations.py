@@ -308,7 +308,6 @@ async def evaluate_profile_artifact(
                 "predictionGeneratedAt": generated.isoformat(),
                 "outcomeObservedAt": observed_at.isoformat(),
                 "labelContractVersion": PROFILE_LABEL_CONTRACT,
-                "split": prediction_split,
             })
         except (TypeError, ValueError, KeyError, AttributeError):
             continue

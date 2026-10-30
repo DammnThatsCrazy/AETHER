@@ -177,7 +177,9 @@ def _valid_profile_evaluation_sample(row: Any, evaluation: dict[str, Any]) -> bo
                 or not isinstance(rank, int) or isinstance(rank, bool) or rank < 1
                 or item["state"] in states or rank in ranks):
             return False
-        states.add(item["state"]); ranks.add(rank); total += probability
+        states.add(item["state"])
+        ranks.add(rank)
+        total += probability
     return (abs(total - 1.0) <= 1e-6 and row["predictedState"] in states
             and isinstance(row.get("predictedConfidence"), (int, float))
             and not isinstance(row.get("predictedConfidence"), bool)
