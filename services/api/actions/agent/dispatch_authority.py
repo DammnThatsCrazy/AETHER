@@ -45,17 +45,3 @@ async def read_dispatch_authorization(
         "evaluated_at": evaluated.isoformat(),
         "uri": f"store://security_policy_decisions/{quote(decision_id, safe='')}",
     }
-
-
-def connector_receipt_read_state() -> dict[str, str]:
-    """Report the current receipt boundary without treating receipt IDs as proof.
-
-    ``action_delivery_receipts`` is keyed by dispatch ID, but its records do not
-    carry canonical tenant/subject/action/decision/recommendation bindings or a
-    trusted producer marker. The same store accepts caller-recorded receipts,
-    so consumers cannot safely join one as connector evidence yet.
-    """
-    return {
-        "connectorReceiptRead": "unknown",
-        "connectorReceiptReason": "trusted_connector_receipt_binding_unavailable",
-    }

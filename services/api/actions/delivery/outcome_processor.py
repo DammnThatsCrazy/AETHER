@@ -281,11 +281,21 @@ class WebhookInboxProcessor:
                     continue
                 if binding is not None:
                     link = binding["link"]
-                    outcome = outcome.model_copy(update={
+                    binding_update = {
                         "tenant_id": link["tenant_id"],
                         "intent_id": link.get("intent_id"),
                         "receipt_id": link.get("receipt_id"),
-                    })
+                    }
+                    if binding.get("verified_receipt_binding") is True:
+                        binding_update.update({
+                            "producer_provenance": "verified_callback",
+                            "signature_authority": (
+                            "tenant_owned_webhook_signature"
+                            if record.get("provider") == "webhook"
+                            else "external_provider_signature"
+                            ),
+                        })
+                    outcome = outcome.model_copy(update=binding_update)
 
                 # 3. Persist ExternalOutcomeEvent. A failure here must NOT mark the
                 #    record processed — it will be retried on the next tick.
@@ -607,12 +617,28 @@ class WebhookInboxProcessor:
         )
         matches: list[dict] = []
         for link in links:
-            if not link.get("tenant_id"):
+            if (not link.get("tenant_id") or link.get("provider") != provider
+                    or link.get("external_id") != str(key)):
                 continue
             stored = await self._stored_delivery(link)
             if stored is None:
                 continue
             receipt, job = stored
+            # Keep legacy callback routing behavior, but grant trusted event
+            # provenance only for the complete canonical receipt binding.
+            verified_receipt_binding = bool(
+                receipt and job
+                and receipt.get("id") == link.get("receipt_id")
+                and receipt.get("tenant_id") == link.get("tenant_id")
+                and receipt.get("intent_id") == link.get("intent_id")
+                and isinstance(receipt.get("delivered_at"), str)
+                and receipt.get("provider_adapter") == provider
+                and receipt.get("external_id") == link.get("external_id")
+                and job.get("id") == receipt.get("job_id")
+                and job.get("tenant_id") == link.get("tenant_id")
+                and job.get("intent_id") == link.get("intent_id")
+                and job.get("provider_adapter") == provider
+            )
             secret = None
             if provider == "jira" and not _jira_site_matches(payload, receipt, job):
                 continue
@@ -624,7 +650,8 @@ class WebhookInboxProcessor:
                 secret = await self._resolve_secret(job)
                 if not secret:
                     continue
-            matches.append({"link": link, "secret": secret})
+            matches.append({"link": link, "secret": secret,
+                            "verified_receipt_binding": verified_receipt_binding})
         if len({m["link"]["tenant_id"] for m in matches}) != 1:
             return None
         return matches[0]

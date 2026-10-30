@@ -241,6 +241,10 @@ class ExternalOutcomeEvent(BaseModel):
     receipt_id: Optional[str] = None
     outcome_type: ExternalOutcomeType
     raw_payload: dict[str, Any] = Field(default_factory=dict)
+    # Set only by OutcomeProcessor after signature verification and exact
+    # stored delivery binding. API callers are always recorded as asserted.
+    producer_provenance: str = "caller_asserted"
+    signature_authority: Optional[str] = None
     occurred_at: str = Field(default_factory=_now_iso)
     ingested_at: str = Field(default_factory=_now_iso)
 

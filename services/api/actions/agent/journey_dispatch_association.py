@@ -14,6 +14,7 @@ async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id
                                   dispatches: Any = None, actions: Any = None,
                                   decisions: Any = None, recommendations: Any = None,
                                   policy_decisions: Any = None,
+                                  delivery_evidence_reader: Any = None,
                                   limit: int = 20) -> tuple[list[dict[str, Any]], bool]:
     """Project bounded current dispatch state after exact tenant/decision joins.
 
@@ -27,10 +28,8 @@ async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id
     actions = actions or ActionFeedbackRepository()
     decisions = decisions or DecisionRepository()
     recommendations = recommendations or RecommendationRepository()
-    from actions.agent.dispatch_authority import (
-        connector_receipt_read_state,
-        read_dispatch_authorization,
-    )
+    from actions.agent.dispatch_authority import read_dispatch_authorization
+    from actions.agent.action_delivery_evidence import read_action_delivery_evidence
     bounded = min(max(limit, 1), 20)
     try:
         rows = await dispatches.find_many(filters={"tenant_id": tenant_id,
@@ -75,20 +74,29 @@ async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id
             )
             if dispatch_authorization is None:
                 return [], False
+            evidence, delivery_complete = await (delivery_evidence_reader or read_action_delivery_evidence)(
+                tenant_id=tenant_id, dispatch=row,
+            )
+            if not delivery_complete:
+                return [], False
+            evidence_refs = [
+                {"id": dispatch_id, "type": "event", "source": "action_dispatches",
+                 "observedAt": created.isoformat(), "uri": f"store://action_dispatches/{quote(dispatch_id, safe='')}"},
+                {"id": action_id, "type": "event", "source": "action_feedback"},
+                {"id": decision_id, "type": "event", "source": "decision_records"},
+                {"id": recommendation_id, "type": "model_output", "source": "recommendations"},
+                {"id": dispatch_authorization["decision_id"], "type": "event",
+                 "source": "security_policy_decisions", "observedAt": dispatch_authorization["evaluated_at"],
+                 "uri": dispatch_authorization["uri"]},
+                *(delivery["evidenceRef"] for delivery in evidence["connectorReportedDeliveries"]),
+                *(callback["evidenceRef"] for callback in evidence["verifiedCallbacks"]),
+            ]
             seen.add(dispatch_id)
             output.append({"dispatchId": dispatch_id, "status": row["status"], "createdAt": created.isoformat(),
                            "externalEffect": "not_independently_verified", "evidenceRefs": [
-                               {"id": dispatch_id, "type": "event", "source": "action_dispatches",
-                                "observedAt": created.isoformat(), "uri": f"store://action_dispatches/{quote(dispatch_id, safe='')}"},
-                               {"id": action_id, "type": "event", "source": "action_feedback"},
-                               {"id": decision_id, "type": "event", "source": "decision_records"},
-                               {"id": recommendation_id, "type": "model_output", "source": "recommendations"},
-                               {"id": dispatch_authorization["decision_id"], "type": "event",
-                                "source": "security_policy_decisions",
-                                "observedAt": dispatch_authorization["evaluated_at"],
-                                "uri": dispatch_authorization["uri"]}],
+                               *evidence_refs],
                            "dispatchAuthorization": dispatch_authorization,
-                           **connector_receipt_read_state()})
+                           **evidence})
         return output, True
     except Exception:  # noqa: BLE001 - authority failures are partial and never fabricate dispatch
         return [], False

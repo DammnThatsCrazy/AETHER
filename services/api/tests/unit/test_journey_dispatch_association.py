@@ -61,7 +61,7 @@ async def test_exact_journey_dispatch_chain(case):
         assert complete and rows[0]["status"] == "delivered"
         assert rows[0]["externalEffect"] == "not_independently_verified"
         assert rows[0]["connectorReceiptRead"] == "unknown"
-        assert rows[0]["connectorReceiptReason"] == "trusted_connector_receipt_binding_unavailable"
+        assert rows[0]["connectorReceiptReason"] == "action_delivery_evidence_missing"
         assert {ref["source"] for ref in rows[0]["evidenceRefs"]} == {
             "action_dispatches", "action_feedback", "decision_records", "recommendations",
             "security_policy_decisions",
