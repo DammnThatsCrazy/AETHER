@@ -114,6 +114,37 @@ def test_projector_row_flows_surface_and_sequence_to_activity_end_to_end():
     assert contract.consent_snapshot_id == "consent-1"
 
 
+def test_outcome_projector_preserves_only_explicit_prediction_adjudication_refs():
+    event = _bronze_event()
+    event["properties"].update({
+        "predictionId": "ppout_prediction-7",
+        "predictionLabelContractVersion": "profile-outcome-labels.v1",
+    })
+    result = OutcomeProjector().project(event)
+    assert result is not None
+    row = result.rows[0]
+    assert row["prediction_id"] == "ppout_prediction-7"
+    assert row["prediction_label_contract_version"] == "profile-outcome-labels.v1"
+
+    # Matching only the entity and timestamp cannot create adjudication refs.
+    implicit = OutcomeProjector().project(_bronze_event())
+    assert implicit is not None
+    assert implicit.rows[0]["prediction_id"] is None
+    assert implicit.rows[0]["prediction_label_contract_version"] is None
+
+
+def test_outcome_projector_discards_malformed_adjudication_refs():
+    event = _bronze_event()
+    event["properties"].update({
+        "predictionId": ["prediction-1"],
+        "predictionLabelContractVersion": " " + "x" * 130,
+    })
+    result = OutcomeProjector().project(event)
+    assert result is not None
+    assert result.rows[0]["prediction_id"] is None
+    assert result.rows[0]["prediction_label_contract_version"] is None
+
+
 def test_adapter_base_defaults_surface_and_sequence_key_to_none():
     silver_row = {
         "tenant_id": "tenant-a",
