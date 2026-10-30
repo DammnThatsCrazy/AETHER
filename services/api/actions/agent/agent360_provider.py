@@ -3810,12 +3810,41 @@ class Agent360Provider:
         policy_rows, policy_rows_valid = Agent360Provider._validate_capability_policy_decisions(
             row.get("capability_policy_decisions"), tenant_id, canonical_agent_entity_id,
         )
+        from actions.agent_access_intelligence.authority import server_ref_for
+
+        grant_by_id = {
+            _first(grant, "authorization_id", "delegation_id", "id"): grant
+            for grant in grant_rows
+        }
+        policy_grants_valid = all(
+            not evaluation["allowed"]
+            or (
+                (grant := grant_by_id.get(evaluation["grant_record_id"])) is not None
+                and (
+                    grant.get("capability_id") == evaluation["capability_id"]
+                    or (
+                        grant.get("server_ref") is not None
+                        and any(
+                            capability.get("capabilityId") == evaluation["capability_id"]
+                            and capability.get("serverKey")
+                            and grant.get("server_ref") == server_ref_for(
+                                tenant_id, capability["serverKey"]
+                            )
+                            for capability in capabilities
+                        )
+                    )
+                )
+            )
+            for evaluation in policy_rows
+        )
+        if not policy_grants_valid:
+            policy_rows = []
         policy_read_complete = bool(
             row.get("capability_policy_decision_read_complete") is True
             and policy_rows_valid
+            and policy_grants_valid
         )
         active_grants = [grant for grant in grant_rows if grant.get("state") == "active"]
-        from actions.agent_access_intelligence.authority import server_ref_for
 
         for capability in capabilities:
             server_key = capability.get("serverKey")

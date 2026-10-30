@@ -1798,6 +1798,38 @@ async def test_agent360_projects_exact_recorded_capability_policy_evaluation():
 
 
 @pytest.mark.asyncio
+async def test_agent360_rejects_allowed_capability_evaluation_with_unjoined_grant():
+    class DanglingGrantPolicySource(FakeSource):
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "cap-policy-dangling-grant", "tenant_id": tenant_id,
+                "policy_key": "capability.invoke", "actor_type": "tenant_user",
+                "resource_type": "capability", "resource_id": "capability-search",
+                "action": "invoke", "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {"agent_id": canonical_agent_entity_id,
+                            "capability_id": "capability-search",
+                            "capability_grant_record_id": "grant-not-in-canonical-read",
+                            "capability_observed": True},
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = True
+            return batch
+
+    result = await Agent360Provider(DanglingGrantPolicySource()).project(_request(), _context())
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    capability = authority["capabilityAccessProfile"]["capabilities"][0]
+
+    assert capability["invokePolicyEvaluations"] == []
+    assert capability["invokePolicyEvaluationHistoryComplete"] is False
+
+
+@pytest.mark.asyncio
 async def test_agent360_resolves_configured_owner_without_delegation_records():
     class OwnerOnlySource(FakeSource):
         async def incoming_delegations(self, tenant_id, canonical_agent_entity_id, limit):
