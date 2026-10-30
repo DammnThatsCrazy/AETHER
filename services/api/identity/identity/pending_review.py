@@ -273,5 +273,51 @@ class PendingIdentityReviewRepository:
             patch=patch,
         )
 
+    async def decide_agent_continuity(
+        self,
+        *,
+        tenant_id: str,
+        record_id: str,
+        decision: str,
+        decided_by: str,
+    ) -> dict[str, Any] | None:
+        """Record a reviewer's decision on one open agent continuity item.
+
+        ``confirmed`` means the reviewer judged the deployments to report one
+        logical agent; ``rejected`` means distinct agents. The record is review
+        context only: nothing is merged, bound or relinked, and
+        ``merge_performed`` is always False. Returns the stored row, or None
+        when the item is missing, of another kind, or no longer open (the
+        transition is compare-and-set, so concurrent decisions cannot both win).
+        """
+        if decision not in AGENT_CONTINUITY_DECISIONS:
+            raise ValueError(f"unknown agent continuity decision {decision!r}")
+        row = await self.get(tenant_id, record_id, entry_type="agent_continuity_candidate")
+        if row is None or row.get("status") != "open":
+            return None
+        reason = f"agent_continuity_{decision}"
+        applied = await self._store.compare_and_set_status(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            expected_status="open",
+            patch={
+                "status": decision,
+                "reason_codes": sorted({*(row.get("reason_codes") or []), reason}),
+                "decision": {
+                    "decision": decision,
+                    "decided_by": str(decided_by or "")[:256],
+                    "decided_at": utc_now().isoformat(),
+                    "merge_performed": False,
+                },
+            },
+        )
+        if not applied:
+            return None
+        return await self.get(tenant_id, record_id, entry_type="agent_continuity_candidate")
+
+
+#: Reviewer outcomes for ``agent_continuity_candidate`` items. Neither merges.
+AGENT_CONTINUITY_DECISIONS = frozenset({"confirmed", "rejected"})
+
 
 __all__ = ["PendingIdentityReviewRepository"]

@@ -58,7 +58,7 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 
 ## Open items
 
-1. **Continuity review decisions.** Agent continuity items are queued and visible in Agent 360, but there is no approve or reject action for them yet. The existing late-binding approve and merge routes deliberately cannot load them.
+1. **Continuity review decisions.** Built: `POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm` and `/reject` (`agent:manage`) record the reviewer's decision and never merge. Still open: a confirmed decision does not feed any continuity claim yet, and no UI action calls these routes.
 2. **Pipeline wiring.** Risk360 accepts agent behavior evidence through its evidence bundle. No caller assembles that bundle on a schedule yet, and no Value 360 provider consumes the Value seam.
 3. **Persistence.** Behavior models, snapshots and DecisionEnvelopes are rebuilt on read from at most 1,000 recent facts per agent. Longer histories need a stored, replayable projection. That decision goes through the projection registry.
 4. **Access Kit.** Built (WO-123 above).

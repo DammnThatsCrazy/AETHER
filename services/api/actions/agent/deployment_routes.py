@@ -26,7 +26,7 @@ from actions.agent.deployments import (
 from actions.agentic_observability.foundation import require_permission as _require_perm
 from actions.agent_marketplace.models import AgentMarketplaceOrigin
 from repositories.repos import EntityRepository
-from shared.common.common import APIResponse, BadRequestError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, ConflictError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.agent.deployments.routes")
@@ -636,11 +636,85 @@ async def _behavior_facts(tenant_id: str, agent_ref: str) -> tuple[list[Any], bo
     return await load_behavior_facts(tenant_id, agent_ref)
 
 
+async def _agent_source_identity_ids(tenant_id: str, agent_ref: str) -> set[str]:
+    from identity.identity.routes import get_identity_resolver
+
+    repo = getattr(get_identity_resolver(), "_repo", None)
+    if repo is None:
+        return set()
+    return {str(row.get("id")) for row in await repo.list_source_identities_by_identifier(
+        tenant_id, "agent_id", agent_ref, limit=20)}
+
+
+def _review_touches(item: dict[str, Any], source_ids: set[str]) -> bool:
+    return bool(source_ids & ({item.get("identify_source_identity_id")}
+                              | set(item.get("candidate_source_identity_ids") or [])))
+
+
 async def _agent_continuity_reviews(tenant_id: str, agent_ref: str) -> list[dict[str, Any]]:
     """Open agent continuity review items touching this agent's source identities."""
     from actions.agent.behavior_read_model import agent_continuity_reviews
 
     return await agent_continuity_reviews(tenant_id, agent_ref)
+
+
+def _continuity_decision_view(agent_ref: str, item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item.get("id"),
+        "agent_ref": agent_ref,
+        "entry_type": "agent_continuity_candidate",
+        "status": item.get("status"),
+        "decision": item.get("decision"),
+        "reason_codes": item.get("reason_codes", []),
+        "identify_source_identity_id": item.get("identify_source_identity_id"),
+        "candidate_source_identity_ids": item.get("candidate_source_identity_ids", []),
+        "authority": "none",
+        "merge_performed": False,
+    }
+
+
+async def _decide_agent_continuity(agent_ref: str, review_id: str, request: Request,
+                                   decision: str) -> dict[str, Any]:
+    """Record a reviewer decision on one agent continuity item. Never merges.
+
+    The item must be an ``agent_continuity_candidate`` that touches one of this
+    agent's source identities in the caller's tenant; anything else is
+    not-found (no existence leak). Repeating the same decision is idempotent;
+    a different decision on a decided item is a conflict.
+    """
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from identity.identity.pending_review import PendingIdentityReviewRepository
+
+    repo = PendingIdentityReviewRepository()
+    item = await repo.get(tenant.tenant_id, review_id, entry_type="agent_continuity_candidate")
+    if item is None or not _review_touches(item, await _agent_source_identity_ids(tenant.tenant_id, agent_ref)):
+        raise NotFoundError("agent continuity review not found")
+    if item.get("status") == "open":
+        stored = await repo.decide_agent_continuity(
+            tenant_id=tenant.tenant_id, record_id=review_id, decision=decision,
+            decided_by=str(getattr(tenant, "user_id", "") or ""),
+        )
+        if stored is not None:
+            metrics.increment("agent_continuity_review_decided", labels={"decision": decision})
+            return APIResponse(data=_continuity_decision_view(agent_ref, stored)).to_dict()
+        item = await repo.get(tenant.tenant_id, review_id, entry_type="agent_continuity_candidate") or item
+    if item.get("status") == decision:
+        return APIResponse(data=_continuity_decision_view(agent_ref, item)).to_dict()
+    raise ConflictError(f"agent continuity review is already {item.get('status')}")
+
+
+@lineage_router.post("/{agent_ref}/continuity-reviews/{review_id}/confirm")
+async def confirm_agent_continuity(agent_ref: str, review_id: str, request: Request):
+    """Reviewer confirms the deployments report one logical agent. Recorded as
+    review context only: no source identity is merged, bound or relinked."""
+    return await _decide_agent_continuity(agent_ref, review_id, request, "confirmed")
+
+
+@lineage_router.post("/{agent_ref}/continuity-reviews/{review_id}/reject")
+async def reject_agent_continuity(agent_ref: str, review_id: str, request: Request):
+    """Reviewer rejects continuity: the deployments report distinct agents."""
+    return await _decide_agent_continuity(agent_ref, review_id, request, "rejected")
 
 
 @lineage_router.get("/{agent_ref}/behavior")
