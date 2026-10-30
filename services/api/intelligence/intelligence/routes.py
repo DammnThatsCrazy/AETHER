@@ -677,7 +677,7 @@ async def _enqueue_action_delivery(
         source_type="action",
         source_id=dispatch.dispatch_id,
         channels=[dispatch.target_type],
-        idempotency_key=dispatch.idempotency_key or dispatch.dispatch_id,
+        idempotency_key=dispatch.dispatch_id,
         metadata={"action_id": dispatch.action_id, "decision_id": dispatch.decision_id},
     )
     await DeliveryIntentRepository().insert(intent.id, intent.model_dump())
@@ -702,7 +702,7 @@ async def _enqueue_action_delivery(
         provider_adapter=dispatch.target_type,
         payload=dispatch.payload,
         provider_config=provider_config,
-        idempotency_key=dispatch.idempotency_key or dispatch.dispatch_id,
+        idempotency_key=dispatch.dispatch_id,
     )
     return await DeliveryJobRepository().insert(job.id, job.model_dump())
 
