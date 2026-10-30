@@ -7,10 +7,22 @@ resource state or proof of a resource operation.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 from shared.temporal.instant import parse_instant_strict
+
+
+@dataclass(frozen=True)
+class ApprovedResourceRead:
+    """Bounded read of current resources referenced by approved run actions."""
+
+    rows: tuple[dict[str, str], ...]
+    available: bool
+    complete: bool
+    truncated: bool = False
+    reason: str | None = None
 
 
 def execution_result(*, tenant_id: str, workflow_run_id: str, execution: dict[str, Any],
@@ -39,12 +51,12 @@ def execution_result(*, tenant_id: str, workflow_run_id: str, execution: dict[st
 
 
 async def approved_resources(*, tenant_id: str, workflow_run_id: str,
-                             access_rows: list[dict[str, Any]], store: Any = None) -> list[dict[str, str]]:
+                             access_rows: list[dict[str, Any]], store: Any = None) -> ApprovedResourceRead:
+    if len(access_rows) > 200:
+        return ApprovedResourceRead((), True, False, True, "approved_resource_access_read_truncated")
     if store is None:
         from value.x402.commerce_store import get_commerce_store
         store = get_commerce_store()
-    if len(access_rows) > 200:
-        return []
     result: list[dict[str, str]] = []
     for row in access_rows:
         if not isinstance(row, dict):
@@ -79,4 +91,4 @@ async def approved_resources(*, tenant_id: str, workflow_run_id: str,
     for row in result:
         if len(associations[row["execution_id"]]) == 1:
             unique.setdefault(tuple(row.values()), row)
-    return list(unique.values())
+    return ApprovedResourceRead(tuple(unique.values()), True, True)

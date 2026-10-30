@@ -1526,6 +1526,8 @@ class Workflow360Provider:
 
         approval_agent_access_rows: list[dict[str, Any]] = []
         action_agent_access_rows: list[dict[str, Any]] = []
+        action_agent_access_available = False
+        action_agent_access_complete = False
         approval_access_allowed = action_association_read_authorized(
             request, context, surface="workflow360", slot="approvals", consumer="workflow360"
         )
@@ -1547,6 +1549,8 @@ class Workflow360Provider:
                         approval_agent_access_rows = list(access_read.rows)
                     if action_access_allowed:
                         action_agent_access_rows = list(access_read.rows)
+                        action_agent_access_available = True
+                        action_agent_access_complete = access_read.complete
             except Exception:  # noqa: BLE001 - access evidence fails closed independently
                 pass
         risk_requested = (
@@ -1709,7 +1713,7 @@ class Workflow360Provider:
             historical=historical_risk_scope,
             subject_supported=subject.kind in _RUN_SUBJECT_KINDS,
         )
-        from intelligence.workflow.action_authorities import approved_resources
+        from intelligence.workflow.action_authorities import ApprovedResourceRead, approved_resources
 
         commerce_authorized = (action_access_allowed and context.tenantId == tenant_id
             and context.projectionId == "workflow360" and any(
@@ -1719,13 +1723,25 @@ class Workflow360Provider:
                 and auth.capabilityKey == "commerce360.read" and auth.policyState == "allowed"
                 and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
                 for auth in context.experience360ReadAuthorizations))
-        resource_rows: list[dict[str, str]] = []
-        if commerce_authorized and not historical_action_scope and actions_requested and action_agent_access_rows:
+        resource_read = ApprovedResourceRead((), False, False, reason="approved_resource_read_not_performed")
+        if (commerce_authorized and not historical_action_scope and actions_requested
+                and action_agent_access_available):
+            resource_read = ApprovedResourceRead(
+                (), True, action_agent_access_complete,
+                reason=None if action_agent_access_complete else "approved_resource_access_evidence_incomplete",
+            )
+        if (commerce_authorized and not historical_action_scope and actions_requested
+                and action_agent_access_rows):
             try:
-                resource_rows = await approved_resources(tenant_id=tenant_id, workflow_run_id=subject.id,
+                resource_read = await approved_resources(tenant_id=tenant_id, workflow_run_id=subject.id,
                                                          access_rows=action_agent_access_rows)
+                if not action_agent_access_complete:
+                    resource_read = ApprovedResourceRead(
+                        (), resource_read.available, False, resource_read.truncated,
+                        "approved_resource_access_evidence_incomplete",
+                    )
             except Exception:  # noqa: BLE001 - resource authority remains unknown
-                pass
+                resource_read = ApprovedResourceRead((), False, False, reason="approved_resource_read_unavailable")
         actions_section, action_claims = _workflow_actions_section(
             subject,
             tenant_id=tenant_id,
@@ -1737,7 +1753,7 @@ class Workflow360Provider:
             requested=actions_requested,
             historical=historical_action_scope,
             execution_results_authorized=action_access_allowed,
-            resource_rows=resource_rows,
+            resource_read=resource_read,
         )
         registrar_identity_read = WorkflowPrincipalIdentityRead(
             (), False, False, reason="definition_registrar_identity_not_read"
@@ -2366,7 +2382,7 @@ def _workflow_actions_section(
     requested: bool,
     historical: bool,
     execution_results_authorized: bool,
-    resource_rows: list[dict[str, str]],
+    resource_read: Any,
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     """Project exact observed tool-call edges without upgrading them to effects."""
     reason = (
@@ -2528,7 +2544,7 @@ def _workflow_actions_section(
         outcome = (execution_result(tenant_id=tenant_id, workflow_run_id=subject.id,
                                     execution=execution_by_id[execution_id], called_at=called_at)
                    if execution_results_authorized else None)
-        resource = next((row for row in resource_rows if row.get("execution_id") == execution_id), None)
+        resource = next((row for row in resource_read.rows if row.get("execution_id") == execution_id), None)
         resource_view: dict[str, Any] = {"state": "unknown"}
         if (resource is not None and all(_safe_identifier(resource.get(key)) for key in
                 ("resource_id", "approval_id", "decision_id", "delegation_id"))):
@@ -2621,6 +2637,13 @@ def _workflow_actions_section(
         "observedCount": len(actions),
         "executionInventoryReadComplete": execution_inventory_complete,
         "actionEdgeReadComplete": read.complete and not read.scope_mismatch and not invalid_rows,
+        "approvedResourceRead": {
+            "state": "complete" if resource_read.complete else "truncated" if resource_read.truncated else "incomplete" if resource_read.available else "unavailable",
+            "available": resource_read.available,
+            "complete": resource_read.complete,
+            "truncated": resource_read.truncated,
+            "reasonCode": resource_read.reason,
+        },
         "workflowDefinitionState": "unknown",
         "actionProducerCoverage": "unknown",
         "authorizationState": "not_established_by_tool_call_edge",

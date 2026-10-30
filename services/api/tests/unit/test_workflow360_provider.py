@@ -2807,15 +2807,17 @@ async def test_workflow_action_authorities_require_slot_envelopes_and_keep_effec
     source = Source(WorkflowRunInvocationRead((_row("invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"),), True, True),
                     agent_executions=WorkflowAgentExecutionRead((execution,), True, True), approvals=WorkflowApprovalRead((approval,), True, True))
     calls = []
+    actual_approved_resources = action_authorities.approved_resources
+    access_rows = [{"tenant_id": TENANT_A, "workflow_run_id": RUN_ID,
+        "execution_id": "agent-execution-a", "approval_id": "approval-a", "decision_id": "decision-a",
+        "delegation_id": "delegation-a", "requested_resource": "resource-a", "evaluated_at": "2026-10-18T10:00:00Z"}]
     async def access(**kwargs):
         calls.append("access")
-        return approval_agent_access.ApprovalAgentAccessRead(({"tenant_id": TENANT_A, "workflow_run_id": RUN_ID,
-            "execution_id": "agent-execution-a", "approval_id": "approval-a", "decision_id": "decision-a",
-            "delegation_id": "delegation-a", "requested_resource": "resource-a", "evaluated_at": "2026-10-18T10:00:00Z"},), True, True)
+        return approval_agent_access.ApprovalAgentAccessRead(tuple(access_rows), True, True)
     async def resources(**kwargs):
         calls.append("resource")
-        return [{"execution_id": "agent-execution-a", "resource_id": "resource-a", "approval_id": "approval-a",
-                 "decision_id": "decision-a", "delegation_id": "delegation-a", "registered_at": "2026-10-18T09:00:00Z"}]
+        return action_authorities.ApprovedResourceRead(({"execution_id": "agent-execution-a", "resource_id": "resource-a", "approval_id": "approval-a",
+                 "decision_id": "decision-a", "delegation_id": "delegation-a", "registered_at": "2026-10-18T09:00:00Z"},), True, True)
     monkeypatch.setattr(approval_agent_access, "read_approval_agent_access", access)
     monkeypatch.setattr(action_authorities, "approved_resources", resources)
     request = _request()
@@ -2835,5 +2837,18 @@ async def test_workflow_action_authorities_require_slot_envelopes_and_keep_effec
     assert projected["executionResult"]["toolResult"] == "unknown"
     assert projected["approvedResource"]["resourceId"] == "resource-a"
     assert projected["approvedResource"]["resourceOperation"] == "unknown"
+    assert _sections(result)["actions"].content["approvedResourceRead"] == {
+        "state": "complete", "available": True, "complete": True, "truncated": False, "reasonCode": None,
+    }
     assert {claim.kind for claim in result.claims} >= {"workflow_linked_executor_result", "workflow_linked_approved_resource"}
     assert _sections(result)["approvals"].content["approvals"][0]["agentAccess"]["state"] == "unknown"
+
+    monkeypatch.setattr(action_authorities, "approved_resources", actual_approved_resources)
+    access_rows[:] = access_rows * 201
+    truncated = await Workflow360Provider(source=source).project(request, context)
+    truncated_actions = _sections(truncated)["actions"]
+    assert truncated_actions.content["approvedResourceRead"] == {
+        "state": "truncated", "available": True, "complete": False, "truncated": True,
+        "reasonCode": "approved_resource_access_read_truncated",
+    }
+    assert truncated_actions.content["actions"][0]["approvedResource"]["state"] == "unknown"

@@ -45,8 +45,9 @@ async def test_approved_resource_requires_current_exact_tenant_record(case):
         async def get_resource(self, tenant_id, resource_id):
             assert (tenant_id, resource_id) == ("tenant-a", "resource-1")
             return None if case == "missing" else resource
-    rows = await approved_resources(tenant_id="tenant-a", workflow_run_id="run-1", access_rows=[row], store=Store())
-    assert len(rows) == (1 if case == "valid" else 0)
+    read = await approved_resources(tenant_id="tenant-a", workflow_run_id="run-1", access_rows=[row], store=Store())
+    assert read.available is True and read.complete is True and read.truncated is False
+    assert len(read.rows) == (1 if case == "valid" else 0)
 
 
 @pytest.mark.asyncio
@@ -63,12 +64,26 @@ async def test_approved_resources_fail_closed_for_ambiguous_or_malformed_evidenc
     async def read(rows):
         return await approved_resources(tenant_id="tenant-a", workflow_run_id="run-1", access_rows=rows, store=Store())
 
-    assert len(await read([base, dict(base)])) == 1  # replayed access row is one association
-    assert await read([base, {**base, "requested_resource": "resource-2"}]) == []
-    assert await read([base, {**base, "decision_id": "decision-2"}]) == []
-    assert await read([{**base, "approval_id": None}, None]) == []
-    assert await read([{**base, "evaluated_at": "9999-01-01T00:00:00Z"}]) == []
-    assert await read([base] * 201) == []
+    assert len((await read([base, dict(base)])).rows) == 1  # replayed access row is one association
+    assert (await read([base, {**base, "requested_resource": "resource-2"}])).rows == ()
+    assert (await read([base, {**base, "decision_id": "decision-2"}])).rows == ()
+    assert (await read([{**base, "approval_id": None}, None])).rows == ()
+    assert (await read([{**base, "evaluated_at": "9999-01-01T00:00:00Z"}])).rows == ()
+
+
+@pytest.mark.asyncio
+async def test_approved_resources_reports_truncation_for_more_than_200_access_rows():
+    class Store:
+        async def get_resource(self, tenant_id, resource_id):
+            raise AssertionError("truncated reads must fail closed before resolving resources")
+
+    rows = [{"tenant_id": "tenant-a", "workflow_run_id": "run-1"}] * 201
+    read = await approved_resources(tenant_id="tenant-a", workflow_run_id="run-1", access_rows=rows, store=Store())
+    assert read.rows == ()
+    assert read.available is True
+    assert read.complete is False
+    assert read.truncated is True
+    assert read.reason == "approved_resource_access_read_truncated"
 
 
 @pytest.mark.asyncio
