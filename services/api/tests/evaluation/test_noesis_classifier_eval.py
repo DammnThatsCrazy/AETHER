@@ -250,6 +250,11 @@ EVAL_CASES: list[tuple[str, str]] = [
     ("Reconcile the risk assessment and fraud hypotheses for entity ent_123", "risk_fraud_contradiction_lookup"),
     ("Does the fraud hypothesis conflict with the risk assessment for agent ag_1?", "risk_fraud_contradiction_lookup"),
 
+    # agent_behavior (3 examples)
+    ("What does agent ag_123 usually do?", "agent_behavior"),
+    ("Explain the behavior of agent ag_123", "agent_behavior"),
+    ("Show the decisions agent ag_123 made", "agent_behavior"),
+
 ]
 
 
