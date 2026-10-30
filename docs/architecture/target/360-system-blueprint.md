@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d5f7449dc449eebdd744d1a8ca665b3d1b33d1291f2038627d7fd3e7131a8e9d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:51c87d82aa0fe872058d47410ef6fcea9d78b4ab176b69d36128495153d77be8"
 ---
 
 # 360 System Blueprint
@@ -79,8 +79,10 @@ remain unbound. Agent360 `capabilities` resolves
 observed MCP catalog tool identity only for an exact tenant/provider/server/tool
 tuple. For a complete canonical grant read, it also exposes the exact recorded
 invoke action and capability or server resource with delegation evidence;
-ambiguous grant scopes fail closed. Action and resource policy and effective
-tool authorization remain unbound. Support360 `sla` now joins an operator-registered source policy revision
+ambiguous grant scopes fail closed. It also exposes bounded persisted
+`capability.invoke` evaluations with exact Agent, capability, grant, result,
+and time. They do not bind to observed MCP calls or establish current effective
+authority; the slot remains partial. Support360 `sla` now joins an operator-registered source policy revision
 to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link

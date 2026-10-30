@@ -11,9 +11,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d5f7449dc449eebdd744d1a8ca665b3d1b33d1291f2038627d7fd3e7131a8e9d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:51c87d82aa0fe872058d47410ef6fcea9d78b4ab176b69d36128495153d77be8"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:bdbb9466297c2bb1b97b18876c9489bf45bc14827c02b5ec1c83055dbfddf733"
+  "services/api/actions/agent/": "sha256:56085e40bd0f9302f56d6d771263cd943cb8e5488b35448c837f6ef9ae4d4add"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -147,8 +147,11 @@ canonical Agent and tenant; missing, malformed, foreign, or truncated rows keep
 coverage partial or unknown. The capability profile reports observed reach
 and invoke-grant coverage. A complete grant read includes recorded invoke
 action and capability or server resource scopes with delegation evidence;
-ambiguous dual-target grants are rejected. It does not decide whether a new
-action/resource request is authorized. Its
+ambiguous dual-target grants are rejected. The bounded `capability.invoke`
+policy history records exact Agent, capability, grant reference, result, and
+evaluation time. Those evaluations are not linked to observed tool calls and do
+not establish current or historical effective authorization; action and
+resource authorities remain unbound. Its
 `policy_boundary` section now carries historical, action-scoped server
 decisions when observed while keeping effective policy unknown; it does not
 expose a standing policy snapshot. Its `risk_summary` composes canonical

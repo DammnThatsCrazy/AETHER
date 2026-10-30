@@ -67,9 +67,9 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:c17fc659d3a24b75c401cf018996669d3d42f2ce3ca4ce1f057c30175162fc69"
+  "packages/shared/": "sha256:bd1a8cd7e8ac5892bba49e1cb81f78541905d22bccaf374f805c06a5631a3d68"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:a4a99e1b7f75401f596da29b4ccc29bc11c986f8fed2cc44853a0e4f23e8145f"
+  "services/api/actions/agent/agent360_provider.py": "sha256:df1bc42420c157079942ba0475219928c75361aa19279a10e9adf8f14046547e"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
@@ -1058,7 +1058,10 @@ identity and party joins, with `effectiveAuthorization=unknown`. Agent360
 exposes exact active capability invoke-grant action and resource scopes with
 delegation evidence only after a complete canonical grant read. Grants that
 specify both a capability and a server are rejected; these recorded scopes do
-not establish effective authorization or policy at execution time. Agent360
+not establish effective authorization or policy at execution time. It also
+exposes bounded prior `capability.invoke` evaluations with exact Agent,
+capability, grant, result, and evaluation-time context; these are not linked to
+observed tool calls and do not establish current authorization. Agent360
 also requires one resolved tenant-owned canonical Agent before reading
 source-asserted inbox/message observations into its communications slot.
 Claims cite the exact identity, inbox, and message evidence; the read does

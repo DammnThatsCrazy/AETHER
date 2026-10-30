@@ -14,7 +14,7 @@ source_hashes:
   "services/api/governance/governance/routes.py": "sha256:ca87bb59cf8c61661b53d0294d6cee4f5093beb28ae32aca79cbea7a62b708f1"
   "services/api/governance/reliability/service.py": "sha256:71fe39c503316a915a02f154dececd6385e7e07ed074ddea7ddb24915551d20c"
   "services/api/governance/security/access_control.py": "sha256:3e5f52376cae80e8e109bc580939800220dde88abe18e3efea46c5f643d000ef"
-  "services/api/governance/security/policy_engine.py": "sha256:a086aa9ec1dca46b6663ec5878fae5d4e8bbf0551905bf0bfda703a2604073b7"
+  "services/api/governance/security/policy_engine.py": "sha256:4549f890a119c7bfaafe514c8527bac7aa86aee9ae4755e849e576ed0b4810a7"
 ---
 
 # Security, Compliance & Governance Controls
@@ -46,13 +46,19 @@ government buyers run a security review against demonstrable controls. It answer
 | Break-glass operator access | [BREAK-GLASS-ACCESS.md](../architecture/BREAK-GLASS-ACCESS.md) | Implemented |
 | Data retention + data requests | [DATA-RETENTION.md](./DATA-RETENTION.md) | Implemented |
 | Audit export governance | [AUDIT-EXPORTS.md](./AUDIT-EXPORTS.md) | Implemented |
+| Integration security | [INTEGRATION-SECURITY.md](./INTEGRATION-SECURITY.md) | Implemented |
+| Governance evidence packs | [GOVERNANCE-EVIDENCE-PACKS.md](./GOVERNANCE-EVIDENCE-PACKS.md) | Implemented |
 
 The `action.dispatch` policy record captures the allowed tenant write-permission
 check, approved-decision gate, actor, tenant, action ID, and evaluation time. It
 is persisted with the dispatch and can be revalidated by downstream projections;
 it does not attest to connector execution or an external effect.
-| Integration security | [INTEGRATION-SECURITY.md](./INTEGRATION-SECURITY.md) | Implemented |
-| Governance evidence packs | [GOVERNANCE-EVIDENCE-PACKS.md](./GOVERNANCE-EVIDENCE-PACKS.md) | Implemented |
+
+`capability.invoke` decisions persist a context containing the exact Agent,
+capability, grant reference, inventory observation, and evaluation result.
+Agent360 exposes bounded tenant-scoped evaluations with their timestamps. These
+are prior policy evaluations; they are not linked to observed tool calls and do
+not prove current authority.
 
 ## Architecture
 

@@ -15,7 +15,7 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d5f7449dc449eebdd744d1a8ca665b3d1b33d1291f2038627d7fd3e7131a8e9d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:51c87d82aa0fe872058d47410ef6fcea9d78b4ab176b69d36128495153d77be8"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -78,6 +78,11 @@ Views, cart changes, checkout starts, and payment attempts do not create an
 intent. Agent-authored declarations, commerce/SKU/checkout subjects, and a
 freshness threshold remain unsupported, so the projection does not grant
 purchase or execution authority and the slot remains partial.
+
+Agent360's capabilities slot exposes bounded persisted `capability.invoke`
+policy evaluations with exact Agent, capability, grant reference, outcome, and
+time. These evaluations are not linked to observed MCP calls; effective tool
+authorization and tool execution evidence remain open.
 
 The current x402 approval records can also bind one server-created execution
 ID and action to a typed approval decision history. Execution360 accepts that

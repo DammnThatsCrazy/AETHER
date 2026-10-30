@@ -528,6 +528,7 @@ class RepositoryAgent360Source:
         """
         from actions.agent_access_intelligence.authority import capability_authority_service
         from actions.agent_access_intelligence.profiles import capability_profile_service
+        from governance.security.repositories import PolicyDecisionRepository
 
         profile = await capability_profile_service.profile(tenant_id, agent_id)
         grants = await capability_authority_service.list(
@@ -537,6 +538,14 @@ class RepositoryAgent360Source:
             offset=0,
         )
         truncated = len(grants) > CAPABILITY_AUTHORIZATION_SCAN_LIMIT
+        try:
+            policy_decisions = await PolicyDecisionRepository().list_for_tenant(
+                tenant_id, limit=MAX_READ_LIMIT + 1, extra={"policy_key": "capability.invoke"}
+            )
+            policy_decisions_complete = len(policy_decisions) <= MAX_READ_LIMIT
+        except Exception:  # noqa: BLE001 - policy history degrades independently from grant reads
+            policy_decisions = []
+            policy_decisions_complete = False
         return Agent360ReadBatch(
             rows=[
                 {
@@ -546,6 +555,8 @@ class RepositoryAgent360Source:
                     "profile": profile,
                     "canonical_grant_records": grants[:CAPABILITY_AUTHORIZATION_SCAN_LIMIT],
                     "canonical_grant_read_complete": not truncated,
+                    "capability_policy_decisions": policy_decisions[:MAX_READ_LIMIT],
+                    "capability_policy_decision_read_complete": policy_decisions_complete,
                 }
             ],
             truncated=truncated,
@@ -2922,7 +2933,7 @@ class Agent360Provider:
                     subject=request.subject,
                     evidenceRefs=_dedupe_refs(capability_access_refs),
                     claims=[
-                        "Tenant-scoped capability reach is joined to exact active invoke-grant records for the resolved canonical Agent and reflects current repository state at read time; it does not evaluate authorization for a new action or resource."
+                        "Tenant-scoped capability reach is joined to exact active invoke-grant records and bounded prior capability.invoke policy evaluations for the resolved canonical Agent. Evaluation records retain their exact capability, grant, and timestamp; they do not establish current authorization or prove a tool invocation occurred."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=["capabilities"],
@@ -3569,6 +3580,56 @@ class Agent360Provider:
         return validated, complete
 
     @staticmethod
+    def _validate_capability_policy_decisions(
+        records: Any, tenant_id: Any, canonical_agent_entity_id: Any,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        if (not isinstance(records, list) or not isinstance(tenant_id, str)
+                or not isinstance(canonical_agent_entity_id, str)):
+            return [], False
+        now = datetime.now(timezone.utc)
+        validated: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        complete = True
+        for row in records:
+            context = row.get("context") if isinstance(row, dict) else None
+            decision_id = row.get("decision_id") if isinstance(row, dict) else None
+            capability_id = row.get("resource_id") if isinstance(row, dict) else None
+            evaluated_at = row.get("evaluated_at") if isinstance(row, dict) else None
+            evaluated, error = try_parse_instant(evaluated_at)
+            valid = bool(
+                isinstance(row, dict)
+                and isinstance(decision_id, str) and decision_id.strip() and decision_id not in seen
+                and row.get("tenant_id") == tenant_id
+                and row.get("policy_key") == "capability.invoke"
+                and row.get("actor_type") == "tenant_user"
+                and row.get("resource_type") == "capability"
+                and row.get("action") == "invoke"
+                and isinstance(row.get("allowed"), bool)
+                and isinstance(capability_id, str) and capability_id.strip()
+                and isinstance(context, dict)
+                and context.get("agent_id") == canonical_agent_entity_id
+                and context.get("capability_id") == capability_id
+                and isinstance(context.get("capability_observed"), bool)
+                and evaluated is not None and error is None and evaluated <= now
+                and (not row.get("allowed") or (
+                    isinstance(context.get("capability_grant_record_id"), str)
+                    and bool(context["capability_grant_record_id"].strip())
+                ))
+            )
+            if not valid:
+                complete = False
+                continue
+            seen.add(decision_id)
+            validated.append({
+                "decision_id": decision_id,
+                "capability_id": capability_id,
+                "allowed": row["allowed"],
+                "evaluated_at": evaluated.isoformat(),
+                "grant_record_id": context.get("capability_grant_record_id"),
+            })
+        return validated, complete
+
+    @staticmethod
     def _capability_profile_complete(
         rows: list[dict[str, Any]],
         read: _Read,
@@ -3746,6 +3807,13 @@ class Agent360Provider:
             and not read.truncated
             and grant_rows_valid
         )
+        policy_rows, policy_rows_valid = Agent360Provider._validate_capability_policy_decisions(
+            row.get("capability_policy_decisions"), tenant_id, canonical_agent_entity_id,
+        )
+        policy_read_complete = bool(
+            row.get("capability_policy_decision_read_complete") is True
+            and policy_rows_valid
+        )
         active_grants = [grant for grant in grant_rows if grant.get("state") == "active"]
         from actions.agent_access_intelligence.authority import server_ref_for
 
@@ -3787,6 +3855,21 @@ class Agent360Provider:
                 }
                 for grant in matching[:MAX_READ_LIMIT]
             ] if grant_read_complete else []
+            evaluations = [
+                evaluation for evaluation in policy_rows
+                if evaluation["capability_id"] == capability["capabilityId"]
+            ]
+            capability["invokePolicyEvaluations"] = [
+                {
+                    **evaluation,
+                    "evidenceRef": EvidenceRef(
+                        id=evaluation["decision_id"], type="event",
+                        source="security_policy_decisions", observedAt=evaluation["evaluated_at"],
+                    ).model_dump(mode="json", exclude_none=True),
+                }
+                for evaluation in evaluations[:MAX_READ_LIMIT]
+            ]
+            capability["invokePolicyEvaluationHistoryComplete"] = policy_read_complete
 
         evidence_refs: list[dict[str, Any]] = []
         identity = profile.get("identity")
@@ -3811,6 +3894,10 @@ class Agent360Provider:
                     type="entity",
                     source="capability_catalog",
                 ).model_dump(mode="json", exclude_none=True)
+            )
+            evidence_refs.extend(
+                evaluation["evidenceRef"]
+                for evaluation in item.get("invokePolicyEvaluations", [])
             )
         active_record_ids = [
             record_id

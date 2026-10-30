@@ -3056,7 +3056,7 @@
         {
           "id": "capabilities",
           "requirement": "required",
-          "description": "Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent and exact observed MCP tool catalog identity; action and resource authorization remains unknown.",
+          "description": "Observed runtime capability reach joined to exact active invoke grants and bounded persisted capability.invoke evaluations for the resolved canonical Agent and exact observed MCP tool identity; current authorization and invocation binding remain unknown.",
           "canonicalAuthorityRefs": [
             "actions",
             "resources",
@@ -3084,8 +3084,8 @@
             "actions",
             "resources"
           ],
-          "authorityGapReason": "active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy",
-          "partialImplementationReason": "Current active grant join is bounded to 2000 records. Observed catalog identity for an exact MCP tool does not prove remote ownership, effective tool authorization, action or resource policy, or historical authority."
+          "authorityGapReason": "recorded_capability_invoke_policy_evaluations_are_not_bound_to_observed_tool_calls_or_current_effective_authority",
+          "partialImplementationReason": "Current active grant and bounded persisted capability.invoke policy evaluation reads require exact tenant, canonical Agent, capability, and grant scope. Evaluations show policy results at their recorded times but are not bound to observed MCP calls and do not establish current authorization, remote ownership, or historical authority."
         },
         {
           "id": "execution_history",

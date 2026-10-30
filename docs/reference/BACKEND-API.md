@@ -25,11 +25,11 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:c603f4f91494119bcc69eb48202c83c60b5aa46dc8d4f751a66fc47c7f64943e"
+  "services/api/actions/": "sha256:23bafc08aa6fd86ac3cf48e3ffff1e0e5062bb1e5d0ca7bf70723bd2a6550197"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:54c23c8d05a0d07a841a90550986a6f0f36fe44bf4bfff70efacd6bac6534d36"
+  "services/api/governance/": "sha256:2e1630b919066aaadfdba266305d3643f61ea3b43b94d6b53fd7d2a07052f81f"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
@@ -2256,7 +2256,10 @@ complete, continuous path with exact records and canonical party evidence.
 It does not infer transitive authority or an effective authorization decision.
 The Agent360 capability profile also exposes exact recorded invoke action and
 resource scopes with delegation evidence on a complete grant read. Ambiguous
-dual-target grants are rejected; these records are not an authorization decision.
+dual-target grants are rejected. It also exposes bounded persisted
+`capability.invoke` evaluations linked to exact tenant, Agent, capability, grant,
+result, and evaluation time. These records describe prior policy evaluations,
+not current authorization or actual tool invocations.
 These provider joins add no new HTTP endpoints and do not complete their
 surfaces or the full 18-surface contract.
 

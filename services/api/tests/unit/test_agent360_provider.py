@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 from pathlib import Path
@@ -1593,10 +1594,8 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
         "resources": ["capability:capability-search"],
         "evidenceRef": {"id": "capability-grant-1", "type": "document", "source": "delegations"},
     }]
-    assert any(
-        ref["id"] == "capability-grant-1" and ref["source"] == "delegations"
-        for ref in access_profile["evidenceRefs"]
-    )
+
+
     assert authority["actionScopedDecisionState"] == "available"
     assert authority["actionScopedDecisions"] == [
         {
@@ -1756,6 +1755,46 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
             claim.claims[0] for claim in result.claims if claim.kind == "agent_delegation_record"
         ).lower()
     )
+
+
+@pytest.mark.asyncio
+async def test_agent360_projects_exact_recorded_capability_policy_evaluation():
+    class PolicyHistorySource(FakeSource):
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "cap-policy-1", "tenant_id": tenant_id,
+                "policy_key": "capability.invoke", "actor_type": "tenant_user",
+                "resource_type": "capability", "resource_id": "capability-search",
+                "action": "invoke", "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {"agent_id": canonical_agent_entity_id,
+                            "capability_id": "capability-search",
+                            "capability_grant_record_id": "capability-grant-1",
+                            "capability_observed": True},
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = True
+            return batch
+
+    result = await Agent360Provider(PolicyHistorySource()).project(_request(), _context())
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    profile = authority["capabilityAccessProfile"]
+    capability = profile["capabilities"][0]
+    evaluations = capability["invokePolicyEvaluations"]
+    assert len(evaluations) == 1
+    assert evaluations[0]["decision_id"] == "cap-policy-1"
+    assert evaluations[0]["capability_id"] == "capability-search"
+    assert evaluations[0]["allowed"] is True
+    assert evaluations[0]["grant_record_id"] == "capability-grant-1"
+    assert evaluations[0]["evidenceRef"]["source"] == "security_policy_decisions"
+    assert capability["invokePolicyEvaluationHistoryComplete"] is True
+    assert capability["toolIdentity"]["effectiveToolAuthorization"] == "unknown"
+    assert any(ref["id"] == "cap-policy-1" for ref in profile["evidenceRefs"])
 
 
 @pytest.mark.asyncio

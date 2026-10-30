@@ -142,6 +142,7 @@ class PolicyDecision(BaseModel):
     severity: PolicySeverity = 'info'
     required_action: Optional[str] = None
     evaluated_at: str = Field(default_factory=now_iso)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class SecurityAuditEvent(BaseModel):

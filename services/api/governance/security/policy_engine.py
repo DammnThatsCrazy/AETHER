@@ -430,14 +430,21 @@ class PolicyEngine:
             # invocation. The sanitizer is correct and is not weakened; the key is renamed.
             "capability_grant_id": authorization_id,
         })
+        context = {
+            "agent_id": agent_id,
+            "capability_id": capability_id,
+            "capability_grant_record_id": authorization_id,
+            "capability_observed": capability_observed,
+        }
 
         def _deny(reason: str, required_action: str) -> PolicyDecision:
-            return self._decision(
+            decision = self._decision(
                 policy_key="capability.invoke", actor_id=actor_id, actor_type=actor_type,
                 action="invoke", resource_type="capability", tenant_id=tenant_id,
                 resource_id=capability_id, allowed=False, severity='block',
                 reason=reason, required_action=required_action,
             )
+            return decision.model_copy(update={"context": context})
 
         if not capability_observed:
             return await self._finalize(
@@ -469,6 +476,7 @@ class PolicyEngine:
             resource_id=capability_id, allowed=True,
             reason="active capability authorization",
         )
+        d = d.model_copy(update={"context": context})
         return await self._finalize(d, actor_type=actor_type, metadata=meta, **audit)
 
     async def list_decisions(

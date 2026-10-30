@@ -25,6 +25,7 @@ from governance.security.integration_security import (
 from governance.security.isolation_verifier import TenantIsolationVerifier
 from governance.security.policy_engine import PolicyEngine
 from governance.security.repositories import SecurityAuditEventRepository
+from governance.security.repositories import PolicyDecisionRepository
 from governance.security.retention import DataRetentionService
 
 pytestmark = pytest.mark.asyncio
@@ -117,6 +118,20 @@ async def test_dispatch_requires_actor_permission():
     )
     assert d.allowed is False
     assert "lacks tenant dispatch permission" in d.reason
+
+
+async def test_capability_policy_decision_persists_exact_agent_and_grant_context():
+    eng = PolicyEngine()
+    decision = await eng.check_capability_invocation(
+        actor_id="user-1", actor_type="tenant_user", tenant_id="tenant-1",
+        capability_id="cap-1", agent_id="agent-1", capability_observed=True,
+        has_active_authorization=True, authorization_id="grant-1",
+    )
+    stored = await PolicyDecisionRepository().find_by_id(decision.decision_id)
+    assert stored["context"] == {
+        "agent_id": "agent-1", "capability_id": "cap-1",
+        "capability_grant_record_id": "grant-1", "capability_observed": True,
+    }
 
 
 async def test_cross_tenant_access_denied():

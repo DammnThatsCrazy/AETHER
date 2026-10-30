@@ -2,6 +2,7 @@
 
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -64,3 +65,28 @@ def test_exact_grant_with_aware_boundaries_is_retained():
     assert Agent360Provider._validate_capability_grant_records(
         [record], "tenant-a", "agent-a"
     ) == ([record], True)
+
+
+def test_capability_policy_decision_requires_exact_tenant_agent_resource_and_time():
+    decision = {
+        "decision_id": "decision-1", "tenant_id": "tenant-a", "policy_key": "capability.invoke",
+        "actor_type": "tenant_user", "resource_type": "capability", "resource_id": "tool-a",
+        "action": "invoke", "allowed": True,
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
+        "context": {"agent_id": "agent-a", "capability_id": "tool-a",
+                    "capability_grant_record_id": "grant-a", "capability_observed": True},
+    }
+    assert Agent360Provider._validate_capability_policy_decisions(
+        [decision], "tenant-a", "agent-a"
+    )[1] is True
+    for field, value in (("tenant_id", "tenant-b"), ("resource_id", "tool-b"),
+                         ("actor_type", "agent"),
+                         ("evaluated_at", (datetime.now(timezone.utc) + timedelta(days=1)).isoformat())):
+        candidate = {**decision, field: value}
+        assert Agent360Provider._validate_capability_policy_decisions(
+            [candidate], "tenant-a", "agent-a"
+        ) == ([], False)
+    candidate = {**decision, "context": {**decision["context"], "agent_id": "agent-b"}}
+    assert Agent360Provider._validate_capability_policy_decisions(
+        [candidate], "tenant-a", "agent-a"
+    ) == ([], False)
