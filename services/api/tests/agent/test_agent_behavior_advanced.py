@@ -194,3 +194,24 @@ def test_adversarial_probing_and_injection():
                ("agent_guardrail_observed", "a", {}))
     kinds = {x["kind"] for x in adversarial_signals(fs)}
     assert {"guardrail_triggered", "authority_probing", "injection_suspected"} <= kinds
+
+
+def test_risk360_pipeline_consumes_agent_behavior_evidence():
+    import pytest as _pytest
+
+    from intelligence.risk360.pipeline import compute_assessment
+    from intelligence.risk360.signals import RiskEvidenceBundle
+
+    fs = facts(*[e for i in range(6) for e in _shop(i, deny=True)])
+    model = build_behavior_model(fs, "buyer")
+    bundle = RiskEvidenceBundle(agent_behavior={
+        "model": model,
+        "authority_checks": [{"status": "outside", "evidence": ["e-1"]}],
+        "adversarial": adversarial_signals(fs),
+    })
+    res = compute_assessment(tenant_id=T, subject_kind="agent", subject_id="buyer", evidence_bundle=bundle)
+    assert res.assessment.vector.has_component("agentic")
+    with _pytest.raises(ValueError):
+        compute_assessment(tenant_id=T, subject_kind="entity", subject_id="person-1", evidence_bundle=bundle)
+    with _pytest.raises(ValueError):
+        compute_assessment(tenant_id=T, subject_kind="agent", subject_id="someone-else", evidence_bundle=bundle)

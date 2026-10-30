@@ -40,7 +40,7 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 | WO-070 – WO-083 capability, competency, features, uncertainty, exploration, confidence, observability, model, preference | Built | `intelligence/agent_behavior/model.py` | model test |
 | WO-090 – WO-091 attribution, influence graph | Built | `intelligence/agent_behavior/dynamics.py` | `test_agent_behavior_advanced.py` |
 | WO-092 Value | Built as a Value-owned seam; composed into the Agent 360 `value` section; not yet called by a Value 360 provider | `value/attribution/agent_behavior_value.py` | advanced test |
-| WO-093 Risk | Built as RiskSignal adapters; composed into the Agent 360 `risk` section; not yet fed into the Risk360 pipeline run | `intelligence/risk360/agent_behavior_signals.py` | advanced test |
+| WO-093 Risk | Built. `agent_behavior` is a Risk360 evidence-bundle producer, so `compute_assessment` turns behavior evidence into agent-subject signals (`agentic`, `execution`, `behavioral`, `identity`, `security`, `data_quality` dimensions); also composed into the Agent 360 `risk` section | `intelligence/risk360/agent_behavior_signals.py` | advanced test |
 | WO-094 Trust | Built under Risk (ADR-AB-011) | `intelligence/risk360/agent_trust.py` | advanced test |
 | WO-100 – WO-103 snapshots, drift, adaptation, counterfactuals | Built; snapshots are computed on read, not stored | `dynamics.py` | advanced test |
 | WO-110 – WO-113 read models | Built: routes `GET /v1/agent/agents/{agent_ref}/behavior` and `/decisions/{decision_id}`; Profile 360 reconciliation is a function, not yet a Profile 360 section | `intelligence/agent_behavior/read_models.py`, `actions/agent/deployment_routes.py` | `test_agent_behavior_read_models.py` |
@@ -59,7 +59,7 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 ## Open items
 
 1. **Continuity review decisions.** Agent continuity items are queued and visible in Agent 360, but there is no approve or reject action for them yet. The existing late-binding approve and merge routes deliberately cannot load them.
-2. **Pipeline wiring.** Value, Risk and Trust are composed into the Agent 360 read model. No Value 360 provider or Risk360 pipeline run consumes them yet, and Noesis has no behavior intent.
+2. **Pipeline wiring.** Risk360 accepts agent behavior evidence through its evidence bundle. No caller assembles that bundle on a schedule yet, no Value 360 provider consumes the Value seam, and Noesis has no behavior intent.
 3. **Persistence.** Behavior models, snapshots and DecisionEnvelopes are rebuilt on read from at most 1,000 recent facts per agent. Longer histories need a stored, replayable projection. That decision goes through the projection registry.
 4. **Access Kit.** See WO-123 above.
 5. **Calibration.** Every rate and confidence is uncalibrated. Only Wilson intervals are reported.
