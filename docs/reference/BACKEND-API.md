@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:f89fa77d2f74a0f920cf00f4b2cf3448167181ecb9099900b7b4952d6eb02bb6"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:34727f938c0757dc3102bd336d6088da9018d0d83f029ba2112df6baec48a13f"
+  "services/api/intelligence/": "sha256:c369d8d47f583822b1f15d1cde3178ee27b222974a6c080a5e9e8da764f9709b"
   "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -1951,6 +1951,11 @@ action; this records the tenant write-permission and approved-decision checks,
 not connector execution or an external effect. For execution-bound x402
 approvals, the decision also records the authenticated human's request-time
 `commerce:approve` check.
+
+An idempotent dispatch replay must supply the same association reference and
+match the persisted tenant, action, canonical action decision, selected action,
+and recommendation tuple. The replay uses the original stored association rather
+than asserting that its Journey intent or Risk decision is still current.
 
 Communication360 Agent authorship requires an exact tenant-owned canonical
 Agent author binding with provider scope, event-time role validity, and trusted

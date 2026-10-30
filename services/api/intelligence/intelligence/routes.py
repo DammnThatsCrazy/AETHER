@@ -1017,6 +1017,97 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
                 from shared.common.common import ConflictError
                 raise ConflictError("Idempotent dispatch has a different journey association")
             replay_dispatch = existing[0]
+    if replay_dispatch is not None:
+        # Replays use the association stored on the original dispatch;
+        # they do not revalidate a Journey intent or the current Risk decision.
+        # Still bind that stored association to the exact canonical dispatch
+        # context and caller reference so an idempotency key cannot be rebound.
+        from shared.common.common import ConflictError
+
+        selected = decision.get("selected_action") or {}
+        if not isinstance(selected, dict):
+            selected = {}
+        association_conflict = False
+        if body.risk_action_reference is not None:
+            association = replay_dispatch.get("risk_action_association")
+            reference = body.risk_action_reference
+            from actions.agent.risk_dispatch_association import recommendation_matches_risk_subject
+
+            recommendation_id = recommendation.get("recommendation_id")
+            association_conflict = not (
+                isinstance(association, dict)
+                and association.get("kind") == "risk_intervention"
+                and association.get("link_state") == "caller_associated"
+                and association.get("record_id") == reference.record_id
+                and association.get("subject_kind") == reference.subject_kind
+                and association.get("subject_id") == reference.subject_id
+                and association.get("recommendation_id") == recommendation_id
+                and association.get("action_key") == selected.get("action_key")
+                and association.get("action_type") == selected.get("action_type")
+                and replay_dispatch.get("risk_action_association_record_id") == reference.record_id
+                and replay_dispatch.get("tenant_id") == tenant.tenant_id
+                and replay_dispatch.get("action_id") == action_id
+                and replay_dispatch.get("decision_id") == decision.get("decision_id")
+                and replay_dispatch.get("recommendation_id") == recommendation_id
+                and action.get("tenant_id") == tenant.tenant_id
+                and action.get("action_id") == action_id
+                and action.get("decision_id") == decision.get("decision_id")
+                and action.get("recommendation_id") == recommendation_id
+                and action.get("action_type") == selected.get("action_type")
+                and decision.get("tenant_id") == tenant.tenant_id
+                and decision.get("decision_status") == "approved"
+                and decision.get("recommendation_id") == recommendation_id
+                and selected.get("action_key") == association.get("action_key")
+                and selected.get("action_type") == association.get("action_type")
+                and isinstance(recommendation_id, str)
+                and recommendation_matches_risk_subject(
+                    recommendation, reference.subject_kind, reference.subject_id
+                )
+                and not body.journey_action_reference
+                and not replay_dispatch.get("journey_action_association")
+            )
+        elif body.journey_action_reference is not None:
+            association = replay_dispatch.get("journey_action_association")
+            reference = body.journey_action_reference
+            recommendation_id = recommendation.get("recommendation_id")
+            association_conflict = not (
+                isinstance(association, dict)
+                and association.get("kind") == "journey_action_intent"
+                and association.get("link_state") == "caller_associated"
+                and association.get("record_id") == reference.record_id
+                and association.get("subject_id") == reference.journey_id
+                and association.get("version_id") == reference.journey_version_id
+                and association.get("recommendation_id") == recommendation_id
+                and association.get("action_key") == selected.get("action_key")
+                and association.get("action_type") == selected.get("action_type")
+                and replay_dispatch.get("journey_action_association_record_id") == reference.record_id
+                and replay_dispatch.get("tenant_id") == tenant.tenant_id
+                and replay_dispatch.get("action_id") == action_id
+                and replay_dispatch.get("decision_id") == decision.get("decision_id")
+                and replay_dispatch.get("recommendation_id") == recommendation_id
+                and action.get("tenant_id") == tenant.tenant_id
+                and action.get("action_id") == action_id
+                and action.get("decision_id") == decision.get("decision_id")
+                and action.get("recommendation_id") == recommendation_id
+                and action.get("action_type") == selected.get("action_type")
+                and decision.get("tenant_id") == tenant.tenant_id
+                and decision.get("decision_status") == "approved"
+                and decision.get("recommendation_id") == recommendation_id
+                and selected.get("action_key") == association.get("action_key")
+                and selected.get("action_type") == association.get("action_type")
+                and recommendation.get("tenant_id") == tenant.tenant_id
+                and recommendation.get("recommendation_id") == recommendation_id
+                and not replay_dispatch.get("risk_action_association")
+            )
+        else:
+            association_conflict = bool(
+                replay_dispatch.get("journey_action_association")
+                or replay_dispatch.get("risk_action_association")
+                or replay_dispatch.get("journey_action_association_record_id")
+                or replay_dispatch.get("risk_action_association_record_id")
+            )
+        if association_conflict:
+            raise ConflictError("Idempotent dispatch has a different or inconsistent association")
     if decision.get("decision_status") != "approved":
         raise BadRequestError("Actions can only be dispatched for approved decisions")
     # Governance policy: elevated/critical dispatch requires an approval_id. This

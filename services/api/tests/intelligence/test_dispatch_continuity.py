@@ -229,6 +229,12 @@ async def test_risk_dispatch_binding_replays_without_revalidating_and_rejects_re
     action, _, _ = await context("tenant-a", "action-1")
     await routes._actions.insert("action-1", action)
     reference = {"record_id": "risk-1", "subject_kind": "entity", "subject_id": "entity-1"}
+    with pytest.raises(routes.BadRequestError):
+        rebound_ingress = routes.DispatchActionRequest(
+            target_type="test", idempotency_key="risk-cross-subject",
+            risk_action_reference={"record_id": "risk-1", "subject_kind": "entity", "subject_id": "entity-2"},
+        )
+        await routes._dispatch_action("action-1", rebound_ingress, _request("tenant-a"))
     body = routes.DispatchActionRequest(target_type="test", idempotency_key="risk-key", risk_action_reference=reference)
     result = await routes._dispatch_action("action-1", body, _request("tenant-a"))
     assert result["data"]["dispatch"]["risk_action_association"]["recommendation_id"] == "rec-1"
@@ -238,4 +244,18 @@ async def test_risk_dispatch_binding_replays_without_revalidating_and_rejects_re
     assert (await routes._dispatch_action("action-1", body, _request("tenant-a")))["data"]["replayed"]
     with pytest.raises(ConflictError):
         await routes._dispatch_action("action-1", routes.DispatchActionRequest(target_type="test", idempotency_key="risk-key"), _request("tenant-a"))
+    with pytest.raises(ConflictError):
+        rebound = routes.DispatchActionRequest(
+            target_type="test", idempotency_key="risk-key",
+            risk_action_reference={"record_id": "risk-1", "subject_kind": "entity", "subject_id": "entity-2"},
+        )
+        await routes._dispatch_action("action-1", rebound, _request("tenant-a"))
+    stored = (await routes._dispatches.find_many(
+        {"tenant_id": "tenant-a", "action_id": "action-1", "idempotency_key": "risk-key"}, limit=1
+    ))[0]
+    original_recommendation = stored["risk_action_association"]["recommendation_id"]
+    stored["risk_action_association"]["recommendation_id"] = "different-rec"
+    with pytest.raises(ConflictError):
+        await routes._dispatch_action("action-1", body, _request("tenant-a"))
+    stored["risk_action_association"]["recommendation_id"] = original_recommendation
     assert target.calls == 1
