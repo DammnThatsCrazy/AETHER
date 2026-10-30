@@ -523,11 +523,11 @@ async def execute(
         },
         causality={"triggered_by_event_id": body.triggered_by_event_id},
     ))
-    # The actual execution runtime is out of scope for this layer — Profile 360
-    # only owns the bookkeeping. Callers may follow up with `/executions/{id}`
-    # PATCH-style updates as the runtime progresses; v1 here records the
-    # synchronous "started" row, treating the immediate response as the result
-    # of a succeeded planning step.
+    # This route owns admission and bookkeeping only; it does not invoke an
+    # agent tool or resource operation. The returned AgentExecution and its
+    # later worker callback therefore cannot serve as an invocation receipt.
+    # A receipt producer must be wired into the runtime's actual tool/resource
+    # call boundary before Agent360 or Workflow360 can report those claims.
     record = await _executions.record(
         execution_id=execution_id,
         agent_id=agent_id,

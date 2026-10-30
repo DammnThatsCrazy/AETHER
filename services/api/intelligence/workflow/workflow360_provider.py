@@ -2549,6 +2549,14 @@ def _workflow_actions_section(
                 "calledAt": called_at,
                 "observationKind": "tenant_scoped_execution_linked_tool_call_edge",
                 "operationState": "call_observed_external_effect_unknown",
+                # CALLED_TOOL lifecycle edges and executor callbacks are not
+                # an invocation-bound receipt. Keep this explicit until a
+                # server-owned append-only receipt is joined at the actual
+                # tool/resource invocation boundary.
+                "executionReceipt": {
+                    "state": "unknown",
+                    "reasonCode": "canonical_action_execution_receipt_source_unavailable",
+                },
                 "authorityDecision": "not_established_by_tool_call_edge",
                 "executionResult": outcome or {"state": "unknown"},
                 "approvedResource": resource_view,

@@ -2167,6 +2167,15 @@ async def test_workflow_actions_project_observed_calls_without_inference() -> No
             "source": "graph_vertices",
             "uri": f"store://graph_vertices/{TENANT_A}%3Atool%3Atool-a",
         },
+        # Caller or callback controlled fields on an observation must never
+        # be promoted to a server execution receipt or operation result.
+        "principal_id": "attacker-principal",
+        "policy_decision": {"allowed": True, "policy_id": "caller-claim"},
+        "tool_result": {"status": "succeeded", "value": "caller-claim"},
+        "resource_id": "caller-resource",
+        "resource_operation": {"status": "succeeded"},
+        "external_effect": "confirmed",
+        "integrity": {"signature": "caller-claim"},
     }
 
     class SourceWithActions(FakeWorkflowSource):
@@ -2201,6 +2210,13 @@ async def test_workflow_actions_project_observed_calls_without_inference() -> No
     assert actions.content["actions"][0]["toolIdentityState"] == "resolved"
     assert actions.content["actions"][0]["executionResult"] == {"state": "unknown"}
     assert actions.content["actions"][0]["approvedResource"] == {"state": "unknown"}
+    assert actions.content["actions"][0]["executionReceipt"] == {
+        "state": "unknown",
+        "reasonCode": "canonical_action_execution_receipt_source_unavailable",
+    }
+    assert "tool_result" not in actions.content["actions"][0]
+    assert "policy_decision" not in actions.content["actions"][0]
+    assert "external_effect" not in actions.content["actions"][0]
     assert actions.content["actions"][0]["authorityDecision"] == "not_established_by_tool_call_edge"
     assert actions.content["actions"][0]["approvedResource"].get("resourceOperation", "unknown") == "unknown"
     assert actions.canonicalAuthorityRefs == ["agent_executions", "graph_edges", "tools"]
