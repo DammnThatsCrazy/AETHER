@@ -192,13 +192,18 @@ async def test_behavior_route_shows_queued_agent_continuity_reviews(_routes, mon
 
 # --- WO-110: behavior sections through the agent360 projection provider -------------
 
-def _projection(tenant=T, subject_kind="agent", subject_id="gsc-buyer"):
+def _projection(tenant=T, subject_kind="agent", subject_id="gsc-buyer", authorized=True, auth_tenant=None):
     from shared.intelligence_projections import ProjectionContext, ProjectionRequest, ProjectionSubject
+    from shared.intelligence_projections.contracts import ProjectionReadAuthorization
 
-    req = ProjectionRequest(projectionId="agent360", tenantId=tenant,
-                            subject=ProjectionSubject(kind=subject_kind, id=subject_id))
+    subject = ProjectionSubject(kind=subject_kind, id=subject_id)
+    req = ProjectionRequest(projectionId="agent360", tenantId=tenant, subject=subject)
+    auths = [ProjectionReadAuthorization(
+        tenantId=auth_tenant or tenant, sourceSurfaceId="agent360", sourceSubject=subject,
+        sourceSlotId="behavior", consumerProjectionId="agent360", targetProjectionId="agent360",
+        capabilityKey="agent_behavior", policyState="allowed")] if authorized else []
     ctx = ProjectionContext(projectionId="agent360", tenantId=tenant, registryState="in_flight",
-                            dependencyState=[], warnings=[])
+                            dependencyState=[], warnings=[], experience360ReadAuthorizations=auths)
     return req, ctx
 
 
@@ -255,7 +260,7 @@ async def test_agent360_provider_serves_the_route_read_model(_routes):
 
 
 @pytest.mark.asyncio
-async def test_agent360_behavior_sections_degrade_honestly():
+async def test_agent360_behavior_sections_degrade_honestly(_routes):
     from actions.agent.agent360_provider import Agent360Provider, BEHAVIOR_SECTIONS
 
     facts = _facts(_events("GS-C"))
@@ -282,3 +287,21 @@ async def test_agent360_behavior_sections_degrade_honestly():
         "timeRange": {"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"}})
     windowed = await Agent360Provider(_BehaviorOnlySource(capped_model)).project(windowed_req, ctx)
     assert {s.state for s in windowed.sections if s.id in BEHAVIOR_SECTIONS} == {"unknown"}
+
+
+@pytest.mark.asyncio
+async def test_agent360_behavior_sections_fail_closed_without_gate_parity(_routes, monkeypatch):
+    """The projection path must not bypass the route's registry flag or agent:manage."""
+    from actions.agent.agent360_provider import BEHAVIOR_SECTIONS, Agent360Provider
+
+    source = _BehaviorOnlySource()
+    for kwargs in ({"authorized": False}, {"auth_tenant": "other-tenant"}):
+        res = await Agent360Provider(source).project(*_projection(**kwargs))
+        states = {sec.state for sec in res.sections if sec.id in BEHAVIOR_SECTIONS}
+        assert states == {"suppressed"}, kwargs
+        assert "agent_behavior_not_authorized" in res.degradedReasons
+    monkeypatch.setattr(agent_routes.settings, "external_agent_telemetry",
+                        dataclasses.replace(agent_routes.settings.external_agent_telemetry,
+                                            enabled=False, registry_enabled=False))
+    res = await Agent360Provider(source).project(*_projection())
+    assert {sec.state for sec in res.sections if sec.id in BEHAVIOR_SECTIONS} == {"not_applicable"}

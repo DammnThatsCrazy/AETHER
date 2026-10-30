@@ -111,6 +111,10 @@ REASON_RISK_UNAVAILABLE = "agent_risk_source_unavailable"
 REASON_COMMUNICATION_UNAVAILABLE = "agent_communication_source_unavailable"
 REASON_TEMPORAL_REPLAY_UNAVAILABLE = "agent_temporal_replay_unavailable"
 REASON_EVIDENCE_PROVENANCE_UNAVAILABLE = "agent_evidence_provenance_source_unavailable"
+REASON_BEHAVIOR_DISABLED = "agent_behavior_disabled"
+REASON_BEHAVIOR_NOT_AUTHORIZED = "agent_behavior_not_authorized"
+#: Capability key a caller's server-derived read authorization must carry.
+BEHAVIOR_CAPABILITY = "agent_behavior"
 REASON_BEHAVIOR_UNAVAILABLE = "agent_behavior_source_unavailable"
 REASON_BEHAVIOR_TRUNCATED = "agent_behavior_source_truncated"
 
@@ -3214,6 +3218,32 @@ class Agent360Provider:
                 "behavior facts are keyed by the source-reported runtime agent reference; "
                 "a canonical Agent entity subject has no exact join to them",
             ), [], []
+        # Gate parity with GET /v1/agent/agents/{agent_ref}/behavior: the
+        # external agent registry must be enabled, and the caller must hold an
+        # explicit server-derived ``agent_behavior`` read authorization (the
+        # route requires agent:manage). Without both the sections fail closed.
+        from config.settings import settings
+
+        telemetry = settings.external_agent_telemetry
+        if not (telemetry.enabled or telemetry.registry_enabled):
+            return uniform(
+                "not_applicable", "external agent telemetry is not enabled",
+                REASON_BEHAVIOR_DISABLED,
+            ), [], [REASON_BEHAVIOR_DISABLED]
+        authorized = any(
+            auth.capabilityKey == BEHAVIOR_CAPABILITY
+            and auth.policyState == "allowed"
+            and auth.tenantId == tenant_id
+            and auth.targetProjectionId == self.projection_id
+            and auth.sourceSubject.kind == request.subject.kind
+            and auth.sourceSubject.id == request.subject.id
+            for auth in context.experience360ReadAuthorizations
+        )
+        if not authorized:
+            return uniform(
+                "suppressed", "agent behavior requires an agent:manage read authorization",
+                REASON_BEHAVIOR_NOT_AUTHORIZED,
+            ), [], [REASON_BEHAVIOR_NOT_AUTHORIZED]
         if request.timeRange is not None or request.asOf is not None or context.asOf is not None:
             return uniform(
                 "unknown",
