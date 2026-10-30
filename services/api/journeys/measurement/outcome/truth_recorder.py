@@ -144,6 +144,8 @@ async def record_from_silver_outcome(
         policy_version=policy_version,
         evidence_refs=_to_evidence_list(evidence_refs),
         source_event_ids=[event_id] if event_id else [],
+        prediction_id=row.get("prediction_id"),
+        prediction_label_contract_version=row.get("prediction_label_contract_version"),
         observed_at=row.get("occurred_at"),
         goal_id=row.get("goal_id"),
         recommendation_id=row.get("recommendation_id"),

@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 from typing import Any, Optional
 
+import pytest
+
 os.environ.setdefault("AETHER_ENV", "local")
 
 from journeys.measurement.contracts import CanonicalActivity  # noqa: E402
@@ -143,6 +145,38 @@ def test_outcome_projector_discards_malformed_adjudication_refs():
     assert result is not None
     assert result.rows[0]["prediction_id"] is None
     assert result.rows[0]["prediction_label_contract_version"] is None
+
+
+@pytest.mark.asyncio
+async def test_outcome_truth_recorder_preserves_explicit_prediction_refs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import journeys.measurement.outcome.truth_recorder as recorder
+
+    captured = {}
+
+    async def capture(record, store=None, *, register_correlation=True):
+        captured["record"] = record
+        return record
+
+    monkeypatch.setattr(recorder, "outcome_truth_store_enabled", lambda: True)
+    monkeypatch.setattr(recorder, "persist_outcome_truth", capture)
+    result = OutcomeProjector().project(_bronze_event())
+    assert result is not None
+    row = result.rows[0] | {
+        "prediction_id": "ppout_explicit-1",
+        "prediction_label_contract_version": "profile-outcome-labels.v1",
+    }
+
+    await recorder.record_from_silver_outcome(
+        tenant_id="tenant-a", row=row, event_id="evt-1"
+    )
+
+    assert captured["record"].prediction_id == "ppout_explicit-1"
+    assert (
+        captured["record"].prediction_label_contract_version
+        == "profile-outcome-labels.v1"
+    )
 
 
 def test_adapter_base_defaults_surface_and_sequence_key_to_none():

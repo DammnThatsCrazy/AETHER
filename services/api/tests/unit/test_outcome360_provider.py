@@ -397,6 +397,12 @@ async def test_durable_journey_outcomes_match_exact_tenant_kind_and_id(
                 )
             ],
             source_event_ids=[f"source-{outcome_id}"],
+            prediction_id=("ppout-linked-1" if outcome_id == "outcome-journey-exact" else None),
+            prediction_label_contract_version=(
+                "profile-outcome-labels.v1"
+                if outcome_id == "outcome-journey-exact"
+                else None
+            ),
             observed_at="2026-10-17T12:00:00Z",
             updated_at="2026-10-17T12:00:01Z",
         )
@@ -453,6 +459,11 @@ async def test_durable_journey_outcomes_match_exact_tenant_kind_and_id(
     assert [outcome.id for outcome in read_outcomes] == ["outcome-journey-exact"]
     assert read_outcomes[0].tenant_id == "tenant-a"
     assert [ref.id for ref in read_outcomes[0].evidence_refs] == ["evidence-journey-exact"]
+    assert read_outcomes[0].prediction_id == "ppout-linked-1"
+    assert (
+        read_outcomes[0].prediction_label_contract_version
+        == "profile-outcome-labels.v1"
+    )
     same_id_other_context = await reader.list_outcomes(
         "tenant-a", ProjectionSubject(kind="campaign", id="journey-1")
     )

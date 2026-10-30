@@ -426,6 +426,8 @@ class OutcomeTruthStoreReader:
                     achieved_at=row.achieved_at,
                     value=value,
                     evidence_refs=row.evidence_refs,
+                    prediction_id=row.prediction_id,
+                    prediction_label_contract_version=row.prediction_label_contract_version,
                     updated_at=row.updated_at,
                 )
             )
