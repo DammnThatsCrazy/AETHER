@@ -13,6 +13,7 @@ from shared.intelligence_projections.generated_registry import INTELLIGENCE_PROJ
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("surface,kind,slot,consumer,target,capability", [
+    ("profile360", "entity", "likely_next_states", "profile360", "outcome360", "outcome_facts.read"),
     ("campaign360", "campaign", "cohorts_syndicates", "campaign360", "population360", "population360.read"),
     ("campaign360", "campaign", "cohorts_syndicates", "campaign360", "social360", "social360.read"),
     ("journey360", "journey", "recommended_actions", "episode360", "agent360", "agent360.read"),
@@ -40,6 +41,13 @@ async def test_nested_authority_requires_exact_allowed_slot(surface, kind, slot,
                 )},
             )
 
+        async def evaluate_profile_prediction_outcome_read(self, frame_request):
+            return Experience360PolicyDisposition(
+                state="allowed",
+                policyIds=["outcomes-policy"],
+                evaluatedAt="2026-10-27T10:00:00Z",
+            )
+
     class Runtime:
         async def execute_projection(self, projection_request, **kwargs):
             seen.extend(kwargs.get("experience360_read_authorizations", []))
@@ -62,6 +70,60 @@ async def test_nested_authority_requires_exact_allowed_slot(surface, kind, slot,
     seen.clear()
     await build_experience360_frame(request, policy_evaluator=Policy("denied"), projection_runtime=Runtime())
     assert not seen
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome_state,expected", [("allowed", True), ("denied", False), ("error", False)])
+async def test_profile_outcome_read_requires_independent_outcomes_permission(outcome_state, expected):
+    seen = []
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId="tenant-a",
+        subject=ProjectionSubject(kind="entity", id="entity-1"),
+        requestedSlotIds=["likely_next_states"],
+    )
+
+    class Policy:
+        async def evaluate(self, frame_request):
+            return Experience360PolicyEvaluation(
+                surfaceId="profile360",
+                tenantId="tenant-a",
+                evaluatedAt="2026-10-27T10:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={"likely_next_states": Experience360PolicyDisposition(
+                    state="allowed", policyIds=["profile-policy"], evaluatedAt="2026-10-27T10:00:00Z"
+                )},
+            )
+
+        async def evaluate_profile_prediction_outcome_read(self, frame_request):
+            if outcome_state == "error":
+                raise RuntimeError("outcome policy unavailable")
+            return Experience360PolicyDisposition(
+                state=outcome_state,
+                policyIds=["outcomes-policy"],
+                evaluatedAt="2026-10-27T10:00:00Z",
+            )
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **kwargs):
+            seen.extend(kwargs.get("experience360_read_authorizations", []))
+            return ProjectionResult(
+                projectionId=projection_request.projectionId,
+                tenantId="tenant-a",
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[ProjectionSection(id=section, state="unknown", content={})
+                          for section in projection_request.includeSections or []],
+                claims=[], dependencyState=[], generatedAt="2026-10-27T10:00:00Z", degradedReasons=[],
+            )
+
+    await build_experience360_frame(request, policy_evaluator=Policy(), projection_runtime=Runtime())
+    outcome_authorizations = [item for item in seen if item.capabilityKey == "outcome_facts.read"]
+    assert bool(outcome_authorizations) is expected
+    if expected:
+        authorization = outcome_authorizations[0]
+        assert authorization.sourceSubject == request.subject
+        assert authorization.tenantId == request.tenantId
+        assert authorization.policyIds == ["outcomes-policy"]
 
 
 @pytest.mark.asyncio

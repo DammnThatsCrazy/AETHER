@@ -2002,6 +2002,12 @@ async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
             "execution_id": execution["execution_id"],
             "called_at": "2026-10-18T10:00:01Z",
             "idempotency_key": "tool-call-event-a",
+            "action": "delete",
+            "resource_id": "foreign-resource",
+            "policy_decision": {"allowed": True, "action": "delete"},
+            "tool_result": {"status": "succeeded"},
+            "resource_operation": {"status": "succeeded"},
+            "external_effect": "confirmed",
         },
     )
 
@@ -2041,6 +2047,99 @@ async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
 
 
 @pytest.mark.asyncio
+async def test_repository_source_marks_truncated_action_edge_scan_incomplete(monkeypatch) -> None:
+    import shared.graph.graph as graph_module
+
+    class TruncatedGraph:
+        async def get_edges_for_tenant(self, tenant_id: str, *, limit: int, edge_types: list[Any]):
+            assert tenant_id == TENANT_A
+            assert edge_types == [graph_module.EdgeType.CALLED_TOOL]
+            return [], True
+
+    monkeypatch.setattr(graph_module, "GraphClient", TruncatedGraph)
+    read = await RepositoryWorkflow360Source().run_execution_actions(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(_agent_execution_row(),),
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.rows == ()
+    assert read.complete is False
+    assert read.scope_mismatch is False
+    assert read.reason == "canonical_workflow_action_graph_read_truncated"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("tenant_id", f" {TENANT_A}"),
+        ("execution_id", " agent-execution-a "),
+        ("idempotency_key", " tool-call-event-a"),
+        ("to_vertex_id", f" {TENANT_A}:tool:tool-a"),
+        ("tool_vertex_tenant_id", f"{TENANT_A} "),
+        ("tool_vertex_tool_id", " tool-a"),
+    ],
+)
+async def test_repository_source_rejects_padded_tool_call_join_identifiers(
+    monkeypatch, field, value
+) -> None:
+    from types import SimpleNamespace
+
+    import shared.graph.graph as graph_module
+
+    execution = _agent_execution_row()
+    properties = {
+        "tenant_id": TENANT_A,
+        "execution_id": execution["execution_id"],
+        "called_at": "2026-10-18T10:00:01Z",
+        "idempotency_key": "tool-call-event-a",
+    }
+    vertex_tenant_id = TENANT_A
+    vertex_tool_id = "tool-a"
+    target_vertex_id = f"{TENANT_A}:tool:tool-a"
+    if field == "to_vertex_id":
+        target_vertex_id = value
+    elif field == "tool_vertex_tenant_id":
+        vertex_tenant_id = value
+    elif field == "tool_vertex_tool_id":
+        vertex_tool_id = value
+    else:
+        properties[field] = value
+    edge = SimpleNamespace(
+        edge_type=graph_module.EdgeType.CALLED_TOOL,
+        from_vertex_id=f"{TENANT_A}:agent:{execution['agent_id']}",
+        to_vertex_id=target_vertex_id,
+        properties=properties,
+    )
+
+    class FakeGraph:
+        async def get_edges_for_tenant(self, tenant_id: str, *, limit: int, edge_types: list[Any]):
+            return [edge], False
+
+        async def get_vertex_for_tenant(self, tenant_id: str, vertex_id: str):
+            return SimpleNamespace(
+                vertex_type="Tool",
+                properties={"tenant_id": vertex_tenant_id, "tool_id": vertex_tool_id},
+            )
+
+    monkeypatch.setattr(graph_module, "GraphClient", FakeGraph)
+    read = await RepositoryWorkflow360Source().run_execution_actions(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(execution,),
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.rows == ()
+    assert read.complete is False
+    assert read.scope_mismatch is True
+
+
+@pytest.mark.asyncio
 async def test_workflow_actions_project_observed_calls_without_inference() -> None:
     invocation = _row(
         "invocation-a",
@@ -2068,6 +2167,15 @@ async def test_workflow_actions_project_observed_calls_without_inference() -> No
             "source": "graph_vertices",
             "uri": f"store://graph_vertices/{TENANT_A}%3Atool%3Atool-a",
         },
+        # Caller or callback controlled fields on an observation must never
+        # be promoted to a server execution receipt or operation result.
+        "principal_id": "attacker-principal",
+        "policy_decision": {"allowed": True, "policy_id": "caller-claim"},
+        "tool_result": {"status": "succeeded", "value": "caller-claim"},
+        "resource_id": "caller-resource",
+        "resource_operation": {"status": "succeeded"},
+        "external_effect": "confirmed",
+        "integrity": {"signature": "caller-claim"},
     }
 
     class SourceWithActions(FakeWorkflowSource):
@@ -2100,6 +2208,17 @@ async def test_workflow_actions_project_observed_calls_without_inference() -> No
         "call_observed_external_effect_unknown"
     )
     assert actions.content["actions"][0]["toolIdentityState"] == "resolved"
+    assert actions.content["actions"][0]["executionResult"] == {"state": "unknown"}
+    assert actions.content["actions"][0]["approvedResource"] == {"state": "unknown"}
+    assert actions.content["actions"][0]["executionReceipt"] == {
+        "state": "unknown",
+        "reasonCode": "canonical_action_execution_receipt_source_unavailable",
+    }
+    assert "tool_result" not in actions.content["actions"][0]
+    assert "policy_decision" not in actions.content["actions"][0]
+    assert "external_effect" not in actions.content["actions"][0]
+    assert actions.content["actions"][0]["authorityDecision"] == "not_established_by_tool_call_edge"
+    assert actions.content["actions"][0]["approvedResource"].get("resourceOperation", "unknown") == "unknown"
     assert actions.canonicalAuthorityRefs == ["agent_executions", "graph_edges", "tools"]
     claim = next(claim for claim in result.claims if "actions" in claim.domainSlotIds)
     assert claim.claimState == EpistemicStatus.OBSERVED
@@ -2688,15 +2807,17 @@ async def test_workflow_action_authorities_require_slot_envelopes_and_keep_effec
     source = Source(WorkflowRunInvocationRead((_row("invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"),), True, True),
                     agent_executions=WorkflowAgentExecutionRead((execution,), True, True), approvals=WorkflowApprovalRead((approval,), True, True))
     calls = []
+    actual_approved_resources = action_authorities.approved_resources
+    access_rows = [{"tenant_id": TENANT_A, "workflow_run_id": RUN_ID,
+        "execution_id": "agent-execution-a", "approval_id": "approval-a", "decision_id": "decision-a",
+        "delegation_id": "delegation-a", "requested_resource": "resource-a", "evaluated_at": "2026-10-18T10:00:00Z"}]
     async def access(**kwargs):
         calls.append("access")
-        return approval_agent_access.ApprovalAgentAccessRead(({"tenant_id": TENANT_A, "workflow_run_id": RUN_ID,
-            "execution_id": "agent-execution-a", "approval_id": "approval-a", "decision_id": "decision-a",
-            "delegation_id": "delegation-a", "requested_resource": "resource-a", "evaluated_at": "2026-10-18T10:00:00Z"},), True, True)
+        return approval_agent_access.ApprovalAgentAccessRead(tuple(access_rows), True, True)
     async def resources(**kwargs):
         calls.append("resource")
-        return [{"execution_id": "agent-execution-a", "resource_id": "resource-a", "approval_id": "approval-a",
-                 "decision_id": "decision-a", "delegation_id": "delegation-a", "registered_at": "2026-10-18T09:00:00Z"}]
+        return action_authorities.ApprovedResourceRead(({"execution_id": "agent-execution-a", "resource_id": "resource-a", "approval_id": "approval-a",
+                 "decision_id": "decision-a", "delegation_id": "delegation-a", "registered_at": "2026-10-18T09:00:00Z"},), True, True)
     monkeypatch.setattr(approval_agent_access, "read_approval_agent_access", access)
     monkeypatch.setattr(action_authorities, "approved_resources", resources)
     request = _request()
@@ -2716,5 +2837,18 @@ async def test_workflow_action_authorities_require_slot_envelopes_and_keep_effec
     assert projected["executionResult"]["toolResult"] == "unknown"
     assert projected["approvedResource"]["resourceId"] == "resource-a"
     assert projected["approvedResource"]["resourceOperation"] == "unknown"
+    assert _sections(result)["actions"].content["approvedResourceRead"] == {
+        "state": "complete", "available": True, "complete": True, "truncated": False, "reasonCode": None,
+    }
     assert {claim.kind for claim in result.claims} >= {"workflow_linked_executor_result", "workflow_linked_approved_resource"}
     assert _sections(result)["approvals"].content["approvals"][0]["agentAccess"]["state"] == "unknown"
+
+    monkeypatch.setattr(action_authorities, "approved_resources", actual_approved_resources)
+    access_rows[:] = access_rows * 201
+    truncated = await Workflow360Provider(source=source).project(request, context)
+    truncated_actions = _sections(truncated)["actions"]
+    assert truncated_actions.content["approvedResourceRead"] == {
+        "state": "truncated", "available": True, "complete": False, "truncated": True,
+        "reasonCode": "approved_resource_access_read_truncated",
+    }
+    assert truncated_actions.content["actions"][0]["approvedResource"]["state"] == "unknown"

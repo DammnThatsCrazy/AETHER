@@ -25,6 +25,7 @@ from governance.security.integration_security import (
 from governance.security.isolation_verifier import TenantIsolationVerifier
 from governance.security.policy_engine import PolicyEngine
 from governance.security.repositories import SecurityAuditEventRepository
+from governance.security.repositories import PolicyDecisionRepository
 from governance.security.retention import DataRetentionService
 
 pytestmark = pytest.mark.asyncio
@@ -99,14 +100,44 @@ async def test_elevated_dispatch_requires_approval_id():
     eng = PolicyEngine()
     d = await eng.check_action_dispatch(
         actor_id="u1", actor_type='tenant_user', tenant_id='t1',
-        decision_status='approved', is_elevated=True, approval_id=None,
+        decision_status='approved', has_dispatch_permission=True, is_elevated=True, approval_id=None,
     )
     assert d.allowed is False and d.policy_key == 'action.elevated_dispatch'
     ok = await eng.check_action_dispatch(
         actor_id="u1", actor_type='tenant_user', tenant_id='t1',
-        decision_status='approved', is_elevated=True, approval_id='appr_1',
+        decision_status='approved', has_dispatch_permission=True, is_elevated=True, approval_id='appr_1',
+        dispatch_id='d1', target_type='webhook', selected_action_key='notify',
+        selected_action_type='send',
     )
     assert ok.allowed is True
+    assert ok.context == {"dispatch_id": "d1", "target_type": "webhook",
+                          "selected_action_key": "notify", "selected_action_type": "send",
+                          "is_elevated": True, "approval_id": "appr_1",
+                          "association_record_id": None}
+
+
+async def test_dispatch_requires_actor_permission():
+    eng = PolicyEngine()
+    d = await eng.check_action_dispatch(
+        actor_id="u1", actor_type='tenant_user', tenant_id='t1',
+        decision_status='approved', action_id='a1', has_dispatch_permission=False,
+    )
+    assert d.allowed is False
+    assert "lacks tenant dispatch permission" in d.reason
+
+
+async def test_capability_policy_decision_persists_exact_agent_and_grant_context():
+    eng = PolicyEngine()
+    decision = await eng.check_capability_invocation(
+        actor_id="user-1", actor_type="tenant_user", tenant_id="tenant-1",
+        capability_id="cap-1", agent_id="agent-1", capability_observed=True,
+        has_active_authorization=True, authorization_id="grant-1",
+    )
+    stored = await PolicyDecisionRepository().find_by_id(decision.decision_id)
+    assert stored["context"] == {
+        "agent_id": "agent-1", "capability_id": "cap-1",
+        "capability_grant_record_id": "grant-1", "capability_observed": True,
+    }
 
 
 async def test_cross_tenant_access_denied():

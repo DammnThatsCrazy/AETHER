@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
-from shared.intelligence_projections.contracts import ProjectionRequest, ProjectionSubject
+from shared.intelligence_projections.contracts import (
+    ProjectionReadAuthorization,
+    ProjectionRequest,
+    ProjectionSubject,
+)
 from shared.intelligence_projections.registry import ProviderRegistry
 from identity.profile.prediction_authority import (
     PredictionAuthorityEvidence,
@@ -18,14 +24,43 @@ from identity.profile.prediction_authority import (
 )
 from identity.profile.profile360_provider import (
     PredictionOutputRead,
+    PredictionOutcomeRead,
     Profile360Provider,
     RepositoryProfile360Source,
 )
+from graph.operational_intelligence.models import EntityRef, EvidenceRef
+from shared.backend_interpretation.primitives import OutcomeTruthRecord
 
 
 TENANT = "tenant_profile_prediction"
 ENTITY = "human-profile-1"
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
+
+
+async def _context(request, *, outcome_authorized=True):
+    authorizations = (
+        [
+            ProjectionReadAuthorization(
+                tenantId=request.tenantId,
+                sourceSurfaceId="profile360",
+                sourceSubject=request.subject,
+                sourceSlotId="likely_next_states",
+                consumerProjectionId="profile360",
+                targetProjectionId="outcome360",
+                capabilityKey="outcome_facts.read",
+                policyState="allowed",
+                policyIds=["outcomes-policy"],
+                policyEvaluatedAt=NOW.isoformat(),
+            )
+        ]
+        if outcome_authorized
+        else []
+    )
+    return await ProviderRegistry().build_context(
+        "profile360",
+        request,
+        experience360_read_authorizations=authorizations,
+    )
 
 
 def _output(
@@ -83,8 +118,13 @@ class _MemoryPredictionRepository(ProfilePredictionOutputRepository):
 
 
 class _PredictionSource:
-    def __init__(self, read: PredictionOutputRead) -> None:
+    def __init__(
+        self,
+        read: PredictionOutputRead,
+        outcome_read: PredictionOutcomeRead | None = None,
+    ) -> None:
         self.read = read
+        self.outcome_read = outcome_read or PredictionOutcomeRead([], True, True)
 
     async def prediction_outputs(self, tenant_id, subject, *, as_of, limit):
         assert tenant_id == TENANT
@@ -92,6 +132,15 @@ class _PredictionSource:
         assert as_of.tzinfo is not None
         assert 1 <= limit <= 100
         return self.read
+
+    async def reported_outcomes_for_prediction(
+        self, tenant_id, prediction_id, label_contract_version, *, limit
+    ):
+        assert tenant_id == TENANT
+        assert prediction_id == "ppout_test1"
+        assert label_contract_version == "profile-outcome-labels.v1"
+        assert 1 <= limit <= 50
+        return self.outcome_read
 
 
 class _WriterRepository:
@@ -108,6 +157,7 @@ async def test_prediction_writer_skips_scores_without_explicit_future_state():
     result = await record_eligible_profile_prediction(
         tenant_id=TENANT,
         requested_subject_id=ENTITY,
+        actor_id="actor-1",
         model_id="churn_prediction",
         feature_digest="0123456789abcdef",
         feature_schema_hash="schema-hash-v1",
@@ -182,6 +232,7 @@ async def test_prediction_writer_records_only_exact_policy_artifact_and_event_ev
     result = await record_eligible_profile_prediction(
         tenant_id=TENANT,
         requested_subject_id=ENTITY,
+        actor_id="actor-1",
         model_id="churn_prediction",
         feature_digest="0123456789abcdef",
         feature_schema_hash="schema-hash-v1",
@@ -219,6 +270,40 @@ async def test_prediction_writer_records_only_exact_policy_artifact_and_event_ev
         "cpd-1",
         "churn_prediction@v-production-2:" + "a" * 64,
     }
+
+    mismatched_actor = await record_eligible_profile_prediction(
+        tenant_id=TENANT,
+        requested_subject_id=ENTITY,
+        actor_id="different-actor",
+        model_id="churn_prediction",
+        feature_digest="0123456789abcdef",
+        feature_schema_hash="schema-hash-v1",
+        policy_decision_id="cpd-1",
+        policy_version="consent-v2",
+        policy_allowed=True,
+        model_result={
+            "artifact_version": "v-production-2",
+            "artifact_checksum_sha256": "a" * 64,
+            "state_schema_version": "profile_future_state.v1",
+            "likely_next_states": [{"state": "at_risk", "probability": 0.73, "rank": 1}],
+            "valid_from": (NOW - timedelta(minutes=1)).isoformat(),
+            "valid_until": (NOW + timedelta(hours=1)).isoformat(),
+            "evidence_refs": [
+                {"type": "event", "source": "analytics_events", "id": "event-1"}
+            ],
+        },
+        cache="cache",
+        repository=repository,
+        artifact_resolver=lambda model, version: SimpleNamespace(
+            model_id=model,
+            artifact_version=version,
+            feature_schema_hash="schema-hash-v1",
+            checksum_sha256="a" * 64,
+            created_at=NOW.isoformat(),
+        ),
+    )
+    assert mismatched_actor.stored is False
+    assert mismatched_actor.reason == "prediction_policy_decision_scope_or_version_invalid"
 
 
 @pytest.mark.asyncio
@@ -259,7 +344,7 @@ async def test_profile360_likely_next_states_is_unknown_without_approved_rows():
             PredictionOutputRead([], available=True, scope_known=True)
         )
     )
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
 
     result = await provider.project(request, context)
 
@@ -267,6 +352,49 @@ async def test_profile360_likely_next_states_is_unknown_without_approved_rows():
     assert section.id == "likely_next_states"
     assert section.state == "unknown"
     assert section.content["reasonCode"] == "no_fresh_approved_prediction_valid_at_anchor"
+    assert not result.claims
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope_change", [
+    {"tenant_id": "tenant-other"},
+    {"entity_id": "entity-other"},
+])
+async def test_profile360_reader_rejects_prediction_outside_exact_subject_scope(
+    monkeypatch, scope_change
+):
+    import identity.profile.prediction_authority as authority
+
+    async def unexpected_policy_check(_output):
+        pytest.fail("out-of-scope prediction must be rejected before governance reads")
+
+    def unexpected_artifact_lookup(_model, _version):
+        pytest.fail("out-of-scope prediction must be rejected before artifact lookup")
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", unexpected_policy_check)
+    monkeypatch.setattr(authority, "approved_production_artifact", unexpected_artifact_lookup)
+    raw = _output(**scope_change).model_dump(mode="python")
+    request = ProjectionRequest(
+        projectionId="profile360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of",
+        asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(
+        source=_PredictionSource(
+            PredictionOutputRead([raw], available=True, scope_known=True)
+        )
+    )
+    context = await _context(request)
+
+    result = await provider.project(request, context)
+
+    section = result.sections[0]
+    assert section.state == "degraded"
+    assert section.content["items"] == []
+    assert section.content["reasonCode"] == "profile_prediction_records_invalid"
     assert not result.claims
 
 
@@ -316,7 +444,7 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
             )
         )
     )
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
 
     result = await provider.project(request, context)
 
@@ -332,9 +460,370 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
         assert governance["calibrationMetric"]["value"] == 0.12
         assert governance["calibrationMetric"]["datasetAndEvaluationScope"] == "unknown"
         assert governance["calibrationMetric"]["predictionApplicability"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifact(monkeypatch):
+    import identity.profile.prediction_authority as authority
+    from intelligence.model_governance.evaluations import ModelEvaluationRepository
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority, "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model, artifact_version=version, checksum_sha256="a" * 64,
+            promotion_state="promoted", disabled=False, synthetic_data=False,
+            threshold_passed=True, production_allowed=True, metrics={},
+        ),
+    )
+
+    sample_refs = sorted(({
+        "tenantId": TENANT, "entityId": ENTITY, "modelId": "churn_prediction",
+        "artifactVersion": "v-production-2", "split": "holdout",
+        "predictionId": f"sample-{index}", "outcomeId": f"outcome-{index}",
+        "sourceEventId": f"event-{index}", "actualState": "churned",
+        "predictedState": "churned", "predictedConfidence": 0.8,
+        "predictedDistribution": [
+            {"state": "churned", "probability": 0.8, "rank": 1},
+            {"state": "active", "probability": 0.2, "rank": 2},
+        ], "correct": True, "artifactChecksumSha256": "a" * 64,
+        "policyDecisionId": "cpd-1", "policyVersion": "consent-v2", "actorId": "actor-1",
+        "predictionEvidenceRefs": [
+            {"id": "cpd-1", "type": "annotation", "source": "consent_policy_decisions"},
+            {"id": "churn_prediction@v-production-2:" + "a" * 64,
+             "type": "model_output", "source": "model_artifact_registry"},
+            {"id": "event-input", "type": "event", "source": "analytics_events"},
+        ], "predictionGeneratedAt": "2026-10-29T01:00:00Z",
+        "outcomeEvidenceRefs": [
+            {"id": f"event-{index}", "type": "event", "source": "silver_outcome_facts"},
+        ],
+        "predictionValidFrom": "2026-10-29T01:00:00Z",
+        "predictionValidUntil": "2026-10-29T12:00:00Z",
+        "outcomeObservedAt": "2026-10-29T02:00:00Z",
+    } for index in range(12)), key=lambda row: row["predictionId"])
+    dataset_manifest = [hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()]
+    created_at = ["2026-10-30T00:00:00Z"]
+
+    async def exact_evaluation(self, tenant, domain, model, version, checksum):
+        assert (tenant, domain, model, version, checksum) == (
+            TENANT, "profile360", "churn_prediction", "v-production-2", "a" * 64
+        )
+        return {
+            "evaluation_id": "mge_" + "1" * 32, "tenant_id": TENANT, "domain": domain,
+            "model_id": model, "artifact_version": version,
+            "artifact_checksum_sha256": checksum, "dataset_manifest_sha256": dataset_manifest[0],
+            "split": "holdout", "sample_count": 12,
+            "window_start": "2026-10-29T00:00:00Z", "window_end": "2026-10-30T00:00:00Z",
+            "sample_refs": sample_refs,
+            "created_at": created_at[0],
+            "method": "profile-state-adjudication.v1", "metrics": {
+                "top_state_accuracy": 1.0, "multiclass_brier_score": 0.08,
+                "expected_calibration_error": 0.2,
+                "reliability_bins": [[0, 0.0, 0] for _ in range(8)] + [[12, 9.6, 12], [0, 0.0, 0]],
+            },
+        }
+
+    monkeypatch.setattr(ModelEvaluationRepository, "latest_for_artifact", exact_evaluation)
+    output = _output()
+    request = ProjectionRequest(
+        projectionId="profile360", tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY), temporalMode="as_of",
+        asOf=NOW.isoformat(), includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    ))
+    result = await provider.project(request, await _context(request))
+    governance = result.sections[0].content["items"][0]["modelGovernance"]
+    assert governance["evaluationEvidence"]["state"] == "computed"
+    assert governance["evaluationEvidence"]["sampleCount"] == 12
+    assert governance["evaluationEvidence"]["metrics"]["expected_calibration_error"] == 0.2
+    assert governance["modelCalibrationVerified"] is False
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]
+    dataset_manifest[0] = "0" * 64
+    bad_manifest = await Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    )).project(request, await _context(request))
+    assert bad_manifest.sections[0].content["items"][0]["modelGovernance"]["evaluationEvidence"]["state"] == "unknown"
+    dataset_manifest[0] = hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    sample_refs[0]["predictedDistribution"] = "malformed"
+    dataset_manifest[0] = hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    malformed_sample = await Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    )).project(request, await _context(request))
+    assert malformed_sample.sections[0].content["items"][0]["modelGovernance"]["evaluationEvidence"]["state"] == "unknown"
+    sample_refs[0]["predictedDistribution"] = [
+        {"state": "churned", "probability": 0.8, "rank": 1},
+        {"state": "active", "probability": 0.2, "rank": 2},
+    ]
+    dataset_manifest[0] = hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    created_at[0] = "2030-01-01T00:00:00Z"
+    future_result = await Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    )).project(request, await _context(request))
+    assert future_result.sections[0].content["items"][0]["modelGovernance"]["evaluationEvidence"]["state"] == "unknown"
+
+
+def test_profile_evaluation_manifest_rows_fail_closed_on_malformed_shape_and_future_time():
+    from identity.profile.profile360_provider import _valid_profile_evaluation_sample
+
+    evaluation = {
+        "artifact_checksum_sha256": "a" * 64,
+        "tenant_id": TENANT, "model_id": "churn_prediction",
+        "artifact_version": "v-production-2", "split": "holdout",
+        "window_start": "2026-10-29T00:00:00Z",
+        "window_end": "2026-10-30T00:00:00Z",
+    }
+    assert _valid_profile_evaluation_sample(None, evaluation) is False
+    row = {
+        "tenantId": TENANT, "entityId": ENTITY, "modelId": "churn_prediction",
+        "artifactVersion": "v-production-2", "split": "holdout",
+        "predictionId": "p-1", "outcomeId": "o-1", "sourceEventId": "e-1",
+        "actualState": "churned", "predictedState": "churned", "predictedConfidence": 0.8,
+        "predictedDistribution": [{"state": "churned", "probability": 0.8, "rank": 1},
+                                  {"state": "active", "probability": 0.2, "rank": 2}],
+        "correct": True, "artifactChecksumSha256": "a" * 64,
+        "policyDecisionId": "policy-1", "policyVersion": "v1", "actorId": "actor-1",
+        "predictionEvidenceRefs": [
+            {"id": "policy-1", "source": "consent_policy_decisions"},
+            {"id": "churn_prediction@v-production-2:" + "a" * 64,
+             "type": "model_output", "source": "model_artifact_registry"},
+            {"id": "input-event", "type": "event", "source": "analytics_events"},
+        ],
+        "outcomeEvidenceRefs": [{"id": "e-1", "source": "silver_outcome_facts"}],
+        "predictionGeneratedAt": "2026-10-29T01:00:00Z",
+        "predictionValidFrom": "2026-10-29T01:00:00Z",
+        "predictionValidUntil": "2026-10-29T12:00:00Z",
+        "outcomeObservedAt": "2026-10-29T02:00:00Z",
+    }
+    assert _valid_profile_evaluation_sample(row, evaluation) is True
+    assert _valid_profile_evaluation_sample({**row, "predictedDistribution": "bad"}, evaluation) is False
+    assert _valid_profile_evaluation_sample({**row, "outcomeObservedAt": "2030-01-01T00:00:00Z"}, evaluation) is False
+
+
+def _reported_outcome(
+    *,
+    tenant_id: str = TENANT,
+    subject_id: str = ENTITY,
+    subject_kind: str = "user",
+    prediction_id: str = "ppout_test1",
+    label_version: str = "profile-outcome-labels.v1",
+    observed_at: datetime = NOW,
+    outcome_id: str = "outcome-1",
+) -> OutcomeTruthRecord:
+    return OutcomeTruthRecord(
+        outcome_id=outcome_id,
+        tenant_id=tenant_id,
+        definition_ref="goal_achieved",
+        subject=EntityRef(kind=subject_kind, id=subject_id),
+        state="final",
+        achieved_at=observed_at.isoformat(),
+        observed_at=observed_at.isoformat(),
+        prediction_id=prediction_id,
+        prediction_label_contract_version=label_version,
+        evidence_refs=[EvidenceRef(id="event-outcome-1", type="event", source="silver_outcome_facts")],
+    )
+
+
+@pytest.mark.asyncio
+async def test_profile360_reports_only_exact_versioned_outcome_association(monkeypatch):
+    import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority,
+        "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model, artifact_version=version, checksum_sha256="a" * 64,
+            promotion_state="promoted", disabled=False, synthetic_data=False,
+            threshold_passed=True, production_allowed=True, metrics={},
+        ),
+    )
+    prediction = _output()
+    exact = _reported_outcome()
+    request = ProjectionRequest(
+        projectionId="profile360", tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of", asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([prediction.model_dump(mode="python")], True, True),
+        PredictionOutcomeRead([exact], True, True),
+    ))
+    result = await provider.project(request, await _context(request))
+
+    item = result.sections[0].content["items"][0]
+    associations = item["reportedOutcomeAssociations"]
+    assert [fact["outcomeId"] for fact in associations["facts"]] == ["outcome-1"], associations
+    assert associations["facts"][0]["evidenceRefs"][0]["id"] == "event-outcome-1"
+    assert associations["complete"] is True
+    assert associations["reasonCode"] is None
+    assert "correctness" in associations["interpretation"]
+    assert item["epistemicStatus"] == "predicted"
+    assert all("correct" not in " ".join(claim.claims).lower() for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_profile360_does_not_read_outcomes_without_separate_policy_authorization(
+    monkeypatch,
+):
+    import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority,
+        "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model,
+            artifact_version=version,
+            checksum_sha256="a" * 64,
+            promotion_state="promoted",
+            disabled=False,
+            synthetic_data=False,
+            threshold_passed=True,
+            production_allowed=True,
+            metrics={},
+        ),
+    )
+    source = _PredictionSource(
+        PredictionOutputRead([_output().model_dump(mode="python")], True, True),
+        PredictionOutcomeRead([_reported_outcome()], True, True),
+    )
+
+    async def unexpected_outcome_read(*args, **kwargs):
+        pytest.fail("outcome read must require its separate server policy decision")
+
+    monkeypatch.setattr(source, "reported_outcomes_for_prediction", unexpected_outcome_read)
+    request = ProjectionRequest(
+        projectionId="profile360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of",
+        asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    result = await Profile360Provider(source=source).project(
+        request, await _context(request, outcome_authorized=False)
+    )
+
+    associations = result.sections[0].content["items"][0]["reportedOutcomeAssociations"]
+    assert associations["facts"] == []
+    assert associations["reasonCode"] == "profile_outcome_read_authorization_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_profile360_suppresses_outcome_outside_prediction_validity(monkeypatch):
+    import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority,
+        "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model,
+            artifact_version=version,
+            checksum_sha256="a" * 64,
+            promotion_state="promoted",
+            disabled=False,
+            synthetic_data=False,
+            threshold_passed=True,
+            production_allowed=True,
+            metrics={},
+        ),
+    )
+    prediction = _output(
+        generated_at=NOW - timedelta(minutes=1),
+        valid_from=NOW - timedelta(seconds=20),
+        valid_until=NOW + timedelta(minutes=1),
+    )
+    request = ProjectionRequest(
+        projectionId="profile360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of",
+        asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(
+        source=_PredictionSource(
+            PredictionOutputRead([prediction.model_dump(mode="python")], True, True),
+            PredictionOutcomeRead(
+                [_reported_outcome(observed_at=NOW - timedelta(seconds=30))], True, True
+            ),
+        )
+    )
+
+    result = await provider.project(request, await _context(request))
+
+    associations = result.sections[0].content["items"][0]["reportedOutcomeAssociations"]
+    assert associations["facts"] == []
+    assert associations["reasonCode"] == "profile_outcome_truth_records_invalid"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("read,expected_reason", [
+    (PredictionOutcomeRead([_reported_outcome(observed_at=NOW + timedelta(seconds=1))], True, True), "profile_outcome_truth_records_invalid"),
+    (PredictionOutcomeRead([_reported_outcome(label_version="profile-outcome-labels.v2")], True, True), "profile_outcome_truth_records_invalid"),
+    (PredictionOutcomeRead([_reported_outcome(tenant_id="tenant-other")], True, True), "profile_outcome_truth_records_invalid"),
+    (PredictionOutcomeRead([_reported_outcome(subject_kind="session")], True, True), "profile_outcome_truth_records_invalid"),
+    (PredictionOutcomeRead([], True, True, invalid_records=True), "profile_outcome_truth_records_invalid"),
+    (PredictionOutcomeRead([_reported_outcome(), _reported_outcome(outcome_id="outcome-duplicate")], True, True), "profile_outcome_truth_ambiguous"),
+    (PredictionOutcomeRead([_reported_outcome()], True, True, truncated=True), "profile_outcome_truth_read_truncated"),
+])
+async def test_profile360_suppresses_future_ambiguous_or_truncated_outcomes(monkeypatch, read, expected_reason):
+    import identity.profile.prediction_authority as authority
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority,
+        "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model, artifact_version=version, checksum_sha256="a" * 64,
+            promotion_state="promoted", disabled=False, synthetic_data=False,
+            threshold_passed=True, production_allowed=True, metrics={},
+        ),
+    )
+    request = ProjectionRequest(
+        projectionId="profile360", tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY),
+        temporalMode="as_of", asOf=NOW.isoformat(),
+        includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([_output().model_dump(mode="python")], True, True), read,
+    ))
+    result = await provider.project(request, await _context(request))
+
+    associations = result.sections[0].content["items"][0]["reportedOutcomeAssociations"]
+    assert associations["facts"] == []
+    assert associations["complete"] is False
+    assert associations["reasonCode"] == expected_reason
 
 
 @pytest.mark.asyncio
@@ -391,7 +880,7 @@ async def test_profile360_suppresses_predictions_without_current_exact_artifact(
             )
         )
     )
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
 
     result = await provider.project(request, context)
 
@@ -445,7 +934,7 @@ async def test_prediction_reader_suppresses_missing_policy_evidence(monkeypatch)
     provider = Profile360Provider(source=_PredictionSource(
         PredictionOutputRead([_output().model_dump(mode="python")], available=True, scope_known=True)
     ))
-    context = await ProviderRegistry().build_context("profile360", request)
+    context = await _context(request)
     result = await provider.project(request, context)
     assert result.sections[0].state == "degraded"
     assert result.sections[0].content["items"] == []

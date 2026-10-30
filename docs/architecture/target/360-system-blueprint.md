@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bb38bc7ee689e493c0b46c108845d4a90e74261d5a003daa0973d92085090601"
 ---
 
 # 360 System Blueprint
@@ -57,8 +57,14 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Six slots declare at least one unbound canonical authority after the exact
-bindings in this slice. Value360 can expose a recorded check of attribution run
+Four slots declare five unbound canonical authority references after the exact
+bindings in this slice. Journey360 and Risk360 now bind the actions authority
+through persisted dispatch authorization and credential-bound Jira resource
+read-back. The supported verification checks the provider site, requested payload,
+tenant, subject, intent, job, receipt and policy decision. Other providers remain
+unverified; neither slot is complete, and business outcomes, producer coverage,
+historical replay and freshness are not established by resource existence.
+Value360 can expose a recorded check of attribution run
 configuration lineage against the current config, while model governance and
 calibration remain unbound. Campaign360
 `signal_sources` now binds exact gateway-admitted SDK Bronze observations and
@@ -74,13 +80,28 @@ as a source fact for that namespace. Event-time status, fleet health, and
 source reliability remain unknown. Workflow360 `actions` preserves the exact
 tenant Tool vertex evidence for admitted execution-linked call edges. Under
 slot policy it may also expose the linked execution's recorded executor result
-and an exact current approved resource; tool results and resource operations
-remain unbound. Agent360 `capabilities` resolves
+and an exact current approved resource. Server-owned public HTTPS MCP invocation
+receipts now bind the actions reference for Workflow360 and Agent360 capabilities.
+The authenticated invocation route requires write and dispatch permissions, an
+exact running agent execution, an enabled observed tool, and a current exact
+invoke grant checked again after MCP initialization. DNS-pinned public transport
+performs the actual tools/call. Durable claims prevent duplicate execution, and
+immutable completion receipts bind the principal, tenant, agent, execution, tool,
+workflow, policy, grant interval and provider result. Handshake failures do not
+prove invocation. Readers reject ambiguous, cross-scope, out-of-window and
+out-of-grant evidence. Resource operations remain unbound. Agent360 `capabilities` resolves
 observed MCP catalog tool identity only for an exact tenant/provider/server/tool
 tuple. For a complete canonical grant read, it also exposes the exact recorded
 invoke action and capability or server resource with delegation evidence;
-ambiguous grant scopes fail closed. Action and resource policy and effective
-tool authorization remain unbound. Support360 `sla` now joins an operator-registered source policy revision
+ambiguous grant scopes fail closed. It also exposes bounded persisted
+`capability.invoke` evaluations with exact Agent, capability, grant, result,
+and time. Those evaluations alone do not bind to observed MCP calls or establish
+current effective authority. Separately joined server-owned invocation receipts
+prove only the exact supported invocation and provider-reported result, not a
+resource operation or independent external effect. Credentialed/private MCP
+endpoints, standing authorization, freshness and full producer coverage remain
+unsupported or unknown. The slot
+remains partial. Support360 `sla` now joins an operator-registered source policy revision
 to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link
@@ -91,7 +112,15 @@ consent receipts and relationship evidence. Roster completeness, other predicate
 syndicates, historical membership, and freshness remain unknown. Journey and Risk
 can expose an exact caller-associated agent lifecycle request after slot policy.
 The request can include its matching, tenant-scoped, time-checked recorded delegation decision;
-current authorization, dispatch and external effect remain unverified. Workflow approval decisions can
+current authorization, dispatch and external effect remain unverified. Journey360
+and Risk360 dispatch reads also require the persisted tenant `action.dispatch`
+policy decision for the exact action before dispatch creation. Risk360 also
+rejects a permission decision evaluated before the associated risk decision's
+recorded, observed, or effective time. These dispatch associations are
+caller-supplied links; the permission record is not a canonical producer for
+tool results or resource operations. Connector execution, external effect,
+independent outcome verification, complete dispatch producer coverage, and
+freshness remain unknown. Workflow approval decisions can
 carry a recorded human permission check and the matching request-time agent
 delegation decision joined to its current grant. Workflow-wide coverage,
 historical policy replay, and current authorization remain unknown.
@@ -99,8 +128,12 @@ Profile360 `likely_next_states` rechecks the recorded inference decision against
 the tenant, actor, model, subject, policy version, and decision time; session
 models also require the exact current session identity binding. A current
 artifact-reported calibration metric can be shown with unknown dataset and
-evaluation scope. Current consent, historical identity state, independently
-validated calibration, and observed outcomes remain unproven.
+evaluation scope. Explicit prediction-ID and versioned-label-contract outcome
+links may be shown as reported associations after separate outcomes-domain
+policy authorization and exact tenant, subject, and prediction-validity-time
+checks; they do not establish prediction correctness. Current consent,
+historical identity state, independently validated calibration, complete
+outcome coverage, and outcome verification remain unproven.
 Campaign360 `anomalies` and Location360 `risk` bind bounded exact Risk360
 assessment reads, while producer coverage and whole-slot completeness remain
 unknown. Their exact

@@ -33,7 +33,7 @@ source_hashes:
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
+  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/tenancy/auth/routes.py": "sha256:28646c94b30efa7f437fe477209cb7877202c0692caf8076689b7bc407bf7c76"
 ---
 

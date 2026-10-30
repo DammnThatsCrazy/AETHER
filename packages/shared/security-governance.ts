@@ -107,6 +107,7 @@ export interface PolicyDecision {
   severity: PolicySeverity;
   required_action?: string | null;
   evaluated_at: string;
+  context?: Record<string, unknown>;
 }
 
 export type SecurityAuditOutcome = 'allowed' | 'blocked' | 'failed';

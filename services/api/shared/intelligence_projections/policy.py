@@ -184,6 +184,40 @@ class RequestAccessPolicyEvaluator:
             evaluatedAt=_utc_now_iso(),
         )
 
+    async def evaluate_profile_prediction_outcome_read(
+        self, frame_request: Experience360FrameRequest
+    ) -> Experience360PolicyDisposition:
+        actor = tenant_actor(self._request)
+        if (
+            actor.tenant_id != frame_request.tenantId
+            or frame_request.surfaceId != "profile360"
+            or frame_request.subject.kind != "entity"
+            or (
+                frame_request.requestedSlotIds is not None
+                and "likely_next_states" not in frame_request.requestedSlotIds
+            )
+        ):
+            raise ValueError("profile prediction outcome policy scope mismatch")
+        decision = await access_control.evaluate(
+            actor_id=actor.actor_id,
+            actor_type=actor.actor_type,
+            roles=actor.roles,
+            domain="outcomes",
+            action="read",
+            actor_tenant=actor.tenant_id,
+            target_tenant=frame_request.tenantId,
+            resource_type="profile_prediction_outcomes",
+            resource_id=frame_request.subject.id,
+            ip_address=actor.ip_address,
+            user_agent=actor.user_agent,
+        )
+        return Experience360PolicyDisposition(
+            state="allowed" if decision.allowed else "denied",
+            policyIds=[decision.policy_key],
+            reasonCodes=["access_granted" if decision.allowed else "access_denied"],
+            evaluatedAt=_utc_now_iso(),
+        )
+
     async def evaluate(
         self, frame_request: Experience360FrameRequest
     ) -> Experience360PolicyEvaluation:

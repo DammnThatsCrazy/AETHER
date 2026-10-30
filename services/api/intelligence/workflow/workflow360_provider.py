@@ -433,19 +433,26 @@ class RepositoryWorkflow360Source:
             ):
                 scope_mismatch = True
                 continue
-            edge_tenant_id = _safe_identifier(
+            edge_tenant_id = _exact_identifier(
                 properties.get("tenant_id") or properties.get("tenantId")
             )
-            execution_id = _safe_identifier(properties.get("execution_id"))
+            raw_execution_id = properties.get("execution_id")
+            execution_id = _exact_identifier(raw_execution_id)
             if edge_tenant_id != tenant_id:
                 scope_mismatch = True
                 continue
-            if execution_id is None or execution_id not in execution_agents:
+            if execution_id is None:
+                # A malformed value that normalizes to an admitted execution
+                # is an ambiguous attempted join, so it must affect coverage.
+                if _safe_identifier(raw_execution_id) in execution_agents:
+                    scope_mismatch = True
+                continue
+            if execution_id not in execution_agents:
                 continue
 
             expected_agent_id = execution_agents[execution_id]
             expected_agent_vertex = f"{tenant_id}:agent:{expected_agent_id}"
-            target_vertex_id = _safe_identifier(getattr(edge, "to_vertex_id", None))
+            target_vertex_id = _exact_identifier(getattr(edge, "to_vertex_id", None))
             tool_prefix = f"{tenant_id}:tool:"
             if (
                 getattr(edge, "from_vertex_id", None) != expected_agent_vertex
@@ -455,9 +462,9 @@ class RepositoryWorkflow360Source:
                 scope_mismatch = True
                 continue
 
-            tool_id = _safe_identifier(target_vertex_id[len(tool_prefix):])
+            tool_id = _exact_identifier(target_vertex_id[len(tool_prefix):])
             called_at = _safe_timestamp(properties.get("called_at"))
-            event_ref = _safe_identifier(
+            event_ref = _exact_identifier(
                 properties.get("source_event_id") or properties.get("idempotency_key")
             )
             if tool_id is None or called_at is None or event_ref is None:
@@ -473,10 +480,10 @@ class RepositoryWorkflow360Source:
                 tool_vertex is None
                 or getattr(tool_vertex, "vertex_type", None) != "Tool"
                 or not isinstance(tool_properties, dict)
-                or _safe_identifier(
+                or _exact_identifier(
                     tool_properties.get("tenant_id") or tool_properties.get("tenantId")
                 ) != tenant_id
-                or _safe_identifier(tool_properties.get("tool_id")) != tool_id
+                or _exact_identifier(tool_properties.get("tool_id")) != tool_id
             ):
                 scope_mismatch = True
                 continue
@@ -1519,6 +1526,8 @@ class Workflow360Provider:
 
         approval_agent_access_rows: list[dict[str, Any]] = []
         action_agent_access_rows: list[dict[str, Any]] = []
+        action_agent_access_available = False
+        action_agent_access_complete = False
         approval_access_allowed = action_association_read_authorized(
             request, context, surface="workflow360", slot="approvals", consumer="workflow360"
         )
@@ -1540,6 +1549,8 @@ class Workflow360Provider:
                         approval_agent_access_rows = list(access_read.rows)
                     if action_access_allowed:
                         action_agent_access_rows = list(access_read.rows)
+                        action_agent_access_available = True
+                        action_agent_access_complete = access_read.complete
             except Exception:  # noqa: BLE001 - access evidence fails closed independently
                 pass
         risk_requested = (
@@ -1702,7 +1713,7 @@ class Workflow360Provider:
             historical=historical_risk_scope,
             subject_supported=subject.kind in _RUN_SUBJECT_KINDS,
         )
-        from intelligence.workflow.action_authorities import approved_resources
+        from intelligence.workflow.action_authorities import ApprovedResourceRead, approved_resources
 
         commerce_authorized = (action_access_allowed and context.tenantId == tenant_id
             and context.projectionId == "workflow360" and any(
@@ -1712,14 +1723,26 @@ class Workflow360Provider:
                 and auth.capabilityKey == "commerce360.read" and auth.policyState == "allowed"
                 and bool(auth.policyIds) and bool(auth.policyEvaluatedAt)
                 for auth in context.experience360ReadAuthorizations))
-        resource_rows: list[dict[str, str]] = []
-        if commerce_authorized and not historical_action_scope and actions_requested and action_agent_access_rows:
+        resource_read = ApprovedResourceRead((), False, False, reason="approved_resource_read_not_performed")
+        if (commerce_authorized and not historical_action_scope and actions_requested
+                and action_agent_access_available):
+            resource_read = ApprovedResourceRead(
+                (), True, action_agent_access_complete,
+                reason=None if action_agent_access_complete else "approved_resource_access_evidence_incomplete",
+            )
+        if (commerce_authorized and not historical_action_scope and actions_requested
+                and action_agent_access_rows):
             try:
-                resource_rows = await approved_resources(tenant_id=tenant_id, workflow_run_id=subject.id,
+                resource_read = await approved_resources(tenant_id=tenant_id, workflow_run_id=subject.id,
                                                          access_rows=action_agent_access_rows)
+                if not action_agent_access_complete:
+                    resource_read = ApprovedResourceRead(
+                        (), resource_read.available, False, resource_read.truncated,
+                        "approved_resource_access_evidence_incomplete",
+                    )
             except Exception:  # noqa: BLE001 - resource authority remains unknown
-                pass
-        actions_section, action_claims = _workflow_actions_section(
+                resource_read = ApprovedResourceRead((), False, False, reason="approved_resource_read_unavailable")
+        actions_section, action_claims = await _workflow_actions_section(
             subject,
             tenant_id=tenant_id,
             read=action_read,
@@ -1730,7 +1753,7 @@ class Workflow360Provider:
             requested=actions_requested,
             historical=historical_action_scope,
             execution_results_authorized=action_access_allowed,
-            resource_rows=resource_rows,
+            resource_read=resource_read,
         )
         registrar_identity_read = WorkflowPrincipalIdentityRead(
             (), False, False, reason="definition_registrar_identity_not_read"
@@ -2347,7 +2370,7 @@ def _unknown_section(slot_id: str) -> ProjectionSection:
     )
 
 
-def _workflow_actions_section(
+async def _workflow_actions_section(
     subject: Any,
     *,
     tenant_id: str,
@@ -2359,7 +2382,7 @@ def _workflow_actions_section(
     requested: bool,
     historical: bool,
     execution_results_authorized: bool,
-    resource_rows: list[dict[str, str]],
+    resource_read: Any,
 ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
     """Project exact observed tool-call edges without upgrading them to effects."""
     reason = (
@@ -2412,6 +2435,14 @@ def _workflow_actions_section(
         for ref in execution_refs
         if ref.source == _AGENT_EXECUTION_SOURCE and ref.id in execution_by_id
     }
+    provider_invocations: dict[str, dict[str, Any]] = {}
+    if execution_results_authorized:
+        from intelligence.workflow.action_authorities import invocation_receipt
+        for execution_id, execution in execution_by_id.items():
+            receipt = await invocation_receipt(tenant_id=tenant_id, workflow_run_id=subject.id,
+                                               execution=execution)
+            if receipt is not None:
+                provider_invocations[execution_id] = receipt
 
     lower_raw = getattr(time_range, "from_", None) if time_range else None
     upper_raw = getattr(time_range, "to", None) if time_range else None
@@ -2521,7 +2552,7 @@ def _workflow_actions_section(
         outcome = (execution_result(tenant_id=tenant_id, workflow_run_id=subject.id,
                                     execution=execution_by_id[execution_id], called_at=called_at)
                    if execution_results_authorized else None)
-        resource = next((row for row in resource_rows if row.get("execution_id") == execution_id), None)
+        resource = next((row for row in resource_read.rows if row.get("execution_id") == execution_id), None)
         resource_view: dict[str, Any] = {"state": "unknown"}
         if (resource is not None and all(_safe_identifier(resource.get(key)) for key in
                 ("resource_id", "approval_id", "decision_id", "delegation_id"))):
@@ -2542,6 +2573,10 @@ def _workflow_actions_section(
                 "calledAt": called_at,
                 "observationKind": "tenant_scoped_execution_linked_tool_call_edge",
                 "operationState": "call_observed_external_effect_unknown",
+                # Provider receipts are exposed as separate execution-bound evidence
+                # below; an observed action edge is not itself their canonical join.
+                "executionReceipt": {"state": "unknown",
+                    "reasonCode": "canonical_action_execution_receipt_source_unavailable"},
                 "authorityDecision": "not_established_by_tool_call_edge",
                 "executionResult": outcome or {"state": "unknown"},
                 "approvedResource": resource_view,
@@ -2594,18 +2629,54 @@ def _workflow_actions_section(
         else reason
     )
     latest_observed_at = max((item["calledAt"] for item in actions), default=None)
+    provider_invocation_views: list[dict[str, Any]] = []
+    for execution_id, receipt in provider_invocations.items():
+        completed = _parse_timestamp(receipt.get("completedAt"))
+        if (invalid_window or completed is None
+                or (lower is not None and completed < lower)
+                or (upper is not None and completed > upper)):
+            continue
+        execution = execution_by_id[execution_id]
+        execution_ref = next((ref for ref in execution_refs if ref.id == execution_id), None)
+        receipt_ref = EvidenceRef(id=receipt["receiptId"], type="event",
+            source="agent_invocation_receipts", observedAt=receipt.get("completedAt"))
+        provider_invocation_views.append({**receipt, "executionId": execution_id,
+            "executionEvidenceRef": execution_ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                if execution_ref else None,
+            "evidenceRef": receipt_ref.model_dump(mode="json", by_alias=True, exclude_none=True)})
+        is_resource_read = receipt.get("resourceOperation") == "read"
+        claims.append(ClaimEnvelope(
+            id=f"workflow360.provider_invocation.{quote(receipt['receiptId'], safe='')}",
+            kind=("workflow_linked_provider_resource_read" if is_resource_read else "workflow_linked_provider_tool_result"), subject=subject,
+            evidenceRefs=[ref for ref in [execution_ref, receipt_ref] if ref is not None],
+            claims=[("The exact tenant, agent, execution, workflow run, observed resource URI, dedicated resource-read grant and policy decision are joined to a server-owned MCP resources/read completion receipt. It proves the returned resource content only; mutation and external effects remain unknown."
+                     if is_resource_read else "The exact tenant, agent, execution, workflow run, policy decision and active capability grant are joined to a server-owned MCP provider completion receipt; the receipt proves the provider tool result only, not a resource operation or external effect.")],
+            claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
+        ))
+    if provider_invocation_views:
+        state = "degraded" if source_incomplete else "available"
+        if not source_incomplete:
+            reason = None
     content = {
         "state": state,
-        "coverage": "partial" if actions else "unknown",
+        "coverage": "partial" if actions or provider_invocation_views else "unknown",
         "reasonCode": reason,
         "tenantId": tenant_id,
         "subject": {"kind": subject.kind, "id": subject.id},
         "source": "graph_edges",
         "evidenceScope": "CALLED_TOOL edges joined to exact admitted tenant and workflow-run execution IDs",
         "actions": actions,
+        "providerInvocationReceipts": provider_invocation_views,
         "observedCount": len(actions),
         "executionInventoryReadComplete": execution_inventory_complete,
         "actionEdgeReadComplete": read.complete and not read.scope_mismatch and not invalid_rows,
+        "approvedResourceRead": {
+            "state": "complete" if resource_read.complete else "truncated" if resource_read.truncated else "incomplete" if resource_read.available else "unavailable",
+            "available": resource_read.available,
+            "complete": resource_read.complete,
+            "truncated": resource_read.truncated,
+            "reasonCode": resource_read.reason,
+        },
         "workflowDefinitionState": "unknown",
         "actionProducerCoverage": "unknown",
         "authorizationState": "not_established_by_tool_call_edge",
@@ -2628,8 +2699,9 @@ def _workflow_actions_section(
                 ["agent_executions", "graph_edges", *(
                     ["tools"] if any(row["toolIdentityState"] == "resolved" for row in actions) else []
                 ), *(["actions"] if any(row["executionResult"]["state"] != "unknown" for row in actions) else []),
-                 *(["resources"] if any(row["approvedResource"]["state"] != "unknown" for row in actions) else [])]
-                if actions else None
+                 *(["resources"] if any(row["approvedResource"]["state"] != "unknown" for row in actions) else []),
+                 *(["actions"] if provider_invocation_views else [])]
+                if actions or provider_invocation_views else None
             ),
         ),
         claims,
@@ -4577,6 +4649,13 @@ def _safe_identifier(value: Any) -> Optional[str]:
     if not text or len(text) > 256 or any(ord(char) < 32 or ord(char) == 127 for char in text):
         return None
     return text
+
+
+def _exact_identifier(value: Any) -> Optional[str]:
+    """Accept a persisted join key only in its canonical, unpadded form."""
+    if not isinstance(value, str) or value != value.strip():
+        return None
+    return _safe_identifier(value)
 
 
 def _safe_token(value: Any, *, allowed: Optional[set[str]] = None) -> Optional[str]:

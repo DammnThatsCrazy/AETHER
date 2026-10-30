@@ -6,15 +6,18 @@ visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
 since_version: 0.1.0
-source_files: [services/api/intelligence/intelligence/routes.py, services/api/intelligence/intelligence/decision_models.py]
+source_files: [services/api/intelligence/intelligence/routes.py, services/api/intelligence/intelligence/decision_models.py, services/api/actions/delivery/worker.py, services/api/actions/delivery/adapters/jira.py, services/api/actions/agent/action_delivery_evidence.py]
 flags: [AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED]
 related: [ai/decision-outcome-intelligence]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/api/intelligence/intelligence/decision_models.py": "sha256:d620c4d0e42e135bed4ab50120a0bae2da67521399cdc6ac9bd915b9ca0464ae"
-  "services/api/intelligence/intelligence/routes.py": "sha256:dd995bcc1ae4e96d6c073e81c3c2fa28b681bce23ce18a02b1941683625839a5"
+  "services/api/actions/agent/action_delivery_evidence.py": "sha256:2885ba7a495362dc813263ad3135c967eaa669306d8e88888e838bbbe938a376"
+  "services/api/actions/delivery/adapters/jira.py": "sha256:c8d4dcc9e02158e39d7c808b3fb81d3e46abda8547f009be31a1519d7d3dc051"
+  "services/api/actions/delivery/worker.py": "sha256:caec7adc3a0025043b5c1567356f075050fdfdb42f1541cb8fac4f10a0e61fc2"
+  "services/api/intelligence/intelligence/decision_models.py": "sha256:fa7574a7f99bcebb21ff58d6cd61ffbb761a58b0022b5a247a13387c8c9853d8"
+  "services/api/intelligence/intelligence/routes.py": "sha256:60d5307836ffcd38c784710b60689c803347d7a3dbb0f7608a64ba66ef150241"
 ---
 # Integration Actions
 
@@ -28,17 +31,55 @@ Supported targets: Slack, signed webhook, ticketing (delegates to Linear or Jira
 
 Dispatch reserves an optional idempotency key within the authenticated tenant
 and action before calling a connector. Replays return the existing durable
-dispatch and cannot invoke an external side effect twice. A concrete delivered
-receipt must contain a real external ID; simulation-shaped receipts are
-rejected. If a target adapter is not implemented, the reserved dispatch stays
-an auditable `queued` plan and is handed to the canonical delivery worker seam
-when available, with `planned: true` and `external_side_effect: false` in the
+dispatch and do not invoke the connector again. When a Journey or Risk
+association was recorded, a replay must supply that same reference and match
+the persisted decision/action/recommendation linkage; the association is replayed
+as stored, not revalidated as a current decision. A concrete delivered receipt
+must contain a real external ID; simulation-shaped receipts are rejected. If a
+target adapter is not implemented, the reserved dispatch stays an auditable
+`queued` plan and is handed to the canonical delivery worker seam when
+available, with `planned: true` and `external_side_effect: false` in the
 response. Connector failures remain durable and retryable rather than silently
 creating a second dispatch. See [ADR-001](adr-001-canonical-delivery-pipeline.md).
 
+For authorization, a new idempotent reservation remains
+`authorization_pending` until its policy decision is persisted. A single
+atomic `authorizing` claim prevents concurrent retries from repeating the
+authorization work. If policy or audit persistence fails, the same reservation
+returns to the pending state; a later retry can persist authorization and
+deliver using the original dispatch ID. No connector call occurs before that
+persistence succeeds.
+
+Journey360 and Risk360 read worker delivery evidence through the canonical
+intent → job → provider receipt → external-resource link chain. A receipt on
+the intelligence dispatch endpoint is not itself that worker-chain evidence.
+Tenant-submitted delivery outcomes remain `caller_asserted`; only callback
+events whose signature and exact receipt/resource binding were verified are
+exposed as verified callbacks. Neither provider delivery evidence nor a
+verified callback proves an independently verified external effect.
+
+For Jira deliveries, the worker separately re-resolves the vault credential and
+reads the issue back, matching its key, project, and requested title. A durable
+verification binds that observation to the exact tenant, dispatch, subject,
+intent, job, receipt, provider site, payload digest, and dispatch policy decision.
+Journey360 and Risk360 revalidate those bindings before reporting
+`provider_resource_readback_verified`. This proves the requested Jira resource
+was observed, not a successful business outcome or complete provider coverage.
+Other adapters remain unsupported for independent read-back verification.
+
 ## Controls
 
-Integration actions require an approved decision before queued or executed status. Elevated and critical actions still require `authorization_metadata.approval_id`. Every action creates an `ActionFeedback` record, emits the action lifecycle event, supports later outcome observation, preserves tenant isolation, and remains auditable.
+Integration actions require tenant write permission, tenant `dispatch`
+permission, an authenticated principal, and an approved decision before
+dispatch. Elevated and critical actions still require
+`authorization_metadata.approval_id`. The persisted allowed `action.dispatch`
+decision is matched to the exact dispatch, tenant, principal, action, target,
+selected action, elevation/approval context, and association before Journey360
+or Risk360 treats its dispatch read as complete. This records the application
+permission decision at dispatch time; it does not prove later connector
+execution or an external effect. Every action creates an `ActionFeedback`
+record, emits the action lifecycle event, supports later outcome observation,
+preserves tenant isolation, and remains auditable.
 
 When the action originated from a finding-backed investigation, its optional
 `finding_id` and `investigation_id` links are inherited from the decision and

@@ -175,6 +175,7 @@ async def build_experience360_frame(
 
     journey_dispatch_policy = None
     risk_dispatch_policy = None
+    profile_outcome_policy = None
     risk_dispatch_evaluator = getattr(evaluator, "evaluate_risk_dispatch_read", None)
     if (request.surfaceId == "risk360" and "interventions" in readable_slot_ids
             and callable(risk_dispatch_evaluator)):
@@ -191,6 +192,21 @@ async def build_experience360_frame(
             )
         except Exception:  # noqa: BLE001 - missing authority fails closed
             journey_dispatch_policy = None
+    profile_outcome_evaluator = getattr(
+        evaluator, "evaluate_profile_prediction_outcome_read", None
+    )
+    if (
+        request.surfaceId == "profile360"
+        and request.subject.kind == "entity"
+        and "likely_next_states" in readable_slot_ids
+        and callable(profile_outcome_evaluator)
+    ):
+        try:
+            profile_outcome_policy = Experience360PolicyDisposition.model_validate(
+                await profile_outcome_evaluator(request)
+            )
+        except Exception:  # noqa: BLE001 - missing authority fails closed
+            profile_outcome_policy = None
 
     account_policy: Optional[dict[str, Experience360PolicyDisposition]] = None
     account_identity_read: Optional[Any] = None
@@ -548,6 +564,51 @@ async def build_experience360_frame(
                         policyState=relationship_disposition.state,
                         policyIds=list(relationship_disposition.policyIds),
                         policyEvaluatedAt=relationship_disposition.evaluatedAt,
+                    )
+                )
+            prediction_slot_id = "likely_next_states"
+            prediction_slot = slot_definitions.get(prediction_slot_id)
+            prediction_disposition = selected_policy.get(prediction_slot_id)
+            prediction_bindings = (
+                prediction_slot.get("projectionBindings", [])
+                if isinstance(prediction_slot, Mapping)
+                else []
+            )
+            prediction_binding = next(
+                (
+                    binding
+                    for binding in prediction_bindings
+                    if isinstance(binding, Mapping)
+                    and binding.get("projectionId") == "profile360"
+                    and isinstance(binding.get("sectionIds"), (list, tuple))
+                    and "likely_next_states" in binding["sectionIds"]
+                    and isinstance(binding.get("subjectKinds"), (list, tuple))
+                    and request.subject.kind in binding["subjectKinds"]
+                ),
+                None,
+            )
+            if (
+                prediction_slot_id in readable_slot_ids
+                and prediction_disposition is not None
+                and prediction_disposition.state == "allowed"
+                and isinstance(prediction_binding, Mapping)
+                and profile_outcome_policy is not None
+                and profile_outcome_policy.state == "allowed"
+                and profile_outcome_policy.policyIds
+                and profile_outcome_policy.evaluatedAt
+            ):
+                read_authorizations.append(
+                    ProjectionReadAuthorization(
+                        tenantId=request.tenantId,
+                        sourceSurfaceId="profile360",
+                        sourceSubject=request.subject,
+                        sourceSlotId=prediction_slot_id,
+                        consumerProjectionId="profile360",
+                        targetProjectionId="outcome360",
+                        capabilityKey="outcome_facts.read",
+                        policyState="allowed",
+                        policyIds=list(profile_outcome_policy.policyIds),
+                        policyEvaluatedAt=profile_outcome_policy.evaluatedAt,
                     )
                 )
         async with semaphore:

@@ -1558,10 +1558,11 @@ class Risk360Provider:
                 interventions_reason = interventions_reason or "risk_dispatch_read_truncated"
             for record in eligible[:20]:
                 rows, complete = await read_risk_dispatches(tenant_id=tenant_id, record=record)
-                intervention_dispatches[record.record_id] = rows
                 if not complete:
+                    rows = []
                     interventions_degraded = True
                     interventions_reason = interventions_reason or "risk_dispatch_read_incomplete"
+                intervention_dispatches[record.record_id] = rows
 
         evidence = self._collect_evidence(
             assessment,

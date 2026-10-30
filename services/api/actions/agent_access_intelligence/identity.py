@@ -119,6 +119,7 @@ IDENTITY_FIELDS: tuple[str, ...] = (
     "provider",
     "server",
     "tool_name",
+    "resource_uri",
     "protocol_version",
     "capability_kind",
 )
@@ -141,6 +142,12 @@ def _norm_field(record: dict[str, Any], name: str) -> str:
     if value is None:
         return ""
     value = getattr(value, "value", value)
+    # MCP resource URIs are compared as exact observed identifiers by the authority
+    # reader. URI paths and opaque resource identifiers can be case-sensitive, so
+    # lowercasing them here would make a digest claim equality that authorization does
+    # not. The caller has already applied field-level whitespace cleanup.
+    if name == "resource_uri":
+        return str(value).strip()
     return str(value).strip().lower()
 
 
@@ -190,15 +197,20 @@ def declaration_id_for(
     provider: Optional[str],
     server_key: Optional[str],
     tool_name: Optional[str],
+    resource_uri: Optional[str] = None,
 ) -> str:
     """Deterministic declaration identity.
 
-    Keyed by the **same** tuple as ``models.capability_id_for`` so a declaration and the
-    observation it describes join exactly, with no fuzzy matching: one declaration per
-    (tenant, provider, server, tool). Re-declaring the same capability updates that row
+    Keyed by the same tuple as the observed catalog: tools use
+    ``(tenant, provider, server, tool)`` and MCP resources use
+    ``(tenant, provider, server, "resource", exact_uri)``. This keeps declaration joins
+    exact, with no fuzzy matching. Re-declaring the same capability updates that row
     instead of accumulating duplicates that would each report their own drift verdict.
     """
-    raw = f"{tenant_id}|{provider or ''}|{server_key or ''}|{tool_name or ''}"
+    if resource_uri:
+        raw = f"{tenant_id}|{provider or ''}|{server_key or ''}|resource|{resource_uri.strip()}"
+    else:
+        raw = f"{tenant_id}|{provider or ''}|{server_key or ''}|{tool_name or ''}"
     return "dec_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 

@@ -242,6 +242,7 @@
         "agent"
       ],
       "canonicalAuthorities": [
+        "actions",
         "agent_access",
         "agent_entities",
         "agent_entity",
@@ -616,6 +617,7 @@
         "journey"
       ],
       "canonicalAuthorities": [
+        "actions",
         "agent_executions",
         "attribution_credits",
         "attribution_runs",
@@ -1827,6 +1829,7 @@
         "support_case"
       ],
       "canonicalAuthorities": [
+        "actions",
         "bronze_sdk_events",
         "cluster_membership",
         "computation",
@@ -2812,18 +2815,19 @@
         "workflow_run"
       ],
       "canonicalAuthorities": [
+        "actions",
         "agent_access",
-        "ai_execution_facts",
         "agent_entities",
         "agent_executions",
+        "ai_execution_facts",
         "commerce",
+        "events",
+        "evidence",
         "execution_facts",
+        "graph_edges",
         "identity",
         "outcome_facts",
-        "evidence",
-        "events",
         "risk_assessments",
-        "graph_edges",
         "tools",
         "workflow_definition_revisions"
       ],
@@ -3056,7 +3060,7 @@
         {
           "id": "capabilities",
           "requirement": "required",
-          "description": "Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent and exact observed MCP tool catalog identity; action and resource authorization remains unknown.",
+          "description": "Observed capability reach and bounded server-owned MCP invocation results joined to exact invoke grants and invocation-time policy decisions; standing authorization and resource operations remain unknown.",
           "canonicalAuthorityRefs": [
             "actions",
             "resources",
@@ -3081,11 +3085,10 @@
             "actions_tools_resources"
           ],
           "unboundCanonicalAuthorityRefs": [
-            "actions",
             "resources"
           ],
-          "authorityGapReason": "active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy",
-          "partialImplementationReason": "Current active grant join is bounded to 2000 records. Observed catalog identity for an exact MCP tool does not prove remote ownership, effective tool authorization, action or resource policy, or historical authority."
+          "authorityGapReason": "resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer",
+          "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown."
         },
         {
           "id": "execution_history",
@@ -5815,11 +5818,7 @@
               ]
             }
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "actions"
-          ],
-          "authorityGapReason": "A non-executable recommendation record does not join the canonical action execution authority.",
-          "partialImplementationReason": "Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy; action dispatch, external effects, policy replay, outcomes, full recommendation inventory and freshness remain unknown."
+          "partialImplementationReason": "Current-version intents and caller-associated dispatches join exact tenant action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the durable intent, job, receipt and resource-link chain, validating the requested payload, provider site, subject and policy context. Other providers lack independent resource verification. Verified business outcomes, complete recommendation and producer coverage, historical replay and freshness remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -6720,11 +6719,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Exact-subject intervention decisions and reported outcomes can include slot-authorized, caller-associated agent lifecycle requests; dispatch, external effects, actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
-          "unboundCanonicalAuthorityRefs": [
-            "actions"
-          ],
-          "authorityGapReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown."
+          "partialImplementationReason": "Exact-subject intervention decisions join caller-associated dispatches and their persisted action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the exact tenant, intent, job, receipt, provider site, requested payload and subject chain. Other providers lack independent resource verification. Producer coverage, historical replay, independently verified intervention outcomes and freshness remain unknown."
         },
         {
           "id": "audit_history",
@@ -10296,12 +10291,11 @@
               ]
             }
           ],
-          "partialImplementationReason": "Bounded call edges may include an exact linked execution's published executor completion or failure and a current approved tenant resource joined through approval and delegation evidence after slot policy. These records do not establish the tool result, resource operation, external effect, complete producer coverage, historical replay, or freshness.",
+          "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown.",
           "unboundCanonicalAuthorityRefs": [
-            "actions",
             "resources"
           ],
-          "authorityGapReason": "Tool-call results and resource-operation outcomes are not joined; execution callbacks and current approved resource records are bounded context only."
+          "authorityGapReason": "resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer"
         },
         {
           "id": "failures",

@@ -191,6 +191,8 @@ class Outcome(ContractModel):
     target_at: Optional[str] = None
     value: Optional[float] = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    prediction_id: Optional[str] = None
+    prediction_label_contract_version: Optional[str] = None
     updated_at: str
 
 

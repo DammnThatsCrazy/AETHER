@@ -60,15 +60,34 @@ async def test_reader_validates_exact_joins_and_fails_closed():
             "action_type": "review", "recommendation_id": "rec"}
     row = {"id": "d", "dispatch_id": "d", "tenant_id": "t", "action_id": "a", "decision_id": "dec",
            "recommendation_id": "rec", "risk_action_association_record_id": "r", "risk_action_association": link,
-           "status": "queued", "created_at": now.isoformat()}
+           "dispatch_policy_decision_id": "policy", "status": "queued",
+           "created_at": (now - timedelta(seconds=1)).isoformat()}
+    row.update(dispatch_actor_id="user", dispatch_action_key="review", dispatch_action_type="review",
+               dispatch_approval_id=None, dispatch_requires_elevation=False, target_type="webhook")
     action = {"tenant_id": "t", "action_id": "a", "decision_id": "dec", "recommendation_id": "rec", "action_type": "review"}
     decision = {"tenant_id": "t", "decision_id": "dec", "recommendation_id": "rec", "decision_status": "approved",
                 "selected_action": {"action_key": "review", "action_type": "review"}}
     recommendation = {"tenant_id": "t", "recommendation_id": "rec", "entity_id": "s"}
+    policy_decision = {"decision_id": "policy", "tenant_id": "t", "policy_key": "action.dispatch",
+                       "actor_id": "user", "actor_type": "tenant_user", "action": "dispatch",
+                       "resource_type": "action", "resource_id": "a", "allowed": True,
+                       "context": {"dispatch_id": "d", "target_type": "webhook",
+                                   "selected_action_key": "review", "selected_action_type": "review",
+                                   "is_elevated": False, "approval_id": None,
+                                   "association_record_id": "r"},
+                       "evaluated_at": (now - timedelta(seconds=2)).isoformat()}
     kwargs = dict(tenant_id="t", record=record, dispatches=Repository([row]), actions=Repository({"a": action}),
-                  decisions=Repository({"dec": decision}), recommendations=Repository({"rec": recommendation}))
+                  decisions=Repository({"dec": decision}), recommendations=Repository({"rec": recommendation}),
+                  policy_decisions=Repository({"policy": policy_decision}))
     rows, complete = await read_risk_dispatches(**kwargs)
     assert complete and rows[0]["externalEffect"] == "not_independently_verified"
+    assert rows[0]["connectorReceiptRead"] == "unknown"
+    assert rows[0]["connectorReceiptReason"] == "action_delivery_evidence_missing"
+    assert rows[0]["dispatchAuthorization"]["decision_id"] == "policy"
+    original_evaluated_at = policy_decision["evaluated_at"]
+    policy_decision["evaluated_at"] = (record.effective_at - timedelta(seconds=1)).isoformat()
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["evaluated_at"] = original_evaluated_at
     for field in ("recorded_at", "observed_at", "effective_at"):
         original = getattr(record, field)
         setattr(record, field, now + timedelta(seconds=1))
@@ -86,6 +105,23 @@ async def test_reader_validates_exact_joins_and_fails_closed():
     recommendation["population_id"] = "population"
     assert await read_risk_dispatches(**kwargs) == ([], False)
     recommendation.pop("population_id")
+    policy_decision["resource_id"] = "other-action"
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["resource_id"] = "a"
+    policy_decision["actor_id"] = "other-user"
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["actor_id"] = "user"
+    policy_decision["context"]["dispatch_id"] = "another-dispatch"
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["context"]["dispatch_id"] = "d"
+    policy_decision["context"]["target_type"] = "other-target"
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["context"]["target_type"] = "webhook"
+    policy_decision.pop("context")
+    assert await read_risk_dispatches(**kwargs) == ([], False)
+    policy_decision["context"] = {"dispatch_id": "d", "target_type": "webhook",
+                                   "selected_action_key": "review", "selected_action_type": "review",
+                                   "is_elevated": False, "approval_id": None, "association_record_id": "r"}
     action["tenant_id"] = "other"
     assert await read_risk_dispatches(**kwargs) == ([], False)
 

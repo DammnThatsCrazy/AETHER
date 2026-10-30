@@ -7,13 +7,18 @@ audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
 source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/delegation/engine.py, services/api/actions/agentic_observability/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/alembic/versions/20261022_risk_poisoning_evidence.py, services/api/alembic/versions/20261023_commerce_intent_authority.py, services/api/alembic/versions/20261023_support_callback_authority.py, services/api/value/commerce/, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/value/economic/journey_operation_evidence.py, services/api/value/economic/economic360_provider.py, services/api/value/economic/ai_aggregation.py, services/api/journeys/communication360/, services/api/journeys/support360/, services/api/intelligence/workflow/workflow360_provider.py, services/api/identity/account360_provider.py, services/api/shared/intelligence_projections/frame_runtime.py, services/api/repositories/repos.py, services/api/intelligence/fraud_networks/risk360_projection.py, services/api/connectors/integrations/providers/payment_rails/models.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/intelligence/risk360/, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/contracts/intelligence-projection-registry.json, packages/shared/agentic-observability.ts]
+reviewed_source_commits:
+  - commit: "fa28339e9"
+    reason: "Reviewed fa28339e9 and 9b7d55daa: malformed or padded Agent360 authority identifiers and Workflow360 action join identifiers fail closed; exact Tool evidence is required. Updated the current-state notes below."
+  - commit: "9b7d55daa"
+    reason: "Reviewed the follow-up exact persisted Tool identity validation and Workflow360 incomplete action-read coverage behavior; partial observations do not establish effects."
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2f400c148c9f190874adc75f8dd78b631cc1fb2f787febfa0fdac7ce0f4fdee4"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bb38bc7ee689e493c0b46c108845d4a90e74261d5a003daa0973d92085090601"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:9255f80b14391563cc75dde395aa2621019a3eec56bc0560f32fdd9e2ca2de92"
+  "services/api/actions/agent/": "sha256:fb3acc6d08b0bd7acdfd39653cdbbdf13cdd62ce6cc72010c7986dbe68a946cc"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -29,20 +34,20 @@ source_hashes:
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1254be67a69e089a6d9ed814a92fca7fb7a5fcf7fd4d6757e22918c596cfe7c5"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/": "sha256:c2c29d0bfcab2ed393a5f68ffc1a2fb6e03b7bcfe5c167956bddf5c09195bbd9"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:faea869afaddcfee82abf3d618e845de8018ee9127edc71214cc94d760cae0ef"
+  "services/api/intelligence/risk360/": "sha256:fbc31678aeaf5a4817cb48787708c394a1ab96a05e3554af88ac291273d57b47"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
-  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:0bcf70a96d1dce09ddc04921b7328b5b87b453a13dbb1bd78da661e126ea3b4d"
+  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:c4876df0c44da2b2322921a43301c8917d40e9dda50d986890b537b3a4e9e844"
+  "services/api/value/economic/economic360_provider.py": "sha256:a98f9f5e6bd1ae986f284fcc52b6711b397597e3494da6be3ae497d6dd9613b8"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
@@ -122,9 +127,22 @@ Separately, Journey360 and Risk360 can read exact associated dispatch lifecycle
 records after an explicit actions-domain policy decision. Journey dispatch joins
 require the intent to have occurred and been recorded by dispatch time. Risk dispatch joins
 require an exact entity recommendation binding and an approved decision observed,
-recorded, and effective no later than the dispatch. These bounded reads do not
-establish event-time authorization, complete coverage, or an external effect;
-the corresponding registry authorities remain unbound.
+recorded, and effective no later than the dispatch. Dispatch lifecycle reads alone
+do not establish connector execution or external effects. A separate credential-bound
+Jira read-back now verifies the requested issue key, project, and title, with exact
+tenant, subject, dispatch, policy, receipt, provider-site, and payload bindings.
+That producer-to-reader path binds the Journey and Risk actions registry references.
+Both slots remain partial: other providers, complete producer coverage, freshness,
+and independent business outcomes are not established.
+Dispatch records now carry an `action.dispatch` policy decision created after
+the authenticated principal's tenant `dispatch` permission check. Journey360
+and Risk360 require that decision to match the dispatch ID, tenant, principal,
+selected action, target, elevation/approval context, association, allowed
+result, and dispatch time before treating the dispatch chain as complete.
+For Risk360, the authorization evaluation must also be no earlier than the
+associated risk decision's recorded, observed, and effective times. These
+records establish an application permission decision, not event-time authority,
+connector execution, or an external effect.
 Risk decision-history validation rejects out-of-scope or future-observed or
 future-recorded rows and requires the current approved intervention type to match
 the associated action. Invalid decision records do not produce a complete empty
@@ -141,8 +159,11 @@ canonical Agent and tenant; missing, malformed, foreign, or truncated rows keep
 coverage partial or unknown. The capability profile reports observed reach
 and invoke-grant coverage. A complete grant read includes recorded invoke
 action and capability or server resource scopes with delegation evidence;
-ambiguous dual-target grants are rejected. It does not decide whether a new
-action/resource request is authorized. Its
+ambiguous dual-target grants are rejected. The bounded `capability.invoke`
+policy history records exact Agent, capability, grant reference, result, and
+evaluation time. Those evaluations are not linked to observed tool calls and do
+not establish current or historical effective authorization; action and
+resource authorities remain unbound. Its
 `policy_boundary` section now carries historical, action-scoped server
 decisions when observed while keeping effective policy unknown; it does not
 expose a standing policy snapshot. Its `risk_summary` composes canonical
@@ -266,6 +287,30 @@ recorded agent delegation decision to its current matching grant. This is
 request-time evidence, not current authorization or historical policy replay.
 The actions slot may show a linked execution's recorded executor result and
 current approved resource, but does not infer a tool result or resource effect.
+Workflow360 accepts action joins only with canonical, unpadded tenant,
+execution, event, and Tool identifiers plus matching persisted Tool evidence.
+Invalid rows are omitted and make the read incomplete; bounded or
+scope-incomplete reads may expose admissible observed rows as degraded partial
+coverage, while no admissible rows leaves the section unknown. Agent360 also
+rejects malformed or padded capability-grant and policy-decision identifiers.
+Allowed Agent360 invoke evaluations now bind to the referenced grant only when
+their recorded time falls within its start and end/revocation interval; valid
+rows for other agents do not make this agent's scoped history incomplete.
+Separate authenticated Agent routes now perform exact MCP tool invocations
+under invoke grants and exact resource reads under a resource-read grant
+and records an invocation-bound receipt with provider and resource identity,
+policy and grant context, timestamps, and result status; successful reads carry
+a digest of the provider result. This is evidence of the recorded read attempt
+and returned content digest, not a tool mutation or external effect. Workflow360
+still reports approved-resource read availability, completeness, and
+truncation. It exposes validated run-bound provider receipts separately from
+observed action edges; an edge without an exact receipt link retains unknown
+execution-receipt authority.
+The invocation client accepts JSON and Streamable HTTP SSE replies only when
+exactly one JSON-RPC 2.0 response matches the expected request ID. This check
+also applies to initialization and resource list/read exchanges; unrelated SSE
+messages cannot be mistaken for the provider result. Valid resource-read grants
+are checked in the canonical grant set but do not count as invoke-grant coverage.
 Workflow definition-to-run linkage, complete actor and step coverage,
 workflow-wide approval authority, policy, and freshness remain unknown.
 Workflow360 `triggers` now

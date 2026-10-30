@@ -16,7 +16,7 @@ reviewed_source_commits:
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
   "services/api/intelligence/fraud_networks/": "sha256:d5e8c0a0e46b89c971588b052c48eb357e6187f5d10b5863f902b1a5d77a4240"
-  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
+  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
 ---
 
 # Fraud Network Intelligence

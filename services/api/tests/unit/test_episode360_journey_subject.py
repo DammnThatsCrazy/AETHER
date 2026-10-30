@@ -143,7 +143,7 @@ def _context(tenant_id: str = TENANT) -> ProjectionContext:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scope", ["allowed", "absent", "tenant", "subject", "temporal", "failure"])
+@pytest.mark.parametrize("scope", ["allowed", "absent", "tenant", "subject", "temporal", "failure", "incomplete"])
 async def test_journey_dispatch_claims_require_exact_authority_and_isolate_evidence(monkeypatch, scope):
     intent = {
         "record_id": "intent-record-1", "tenant_id": TENANT, "journey_id": JOURNEY_ID,
@@ -165,10 +165,13 @@ async def test_journey_dispatch_claims_require_exact_authority_and_isolate_evide
         calls.append(kwargs)
         if scope == "failure":
             raise RuntimeError("authority unavailable")
-        return ([{"dispatchId": dispatch_id, "status": "queued", "evidenceRefs": [
+        rows = ([{"dispatchId": dispatch_id, "status": "queued", "evidenceRefs": [
             {"id": dispatch_id, "type": "event", "source": "action_dispatches"},
             {"id": f"decision-{dispatch_id}", "type": "event", "source": "decision_records"},
-        ]} for dispatch_id in ("dispatch-1", "dispatch-2")], True)
+        ], "connectorReceiptRead": "unknown",
+            "connectorReceiptReason": "trusted_connector_receipt_binding_unavailable"}
+            for dispatch_id in ("dispatch-1", "dispatch-2")])
+        return rows, scope != "incomplete"
 
     monkeypatch.setattr(Episode360Provider, "_load_journey_action_intents", load_intents)
     monkeypatch.setattr("actions.agent.journey_dispatch_association.read_journey_dispatches", read_dispatches)
@@ -185,7 +188,7 @@ async def test_journey_dispatch_claims_require_exact_authority_and_isolate_evide
     request = _request(asOf="2026-10-16T10:00:00Z") if scope == "temporal" else _request()
     result = await Episode360Provider(journey_source=FakeJourneySource()).project(request, context)
     dispatch_claims = [claim for claim in result.claims if claim.kind == "journey_linked_action_dispatch"]
-    assert bool(calls) == (scope in {"allowed", "failure"})
+    assert bool(calls) == (scope in {"allowed", "failure", "incomplete"})
     if scope == "allowed":
         assert calls[0]["occurred_at"].isoformat() == intent["occurred_at"].replace("Z", "+00:00")
         assert len(dispatch_claims) == 2

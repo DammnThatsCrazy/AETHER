@@ -13,6 +13,9 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
+from uuid import uuid4
+
+from repositories.typed_repo import TypedTableRepository
 
 
 _local_decisions: dict[tuple[str, str], dict[str, Any]] = {}
@@ -41,8 +44,79 @@ _EFFECTIVE_OVERRIDE_FIELDS = {
 }
 
 
+class ValueModelApprovalRepository(TypedTableRepository):
+    """Append-only scoped human decisions; approvals are never caller labels."""
+    table_name = "value_model_approval_decisions"
+    columns = ("decision_id", "tenant_id", "attribution_run_id", "model_config_id",
+               "model_type", "model_version", "validation_decision_id", "decision",
+               "actor_id", "reason", "created_at")
+    conflict_key = ("decision_id",)
+
+    async def latest(self, tenant_id: str, run_id: str) -> Optional[dict[str, Any]]:
+        pool = await self._pool()
+        if pool is None:
+            rows = [r for r in self._rows if r.get("tenant_id") == tenant_id
+                    and _uuid(r.get("attribution_run_id")) == _uuid(run_id)]
+            return max(rows, key=lambda r: _utc(r.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc), default=None)
+        row = await pool.fetchrow(
+            "SELECT * FROM value_model_approval_decisions WHERE tenant_id=$1 AND attribution_run_id=$2 ORDER BY created_at DESC, decision_id DESC LIMIT 1",
+            tenant_id, UUID(str(run_id)),
+        )
+        return dict(row) if row is not None else None
+
+
+async def decide_value_model_approval(
+    tenant_id: str, run_id: str, decision: str, *, actor_id: str, reason: str,
+    runs: Any = None, decisions: Optional[AttributionModelValidationRepository] = None,
+    approvals: Optional[ValueModelApprovalRepository] = None,
+) -> dict[str, Any]:
+    """Append a tenant admin decision bound to an exactly validated completed run."""
+    if decision not in {"approved", "rejected"} or not actor_id.strip() or not reason.strip():
+        raise ValueError("authenticated actor, decision, and reason are required")
+    validation = await validate_attribution_run_model(tenant_id, run_id, runs=runs, decisions=decisions)
+    row = {
+        "decision_id": "vma_" + uuid4().hex,
+        "tenant_id": tenant_id,
+        "attribution_run_id": validation["attribution_run_id"],
+        "model_config_id": validation["model_config_id"],
+        "model_type": validation["model_type"],
+        "model_version": validation["model_version"],
+        "validation_decision_id": validation["decision_id"],
+        "decision": decision,
+        "actor_id": actor_id,
+        "reason": reason.strip(),
+        "created_at": datetime.now(timezone.utc),
+    }
+    await (approvals or ValueModelApprovalRepository()).insert(row)
+    return row
+
+
 def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _decision_id_for_scope(
+    tenant_id: str,
+    attribution_run_id: Any,
+    model_config_id: Any,
+    config_snapshot_sha256: Any,
+) -> Optional[str]:
+    """Return the deterministic decision ID only for a complete exact scope."""
+    run_id = _uuid(attribution_run_id)
+    config_id = _uuid(model_config_id)
+    if (
+        not tenant_id
+        or run_id is None
+        or config_id is None
+        or not isinstance(config_snapshot_sha256, str)
+        or len(config_snapshot_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in config_snapshot_sha256)
+    ):
+        return None
+    digest = hashlib.sha256(
+        f"{tenant_id}:{run_id}:{config_id}:{config_snapshot_sha256}".encode("utf-8")
+    ).hexdigest()[:32]
+    return f"amv_{digest}"
 
 
 def _utc(value: Any) -> Optional[datetime]:
@@ -105,9 +179,8 @@ def _decision_for(
         raise ValueError("attribution model configuration lineage is not exact and complete")
     snapshot_json = _canonical(snap)
     snapshot_hash = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
-    decision_id = "amv_" + hashlib.sha256(
-        f"{tenant_id}:{run_id}:{config_id}:{snapshot_hash}".encode("utf-8")
-    ).hexdigest()[:32]
+    decision_id = _decision_id_for_scope(tenant_id, run_id, config_id, snapshot_hash)
+    assert decision_id is not None
     return {
         "decision_id": decision_id,
         "tenant_id": tenant_id,
@@ -181,6 +254,8 @@ class AttributionModelValidationRepository:
 
 
 def _same_decision(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if left.get("tenant_id") != right.get("tenant_id"):
+        return False
     if _uuid(left.get("model_config_id")) != _uuid(right.get("model_config_id")):
         return False
     if _uuid(left.get("attribution_run_id")) != _uuid(right.get("attribution_run_id")):

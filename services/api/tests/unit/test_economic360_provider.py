@@ -631,6 +631,142 @@ async def test_value_attribution_credit_discards_cross_tenant_run_and_credit_row
     assert not any(claim.kind == "canonical_attribution_credit" for claim in result.claims)
 
 
+async def test_value_confidence_reader_rejects_validation_id_from_other_scope() -> None:
+    conversion_id = "00000000-0000-4000-8000-000000000311"
+    run_id = "00000000-0000-4000-8000-000000000312"
+    config_id = "00000000-0000-4000-8000-000000000313"
+    conversion_ref = EvidenceRef(
+        id=conversion_id,
+        type="transaction",
+        source="canonical_conversions",
+        uri=f"store://canonical_conversions/{conversion_id}",
+    ).model_dump(mode="json")
+    wrong_scope_governance = {
+        "state": "validated",
+        "validationState": "exact_config_lineage_validated",
+        "calibrationState": "unvalidated",
+        "modelConfigId": config_id,
+        "decisionId": "amv_" + "a" * 32,
+        "configSnapshotSha256": "b" * 64,
+        "evidenceRef": {
+            "id": "amv_" + "a" * 32,
+            "type": "model_output",
+            "source": "attribution_model_validation_decisions",
+            "observedAt": None,
+            "uri": "store://attribution_model_validation_decisions/amv_" + "a" * 32,
+        },
+    }
+    reader = FakeAttributionCredits(
+        {
+            "tenantId": "tenant-a",
+            "conversionIds": [conversion_id],
+            "state": "available",
+            "completeness": "complete",
+            "runs": [
+                {
+                    "tenantId": "tenant-a",
+                    "conversionId": conversion_id,
+                    "attributionRunId": run_id,
+                    "status": "complete",
+                    "modelGovernance": wrong_scope_governance,
+                }
+            ],
+            "records": [],
+        }
+    )
+    provider = Economic360Provider(
+        sources=FakeSource([]), attribution_credit_reader=reader
+    )
+
+    result = await provider._safe_attribution_credits(
+        _request(),
+        {
+            "state": "available",
+            "completeness": "complete",
+            "records": [{"conversionId": conversion_id}],
+            "evidenceRefs": [conversion_ref],
+        },
+    )
+
+    assert result["runs"][0]["modelGovernance"]["state"] == "unknown"
+    assert result["runs"][0]["modelGovernance"]["calibrationState"] == "unvalidated"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("durable_tenant,expected_state", [
+    ("tenant-a", "approved"), ("tenant-b", "unknown"),
+])
+async def test_value_confidence_reader_rejoins_exact_durable_approval(
+    monkeypatch, durable_tenant, expected_state,
+) -> None:
+    from value.economic.attribution_model_validation import (
+        ValueModelApprovalRepository,
+        _decision_id_for_scope,
+    )
+
+    tenant_id = "tenant-a"
+    conversion_id = "00000000-0000-4000-8000-000000000321"
+    run_id = "00000000-0000-4000-8000-000000000322"
+    config_id = "00000000-0000-4000-8000-000000000323"
+    config_hash = "c" * 64
+    validation_id = _decision_id_for_scope(tenant_id, run_id, config_id, config_hash)
+    approval_id = "vma_" + "d" * 32
+    approval_time = "2026-10-29T10:00:00+00:00"
+    approval_ref = {
+        "id": approval_id, "type": "annotation", "source": "value_model_approval_decisions",
+        "observedAt": approval_time, "confidence": None,
+        "uri": f"store://value_model_approval_decisions/{approval_id}",
+    }
+
+    async def latest(_self, _tenant, _run):
+        return {
+            "decision_id": approval_id, "tenant_id": durable_tenant,
+            "attribution_run_id": run_id, "model_config_id": config_id,
+            "model_type": "last_touch", "model_version": "v2",
+            "validation_decision_id": validation_id, "decision": "approved",
+            "actor_id": "admin-1", "reason": "Reviewed exact run evidence.",
+            "created_at": approval_time,
+        }
+
+    monkeypatch.setattr(ValueModelApprovalRepository, "latest", latest)
+    validation_ref = {
+        "id": validation_id, "type": "model_output",
+        "source": "attribution_model_validation_decisions", "observedAt": None,
+        "confidence": None,
+        "uri": f"store://attribution_model_validation_decisions/{validation_id}",
+    }
+    governance = {
+        "state": "validated", "validationState": "exact_config_lineage_validated",
+        "calibrationState": "unvalidated", "modelConfigId": config_id,
+        "decisionId": validation_id, "configSnapshotSha256": config_hash,
+        "evidenceRef": validation_ref, "approvalState": "approved",
+        "approvalActorId": "admin-1", "approvalReason": "Reviewed exact run evidence.",
+        "approvalEvidenceRef": approval_ref,
+    }
+    reader = FakeAttributionCredits({
+        "tenantId": tenant_id, "conversionIds": [conversion_id],
+        "state": "available", "completeness": "complete",
+        "runs": [{
+            "tenantId": tenant_id, "conversionId": conversion_id,
+            "attributionRunId": run_id, "status": "complete",
+            "modelType": "last_touch", "modelVersion": "v2",
+            "modelGovernance": governance,
+        }],
+        "records": [],
+    })
+    provider = Economic360Provider(sources=FakeSource([]), attribution_credit_reader=reader)
+    conversion_ref = EvidenceRef(
+        id=conversion_id, type="transaction", source="canonical_conversions",
+        uri=f"store://canonical_conversions/{conversion_id}",
+    ).model_dump(mode="json")
+    result = await provider._safe_attribution_credits(
+        _request(),
+        {"state": "available", "completeness": "complete",
+         "records": [{"conversionId": conversion_id}], "evidenceRefs": [conversion_ref]},
+    )
+    assert result["runs"][0]["modelGovernance"]["approvalState"] == expected_state
+
+
 async def test_repository_attribution_reader_uses_tenant_and_exact_conversion(monkeypatch) -> None:
     from journeys.measurement.repositories import attribution_run_repo
     from journeys.measurement.repositories import touchpoint_repo

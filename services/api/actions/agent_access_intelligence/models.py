@@ -63,6 +63,13 @@ def capability_id_for(
     return "cap_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
+def resource_id_for(tenant_id: str, provider: Optional[str], server_key: Optional[str], uri: Optional[str]) -> str:
+    """Canonical identity for one observed MCP resource URI."""
+    # MCP resource URIs are exact identifiers; path and opaque-URI case must survive.
+    raw = f"{tenant_id}|{provider or ''}|{server_key or ''}|resource|{(uri or '').strip()}"
+    return "res_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
 def installation_id_for(
     tenant_id: str, agent_id: Optional[str], server_key: Optional[str]
 ) -> str:
@@ -81,6 +88,7 @@ class Capability(BaseModel):
     server_name: Optional[str] = None
     server_url: Optional[str] = None
     tool_name: Optional[str] = None
+    resource_uri: Optional[str] = None
     protocol_version: Optional[str] = None
     latest_risk_level: Optional[str] = None
     discovery_state: DiscoveryState = DiscoveryState.OBSERVED
