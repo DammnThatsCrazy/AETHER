@@ -66,10 +66,14 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
+  - commit: "fa28339e9"
+    reason: "Reviewed fa28339e9 and 9b7d55daa: Agent360 and Workflow360 reject padded or malformed authority join identifiers, and Workflow360 requires exact persisted Tool identity evidence. Updated the provider behavior notes below."
+  - commit: "9b7d55daa"
+    reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
   "packages/shared/": "sha256:bd1a8cd7e8ac5892bba49e1cb81f78541905d22bccaf374f805c06a5631a3d68"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:df39ac1c74da39a38ab44a0c7c2df0c71d8cd4a0cba6f5deb861ec8a9b6a61df"
+  "services/api/actions/agent/agent360_provider.py": "sha256:35d0dde203b2ff67474b2629c82071e1cacdf8fcea52a91c1d5c741850938a65"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
@@ -92,8 +96,8 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/provider.py": "sha256:b81a9c1d5af346c007494a8bcc7e0fd5647d56bc26bc394a2c99ab0795f21616"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:faea869afaddcfee82abf3d618e845de8018ee9127edc71214cc94d760cae0ef"
+  "services/api/intelligence/risk360/provider.py": "sha256:4a6d24b8c9f765dc05801de7e93c0b83f75ef35ad220d06c884b917bd91a1601"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:2b44f2b4b87374a0afbc51d5743172c1a158e34454be2077807ffdbbca0494f9"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
@@ -107,7 +111,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
   "services/api/value/commerce/routes.py": "sha256:9b68c0d975d7b81b530ff8eb91e95ee6c37e10034498dbf248f1889f026c5897"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:c4876df0c44da2b2322921a43301c8917d40e9dda50d986890b537b3a4e9e844"
+  "services/api/value/economic/economic360_provider.py": "sha256:cf57b951f85d0f92df302d710e363c1628874d58e186da2a8fa35c16074e253b"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
@@ -800,7 +804,15 @@ This does not establish current authorization or historical policy replay.
 For an allowed actions slot, the same execution may expose a recorded executor
 completion or failure and an exact current approved tenant resource. Neither
 record establishes that the observed tool call succeeded or operated on the
-resource.
+resource. Workflow360 joins only canonical, unpadded tenant, execution, event,
+and Tool identifiers with matching graph evidence. Invalid rows are omitted
+and make the read incomplete; a bounded or scope-incomplete read may still
+show valid observed rows as degraded partial coverage, while a read with no
+admissible rows stays unknown. Tool-call edges do not establish action
+authority, tool completion, or external effect. Agent360 likewise rejects
+malformed or padded grant and policy-decision identifiers; its
+action-specific and resource-operation authority remains explicitly unknown
+when no canonical authority producer is joined.
 Workflow definition-to-run linkage, complete actor and step coverage, workflow-wide approval authority,
 policy, and freshness remain unknown. Account360 adds bounded member Risk360 frames from
 exact tenant-owned `MEMBER_OF` edges after account-slot and per-member policy
