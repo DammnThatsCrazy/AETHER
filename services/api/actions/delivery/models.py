@@ -247,6 +247,8 @@ class ProviderExecutionVerification(BaseModel):
     subject_id: str
     association_record_id: str
     provider_resource_identity: str
+    provider_site: str
+    requested_payload_sha256: str
     created_at: str = Field(default_factory=_now_iso)
 
 

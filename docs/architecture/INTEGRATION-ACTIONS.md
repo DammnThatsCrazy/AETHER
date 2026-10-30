@@ -6,13 +6,16 @@ visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
 since_version: 0.1.0
-source_files: [services/api/intelligence/intelligence/routes.py, services/api/intelligence/intelligence/decision_models.py]
+source_files: [services/api/intelligence/intelligence/routes.py, services/api/intelligence/intelligence/decision_models.py, services/api/actions/delivery/worker.py, services/api/actions/delivery/adapters/jira.py, services/api/actions/agent/action_delivery_evidence.py]
 flags: [AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED]
 related: [ai/decision-outcome-intelligence]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
+  "services/api/actions/agent/action_delivery_evidence.py": "sha256:2885ba7a495362dc813263ad3135c967eaa669306d8e88888e838bbbe938a376"
+  "services/api/actions/delivery/adapters/jira.py": "sha256:c8d4dcc9e02158e39d7c808b3fb81d3e46abda8547f009be31a1519d7d3dc051"
+  "services/api/actions/delivery/worker.py": "sha256:caec7adc3a0025043b5c1567356f075050fdfdb42f1541cb8fac4f10a0e61fc2"
   "services/api/intelligence/intelligence/decision_models.py": "sha256:fa7574a7f99bcebb21ff58d6cd61ffbb761a58b0022b5a247a13387c8c9853d8"
   "services/api/intelligence/intelligence/routes.py": "sha256:389f7099cb4a4fd12c2803bd7b7495258778cdb4f5ce788294c95f7c37073464"
 ---
@@ -46,6 +49,15 @@ Tenant-submitted delivery outcomes remain `caller_asserted`; only callback
 events whose signature and exact receipt/resource binding were verified are
 exposed as verified callbacks. Neither provider delivery evidence nor a
 verified callback proves an independently verified external effect.
+
+For Jira deliveries, the worker separately re-resolves the vault credential and
+reads the issue back, matching its key, project, and requested title. A durable
+verification binds that observation to the exact tenant, dispatch, subject,
+intent, job, receipt, provider site, payload digest, and dispatch policy decision.
+Journey360 and Risk360 revalidate those bindings before reporting
+`provider_resource_readback_verified`. This proves the requested Jira resource
+was observed, not a successful business outcome or complete provider coverage.
+Other adapters remain unsupported for independent read-back verification.
 
 ## Controls
 

@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:bd1a8cd7e8ac5892bba49e1cb81f78541905d22bccaf374f805c06a5631a3d68"
+  "packages/shared/": "sha256:44c69930f2310b0959a98399bd7e5218b18f062024c641e20bd8aa21a78352e2"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:857c571d16ce1fa4f4ceb4e0d7b39e13894cba51625218f1592d8c9afbccec26"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -838,6 +838,11 @@ Journey360 `episodes` now joins only tenant-scoped EpisodeRecords that
 explicitly persist the exact `journey_id`, with record/source evidence. Legacy
 or unlinked records, association completeness, store freshness, policy, and
 historical replay remain unknown; a missing link does not establish absence.
+Journey360 and Risk360 additionally bind their actions authorities through the
+credential-bound Jira issue read-back path. Verification matches the exact
+dispatch, subject, policy, receipt, provider site, and requested payload; receipt
+or callback evidence alone does not qualify. Unsupported providers, business
+outcomes, freshness, and complete coverage keep both slots partial.
 The current agentic/support slice adds three partial paths: Agent360
 `owner_delegator` resolves the configured owner reference through an exact
 tenant entity lookup and now requires an exact tenant graph `OWNS` or

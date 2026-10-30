@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:ae6453b4c1164fdef9a3aa5d40fa1d6809f895104e71475a1daad00e779b2960"
+  "services/api/actions/": "sha256:e394e027dc1ae55c0649d4154332b1e763bd4168592a1359751c1f0146241658"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -1972,10 +1972,14 @@ The tenant-facing `/v1/delivery/outcomes/ingest` endpoint records
 authority. Such events are not treated as verified callbacks by the projection
 reader. Callback events enter the verified evidence set only after signature
 verification and exact binding to the tenant, provider receipt, and external
-resource. Journey360 and Risk360 still report `externalEffect:
-not_independently_verified`, including when connector delivery or verified
-callback evidence is present; these records do not establish the outcome or
-effect of the external action independently.
+resource. Connector receipts and verified callbacks alone leave `externalEffect`
+as `not_independently_verified`. Separately, Jira delivery can produce a durable,
+credential-bound issue read-back matching the requested key, project, and title.
+The reader requires exact tenant, subject, dispatch, policy, receipt, provider-site,
+payload-digest, and temporal bindings before reporting
+`provider_resource_readback_verified`. Other providers remain unsupported for
+this verification; issue existence does not prove a business outcome or complete
+execution coverage.
 
 Communication360 Agent authorship requires an exact tenant-owned canonical
 Agent author binding with provider scope, event-time role validity, and trusted

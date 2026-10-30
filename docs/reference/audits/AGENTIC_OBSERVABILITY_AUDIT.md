@@ -16,9 +16,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:51c87d82aa0fe872058d47410ef6fcea9d78b4ab176b69d36128495153d77be8"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6f2e26b373c363826258bd79d4189d700e3edbf00279f36cf757e2a0b5f7918c"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:fec4051342405807815a02860309f414b7c16a29c4bb28928c82f7c47224fe01"
+  "services/api/actions/agent/": "sha256:413fa4a4f89dcc53495bcda818fc20f15ffbc464f4b9b72883932326cccef229"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -127,14 +127,18 @@ Separately, Journey360 and Risk360 can read exact associated dispatch lifecycle
 records after an explicit actions-domain policy decision. Journey dispatch joins
 require the intent to have occurred and been recorded by dispatch time. Risk dispatch joins
 require an exact entity recommendation binding and an approved decision observed,
-recorded, and effective no later than the dispatch. These bounded reads do not
-establish connector execution, external effects, complete producer coverage, or
-independent outcomes; the corresponding registry authorities remain unbound.
+recorded, and effective no later than the dispatch. Dispatch lifecycle reads alone
+do not establish connector execution or external effects. A separate credential-bound
+Jira read-back now verifies the requested issue key, project, and title, with exact
+tenant, subject, dispatch, policy, receipt, provider-site, and payload bindings.
+That producer-to-reader path binds the Journey and Risk actions registry references.
+Both slots remain partial: other providers, complete producer coverage, freshness,
+and independent business outcomes are not established.
 Dispatch records now carry an `action.dispatch` policy decision created after
 the authenticated principal's tenant `dispatch` permission check. Journey360
 and Risk360 require that decision to match the dispatch ID, tenant, principal,
 selected action, target, elevation/approval context, association, allowed
-result, and dispatch time before treating the dispatch chain as complete. This
+result, and dispatch time before treating the dispatch chain as complete.
 For Risk360, the authorization evaluation must also be no earlier than the
 associated risk decision's recorded, observed, and effective times. These
 records establish an application permission decision, not event-time authority,

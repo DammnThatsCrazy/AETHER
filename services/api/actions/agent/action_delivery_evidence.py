@@ -133,13 +133,29 @@ async def read_action_delivery_evidence(
             if not isinstance(verification_rows, list) or len(verification_rows) > 1:
                 return empty, False
             if verification_rows:
+                import hashlib
+                import json
                 verification = verification_rows[0]
                 association = dispatch.get("journey_action_association") or dispatch.get("risk_action_association")
+                config = job.get("provider_config") or {}
+                provider_site = str(config.get("base_url") or config.get("site_url") or "").rstrip("/")
+                payload_hash = hashlib.sha256(json.dumps(
+                    job.get("payload"), sort_keys=True, separators=(",", ":"), allow_nan=False,
+                ).encode()).hexdigest()
+                subject_kind = (
+                    "journey" if dispatch.get("journey_action_association")
+                    else association.get("subject_kind") if isinstance(association, dict) else None
+                )
                 if (not isinstance(verification, dict) or not isinstance(association, dict)
                         or not isinstance(verification.get("id"), str) or not verification.get("id", "").strip()
                         or verification.get("verified") is not True
                         or verification.get("verification_kind") != "credential_bound_provider_resource_readback"
                         or verification.get("provider") != provider or provider != "jira"
+                        or dispatch.get("target_type") != provider
+                        or job.get("idempotency_key") != dispatch_id
+                        or job.get("payload") != dispatch.get("payload")
+                        or not provider_site or verification.get("provider_site") != provider_site
+                        or verification.get("requested_payload_sha256") != payload_hash
                         or verification.get("tenant_id") != tenant_id
                         or verification.get("dispatch_id") != dispatch_id
                         or verification.get("intent_id") != intent_id or verification.get("job_id") != job_id
@@ -147,6 +163,7 @@ async def read_action_delivery_evidence(
                         or verification.get("external_id") != external_id
                         or verification.get("association_record_id") != association.get("record_id")
                         or verification.get("subject_id") != association.get("subject_id")
+                        or not subject_kind or verification.get("subject_kind") != subject_kind
                         or verification.get("provider_resource_identity") != f"{provider}:{external_id}"
                         or verification.get("policy_decision_id") != dispatch.get("dispatch_policy_decision_id")):
                     return empty, False
@@ -213,11 +230,11 @@ async def read_action_delivery_evidence(
                                     "uri": f"store://external_outcome_events/{quote(event_id, safe='')}"},
                 })
         if deliveries:
-            verification_refs = [v["evidenceRef"] for d in deliveries
-                                 for v in d.get("independentExecutionVerifications", [])]
+            verification_records = [verification for delivery in deliveries
+                                    for verification in delivery.get("independentExecutionVerifications", [])]
             return {"connectorReceiptRead": "complete", "connectorReceiptReason": "",
                     "connectorReportedDeliveries": deliveries, "verifiedCallbacks": callbacks,
-                    "independentExecutionVerifications": verification_refs}, True
+                    "independentExecutionVerifications": verification_records}, True
         return {**empty, "connectorReceiptReason": "provider_receipt_unavailable"}, True
     except Exception:  # noqa: BLE001 - evidence failures never infer a provider effect
         return empty, False

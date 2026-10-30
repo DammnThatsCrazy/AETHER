@@ -616,6 +616,7 @@
         "journey"
       ],
       "canonicalAuthorities": [
+        "actions",
         "agent_executions",
         "attribution_credits",
         "attribution_runs",
@@ -1827,6 +1828,7 @@
         "support_case"
       ],
       "canonicalAuthorities": [
+        "actions",
         "bronze_sdk_events",
         "cluster_membership",
         "computation",
@@ -5815,11 +5817,7 @@
               ]
             }
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "actions"
-          ],
-          "authorityGapReason": "A non-executable recommendation record does not join the canonical action execution authority.",
-          "partialImplementationReason": "Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy. Exact dispatches join their persisted tenant action-dispatch permission decision; external effects, independent outcome verification, full recommendation inventory and freshness remain unknown."
+          "partialImplementationReason": "Current-version intents and caller-associated dispatches join exact tenant action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the durable intent, job, receipt and resource-link chain, validating the requested payload, provider site, subject and policy context. Other providers lack independent resource verification. Verified business outcomes, complete recommendation and producer coverage, historical replay and freshness remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -6720,11 +6718,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Exact-subject intervention decisions and reported outcomes can include slot-authorized lifecycle requests and exact dispatches joined to their persisted tenant action-dispatch permission decision; external effects, producer coverage, independent outcome verification, and freshness remain unknown.",
-          "unboundCanonicalAuthorityRefs": [
-            "actions"
-          ],
-          "authorityGapReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; dispatch-side actor permission evidence does not establish external effects, producer coverage, independently verified outcomes, or freshness."
+          "partialImplementationReason": "Exact-subject intervention decisions join caller-associated dispatches and their persisted action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the exact tenant, intent, job, receipt, provider site, requested payload and subject chain. Other providers lack independent resource verification. Producer coverage, historical replay, independently verified intervention outcomes and freshness remain unknown."
         },
         {
           "id": "audit_history",

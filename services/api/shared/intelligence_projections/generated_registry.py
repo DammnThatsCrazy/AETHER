@@ -566,7 +566,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/episode360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
+        "canonicalAuthorities": ("actions", "agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
         "hardDependencies": ("contract_spine", "journey_continuity", "temporal_kernel"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
@@ -1173,7 +1173,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/risk360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "cluster", "contagion_path", "entity", "population", "relationship", "source", "support_case"),
-        "canonicalAuthorities": ("bronze_sdk_events", "cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "observations", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "support_cases", "transfers"),
+        "canonicalAuthorities": ("actions", "bronze_sdk_events", "cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "observations", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "support_cases", "transfers"),
         "hardDependencies": ("computation_substrate", "evidence_provenance", "model_governance"),
         "projectionDependencies": ("cluster360", "economic360", "profile360"),
         "optionalProjectionDependencies": [],
@@ -2036,12 +2036,12 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "optional"
             },
             {
-                "authorityGapReason": "active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy",
+                "authorityGapReason": "recorded_capability_invoke_policy_evaluations_are_not_bound_to_observed_tool_calls_or_current_effective_authority",
                 "canonicalAuthorityRefs": ("actions", "agent_access", "resources", "tools"),
-                "description": "Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent and exact observed MCP tool catalog identity; action and resource authorization remains unknown.",
+                "description": "Observed runtime capability reach joined to exact active invoke grants and bounded persisted capability.invoke evaluations for the resolved canonical Agent and exact observed MCP tool identity; current authorization and invocation binding remain unknown.",
                 "id": "capabilities",
                 "implementationCrosswalk": ("actions_tools_resources",),
-                "partialImplementationReason": "Current active grant join is bounded to 2000 records. Observed catalog identity for an exact MCP tool does not prove remote ownership, effective tool authorization, action or resource policy, or historical authority.",
+                "partialImplementationReason": "Current active grant and bounded persisted capability.invoke policy evaluation reads require exact tenant, canonical Agent, capability, and grant scope. Evaluations show policy results at their recorded times but are not bound to observed MCP calls and do not establish current authorization, remote ownership, or historical authority.",
                 "projectionBindings": [
                     {
                         "projectionId": "agent360",
@@ -3894,11 +3894,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "A non-executable recommendation record does not join the canonical action execution authority.",
                 "canonicalAuthorityRefs": ("actions", "episode_journey_authority_records", "journeys"),
                 "description": "Exact current-journey-version non-executable action intent records validated against canonical journey and step evidence.",
                 "id": "recommended_actions",
-                "partialImplementationReason": "Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy; action dispatch, external effects, policy replay, outcomes, full recommendation inventory and freshness remain unknown.",
+                "partialImplementationReason": "Current-version intents and caller-associated dispatches join exact tenant action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the durable intent, job, receipt and resource-link chain, validating the requested payload, provider site, subject and policy context. Other providers lack independent resource verification. Verified business outcomes, complete recommendation and producer coverage, historical replay and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -3907,8 +3906,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "interactions", "summary")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("events", "evidence", "journeys"),
@@ -4988,11 +4986,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
                 "canonicalAuthorityRefs": ("actions", "risk_intervention_records", "risk_outputs"),
                 "description": "Recorded risk interventions and results.",
                 "id": "interventions",
-                "partialImplementationReason": "Exact-subject intervention decisions and reported outcomes can include slot-authorized, caller-associated agent lifecycle requests; dispatch, external effects, actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
+                "partialImplementationReason": "Exact-subject intervention decisions join caller-associated dispatches and their persisted action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the exact tenant, intent, job, receipt, provider site, requested payload and subject chain. Other providers lack independent resource verification. Producer coverage, historical replay, independently verified intervention outcomes and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5001,8 +4998,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "findings", "health")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("risk_outputs", "source_provenance"),

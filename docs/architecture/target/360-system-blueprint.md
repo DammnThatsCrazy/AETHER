@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:51c87d82aa0fe872058d47410ef6fcea9d78b4ab176b69d36128495153d77be8"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6f2e26b373c363826258bd79d4189d700e3edbf00279f36cf757e2a0b5f7918c"
 ---
 
 # 360 System Blueprint
@@ -57,8 +57,14 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Six slots declare at least one unbound canonical authority after the exact
-bindings in this slice. Value360 can expose a recorded check of attribution run
+Four slots declare seven unbound canonical authority references after the exact
+bindings in this slice. Journey360 and Risk360 now bind the actions authority
+through persisted dispatch authorization and credential-bound Jira resource
+read-back. The supported verification checks the provider site, requested payload,
+tenant, subject, intent, job, receipt and policy decision. Other providers remain
+unverified; neither slot is complete, and business outcomes, producer coverage,
+historical replay and freshness are not established by resource existence.
+Value360 can expose a recorded check of attribution run
 configuration lineage against the current config, while model governance and
 calibration remain unbound. Campaign360
 `signal_sources` now binds exact gateway-admitted SDK Bronze observations and

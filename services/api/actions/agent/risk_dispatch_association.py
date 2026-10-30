@@ -131,7 +131,7 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
                  "uri": dispatch_authorization["uri"]},
                 *(delivery["evidenceRef"] for delivery in evidence["connectorReportedDeliveries"]),
                 *(callback["evidenceRef"] for callback in evidence["verifiedCallbacks"]),
-                *evidence.get("independentExecutionVerifications", []),
+                *(verification["evidenceRef"] for verification in evidence.get("independentExecutionVerifications", [])),
             ]
             seen.add(dispatch_id)
             output.append({"dispatchId": dispatch_id, "status": row["status"], "createdAt": created.isoformat(),
