@@ -316,6 +316,22 @@ class ProfilePredictionOutputRepository(TypedTableRepository):
         "states",
         "evidence_refs",
     )
+
+    async def get_prediction(self, tenant_id: str, prediction_id: str) -> Optional[dict[str, Any]]:
+        """Return one exact tenant/prediction row for canonical outcome binding."""
+        if not tenant_id or not prediction_id:
+            return None
+        pool = await self._pool()
+        if pool is None:
+            row = next((row for row in self._rows
+                        if row.get("tenant_id") == tenant_id
+                        and row.get("prediction_id") == prediction_id), None)
+            return dict(row) if row is not None else None
+        row = await pool.fetchrow(
+            f"SELECT {', '.join(self.columns)} FROM {self.table_name} WHERE tenant_id=$1 AND prediction_id=$2",
+            tenant_id, prediction_id,
+        )
+        return self._decode_row(dict(row)) if row is not None else None
     jsonb_columns = frozenset({"states", "evidence_refs"})
     conflict_key = ("tenant_id", "idempotency_key")
 

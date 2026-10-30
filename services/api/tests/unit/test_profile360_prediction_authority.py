@@ -480,13 +480,34 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
         ),
     )
 
-    sample_refs = sorted(
-        ({"predictionId": f"sample-{index}"} for index in range(12)),
-        key=lambda row: row["predictionId"],
-    )
-    dataset_manifest = hashlib.sha256(json.dumps(
+    sample_refs = sorted(({
+        "tenantId": TENANT, "entityId": ENTITY, "modelId": "churn_prediction",
+        "artifactVersion": "v-production-2", "split": "holdout",
+        "predictionId": f"sample-{index}", "outcomeId": f"outcome-{index}",
+        "sourceEventId": f"event-{index}", "actualState": "churned",
+        "predictedState": "churned", "predictedConfidence": 0.8,
+        "predictedDistribution": [
+            {"state": "churned", "probability": 0.8, "rank": 1},
+            {"state": "active", "probability": 0.2, "rank": 2},
+        ], "correct": True, "artifactChecksumSha256": "a" * 64,
+        "policyDecisionId": "cpd-1", "policyVersion": "consent-v2", "actorId": "actor-1",
+        "predictionEvidenceRefs": [
+            {"id": "cpd-1", "type": "annotation", "source": "consent_policy_decisions"},
+            {"id": "churn_prediction@v-production-2:" + "a" * 64,
+             "type": "model_output", "source": "model_artifact_registry"},
+            {"id": "event-input", "type": "event", "source": "analytics_events"},
+        ], "predictionGeneratedAt": "2026-10-29T01:00:00Z",
+        "outcomeEvidenceRefs": [
+            {"id": f"event-{index}", "type": "event", "source": "silver_outcome_facts"},
+        ],
+        "predictionValidFrom": "2026-10-29T01:00:00Z",
+        "predictionValidUntil": "2026-10-29T12:00:00Z",
+        "outcomeObservedAt": "2026-10-29T02:00:00Z",
+    } for index in range(12)), key=lambda row: row["predictionId"])
+    dataset_manifest = [hashlib.sha256(json.dumps(
         sample_refs, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")).hexdigest()
+    ).encode("utf-8")).hexdigest()]
+    created_at = ["2026-10-30T00:00:00Z"]
 
     async def exact_evaluation(self, tenant, domain, model, version, checksum):
         assert (tenant, domain, model, version, checksum) == (
@@ -495,12 +516,16 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
         return {
             "evaluation_id": "mge_" + "1" * 32, "tenant_id": TENANT, "domain": domain,
             "model_id": model, "artifact_version": version,
-            "artifact_checksum_sha256": checksum, "dataset_manifest_sha256": dataset_manifest,
+            "artifact_checksum_sha256": checksum, "dataset_manifest_sha256": dataset_manifest[0],
             "split": "holdout", "sample_count": 12,
             "window_start": "2026-10-29T00:00:00Z", "window_end": "2026-10-30T00:00:00Z",
             "sample_refs": sample_refs,
-            "created_at": "2026-10-30T00:00:00Z",
-            "method": "profile-state-adjudication.v1", "metrics": {"expected_calibration_error": 0.08},
+            "created_at": created_at[0],
+            "method": "profile-state-adjudication.v1", "metrics": {
+                "top_state_accuracy": 1.0, "multiclass_brier_score": 0.08,
+                "expected_calibration_error": 0.2,
+                "reliability_bins": [[0, 0.0, 0] for _ in range(8)] + [[12, 9.6, 12], [0, 0.0, 0]],
+            },
         }
 
     monkeypatch.setattr(ModelEvaluationRepository, "latest_for_artifact", exact_evaluation)
@@ -517,11 +542,76 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
     governance = result.sections[0].content["items"][0]["modelGovernance"]
     assert governance["evaluationEvidence"]["state"] == "computed"
     assert governance["evaluationEvidence"]["sampleCount"] == 12
-    assert governance["evaluationEvidence"]["metrics"]["expected_calibration_error"] == 0.08
+    assert governance["evaluationEvidence"]["metrics"]["expected_calibration_error"] == 0.2
     assert governance["modelCalibrationVerified"] is False
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]
+    dataset_manifest[0] = "0" * 64
+    bad_manifest = await Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    )).project(request, await _context(request))
+    assert bad_manifest.sections[0].content["items"][0]["modelGovernance"]["evaluationEvidence"]["state"] == "unknown"
+    dataset_manifest[0] = hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    sample_refs[0]["predictedDistribution"] = "malformed"
+    dataset_manifest[0] = hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    malformed_sample = await Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    )).project(request, await _context(request))
+    assert malformed_sample.sections[0].content["items"][0]["modelGovernance"]["evaluationEvidence"]["state"] == "unknown"
+    sample_refs[0]["predictedDistribution"] = [
+        {"state": "churned", "probability": 0.8, "rank": 1},
+        {"state": "active", "probability": 0.2, "rank": 2},
+    ]
+    dataset_manifest[0] = hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    created_at[0] = "2030-01-01T00:00:00Z"
+    future_result = await Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    )).project(request, await _context(request))
+    assert future_result.sections[0].content["items"][0]["modelGovernance"]["evaluationEvidence"]["state"] == "unknown"
+
+
+def test_profile_evaluation_manifest_rows_fail_closed_on_malformed_shape_and_future_time():
+    from identity.profile.profile360_provider import _valid_profile_evaluation_sample
+
+    evaluation = {
+        "artifact_checksum_sha256": "a" * 64,
+        "tenant_id": TENANT, "model_id": "churn_prediction",
+        "artifact_version": "v-production-2", "split": "holdout",
+        "window_start": "2026-10-29T00:00:00Z",
+        "window_end": "2026-10-30T00:00:00Z",
+    }
+    assert _valid_profile_evaluation_sample(None, evaluation) is False
+    row = {
+        "tenantId": TENANT, "entityId": ENTITY, "modelId": "churn_prediction",
+        "artifactVersion": "v-production-2", "split": "holdout",
+        "predictionId": "p-1", "outcomeId": "o-1", "sourceEventId": "e-1",
+        "actualState": "churned", "predictedState": "churned", "predictedConfidence": 0.8,
+        "predictedDistribution": [{"state": "churned", "probability": 0.8, "rank": 1},
+                                  {"state": "active", "probability": 0.2, "rank": 2}],
+        "correct": True, "artifactChecksumSha256": "a" * 64,
+        "policyDecisionId": "policy-1", "policyVersion": "v1", "actorId": "actor-1",
+        "predictionEvidenceRefs": [
+            {"id": "policy-1", "source": "consent_policy_decisions"},
+            {"id": "churn_prediction@v-production-2:" + "a" * 64,
+             "type": "model_output", "source": "model_artifact_registry"},
+            {"id": "input-event", "type": "event", "source": "analytics_events"},
+        ],
+        "outcomeEvidenceRefs": [{"id": "e-1", "source": "silver_outcome_facts"}],
+        "predictionGeneratedAt": "2026-10-29T01:00:00Z",
+        "predictionValidFrom": "2026-10-29T01:00:00Z",
+        "predictionValidUntil": "2026-10-29T12:00:00Z",
+        "outcomeObservedAt": "2026-10-29T02:00:00Z",
+    }
+    assert _valid_profile_evaluation_sample(row, evaluation) is True
+    assert _valid_profile_evaluation_sample({**row, "predictedDistribution": "bad"}, evaluation) is False
+    assert _valid_profile_evaluation_sample({**row, "outcomeObservedAt": "2030-01-01T00:00:00Z"}, evaluation) is False
 
 
 def _reported_outcome(

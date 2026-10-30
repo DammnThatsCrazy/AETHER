@@ -1,8 +1,8 @@
 """Artifact scoped evaluation over exact, explicitly adjudicated outcomes.
 
-The evaluation runner reads persisted Profile360 predictions and canonical
-outcome facts. It accepts no caller supplied labels or scores. Only the v1
-adjudication contract is interpreted; older association labels are excluded.
+Evaluation labels are read from canonical OutcomeTruthStore records carrying
+the Profile adjudication contract and exact prediction link. Silver facts are
+inputs to that recorder, never evaluation evidence themselves.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from uuid import uuid4
 from repositories.typed_repo import TypedTableRepository
 
 PROFILE_LABEL_CONTRACT = "profile-state-adjudication.v1"
+MAX_EVALUATION_ROWS = 5_000
 # This first contract is deliberately closed over two canonical outcome event
 # types. Other generic outcome labels have no state adjudication semantics.
 PROFILE_OUTCOME_TO_STATE = {
@@ -74,31 +75,51 @@ class ModelEvaluationRepository(TypedTableRepository):
 
 
 class ProfileAdjudicationOutcomeReader:
-    """Read append-only Silver outcome facts carrying explicit prediction links."""
+    """Read bounded canonical outcome truth carrying exact prediction links."""
 
     async def list_for_profile_adjudication(
         self, tenant_id: str, label_contract_version: str,
-        window_start: datetime, window_end: datetime,
+        window_start: datetime, window_end: datetime, *, prediction_ids: list[str],
     ) -> list[dict[str, Any]]:
-        from repositories.repos import get_pool
+        from shared.backend_interpretation.flags import outcome_truth_store_enabled
+        from shared.backend_interpretation.stores import OutcomeTruthStore
 
-        pool = await get_pool()
-        if pool is None:
+        if not outcome_truth_store_enabled():
             return []
-        rows = await pool.fetch(
-            """SELECT tenant_id, fact_id, source_event_id, source_event_type,
-                      user_id, occurred_at, outcome_type, prediction_id,
-                      prediction_label_contract_version
-               FROM silver_outcome_facts
-               WHERE tenant_id=$1 AND prediction_label_contract_version=$2
-                 AND occurred_at >= $3 AND occurred_at < $4
-                 AND prediction_id IS NOT NULL AND user_id IS NOT NULL
-               ORDER BY occurred_at, fact_id LIMIT 5001""",
-            tenant_id, label_contract_version, window_start, window_end,
-        )
-        if len(rows) > 5_000:
-            raise ValueError("adjudicated outcome dataset exceeds the 5000 row bound")
-        return [dict(row) for row in rows]
+        store = OutcomeTruthStore()
+        start, end = _instant(window_start), _instant(window_end)
+        result = []
+        if len(prediction_ids) > MAX_EVALUATION_ROWS:
+            raise ValueError("adjudicated prediction dataset exceeds the 5000 row bound")
+        for prediction_id in prediction_ids:
+            records, truncated, invalid = await store.list_for_prediction(
+                tenant_id, prediction_id, label_contract_version, limit=2,
+            )
+            if truncated or invalid:
+                raise ValueError("canonical adjudication lookup is truncated or invalid")
+            for record in records:
+                observed = _instant(record.observed_at)
+                if observed is None or start is None or end is None or not start <= observed < end:
+                    continue
+                result.append({
+                    "tenant_id": record.tenant_id,
+                    "prediction_id": record.prediction_id,
+                    "prediction_label_contract_version": record.prediction_label_contract_version,
+                    "user_id": getattr(record.subject, "id", None),
+                    "subject_kind": getattr(record.subject, "kind", None),
+                    "occurred_at": observed,
+                    "achieved_at": _instant(record.achieved_at),
+                    "outcome_type": record.definition_ref,
+                    "source_event_type": record.definition_ref,
+                    "claim_type": record.claim_type,
+                    "outcome_id": record.outcome_id,
+                    "source_event_ids": list(record.source_event_ids),
+                    "evidence_refs": [ref.model_dump(mode="json") for ref in record.evidence_refs],
+                    "superseded_by": record.superseded_by,
+                })
+                if len(result) > MAX_EVALUATION_ROWS:
+                    raise ValueError("adjudicated outcome dataset exceeds the 5000 row bound")
+        return result
 
 
 def _instant(value: Any) -> datetime | None:
@@ -121,8 +142,10 @@ async def evaluate_profile_artifact(
 ) -> dict[str, Any]:
     """Compute top-state accuracy and multiclass Brier score from exact labels."""
     start, end = _instant(window_start), _instant(window_end)
+    now = datetime.now(timezone.utc)
     if (not tenant_id or not model_id or not artifact_version or not actor_id
             or start is None or end is None or start >= end
+            or end > now
             or split not in {"evaluation", "holdout"}):
         raise ValueError("exact tenant, artifact, actor, bounded window, and evaluation split are required")
     from identity.profile.prediction_authority import ProfilePredictionOutputRepository
@@ -139,6 +162,8 @@ async def evaluate_profile_artifact(
         raise ValueError("evaluation prediction dataset exceeds the 5000 row bound")
     truth_rows = await outcome_reader.list_for_profile_adjudication(
         tenant_id, PROFILE_LABEL_CONTRACT, start, end,
+        prediction_ids=[str(row.get("prediction_id")) for row in rows if isinstance(row, dict)
+                        and isinstance(row.get("prediction_id"), str)],
     )
     verify_policy = policy_verifier or verify_prediction_policy_evidence
     resolve_artifact = artifact_resolver or approved_production_artifact
@@ -172,7 +197,7 @@ async def evaluate_profile_artifact(
             validated = ProfilePredictionOutput.model_validate(raw)
             generated = _instant(validated.generated_at)
             prediction = raw if isinstance(raw, dict) else {}
-            if (generated is None or generated < start or generated >= end
+            if (generated is None or generated < start or generated >= end or generated > now
                     or validated.tenant_id != tenant_id
                     or validated.model_id != model_id
                     or validated.artifact_version != artifact_version
@@ -185,18 +210,28 @@ async def evaluate_profile_artifact(
             if len(outcomes_for_prediction) != 1:
                 continue
             truth = outcomes_for_prediction[0]
+            evidence_refs = truth.get("evidence_refs")
+            source_event_ids = truth.get("source_event_ids")
             if (
                 truth.get("source_event_type") != truth.get("outcome_type")
+                or truth.get("claim_type") != "observed"
+                or truth.get("subject_kind") != "user"
                 or not truth.get("user_id")
-                or not truth.get("source_event_id")
-                or not truth.get("fact_id")
+                or not truth.get("outcome_id")
+                or not isinstance(source_event_ids, list) or len(source_event_ids) != 1
+                or not isinstance(evidence_refs, list) or len(evidence_refs) != 1
+                or not isinstance(evidence_refs[0], dict)
+                or evidence_refs[0].get("id") != source_event_ids[0]
+                or evidence_refs[0].get("source") != "silver_outcome_facts"
+                or truth.get("superseded_by") is not None
             ):
                 continue
             observed_at = _instant(truth.get("occurred_at"))
-            achieved_at = observed_at
+            achieved_at = _instant(truth.get("achieved_at"))
             valid_from, valid_until = _instant(validated.valid_from), _instant(validated.valid_until)
-            if (observed_at is None or observed_at < generated or observed_at >= end
+            if (observed_at is None or observed_at < generated or observed_at > now or observed_at >= end
                     or valid_from is None or valid_until is None
+                    or valid_until > now
                     or observed_at < valid_from or observed_at > valid_until
                     or achieved_at is None or achieved_at < generated
                     or achieved_at < valid_from or achieved_at > valid_until
@@ -215,8 +250,7 @@ async def evaluate_profile_artifact(
             )
             if prediction_split != split:
                 continue
-            if not actual_state or not any(s.get("state") == actual_state for s in states if isinstance(s, dict)):
-                # Labels outside the exact predicted state vocabulary are not adjudicated.
+            if not actual_state:
                 continue
             total = 0.0
             for state in states:
@@ -226,6 +260,10 @@ async def evaluate_profile_artifact(
                         or not 0 <= probability <= 1):
                     raise ValueError("prediction probability invalid")
                 total += (float(probability) - (1.0 if code == actual_state else 0.0)) ** 2
+            if not any(state.get("state") == actual_state for state in states):
+                # The observed class has probability zero in a complete but
+                # sparse ranked distribution and contributes its own squared error.
+                total += 1.0
             # Unlisted states have probability zero only when the model's output contract
             # supplies a complete ranked state distribution. Require an exact unit sum.
             prob_sum = sum(float(s["probability"]) for s in states)
@@ -242,8 +280,13 @@ async def evaluate_profile_artifact(
             calibration_bins[bin_index][2] += int(matched)
             sample_rows.append({
                 "predictionId": prediction["prediction_id"],
-                "outcomeFactId": str(truth["fact_id"]),
-                "sourceEventId": str(truth["source_event_id"]),
+                "tenantId": validated.tenant_id,
+                "entityId": validated.entity_id,
+                "modelId": validated.model_id,
+                "artifactVersion": validated.artifact_version,
+                "split": prediction_split,
+                "outcomeId": str(truth["outcome_id"]),
+                "sourceEventId": str(source_event_ids[0]),
                 "actualState": actual_state,
                 "predictedState": top["state"],
                 "predictedConfidence": confidence,
@@ -261,6 +304,7 @@ async def evaluate_profile_artifact(
                 "predictionEvidenceRefs": [
                     ref.model_dump(mode="json") for ref in validated.evidence_refs
                 ],
+                "outcomeEvidenceRefs": evidence_refs,
                 "predictionGeneratedAt": generated.isoformat(),
                 "outcomeObservedAt": observed_at.isoformat(),
                 "labelContractVersion": PROFILE_LABEL_CONTRACT,

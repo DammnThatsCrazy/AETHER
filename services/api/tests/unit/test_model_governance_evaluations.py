@@ -53,12 +53,17 @@ class Predictions:
 
 
 class Outcomes:
-    async def list_for_profile_adjudication(self, tenant_id, version, start, end):
+    async def list_for_profile_adjudication(self, tenant_id, version, start, end, *, prediction_ids):
         return [
             {"tenant_id": tenant_id, "prediction_id": "p-1",
              "prediction_label_contract_version": version, "user_id": "e-1",
+             "subject_kind": "user", "claim_type": "observed", "outcome_id": "outcome-1",
+             "source_event_ids": ["event-1"],
+             "evidence_refs": [{"id": "event-1", "source": "silver_outcome_facts"}],
+             "superseded_by": None,
              "source_event_id": "event-1", "source_event_type": "churn_observed", "fact_id": "fact-1",
-             "occurred_at": "2026-01-03T00:00:00Z", "outcome_type": "churn_observed"},
+             "occurred_at": "2026-01-03T00:00:00Z", "achieved_at": "2026-01-03T00:00:00Z",
+             "outcome_type": "churn_observed"},
             # Arbitrary legacy labels are not retroactively adjudicated.
             {"tenant_id": tenant_id, "prediction_id": "p-1",
              "prediction_label_contract_version": "profile-outcome-labels.v1",
@@ -105,14 +110,14 @@ async def test_profile_evaluation_uses_only_exact_contract_scoped_final_outcomes
     assert read_back["metrics"]["expected_calibration_error"] == pytest.approx(0.2)
     detail = await persisted.get_evaluation("tenant-a", result["evaluation_id"])
     assert detail["sample_count"] == 1
-    assert detail["sample_refs"][0]["outcomeFactId"] == "fact-1"
+    assert detail["sample_refs"][0]["outcomeId"] == "outcome-1"
     assert await persisted.get_evaluation("tenant-other", result["evaluation_id"]) is None
 
 
 @pytest.mark.asyncio
 async def test_profile_evaluation_stays_unknown_without_adjudicated_evidence():
     class NoLabels(Outcomes):
-        async def list_for_profile_adjudication(self, tenant_id, version, start, end):
+        async def list_for_profile_adjudication(self, tenant_id, version, start, end, *, prediction_ids):
             return []
 
     result = await evaluate_profile_artifact(
@@ -146,3 +151,64 @@ async def test_profile_evaluation_excludes_prediction_without_exact_allowed_poli
     assert result["state"] == "unknown"
     assert result["sample_count"] == 0
     assert result["metrics"] == {}
+
+
+@pytest.mark.asyncio
+async def test_future_evaluation_window_is_rejected():
+    with pytest.raises(ValueError, match="bounded window"):
+        await evaluate_profile_artifact(
+            "tenant-a", "model-a", "artifact-1",
+            window_start=datetime(2030, 1, 1, tzinfo=timezone.utc),
+            window_end=datetime(2030, 2, 1, tzinfo=timezone.utc),
+            split="evaluation", actor_id="admin-a", predictions=Predictions(),
+            outcomes=Outcomes(), evaluations=Evaluations(),
+            policy_verifier=allow_policy, artifact_resolver=promoted_artifact,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation,expected_count", [
+    ("wrong_subject", 0),
+    ("conflicting_labels", 0),
+    ("absent_predicted_state", 1),
+    ("open_horizon", 0),
+])
+async def test_profile_evaluation_adversarial_subject_labels_and_horizon(mutation, expected_count):
+    class AdversarialOutcomes(Outcomes):
+        async def list_for_profile_adjudication(self, tenant_id, version, start, end, *, prediction_ids):
+            rows = await super().list_for_profile_adjudication(
+                tenant_id, version, start, end, prediction_ids=prediction_ids,
+            )
+            exact = rows[0]
+            if mutation == "wrong_subject":
+                exact["user_id"] = "entity-other"
+            elif mutation == "conflicting_labels":
+                rows.append({**exact, "outcome_id": "outcome-conflict", "outcome_type": "retention_observed",
+                             "source_event_type": "retention_observed", "source_event_ids": ["event-2"],
+                             "evidence_refs": [{"id": "event-2", "source": "silver_outcome_facts"}]})
+            elif mutation == "absent_predicted_state":
+                exact["outcome_type"] = exact["source_event_type"] = "retention_observed"
+            return rows
+
+    predictions = Predictions()
+    if mutation == "open_horizon":
+        original = predictions.list_for_artifact
+
+        async def open_horizon(*args, **kwargs):
+            rows, truncated = await original(*args, **kwargs)
+            rows[0]["valid_until"] = datetime(2030, 2, 2, tzinfo=timezone.utc)
+            return rows, truncated
+
+        predictions.list_for_artifact = open_horizon
+    result = await evaluate_profile_artifact(
+        "tenant-a", "model-a", "artifact-1",
+        window_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        window_end=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        split="evaluation", actor_id="admin-a", predictions=predictions,
+        outcomes=AdversarialOutcomes(), evaluations=Evaluations(),
+        policy_verifier=allow_policy, artifact_resolver=promoted_artifact,
+    )
+    assert result["sample_count"] == expected_count
+    if mutation == "absent_predicted_state":
+        assert result["sample_refs"][0]["actualState"] == "retained"
+        assert result["metrics"]["multiclass_brier_score"] == pytest.approx(1.68)

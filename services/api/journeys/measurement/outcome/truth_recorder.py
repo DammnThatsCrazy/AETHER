@@ -19,6 +19,7 @@ projection of them for the outcome360 + governance reads.
 from __future__ import annotations
 
 import logging
+from datetime import timezone
 from typing import Any, Optional
 
 from shared.backend_interpretation.flags import outcome_truth_store_enabled
@@ -128,22 +129,49 @@ async def record_from_silver_outcome(
     prediction_id = row.get("prediction_id")
     label_contract = row.get("prediction_label_contract_version")
     claim_type = "derived"
-    # Only this closed, versioned mapping admits source-observed events as
-    # adjudication labels. Legacy outcome labels and other event types retain
-    # their original derived classification and cannot calibrate predictions.
+    # A contract string is only a declaration. Admit it as adjudication truth
+    # only when the exact persisted prediction, subject, outcome event, and
+    # closed prediction horizon all bind. Otherwise preserve it as derived.
     try:
         from intelligence.model_governance.evaluations import (
             PROFILE_LABEL_CONTRACT, PROFILE_OUTCOME_TO_STATE,
         )
+        from identity.profile.prediction_authority import (
+            ProfilePredictionOutput, ProfilePredictionOutputRepository,
+        )
+        from shared.temporal.instant import parse_instant_strict
+
+        prediction_id = row.get("prediction_id")
+        prediction_row = None
+        if isinstance(prediction_id, str) and prediction_id.strip():
+            prediction_row = await ProfilePredictionOutputRepository().get_prediction(
+                tenant_id, prediction_id,
+            )
+        prediction = ProfilePredictionOutput.model_validate(prediction_row) if prediction_row else None
+        occurred_at = parse_instant_strict(row.get("occurred_at"))
+        generated_at = prediction.generated_at.astimezone(timezone.utc) if prediction else None
+        valid_until = prediction.valid_until.astimezone(timezone.utc) if prediction else None
         if (
-            isinstance(prediction_id, str) and prediction_id.strip()
+            prediction is not None
+            and prediction.tenant_id == tenant_id
+            and subject is not None
+            and getattr(subject, "kind", None) == "user"
+            and getattr(subject, "id", None) == prediction.entity_id
+            and row.get("user_id") == prediction.entity_id
+            and row.get("tenant_id", tenant_id) == tenant_id
+            and isinstance(prediction_id, str) and prediction_id == prediction.prediction_id
             and label_contract == PROFILE_LABEL_CONTRACT
             and outcome_type in PROFILE_OUTCOME_TO_STATE
-            and event_id
-            and subject is not None
+            and isinstance(event_id, str) and bool(event_id.strip())
+            and event_id == row.get("source_event_id")
+            and row.get("source_event_type") == outcome_type
+            and occurred_at is not None and generated_at is not None and valid_until is not None
+            and generated_at <= occurred_at <= valid_until
+            and row.get("adjudication_policy_state") == "allowed"
+            and isinstance(policy_version, str) and bool(policy_version.strip())
         ):
             claim_type = "observed"
-    except ImportError:
+    except (ImportError, TypeError, ValueError, AttributeError):
         pass
     record = OutcomeTruthRecord(
         outcome_id=f"{tenant_id}:{event_id}:{outcome_type}",
