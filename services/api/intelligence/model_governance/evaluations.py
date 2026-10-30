@@ -69,8 +69,9 @@ class ModelEvaluationRepository(TypedTableRepository):
         if row is None:
             return None
         result = dict(row)
-        if isinstance(result.get("metrics"), str):
-            result["metrics"] = json.loads(result["metrics"])
+        for field in ("metrics", "sample_refs"):
+            if isinstance(result.get(field), str):
+                result[field] = json.loads(result[field])
         return result
 
 

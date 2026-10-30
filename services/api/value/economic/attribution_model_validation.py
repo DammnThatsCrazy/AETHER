@@ -50,7 +50,7 @@ class ValueModelApprovalRepository(TypedTableRepository):
     columns = ("decision_id", "tenant_id", "attribution_run_id", "model_config_id",
                "model_type", "model_version", "validation_decision_id", "decision",
                "actor_id", "reason", "created_at")
-    conflict_key = ("tenant_id", "decision_id")
+    conflict_key = ("decision_id",)
 
     async def latest(self, tenant_id: str, run_id: str) -> Optional[dict[str, Any]]:
         pool = await self._pool()
