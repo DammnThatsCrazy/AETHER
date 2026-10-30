@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:aebd883c16e3ed8a7bbaeac52c371ae40ab479d495846a11faa9c1bb00a84d94"
+  "services/api/actions/": "sha256:45654a28bc228b726f727f95e0ae985d2638744a61fa86015eb47849adce93f7"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,11 +33,11 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:f89fa77d2f74a0f920cf00f4b2cf3448167181ecb9099900b7b4952d6eb02bb6"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:c369d8d47f583822b1f15d1cde3178ee27b222974a6c080a5e9e8da764f9709b"
-  "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
+  "services/api/intelligence/": "sha256:d061f3f4651095609409e9c8c20d295b7d6a1b4d827926eb8368887b95d452ce"
+  "services/api/journeys/": "sha256:30f74058526f2fad74021de6185c9b4c72e5ce19fa592c11c5475f1e82b08036"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:4ba49ac2d971c4320513f9a4ae2dfba5935819dae3fae40d60f03aa3aa331fa0"
+  "services/api/value/": "sha256:81ce0c242d904e159690f0308f62430272d879a06fa7c71e28f904da8fb336be"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1956,6 +1956,25 @@ An idempotent dispatch replay must supply the same association reference and
 match the persisted tenant, action, canonical action decision, selected action,
 and recommendation tuple. The replay uses the original stored association rather
 than asserting that its Journey intent or Risk decision is still current.
+
+Journey360 and Risk360 dispatch reads also join bounded delivery evidence along
+the canonical `action_dispatches` → deterministic `DeliveryIntent` →
+`DeliveryJob` → `ProviderReceipt` → external-resource-link chain. Connector
+delivery is reported only when the exact tenant, dispatch, job, receipt,
+provider, external ID, and temporal links agree. Missing provider evidence is
+reported as unknown; ambiguous, malformed, cross-tenant, or incomplete reads
+fail closed. The intelligence dispatch receipt endpoint and its receipts do
+not substitute for this worker evidence chain.
+
+The tenant-facing `/v1/delivery/outcomes/ingest` endpoint records
+`producer_provenance: caller_asserted` and clears caller-supplied signature
+authority. Such events are not treated as verified callbacks by the projection
+reader. Callback events enter the verified evidence set only after signature
+verification and exact binding to the tenant, provider receipt, and external
+resource. Journey360 and Risk360 still report `externalEffect:
+not_independently_verified`, including when connector delivery or verified
+callback evidence is present; these records do not establish the outcome or
+effect of the external action independently.
 
 Communication360 Agent authorship requires an exact tenant-owned canonical
 Agent author binding with provider scope, event-time role validity, and trusted

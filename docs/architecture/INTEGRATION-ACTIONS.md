@@ -14,7 +14,7 @@ estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/decision_models.py": "sha256:019dc89f216807ca260aa7831ff2a59f64c7b33e061baf72a964992fd847bc93"
-  "services/api/intelligence/intelligence/routes.py": "sha256:ba0580bcc071a5d6ed6463960ab942092a46106d228721ce3860045312e40589"
+  "services/api/intelligence/intelligence/routes.py": "sha256:e05c58afae3a971c5933d127c6a800a4e5ccd9b31e4bc7f1789617034cc70e07"
 ---
 # Integration Actions
 
@@ -28,13 +28,24 @@ Supported targets: Slack, signed webhook, ticketing (delegates to Linear or Jira
 
 Dispatch reserves an optional idempotency key within the authenticated tenant
 and action before calling a connector. Replays return the existing durable
-dispatch and cannot invoke an external side effect twice. A concrete delivered
-receipt must contain a real external ID; simulation-shaped receipts are
-rejected. If a target adapter is not implemented, the reserved dispatch stays
-an auditable `queued` plan and is handed to the canonical delivery worker seam
-when available, with `planned: true` and `external_side_effect: false` in the
+dispatch and do not invoke the connector again. When a Journey or Risk
+association was recorded, a replay must supply that same reference and match
+the persisted decision/action/recommendation linkage; the association is replayed
+as stored, not revalidated as a current decision. A concrete delivered receipt
+must contain a real external ID; simulation-shaped receipts are rejected. If a
+target adapter is not implemented, the reserved dispatch stays an auditable
+`queued` plan and is handed to the canonical delivery worker seam when
+available, with `planned: true` and `external_side_effect: false` in the
 response. Connector failures remain durable and retryable rather than silently
 creating a second dispatch. See [ADR-001](adr-001-canonical-delivery-pipeline.md).
+
+Journey360 and Risk360 read worker delivery evidence through the canonical
+intent → job → provider receipt → external-resource link chain. A receipt on
+the intelligence dispatch endpoint is not itself that worker-chain evidence.
+Tenant-submitted delivery outcomes remain `caller_asserted`; only callback
+events whose signature and exact receipt/resource binding were verified are
+exposed as verified callbacks. Neither provider delivery evidence nor a
+verified callback proves an independently verified external effect.
 
 ## Controls
 

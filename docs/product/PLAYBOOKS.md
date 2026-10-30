@@ -14,7 +14,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/decision_models.py": "sha256:019dc89f216807ca260aa7831ff2a59f64c7b33e061baf72a964992fd847bc93"
-  "services/api/intelligence/intelligence/routes.py": "sha256:ba0580bcc071a5d6ed6463960ab942092a46106d228721ce3860045312e40589"
+  "services/api/intelligence/intelligence/routes.py": "sha256:e05c58afae3a971c5933d127c6a800a4e5ccd9b31e4bc7f1789617034cc70e07"
 ---
 # Playbooks
 
@@ -40,7 +40,10 @@ Playbook actions inherit the canonical dispatch safeguards: idempotency is
 reserved per tenant/action before connector invocation, real external evidence
 is required for a delivered receipt, and an unavailable adapter remains a
 durable queued plan with no claimed external side effect. This keeps playbook
-ROI and run history honest when execution is pending or failed.
+ROI and run history honest when execution is pending or failed. Journey360 and
+Risk360 can include canonical provider delivery receipts and signature-verified
+callbacks, but tenant-submitted outcome events remain `caller_asserted` and
+neither evidence type establishes an independently verified external effect.
 
 ## Package ROI and audit exports
 

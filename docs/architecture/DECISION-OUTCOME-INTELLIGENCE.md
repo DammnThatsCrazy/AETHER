@@ -19,7 +19,7 @@ source_hashes:
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "services/api/intelligence/intelligence/recommendation_families.py": "sha256:1d4ef3823c50ca7cd13617c779fb0c83266dd9d57f1b61e4f819f8c820b5bb6a"
   "services/api/intelligence/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
-  "services/api/intelligence/intelligence/routes.py": "sha256:ba0580bcc071a5d6ed6463960ab942092a46106d228721ce3860045312e40589"
+  "services/api/intelligence/intelligence/routes.py": "sha256:e05c58afae3a971c5933d127c6a800a4e5ccd9b31e4bc7f1789617034cc70e07"
 ---
 # Decision & Outcome Intelligence
 
@@ -70,7 +70,11 @@ unattributed vertices are not a wildcard). An optional action idempotency key
 is reserved before any connector call, and a missing adapter leaves an
 auditable queued plan rather than claiming an external effect. Delivered
 receipts must contain real provider evidence; simulation-shaped receipts are
-not accepted.
+not accepted. Journey360 and Risk360 can join a dispatch to canonical worker
+delivery evidence, including provider receipts and signature-verified,
+receipt-bound callbacks. Tenant-submitted outcome events remain
+`caller_asserted`; neither those events nor a provider delivery record changes
+the projection's external-effect state from `not_independently_verified`.
 
 ## Tenant vs Kyber responsibilities
 
