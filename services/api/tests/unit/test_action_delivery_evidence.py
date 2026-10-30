@@ -144,3 +144,45 @@ async def test_tenant_outcome_write_forces_caller_asserted_provenance(monkeypatc
     assert response.status_code == 201
     assert b'"producer_provenance":"caller_asserted"' in response.body
     assert b'"signature_authority":null' in response.body
+
+
+@pytest.mark.asyncio
+async def test_callback_binding_rejects_same_tenant_duplicate_external_resource(monkeypatch):
+    import json
+
+    from actions.delivery import outcome_processor
+
+    links = [
+        {"tenant_id": "t-1", "intent_id": f"action-d-{index}", "receipt_id": f"r-{index}",
+         "provider": "jira", "external_id": "OPS-1"}
+        for index in (1, 2)
+    ]
+
+    class LinkRepository:
+        async def find_many(self, filters, limit):
+            assert filters == {"provider": "jira", "external_id": "OPS-1"}
+            assert limit > len(links)
+            return links
+
+    processor = outcome_processor.WebhookInboxProcessor(
+        inbox_repo=None, outcome_repo=None, link_repo=LinkRepository()
+    )
+
+    async def stored_delivery(link):
+        index = link["receipt_id"][-1]
+        return (
+            {"id": link["receipt_id"], "tenant_id": "t-1", "intent_id": link["intent_id"],
+             "job_id": f"j-{index}", "provider_adapter": "jira", "external_id": "OPS-1",
+             "delivered_at": "2026-10-30T00:00:00Z"},
+            {"id": f"j-{index}", "tenant_id": "t-1", "intent_id": link["intent_id"],
+             "provider_adapter": "jira"},
+        )
+
+    processor._stored_delivery = stored_delivery
+    monkeypatch.setattr(outcome_processor, "_jira_site_matches", lambda *_: True)
+    binding = await processor._bind({
+        "provider": "jira",
+        "raw_body": json.dumps({"issue": {"key": "OPS-1"}}),
+    })
+
+    assert binding is None

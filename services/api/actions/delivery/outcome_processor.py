@@ -652,7 +652,7 @@ class WebhookInboxProcessor:
                     continue
             matches.append({"link": link, "secret": secret,
                             "verified_receipt_binding": verified_receipt_binding})
-        if len({m["link"]["tenant_id"] for m in matches}) != 1:
+        if len(matches) != 1 or len({m["link"]["tenant_id"] for m in matches}) != 1:
             return None
         return matches[0]
 
