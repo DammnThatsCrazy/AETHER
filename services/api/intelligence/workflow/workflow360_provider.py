@@ -2631,6 +2631,11 @@ async def _workflow_actions_section(
     latest_observed_at = max((item["calledAt"] for item in actions), default=None)
     provider_invocation_views: list[dict[str, Any]] = []
     for execution_id, receipt in provider_invocations.items():
+        completed = _parse_timestamp(receipt.get("completedAt"))
+        if (invalid_window or completed is None
+                or (lower is not None and completed < lower)
+                or (upper is not None and completed > upper)):
+            continue
         execution = execution_by_id[execution_id]
         execution_ref = next((ref for ref in execution_refs if ref.id == execution_id), None)
         receipt_ref = EvidenceRef(id=receipt["receiptId"], type="event",
@@ -2646,9 +2651,13 @@ async def _workflow_actions_section(
             claims=["The exact tenant, agent, execution, workflow run, policy decision and active capability grant are joined to a server-owned MCP provider completion receipt; the receipt proves the provider tool result only, not a resource operation or external effect."],
             claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
         ))
+    if provider_invocation_views:
+        state = "degraded" if source_incomplete else "available"
+        if not source_incomplete:
+            reason = None
     content = {
         "state": state,
-        "coverage": "partial" if actions else "unknown",
+        "coverage": "partial" if actions or provider_invocation_views else "unknown",
         "reasonCode": reason,
         "tenantId": tenant_id,
         "subject": {"kind": subject.kind, "id": subject.id},
@@ -2688,8 +2697,9 @@ async def _workflow_actions_section(
                 ["agent_executions", "graph_edges", *(
                     ["tools"] if any(row["toolIdentityState"] == "resolved" for row in actions) else []
                 ), *(["actions"] if any(row["executionResult"]["state"] != "unknown" for row in actions) else []),
-                 *(["resources"] if any(row["approvedResource"]["state"] != "unknown" for row in actions) else [])]
-                if actions else None
+                 *(["resources"] if any(row["approvedResource"]["state"] != "unknown" for row in actions) else []),
+                 *(["actions"] if provider_invocation_views else [])]
+                if actions or provider_invocation_views else None
             ),
         ),
         claims,

@@ -2525,15 +2525,24 @@ class Agent360Provider:
 
         from actions.agent.invocation_runtime import validated_agent_receipt
         invocation_receipts: dict[str, dict[str, Any]] = {}
-        for row in execution_rows[:limit]:
+        receipt_execution_rows = (
+            timeline_exec.rows[:limit]
+            if resolved_canonical_actor is not None and not invalid_window
+            and request.timeRange is None and data["executions"].available
+            and data["executions"].scope_known and not data["executions"].scope_mismatch
+            else []
+        )
+        for row in receipt_execution_rows:
             row_agent_id = _first(row, "agent_id")
             execution_id = _first(row, "execution_id", "id")
-            if isinstance(row_agent_id, str) and isinstance(execution_id, str):
+            if row_agent_id == agent_id and isinstance(execution_id, str):
                 receipt = await validated_agent_receipt(
                     tenant_id=tenant_id, agent_id=row_agent_id, execution=row
                 )
                 if receipt is not None:
                     invocation_receipts[execution_id] = receipt
+        capability_access_profile_view["providerInvocationReceipts"] = list(invocation_receipts.values())
+        capability_access_profile_view["invocationReceiptCoverage"] = "bounded_unknown_producer_coverage"
         exec_items = [self._execution_view(row, invocation_receipts.get(_first(row, "execution_id", "id")))
                       for row in execution_rows[:limit]]
         activity_items = [self._activity_view(row) for row in timeline_activity.rows[:limit]]
@@ -2928,6 +2937,18 @@ class Agent360Provider:
                 )
             )
         capability_access_refs: list[EvidenceRef] = []
+        for execution_id, receipt in invocation_receipts.items():
+            claims.append(ClaimEnvelope(
+                id=f"agent360.provider_invocation:{receipt['receiptId']}",
+                kind="agent_provider_tool_invocation_result", subject=request.subject,
+                evidenceRefs=[
+                    EvidenceRef(id=receipt["receiptId"], type="event", source="agent_invocation_receipts",
+                                observedAt=receipt["completedAt"]),
+                    EvidenceRef(id=execution_id, type="event", source="agent_executions"),
+                ],
+                claims=["A server-owned MCP completion receipt binds this Agent execution to its exact tool, invoke grant and invocation-time policy decision. Resource operations, standing authorization and external effects remain unknown."],
+                claimState=EpistemicStatus.OBSERVED, domainSlotIds=["capabilities", "evidence_trace"],
+            ))
         for raw_ref in capability_access_profile_view.get("evidenceRefs", []):
             try:
                 capability_access_refs.append(EvidenceRef.model_validate(raw_ref))

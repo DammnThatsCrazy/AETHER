@@ -57,7 +57,7 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Four slots declare seven unbound canonical authority references after the exact
+Four slots declare five unbound canonical authority references after the exact
 bindings in this slice. Journey360 and Risk360 now bind the actions authority
 through persisted dispatch authorization and credential-bound Jira resource
 read-back. The supported verification checks the provider site, requested payload,
@@ -80,18 +80,27 @@ as a source fact for that namespace. Event-time status, fleet health, and
 source reliability remain unknown. Workflow360 `actions` preserves the exact
 tenant Tool vertex evidence for admitted execution-linked call edges. Under
 slot policy it may also expose the linked execution's recorded executor result
-and an exact current approved resource; tool results and resource operations
-remain unbound. Agent360 `capabilities` resolves
+and an exact current approved resource. Server-owned public HTTPS MCP invocation
+receipts now bind the actions reference for Workflow360 and Agent360 capabilities.
+The authenticated invocation route requires write and dispatch permissions, an
+exact running agent execution, an enabled observed tool, and a current exact
+invoke grant checked again after MCP initialization. DNS-pinned public transport
+performs the actual tools/call. Durable claims prevent duplicate execution, and
+immutable completion receipts bind the principal, tenant, agent, execution, tool,
+workflow, policy, grant interval and provider result. Handshake failures do not
+prove invocation. Readers reject ambiguous, cross-scope, out-of-window and
+out-of-grant evidence. Resource operations remain unbound. Agent360 `capabilities` resolves
 observed MCP catalog tool identity only for an exact tenant/provider/server/tool
 tuple. For a complete canonical grant read, it also exposes the exact recorded
 invoke action and capability or server resource with delegation evidence;
 ambiguous grant scopes fail closed. It also exposes bounded persisted
 `capability.invoke` evaluations with exact Agent, capability, grant, result,
-and time. They do not bind to observed MCP calls or establish current effective
-authority. Agent360 explicitly reports action-specific and resource-operation
-authority as unknown because no such producer is joined: tool-call and resource
-request lifecycle observations, catalog/install records, invoke grants, and
-`capability.invoke` decisions do not establish those authorities. The slot
+and time. Those evaluations alone do not bind to observed MCP calls or establish
+current effective authority. Separately joined server-owned invocation receipts
+prove only the exact supported invocation and provider-reported result, not a
+resource operation or independent external effect. Credentialed/private MCP
+endpoints, standing authorization, freshness and full producer coverage remain
+unsupported or unknown. The slot
 remains partial. Support360 `sla` now joins an operator-registered source policy revision
 to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.

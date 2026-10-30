@@ -313,6 +313,18 @@ def test_dispatch_actions_authority_is_bound_without_claiming_slot_completion(
     assert "Jira" in slot["partialImplementationReason"]
 
 
+@pytest.mark.parametrize(("surface_id", "slot_id"), [
+    ("agent360", "capabilities"), ("workflow360", "actions"),
+])
+def test_mcp_invocation_actions_bound_but_resource_operations_unbound(surface_id, slot_id):
+    slot = next(item for item in PRODUCT_360_SURFACE_DEFINITIONS[surface_id]["domainSlots"]
+                if item["id"] == slot_id)
+    assert set(slot["unboundCanonicalAuthorityRefs"]) == {"resources"}
+    assert "actions" in slot["canonicalAuthorityRefs"]
+    assert "server-owned" in slot["partialImplementationReason"].lower()
+    assert "resource-operation" in slot["partialImplementationReason"]
+
+
 def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> None:
     confidence = next(
         slot

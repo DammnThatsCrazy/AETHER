@@ -21,7 +21,7 @@ def upgrade() -> None:
     op.execute("""CREATE OR REPLACE FUNCTION reject_agent_invocation_receipt_update() RETURNS trigger
         LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'agent invocation receipts are immutable'; END $$""")
     op.execute("DROP TRIGGER IF EXISTS trg_agent_invocation_receipts_immutable ON agent_invocation_receipts")
-    op.execute("""CREATE TRIGGER trg_agent_invocation_receipts_immutable BEFORE UPDATE
+    op.execute("""CREATE TRIGGER trg_agent_invocation_receipts_immutable BEFORE UPDATE OR DELETE
         ON agent_invocation_receipts FOR EACH ROW EXECUTE FUNCTION reject_agent_invocation_receipt_update()""")
     # A durable, non-evidentiary idempotency claim prevents repeated tool effects.
     # It contains no provider result and is never surfaced as an invocation receipt.

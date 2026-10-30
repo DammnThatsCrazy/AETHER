@@ -625,6 +625,10 @@ async def invoke_agent_tool(agent_id: str, execution_id: str, tool_name: str,
     """Authenticated server-side MCP invocation; receipts come from the provider call."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+    tenant.require_permission("dispatch")
+    principal = getattr(tenant, "user_id", None)
+    if not isinstance(principal, str) or not principal or principal != principal.strip():
+        raise ForbiddenError("Tool invocation requires an authenticated principal")
     config = await _configs.find_by_id(agent_id)
     execution = await _executions.find_by_id(execution_id)
     if (config is None or config.get("tenant_id") != tenant.tenant_id
@@ -639,6 +643,7 @@ async def invoke_agent_tool(agent_id: str, execution_id: str, tool_name: str,
         tool_name=tool_name, arguments=body.arguments, config=config, engine=engine,
         workflow_run_id=execution.get("workflow_run_id"),
         workflow_definition_link=execution.get("workflow_definition_link"),
+        initiating_principal_user_id=principal,
     )
     return APIResponse(data=receipt).to_dict()
 

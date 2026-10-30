@@ -1453,6 +1453,7 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 |--------|----------|-------------|
 | POST | `/v1/agent/register` | Register agent in the Intelligence Graph |
 | POST | `/v1/agents/{agent_id}/execute` | Admit and record run bookkeeping after delegation checks; optional `approval_id` requires a current tenant-scoped x402 approval whose agent, action, resource, amount, and latest immutable decision match exactly. This route does not invoke a tool/resource operation or create an invocation receipt. |
+| POST | `/v1/agents/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke` | Require authenticated principal, write and dispatch permissions, tenant-owned running execution, enabled exact observed MCP tool and active invoke grant. Perform public HTTPS MCP initialization and `tools/call` through DNS-pinned transport with redirects disabled. Persist immutable scoped completion receipts; durable claims prevent duplicate calls. Private/credentialed endpoints and resource-operation verification are unsupported. |
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
@@ -2301,9 +2302,15 @@ resource scopes with delegation evidence on a complete grant read. Ambiguous
 dual-target grants are rejected. It also exposes bounded persisted
 `capability.invoke` evaluations linked to exact tenant, Agent, capability, grant,
 result, and evaluation time. These records describe prior policy evaluations,
-not current authorization or actual tool invocations.
-These provider joins add no new HTTP endpoints and do not complete their
-surfaces or the full 18-surface contract.
+not current authorization or actual tool invocations. The separate authenticated
+tool invocation endpoint now produces server-owned MCP completion receipts.
+Agent360 capabilities and Workflow360 actions admit those receipts only with
+exact tenant, agent, execution, tool, grant, policy and workflow scope and valid
+invocation timing. Failed initialization cannot become a tool invocation claim;
+observations and executor callbacks cannot produce these receipts. This binds
+supported invoke actions, not resource operations, standing authorization,
+independent external effects or complete producer coverage. Neither surface nor
+the full 18-surface contract is complete.
 
 Journey360 and Risk360 can also include an associated agent execution's
 recorded delegation decision when its tenant, grant reference, status and decision time
