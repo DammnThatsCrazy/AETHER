@@ -28,6 +28,8 @@ function errorResult(error) {
       message: error.message,
       ...(Number.isInteger(error.status) ? { status: error.status } : {}),
       ...(error.code ? { code: error.code } : {}),
+      ...(error.category ? { category: error.category } : {}),
+      ...(Number.isInteger(error.retryAfterSeconds) ? { retry_after_seconds: error.retryAfterSeconds } : {}),
       ...(error.requestId ? { request_id: error.requestId } : {}),
       ...(error.apiRequestId ? { api_request_id: error.apiRequestId } : {}),
       ...(error.interaction ? { interaction: error.interaction } : {}),
