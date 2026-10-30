@@ -13,7 +13,7 @@ source_files:
   - services/api/value/commerce/commerce360_provider.py
   - services/api/value/commerce/commerce_intents.py
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6f2e26b373c363826258bd79d4189d700e3edbf00279f36cf757e2a0b5f7918c"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bb38bc7ee689e493c0b46c108845d4a90e74261d5a003daa0973d92085090601"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/tests/unit/test_commerce_intent_authority.py": "sha256:2f80185b0b0ae04a08b2342152b81a311b017ce2cf87ded2ca8aa615b08fad87"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"

@@ -11,7 +11,7 @@ related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
   "services/api/identity/profile/routes.py": "sha256:73c002b436a26ade807bfa2b0ff77a2ee574021ce86dadbdf4ff055b821c0dce"
-  "services/api/value/economic/routes.py": "sha256:aadfa8101b7fc4fdcd267f643d7817442d4ed32b5ddef31f086b545abcc7eba2"
+  "services/api/value/economic/routes.py": "sha256:ceff2b0583bf08e2603f6693b19d70979a435eaa4afd7567a77a074413a97167"
 ---
 
 # Aether — Kyber Economic Observability
@@ -75,8 +75,12 @@ GET /v1/profile/{id}/economic/campaigns      → Campaign-attributed value
 GET /v1/profile/{id}/economic/warnings       → Missing, stale and contradicting dimensions (profile service)
 ```
 
-The GET routes require `read`; the lineage check requires `write`. It does not
-approve or calibrate the model. `/economic/agentic`, `/economic/campaigns`
+The GET routes require `read`; the lineage check requires `write`. It validates
+run/config lineage but does not itself approve or calibrate the model. A
+separate `POST /v1/economic/attribution-runs/{run_id}/model-approval` requires
+tenant-admin permission and records an approval or rejection bound to the exact
+validated run and configuration. This is an approval record, not calibration
+evidence. `/economic/agentic`, `/economic/campaigns`
 and the two `/v1/economic` routes are served by `services/api/value/economic/routes.py`; the
 other four profile routes are served by `services/api/identity/profile/routes.py`. Each URL has
 exactly one handler (`tests/unit/test_route_conflicts.py`).

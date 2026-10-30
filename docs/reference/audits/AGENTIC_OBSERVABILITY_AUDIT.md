@@ -16,9 +16,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6f2e26b373c363826258bd79d4189d700e3edbf00279f36cf757e2a0b5f7918c"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bb38bc7ee689e493c0b46c108845d4a90e74261d5a003daa0973d92085090601"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:413fa4a4f89dcc53495bcda818fc20f15ffbc464f4b9b72883932326cccef229"
+  "services/api/actions/agent/": "sha256:f37813b361f5c5a9b357832b5fe026389b44a1a3aa730686fc8ffef82b4926a6"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -34,20 +34,20 @@ source_hashes:
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1254be67a69e089a6d9ed814a92fca7fb7a5fcf7fd4d6757e22918c596cfe7c5"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/": "sha256:fbc31678aeaf5a4817cb48787708c394a1ab96a05e3554af88ac291273d57b47"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:37cea2bbcd7d9c38669f23a95af1fc5ecddbb6b8c59f7afcb4eb459f11587d18"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
-  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
+  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:cf57b951f85d0f92df302d710e363c1628874d58e186da2a8fa35c16074e253b"
+  "services/api/value/economic/economic360_provider.py": "sha256:a98f9f5e6bd1ae986f284fcc52b6711b397597e3494da6be3ae497d6dd9613b8"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
@@ -296,11 +296,16 @@ rejects malformed or padded capability-grant and policy-decision identifiers.
 Allowed Agent360 invoke evaluations now bind to the referenced grant only when
 their recorded time falls within its start and end/revocation interval; valid
 rows for other agents do not make this agent's scoped history incomplete.
-Action-specific and resource-operation authority remains explicitly unknown
-because no invocation or operation receipt producer is joined. Workflow360
-reports approved-resource read availability, completeness, and truncation, but
-its execution receipt remains unknown without a server-owned invocation-bound
-producer.
+Separate authenticated Agent routes now perform exact MCP tool invocations
+under invoke grants and exact resource reads under a resource-read grant
+and records an invocation-bound receipt with provider and resource identity,
+policy and grant context, timestamps, and result status; successful reads carry
+a digest of the provider result. This is evidence of the recorded read attempt
+and returned content digest, not a tool mutation or external effect. Workflow360
+still reports approved-resource read availability, completeness, and
+truncation. It exposes validated run-bound provider receipts separately from
+observed action edges; an edge without an exact receipt link retains unknown
+execution-receipt authority.
 Workflow definition-to-run linkage, complete actor and step coverage,
 workflow-wide approval authority, policy, and freshness remain unknown.
 Workflow360 `triggers` now
