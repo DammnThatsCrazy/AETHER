@@ -987,6 +987,11 @@ async def update_action_integration(config_id: str, body: IntegrationConfigReque
 async def _dispatch_action(action_id: str, body: DispatchActionRequest, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("write")
+    tenant.require_permission("dispatch")
+    principal_id = tenant.user_id
+    if not isinstance(principal_id, str) or not principal_id.strip():
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("Authenticated principal is required to dispatch actions")
     if body.journey_action_reference and body.risk_action_reference:
         raise BadRequestError("Only one dispatch association may be supplied")
     action, decision, recommendation = await _load_dispatch_context(tenant.tenant_id, action_id)
@@ -1160,23 +1165,39 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
             risk_association.update(recommendation_id=recommendation_id, action_type=action_type)
         except ValueError as exc:
             raise BadRequestError(str(exc)) from exc
+    if replay_dispatch is not None:
+        from shared.common.common import ConflictError
+        from actions.agent.dispatch_authority import read_dispatch_authorization
+
+        if (replay_dispatch.get("tenant_id") != tenant.tenant_id
+                or replay_dispatch.get("action_id") != action_id
+                or replay_dispatch.get("dispatch_actor_id") != principal_id
+                or await read_dispatch_authorization(
+                    tenant_id=tenant.tenant_id, action_id=action_id, dispatch=replay_dispatch,
+                ) is None):
+            raise ConflictError("Idempotent dispatch authority does not match this actor or context")
+        receipts = await _delivery_receipts.find_many({"dispatch_id": replay_dispatch.get("dispatch_id")}, limit=1)
+        return APIResponse(data={"dispatch": replay_dispatch, "receipt": receipts[0] if receipts else None,
+                                 "replayed": True}).to_dict()
     approval_level = selected_action.get("requires_approval_level", "none")
     approval_id = (
         (body.approval_metadata or {}).get("approval_id")
         or (action.get("authorization_metadata") or {}).get("approval_id")
     )
+    dispatch_id = str(uuid.uuid4())
+    selected_action_key = selected_action.get("action_key")
+    selected_action_type = selected_action.get("action_type")
+    association_record_id = (journey_association or risk_association or {}).get("record_id")
+    dispatch_permission = tenant.has_permission("dispatch")
     dispatch_policy = await policy_engine.check_action_dispatch(
-        actor_id=tenant.user_id or tenant.tenant_id, actor_type='tenant_user',
+        actor_id=principal_id, actor_type='tenant_user',
         tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
-        has_dispatch_permission=True,
+        has_dispatch_permission=dispatch_permission, dispatch_id=dispatch_id,
+        target_type=body.target_type, selected_action_key=selected_action_key,
+        selected_action_type=selected_action_type, association_record_id=association_record_id,
         is_elevated=approval_level in {"elevated", "critical"}, approval_id=approval_id,
+        persist=False,
     )
-    if not dispatch_policy.allowed:
-        raise BadRequestError(dispatch_policy.reason)
-    if replay_dispatch is not None:
-        receipts = await _delivery_receipts.find_many({"dispatch_id": replay_dispatch.get("dispatch_id")}, limit=1)
-        return APIResponse(data={"dispatch": replay_dispatch, "receipt": receipts[0] if receipts else None,
-                                 "replayed": True}).to_dict()
     config = None
     if body.config_id:
         raw_config = await _integrations.find_by_id_or_fail(body.config_id)
@@ -1197,7 +1218,7 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         overrides=body.payload_overrides,
     )
     dispatch = ActionDispatch(
-        dispatch_id=str(uuid.uuid4()),
+        dispatch_id=dispatch_id,
         tenant_id=tenant.tenant_id,
         action_id=action_id,
         decision_id=decision["decision_id"],
@@ -1208,6 +1229,11 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         config_id=body.config_id,
         status="queued",
         dispatch_policy_decision_id=dispatch_policy.decision_id,
+        dispatch_actor_id=principal_id,
+        dispatch_action_key=selected_action_key,
+        dispatch_action_type=selected_action_type,
+        dispatch_approval_id=approval_id,
+        dispatch_requires_elevation=approval_level in {"elevated", "critical"},
         payload=payload,
         approval_metadata=body.approval_metadata,
         idempotency_key=body.idempotency_key,
@@ -1234,6 +1260,13 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
             if saved_dispatch.get("risk_action_association") != risk_association:
                 from shared.common.common import ConflictError
                 raise ConflictError("Idempotent dispatch has a different risk association")
+            from actions.agent.dispatch_authority import read_dispatch_authorization
+            if (saved_dispatch.get("dispatch_actor_id") != principal_id
+                    or await read_dispatch_authorization(
+                        tenant_id=tenant.tenant_id, action_id=action_id, dispatch=saved_dispatch,
+                    ) is None):
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch authority does not match this actor or context")
             receipts = await _delivery_receipts.find_many(
                 {"dispatch_id": saved_dispatch.get("dispatch_id")}, limit=1
             )
@@ -1244,6 +1277,14 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
             }).to_dict()
     else:
         saved_dispatch = await _dispatches.insert(dispatch.dispatch_id, dispatch.model_dump())
+
+    await policy_engine.persist_action_dispatch_decision(dispatch_policy)
+    dispatch.dispatch_policy_decision_id = dispatch_policy.decision_id
+    saved_dispatch = await _dispatches.update(dispatch_id, {
+        **({"status": "failed", "error": dispatch_policy.reason} if not dispatch_policy.allowed else {}),
+    })
+    if not dispatch_policy.allowed:
+        raise BadRequestError(dispatch_policy.reason)
 
     try:
         receipt = await target.dispatch(dispatch, config)

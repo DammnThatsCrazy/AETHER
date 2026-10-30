@@ -130,12 +130,13 @@ require an exact entity recommendation binding and an approved decision observed
 recorded, and effective no later than the dispatch. These bounded reads do not
 establish connector execution, external effects, complete producer coverage, or
 independent outcomes; the corresponding registry authorities remain unbound.
-Dispatch records now also carry the persisted `action.dispatch` policy decision
-created after the tenant write-permission check. Journey360 and Risk360 require
-that exact decision to match the tenant, action, allowed result, and dispatch
-time before treating the dispatch chain as complete. This records the
-application's tenant write-permission check; it does not establish connector
-execution or an external effect.
+Dispatch records now carry an `action.dispatch` policy decision created after
+the authenticated principal's tenant `dispatch` permission check. Journey360
+and Risk360 require that decision to match the dispatch ID, tenant, principal,
+selected action, target, elevation/approval context, association, allowed
+result, and dispatch time before treating the dispatch chain as complete. This
+records an application permission decision; it does not establish event-time
+authority, connector execution, or an external effect.
 Risk decision-history validation rejects out-of-scope or future-observed or
 future-recorded rows and requires the current approved intervention type to match
 the associated action. Invalid decision records do not produce a complete empty

@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/action_targets/base.py": "sha256:455280d204f34cf4b774550f1d46024b320ae8e0f2f77eed44b3db8b6b7c2672"
   "services/api/intelligence/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "services/api/intelligence/intelligence/routes.py": "sha256:e05c58afae3a971c5933d127c6a800a4e5ccd9b31e4bc7f1789617034cc70e07"
+  "services/api/intelligence/intelligence/routes.py": "sha256:389f7099cb4a4fd12c2803bd7b7495258778cdb4f5ce788294c95f7c37073464"
 ---
 
 # Governed Action Dispatch
@@ -100,11 +100,13 @@ Integration secrets such as `auth_secret`, `secret`, `api_key`, and `webhook_sec
 
 ## Governance
 
-Dispatch requires tenant write permission and an approved decision; elevated and
-critical actions also require an approval ID. The allowed tenant permission
-decision is persisted on the dispatch and joined by Journey360 and Risk360 before
-they report the dispatch chain as complete. This evidence records the application
-permission check and decision gate; it does not verify connector execution or an
+Dispatch requires the authenticated tenant principal's `dispatch` permission and
+an approved decision; elevated and critical actions also require an approval ID.
+The persisted `action.dispatch` decision is bound to one dispatch ID, tenant,
+principal, selected action, target, elevation/approval context, and Journey or Risk
+association record. Journey360 and Risk360 recheck that exact context before
+reporting a complete dispatch chain. This records an application permission
+decision; it does not establish event-time authority, connector execution, or an
 external effect. The dispatch payload includes the action, decision,
 recommendation, expected value, expected outcome, and policy flags so downstream
 systems can preserve audit context.

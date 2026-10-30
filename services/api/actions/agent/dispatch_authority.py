@@ -36,6 +36,30 @@ async def read_dispatch_authorization(
         or decision.get("resource_type") != "action"
         or decision.get("resource_id") != action_id
         or decision.get("allowed") is not True
+        or not isinstance(dispatch.get("dispatch_actor_id"), str)
+        or not dispatch.get("dispatch_actor_id", "").strip()
+        or decision.get("actor_id") != dispatch.get("dispatch_actor_id")
+        or dispatch.get("dispatch_requires_elevation") not in {True, False}
+        or not isinstance(dispatch.get("dispatch_action_key"), str)
+        or not dispatch.get("dispatch_action_key", "").strip()
+        or not isinstance(dispatch.get("dispatch_action_type"), str)
+        or not dispatch.get("dispatch_action_type", "").strip()
+        or dispatch.get("target_type") is None
+        or not isinstance(decision.get("context"), dict)
+        or decision.get("context") != {
+            "dispatch_id": dispatch.get("dispatch_id"),
+            "target_type": dispatch.get("target_type"),
+            "selected_action_key": dispatch.get("dispatch_action_key"),
+            "selected_action_type": dispatch.get("dispatch_action_type"),
+            "is_elevated": dispatch.get("dispatch_requires_elevation"),
+            "approval_id": dispatch.get("dispatch_approval_id"),
+            "association_record_id": (
+                dispatch.get("journey_action_association_record_id")
+                or dispatch.get("risk_action_association_record_id")
+            ),
+        }
+        or (dispatch.get("dispatch_requires_elevation") is True
+            and not dispatch.get("dispatch_approval_id"))
         or evaluated > created
         or created > now
     ):

@@ -1947,10 +1947,11 @@ caller association on the lifecycle request. Slot-authorized Journey360 and
 Risk360 reads can show the recorded request with evidence; it does not prove
 dispatch or an external effect. Journey360 and Risk360 dispatch reads also
 require the persisted tenant `action.dispatch` policy decision for the exact
-action; this records the tenant write-permission and approved-decision checks,
-not connector execution or an external effect. For execution-bound x402
-approvals, the decision also records the authenticated human's request-time
-`commerce:approve` check.
+dispatch, actor, selected action, target, elevation/approval context, and
+association; this records the application permission and approved-decision
+checks, not event-time authority, connector execution, or an external effect.
+For execution-bound x402 approvals, the decision also records the authenticated
+human's request-time `commerce:approve` check.
 
 An idempotent dispatch replay must supply the same association reference and
 match the persisted tenant, action, canonical action decision, selected action,
@@ -2308,11 +2309,14 @@ Risk360 can separately read associated dispatch lifecycle records after an
 actions-domain policy decision. The join requires an exact entity recommendation
 and an approved intervention observed, recorded, and effective by dispatch time.
 It also requires the persisted tenant action-dispatch policy decision to be
-allowed for the same action no later than dispatch creation.
+allowed for this exact dispatch, tenant, authenticated principal, selected
+action, target, elevation/approval context, and association record, with policy
+evaluation no later than dispatch creation.
 Current-decision validation rejects out-of-scope or future-observed or recorded
 history, and invalid decisions cannot yield a complete empty dispatch read.
-The persisted dispatch check records the tenant write permission and approved
-decision gate; it does not establish connector execution or an external effect.
+The persisted dispatch check records the tenant dispatch permission and approved
+decision gate; it does not establish event-time authority, connector execution,
+or an external effect.
 
 The latest provider slice adds Agent360 `risk_summary`, Execution360
 `risk_events`, and Value360 `ltv` evidence without adding routes. Agent360 no

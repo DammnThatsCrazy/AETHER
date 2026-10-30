@@ -162,6 +162,11 @@ class ActionDispatch(BaseModel):
     config_id: str | None = None
     status: Literal["queued", "dispatched", "delivered", "failed", "cancelled"] = "queued"
     dispatch_policy_decision_id: str | None = None
+    dispatch_actor_id: str | None = None
+    dispatch_action_key: str | None = None
+    dispatch_action_type: str | None = None
+    dispatch_approval_id: str | None = None
+    dispatch_requires_elevation: bool | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     approval_metadata: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None

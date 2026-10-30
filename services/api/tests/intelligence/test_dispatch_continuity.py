@@ -24,9 +24,16 @@ class _Tenant:
     def require_permission(self, _permission: str) -> None:
         return None
 
+    def has_permission(self, _permission: str) -> bool:
+        return self.dispatch_permission if _permission == "dispatch" else True
 
-def _request(tenant_id: str) -> SimpleNamespace:
-    return SimpleNamespace(state=SimpleNamespace(tenant=_Tenant(tenant_id)))
+
+def _request(tenant_id: str, user_id: str | None = None, dispatch_permission: bool = True) -> SimpleNamespace:
+    tenant = _Tenant(tenant_id)
+    tenant.dispatch_permission = dispatch_permission
+    if user_id is not None:
+        tenant.user_id = user_id
+    return SimpleNamespace(state=SimpleNamespace(tenant=tenant))
 
 
 class _Target:
@@ -97,6 +104,31 @@ async def test_dispatch_reservation_dedupes_concurrent_requests_and_is_tenant_sc
     assert created_b is True and second["tenant_id"] == "tenant-b"
 
 
+async def test_dispatch_policy_uses_tenant_permission_and_binds_denial_to_durable_dispatch(monkeypatch):
+    from governance.security.repositories import PolicyDecisionRepository
+    from shared.common.common import BadRequestError
+
+    monkeypatch.setattr(routes._action_targets, "get", lambda _name: _Target())
+    monkeypatch.setattr(routes, "_load_dispatch_context", lambda _tenant, action_id: _async_context(action_id))
+    await routes._actions.insert("action-1", {
+        "action_id": "action-1", "tenant_id": "tenant-a", "decision_id": "decision-1",
+        "action_type": "review", "status": "planned",
+    })
+    with pytest.raises(BadRequestError, match="lacks tenant dispatch permission"):
+        await routes._dispatch_action(
+            "action-1", routes.DispatchActionRequest(target_type="test"),
+            _request("tenant-a", dispatch_permission=False),
+        )
+    rows = await routes._dispatches.find_many({"tenant_id": "tenant-a", "action_id": "action-1"}, limit=1)
+    assert len(rows) == 1
+    row = rows[0]
+    policy = await PolicyDecisionRepository().find_by_id(row["dispatch_policy_decision_id"])
+    assert policy["allowed"] is False
+    assert policy["actor_id"] == row["dispatch_actor_id"] == "user-tenant-a"
+    assert policy["context"]["dispatch_id"] == row["dispatch_id"]
+    assert policy["context"]["target_type"] == row["target_type"] == "test"
+
+
 async def test_missing_connector_keeps_auditable_plan_without_delivery_claim(monkeypatch):
     target = routes._action_targets.get("agent_assist")
     monkeypatch.setattr(routes._action_targets, "get", lambda _name: target)
@@ -137,7 +169,8 @@ def _context(action_id: str = "action-1") -> tuple[dict, dict, dict]:
     decision = {
         "decision_id": "decision-1", "tenant_id": "tenant-a",
         "recommendation_id": "rec-1", "decision_status": "approved",
-        "selected_action": {"action_type": "review", "label": "Review", "requires_approval_level": "none"},
+        "selected_action": {"action_key": "review", "action_type": "review", "label": "Review",
+                            "requires_approval_level": "none"},
     }
     action = {
         "action_id": action_id, "tenant_id": "tenant-a", "decision_id": "decision-1",
@@ -200,6 +233,8 @@ async def test_journey_dispatch_link_is_validated_and_idempotency_cannot_rebind(
         raise ValueError("journey intent is no longer current")
     monkeypatch.setattr(routes, "validate_action_association", unavailable_validation)
     assert (await routes._dispatch_action("action-1", body, _request("tenant-a")))["data"]["replayed"]
+    with pytest.raises(ConflictError):
+        await routes._dispatch_action("action-1", body, _request("tenant-a", "different-user"))
     with pytest.raises(ConflictError):
         await routes._dispatch_action("action-1", routes.DispatchActionRequest(target_type="test", idempotency_key="journey-key"), _request("tenant-a"))
     assert target.calls == 1

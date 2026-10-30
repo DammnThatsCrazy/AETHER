@@ -49,10 +49,11 @@ government buyers run a security review against demonstrable controls. It answer
 | Integration security | [INTEGRATION-SECURITY.md](./INTEGRATION-SECURITY.md) | Implemented |
 | Governance evidence packs | [GOVERNANCE-EVIDENCE-PACKS.md](./GOVERNANCE-EVIDENCE-PACKS.md) | Implemented |
 
-The `action.dispatch` policy record captures the allowed tenant write-permission
-check, approved-decision gate, actor, tenant, action ID, and evaluation time. It
-is persisted with the dispatch and can be revalidated by downstream projections;
-it does not attest to connector execution or an external effect.
+The `action.dispatch` policy record captures the tenant dispatch-permission
+check, approved-decision gate, actor, tenant, dispatch ID, selected action,
+target, elevation and approval context, association record, and evaluation time.
+It is persisted with the dispatch and revalidated by downstream projections; it
+does not establish event-time authority, connector execution, or an external effect.
 
 `capability.invoke` decisions persist a context containing the exact Agent,
 capability, grant reference, inventory observation, and evaluation result.

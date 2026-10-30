@@ -106,8 +106,14 @@ async def test_elevated_dispatch_requires_approval_id():
     ok = await eng.check_action_dispatch(
         actor_id="u1", actor_type='tenant_user', tenant_id='t1',
         decision_status='approved', has_dispatch_permission=True, is_elevated=True, approval_id='appr_1',
+        dispatch_id='d1', target_type='webhook', selected_action_key='notify',
+        selected_action_type='send',
     )
     assert ok.allowed is True
+    assert ok.context == {"dispatch_id": "d1", "target_type": "webhook",
+                          "selected_action_key": "notify", "selected_action_type": "send",
+                          "is_elevated": True, "approval_id": "appr_1",
+                          "association_record_id": None}
 
 
 async def test_dispatch_requires_actor_permission():

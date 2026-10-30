@@ -6,7 +6,7 @@ from actions.agent.journey_dispatch_association import read_journey_dispatches
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", ["valid", "foreign", "wrong_subject", "wrong_version", "wrong_recommendation", "wrong_action", "foreign_decision", "unapproved", "future", "before_occurrence", "before_recording", "truncated", "missing_policy", "foreign_policy", "wrong_policy_action", "wrong_policy_resource", "future_policy"])
+@pytest.mark.parametrize("case", ["valid", "foreign", "wrong_subject", "wrong_version", "wrong_recommendation", "wrong_action", "foreign_decision", "unapproved", "future", "before_occurrence", "before_recording", "truncated", "missing_policy", "foreign_policy", "wrong_policy_action", "wrong_policy_resource", "future_policy", "wrong_actor", "shared_policy", "missing_context", "wrong_context_target", "wrong_context_action", "wrong_context_association", "wrong_approval", "replay_context"])
 async def test_exact_journey_dispatch_chain(case):
     link = {"kind": "journey_action_intent", "link_state": "caller_associated", "record_id": "intent-1",
             "subject_id": "journey-1", "version_id": "version-1", "action_key": "notice",
@@ -14,6 +14,9 @@ async def test_exact_journey_dispatch_chain(case):
     dispatch = {"id": "dispatch-1", "dispatch_id": "dispatch-1", "tenant_id": "tenant-a",
                 "action_id": "action-1", "decision_id": "decision-1", "recommendation_id": "rec-1",
                 "dispatch_policy_decision_id": "policy-1",
+                "dispatch_actor_id": "user-1", "dispatch_action_key": "notice",
+                "dispatch_action_type": "send", "dispatch_approval_id": None,
+                "dispatch_requires_elevation": False, "target_type": "webhook",
                 "journey_action_association_record_id": "intent-1", "journey_action_association": link,
                 "status": "delivered", "created_at": "2026-10-18T10:00:02Z"}
     action = {"tenant_id": "tenant-a", "action_id": "action-1", "decision_id": "decision-1",
@@ -24,6 +27,10 @@ async def test_exact_journey_dispatch_chain(case):
     policy_decision = {"decision_id": "policy-1", "tenant_id": "tenant-a", "policy_key": "action.dispatch",
                        "actor_id": "user-1", "actor_type": "tenant_user", "action": "dispatch",
                        "resource_type": "action", "resource_id": "action-1", "allowed": True,
+                       "context": {"dispatch_id": "dispatch-1", "target_type": "webhook",
+                                   "selected_action_key": "notice", "selected_action_type": "send",
+                                   "is_elevated": False, "approval_id": None,
+                                   "association_record_id": "intent-1"},
                        "evaluated_at": "2026-10-18T10:00:01Z"}
     if case == "missing_policy":
         dispatch.pop("dispatch_policy_decision_id")
@@ -35,6 +42,13 @@ async def test_exact_journey_dispatch_chain(case):
         policy_decision["resource_id"] = "other-action"
     if case == "future_policy":
         policy_decision["evaluated_at"] = "2999-10-18T10:00:01Z"
+    if case == "wrong_actor": policy_decision["actor_id"] = "other-user"
+    if case in {"shared_policy", "replay_context"}: policy_decision["context"]["dispatch_id"] = "another-dispatch"
+    if case == "missing_context": policy_decision.pop("context")
+    if case == "wrong_context_target": policy_decision["context"]["target_type"] = "other-target"
+    if case == "wrong_context_action": policy_decision["context"]["selected_action_key"] = "other-action"
+    if case == "wrong_context_association": policy_decision["context"]["association_record_id"] = "other-intent"
+    if case == "wrong_approval": policy_decision["context"]["approval_id"] = "other-approval"
     if case == "foreign": dispatch["tenant_id"] = "tenant-b"
     if case == "wrong_subject": link["subject_id"] = "journey-2"
     if case == "wrong_version": link["version_id"] = "other"

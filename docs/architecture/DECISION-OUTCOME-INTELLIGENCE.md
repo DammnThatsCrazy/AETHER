@@ -14,12 +14,12 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
-  "services/api/intelligence/intelligence/decision_models.py": "sha256:019dc89f216807ca260aa7831ff2a59f64c7b33e061baf72a964992fd847bc93"
+  "services/api/intelligence/intelligence/decision_models.py": "sha256:fa7574a7f99bcebb21ff58d6cd61ffbb761a58b0022b5a247a13387c8c9853d8"
   "services/api/intelligence/intelligence/ooda_engine.py": "sha256:e029e43ee23fe742c4ad33a5023e5b04d66e2003a3b655ab177d4567747b92de"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "services/api/intelligence/intelligence/recommendation_families.py": "sha256:1d4ef3823c50ca7cd13617c779fb0c83266dd9d57f1b61e4f819f8c820b5bb6a"
   "services/api/intelligence/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
-  "services/api/intelligence/intelligence/routes.py": "sha256:e05c58afae3a971c5933d127c6a800a4e5ccd9b31e4bc7f1789617034cc70e07"
+  "services/api/intelligence/intelligence/routes.py": "sha256:389f7099cb4a4fd12c2803bd7b7495258778cdb4f5ce788294c95f7c37073464"
 ---
 # Decision & Outcome Intelligence
 
@@ -39,11 +39,13 @@ Aether extends the existing intelligence graph into a graph-native OODA loop: **
 `generated → viewed → decided → outcome_observed → confidence_updated`.
 Recommendations include evidence, confidence decomposition, required approval level, policy/governance flags, graph snapshot id, and data freshness. When a recommendation is promoted from a comparison finding, optional `finding_id` and `investigation_id` provenance links are carried onto the decision, planned action/dispatch, and observed outcome records so the full loop remains traceable.
 
-Action dispatch also persists the allowed tenant `action.dispatch` policy
-decision with the dispatch. Journey360 and Risk360 rejoin that record by tenant
-and action ID and require its evaluation time to precede dispatch creation. The
-record covers the tenant write-permission and approved-decision checks; it does
-not prove a connector acted or an external effect occurred.
+Action dispatch also persists an `action.dispatch` policy decision with the
+durable dispatch. A successful record is bound to its dispatch ID, tenant,
+authenticated principal, selected action, target, elevation and approval
+context, and Journey or Risk association record. Journey360 and Risk360 rejoin
+and validate those exact fields, as well as requiring policy evaluation to
+precede dispatch creation. This records the application permission decision; it
+does not prove event-time authority, connector execution, or an external effect.
 
 ## Graph relationships
 

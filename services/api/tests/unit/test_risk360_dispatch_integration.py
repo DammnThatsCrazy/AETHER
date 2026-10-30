@@ -91,7 +91,8 @@ async def _produce_dispatch(*, recommendation_subject="entity-1", subject_kind="
     await RecommendationRepository().insert("rec-1", recommendation)
     await DecisionRepository().insert("dec-1", decision)
     await ActionFeedbackRepository().insert("action-1", action)
-    tenant = SimpleNamespace(tenant_id=TENANT_A, user_id="operator", require_permission=lambda permission: None)
+    tenant = SimpleNamespace(tenant_id=TENANT_A, user_id="operator", require_permission=lambda permission: None,
+                             has_permission=lambda permission: permission in {"write", "dispatch"})
     response = await routes._dispatch_action(
         "action-1", routes.DispatchActionRequest(
             target_type="agent_assist", idempotency_key="risk-dispatch",
@@ -179,6 +180,18 @@ def _authorization(subject):
 @pytest.mark.parametrize("scope", ["allowed", "missing", "tenant", "subject", "denied"])
 async def test_producer_dispatch_reaches_only_authorized_subject(scope):
     record, dispatch = await _produce_dispatch()
+    from governance.security.repositories import PolicyDecisionRepository
+    policy_decision = await PolicyDecisionRepository().find_by_id(dispatch["dispatch_policy_decision_id"])
+    assert policy_decision["allowed"] is True
+    assert policy_decision["actor_id"] == dispatch["dispatch_actor_id"] == "operator"
+    assert policy_decision["context"] == {
+        "dispatch_id": dispatch["dispatch_id"], "target_type": dispatch["target_type"],
+        "selected_action_key": dispatch["dispatch_action_key"],
+        "selected_action_type": dispatch["dispatch_action_type"],
+        "is_elevated": dispatch["dispatch_requires_elevation"],
+        "approval_id": dispatch["dispatch_approval_id"],
+        "association_record_id": dispatch["risk_action_association_record_id"],
+    }
     request = _request(subject=ProjectionSubject(kind="entity", id=record.subject_id))
     context = await _context(_available_registry())
     auth = _authorization(request.subject)
