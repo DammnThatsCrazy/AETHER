@@ -82,7 +82,11 @@ invoke action and capability or server resource with delegation evidence;
 ambiguous grant scopes fail closed. It also exposes bounded persisted
 `capability.invoke` evaluations with exact Agent, capability, grant, result,
 and time. They do not bind to observed MCP calls or establish current effective
-authority; the slot remains partial. Support360 `sla` now joins an operator-registered source policy revision
+authority. Agent360 explicitly reports action-specific and resource-operation
+authority as unknown because no such producer is joined: tool-call and resource
+request lifecycle observations, catalog/install records, invoke grants, and
+`capability.invoke` decisions do not establish those authorities. The slot
+remains partial. Support360 `sla` now joins an operator-registered source policy revision
 to an exact case timer and target. Breach evaluation, historical applicability,
 source completeness, and freshness remain partial.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link

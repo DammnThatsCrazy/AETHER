@@ -1794,6 +1794,25 @@ async def test_agent360_projects_exact_recorded_capability_policy_evaluation():
     assert evaluations[0]["evidenceRef"]["source"] == "security_policy_decisions"
     assert capability["invokePolicyEvaluationHistoryComplete"] is True
     assert capability["toolIdentity"]["effectiveToolAuthorization"] == "unknown"
+    assert profile["actionResourceAuthority"] == {
+        "state": "unknown",
+        "actions": {
+            "state": "unknown",
+            "reason": "agent360_action_specific_authority_source_unbound",
+        },
+        "resources": {
+            "state": "unknown",
+            "reason": "agent360_resource_operation_authority_source_unbound",
+        },
+        "effectiveToolAuthorization": "unknown",
+        "reason": (
+            "persisted capability.invoke evaluations cover only invoke on a "
+            "capability resource; no action-specific or resource-operation "
+            "authority producer is joined"
+        ),
+    }
+    assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
     assert any(ref["id"] == "cap-policy-1" for ref in profile["evidenceRefs"])
 
 
@@ -1827,6 +1846,48 @@ async def test_agent360_rejects_allowed_capability_evaluation_with_unjoined_gran
 
     assert capability["invokePolicyEvaluations"] == []
     assert capability["invokePolicyEvaluationHistoryComplete"] is False
+
+
+@pytest.mark.asyncio
+async def test_agent360_does_not_treat_action_or_resource_policy_rows_as_invoke_authority():
+    class OutOfContractActionResourcePolicySource(FakeSource):
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "resource-operation-policy-row", "tenant_id": tenant_id,
+                "policy_key": "capability.invoke", "actor_type": "tenant_user",
+                "resource_type": "resource", "resource_id": "customer:123",
+                "action": "delete", "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {"agent_id": canonical_agent_entity_id,
+                            "capability_id": "capability-search",
+                            "capability_grant_record_id": "capability-grant-1",
+                            "capability_observed": True},
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = True
+            return batch
+
+    result = await Agent360Provider(OutOfContractActionResourcePolicySource()).project(
+        _request(), _context()
+    )
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    profile = authority["capabilityAccessProfile"]
+    capability = profile["capabilities"][0]
+
+    assert capability["invokePolicyEvaluations"] == []
+    assert capability["invokePolicyEvaluationHistoryComplete"] is False
+    assert profile["actionResourceAuthority"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["actions"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["resources"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["effectiveToolAuthorization"] == "unknown"
+    assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert all(ref["id"] != "resource-operation-policy-row" for ref in profile["evidenceRefs"])
 
 
 @pytest.mark.asyncio

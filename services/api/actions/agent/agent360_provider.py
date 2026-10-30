@@ -3686,6 +3686,29 @@ class Agent360Provider:
         """Project observed capability reach and invoke-grant coverage without
         turning it into an authorization verdict for an arbitrary new action.
         """
+        # Keep unsupported authority explicit even when the capability profile
+        # itself is unavailable or conflicted.
+        action_resource_authority = {
+            "state": "unknown",
+            "actions": {
+                "state": "unknown",
+                "reason": "agent360_action_specific_authority_source_unbound",
+            },
+            "resources": {
+                "state": "unknown",
+                "reason": "agent360_resource_operation_authority_source_unbound",
+            },
+            "effectiveToolAuthorization": "unknown",
+            "reason": (
+                "persisted capability.invoke evaluations cover only invoke on a "
+                "capability resource; no action-specific or resource-operation "
+                "authority producer is joined"
+            ),
+        }
+        authority_gap_inputs = [
+            "agent360_action_specific_authority_source_unbound",
+            "agent360_resource_operation_authority_source_unbound",
+        ]
         if not read.available:
             return {
                 "state": "unavailable",
@@ -3693,6 +3716,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability access profile authority was unavailable",
             }
@@ -3703,6 +3728,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability access profile did not match the requested tenant and agent",
             }
@@ -3713,6 +3740,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "no exact capability access profile was returned",
             }
@@ -3724,6 +3753,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability installations are keyed by runtime agent ID, not entity ID",
             }
@@ -3735,6 +3766,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability access profile returned no profile object",
             }
@@ -4029,9 +4062,15 @@ class Agent360Provider:
                     "they do not evaluate a new action/resource request"
                 ),
             },
+            # Agent360 currently reads capability.invoke history only. Tool-call
+            # lifecycle edges, catalog/install rows, and invoke grants do not
+            # provide action-specific or resource-operation authority evidence.
+            # Keep these blockers explicit until a canonical producer is joined.
+            "actionResourceAuthority": action_resource_authority,
             "missingInputs": (
                 reach_missing
                 + ([] if grant_read_complete else ["canonical_capability_grant_read_incomplete"])
+                + authority_gap_inputs
             ),
             "evidenceRefs": _dedupe_json_refs(evidence_refs),
             "freshnessSemantics": "current_repository_state; active grant state is derived at read time; no historical replay",
