@@ -1018,10 +1018,6 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
                 raise ConflictError("Idempotent dispatch has a different journey association")
             replay_dispatch = existing[0]
     if replay_dispatch is not None:
-        # Replays use the association stored on the original dispatch;
-        # they do not revalidate a Journey intent or the current Risk decision.
-        # Still bind that stored association to the exact canonical dispatch
-        # context and caller reference so an idempotency key cannot be rebound.
         from shared.common.common import ConflictError
 
         selected = decision.get("selected_action") or {}
