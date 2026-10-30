@@ -13,10 +13,11 @@ refuses to create one for the same reason).
 
 What a declaration *does* buy is a fixed point to compare against:
 
-* ``capability_id`` is computed with ``models.capability_id_for`` over the **same** tuple
-  ``(tenant, provider, server_key, tool_name)`` that the observed catalog uses, so the
-  declaration↔observation join is exact — no fuzzy name matching, no heuristics that
-  could silently pair a declaration with the wrong observed row.
+* ``capability_id`` is computed over the same tuple the observed catalog uses. Tools use
+  ``(tenant, provider, server_key, tool_name)``; MCP resources use
+  ``(tenant, provider, server_key, "resource", exact_resource_uri)``. The
+  declaration↔observation join is exact — no fuzzy name matching or heuristics that could
+  silently pair a declaration with the wrong observed row.
 * ``artifact_digest`` is computed with ``identity.artifact_digest_for`` over the declared
   identity tuple, so §9.5 drift is a digest comparison rather than a field-by-field
   guess. ``digest_map()`` is the single read Phase C needs.
@@ -28,7 +29,7 @@ Storage invariants:
    verdict, and an operator reading a "declared / drifted" pair would have no way to tell
    which one is the tenant's actual position.
 2. A declaration must identify *something* — at least one of ``server_name`` /
-   ``server_url`` / ``tool_name``. An empty declaration would hash to the same
+   ``server_url`` / ``tool_name`` / ``resource_uri``. An empty declaration would hash to the same
    deterministic id as every other empty declaration in the tenant and would silently
    overwrite it.
 3. ``server_url`` is passed through ``catalog_service._sanitize_server_url`` before it is
@@ -52,7 +53,7 @@ from governance.security.repositories import _ScopedRepo
 
 from . import identity
 from .catalog_service import _clean, _sanitize_server_url, _server_key
-from .models import capability_id_for
+from .models import capability_id_for, resource_id_for
 
 logger = get_logger("aether.service.agent_access_intelligence.declarations")
 
@@ -67,6 +68,7 @@ _IDENTITY_FIELDS = (
     "server_name",
     "server_url",
     "tool_name",
+    "resource_uri",
     "protocol_version",
     "capability_kind",
 )
@@ -123,6 +125,7 @@ class CapabilityDeclarationService:
         server_name: Optional[str] = None,
         server_url: Optional[str] = None,
         tool_name: Optional[str] = None,
+        resource_uri: Optional[str] = None,
         protocol_version: Optional[str] = None,
         capability_kind: Optional[str] = None,
         notes: Optional[str] = None,
@@ -142,21 +145,22 @@ class CapabilityDeclarationService:
             # credential a human pasted into the URL.
             "server_url": _sanitize_server_url(_clean(server_url)),
             "tool_name": _clean(tool_name),
+            "resource_uri": _clean(resource_uri),
             "protocol_version": _clean(protocol_version),
             "capability_kind": _clean(capability_kind),
         }
 
-        if not (fields["server_name"] or fields["server_url"] or fields["tool_name"]):
+        if not (fields["server_name"] or fields["server_url"] or fields["tool_name"] or fields["resource_uri"]):
             raise BadRequestError(
                 "a declaration must identify a capability: at least one of "
-                "server_name, server_url or tool_name is required"
+                "server_name, server_url, tool_name or resource_uri is required"
             )
 
         # Same key the observed catalog uses (`catalog_service._server_key`), so the two
         # sides agree on what "the server" is before either id is derived from it.
         server_key = _server_key(fields)
         declaration_id = identity.declaration_id_for(
-            tenant_id, fields["provider"], server_key, fields["tool_name"]
+            tenant_id, fields["provider"], server_key, fields["tool_name"], fields["resource_uri"]
         )
 
         existing = await self._repo.find_by_id(declaration_id)
@@ -172,8 +176,10 @@ class CapabilityDeclarationService:
             "tenant_id": str(tenant_id),
             # Stored (not recomputed at read time) so Phase C can index declarations by
             # the same key the observed catalog is keyed by.
-            "capability_id": capability_id_for(
-                tenant_id, fields["provider"], server_key, fields["tool_name"]
+            "capability_id": (
+                resource_id_for(tenant_id, fields["provider"], server_key, fields["resource_uri"])
+                if fields["resource_uri"] else
+                capability_id_for(tenant_id, fields["provider"], server_key, fields["tool_name"])
             ),
             **{k: fields[k] for k in _IDENTITY_FIELDS},
             "publisher_ref": identity.publisher_ref_for(fields["server_url"], fields["provider"]),

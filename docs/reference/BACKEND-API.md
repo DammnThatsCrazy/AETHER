@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:9e5f955e1ad0fe98f0a7f9133b0205b1b367047a912350e69a9fdee3f5a29725"
+  "services/api/actions/": "sha256:6e0c7460eeb6f270f51935b2567e50dc03391f6fbf29cbcf009ca8686fdd5081"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -322,6 +322,13 @@ dimension. The API returns durable audit and usage IDs in
 `X-Aether-Access-Surface` request label is limited to `cli`, `mcp_stdio`,
 `mcp_http`, and `access_sdk`; it does not grant permission or choose a tenant.
 The package's operation list describes adapter support, not a tenant grant.
+
+`/v1/capability-declarations` records the tenant's asserted capability identity for
+comparison with the observed catalog. Tool declarations join by the exact tenant,
+provider, server and tool tuple. MCP resource declarations include the exact
+`resource_uri` and join to the matching observed resource ID; URI path and opaque
+identifier case is significant. The digest compares only the fields the declaration
+actually asserts and does not verify publisher identity.
 
 ### Contact & enterprise inquiries (`/v1/contact/*`)
 

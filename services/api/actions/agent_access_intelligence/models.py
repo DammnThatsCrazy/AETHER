@@ -65,7 +65,8 @@ def capability_id_for(
 
 def resource_id_for(tenant_id: str, provider: Optional[str], server_key: Optional[str], uri: Optional[str]) -> str:
     """Canonical identity for one observed MCP resource URI."""
-    raw = f"{tenant_id}|{provider or ''}|{server_key or ''}|resource|{uri or ''}"
+    # MCP resource URIs are exact identifiers; path and opaque-URI case must survive.
+    raw = f"{tenant_id}|{provider or ''}|{server_key or ''}|resource|{(uri or '').strip()}"
     return "res_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
