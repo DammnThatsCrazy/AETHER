@@ -106,7 +106,7 @@ def test_capability_policy_decision_requires_exact_tenant_agent_resource_and_tim
         assert Agent360Provider._validate_capability_policy_decisions(
             [candidate], "tenant-a", "agent-a"
         ) == ([], False)
-    candidate = {**decision, "context": {**decision["context"], "agent_id": "agent-b"}}
+    candidate = {**decision, "context": {**decision["context"], "agent_id": " agent-b"}}
     assert Agent360Provider._validate_capability_policy_decisions(
         [candidate], "tenant-a", "agent-a"
     ) == ([], False)
@@ -121,3 +121,49 @@ def test_capability_policy_decision_requires_exact_tenant_agent_resource_and_tim
     assert Agent360Provider._validate_capability_policy_decisions(
         [candidate], "tenant-a", "agent-a"
     ) == ([], False)
+
+
+def test_well_formed_other_agent_evaluation_does_not_incomplete_scoped_history():
+    now = datetime.now(timezone.utc).isoformat()
+    own = {
+        "decision_id": "decision-own", "tenant_id": "tenant-a", "policy_key": "capability.invoke",
+        "actor_type": "tenant_user", "resource_type": "capability", "resource_id": "tool-a",
+        "action": "invoke", "allowed": False, "evaluated_at": now,
+        "context": {"agent_id": "agent-a", "capability_id": "tool-a", "capability_observed": True},
+    }
+    other = {
+        **own,
+        "decision_id": "decision-other",
+        "context": {**own["context"], "agent_id": "agent-b"},
+    }
+    rows, complete = Agent360Provider._validate_capability_policy_decisions(
+        [other, own], "tenant-a", "agent-a"
+    )
+    assert complete is True
+    assert [row["decision_id"] for row in rows] == ["decision-own"]
+
+    malformed_other = {**other, "action": "read"}
+    rows, complete = Agent360Provider._validate_capability_policy_decisions(
+        [malformed_other, own], "tenant-a", "agent-a"
+    )
+    assert complete is False
+    assert [row["decision_id"] for row in rows] == ["decision-own"]
+
+
+@pytest.mark.parametrize(
+    "evaluated_at,starts_at,ends_at,revoked_at,expected",
+    [
+        ("2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z", None, None, True),
+        ("2026-09-30T23:59:59Z", "2026-10-01T00:00:00Z", None, None, False),
+        ("2026-11-01T00:00:00Z", None, "2026-11-01T00:00:00Z", None, False),
+        ("2026-10-20T00:00:00Z", None, None, "2026-10-20T00:00:00Z", False),
+        ("2026-10-19T23:59:59Z", None, None, "2026-10-20T00:00:00Z", True),
+    ],
+)
+def test_allowed_policy_evaluation_must_fall_within_grant_interval(
+    evaluated_at, starts_at, ends_at, revoked_at, expected
+):
+    record = grant()
+    record.update(starts_at=starts_at, ends_at=ends_at, revoked_at=revoked_at)
+    evaluation = {"evaluated_at": evaluated_at}
+    assert Agent360Provider._capability_evaluation_within_grant(evaluation, record) is expected

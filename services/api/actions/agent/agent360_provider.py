@@ -3604,6 +3604,7 @@ class Agent360Provider:
             capability_id = row.get("resource_id") if isinstance(row, dict) else None
             evaluated_at = row.get("evaluated_at") if isinstance(row, dict) else None
             evaluated, error = try_parse_instant(evaluated_at)
+            context_agent_id = context.get("agent_id") if isinstance(context, dict) else None
             valid = bool(
                 isinstance(row, dict)
                 and isinstance(decision_id, str) and decision_id.strip()
@@ -3617,7 +3618,8 @@ class Agent360Provider:
                 and isinstance(capability_id, str) and capability_id.strip()
                 and capability_id == capability_id.strip()
                 and isinstance(context, dict)
-                and context.get("agent_id") == canonical_agent_entity_id
+                and isinstance(context_agent_id, str) and context_agent_id.strip()
+                and context_agent_id == context_agent_id.strip()
                 and context.get("capability_id") == capability_id
                 and isinstance(context.get("capability_observed"), bool)
                 and evaluated is not None and error is None and evaluated <= now
@@ -3632,6 +3634,10 @@ class Agent360Provider:
                 complete = False
                 continue
             seen.add(decision_id)
+            if context_agent_id != canonical_agent_entity_id:
+                # The repository read is tenant scoped, so valid decisions for
+                # other agents do not make this agent's scoped history incomplete.
+                continue
             validated.append({
                 "decision_id": decision_id,
                 "capability_id": capability_id,
@@ -3640,6 +3646,27 @@ class Agent360Provider:
                 "grant_record_id": context.get("capability_grant_record_id"),
             })
         return validated, complete
+
+    @staticmethod
+    def _capability_evaluation_within_grant(
+        evaluation: dict[str, Any], grant: dict[str, Any],
+    ) -> bool:
+        """Require an allowed evaluation to fall inside its grant's recorded interval."""
+        evaluated, error = try_parse_instant(evaluation.get("evaluated_at"))
+        if evaluated is None or error is not None:
+            return False
+        starts_at, starts_error = try_parse_instant(grant.get("starts_at"))
+        if grant.get("starts_at") is not None and (starts_at is None or starts_error is not None):
+            return False
+        if starts_at is not None and evaluated < starts_at:
+            return False
+        for field in ("ends_at", "revoked_at"):
+            boundary, boundary_error = try_parse_instant(grant.get(field))
+            if grant.get(field) is not None and (boundary is None or boundary_error is not None):
+                return False
+            if boundary is not None and evaluated >= boundary:
+                return False
+        return True
 
     @staticmethod
     def _capability_profile_complete(
@@ -3865,6 +3892,9 @@ class Agent360Provider:
             not evaluation["allowed"]
             or (
                 (grant := grant_by_id.get(evaluation["grant_record_id"])) is not None
+                and Agent360Provider._capability_evaluation_within_grant(
+                    evaluation, grant
+                )
                 and (
                     grant.get("capability_id") == evaluation["capability_id"]
                     or (
