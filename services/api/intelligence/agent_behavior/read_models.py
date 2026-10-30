@@ -42,9 +42,78 @@ def _ts(value: str) -> Optional[datetime]:
 
 # --- Agent360 (WO-110, WO-111, WO-112) -----------------------------------------------
 
+def _observed_action(f: AgentFact):
+    from actions.delegation.authority_boundary import ObservedAction
+
+    return ObservedAction(
+        event_id=f.event_id, actor_ref=f.agent_ref or "", occurred_at=f.occurred_at,
+        action=f.action_type or ("purchase" if f.event_type.startswith("agent_transaction_") else f.event_type),
+        resource=f.resource_ref, amount=str(f.amount) if f.amount is not None else None,
+        merchant=f.attr("merchant", "merchantId"), protocol=f.attr("protocol"), asset=f.currency,
+        human_approval_ref=f.authorization_ref,
+    )
+
+
+def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
+                grants: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Identity, authority, Value, Risk, Trust and market sections from their
+    owning domains (WO-013, WO-020, WO-092–WO-094, WO-144, WO-161). This module
+    only composes; each owner decides its own meaning."""
+    from actions.delegation.authority_boundary import check_action
+    from identity.identity.agent_identity import (
+        agent_continuity, agent_identity, agent_identity_claims, continuity_hypotheses,
+    )
+    from intelligence.agent_behavior.population import adversarial_signals, market_compatibility
+    from intelligence.risk360.agent_behavior_signals import (
+        signals_from_adversarial, signals_from_authority_checks, signals_from_behavior_model,
+    )
+    from intelligence.risk360.agent_trust import reputation_profile, trust_profile
+    from value.attribution.agent_behavior_value import attribute
+
+    tenant = facts[0].tenant_id if facts else ""
+    mine = [f for f in facts if f.agent_ref == agent_ref]
+    actions = [f for f in mine if f.amount is not None and (
+        f.event_type.startswith("agent_transaction_") or f.event_type.startswith("agent_execution_"))]
+    observed = [_observed_action(f) for f in actions]
+    checks = [check_action(a, grants, observed[:i]).to_dict() | {"event_id": a.event_id}
+              for i, a in enumerate(observed)]
+    value = attribute(
+        [{"event_id": f.event_id, "amount": str(f.amount), "currency": f.currency,
+          "roles": decompose(f, facts, grants=grants)} for f in actions],
+        agent_refs={f.agent_ref for f in facts if f.agent_ref},
+    )
+    adversarial = adversarial_signals(mine, checks)
+    signals = (signals_from_behavior_model(tenant, model) + signals_from_authority_checks(tenant, agent_ref, checks)
+               + signals_from_adversarial(tenant, agent_ref, adversarial)) if tenant else []
+    claims = [cl for cl in agent_identity_claims(tenant, facts) if cl["identifier_value"] == agent_ref]
+    return {
+        "identity": _section("available", {
+            "agent": agent_identity(tenant_id=tenant, agent_ref=agent_ref, facts=facts).to_dict(),
+            "continuity": agent_continuity(tenant_id=tenant, agent_ref=agent_ref, facts=facts),
+            "resolver_claims": claims,
+            "review_items": [h for h in continuity_hypotheses(tenant, facts) if h["subject"] == agent_ref],
+        }) if mine else _section("unavailable", None, "no facts for this agent"),
+        "authority": _section("available" if checks else "unavailable", checks,
+                              None if checks else "no value-moving actions observed"),
+        "value": _section("available" if actions else "unavailable", value,
+                          None if actions else "no value-moving actions observed"),
+        "risk": _section("available", {
+            "signals": [sig.model_dump(mode="json") for sig in signals],
+            "adversarial": adversarial,
+            "note": "Risk signals for the Risk360 pipeline; not findings.",
+        }),
+        "trust": _section("available" if mine else "unavailable", {
+            "trust": trust_profile(model, checks), "reputation": reputation_profile(agent_ref, []),
+        }),
+        "market": _section("available" if mine else "unavailable", market_compatibility(mine)),
+    }
+
+
 def agent360_behavior(facts: list[AgentFact], agent_ref: str, *, identity: Optional[dict[str, Any]] = None,
-                      handoffs: Iterable[dict[str, Any]] = (), truncated: bool = False) -> dict[str, Any]:
+                      handoffs: Iterable[dict[str, Any]] = (), truncated: bool = False,
+                      grants: Iterable[dict[str, Any]] = ()) -> dict[str, Any]:
     model = build_behavior_model(facts, agent_ref, identity=identity)
+    governance = _governance(facts, agent_ref, model, list(grants))
     decisions = [d for d in project_decisions([f for f in facts if f.agent_ref == agent_ref])["decisions"]
                  if d["decision_actor"].get("value") == agent_ref]
     partial = "partial" if truncated else "available"
@@ -55,8 +124,7 @@ def agent360_behavior(facts: list[AgentFact], agent_ref: str, *, identity: Optio
         "model": model["model"],
         "source_truncated": truncated,
         "sections": {
-            "identity": _section("available" if identity else "unavailable", identity,
-                                 None if identity else "identity not resolved for this read"),
+            "identity": (_section("available", identity) if identity else governance["identity"]),
             "behavior": _section(partial if have else "unavailable", {
                 "what_it_usually_does": model["what_it_usually_does"],
                 "features": model["features"],
@@ -74,6 +142,11 @@ def agent360_behavior(facts: list[AgentFact], agent_ref: str, *, identity: Optio
             "journey": _section(partial if have else "unavailable",
                                 agent_journey(facts, agent_ref, handoffs=handoffs) if have else None),
             "influence": _section(partial if have else "unavailable", influence_graph(facts) if have else None),
+            "authority": governance["authority"],
+            "value": governance["value"],
+            "risk": governance["risk"],
+            "trust": governance["trust"],
+            "market": governance["market"],
             "observability": _section("available", {
                 **model["observability"], "what_aether_cannot_see": model["what_aether_cannot_see"],
             }),

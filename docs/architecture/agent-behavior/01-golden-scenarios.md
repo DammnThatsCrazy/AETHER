@@ -50,7 +50,7 @@ Today the current expectations cover:
 - Tool results and their status, and GS-D's failure resolution (retry, then switch, then resolved).
 - Policy decisions, and GS-C's DecisionEnvelope, OpportunityEnvelope and ActionDisposition (`constrained_non_action`).
 - Fleet hypotheses: status, priority, person link, confidence cap, competing explanations.
-- `AGENT_USED_TOOL_OBS` and `SPAWNED_SUBAGENT` graph edges.
+- `AGENT_USED_TOOL_OBS` and `SPAWNED_SUBAGENT` graph edges from Silver, and the delegation authority's `DELEGATES` grant edge (asserted through the grant route).
 - The handoff link.
 
 Still pending:
@@ -58,7 +58,6 @@ Still pending:
 - DecisionEnvelopes for GS-A, GS-B and GS-D (WO-050). These need explicit decision events, which those scenarios do not emit.
 - AgentJourney join to the human journey (WO-060). GS-A emits no `journeyId`.
 - Scenario read models (WO-093, WO-110 – WO-112).
-- The `HUMAN_DELEGATED_TO_AGENT` grant edge (WO-021).
 
 ## Rules for the fixture
 

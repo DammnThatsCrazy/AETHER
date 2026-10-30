@@ -43,7 +43,9 @@ def test_agent360_sections_report_state_and_blind_spots():
     facts = _facts(_events("GS-A"))
     rm = agent360_behavior(facts, "gsa-orch")
     sec = rm["sections"]
-    assert sec["identity"]["state"] == "unavailable" and sec["identity"]["reason"]
+    assert sec["identity"]["data"]["agent"]["recognition"] == "probable_agent"
+    assert all(cl["merge_eligible"] is False for cl in sec["identity"]["data"]["resolver_claims"])
+    assert sec["authority"]["state"] == "unavailable" and sec["value"]["state"] == "unavailable"
     assert sec["behavior"]["state"] == "available"
     assert [a["agent"] for a in sec["journey"]["data"]["agents"]] == ["gsa-orch", "gsa-wkr-flights", "gsa-wkr-hotels"]
     assert "memory" in sec["observability"]["data"]["not_observed_families"]
@@ -131,3 +133,26 @@ async def test_behavior_routes_are_tenant_scoped(_routes):
         await agent_routes.agent_decision_detail("gsc-buyer", "derived:gsc-buyer:gsc-task-buy", _request("other-tenant"))
     with pytest.raises(NotFoundError):
         await agent_routes.agent_decision_detail("someone-else", "derived:gsc-buyer:gsc-task-buy", _request())
+
+
+def test_governance_sections_compose_owner_seams():
+    events = [
+        _extra(1, "agent_transaction_initiated", "buyer", amount="120.00", currency="USD",
+               resourceRef="merchant:shop-1", actionType="purchase", decisionId="dz"),
+        _extra(2, "agent_action_selected", "buyer", decisionId="dz", candidateId="sku"),
+        *[_extra(3 + i, "agent_authorization_denied", "buyer") for i in range(3)],
+    ]
+    facts = _facts(events)
+    grants = [{"delegation_id": "g1", "grantor_entity_id": "person-1", "grantee_entity_id": "buyer",
+               "starts_at": "2026-10-01T00:00:00Z", "scope": {"actions": ["purchase"], "max_amount": "100.00"}}]
+    sec = agent360_behavior(facts, "buyer", grants=grants)["sections"]
+    [check] = sec["authority"]["data"]
+    assert check["status"] == "outside" and "max_transaction_exceeded" in check["reasons"]
+    [total] = sec["value"]["data"]["totals"]
+    assert total == {"class": "agent_selected_and_executed", "currency": "USD", "finality": "reported", "amount": "120.00"}
+    sources = {s["source"] for s in sec["risk"]["data"]["signals"]}
+    assert "agent_behavior.authority_boundary_exceeded" in sources
+    assert {a["kind"] for a in sec["risk"]["data"]["adversarial"]} >= {"authority_probing", "authority_boundary_exceeded"}
+    assert sec["trust"]["data"]["trust"]["authority_compliance"]["outside"] == 1
+    assert sec["trust"]["data"]["reputation"]["kind"] == "reputation"
+    assert sec["market"]["data"][0]["target"] == "merchant:shop-1"

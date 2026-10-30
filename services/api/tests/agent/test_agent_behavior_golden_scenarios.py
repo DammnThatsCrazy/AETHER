@@ -282,7 +282,8 @@ async def test_current_graph_edges_match_emission(sid, monkeypatch):
 
     expected = {
         (e["type"], e["from"], e["to"]): e["evidence_event_ids"]
-        for e in scenario["expected"]["graph_edges"] if e["status"] == "current"
+        for e in scenario["expected"]["graph_edges"]
+        if e["status"] == "current" and e.get("emitted_by", "silver") == "silver"
     }
     assert dict(edges) == expected
     for edge in scenario["expected"]["graph_edges"]:
@@ -374,3 +375,47 @@ def test_gs_d_failure_resolution_is_current():
     assert [{"tool": r["tool"], "event_id": r["event_id"]} for r in episode["retries"]] == design["retries"]
     assert [{k: s[k] for k in ("from_tool", "to_tool", "event_id")} for s in episode["switches"]] == design["switches"]
     assert episode["resolved"] is design["resolved"] and episode["basis"] == design["basis"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sid", [s for s in SCENARIOS if any(
+    e.get("emitted_by") == "delegation_authority" for e in SCENARIOS[s]["expected"]["graph_edges"])])
+async def test_grant_edges_come_from_the_delegation_authority(sid):
+    """The human->orchestrator grant edge is the delegation authority's DELEGATES
+    edge, written when the grant is recorded, not a Silver lineage edge."""
+    from types import SimpleNamespace
+
+    from actions.delegation import routes as delegation_routes
+    from repositories.repos import DelegationRepository, reset_in_memory_stores
+
+    class Graph:
+        def __init__(self):
+            self.edges = []
+
+        async def add_edge(self, edge, *args, **kwargs):
+            self.edges.append(edge)
+
+        async def add_vertex(self, *args, **kwargs):
+            return None
+
+    class Producer:
+        async def publish(self, event):
+            return None
+
+    reset_in_memory_stores()
+    graph = Graph()
+    tenant = SimpleNamespace(tenant_id=TENANT, require_permission=lambda _: None)
+    request = SimpleNamespace(state=SimpleNamespace(tenant=tenant))
+    for d in SCENARIOS[sid]["delegations"]:
+        await delegation_routes.grant(
+            delegation_routes.DelegationGrant(
+                delegation_id=d["delegation_id"], grantor_entity_id=d["grantor"],
+                grantee_entity_id=d["grantee"], scope={"actions": ["task"]},
+            ),
+            request, DelegationRepository(), graph, Producer(),
+        )
+    emitted = {(e.edge_type, e.from_vertex_id, e.to_vertex_id): e.properties.get("delegation_id") for e in graph.edges}
+    for want in SCENARIOS[sid]["expected"]["graph_edges"]:
+        if want.get("emitted_by") == "delegation_authority":
+            assert emitted[(want["type"], want["from"], want["to"])] == want["evidence_record"]
+    reset_in_memory_stores()

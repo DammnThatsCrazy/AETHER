@@ -658,10 +658,12 @@ async def agent_behavior_read_model(agent_ref: str, request: Request):
     _require_registry_enabled()
     tenant = _tenant(request)
     from intelligence.agent_behavior.read_models import agent360_behavior
+    from repositories.repos import DelegationRepository
 
     try:
         facts, truncated = await _behavior_facts(tenant.tenant_id, agent_ref)
-        data = agent360_behavior(facts, agent_ref, truncated=truncated)
+        grants = await DelegationRepository().active_for(agent_ref, tenant.tenant_id)
+        data = agent360_behavior(facts, agent_ref, truncated=truncated, grants=grants)
     except Exception as exc:
         logger.warning("agent behavior read model unavailable",
                        extra={"tenant_id": tenant.tenant_id, "error": type(exc).__name__})

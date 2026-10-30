@@ -234,13 +234,14 @@
             ]
           },
           {
-            "type": "HUMAN_DELEGATED_TO_AGENT",
+            "type": "DELEGATES",
             "from": "gsa-person-1",
             "to": "gsa-orch",
-            "status": "pending",
-            "owner_work_order": "WO-021",
+            "status": "current",
+            "emitted_by": "delegation_authority",
             "epistemic_status": "observed",
-            "evidence_event_ids": []
+            "evidence_event_ids": [],
+            "evidence_record": "gsa-del-1"
           }
         ],
         "decision_envelope": {
@@ -283,7 +284,6 @@
       },
       "known_gaps": [
         "Handoff and agent run are not joined by any canonical record; join_basis stays unknown until WO-060.",
-        "The human-to-orchestrator grant is a delegation record, not a graph edge: no HUMAN_DELEGATED_TO_AGENT edge is emitted when a grant is recorded (WO-021).",
         "Agent refs are source-reported, not resolved identities (WO-011/WO-013)."
       ]
     },

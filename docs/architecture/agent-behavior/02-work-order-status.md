@@ -26,9 +26,9 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 |---|---|---|---|
 | WO-000 – WO-002 baseline, ADRs, golden scenarios | Built | `docs/architecture/agent-behavior/`, `docs/architecture/decisions/agent-behavior/`, `tests/fixtures/agent_behavior/` | `test_agent_behavior_golden_scenarios.py` |
 | WO-010 ActorRef | Built | `services/api/identity/identity/actor_ref.py` | `test_agent_behavior_foundation.py` |
-| WO-011 – WO-013 agent identity, continuity, resolution claims | Built; claims are not yet submitted to the resolver | `identity/identity/agent_identity.py` | same |
+| WO-011 – WO-013 agent identity, continuity, resolution claims | Built; claims and review items appear in the Agent 360 identity section but are not yet submitted to the resolver | `identity/identity/agent_identity.py` | same |
 | WO-020 authority boundary | Built | `actions/delegation/authority_boundary.py` | `test_agent_behavior_authority.py` |
-| WO-021 delegation and lineage edges | Built for spawn and delegation; the human→agent grant edge is still pending | `ingestion/silver/projectors/silver_graph_projector.py` | golden test (edges marked current and pending) |
+| WO-021 delegation and lineage edges | Built. Spawn/delegation edges come from Silver; the human→agent grant edge is the delegation authority's existing `DELEGATES` edge (no duplicate edge type) | `ingestion/silver/projectors/silver_graph_projector.py` | golden test (edges marked current and pending) |
 | WO-022 – WO-023 responsibility roles, influence | Built | `intelligence/agent_behavior/responsibility.py` | `test_agent_behavior_authority.py` |
 | WO-030 event taxonomy | Built: 37 registry rows plus a dotted→snake map; all require a validated deployment at ingestion | `event-registry.json`, `intelligence/agent_behavior/taxonomy.py`, `ingestion/ingestion/validation.py` | foundation test |
 | WO-031 adapters | Built for generic, MCP, model gateway, browser, wallet; commerce and communication use the generic mapping | `taxonomy.py` | foundation test |
@@ -39,13 +39,13 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 | WO-060 – WO-063, WO-073 journey, tools, information, memory, failure resolution | Built; GS-D current | `intelligence/agent_behavior/activity.py` | `test_agent_behavior_model.py` |
 | WO-070 – WO-083 capability, competency, features, uncertainty, exploration, confidence, observability, model, preference | Built | `intelligence/agent_behavior/model.py` | model test |
 | WO-090 – WO-091 attribution, influence graph | Built | `intelligence/agent_behavior/dynamics.py` | `test_agent_behavior_advanced.py` |
-| WO-092 Value | Built as a Value-owned seam; not yet called by a Value 360 provider | `value/attribution/agent_behavior_value.py` | advanced test |
-| WO-093 Risk | Built as RiskSignal adapters; not yet wired into the Risk360 pipeline run | `intelligence/risk360/agent_behavior_signals.py` | advanced test |
+| WO-092 Value | Built as a Value-owned seam; composed into the Agent 360 `value` section; not yet called by a Value 360 provider | `value/attribution/agent_behavior_value.py` | advanced test |
+| WO-093 Risk | Built as RiskSignal adapters; composed into the Agent 360 `risk` section; not yet fed into the Risk360 pipeline run | `intelligence/risk360/agent_behavior_signals.py` | advanced test |
 | WO-094 Trust | Built under Risk (ADR-AB-011) | `intelligence/risk360/agent_trust.py` | advanced test |
 | WO-100 – WO-103 snapshots, drift, adaptation, counterfactuals | Built; snapshots are computed on read, not stored | `dynamics.py` | advanced test |
 | WO-110 – WO-113 read models | Built: routes `GET /v1/agent/agents/{agent_ref}/behavior` and `/decisions/{decision_id}`; Profile 360 reconciliation is a function, not yet a Profile 360 section | `intelligence/agent_behavior/read_models.py`, `actions/agent/deployment_routes.py` | `test_agent_behavior_read_models.py` |
 | WO-114 graph UI | Built as the Agent 360 behavior panel | `apps/aether-web/src/features/agent360/agent-behavior-panel.tsx` | `agent360-behavior.test.tsx` |
-| WO-115 query orchestration | Built as a closed capability list; not yet registered with Noesis | `read_models.py` (`QUERY_CAPABILITIES`) | read-model test |
+| WO-115 query orchestration | Built as a closed capability list; a Noesis intent also needs a handler, prompts and cross-surface parity updates, so it is not registered yet | `read_models.py` (`QUERY_CAPABILITIES`) | read-model test |
 | WO-120 instrumentation API | Built: server SDK helpers and Python `build_behavior_event` | `packages/sdk/server/src/agent-telemetry.ts`, `packages/sdk/python/aether_agentic/agentic.py` | vitest and pytest |
 | WO-121 – WO-122 web, React, iOS, Android | Event types regenerated into every SDK's contract; no new client helpers (agents are server-side) | generated SDK files | registry parity validators |
 | WO-123 MCP / CLI / Access Kit | **Gap.** The Access Kit operation table declares `read` permission; the behavior routes need `agent:manage`. Adding them needs a read-scoped route first. | — | — |
@@ -58,9 +58,8 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 
 ## Open items
 
-1. **Human→agent grant edge.** `HUMAN_DELEGATED_TO_AGENT` is not emitted when a delegation is recorded. It stays pending in GS-A and GS-B.
-2. **Resolver submission.** Agent identity claims and continuity review items are produced but not yet submitted to the identity resolver or the pending-review queue.
-3. **Pipeline wiring.** The Value, Risk360 and Noesis seams are callable and tested, but no provider or pipeline run calls them yet.
-4. **Persistence.** Behavior models, snapshots and DecisionEnvelopes are rebuilt on read from at most 1,000 recent facts per agent. Longer histories need a stored, replayable projection. That decision goes through the projection registry.
-5. **Access Kit.** See WO-123 above.
-6. **Calibration.** Every rate and confidence is uncalibrated. Only Wilson intervals are reported.
+1. **Resolver submission.** Agent identity claims and continuity review items are shown in the Agent 360 identity section but not yet submitted to the identity resolver or the pending-review queue. Submission belongs in an ingestion-time consumer, not a read path.
+2. **Pipeline wiring.** Value, Risk and Trust are composed into the Agent 360 read model. No Value 360 provider or Risk360 pipeline run consumes them yet, and Noesis has no behavior intent.
+3. **Persistence.** Behavior models, snapshots and DecisionEnvelopes are rebuilt on read from at most 1,000 recent facts per agent. Longer histories need a stored, replayable projection. That decision goes through the projection registry.
+4. **Access Kit.** See WO-123 above.
+5. **Calibration.** Every rate and confidence is uncalibrated. Only Wilson intervals are reported.
