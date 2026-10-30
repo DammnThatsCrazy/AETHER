@@ -25,16 +25,16 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:5ee606f18dadd3af039bb09c7383dee842ed67532b82b7319073cd07592ac930"
+  "services/api/actions/": "sha256:eb10f1ecbff0b3417448cd2230e6e401f90609b2c0c7515939b02a6183f2db52"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:2e1630b919066aaadfdba266305d3643f61ea3b43b94d6b53fd7d2a07052f81f"
+  "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:f89fa77d2f74a0f920cf00f4b2cf3448167181ecb9099900b7b4952d6eb02bb6"
   "services/api/ingestion/": "sha256:650191a96737a36132506125778a8bd36bff5ff1a0d1a41d2b8d4be7ffc35ea7"
-  "services/api/intelligence/": "sha256:e4b3c62ff58b10d8bda2e944ab2231d8f12c05ef3ae0445c9e789e343e5192a2"
-  "services/api/journeys/": "sha256:30f74058526f2fad74021de6185c9b4c72e5ce19fa592c11c5475f1e82b08036"
+  "services/api/intelligence/": "sha256:f3ed31b70e08cf7931599c3193c1c01a26b7d94786ba80feb10afbfa35b327c4"
+  "services/api/journeys/": "sha256:ae21ca01f4b29e4543f764b7f58605e3d1cdbd194442d38dfb4f588a008bc1de"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:81ce0c242d904e159690f0308f62430272d879a06fa7c71e28f904da8fb336be"

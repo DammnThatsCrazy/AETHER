@@ -13,8 +13,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/api/intelligence/intelligence/decision_models.py": "sha256:019dc89f216807ca260aa7831ff2a59f64c7b33e061baf72a964992fd847bc93"
-  "services/api/intelligence/intelligence/routes.py": "sha256:e05c58afae3a971c5933d127c6a800a4e5ccd9b31e4bc7f1789617034cc70e07"
+  "services/api/intelligence/intelligence/decision_models.py": "sha256:fa7574a7f99bcebb21ff58d6cd61ffbb761a58b0022b5a247a13387c8c9853d8"
+  "services/api/intelligence/intelligence/routes.py": "sha256:389f7099cb4a4fd12c2803bd7b7495258778cdb4f5ce788294c95f7c37073464"
 ---
 # Playbooks
 
@@ -44,6 +44,9 @@ ROI and run history honest when execution is pending or failed. Journey360 and
 Risk360 can include canonical provider delivery receipts and signature-verified
 callbacks, but tenant-submitted outcome events remain `caller_asserted` and
 neither evidence type establishes an independently verified external effect.
+Their dispatch reads also require the persisted allowed `action.dispatch`
+decision to match the exact dispatch context, including tenant, authenticated
+principal, selected action, target, approval/elevation context, and association.
 
 ## Package ROI and audit exports
 

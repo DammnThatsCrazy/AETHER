@@ -13,8 +13,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/api/intelligence/intelligence/decision_models.py": "sha256:019dc89f216807ca260aa7831ff2a59f64c7b33e061baf72a964992fd847bc93"
-  "services/api/intelligence/intelligence/routes.py": "sha256:e05c58afae3a971c5933d127c6a800a4e5ccd9b31e4bc7f1789617034cc70e07"
+  "services/api/intelligence/intelligence/decision_models.py": "sha256:fa7574a7f99bcebb21ff58d6cd61ffbb761a58b0022b5a247a13387c8c9853d8"
+  "services/api/intelligence/intelligence/routes.py": "sha256:389f7099cb4a4fd12c2803bd7b7495258778cdb4f5ce788294c95f7c37073464"
 ---
 # Integration Actions
 
@@ -49,13 +49,17 @@ verified callback proves an independently verified external effect.
 
 ## Controls
 
-Integration actions require tenant write permission and an approved decision
-before dispatch. Elevated and critical actions still require
-`authorization_metadata.approval_id`. The persisted allowed dispatch decision is
-joined to the dispatch by tenant and action ID in Journey360 and Risk360. Every
-action creates an `ActionFeedback` record, emits the action lifecycle event,
-supports later outcome observation, preserves tenant isolation, and remains
-auditable.
+Integration actions require tenant write permission, tenant `dispatch`
+permission, an authenticated principal, and an approved decision before
+dispatch. Elevated and critical actions still require
+`authorization_metadata.approval_id`. The persisted allowed `action.dispatch`
+decision is matched to the exact dispatch, tenant, principal, action, target,
+selected action, elevation/approval context, and association before Journey360
+or Risk360 treats its dispatch read as complete. This records the application
+permission decision at dispatch time; it does not prove later connector
+execution or an external effect. Every action creates an `ActionFeedback`
+record, emits the action lifecycle event, supports later outcome observation,
+preserves tenant isolation, and remains auditable.
 
 When the action originated from a finding-backed investigation, its optional
 `finding_id` and `investigation_id` links are inherited from the decision and
