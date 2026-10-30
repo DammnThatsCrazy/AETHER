@@ -309,6 +309,10 @@ class AgentToolInvocation(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentResourceRead(BaseModel):
+    resource_uri: str
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────
 
 @router.post("")
@@ -645,6 +649,31 @@ async def invoke_agent_tool(agent_id: str, execution_id: str, tool_name: str,
         workflow_definition_link=execution.get("workflow_definition_link"),
         initiating_principal_user_id=principal,
     )
+    return APIResponse(data=receipt).to_dict()
+
+
+@router.post("/{agent_id}/executions/{execution_id}/resources/read")
+async def read_agent_resource(agent_id: str, execution_id: str, body: AgentResourceRead,
+                              request: Request, engine: DelegationEngine = Depends(_get_engine)):
+    """Authenticated, exact MCP resource read under a dedicated read grant."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    tenant.require_permission("dispatch")
+    principal = getattr(tenant, "user_id", None)
+    if not isinstance(principal, str) or not principal or principal != principal.strip():
+        raise ForbiddenError("Resource read requires an authenticated principal")
+    config, execution = await _configs.find_by_id(agent_id), await _executions.find_by_id(execution_id)
+    if (config is None or config.get("tenant_id") != tenant.tenant_id or execution is None
+        or execution.get("tenant_id") != tenant.tenant_id or execution.get("agent_id") != agent_id):
+        raise NotFoundError("Execution")
+    if execution.get("status") != "running":
+        raise ConflictError("Resource read requires a running execution")
+    from actions.agent.invocation_runtime import read_observed_mcp_resource
+    receipt = await read_observed_mcp_resource(tenant_id=tenant.tenant_id, agent_id=agent_id,
+        execution_id=execution_id, resource_uri=body.resource_uri, config=config, engine=engine,
+        workflow_run_id=execution.get("workflow_run_id"),
+        workflow_definition_link=execution.get("workflow_definition_link"),
+        initiating_principal_user_id=principal)
     return APIResponse(data=receipt).to_dict()
 
 

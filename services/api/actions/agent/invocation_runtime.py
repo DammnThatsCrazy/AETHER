@@ -7,6 +7,7 @@ worker execution callbacks do not import or call this producer.
 from __future__ import annotations
 
 import json
+import hashlib
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -23,7 +24,10 @@ from actions.agent_access_intelligence.authority import (
     CAPABILITY_RESOURCE_PREFIX,
     CapabilityAuthorizationRepository,
     server_ref_for,
+    MCP_RESOURCE_PREFIX,
+    RESOURCE_READ_ACTION,
 )
+from actions.agent_access_intelligence.models import resource_id_for
 from actions.delegation.engine import DelegationEngine
 
 
@@ -102,11 +106,16 @@ async def validated_agent_receipt(
     ):
         return None
     rows = await InvocationReceiptRepository().for_execution(tenant_id, agent_id, execution_id)
+    resource_rows = [row for row in rows if isinstance(row, dict) and row.get("action") == RESOURCE_READ_ACTION]
+    if resource_rows:
+        rows = resource_rows
     if len(rows) != 1:
         return None
     row = rows[0]
     if not isinstance(row, dict):
         return None
+    if row.get("action") == RESOURCE_READ_ACTION:
+        return await _validated_resource_receipt(row, tenant_id, agent_id, execution, execution_id)
     try:
         invoked = datetime.fromisoformat(str(row["invoked_at"]).replace("Z", "+00:00"))
         completed = datetime.fromisoformat(str(row["completed_at"]).replace("Z", "+00:00"))
@@ -215,6 +224,65 @@ async def validated_agent_receipt(
         "providerError": row.get("provider_error"),
         "resourceOperation": "unknown",
     }
+
+
+async def _validated_resource_receipt(row: dict[str, Any], tenant_id: str, agent_id: str,
+                                execution: dict[str, Any], execution_id: str) -> dict[str, Any] | None:
+    try:
+        invoked = parse_instant_strict(row.get("invoked_at"))
+        completed = parse_instant_strict(row.get("completed_at"))
+        started = parse_instant_strict(execution.get("started_at"))
+        ended = parse_instant_strict(execution.get("ended_at"))
+        grant_start = parse_instant_strict(row.get("grant_starts_at"))
+        grant_end = parse_instant_strict(row["grant_ends_at"]) if row.get("grant_ends_at") else None
+        decision_at = parse_instant_strict((row.get("policy_decision") or {}).get("evaluated_at"))
+    except (TypeError, ValueError):
+        return None
+    scope, policy = row.get("grant_scope"), row.get("policy_decision")
+    if (row.get("tenant_id") != tenant_id or row.get("agent_id") != agent_id
+        or row.get("execution_id") != execution_id or row.get("workflow_run_id") != execution.get("workflow_run_id")
+        or row.get("action") != RESOURCE_READ_ACTION or row.get("resource_operation") != "read"
+        or row.get("workflow_definition_link") != execution.get("workflow_definition_link")
+        or row.get("resource_id") != resource_id_for(tenant_id, row.get("provider"), row.get("server_key"), row.get("resource_uri"))
+        or row.get("id") != row.get("receipt_id") or row.get("evidence_version") != 1
+        or not all(_exact_identifier(row.get(k)) for k in ("receipt_id", "resource_id", "provider", "server_key", "grant_id", "initiating_principal_user_id"))
+        or not _exact_identifier(row.get("resource_uri")) or not _public_mcp_url(row.get("provider_url"))
+        or row.get("resource") != f"{MCP_RESOURCE_PREFIX}{row.get('resource_id')}"
+        or row.get("policy_resource") != row.get("resource")
+        or scope != {"actions": [RESOURCE_READ_ACTION], "resources": [row.get("resource")]}
+        or not isinstance(policy, dict) or policy.get("allowed") is not True
+        or policy.get("delegation_id") != row.get("grant_id") or policy.get("matched_scope") != scope
+        or row.get("resource_read_attempted") not in {True, False} or row.get("tool_call_attempted") is not False
+        or row.get("result_status") not in {"succeeded", "failed"}
+        or (row.get("result_status") == "succeeded" and (not isinstance(row.get("provider_result_digest"), str) or len(row["provider_result_digest"]) != 64))
+        or not started <= invoked <= completed <= ended or not grant_start <= decision_at <= invoked
+        or (grant_end is not None and (grant_end.tzinfo is None or invoked >= grant_end))
+        or (row.get("provider_result_complete") is True and hashlib.sha256(
+            json.dumps(row.get("provider_result"), sort_keys=True, separators=(",", ":"), default=str).encode()
+        ).hexdigest() != row.get("provider_result_digest"))
+        or (row.get("result_status") == "succeeded" and (not isinstance(row.get("provider_resource_listing_digest"), str)
+            or len(row["provider_resource_listing_digest"]) != 64))
+        or completed > datetime.now(timezone.utc)):
+        return None
+    from actions.agent_access_intelligence.repositories import CapabilityCatalogRepository
+    canonical = await CapabilityCatalogRepository().find_by_id(row["resource_id"])
+    if (not isinstance(canonical, dict) or canonical.get("tenant_id") != tenant_id
+        or canonical.get("capability_kind") != "resource"
+        or canonical.get("resource_uri") != row.get("resource_uri")
+        or canonical.get("provider") != row.get("provider")
+        or (canonical.get("server_name") or canonical.get("server_url")) != row.get("server_key")
+        or canonical.get("server_url") != row.get("provider_url")):
+        return None
+    state = ("provider_resource_read_succeeded" if row["result_status"] == "succeeded"
+             else "provider_resource_read_failed" if row.get("resource_read_attempted") is True
+             else "provider_resource_read_not_attempted")
+    return {"state": state,
+        "receiptId": row["receipt_id"], "resourceId": row["resource_id"], "resourceUri": row["resource_uri"],
+        "resourceOperation": "read", "action": row["action"], "policyDecision": policy, "grantId": row["grant_id"],
+        "invokedAt": invoked.isoformat(), "completedAt": completed.isoformat(), "resultStatus": row["result_status"],
+        "providerResult": row.get("provider_result"), "providerResultDigest": row.get("provider_result_digest"),
+        "providerResultComplete": row.get("provider_result_complete"), "providerError": row.get("provider_error"),
+        "externalEffect": "unknown"}
 
 
 def _exact_identifier(value: Any) -> bool:
@@ -538,3 +606,145 @@ async def invoke_observed_mcp_tool(
         "action": "invoke",
     }
     return await receipts.record_once(receipt)
+
+
+async def read_observed_mcp_resource(
+    *, tenant_id: str, agent_id: str, execution_id: str, resource_uri: str,
+    config: dict[str, Any], engine: DelegationEngine,
+    initiating_principal_user_id: str, workflow_run_id: str | None = None,
+    workflow_definition_link: dict[str, Any] | None = None,
+    grants: CapabilityAuthorizationRepository | None = None,
+    catalog: CapabilityCatalogRepository | None = None,
+    receipts: InvocationReceiptRepository | None = None,
+) -> dict[str, Any]:
+    """Read one exact observed MCP resource under a dedicated resource-read grant."""
+    if any(not _exact_identifier(value) for value in
+           (tenant_id, agent_id, execution_id, resource_uri, initiating_principal_user_id)):
+        raise ForbiddenError("Exact authenticated resource-read scope is required")
+    if resource_uri not in (config.get("resource_uris") or []):
+        raise ForbiddenError("Resource URI is not enabled by agent policy")
+    catalog, grants, receipts = catalog or CapabilityCatalogRepository(), grants or CapabilityAuthorizationRepository(), receipts or InvocationReceiptRepository()
+    rows = await catalog.list_capabilities(tenant_id, limit=1001)
+    if len(rows) > 1000:
+        raise ForbiddenError("Observed MCP resource inventory is truncated")
+    matches = [row for row in rows if row.get("tenant_id") == tenant_id
+               and row.get("capability_kind") == "resource" and row.get("resource_uri") == resource_uri
+               and row.get("capability_id") == resource_id_for(
+                   tenant_id, row.get("provider"), row.get("server_name") or row.get("server_url"), resource_uri)]
+    if len(matches) != 1:
+        raise ForbiddenError("Exact observed MCP resource is unavailable or ambiguous")
+    target = matches[0]
+    server_key = target.get("server_name") or target.get("server_url")
+    url = target.get("server_url")
+    resource = f"{MCP_RESOURCE_PREFIX}{target['capability_id']}"
+    now = datetime.now(timezone.utc)
+    grant_rows = await grants.find_many(filters={"tenant_id": tenant_id, "grantee_entity_id": agent_id,
+        "authorization_kind": "capability"}, limit=2001)
+    if len(grant_rows) > 2000:
+        raise ForbiddenError("Capability grant evidence is truncated")
+    qualifying = []
+    for grant in grant_rows:
+        scope = grant.get("scope") if isinstance(grant.get("scope"), dict) else {}
+        try:
+            start = parse_instant_strict(grant.get("starts_at"))
+            end = parse_instant_strict(grant["ends_at"]) if grant.get("ends_at") else None
+        except (TypeError, ValueError):
+            continue
+        if (grant.get("tenant_id") == tenant_id and grant.get("grantee_entity_id") == agent_id
+            and grant.get("authorization_kind") == "capability" and grant.get("revoked_at") is None
+            and scope == {"actions": [RESOURCE_READ_ACTION], "resources": [resource]}
+            and start <= now and (end is None or now < end)):
+            qualifying.append(grant)
+    if len(qualifying) != 1:
+        raise ForbiddenError("One exact active resource-read grant is required")
+    grant = qualifying[0]
+    decision = await engine.evaluate(grantee_entity_id=agent_id, action=RESOURCE_READ_ACTION,
+                                     resource=resource, tenant_id=tenant_id)
+    if not decision.allowed or decision.delegation_id != grant.get("delegation_id", grant.get("id")):
+        raise ForbiddenError("Resource-read policy denied or did not match the exact grant")
+    if not _public_mcp_url(url):
+        raise ForbiddenError("Only public HTTPS MCP endpoints are supported")
+    from governance.security.policy_engine import evaluate_destination_safety
+    unsafe, _ = await evaluate_destination_safety(url)
+    if unsafe:
+        raise ForbiddenError("Only public HTTPS MCP endpoints are supported")
+    claim_id = str(uuid.uuid5(uuid.NAMESPACE_URL,
+        f"aether:mcp-resource-read:{tenant_id}:{agent_id}:{execution_id}:{target['capability_id']}"))
+    await InvocationClaimRepository().reserve({"id": claim_id, "tenant_id": tenant_id, "agent_id": agent_id,
+        "execution_id": execution_id, "resource_id": target["capability_id"], "claimed_at": now.isoformat()})
+    started = datetime.now(timezone.utc)
+    payload: dict[str, Any] | None = None
+    status, error = "succeeded", None
+    resource_read_attempted = False
+    try:
+        headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+        init_id = f"{execution_id}:initialize"
+        init = await send_public_request("POST", url, max_redirects=0, json={"jsonrpc":"2.0", "id":init_id,
+            "method":"initialize", "params":{"protocolVersion":"2025-03-26", "capabilities":{},
+            "clientInfo":{"name":"aether-agent-runtime", "version":"1"}}}, headers=headers)
+        if init.status_code < 200 or init.status_code >= 300:
+            raise RuntimeError("provider_initialize_failed")
+        init_body = init.json()
+        if not isinstance(init_body, dict) or init_body.get("id") != init_id or not isinstance((init_body.get("result") or {}).get("protocolVersion"), str):
+            raise RuntimeError("provider_initialize_invalid")
+        headers["MCP-Protocol-Version"] = init_body["result"]["protocolVersion"]
+        session = init.headers.get("mcp-session-id")
+        if session: headers["mcp-session-id"] = session
+        ack = await send_public_request("POST", url, max_redirects=0,
+            json={"jsonrpc":"2.0", "method":"notifications/initialized"}, headers=headers)
+        if ack.status_code < 200 or ack.status_code >= 300: raise RuntimeError("provider_initialize_ack_failed")
+        list_id = f"{execution_id}:resources-list"
+        listing = await send_public_request("POST", url, max_redirects=0,
+            json={"jsonrpc":"2.0", "id":list_id, "method":"resources/list", "params":{}}, headers=headers)
+        if listing.status_code < 200 or listing.status_code >= 300 or len(listing.content) > 1_000_000:
+            raise RuntimeError("provider_resource_list_failed")
+        listing_body = listing.json()
+        listed = (listing_body.get("result") or {}).get("resources") if isinstance(listing_body, dict) else None
+        if (not isinstance(listing_body, dict) or listing_body.get("jsonrpc") != "2.0"
+            or listing_body.get("id") != list_id or listing_body.get("error") is not None
+            or not isinstance(listed, list) or not all(isinstance(item, dict) for item in listed)
+            or sum(item.get("uri") == resource_uri for item in listed) != 1):
+            raise RuntimeError("provider_resource_not_exactly_observed")
+        listing_digest = hashlib.sha256(json.dumps(listed, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+        latest = await grants.find_by_id(grant.get("delegation_id", grant.get("id")))
+        if latest is None or any(latest.get(key) != grant.get(key) for key in
+            ("tenant_id", "grantee_entity_id", "agent_id", "authorization_kind", "scope", "starts_at", "ends_at", "revoked_at")):
+            raise ForbiddenError("Resource-read grant changed before operation")
+        decision = await engine.evaluate(grantee_entity_id=agent_id, action=RESOURCE_READ_ACTION, resource=resource, tenant_id=tenant_id)
+        started = datetime.now(timezone.utc)
+        grant_start = parse_instant_strict(grant.get("starts_at"))
+        grant_end = parse_instant_strict(grant["ends_at"]) if grant.get("ends_at") else None
+        decision_time = parse_instant_strict(decision.evaluated_at)
+        if (not decision.allowed or decision.delegation_id != grant.get("delegation_id", grant.get("id"))
+            or decision.matched_scope != grant.get("scope") or started < grant_start
+            or (grant_end is not None and started >= grant_end)
+            or not grant_start <= decision_time <= started):
+            raise ForbiddenError("Resource-read grant is not effective at operation time")
+        resource_read_attempted = True
+        response = await send_public_request("POST", url, max_redirects=0,
+            json={"jsonrpc":"2.0", "id":execution_id, "method":"resources/read", "params":{"uri":resource_uri}}, headers=headers)
+        if response.status_code < 200 or response.status_code >= 300 or len(response.content) > 1_000_000: raise RuntimeError("provider_resource_read_failed")
+        body = response.json()
+        if not isinstance(body, dict) or body.get("jsonrpc") != "2.0" or body.get("id") != execution_id or body.get("error") is not None or not isinstance(body.get("result"), dict):
+            raise RuntimeError("provider_resource_result_invalid")
+        payload = body["result"]
+    except Exception as exc:
+        status, error = "failed", {"code": str(exc)[:256], "type": type(exc).__name__}
+    ended = datetime.now(timezone.utc)
+    from actions.agent.runtime_repository import sanitize_payload
+    safe = sanitize_payload(payload) if status == "succeeded" else None
+    encoded = json.dumps(safe, sort_keys=True, separators=(",",":"), default=str) if safe is not None else ""
+    digest = __import__("hashlib").sha256(encoded.encode()).hexdigest() if safe is not None else None
+    return await receipts.record_once({"id":claim_id, "receipt_id":claim_id, "tenant_id":tenant_id, "agent_id":agent_id,
+        "execution_id":execution_id, "workflow_run_id":workflow_run_id, "workflow_definition_link":workflow_definition_link,
+        "action":RESOURCE_READ_ACTION, "resource_operation":"read", "resource_uri":resource_uri,
+        "resource_id":target["capability_id"], "resource":resource, "policy_resource":resource,
+        "provider":target.get("provider"), "provider_url":url, "server_key":server_key,
+        "initiating_principal_user_id":initiating_principal_user_id, "policy_decision":decision.to_dict(),
+        "grant_scope":dict(grant["scope"]), "grant_id":grant.get("delegation_id", grant.get("id")),
+        "grant_starts_at":grant["starts_at"], "grant_ends_at":grant.get("ends_at"),
+        "invoked_at":started.isoformat(), "completed_at":ended.isoformat(), "result_status":status,
+        "tool_call_attempted":False, "resource_read_attempted":resource_read_attempted, "provider_result":safe if len(encoded) <= 64000 else None,
+        "provider_result_digest":digest, "provider_result_complete":bool(status == "succeeded" and len(encoded) <= 64000),
+        "provider_resource_listing_digest":listing_digest if status == "succeeded" else None,
+        "provider_error":error, "evidence_version":1})

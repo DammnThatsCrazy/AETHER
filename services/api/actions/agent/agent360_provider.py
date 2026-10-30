@@ -2938,15 +2938,17 @@ class Agent360Provider:
             )
         capability_access_refs: list[EvidenceRef] = []
         for execution_id, receipt in invocation_receipts.items():
+            resource_read = receipt.get("resourceOperation") == "read"
             claims.append(ClaimEnvelope(
                 id=f"agent360.provider_invocation:{receipt['receiptId']}",
-                kind="agent_provider_tool_invocation_result", subject=request.subject,
+                kind=("agent_provider_resource_read_result" if resource_read else "agent_provider_tool_invocation_result"), subject=request.subject,
                 evidenceRefs=[
                     EvidenceRef(id=receipt["receiptId"], type="event", source="agent_invocation_receipts",
                                 observedAt=receipt["completedAt"]),
                     EvidenceRef(id=execution_id, type="event", source="agent_executions"),
                 ],
-                claims=["A server-owned MCP completion receipt binds this Agent execution to its exact tool, invoke grant and invocation-time policy decision. Resource operations, standing authorization and external effects remain unknown."],
+                claims=[("A server-owned MCP resources/read completion receipt binds this Agent execution to its exact observed resource URI, dedicated resource-read grant and invocation-time policy decision. Mutation and external effects remain unknown."
+                         if resource_read else "A server-owned MCP completion receipt binds this Agent execution to its exact tool, invoke grant and invocation-time policy decision. Resource operations, standing authorization and external effects remain unknown.")],
                 claimState=EpistemicStatus.OBSERVED, domainSlotIds=["capabilities", "evidence_trace"],
             ))
         for raw_ref in capability_access_profile_view.get("evidenceRefs", []):

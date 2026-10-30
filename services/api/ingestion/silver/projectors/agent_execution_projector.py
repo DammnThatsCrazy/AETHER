@@ -245,6 +245,7 @@ class AgentExecutionProjector(BaseProjector):
             # Observed MCP / tool / risk / object context (drives bounded graph
             # emission in SilverGraphProjector._emit_agent_execution).
             "tool_name": _source_reference(p.get("toolName") or p.get("tool_name")),
+            "resource_uri": p.get("resourceUri") or p.get("resource_uri"),
             "server_name": p.get("serverName"),
             "server_url": p.get("serverUrl"),
             "protocol_version": p.get("protocolVersion"),

@@ -2644,11 +2644,13 @@ async def _workflow_actions_section(
             "executionEvidenceRef": execution_ref.model_dump(mode="json", by_alias=True, exclude_none=True)
                 if execution_ref else None,
             "evidenceRef": receipt_ref.model_dump(mode="json", by_alias=True, exclude_none=True)})
+        is_resource_read = receipt.get("resourceOperation") == "read"
         claims.append(ClaimEnvelope(
             id=f"workflow360.provider_invocation.{quote(receipt['receiptId'], safe='')}",
-            kind="workflow_linked_provider_tool_result", subject=subject,
+            kind=("workflow_linked_provider_resource_read" if is_resource_read else "workflow_linked_provider_tool_result"), subject=subject,
             evidenceRefs=[ref for ref in [execution_ref, receipt_ref] if ref is not None],
-            claims=["The exact tenant, agent, execution, workflow run, policy decision and active capability grant are joined to a server-owned MCP provider completion receipt; the receipt proves the provider tool result only, not a resource operation or external effect."],
+            claims=[("The exact tenant, agent, execution, workflow run, observed resource URI, dedicated resource-read grant and policy decision are joined to a server-owned MCP resources/read completion receipt. It proves the returned resource content only; mutation and external effects remain unknown."
+                     if is_resource_read else "The exact tenant, agent, execution, workflow run, policy decision and active capability grant are joined to a server-owned MCP provider completion receipt; the receipt proves the provider tool result only, not a resource operation or external effect.")],
             claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
         ))
     if provider_invocation_views:

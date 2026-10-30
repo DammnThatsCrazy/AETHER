@@ -119,6 +119,7 @@ IDENTITY_FIELDS: tuple[str, ...] = (
     "provider",
     "server",
     "tool_name",
+    "resource_uri",
     "protocol_version",
     "capability_kind",
 )

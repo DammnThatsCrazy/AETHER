@@ -17,6 +17,7 @@ from actions.agent.invocation_runtime import (  # noqa: E402
 )
 from actions.agent_access_intelligence.authority import CapabilityAuthorizationRepository  # noqa: E402
 from actions.agent_access_intelligence.models import capability_id_for  # noqa: E402
+from actions.agent_access_intelligence.models import resource_id_for  # noqa: E402
 from actions.agent_access_intelligence.repositories import CapabilityCatalogRepository  # noqa: E402
 from actions.delegation.engine import DelegationEngine  # noqa: E402
 from repositories.repos import DelegationRepository, reset_in_memory_stores  # noqa: E402
@@ -539,3 +540,89 @@ async def test_invocation_ingress_requires_dispatch_write_and_principal(permissi
         await invoke_agent_tool(
             "agent-a", "exec-a", "lookup", AgentToolInvocation(arguments={}), request, engine=None
         )
+
+
+@pytest.mark.asyncio
+async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_receipt(monkeypatch):
+    from actions.agent.invocation_runtime import read_observed_mcp_resource
+    from actions.agent_access_intelligence.authority import RESOURCE_READ_ACTION, MCP_RESOURCE_PREFIX
+    from actions.agent_access_intelligence.models import CapabilityKind
+
+    tenant, agent, execution = "tenant-a", "agent-a", "exec-resource"
+    uri, server, provider, url = "https://data.example/items/42", "srv.example", "provider", "https://tools.example/mcp"
+    rid = resource_id_for(tenant, provider, server, uri)
+    catalog = CapabilityCatalogRepository()
+    await catalog.insert(rid, {"capability_id": rid, "tenant_id": tenant, "provider": provider,
+        "server_name": server, "server_url": url, "capability_kind": CapabilityKind.RESOURCE.value,
+        "resource_uri": uri})
+    grants = CapabilityAuthorizationRepository()
+    await grants.grant_capability(authorization_id="invoke-only", tenant_id=tenant,
+        granted_by_entity_id="owner", agent_id=agent, capability_id="cap_fake",
+        scope={"actions": ["invoke"], "resources": ["capability:cap_fake"]})
+    engine = DelegationEngine(DelegationRepository())
+    with pytest.raises(ForbiddenError, match="resource-read grant"):
+        await read_observed_mcp_resource(tenant_id=tenant, agent_id=agent, execution_id=execution,
+            resource_uri=uri, config={"resource_uris": [uri]}, engine=engine,
+            initiating_principal_user_id="owner", grants=grants, catalog=catalog)
+    other_id = resource_id_for(tenant, provider, server, "https://data.example/items/other")
+    await grants.grant_capability(authorization_id="wrong-resource", tenant_id=tenant,
+        granted_by_entity_id="owner", agent_id=agent, capability_id=other_id,
+        scope={"actions": [RESOURCE_READ_ACTION], "resources": [f"{MCP_RESOURCE_PREFIX}{other_id}"]})
+    with pytest.raises(ForbiddenError, match="resource-read grant"):
+        await read_observed_mcp_resource(tenant_id=tenant, agent_id=agent, execution_id=execution,
+            resource_uri=uri, config={"resource_uris": [uri]}, engine=engine,
+            initiating_principal_user_id="owner", grants=grants, catalog=catalog)
+
+    grant = await grants.grant_capability(authorization_id="read-only", tenant_id=tenant,
+        granted_by_entity_id="owner", agent_id=agent, capability_id=rid,
+        scope={"actions": [RESOURCE_READ_ACTION], "resources": [f"{MCP_RESOURCE_PREFIX}{rid}"]})
+    # Keep the grant's scope exact and make the runtime DNS safety policy deterministic.
+    async def safe(_url): return False, "public"
+    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe)
+    calls = []
+    class Response:
+        status_code = 200
+        content = b"{}"
+        headers = {}
+        def __init__(self, body): self.body = body
+        def json(self): return self.body
+    async def request(method, request_url, *, json, headers, max_redirects):
+        calls.append(json)
+        assert method == "POST" and request_url == url and max_redirects == 0
+        if json["method"] == "initialize":
+            return Response({"jsonrpc":"2.0", "id":json["id"], "result":{"protocolVersion":"2025-03-26"}})
+        if json["method"] == "notifications/initialized": return Response({})
+        if json["method"] == "resources/list":
+            return Response({"jsonrpc":"2.0", "id":json["id"], "result":{"resources":[{"uri":uri,"name":"item"}]}})
+        assert json["method"] == "resources/read" and json["params"] == {"uri":uri}
+        return Response({"jsonrpc":"2.0", "id":execution, "result":{"contents":[{"uri":uri,"text":"value"}]}})
+    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", request)
+    execution_record = {"tenant_id":tenant, "agent_id":agent, "execution_id":execution,
+        "workflow_run_id":"run-resource", "started_at":(datetime.now(timezone.utc) - __import__("datetime").timedelta(seconds=2)).isoformat(),
+        "ended_at":(datetime.now(timezone.utc)).isoformat()}
+    receipt = await read_observed_mcp_resource(tenant_id=tenant, agent_id=agent, execution_id=execution,
+        resource_uri=uri, config={"resource_uris":[uri]}, engine=engine, initiating_principal_user_id="owner",
+        workflow_run_id="run-resource", grants=grants, catalog=catalog)
+    assert receipt["action"] == RESOURCE_READ_ACTION and receipt["resource_operation"] == "read"
+    validated = await validated_agent_receipt(tenant_id=tenant, agent_id=agent,
+        execution={**execution_record, "ended_at":(datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=1)).isoformat()},
+        expected_workflow_run_id="run-resource")
+    assert validated["resourceOperation"] == "read"
+    assert validated["providerResultDigest"] and len(calls) == 4
+    assert grant["scope"]["actions"] == [RESOURCE_READ_ACTION]
+
+
+@pytest.mark.asyncio
+async def test_catalog_materializes_exact_observed_mcp_resource_uri():
+    from actions.agent_access_intelligence.catalog_service import CapabilityCatalogService
+
+    uri, server, tenant = "https://data.example/items/9", "catalog-server", "tenant-a"
+    service = CapabilityCatalogService()
+    result = await service.record_from_fact({"tenant_id": tenant, "source_event_id": "resource-observation-1",
+        "event_name": "agent_mcp_resource_observed", "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "provider": "provider", "server_name": server, "server_url": "https://mcp.example/mcp",
+        "resource_uri": uri, "agent_id": "agent-a"})
+    row = await service.get_capability(tenant, result["capability_id"])
+    assert row["capability_kind"] == "resource"
+    assert row["resource_uri"] == uri
+    assert row["capability_id"] == resource_id_for(tenant, "provider", server, uri)
