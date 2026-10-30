@@ -2071,6 +2071,55 @@ async def test_agent360_keeps_capability_coverage_partial_without_exact_canonica
 
 
 @pytest.mark.asyncio
+async def test_agent360_resource_read_grant_does_not_poison_invoke_completeness():
+    invoke_grant = {
+        "tenant_id": "tenant-a",
+        "agent_id": "canonical-agent-a",
+        "grantee_entity_id": "canonical-agent-a",
+        "authorization_id": "invoke-grant",
+        "authorization_kind": "capability",
+        "capability_id": "capability-search",
+        "scope": {
+            "actions": ["invoke"],
+            "resources": ["capability:capability-search"],
+        },
+        "state": "active",
+        "starts_at": "2026-10-01T00:00:00Z",
+        "created_at": "2026-10-01T00:00:00Z",
+    }
+    resource_grant = {
+        "tenant_id": "tenant-a",
+        "agent_id": "canonical-agent-a",
+        "grantee_entity_id": "canonical-agent-a",
+        "authorization_id": "resource-read-grant",
+        "authorization_kind": "capability",
+        "capability_id": "resource-item-1",
+        "scope": {
+            "actions": ["read_resource"],
+            "resources": ["mcp-resource:resource-item-1"],
+        },
+        "state": "active",
+        "starts_at": "2026-10-01T00:00:00Z",
+        "created_at": "2026-10-01T00:00:00Z",
+    }
+    result = await Agent360Provider(
+        FakeSource(capability_grants=[invoke_grant, resource_grant])
+    ).project(_request(), _context())
+    access_profile = next(
+        item
+        for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]["capabilityAccessProfile"]
+
+    assert access_profile["state"] == "available"
+    assert access_profile["authorization"]["known"] is True
+    assert access_profile["capabilities"][0]["invokeGrantCoversCapability"] is True
+    assert [
+        scope["grantRecordId"] for scope in access_profile["capabilities"][0]["invokeGrantScopes"]
+    ] == ["invoke-grant"]
+
+
+@pytest.mark.asyncio
 async def test_agent360_evidence_trace_requires_refs_and_obeys_frame_policy():
     result = await Agent360Provider(FakeSource()).project(_request(), _context())
     evidence_section = _sections(result)["evidence"]

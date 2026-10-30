@@ -3551,7 +3551,11 @@ class Agent360Provider:
         canonical_agent_entity_id: Any,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Validate canonical grant rows and their invoke scope before projection."""
-        from actions.agent_access_intelligence.authority import AUTHORIZATION_KIND
+        from actions.agent_access_intelligence.authority import (
+            AUTHORIZATION_KIND,
+            MCP_RESOURCE_PREFIX,
+            RESOURCE_READ_ACTION,
+        )
 
         if (
             not isinstance(records, list)
@@ -3577,6 +3581,28 @@ class Agent360Provider:
                 or (isinstance(value, str) and try_parse_instant(value)[0] is not None)
                 for value in (row.get("starts_at"), row.get("ends_at"), row.get("revoked_at"))
             )
+            # Resource-read grants share the canonical capability authorization
+            # repository, but they do not contribute to invoke-grant coverage.
+            # Validate their identity and scope, then leave them out of this view.
+            if (
+                isinstance(record_id, str)
+                and record_id
+                and record_id == record_id.strip()
+                and record_id not in seen_ids
+                and row.get("tenant_id") == tenant_id
+                and row.get("agent_id") == canonical_agent_entity_id
+                and row.get("grantee_entity_id") == canonical_agent_entity_id
+                and row.get("authorization_kind") == AUTHORIZATION_KIND
+                and isinstance(capability_id, str)
+                and bool(capability_id)
+                and not server_ref
+                and actions == [RESOURCE_READ_ACTION]
+                and resources == [f"{MCP_RESOURCE_PREFIX}{capability_id}"]
+                and boundaries_valid
+                and row.get("state") in {"active", "pending", "revoked", "expired"}
+            ):
+                seen_ids.add(record_id)
+                continue
             expected_resource = (
                 f"capability:{capability_id}"
                 if isinstance(capability_id, str) and capability_id

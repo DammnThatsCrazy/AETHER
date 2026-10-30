@@ -63,6 +63,38 @@ class InvocationClaimRepository(BaseRepository):
         return await _insert_once(self, claim, "agent_invocation_claims")
 
 
+def _matching_mcp_response(response: Any, expected_id: str) -> dict[str, Any]:
+    """Decode a JSON or Streamable HTTP SSE response, selecting the exact RPC id."""
+    content_type = str((getattr(response, "headers", {}) or {}).get("content-type", ""))
+    if "text/event-stream" not in content_type.lower():
+        payload = response.json()
+        candidates = [payload]
+    else:
+        raw = getattr(response, "content", b"")
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        if not isinstance(raw, str):
+            raise RuntimeError("provider_response_invalid")
+        candidates = []
+        data_lines: list[str] = []
+        for line in raw.splitlines() + [""]:
+            if line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+            elif not line and data_lines:
+                try:
+                    candidates.append(json.loads("\n".join(data_lines)))
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                data_lines = []
+    matches = [
+        item for item in candidates
+        if isinstance(item, dict) and item.get("jsonrpc") == "2.0" and item.get("id") == expected_id
+    ]
+    if len(matches) != 1:
+        raise RuntimeError("provider_response_invalid")
+    return matches[0]
+
+
 async def _insert_once(
     repository: BaseRepository, data: dict[str, Any], table: str
 ) -> dict[str, Any]:
@@ -483,7 +515,7 @@ async def invoke_observed_mcp_tool(
         )
         if init.status_code < 200 or init.status_code >= 300:
             raise RuntimeError(f"provider_initialize_http_{init.status_code}")
-        init_payload = init.json()
+        init_payload = _matching_mcp_response(init, f"{execution_id}:initialize")
         if (
             not isinstance(init_payload, dict)
             or init_payload.get("id") != f"{execution_id}:initialize"
@@ -554,7 +586,7 @@ async def invoke_observed_mcp_tool(
             raise RuntimeError(f"provider_http_{response.status_code}")
         if len(response.content) > 1_000_000:
             raise RuntimeError("provider_response_too_large")
-        payload = response.json()
+        payload = _matching_mcp_response(response, execution_id)
         if (
             not isinstance(payload, dict)
             or payload.get("jsonrpc") != "2.0"

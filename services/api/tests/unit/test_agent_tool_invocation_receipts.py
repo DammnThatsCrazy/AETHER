@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -99,6 +100,16 @@ class _Response:
         return self.payload
 
 
+class _SseResponse(_Response):
+    def __init__(self, payloads):
+        self.payload = None
+        self.headers = {"content-type": "text/event-stream"}
+        self.content = "".join(
+            f"event: message\ndata: {json.dumps(payload)}\n\n"
+            for payload in payloads
+        ).encode()
+
+
 class _Client:
     payload = None
     calls = 0
@@ -142,7 +153,9 @@ async def test_real_provider_completion_receipt_joins_workflow_reader(monkeypatc
         _grant,
         run,
     ) = await _fixture()
-    _Client.payload = {"jsonrpc": "2.0", "id": execution, "result": {"content": [{"text": "real"}]}}
+    _Client.payload = {
+        "jsonrpc": "2.0", "id": execution, "result": {"content": [{"text": "real"}]}
+    }
     _Client.calls = 0
     monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", _Client.post)
 
@@ -186,6 +199,67 @@ async def test_real_provider_completion_receipt_joins_workflow_reader(monkeypatc
             catalog=catalog,
         )
     assert _Client.calls == 3  # initialize, initialized notification, one actual tool call
+
+
+@pytest.mark.asyncio
+async def test_sse_responses_select_the_matching_jsonrpc_message(monkeypatch):
+    fixture = await _fixture()
+    tenant, agent, execution, tool, _cap, catalog, grants, engine, config, _grant, run = fixture
+    _Client.payload = {"jsonrpc": "2.0", "id": execution, "result": {"content": [{"text": "real"}]}}
+
+    async def transport(method, url, **kwargs):
+        response = await _Client.post(method, url, **kwargs)
+        payload = response.payload
+        if kwargs["json"]["method"] == "notifications/initialized":
+            return response
+        # An unrelated message in the same event stream must not shadow the exact
+        # response, while the matching message remains usable.
+        return _SseResponse([{"jsonrpc": "2.0", "id": "unrelated", "result": {}}, payload])
+
+    async def safe_url(_url):
+        return False, "safe"
+
+    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", transport)
+    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
+    row = await invoke_observed_mcp_tool(
+        tenant_id=tenant, agent_id=agent, execution_id=execution,
+        initiating_principal_user_id="owner", tool_name=tool, arguments={},
+        config=config, engine=engine, workflow_run_id="run-a",
+        workflow_definition_link=run["workflow_definition_link"], grants=grants, catalog=catalog,
+    )
+    assert row["result_status"] == "succeeded"
+    assert row["provider_result"] == {"content": [{"text": "real"}]}
+
+
+@pytest.mark.asyncio
+async def test_sse_response_with_only_a_foreign_jsonrpc_id_fails_closed(monkeypatch):
+    fixture = await _fixture()
+    tenant, agent, execution, tool, _cap, catalog, grants, engine, config, _grant, run = fixture
+
+    async def transport(method, url, **kwargs):
+        if kwargs["json"]["method"] == "initialize":
+            return _SseResponse([
+                {
+                    "jsonrpc": "2.0",
+                    "id": "foreign",
+                    "result": {"protocolVersion": "2025-03-26"},
+                }
+            ])
+        return await _Client.post(method, url, **kwargs)
+
+    async def safe_url(_url):
+        return False, "safe"
+
+    monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", transport)
+    monkeypatch.setattr("governance.security.policy_engine.evaluate_destination_safety", safe_url)
+    row = await invoke_observed_mcp_tool(
+        tenant_id=tenant, agent_id=agent, execution_id=execution,
+        initiating_principal_user_id="owner", tool_name=tool, arguments={},
+        config=config, engine=engine, workflow_run_id="run-a",
+        workflow_definition_link=run["workflow_definition_link"], grants=grants, catalog=catalog,
+    )
+    assert row["result_status"] == "failed"
+    assert row["tool_call_attempted"] is False
 
 
 @pytest.mark.asyncio
