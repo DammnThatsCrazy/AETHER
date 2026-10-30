@@ -31,7 +31,7 @@ reviewed_source_commits:
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
+  "services/api/actions/agent/user_agents.py": "sha256:dbe0d9bb0bc7fd83bc64fe628cc5c271d33024f22b8839c0cfd9fc0a5b47532a"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -39,7 +39,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
   "services/api/alembic/versions/20261024_risk_intervention_records.py": "sha256:f3fadd1672c15560cab018906246e307438035404f4fcbcb84c976cae9bdc3b7"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:2b44f2b4b87374a0afbc51d5743172c1a158e34454be2077807ffdbbca0494f9"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:37cea2bbcd7d9c38669f23a95af1fc5ecddbb6b8c59f7afcb4eb459f11587d18"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
@@ -225,6 +225,10 @@ and mark coverage incomplete. If a bounded or scope-incomplete read still has
 valid edges, the projection reports degraded partial coverage; with no
 admissible edges it reports unknown. This read records tool-call edges only;
 it does not establish action authority, tool completion, or external effect.
+The approved-resource subread separately reports availability, completeness,
+and truncation; reads over its row limit expose no resource rows. An explicit
+`executionReceipt` remains unknown because no server-owned receipt is written
+at the actual tool or resource invocation boundary.
 
 ### Analytics event store
 

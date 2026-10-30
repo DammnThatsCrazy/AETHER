@@ -18,7 +18,7 @@ source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:51c87d82aa0fe872058d47410ef6fcea9d78b4ab176b69d36128495153d77be8"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:6c5766d515e66dc35b02ed55a177f94ce5d93442116c48644a15e4e4fff66e8e"
+  "services/api/actions/agent/": "sha256:7e9c4692b2ec70d8ad22b5dda6f2beaf226a76c081157132426793d32fb4a9be"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -38,7 +38,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/": "sha256:fbc31678aeaf5a4817cb48787708c394a1ab96a05e3554af88ac291273d57b47"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:2b44f2b4b87374a0afbc51d5743172c1a158e34454be2077807ffdbbca0494f9"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:37cea2bbcd7d9c38669f23a95af1fc5ecddbb6b8c59f7afcb4eb459f11587d18"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
   "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
@@ -286,8 +286,14 @@ Invalid rows are omitted and make the read incomplete; bounded or
 scope-incomplete reads may expose admissible observed rows as degraded partial
 coverage, while no admissible rows leaves the section unknown. Agent360 also
 rejects malformed or padded capability-grant and policy-decision identifiers.
-Its action-specific and resource-operation authority remains explicitly
-unknown because no canonical producer is joined.
+Allowed Agent360 invoke evaluations now bind to the referenced grant only when
+their recorded time falls within its start and end/revocation interval; valid
+rows for other agents do not make this agent's scoped history incomplete.
+Action-specific and resource-operation authority remains explicitly unknown
+because no invocation or operation receipt producer is joined. Workflow360
+reports approved-resource read availability, completeness, and truncation, but
+its execution receipt remains unknown without a server-owned invocation-bound
+producer.
 Workflow definition-to-run linkage, complete actor and step coverage,
 workflow-wide approval authority, policy, and freshness remain unknown.
 Workflow360 `triggers` now

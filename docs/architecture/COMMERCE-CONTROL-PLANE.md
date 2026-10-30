@@ -19,7 +19,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
+  "services/api/actions/agent/user_agents.py": "sha256:dbe0d9bb0bc7fd83bc64fe628cc5c271d33024f22b8839c0cfd9fc0a5b47532a"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/value/x402/approvals.py": "sha256:a91ab84affb2e46db240f218f428dd342539327abc1ce3e896cbc2a7ca523fd3"
@@ -75,7 +75,9 @@ uses the tenant-scoped JSONB table created by
 The agent execution endpoint revalidates the exact current decision and copies
 its approval and decision IDs onto the server-owned execution record. This is
 an x402 approval join for supported runs, not a general agent authority system
-or evidence that the external action completed.
+or evidence that the external action completed. The execution endpoint performs
+admission and bookkeeping only; it does not invoke a tool or resource operation
+and does not produce an invocation receipt.
 
 ## 3. Day-1 GA scope
 

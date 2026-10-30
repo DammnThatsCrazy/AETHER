@@ -19,7 +19,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
-  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
+  "services/api/actions/agent/user_agents.py": "sha256:dbe0d9bb0bc7fd83bc64fe628cc5c271d33024f22b8839c0cfd9fc0a5b47532a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -167,7 +167,9 @@ records the authenticated initiating principal separately from the target
 agent and stores the server-recorded delegation decision, evaluated tenant,
 and constraints. A
 rejected attempt is still an execution-denial record; this local policy record
-does not assert that an external tool or business action occurred.
+does not assert that an external tool or business action occurred. The route
+performs admission and bookkeeping only; it does not invoke a tool or resource
+operation, and its row or later worker callback is not an invocation receipt.
 
 The row can retain exact workflow-run, invocation, and approval references.
 It can also retain a caller-reported workflow definition ID, revision, and
