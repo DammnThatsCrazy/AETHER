@@ -14,6 +14,7 @@ from actions.delivery.adapters.base import AdapterReceipt, ProviderAdapter, Prov
 from actions.delivery.models import DeliveryChannel, DeliveryIntent, DeliveryJob
 from actions.delivery.outcome_processor import WebhookInboxProcessor
 from actions.delivery.worker import DeliveryWorker
+from actions.delivery.adapters.jira import JiraAdapter
 from repositories.delivery_repos import (
     DeliveryAttemptRepository, DeliveryIntentRepository, DeliveryJobRepository,
     ExternalOutcomeEventRepository, ExternalResourceLinkRepository, ProviderReceiptRepository,
@@ -84,3 +85,24 @@ async def test_delivery_worker_and_verified_processor_are_visible_to_360_reader(
     evidence, complete = await read_action_delivery_evidence(tenant_id=tenant_id, dispatch=dispatch)
     assert complete and len(evidence["verifiedCallbacks"]) == 1
     assert evidence["verifiedCallbacks"][0]["signatureAuthority"] == "external_provider_signature"
+
+
+@pytest.mark.asyncio
+async def test_jira_readback_requires_credential_and_exact_canonical_resource(monkeypatch):
+    from types import SimpleNamespace
+    import actions.delivery.adapters.jira as jira_module
+    calls = []
+    async def request(method, url, *, headers, timeout):
+        calls.append((method, url, headers))
+        return SimpleNamespace(status_code=200, json=lambda: {
+            "key": "OPS-360", "fields": {"summary": "Approved action", "project": {"key": "OPS"}}
+        })
+    monkeypatch.setattr(jira_module, "send_public_request", request)
+    adapter = JiraAdapter()
+    config = {"base_url": SITE, "project_key": "OPS"}
+    payload = {"title": "Approved action"}
+    assert await adapter.verify_readback("OPS-360", payload, config, "Bearer scoped-token")
+    assert calls[0][0] == "GET" and calls[0][1].endswith("/issue/OPS-360")
+    assert calls[0][2]["Authorization"] == "Bearer scoped-token"
+    assert not await adapter.verify_readback("OPS-360", payload, config, None)
+    assert not await adapter.verify_readback("OPS-360", {"title": "different"}, config, "Bearer scoped-token")

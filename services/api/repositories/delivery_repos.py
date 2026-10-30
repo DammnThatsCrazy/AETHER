@@ -255,6 +255,14 @@ class ExternalResourceLinkRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("external_resource_links")
 
+
+class ProviderExecutionVerificationRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("provider_execution_verifications")
+
+    async def find_for_receipt(self, tenant_id: str, receipt_id: str) -> list[dict[str, Any]]:
+        return await self.find_many(filters={"tenant_id": tenant_id, "receipt_id": receipt_id}, limit=3)
+
     async def find_for_intent(self, intent_id: str) -> list[dict[str, Any]]:
         return await self.find_many(filters={"intent_id": intent_id}, limit=50)
 

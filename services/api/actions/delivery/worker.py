@@ -167,7 +167,7 @@ class DeliveryWorker:
         # don't re-trigger _on_failure and cause duplicate deliveries on retry)
         duration_ms = _now_ms() - start_ms
         try:
-            await self._on_success(job, receipt_raw, attempt_number, duration_ms)
+            await self._on_success(job, receipt_raw, attempt_number, duration_ms, adapter)
         except Exception as exc:
             logger.error(
                 f"Persistence error after successful provider call job={job_id!r}: {exc}",
@@ -176,7 +176,7 @@ class DeliveryWorker:
 
     async def _on_success(
         self, job: dict[str, Any], receipt_raw: Any,
-        attempt_number: int, duration_ms: int,
+        attempt_number: int, duration_ms: int, adapter: Any = None,
     ) -> None:
         from actions.delivery.models import (
             DeliveryAttemptOutcome, DeliveryJobState,
@@ -275,6 +275,10 @@ class DeliveryWorker:
             aether_object_id=source_id,
         )
         await self._resource_link_repo.insert(link.id, link.model_dump())
+
+        # Independent verification is emitted only by an adapter read-back over
+        # the same vault-resolved credential. Receipts and callbacks never feed it.
+        await self._verify_action_resource(job, intent_data or {}, receipt, adapter, credential=None)
 
         # Transition source suggestion to DELIVERED only after confirmed provider receipt
         if source_type == "suggestion" and source_id:
@@ -402,6 +406,49 @@ class DeliveryWorker:
 
     async def _resolve_credential(self, job: dict[str, Any]) -> Optional[str]:
         return await resolve_job_credential(job)
+
+    async def _verify_action_resource(self, job: dict[str, Any], intent: dict[str, Any],
+                                      receipt: Any, adapter: Any,
+                                      credential: Optional[str]) -> None:
+        if intent.get("source_type") != "action" or not callable(getattr(adapter, "verify_readback", None)):
+            return
+        try:
+            # Resolve again at verification time; no credential is persisted.
+            credential = credential or await self._resolve_credential(job)
+            if not credential:
+                return
+            from intelligence.intelligence.repositories import ActionDispatchRepository
+            from actions.agent.dispatch_authority import read_dispatch_authorization
+            from actions.delivery.models import ProviderExecutionVerification
+            from repositories.delivery_repos import ProviderExecutionVerificationRepository
+            dispatch_id = intent.get("source_id")
+            dispatch = await ActionDispatchRepository().find_by_id(dispatch_id)
+            if not isinstance(dispatch, dict) or dispatch.get("tenant_id") != job.get("tenant_id"):
+                return
+            authorization = await read_dispatch_authorization(
+                tenant_id=job["tenant_id"], action_id=dispatch.get("action_id", ""), dispatch=dispatch)
+            association = dispatch.get("journey_action_association") or dispatch.get("risk_action_association")
+            if not authorization or not isinstance(association, dict):
+                return
+            verified = await adapter.verify_readback(
+                receipt.external_id, job.get("payload") or {},
+                job.get("provider_config") or {}, credential)
+            if not verified:
+                return
+            record = ProviderExecutionVerification(
+                tenant_id=job["tenant_id"], dispatch_id=dispatch_id,
+                intent_id=job["intent_id"], job_id=job["id"], receipt_id=receipt.id,
+                provider=job.get("provider_adapter", ""), external_id=receipt.external_id,
+                verification_kind="credential_bound_provider_resource_readback",
+                verified=True, policy_decision_id=authorization["decision_id"],
+                policy_evaluated_at=authorization["evaluated_at"],
+                subject_kind=association.get("subject_kind", "journey" if "journey" in dispatch else "entity"),
+                subject_id=association.get("subject_id", ""),
+                association_record_id=association.get("record_id", ""),
+                provider_resource_identity=f"{job.get('provider_adapter')}:{receipt.external_id}")
+            await ProviderExecutionVerificationRepository().insert(record.id, record.model_dump())
+        except Exception as exc:
+            logger.warning("independent provider read-back unavailable job=%s: %s", job.get("id"), exc)
 
     async def _advance_suggestion_delivered(
         self, suggestion_id: str, receipt_id: str, tenant_id: str,

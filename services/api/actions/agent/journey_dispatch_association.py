@@ -90,10 +90,11 @@ async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id
                  "uri": dispatch_authorization["uri"]},
                 *(delivery["evidenceRef"] for delivery in evidence["connectorReportedDeliveries"]),
                 *(callback["evidenceRef"] for callback in evidence["verifiedCallbacks"]),
+                *evidence.get("independentExecutionVerifications", []),
             ]
             seen.add(dispatch_id)
             output.append({"dispatchId": dispatch_id, "status": row["status"], "createdAt": created.isoformat(),
-                           "externalEffect": "not_independently_verified", "evidenceRefs": [
+                           "externalEffect": ("provider_resource_readback_verified" if evidence.get("independentExecutionVerifications") else "not_independently_verified"), "evidenceRefs": [
                                *evidence_refs],
                            "dispatchAuthorization": dispatch_authorization,
                            **evidence})

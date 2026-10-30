@@ -26,6 +26,7 @@ async def read_action_delivery_evidence(
     from repositories.delivery_repos import (
         DeliveryIntentRepository, DeliveryJobRepository, ProviderReceiptRepository,
         ExternalResourceLinkRepository, ExternalOutcomeEventRepository,
+        ProviderExecutionVerificationRepository,
     )
 
     intents = intents or DeliveryIntentRepository()
@@ -33,11 +34,13 @@ async def read_action_delivery_evidence(
     receipts = receipts or ProviderReceiptRepository()
     links = links or ExternalResourceLinkRepository()
     outcomes = outcomes or ExternalOutcomeEventRepository()
+    verifications = ProviderExecutionVerificationRepository()
     empty = {
         "connectorReceiptRead": "unknown",
         "connectorReceiptReason": "action_delivery_evidence_missing",
         "connectorReportedDeliveries": [],
         "verifiedCallbacks": [],
+        "independentExecutionVerifications": [],
     }
     try:
         dispatch_id = dispatch.get("dispatch_id")
@@ -121,10 +124,60 @@ async def read_action_delivery_evidence(
             deliveries.append({
                 "intentId": intent_id, "jobId": job_id, "receiptId": receipt_id,
                 "provider": provider, "externalId": external_id, "deliveredAt": delivered.isoformat(),
+                "independentExecutionVerifications": [],
                 "evidenceRef": {"id": receipt_id, "type": "event", "source": "provider_receipts",
                                 "observedAt": delivered.isoformat(),
                                 "uri": f"store://provider_receipts/{quote(receipt_id, safe='')}"},
             })
+            verification_rows = await verifications.find_for_receipt(tenant_id, receipt_id)
+            if not isinstance(verification_rows, list) or len(verification_rows) > 1:
+                return empty, False
+            if verification_rows:
+                verification = verification_rows[0]
+                association = dispatch.get("journey_action_association") or dispatch.get("risk_action_association")
+                if (not isinstance(verification, dict) or not isinstance(association, dict)
+                        or not isinstance(verification.get("id"), str) or not verification.get("id", "").strip()
+                        or verification.get("verified") is not True
+                        or verification.get("verification_kind") != "credential_bound_provider_resource_readback"
+                        or verification.get("provider") != provider or provider != "jira"
+                        or verification.get("tenant_id") != tenant_id
+                        or verification.get("dispatch_id") != dispatch_id
+                        or verification.get("intent_id") != intent_id or verification.get("job_id") != job_id
+                        or verification.get("receipt_id") != receipt_id
+                        or verification.get("external_id") != external_id
+                        or verification.get("association_record_id") != association.get("record_id")
+                        or verification.get("subject_id") != association.get("subject_id")
+                        or verification.get("provider_resource_identity") != f"{provider}:{external_id}"
+                        or verification.get("policy_decision_id") != dispatch.get("dispatch_policy_decision_id")):
+                    return empty, False
+                from actions.agent.dispatch_authority import read_dispatch_authorization
+                authorization = await read_dispatch_authorization(
+                    tenant_id=tenant_id, action_id=dispatch.get("action_id", ""), dispatch=dispatch)
+                if (authorization is None
+                        or authorization.get("decision_id") != verification.get("policy_decision_id")
+                        or authorization.get("evaluated_at") != verification.get("policy_evaluated_at")):
+                    return empty, False
+                observed = parse_instant_strict(verification.get("observed_at"))
+                created_verification = parse_instant_strict(verification.get("created_at"))
+                if observed < delivered or observed > now or created_verification < observed or created_verification > now:
+                    return empty, False
+                deliveries[-1]["independentExecutionVerifications"].append({
+                    "id": verification.get("id"), "provider": provider,
+                    "verificationKind": verification["verification_kind"],
+                    "observedAt": observed.isoformat(),
+                    "policyDecisionId": verification.get("policy_decision_id"),
+                    "policyEvaluatedAt": verification.get("policy_evaluated_at"),
+                    "subjectId": verification.get("subject_id"),
+                    "providerResourceIdentity": verification.get("provider_resource_identity"),
+                    "evidenceRef": {"id": verification.get("id"), "type": "event",
+                                    "source": "provider_execution_verifications",
+                                    "observedAt": observed.isoformat(),
+                                    "uri": f"store://provider_execution_verifications/{quote(str(verification.get('id')), safe='')}"},
+                })
+            deliveries[-1]["executionVerificationStatus"] = (
+                "verified" if deliveries[-1]["independentExecutionVerifications"]
+                else "not_verified" if provider == "jira" else "unsupported"
+            )
             outcome_rows = await outcomes.find_many(
                 filters={"tenant_id": tenant_id, "intent_id": intent_id, "receipt_id": receipt_id},
                 limit=_MAX_OUTCOMES + 1,
@@ -160,8 +213,11 @@ async def read_action_delivery_evidence(
                                     "uri": f"store://external_outcome_events/{quote(event_id, safe='')}"},
                 })
         if deliveries:
+            verification_refs = [v["evidenceRef"] for d in deliveries
+                                 for v in d.get("independentExecutionVerifications", [])]
             return {"connectorReceiptRead": "complete", "connectorReceiptReason": "",
-                    "connectorReportedDeliveries": deliveries, "verifiedCallbacks": callbacks}, True
+                    "connectorReportedDeliveries": deliveries, "verifiedCallbacks": callbacks,
+                    "independentExecutionVerifications": verification_refs}, True
         return {**empty, "connectorReceiptReason": "provider_receipt_unavailable"}, True
     except Exception:  # noqa: BLE001 - evidence failures never infer a provider effect
         return empty, False

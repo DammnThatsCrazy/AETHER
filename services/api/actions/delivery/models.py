@@ -228,6 +228,28 @@ class ExternalResourceLink(BaseModel):
     created_at: str = Field(default_factory=_now_iso)
 
 
+class ProviderExecutionVerification(BaseModel):
+    """Credential-bound provider read-back, separate from delivery receipts/callbacks."""
+    id: str = Field(default_factory=_new_id)
+    tenant_id: str
+    dispatch_id: str
+    intent_id: str
+    job_id: str
+    receipt_id: str
+    provider: str
+    external_id: str
+    verification_kind: str
+    verified: bool
+    observed_at: str = Field(default_factory=_now_iso)
+    policy_decision_id: str
+    policy_evaluated_at: str
+    subject_kind: str
+    subject_id: str
+    association_record_id: str
+    provider_resource_identity: str
+    created_at: str = Field(default_factory=_now_iso)
+
+
 # ─── ExternalOutcomeEvent ───────────────────────────────────────────────────
 
 class ExternalOutcomeEvent(BaseModel):

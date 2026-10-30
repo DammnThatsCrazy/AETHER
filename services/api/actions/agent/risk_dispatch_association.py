@@ -131,10 +131,11 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
                  "uri": dispatch_authorization["uri"]},
                 *(delivery["evidenceRef"] for delivery in evidence["connectorReportedDeliveries"]),
                 *(callback["evidenceRef"] for callback in evidence["verifiedCallbacks"]),
+                *evidence.get("independentExecutionVerifications", []),
             ]
             seen.add(dispatch_id)
             output.append({"dispatchId": dispatch_id, "status": row["status"], "createdAt": created.isoformat(),
-                           "externalEffect": "not_independently_verified", "evidenceRefs": evidence_refs,
+                           "externalEffect": ("provider_resource_readback_verified" if evidence.get("independentExecutionVerifications") else "not_independently_verified"), "evidenceRefs": evidence_refs,
                            "dispatchAuthorization": dispatch_authorization,
                            **evidence})
         return output, True
