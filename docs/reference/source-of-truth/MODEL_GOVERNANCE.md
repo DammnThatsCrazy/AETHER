@@ -61,6 +61,11 @@ subject is missing a required purpose, the route returns `403` and increments
 `ml_inference_consent_denied`. The `policy_decision_id` is echoed on the
 prediction response for traceability.
 
+When the route persists an explicit Profile360 future-state prediction, the
+writer requires the authenticated inference actor to match the actor on that
+exact tenant-scoped policy decision. This binds the output to its recorded
+inference request; it does not verify model calibration or observed outcomes.
+
 Required serving purposes are resolved from the ML registry governance metadata
 (`ModelEntry.required_inference_purposes` — the serving scope, distinct from the
 training scope `ModelEntry.allowed_training_purposes`) via

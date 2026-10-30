@@ -69,7 +69,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:bd1a8cd7e8ac5892bba49e1cb81f78541905d22bccaf374f805c06a5631a3d68"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:2a83069fa64daa79c744747912ffb4a943ec4fd92244ce3a8560db35480fd871"
+  "services/api/actions/agent/agent360_provider.py": "sha256:df39ac1c74da39a38ab44a0c7c2df0c71d8cd4a0cba6f5deb861ec8a9b6a61df"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
@@ -1062,6 +1062,8 @@ not establish effective authorization or policy at execution time. It also
 exposes bounded prior `capability.invoke` evaluations with exact Agent,
 capability, grant, result, and evaluation-time context; these are not linked to
 observed tool calls and do not establish current authorization. Agent360
+explicitly reports action-specific and resource-operation authority as unknown
+because no canonical producer is joined; the capability slot remains partial.
 also requires one resolved tenant-owned canonical Agent before reading
 source-asserted inbox/message observations into its communications slot.
 Claims cite the exact identity, inbox, and message evidence; the read does

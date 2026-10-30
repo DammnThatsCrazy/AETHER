@@ -14,7 +14,7 @@ source_hashes:
   "services/api/governance/model_extraction_defense/__init__.py": "sha256:0c26347a6e4f591d1d55cb315b0543fb89854b98acaf4ac8bf3f729bf2d0b8c1"
   "services/api/governance/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
   "services/api/governance/model_extraction_defense/rate_limiter.py": "sha256:a2429c3ad4dd0198764124b8a4c5e1d7a9046eca740b9fe983564b4c6d80c7a8"
-  "services/api/intelligence/ml_serving/routes.py": "sha256:603a29cc3b129a03ea6a1906b76c9a6b778f52ff6f2fc715733fd8522b58a5f5"
+  "services/api/intelligence/ml_serving/routes.py": "sha256:1d658313785b0b9bd5297ec8a55308df413e852fda8dea697398493811ad4599"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/serving/src/api.py": "sha256:6f4245be3d28dd75a1ba1495252ec6418cd66e28b13d7f2de9c1e26fe6443147"
 ---

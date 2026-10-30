@@ -25,15 +25,15 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:23bafc08aa6fd86ac3cf48e3ffff1e0e5062bb1e5d0ca7bf70723bd2a6550197"
+  "services/api/actions/": "sha256:aebd883c16e3ed8a7bbaeac52c371ae40ab479d495846a11faa9c1bb00a84d94"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:2e1630b919066aaadfdba266305d3643f61ea3b43b94d6b53fd7d2a07052f81f"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:4b039e7f792a40361fa9cb6d42fe09be077518a86fe75585a970bc9a3b93a0dd"
+  "services/api/identity/": "sha256:f89fa77d2f74a0f920cf00f4b2cf3448167181ecb9099900b7b4952d6eb02bb6"
   "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
-  "services/api/intelligence/": "sha256:7aee167e09a32ad500e3efd389104339fe43aae01df9520db78b8b45bdac9bff"
+  "services/api/intelligence/": "sha256:34727f938c0757dc3102bd336d6088da9018d0d83f029ba2112df6baec48a13f"
   "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -1945,8 +1945,12 @@ The same endpoint accepts one `journey_action_reference` or
 intent or approved risk decision, action, and resource before recording the
 caller association on the lifecycle request. Slot-authorized Journey360 and
 Risk360 reads can show the recorded request with evidence; it does not prove
-dispatch or an external effect. For execution-bound x402 approvals, the decision
-also records the authenticated human's request-time `commerce:approve` check.
+dispatch or an external effect. Journey360 and Risk360 dispatch reads also
+require the persisted tenant `action.dispatch` policy decision for the exact
+action; this records the tenant write-permission and approved-decision checks,
+not connector execution or an external effect. For execution-bound x402
+approvals, the decision also records the authenticated human's request-time
+`commerce:approve` check.
 
 Communication360 Agent authorship requires an exact tenant-owned canonical
 Agent author binding with provider scope, event-time role validity, and trusted
