@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:e394e027dc1ae55c0649d4154332b1e763bd4168592a1359751c1f0146241658"
+  "services/api/actions/": "sha256:9e5f955e1ad0fe98f0a7f9133b0205b1b367047a912350e69a9fdee3f5a29725"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:175604af558952856f52769fe1ae748b2ac5d6c3e2684a0a3a26e70d1e3df056"
-  "services/api/ingestion/": "sha256:650191a96737a36132506125778a8bd36bff5ff1a0d1a41d2b8d4be7ffc35ea7"
-  "services/api/intelligence/": "sha256:f3ed31b70e08cf7931599c3193c1c01a26b7d94786ba80feb10afbfa35b327c4"
-  "services/api/journeys/": "sha256:ae21ca01f4b29e4543f764b7f58605e3d1cdbd194442d38dfb4f588a008bc1de"
+  "services/api/identity/": "sha256:3dd593027d97ad10ab66370ea2c735c4cc5ea0f7655f9564dd1b76aa80e04a83"
+  "services/api/ingestion/": "sha256:3cf77ddb5cc178b6effc001d0936a5a29a7f86f0ac232c14ef79b6fa53199ace"
+  "services/api/intelligence/": "sha256:0ad23c5a51cc2761bc0a285c85299483531f2d17a0e4a8f219b4e3514408a776"
+  "services/api/journeys/": "sha256:303c85a6afa8495a82a02fe59b17bcd9d5075c232919800b14e0cc1ea001cc72"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:81ce0c242d904e159690f0308f62430272d879a06fa7c71e28f904da8fb336be"
+  "services/api/value/": "sha256:e777a712969c6cf6e1a09aa3bd1b767c958f09ca5f76bbcfaca36f7f47dca3c8"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1452,8 +1452,12 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/agent/register` | Register agent in the Intelligence Graph |
+| POST | `/v1/agents/{agent_id}/executions/{execution_id}/resources/read` | Read one explicitly enabled, observed MCP resource URI under a distinct active `read_resource` grant. Requires authenticated write/dispatch permission and a running tenant-owned execution. Persist an immutable receipt only after the remote attempt; successful contents must match the requested URI exactly. Resource mutations and independent effects are unsupported. |
+| POST | `/v1/ml/model-governance/profile-evaluations` | Authenticated tenant-admin evaluation of an exact model artifact over closed prediction horizons and canonical adjudicated outcomes. Records dataset manifest, sample references, split, window, policy provenance and computed accuracy, Brier score and calibration error; not a calibration certification. |
+| GET | `/v1/ml/model-governance/profile-evaluations/{evaluation_id}` | Tenant-admin read of the exact persisted Profile evaluation. |
+| POST | `/v1/economic/attribution-runs/{run_id}/model-approval` | Authenticated tenant-admin approval or rejection bound to the completed run, model config and lineage decision. Does not establish calibration or attribution correctness. |
 | POST | `/v1/agents/{agent_id}/execute` | Admit and record run bookkeeping after delegation checks; optional `approval_id` requires a current tenant-scoped x402 approval whose agent, action, resource, amount, and latest immutable decision match exactly. This route does not invoke a tool/resource operation or create an invocation receipt. |
-| POST | `/v1/agents/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke` | Require authenticated principal, write and dispatch permissions, tenant-owned running execution, enabled exact observed MCP tool and active invoke grant. Perform public HTTPS MCP initialization and `tools/call` through DNS-pinned transport with redirects disabled. Persist immutable scoped completion receipts; durable claims prevent duplicate calls. Private/credentialed endpoints and resource-operation verification are unsupported. |
+| POST | `/v1/agents/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke` | Require authenticated principal, write and dispatch permissions, tenant-owned running execution, enabled exact observed MCP tool and active invoke grant. Perform public HTTPS MCP initialization and `tools/call` through DNS-pinned transport with redirects disabled. Persist immutable scoped completion receipts; durable claims prevent duplicate calls. Private/credentialed endpoints and resource mutations are unsupported; exact resource reads use the separate endpoint above. |
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
@@ -2308,8 +2312,14 @@ Agent360 capabilities and Workflow360 actions admit those receipts only with
 exact tenant, agent, execution, tool, grant, policy and workflow scope and valid
 invocation timing. Failed initialization cannot become a tool invocation claim;
 observations and executor callbacks cannot produce these receipts. This binds
-supported invoke actions, not resource operations, standing authorization,
-independent external effects or complete producer coverage. Neither surface nor
+supported invoke actions. The separate resource-read endpoint uses the configured
+`resource_uris` allowlist, exact observed resource identity, a distinct active
+`read_resource` grant, and MCP `resources/list` followed by `resources/read`.
+Registration persists that allowlist; updates advance the agent policy version.
+Only attempted reads with exact requested-URI contents can report successful
+resource-read evidence. Ambiguous receipts fail closed. Resource mutations,
+standing authorization, independent external effects and complete producer
+coverage remain unknown. Neither surface nor
 the full 18-surface contract is complete.
 
 Journey360 and Risk360 can also include an associated agent execution's
