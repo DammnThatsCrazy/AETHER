@@ -305,6 +305,10 @@ class AgentExecutionOutcome(BaseModel):
     error: dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentToolInvocation(BaseModel):
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────
 
 @router.post("")
@@ -612,6 +616,31 @@ async def read_execution(agent_id: str, execution_id: str, request: Request):
             or record.get("agent_id") != agent_id:
         raise NotFoundError("Execution")
     return APIResponse(data=record).to_dict()
+
+
+@router.post("/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke")
+async def invoke_agent_tool(agent_id: str, execution_id: str, tool_name: str,
+                            body: AgentToolInvocation, request: Request,
+                            engine: DelegationEngine = Depends(_get_engine)):
+    """Authenticated server-side MCP invocation; receipts come from the provider call."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    config = await _configs.find_by_id(agent_id)
+    execution = await _executions.find_by_id(execution_id)
+    if (config is None or config.get("tenant_id") != tenant.tenant_id
+            or execution is None or execution.get("tenant_id") != tenant.tenant_id
+            or execution.get("agent_id") != agent_id):
+        raise NotFoundError("Execution")
+    if execution.get("status") != "running":
+        raise ConflictError("Tool invocation requires a running execution")
+    from actions.agent.invocation_runtime import invoke_observed_mcp_tool
+    receipt = await invoke_observed_mcp_tool(
+        tenant_id=tenant.tenant_id, agent_id=agent_id, execution_id=execution_id,
+        tool_name=tool_name, arguments=body.arguments, config=config, engine=engine,
+        workflow_run_id=execution.get("workflow_run_id"),
+        workflow_definition_link=execution.get("workflow_definition_link"),
+    )
+    return APIResponse(data=receipt).to_dict()
 
 
 @router.post("/{agent_id}/executions/{execution_id}/status")

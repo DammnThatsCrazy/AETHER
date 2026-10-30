@@ -1742,7 +1742,7 @@ class Workflow360Provider:
                     )
             except Exception:  # noqa: BLE001 - resource authority remains unknown
                 resource_read = ApprovedResourceRead((), False, False, reason="approved_resource_read_unavailable")
-        actions_section, action_claims = _workflow_actions_section(
+        actions_section, action_claims = await _workflow_actions_section(
             subject,
             tenant_id=tenant_id,
             read=action_read,
@@ -2370,7 +2370,7 @@ def _unknown_section(slot_id: str) -> ProjectionSection:
     )
 
 
-def _workflow_actions_section(
+async def _workflow_actions_section(
     subject: Any,
     *,
     tenant_id: str,
@@ -2435,6 +2435,14 @@ def _workflow_actions_section(
         for ref in execution_refs
         if ref.source == _AGENT_EXECUTION_SOURCE and ref.id in execution_by_id
     }
+    provider_invocations: dict[str, dict[str, Any]] = {}
+    if execution_results_authorized:
+        from intelligence.workflow.action_authorities import invocation_receipt
+        for execution_id, execution in execution_by_id.items():
+            receipt = await invocation_receipt(tenant_id=tenant_id, workflow_run_id=subject.id,
+                                               execution=execution)
+            if receipt is not None:
+                provider_invocations[execution_id] = receipt
 
     lower_raw = getattr(time_range, "from_", None) if time_range else None
     upper_raw = getattr(time_range, "to", None) if time_range else None
@@ -2565,14 +2573,10 @@ def _workflow_actions_section(
                 "calledAt": called_at,
                 "observationKind": "tenant_scoped_execution_linked_tool_call_edge",
                 "operationState": "call_observed_external_effect_unknown",
-                # CALLED_TOOL lifecycle edges and executor callbacks are not
-                # an invocation-bound receipt. Keep this explicit until a
-                # server-owned append-only receipt is joined at the actual
-                # tool/resource invocation boundary.
-                "executionReceipt": {
-                    "state": "unknown",
-                    "reasonCode": "canonical_action_execution_receipt_source_unavailable",
-                },
+                # Provider receipts are exposed as separate execution-bound evidence
+                # below; an observed action edge is not itself their canonical join.
+                "executionReceipt": {"state": "unknown",
+                    "reasonCode": "canonical_action_execution_receipt_source_unavailable"},
                 "authorityDecision": "not_established_by_tool_call_edge",
                 "executionResult": outcome or {"state": "unknown"},
                 "approvedResource": resource_view,
@@ -2625,6 +2629,23 @@ def _workflow_actions_section(
         else reason
     )
     latest_observed_at = max((item["calledAt"] for item in actions), default=None)
+    provider_invocation_views: list[dict[str, Any]] = []
+    for execution_id, receipt in provider_invocations.items():
+        execution = execution_by_id[execution_id]
+        execution_ref = next((ref for ref in execution_refs if ref.id == execution_id), None)
+        receipt_ref = EvidenceRef(id=receipt["receiptId"], type="event",
+            source="agent_invocation_receipts", observedAt=receipt.get("completedAt"))
+        provider_invocation_views.append({**receipt, "executionId": execution_id,
+            "executionEvidenceRef": execution_ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                if execution_ref else None,
+            "evidenceRef": receipt_ref.model_dump(mode="json", by_alias=True, exclude_none=True)})
+        claims.append(ClaimEnvelope(
+            id=f"workflow360.provider_invocation.{quote(receipt['receiptId'], safe='')}",
+            kind="workflow_linked_provider_tool_result", subject=subject,
+            evidenceRefs=[ref for ref in [execution_ref, receipt_ref] if ref is not None],
+            claims=["The exact tenant, agent, execution, workflow run, policy decision and active capability grant are joined to a server-owned MCP provider completion receipt; the receipt proves the provider tool result only, not a resource operation or external effect."],
+            claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
+        ))
     content = {
         "state": state,
         "coverage": "partial" if actions else "unknown",
@@ -2634,6 +2655,7 @@ def _workflow_actions_section(
         "source": "graph_edges",
         "evidenceScope": "CALLED_TOOL edges joined to exact admitted tenant and workflow-run execution IDs",
         "actions": actions,
+        "providerInvocationReceipts": provider_invocation_views,
         "observedCount": len(actions),
         "executionInventoryReadComplete": execution_inventory_complete,
         "actionEdgeReadComplete": read.complete and not read.scope_mismatch and not invalid_rows,

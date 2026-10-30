@@ -2523,7 +2523,19 @@ class Agent360Provider:
             self._communication_view(row) for row in timeline_communications.rows[:limit]
         ]
 
-        exec_items = [self._execution_view(row) for row in execution_rows[:limit]]
+        from actions.agent.invocation_runtime import validated_agent_receipt
+        invocation_receipts: dict[str, dict[str, Any]] = {}
+        for row in execution_rows[:limit]:
+            row_agent_id = _first(row, "agent_id")
+            execution_id = _first(row, "execution_id", "id")
+            if isinstance(row_agent_id, str) and isinstance(execution_id, str):
+                receipt = await validated_agent_receipt(
+                    tenant_id=tenant_id, agent_id=row_agent_id, execution=row
+                )
+                if receipt is not None:
+                    invocation_receipts[execution_id] = receipt
+        exec_items = [self._execution_view(row, invocation_receipts.get(_first(row, "execution_id", "id")))
+                      for row in execution_rows[:limit]]
         activity_items = [self._activity_view(row) for row in timeline_activity.rows[:limit]]
         tool_items = [self._tool_view(row) for row in timeline_tools.rows[:limit]]
         timeline_items = (
@@ -2531,7 +2543,7 @@ class Agent360Provider:
                 {
                     "kind": "execution",
                     "timestamp": _first(row, "started_at", "created_at"),
-                    **self._execution_view(row),
+                    **self._execution_view(row, invocation_receipts.get(_first(row, "execution_id", "id"))),
                 }
                 for row in timeline_exec.rows[:limit]
             ]
@@ -4756,7 +4768,7 @@ class Agent360Provider:
                     rows_missing += 1
         return _dedupe_refs(refs), rows_missing
 
-    def _execution_view(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _execution_view(self, row: dict[str, Any], invocation_receipt: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         ref = self._ref_one(
             row, "agent_executions", ("execution_id", "id"), ("started_at", "created_at")
         )
@@ -4769,6 +4781,7 @@ class Agent360Provider:
             "triggeredByEventId": _first(row, "triggered_by_event_id"),
             "initiatingPrincipalUserId": _first(row, "initiating_principal_user_id"),
             "evidenceRef": ref.model_dump(mode="json") if ref else None,
+            "toolInvocationReceipt": invocation_receipt or {"state": "unknown"},
         }
 
     def _recorded_execution_decision(

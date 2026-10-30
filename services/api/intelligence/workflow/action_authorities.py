@@ -14,6 +14,44 @@ from typing import Any
 from shared.temporal.instant import parse_instant_strict
 
 
+async def invocation_receipt(*, tenant_id: str, workflow_run_id: str,
+                             execution: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a provider completion only from one exact server-owned receipt."""
+    from actions.agent.invocation_runtime import InvocationReceiptRepository, validated_agent_receipt
+    execution_id = execution.get("execution_id")
+    agent_id = execution.get("agent_id")
+    if not isinstance(execution_id, str) or not isinstance(agent_id, str):
+        return None
+    verified = await validated_agent_receipt(tenant_id=tenant_id, agent_id=agent_id, execution=execution)
+    if verified is None:
+        return None
+    rows = await InvocationReceiptRepository().for_execution(tenant_id, agent_id, execution_id)
+    if len(rows) != 1:
+        return None
+    row = rows[0]
+    try:
+        invoked = parse_instant_strict(row.get("invoked_at"))
+        completed = parse_instant_strict(row.get("completed_at"))
+        started = parse_instant_strict(execution.get("started_at"))
+        ended = parse_instant_strict(execution.get("ended_at"))
+    except (TypeError, ValueError):
+        return None
+    policy = row.get("policy_decision")
+    if (row.get("tenant_id") != tenant_id or row.get("agent_id") != agent_id
+            or row.get("execution_id") != execution_id or row.get("workflow_run_id") != workflow_run_id
+            or row.get("action") != "invoke" or row.get("evidence_version") != 1
+            or not isinstance(row.get("receipt_id"), str) or not row["receipt_id"]
+            or not isinstance(row.get("tool_name"), str) or not row["tool_name"]
+            or not isinstance(row.get("capability_id"), str) or not row["capability_id"]
+            or not isinstance(policy, dict) or policy.get("allowed") is not True
+            or not isinstance(row.get("grant_id"), str) or not row["grant_id"]
+            or row.get("result_status") not in {"succeeded", "failed"}
+            or not started <= invoked <= completed <= ended):
+        return None
+    return {**verified, "invokedAt": invoked.isoformat(), "completedAt": completed.isoformat(),
+            "resourceOperation": "unknown"}
+
+
 @dataclass(frozen=True)
 class ApprovedResourceRead:
     """Bounded read of current resources referenced by approved run actions."""
