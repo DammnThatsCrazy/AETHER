@@ -38,6 +38,8 @@ reviewed_source_commits:
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
+  "config/storage_policies.yaml": "sha256:3012f9d8e0504a79de25b8d17942a3c3cc4dd9d2897cb0a3f559839e82e98645"
+  "services/api/actions/agent/invocation_runtime.py": "sha256:7ea361c7766345c3ba5da95a252b151d3c85ddf8a12a5fb0da39b4fdb0767890"
   "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -45,6 +47,10 @@ source_hashes:
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
   "services/api/alembic/versions/20261024_risk_intervention_records.py": "sha256:f3fadd1672c15560cab018906246e307438035404f4fcbcb84c976cae9bdc3b7"
+  "services/api/alembic/versions/20261030_agent_invocation_receipts.py": "sha256:fe1186d525ae2a2923dacccbbb1eae5a76f96407ed6243b85f2a94244e672537"
+  "services/api/alembic/versions/20261030_merge_authority_heads.py": "sha256:62aa6a6049c5f58b668cb788c36529902541581944d4dc5593f15105a4e539f2"
+  "services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py": "sha256:bb313b4f28028cca340689dbd67154cd9c02810ba08d31c3a0b8a48a98a3e842"
+  "services/api/intelligence/model_governance/evaluations.py": "sha256:1dd0ae6aae180640a50cbe95ede4bd4e35b6bdbdded1acc86b8b0491da437b21"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
@@ -52,6 +58,7 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
+  "services/api/value/economic/attribution_model_validation.py": "sha256:da10a304b79537cda1be523999b7fcc35e1f59177b22bc855709d91f937c5aae"
   "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
 ---
 
