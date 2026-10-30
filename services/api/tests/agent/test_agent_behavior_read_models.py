@@ -188,3 +188,97 @@ async def test_behavior_route_shows_queued_agent_continuity_reviews(_routes, mon
     [review] = data["sections"]["identity"]["data"]["queued_reviews"]
     assert review["reason_codes"] == ["agent_ref_reported_by_multiple_deployments"]
     assert review["status"] == "open"
+
+
+# --- WO-110: behavior sections through the agent360 projection provider -------------
+
+def _projection(tenant=T, subject_kind="agent", subject_id="gsc-buyer"):
+    from shared.intelligence_projections import ProjectionContext, ProjectionRequest, ProjectionSubject
+
+    req = ProjectionRequest(projectionId="agent360", tenantId=tenant,
+                            subject=ProjectionSubject(kind=subject_kind, id=subject_id))
+    ctx = ProjectionContext(projectionId="agent360", tenantId=tenant, registryState="in_flight",
+                            dependencyState=[], warnings=[])
+    return req, ctx
+
+
+class _BehaviorOnlySource:
+    """Every core Agent360 read fails closed; only the behavior seam answers."""
+
+    def __init__(self, model=None, fail=False):
+        self.model, self.fail = model, fail
+
+    def __getattr__(self, name):
+        async def _unavailable(*a, **k):
+            raise RuntimeError("core source not under test")
+        return _unavailable
+
+    async def behavior_read_model(self, tenant_id, agent_id):
+        from actions.agent.agent360_provider import Agent360ReadBatch
+
+        if self.fail:
+            raise RuntimeError("diagnostic must not leak")
+        return Agent360ReadBatch(rows=[self.model] if self.model else [])
+
+
+def test_agent360_registry_declares_behavior_sections():
+    from actions.agent.agent360_provider import BEHAVIOR_SECTIONS, OUTPUT_SECTIONS
+    from shared.intelligence_projections.generated_registry import INTELLIGENCE_PROJECTION_DEFINITIONS
+
+    declared = INTELLIGENCE_PROJECTION_DEFINITIONS["agent360"]["outputSections"]
+    assert set(declared) == set(OUTPUT_SECTIONS)
+    assert set(BEHAVIOR_SECTIONS) <= set(declared)
+
+
+@pytest.mark.asyncio
+async def test_agent360_provider_serves_the_route_read_model(_routes):
+    from actions.agent.agent360_provider import Agent360Provider, BEHAVIOR_SECTIONS, RepositoryAgent360Source
+
+    await _persist(_events("GS-C"))
+    route = (await agent_routes.agent_behavior_read_model("gsc-buyer", _request()))["data"]
+    result = await Agent360Provider(RepositoryAgent360Source()).project(*_projection())
+    by_id = {s.id: s for s in result.sections}
+    for section_id, key in BEHAVIOR_SECTIONS.items():
+        assert by_id[section_id].content["data"] == route["sections"][key]["data"], section_id
+        assert by_id[section_id].content["binding"]["agentRefBasis"] == "source_reported"
+    assert by_id["behavior_decisions"].state == "available"
+    assert by_id["behavior_value"].state == "empty"  # no value-moving action observed
+    [claim] = [c for c in result.claims if c.kind == "agent_behavior_decision"]
+    assert claim.claimState.value == "derived" and claim.domainSlotIds is None
+    gs_c = next(s for s in FIXTURE["scenarios"] if s["id"] == "GS-C")
+    assert {r.id for r in claim.evidenceRefs} <= {e["id"] for e in gs_c["events"]}
+
+    other = await Agent360Provider(RepositoryAgent360Source()).project(*_projection(tenant="other-tenant"))
+    other_by_id = {s.id: s for s in other.sections}
+    assert other_by_id["behavior"].state == "empty"
+    assert other_by_id["behavior_decisions"].content["data"] == []
+
+
+@pytest.mark.asyncio
+async def test_agent360_behavior_sections_degrade_honestly():
+    from actions.agent.agent360_provider import Agent360Provider, BEHAVIOR_SECTIONS
+
+    facts = _facts(_events("GS-C"))
+    capped_model = agent360_behavior(facts, "gsc-buyer", truncated=True)
+
+    failed = await Agent360Provider(_BehaviorOnlySource(fail=True)).project(*_projection())
+    assert {s.state for s in failed.sections if s.id in BEHAVIOR_SECTIONS} == {"degraded"}
+    assert "agent_behavior_source_unavailable" in failed.degradedReasons
+    assert "diagnostic must not leak" not in str([s.model_dump() for s in failed.sections])
+
+    capped = await Agent360Provider(_BehaviorOnlySource(capped_model)).project(*_projection())
+    by_id = {s.id: s for s in capped.sections}
+    assert by_id["behavior"].state == "degraded"
+    assert by_id["behavior_value"].state == "unknown"  # absence in a capped read is not proof
+    assert "agent_behavior_source_truncated" in capped.degradedReasons
+
+    wrong = await Agent360Provider(_BehaviorOnlySource(agent360_behavior(facts, "someone"))).project(
+        *_projection())
+    assert {s.state for s in wrong.sections if s.id in BEHAVIOR_SECTIONS} == {"degraded"}
+
+    req, ctx = _projection()
+    windowed_req = type(req).model_validate({
+        **req.model_dump(by_alias=True, exclude_none=True),
+        "timeRange": {"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"}})
+    windowed = await Agent360Provider(_BehaviorOnlySource(capped_model)).project(windowed_req, ctx)
+    assert {s.state for s in windowed.sections if s.id in BEHAVIOR_SECTIONS} == {"unknown"}

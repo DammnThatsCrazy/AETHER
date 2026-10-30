@@ -331,6 +331,20 @@ _OUTPUT_SECTIONS = frozenset(
         "social_contagion",
         "trust_edges",
         "failures",
+        # Agent behavioral intelligence (WO-110): derived, rebuildable
+        # behavior read-model sections composed into Agent 360.
+        "behavior",
+        "behavior_decisions",
+        "behavior_journey",
+        "behavior_influence",
+        "behavior_authority",
+        "behavior_value",
+        "behavior_risk",
+        "behavior_trust",
+        "behavior_market",
+        "behavior_observability",
+        # Value 360 agent-mediated activity (WO-092).
+        "agent_mediated_activity",
     }
 )
 

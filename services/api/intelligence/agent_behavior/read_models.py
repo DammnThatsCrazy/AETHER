@@ -140,7 +140,7 @@ def agent360_behavior(facts: list[AgentFact], agent_ref: str, *, identity: Optio
                 "decision_id": d["decision_id"], "status": d["status"],
                 "disposition": d["disposition"]["disposition"],
                 "objective": d["objective"].get("value"), "opened_at": d["opened_at"],
-                "missing": d["missing"],
+                "missing": d["missing"], "evidence": list(d["evidence"])[:25],
             } for d in decisions], None if decisions else "no decisions reconstructed"),
             "journey": _section(partial if have else "unavailable",
                                 agent_journey(facts, agent_ref, handoffs=handoffs) if have else None),

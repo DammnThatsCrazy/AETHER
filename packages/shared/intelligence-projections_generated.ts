@@ -227,7 +227,7 @@ export const intelligenceProjectionDefinitions: Record<
     projectionDependencies: ['profile360'],
     optionalProjectionDependencies: ['economic360', 'outcome360'],
     inputRefs: ['EntityRef', 'EvidenceRef', 'GraphResult', 'PageRequest', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'interactions', 'outcomes', 'policy_boundary', 'state', 'summary', 'timeline'],
+    outputSections: ['behavior', 'behavior_authority', 'behavior_decisions', 'behavior_influence', 'behavior_journey', 'behavior_market', 'behavior_observability', 'behavior_risk', 'behavior_trust', 'behavior_value', 'evidence', 'interactions', 'outcomes', 'policy_boundary', 'state', 'summary', 'timeline'],
     supportedTemporalModes: ['as_of', 'relative', 'window'],
     surfaceIds: ['profile360'],
     capabilityKeys: ['agent360.explore', 'agent360.read'],
