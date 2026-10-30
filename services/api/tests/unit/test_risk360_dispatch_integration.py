@@ -153,6 +153,31 @@ async def test_producer_dispatch_reaches_only_authorized_subject(scope):
         assert summary["dispatchAssociation"]["state"] == "unknown"
 
 
+async def test_reader_rejects_same_tenant_recommendation_rebound_to_another_subject():
+    record, dispatch = await _produce_dispatch()
+    recommendations = RecommendationRepository()
+    recommendation = await recommendations.find_by_id("rec-1")
+    assert recommendation["tenant_id"] == TENANT_A
+
+    # Simulate a persisted join whose recommendation now names a different
+    # entity in the same tenant. A matching tenant and dispatch ID cannot
+    # carry the dispatch across subjects.
+    recommendation["entity_id"] = "entity-2"
+    await recommendations.insert("rec-1", recommendation)
+
+    request = _request(subject=ProjectionSubject(kind="entity", id=record.subject_id))
+    context = await _context(_available_registry())
+    context.experience360ReadAuthorizations = [_authorization(request.subject)]
+    result = await Risk360Provider().project(request, context)
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    summary = findings.content["interventions"]
+    row = next(item for item in summary["records"] if item["recordId"] == record.record_id)
+    assert row["dispatches"] == []
+    assert summary["dispatchAssociation"]["state"] == "degraded"
+    assert dispatch["dispatch_id"] not in str(result.model_dump())
+
+
 async def test_unavailable_dispatch_reader_degrades_without_disclosure(monkeypatch):
     record, dispatch = await _produce_dispatch()
     from actions.agent import risk_dispatch_association
