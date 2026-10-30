@@ -75,6 +75,8 @@ async def test_reader_validates_exact_joins_and_fails_closed():
                   policy_decisions=Repository({"policy": policy_decision}))
     rows, complete = await read_risk_dispatches(**kwargs)
     assert complete and rows[0]["externalEffect"] == "not_independently_verified"
+    assert rows[0]["connectorReceiptRead"] == "unknown"
+    assert rows[0]["connectorReceiptReason"] == "trusted_connector_receipt_binding_unavailable"
     assert rows[0]["dispatchAuthorization"]["decision_id"] == "policy"
     for field in ("recorded_at", "observed_at", "effective_at"):
         original = getattr(record, field)

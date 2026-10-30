@@ -57,7 +57,10 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
     actions = actions or ActionFeedbackRepository()
     decisions = decisions or DecisionRepository()
     recommendations = recommendations or RecommendationRepository()
-    from actions.agent.dispatch_authority import read_dispatch_authorization
+    from actions.agent.dispatch_authority import (
+        connector_receipt_read_state,
+        read_dispatch_authorization,
+    )
     bounded = min(max(limit, 1), 20)
     try:
         if (record.tenant_id != tenant_id or record.record_kind != "decision"
@@ -121,7 +124,8 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
                                 "source": "security_policy_decisions",
                                 "observedAt": dispatch_authorization["evaluated_at"],
                                 "uri": dispatch_authorization["uri"]}],
-                           "dispatchAuthorization": dispatch_authorization})
+                           "dispatchAuthorization": dispatch_authorization,
+                           **connector_receipt_read_state()})
         return output, True
     except Exception:
         return [], False

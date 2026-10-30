@@ -27,7 +27,10 @@ async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id
     actions = actions or ActionFeedbackRepository()
     decisions = decisions or DecisionRepository()
     recommendations = recommendations or RecommendationRepository()
-    from actions.agent.dispatch_authority import read_dispatch_authorization
+    from actions.agent.dispatch_authority import (
+        connector_receipt_read_state,
+        read_dispatch_authorization,
+    )
     bounded = min(max(limit, 1), 20)
     try:
         rows = await dispatches.find_many(filters={"tenant_id": tenant_id,
@@ -84,7 +87,8 @@ async def read_journey_dispatches(*, tenant_id: str, journey_id: str, version_id
                                 "source": "security_policy_decisions",
                                 "observedAt": dispatch_authorization["evaluated_at"],
                                 "uri": dispatch_authorization["uri"]}],
-                           "dispatchAuthorization": dispatch_authorization})
+                           "dispatchAuthorization": dispatch_authorization,
+                           **connector_receipt_read_state()})
         return output, True
     except Exception:  # noqa: BLE001 - authority failures are partial and never fabricate dispatch
         return [], False
