@@ -327,9 +327,11 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
     governance = section.content["items"][0]["modelGovernance"]
     assert governance["calibrationMetric"]["state"] == expected
     assert governance["modelCalibrationVerified"] is False
+    assert "observedOutcome" not in section.content["items"][0]
     if expected == "reported":
         assert governance["calibrationMetric"]["value"] == 0.12
         assert governance["calibrationMetric"]["datasetAndEvaluationScope"] == "unknown"
+        assert governance["calibrationMetric"]["predictionApplicability"] == "unknown"
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]

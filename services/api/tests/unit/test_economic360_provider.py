@@ -1396,6 +1396,38 @@ async def test_unresolved_agent_identity_keeps_economic_scope_unknown() -> None:
     assert "summary.ai_execution_cost" not in {claim.id for claim in result.claims}
 
 
+def _with_commerce_provenance(reader, subject_kind):
+    async def read(tenant_id, subject_id, *, as_of=None):
+        result = await reader(tenant_id, subject_id, as_of=as_of)
+        result[f"{subject_kind}_id"] = subject_id
+        existing = result.get("association_evidence") or []
+        associations = []
+        links = []
+        for index, fact in enumerate(result["payment_facts"]):
+            order_ref = fact.get("commerceOrderRef") or f"test-order-{index}"
+            fact["commerceOrderRef"] = order_ref
+            fact.setdefault("joinBasis", result["join_basis"])
+            evidence = fact.setdefault("evidence", [])
+            if not evidence:
+                evidence.append({"id": f"test-payment-{index}", "type": "transaction", "source": "test-provider"})
+            fact.setdefault("provider", evidence[0]["source"])
+            fact.setdefault("evidenceRecordId", evidence[0]["id"])
+            activity_id = (existing[0].get("activityId") if existing else None) or f"test-activity-{index}"
+            if not any(item["commerceOrderRef"] == order_ref for item in associations):
+                associations.append({"activityId": activity_id, "subjectKind": subject_kind,
+                                     "subjectId": subject_id, "commerceOrderRef": order_ref,
+                                     "evidence": {"id": activity_id, "type": "event", "source": "test-activity"}})
+                links.append({"tenant_id": tenant_id, "operation_ref": order_ref,
+                              "identity_basis": "source_shared_identifier",
+                              "identity_evidence": [{"id": order_ref, "type": "transaction",
+                                                     "source": "commerce_order_payment_ledger"}]})
+        result["association_evidence"] = associations
+        result["operation_links"] = links
+        return result
+
+    return read
+
+
 async def test_journey_commerce_payment_facts_flow_into_economic_evidence_section(
     monkeypatch,
 ) -> None:
@@ -1424,7 +1456,7 @@ async def test_journey_commerce_payment_facts_flow_into_economic_evidence_sectio
     monkeypatch.setattr(
         journey_operation_evidence,
         "journey_commerce_operation_evidence",
-        exact_journey_evidence,
+        _with_commerce_provenance(exact_journey_evidence, "journey"),
     )
     provider = Economic360Provider(sources=FakeSource([]))
     result = await provider.project(
@@ -1486,7 +1518,7 @@ async def test_value360_classifies_only_explicit_web2_payment_rails(monkeypatch)
     monkeypatch.setattr(
         journey_operation_evidence,
         "journey_commerce_operation_evidence",
-        exact_journey_evidence,
+        _with_commerce_provenance(exact_journey_evidence, "journey"),
     )
     result = await Economic360Provider(sources=FakeSource([])).project(
         _request(subject=ProjectionSubject(kind="journey", id="journey-web2")),
@@ -1496,7 +1528,9 @@ async def test_value360_classifies_only_explicit_web2_payment_rails(monkeypatch)
     web2_claims = [claim for claim in result.claims if claim.kind == "web2_payment_value"]
     assert len(web2_claims) == 1
     assert web2_claims[0].domainSlotIds == ["web2_value", "evidence_trace"]
-    assert [ref.id for ref in web2_claims[0].evidenceRefs] == ["pi-card"]
+    assert {ref.id for ref in web2_claims[0].evidenceRefs} == {
+        "test-activity-0", "test-order-0", "pi-card"
+    }
     assert "12.00 USD" in web2_claims[0].claims[0]
     assert "no attribution or aggregate asserted" in web2_claims[0].claims[0]
 
@@ -1590,7 +1624,7 @@ async def test_value360_web3_requires_explicit_complete_native_asset_evidence(mo
     monkeypatch.setattr(
         journey_operation_evidence,
         "journey_commerce_operation_evidence",
-        exact_journey_evidence,
+        _with_commerce_provenance(exact_journey_evidence, "journey"),
     )
     result = await Economic360Provider(sources=FakeSource([])).project(
         _request(subject=ProjectionSubject(kind="journey", id="journey-web3")),
@@ -1601,7 +1635,9 @@ async def test_value360_web3_requires_explicit_complete_native_asset_evidence(mo
     assert len(web3_claims) == 1
     claim = web3_claims[0]
     assert claim.domainSlotIds == ["web3_value", "evidence_trace"]
-    assert {ref.id for ref in claim.evidenceRefs} == {"provider-payment-1", "0xabc123"}
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        "test-activity-0", "test-order-0", "provider-payment-1", "0xabc123"
+    }
     assert "0.05 ETH on ethereum (destination side)" in claim.claims[0]
     assert "wallet identity, conversion, and attribution are not asserted" in claim.claims[0]
 
@@ -1642,7 +1678,7 @@ async def test_campaign_commerce_payment_facts_flow_through_canonical_activity_r
     monkeypatch.setattr(
         journey_operation_evidence,
         "campaign_commerce_operation_evidence",
-        exact_campaign_evidence,
+        _with_commerce_provenance(exact_campaign_evidence, "campaign"),
     )
     provider = Economic360Provider(sources=FakeSource([]))
     result = await provider.project(
@@ -1708,7 +1744,7 @@ async def test_campaign_commerce_payment_claim_routes_to_value360_slot_with_evid
     monkeypatch.setattr(
         journey_operation_evidence,
         "campaign_commerce_operation_evidence",
-        exact_campaign_evidence,
+        _with_commerce_provenance(exact_campaign_evidence, "campaign"),
     )
     subject = ProjectionSubject(kind="campaign", id="campaign-a")
     result = await Economic360Provider(sources=FakeSource([])).project(
@@ -1722,7 +1758,9 @@ async def test_campaign_commerce_payment_claim_routes_to_value360_slot_with_evid
         "evidence_trace",
         "revenue_events",
     ]
-    assert [ref.id for ref in payment_claim.evidenceRefs] == ["payment-revision"]
+    assert {ref.id for ref in payment_claim.evidenceRefs} == {
+        "test-activity-0", "test-order-0", "payment-revision"
+    }
     assert getattr(payment_claim.claimState, "value", payment_claim.claimState) == "observed"
     assert "23.40 USD" in payment_claim.claims[0]
     assert "lifecycle state: settled" in payment_claim.claims[0]
@@ -1744,7 +1782,9 @@ async def test_campaign_commerce_payment_claim_routes_to_value360_slot_with_evid
     payment_slot = frame.slots[0]
     assert payment_slot.id == "payments_and_commerce_evidence"
     assert [claim.id for claim in payment_slot.claims] == [payment_claim.id]
-    assert {ref.id for ref in payment_slot.evidenceRefs} == {"payment-revision"}
+    assert {ref.id for ref in payment_slot.evidenceRefs} == {
+        "test-activity-0", "test-order-0", "payment-revision"
+    }
     assert payment_slot.freshness.state == "unknown"
 
 
@@ -1820,7 +1860,7 @@ async def test_value_reconciliation_exposes_separate_exact_source_observations(
     monkeypatch.setattr(
         journey_operation_evidence,
         "journey_commerce_operation_evidence",
-        exact_journey_evidence,
+        _with_commerce_provenance(exact_journey_evidence, "journey"),
     )
     provider = Economic360Provider(
         sources=FakeSource(
@@ -2042,7 +2082,7 @@ async def test_completed_payment_fact_does_not_claim_value_revenue_event(monkeyp
     monkeypatch.setattr(
         journey_operation_evidence,
         "journey_commerce_operation_evidence",
-        completed_payment,
+        _with_commerce_provenance(completed_payment, "journey"),
     )
     result = await Economic360Provider(sources=FakeSource([])).project(
         _request(subject=ProjectionSubject(kind="journey", id="journey-1")),
@@ -2122,7 +2162,7 @@ async def test_entity_commerce_evidence_uses_exact_profile_activity_reference(
     monkeypatch.setattr(
         journey_operation_evidence,
         "entity_commerce_operation_evidence",
-        exact_entity_evidence,
+        _with_commerce_provenance(exact_entity_evidence, "entity"),
     )
     provider = Economic360Provider(
         sources=FakeSource([]), profile_identity_reader=CanonicalProfile()
@@ -3338,7 +3378,7 @@ async def test_value_revenue_adjustments_join_exact_conversion_with_bounded_read
     assert "not recognized revenue" in claim.claims[0]
 
 
-async def test_value_revenue_adjustments_drop_wrong_tenant_row_and_degrade() -> None:
+async def test_value_revenue_adjustments_drop_wrong_tenant_row_and_remain_unknown() -> None:
     conversion_id = "conversion-1"
     ref = EvidenceRef(
         id=conversion_id,
@@ -3374,7 +3414,11 @@ async def test_value_revenue_adjustments_drop_wrong_tenant_row_and_degrade() -> 
     ).project(request, await _make_context(ProviderRegistry()))
 
     evidence = next(section for section in result.sections if section.id == "evidence")
-    assert evidence.content["revenue_adjustments"]["state"] == "degraded"
+    assert evidence.content["revenue_adjustments"]["state"] == "unknown"
+    assert evidence.content["revenue_adjustments"]["reason"] == (
+        "revenue_adjustment_exact_scope_or_record_invalid"
+    )
+    assert evidence.content["revenue_adjustments"]["invalidRecordCount"] == 1
     assert evidence.content["revenue_adjustments"]["records"] == []
     assert not any(
         claim.kind == "canonical_revenue_adjustment_event" for claim in result.claims

@@ -78,6 +78,7 @@ def _decision_for(
         or run_id is None
         or config_id is None
         or snap is None
+        or not _EFFECTIVE_OVERRIDE_FIELDS.issubset(snap)
         or config.get("tenant_id") != tenant_id
         or _uuid(config.get("model_config_id")) != config_id
         or _uuid(snap.get("model_config_id")) != config_id
@@ -207,7 +208,11 @@ async def validate_attribution_run_model(
 
         runs = AttributionRunRepository()
     run = await runs.get_run(canonical_run_id, tenant_id=tenant_id)
-    if not isinstance(run, dict) or run.get("tenant_id") != tenant_id:
+    if (
+        not isinstance(run, dict)
+        or run.get("tenant_id") != tenant_id
+        or _uuid(run.get("attribution_run_id")) != canonical_run_id
+    ):
         raise ValueError("tenant attribution run is unavailable")
     config_id = _uuid(run.get("model_config_id"))
     if config_id is None:

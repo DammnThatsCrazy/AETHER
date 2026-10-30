@@ -43,12 +43,17 @@ async def approved_resources(*, tenant_id: str, workflow_run_id: str,
     if store is None:
         from value.x402.commerce_store import get_commerce_store
         store = get_commerce_store()
+    if len(access_rows) > 200:
+        return []
     result: list[dict[str, str]] = []
-    for row in access_rows[:200]:
+    for row in access_rows:
+        if not isinstance(row, dict):
+            continue
         resource_id = row.get("requested_resource")
         if (row.get("tenant_id") != tenant_id or row.get("workflow_run_id") != workflow_run_id
                 or not isinstance(resource_id, str) or not resource_id.strip()
-                or not isinstance(row.get("execution_id"), str)):
+                or any(not isinstance(row.get(key), str) or not row[key].strip()
+                       for key in ("execution_id", "approval_id", "decision_id", "delegation_id"))):
             continue
         try:
             resource = await store.get_resource(tenant_id, resource_id)
@@ -58,11 +63,20 @@ async def approved_resources(*, tenant_id: str, workflow_run_id: str,
                 continue
             registered = parse_instant_strict(data.get("registered_at"))
             evaluated = parse_instant_strict(row.get("evaluated_at"))
-            if registered > evaluated:
+            if registered > evaluated or evaluated > datetime.now(timezone.utc):
                 continue
         except Exception:  # noqa: BLE001 - missing or malformed resource evidence stays unknown
             continue
         result.append({"execution_id": row["execution_id"], "resource_id": resource_id,
                        "approval_id": row["approval_id"], "decision_id": row["decision_id"],
                        "delegation_id": row["delegation_id"], "registered_at": registered.isoformat()})
-    return result
+    associations: dict[str, set[tuple[str, str, str, str]]] = {}
+    for row in result:
+        associations.setdefault(row["execution_id"], set()).add(
+            (row["resource_id"], row["approval_id"], row["decision_id"], row["delegation_id"])
+        )
+    unique: dict[tuple[str, ...], dict[str, str]] = {}
+    for row in result:
+        if len(associations[row["execution_id"]]) == 1:
+            unique.setdefault(tuple(row.values()), row)
+    return list(unique.values())

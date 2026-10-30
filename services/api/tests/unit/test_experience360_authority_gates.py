@@ -57,6 +57,54 @@ async def test_nested_authority_requires_exact_allowed_slot(surface, kind, slot,
     assert len(matches) == 1
     assert (matches[0].targetProjectionId, matches[0].capabilityKey) == (target, capability)
     assert matches[0].sourceSubject == subject and matches[0].tenantId == "tenant-a"
+    if surface == "journey360":
+        assert not any(item.targetProjectionId == "episode360" for item in seen)
     seen.clear()
     await build_experience360_frame(request, policy_evaluator=Policy("denied"), projection_runtime=Runtime())
     assert not seen
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slot_state,dispatch_state,expected", [
+    ("allowed", "allowed", True), ("allowed", "denied", False),
+    ("allowed", "error", False), ("denied", "allowed", False),
+])
+async def test_journey_dispatch_requires_separate_policy(slot_state, dispatch_state, expected):
+    seen = []
+    subject = ProjectionSubject(kind="journey", id="journey-1")
+    request = Experience360FrameRequest(surfaceId="journey360", tenantId="tenant-a", subject=subject,
+                                        requestedSlotIds=["recommended_actions"])
+
+    class Policy:
+        async def evaluate(self, frame_request):
+            return Experience360PolicyEvaluation(
+                surfaceId="journey360", tenantId="tenant-a", evaluatedAt="2026-10-27T10:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={"recommended_actions": Experience360PolicyDisposition(
+                    state=slot_state, policyIds=["slot-policy"], evaluatedAt="2026-10-27T10:00:00Z")},
+            )
+
+        async def evaluate_journey_dispatch_read(self, frame_request):
+            if dispatch_state == "error":
+                raise RuntimeError("unavailable")
+            return Experience360PolicyDisposition(state=dispatch_state, policyIds=["actions-policy"],
+                                                   evaluatedAt="2026-10-27T10:00:00Z")
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **kwargs):
+            seen.extend(kwargs.get("experience360_read_authorizations", []))
+            return ProjectionResult(
+                projectionId=projection_request.projectionId, tenantId="tenant-a",
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[ProjectionSection(id=section, state="unknown", content={})
+                          for section in projection_request.includeSections or []],
+                claims=[], dependencyState=[], generatedAt="2026-10-27T10:00:00Z", degradedReasons=[],
+            )
+
+    await build_experience360_frame(request, policy_evaluator=Policy(), projection_runtime=Runtime())
+    dispatch = [item for item in seen if item.capabilityKey == "actions.dispatch.read"]
+    assert bool(dispatch) is expected
+    if expected:
+        assert len(dispatch) == 1
+        assert dispatch[0].tenantId == "tenant-a" and dispatch[0].sourceSubject == subject
+        assert dispatch[0].policyIds == ["actions-policy"]

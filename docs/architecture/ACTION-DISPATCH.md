@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/action_targets/base.py": "sha256:455280d204f34cf4b774550f1d46024b320ae8e0f2f77eed44b3db8b6b7c2672"
   "services/api/intelligence/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "services/api/intelligence/intelligence/routes.py": "sha256:4c153189bcb43a8909e8ca898d97204c7bf3ce167c4658efdf746de63770f559"
+  "services/api/intelligence/intelligence/routes.py": "sha256:dd995bcc1ae4e96d6c073e81c3c2fa28b681bce23ce18a02b1941683625839a5"
 ---
 
 # Governed Action Dispatch
@@ -54,6 +54,13 @@ reserved within the authenticated tenant and action. A replay returns the
 existing durable dispatch and latest receipt with `replayed: true`; it does not
 invoke a connector a second time, and the same key on another action or tenant
 does not alias the reservation.
+
+Optional Journey intent or Risk intervention references are validated before a
+new dispatch and retained on its reservation. Reusing a key cannot rebind that
+reservation. Risk association currently supports exact entity subjects only;
+the recommendation must name the same entity. Projection reads require a
+separate actions-domain read policy decision and expose bounded dispatch
+evidence, not proof of historical authority or an external effect.
 
 When a concrete target returns a delivered receipt, it must include a real
 external evidence id (simulation-shaped ids are rejected). When the target is

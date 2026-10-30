@@ -38,6 +38,11 @@ def _fixtures():
         "model_config_snapshot": {
             **config, "effective_from": str(now),
             "click_lookback_window": 24,
+            "view_lookback_window": 168,
+            "identity_confidence_min": 0.0,
+            "fraud_policy": "exclude",
+            "direct_traffic_policy": "include",
+            "engaged_view_threshold_ms": 0,
         },
     }
     return run, config
@@ -70,6 +75,29 @@ def test_invalid_lineage_fails_closed(mutation):
     mutation(run, config)
     with pytest.raises(ValueError, match="lineage"):
         _decision_for("tenant-a", run, config)
+
+
+@pytest.mark.parametrize("field", [
+    "click_lookback_window", "view_lookback_window", "identity_confidence_min",
+    "fraud_policy", "direct_traffic_policy", "engaged_view_threshold_ms",
+])
+def test_missing_effective_setting_fails_closed(field):
+    run, config = _fixtures()
+    del run["model_config_snapshot"][field]
+    with pytest.raises(ValueError, match="lineage"):
+        _decision_for("tenant-a", run, config)
+
+
+@pytest.mark.asyncio
+async def test_producer_rejects_a_different_returned_run():
+    run, config = _fixtures()
+
+    class Runs:
+        async def get_run(self, run_id, tenant_id):
+            return run
+
+    with pytest.raises(ValueError, match="tenant attribution run"):
+        await validate_attribution_run_model("tenant-a", str(uuid4()), runs=Runs())
 
 
 @pytest.mark.asyncio

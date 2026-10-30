@@ -50,6 +50,28 @@ async def test_approved_resource_requires_current_exact_tenant_record(case):
 
 
 @pytest.mark.asyncio
+async def test_approved_resources_fail_closed_for_ambiguous_or_malformed_evidence():
+    base = {"tenant_id": "tenant-a", "workflow_run_id": "run-1", "execution_id": "exec-1",
+            "requested_resource": "resource-1", "approval_id": "approval-1", "decision_id": "decision-1",
+            "delegation_id": "grant-1", "evaluated_at": "2026-10-18T10:00:02Z"}
+
+    class Store:
+        async def get_resource(self, tenant_id, resource_id):
+            return {"tenant_id": tenant_id, "resource_id": resource_id, "active": True,
+                    "registered_at": "2026-10-18T09:00:00Z"}
+
+    async def read(rows):
+        return await approved_resources(tenant_id="tenant-a", workflow_run_id="run-1", access_rows=rows, store=Store())
+
+    assert len(await read([base, dict(base)])) == 1  # replayed access row is one association
+    assert await read([base, {**base, "requested_resource": "resource-2"}]) == []
+    assert await read([base, {**base, "decision_id": "decision-2"}]) == []
+    assert await read([{**base, "approval_id": None}, None]) == []
+    assert await read([{**base, "evaluated_at": "9999-01-01T00:00:00Z"}]) == []
+    assert await read([base] * 201) == []
+
+
+@pytest.mark.asyncio
 async def test_executor_callback_record_flows_to_workflow_result(monkeypatch):
     from types import SimpleNamespace
     from actions.agent import user_agents, runtime_repository
