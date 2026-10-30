@@ -76,6 +76,7 @@ class AgentRegister(BaseModel):
     owner_entity_id: str
     model: str
     tools: list[str] = Field(default_factory=list)
+    resource_uris: list[str] = Field(default_factory=list, max_length=100)
     constraints: dict[str, Any] = Field(default_factory=dict)
     risk_tolerance: str = Field(default="medium", pattern="^(low|medium|high)$")
 
@@ -83,6 +84,7 @@ class AgentRegister(BaseModel):
 class AgentUpdate(BaseModel):
     model: Optional[str] = None
     tools: Optional[list[str]] = None
+    resource_uris: Optional[list[str]] = Field(default=None, max_length=100)
     constraints: Optional[dict[str, Any]] = None
     risk_tolerance: Optional[str] = Field(default=None, pattern="^(low|medium|high)$")
 
@@ -330,6 +332,7 @@ async def register(
         tenant_id=tenant.tenant_id,
         model=body.model,
         tools=body.tools,
+        resource_uris=body.resource_uris,
         constraints=body.constraints,
         risk_tolerance=body.risk_tolerance,
     )
@@ -387,7 +390,7 @@ async def update(agent_id: str, body: AgentUpdate, request: Request):
     if existing is None or existing.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Agent")
     patch = {k: v for k, v in body.model_dump(exclude_none=True).items()}
-    if "tools" in patch or "constraints" in patch or "risk_tolerance" in patch:
+    if any(key in patch for key in ("tools", "resource_uris", "constraints", "risk_tolerance")):
         patch["policy_version"] = (existing.get("policy_version") or 1) + 1
     updated = await _configs.update(agent_id, patch)
     return APIResponse(data=updated).to_dict()

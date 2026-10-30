@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -106,9 +107,6 @@ async def validated_agent_receipt(
     ):
         return None
     rows = await InvocationReceiptRepository().for_execution(tenant_id, agent_id, execution_id)
-    resource_rows = [row for row in rows if isinstance(row, dict) and row.get("action") == RESOURCE_READ_ACTION]
-    if resource_rows:
-        rows = resource_rows
     if len(rows) != 1:
         return None
     row = rows[0]
@@ -252,9 +250,10 @@ async def _validated_resource_receipt(row: dict[str, Any], tenant_id: str, agent
         or scope != {"actions": [RESOURCE_READ_ACTION], "resources": [row.get("resource")]}
         or not isinstance(policy, dict) or policy.get("allowed") is not True
         or policy.get("delegation_id") != row.get("grant_id") or policy.get("matched_scope") != scope
-        or row.get("resource_read_attempted") not in {True, False} or row.get("tool_call_attempted") is not False
+        or row.get("resource_read_attempted") is not True or row.get("tool_call_attempted") is not False
         or row.get("result_status") not in {"succeeded", "failed"}
-        or (row.get("result_status") == "succeeded" and (not isinstance(row.get("provider_result_digest"), str) or len(row["provider_result_digest"]) != 64))
+        or (row.get("result_status") == "succeeded" and (not isinstance(row.get("provider_result_digest"), str) or re.fullmatch(r"[0-9a-f]{64}", row["provider_result_digest"]) is None))
+        or (row.get("provider_result_complete") is True and not _exact_resource_contents(row.get("provider_result"), row.get("resource_uri")))
         or not started <= invoked <= completed <= ended or not grant_start <= decision_at <= invoked
         or (grant_end is not None and (grant_end.tzinfo is None or invoked >= grant_end))
         or (row.get("provider_result_complete") is True and hashlib.sha256(
@@ -287,6 +286,20 @@ async def _validated_resource_receipt(row: dict[str, Any], tenant_id: str, agent
 
 def _exact_identifier(value: Any) -> bool:
     return isinstance(value, str) and bool(value) and value == value.strip() and "*" not in value
+
+
+def _exact_resource_contents(result: Any, resource_uri: str) -> bool:
+    contents = result.get("contents") if isinstance(result, dict) else None
+    return (
+        isinstance(contents, list)
+        and bool(contents)
+        and all(
+            isinstance(item, dict)
+            and item.get("uri") == resource_uri
+            and (isinstance(item.get("text"), str) or isinstance(item.get("blob"), str))
+            for item in contents
+        )
+    )
 
 
 def _public_mcp_url(value: Any) -> bool:
@@ -728,6 +741,8 @@ async def read_observed_mcp_resource(
         if not isinstance(body, dict) or body.get("jsonrpc") != "2.0" or body.get("id") != execution_id or body.get("error") is not None or not isinstance(body.get("result"), dict):
             raise RuntimeError("provider_resource_result_invalid")
         payload = body["result"]
+        if not _exact_resource_contents(payload, resource_uri):
+            raise RuntimeError("provider_resource_contents_mismatch")
     except Exception as exc:
         status, error = "failed", {"code": str(exc)[:256], "type": type(exc).__name__}
     ended = datetime.now(timezone.utc)

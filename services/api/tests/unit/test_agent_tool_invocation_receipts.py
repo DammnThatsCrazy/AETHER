@@ -543,7 +543,8 @@ async def test_invocation_ingress_requires_dispatch_write_and_principal(permissi
 
 
 @pytest.mark.asyncio
-async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_receipt(monkeypatch):
+@pytest.mark.parametrize("response_shape", ["valid", "foreign_uri", "empty_contents"])
+async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_receipt(monkeypatch, response_shape):
     from actions.agent.invocation_runtime import read_observed_mcp_resource
     from actions.agent_access_intelligence.authority import RESOURCE_READ_ACTION, MCP_RESOURCE_PREFIX
     from actions.agent_access_intelligence.models import CapabilityKind
@@ -595,7 +596,10 @@ async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_re
         if json["method"] == "resources/list":
             return Response({"jsonrpc":"2.0", "id":json["id"], "result":{"resources":[{"uri":uri,"name":"item"}]}})
         assert json["method"] == "resources/read" and json["params"] == {"uri":uri}
-        return Response({"jsonrpc":"2.0", "id":execution, "result":{"contents":[{"uri":uri,"text":"value"}]}})
+        contents = [{"uri": uri if response_shape == "valid" else "other-resource", "text": "value"}]
+        if response_shape == "empty_contents":
+            contents = []
+        return Response({"jsonrpc":"2.0", "id":execution, "result":{"contents": contents}})
     monkeypatch.setattr("actions.agent.invocation_runtime.send_public_request", request)
     execution_record = {"tenant_id":tenant, "agent_id":agent, "execution_id":execution,
         "workflow_run_id":"run-resource", "started_at":(datetime.now(timezone.utc) - __import__("datetime").timedelta(seconds=2)).isoformat(),
@@ -608,8 +612,49 @@ async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_re
         execution={**execution_record, "ended_at":(datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=1)).isoformat()},
         expected_workflow_run_id="run-resource")
     assert validated["resourceOperation"] == "read"
-    assert validated["providerResultDigest"] and len(calls) == 4
+    assert len(calls) == 4
+    if response_shape == "valid":
+        assert validated["state"] == "provider_resource_read_succeeded"
+        assert validated["providerResultDigest"]
+    else:
+        assert validated["state"] == "provider_resource_read_failed"
+        assert validated["providerResult"] is None
     assert grant["scope"]["actions"] == [RESOURCE_READ_ACTION]
+
+    async def not_attempted(*_args):
+        return [{**receipt, "resource_read_attempted": False}]
+
+    monkeypatch.setattr(InvocationReceiptRepository, "for_execution", not_attempted)
+    assert await validated_agent_receipt(tenant_id=tenant, agent_id=agent,
+        execution={**execution_record, "ended_at": datetime.now(timezone.utc).isoformat()}) is None
+
+    async def ambiguous(*_args):
+        return [receipt, {**receipt, "action": "invoke"}]
+
+    monkeypatch.setattr(InvocationReceiptRepository, "for_execution", ambiguous)
+    assert await validated_agent_receipt(tenant_id=tenant, agent_id=agent,
+        execution={**execution_record, "ended_at": datetime.now(timezone.utc).isoformat()}) is None
+
+
+@pytest.mark.asyncio
+async def test_resource_allowlist_is_persisted_and_updates_policy_version(monkeypatch):
+    from actions.agent import user_agents
+    from repositories.repos import AgentConfigRepository
+
+    body = user_agents.AgentRegister(
+        agent_id="agent-a", owner_entity_id="owner", model="model-a",
+        resource_uris=["resource://exact-item"],
+    )
+    repository = AgentConfigRepository()
+    await repository.register(**body.model_dump(), tenant_id="tenant-a")
+    assert (await repository.find_by_id("agent-a"))["resource_uris"] == body.resource_uris
+    monkeypatch.setattr(user_agents, "_configs", repository)
+    tenant = SimpleNamespace(tenant_id="tenant-a", require_permission=lambda _permission: None)
+    await user_agents.update("agent-a", user_agents.AgentUpdate(resource_uris=[]),
+        SimpleNamespace(state=SimpleNamespace(tenant=tenant)))
+    saved = await repository.find_by_id("agent-a")
+    assert saved["resource_uris"] == []
+    assert saved["policy_version"] == 2
 
 
 @pytest.mark.asyncio

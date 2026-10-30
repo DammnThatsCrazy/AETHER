@@ -2764,6 +2764,7 @@ class AgentConfigRepository(BaseRepository):
         tools: Optional[list] = None,
         constraints: Optional[dict] = None,
         risk_tolerance: str = "medium",
+        resource_uris: Optional[list[str]] = None,
     ) -> dict:
         return await self.insert(agent_id, {
             "agent_id": agent_id,
@@ -2771,6 +2772,7 @@ class AgentConfigRepository(BaseRepository):
             "tenant_id": tenant_id,
             "model": model,
             "tools": tools or [],
+            "resource_uris": resource_uris or [],
             "constraints": constraints or {},
             "risk_tolerance": risk_tolerance,
             "policy_version": 1,
