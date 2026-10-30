@@ -25,6 +25,34 @@ def _first(mapping: dict[str, Any], *names: str) -> str | None:
     return None
 
 
+async def _register_agent_source(
+    payload: dict[str, Any], tenant_id: str, event_id: str, namespace: str,
+) -> None:
+    from ingestion.ingestion.workers import _validated_agent_deployment_marker
+
+    marker = _validated_agent_deployment_marker(payload)
+    if not marker or not marker.get("agent_id"):
+        # Source-reported agent refs without a validated deployment stay Silver
+        # facts only; they never create identity records.
+        return
+    from identity.identity.routes import get_identity_resolver
+    from identity.identity.source_identity_registry import SourceIdentityRegistry
+
+    repo = getattr(get_identity_resolver(), "_repo", None)
+    if repo is None:
+        raise RuntimeError("canonical identity repository is unavailable")
+    await SourceIdentityRegistry(repo).register_source_identity(
+        tenant_id=tenant_id,
+        source_system_id="aether-agent-telemetry",
+        source_kind="agent",
+        source_namespace=f"{namespace}:agent:deployment:{marker['deployment_id']}",
+        agent_id=marker["agent_id"],
+        idempotency_key=f"{tenant_id}:{event_id}:agent-source-v1",
+        source_record_id=event_id,
+    )
+    metrics.increment("identity_agent_source_registered")
+
+
 async def resolve_sdk_observation(event: Event, producer: EventProducer) -> None:
     """Register and resolve one accepted identity-bearing SDK observation.
 
@@ -71,6 +99,12 @@ async def resolve_sdk_observation(event: Event, producer: EventProducer) -> None
         context, "orgId", "tenantId"
     )
     namespace = str(context.get("identity_namespace") or f"tenant:{tenant_id}")
+
+    # An agent observed through a validated deployment becomes its own
+    # source identity (WO-013). It is never resolved into a person: agent and
+    # deployment identifiers are non-merge-eligible, and the registry record
+    # stays unresolved until a tenant admin binds it to a canonical Agent.
+    await _register_agent_source(payload, tenant_id, event_id, namespace)
 
     wallet_address = _first(properties, "wallet_address", "walletAddress", "address")
     has_source_identity = any((user_id, anonymous_id, device_id, installation_id))
