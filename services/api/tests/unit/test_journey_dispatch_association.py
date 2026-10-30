@@ -6,7 +6,7 @@ from actions.agent.journey_dispatch_association import read_journey_dispatches
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", ["valid", "foreign", "wrong_subject", "wrong_version", "wrong_recommendation", "wrong_action", "foreign_decision", "unapproved", "future", "before_occurrence", "before_recording", "truncated", "missing_policy", "foreign_policy", "wrong_policy_action", "wrong_policy_resource", "future_policy", "wrong_actor", "shared_policy", "missing_context", "wrong_context_target", "wrong_context_action", "wrong_context_association", "wrong_approval", "replay_context"])
+@pytest.mark.parametrize("case", ["valid", "foreign", "wrong_subject", "wrong_version", "wrong_recommendation", "wrong_action", "foreign_decision", "unapproved", "future", "future_dispatch", "dispatch_before_creation", "before_occurrence", "before_recording", "truncated", "missing_policy", "foreign_policy", "wrong_policy_action", "wrong_policy_resource", "future_policy", "wrong_actor", "shared_policy", "missing_context", "wrong_context_target", "wrong_context_action", "wrong_context_association", "wrong_approval", "replay_context"])
 async def test_exact_journey_dispatch_chain(case):
     link = {"kind": "journey_action_intent", "link_state": "caller_associated", "record_id": "intent-1",
             "subject_id": "journey-1", "version_id": "version-1", "action_key": "notice",
@@ -57,6 +57,8 @@ async def test_exact_journey_dispatch_chain(case):
     if case == "foreign_decision": decision["tenant_id"] = "tenant-b"
     if case == "unapproved": decision["decision_status"] = "rejected"
     if case == "future": dispatch["created_at"] = "2999-10-18T10:00:02Z"
+    if case == "future_dispatch": dispatch["dispatched_at"] = "2999-10-18T10:00:02Z"
+    if case == "dispatch_before_creation": dispatch["dispatched_at"] = "2026-10-18T10:00:01Z"
     if case in {"before_occurrence", "before_recording"}: dispatch["created_at"] = "2026-10-18T09:59:59Z"
     class Dispatches:
         async def find_many(self, *, filters, limit):

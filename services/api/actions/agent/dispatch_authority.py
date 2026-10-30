@@ -61,10 +61,10 @@ async def read_dispatch_authorization(
         }
         or (dispatch.get("dispatch_requires_elevation") is True
             and not dispatch.get("dispatch_approval_id"))
-        # A recoverable authorization-persistence retry can evaluate policy
-        # after the reservation was created. It must still precede delivery.
         or evaluated > dispatched
         or created > now
+        or dispatched > now
+        or dispatched < created
     ):
         return None
     return {

@@ -1274,19 +1274,24 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
                 if not await _dispatches.claim_authorization(saved_dispatch["dispatch_id"]):
                     from shared.common.common import ConflictError
                     raise ConflictError("Idempotent dispatch authorization is already in progress")
-                # Reuse the reserved dispatch identity and its exact policy binding.
                 dispatch = ActionDispatch(**{**saved_dispatch, "status": "queued"})
                 dispatch_id = dispatch.dispatch_id
-                dispatch_policy = await policy_engine.check_action_dispatch(
-                    actor_id=principal_id, actor_type='tenant_user',
-                    tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
-                    has_dispatch_permission=dispatch_permission, dispatch_id=dispatch.dispatch_id,
-                    target_type=dispatch.target_type, selected_action_key=dispatch.dispatch_action_key,
-                    selected_action_type=dispatch.dispatch_action_type,
-                    association_record_id=(journey_association or risk_association or {}).get("record_id"),
-                    is_elevated=dispatch.dispatch_requires_elevation,
-                    approval_id=dispatch.dispatch_approval_id, persist=False,
-                )
+                try:
+                    dispatch_policy = await policy_engine.check_action_dispatch(
+                        actor_id=principal_id, actor_type='tenant_user',
+                        tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
+                        has_dispatch_permission=dispatch_permission, dispatch_id=dispatch.dispatch_id,
+                        target_type=dispatch.target_type, selected_action_key=dispatch.dispatch_action_key,
+                        selected_action_type=dispatch.dispatch_action_type,
+                        association_record_id=(journey_association or risk_association or {}).get("record_id"),
+                        is_elevated=dispatch.dispatch_requires_elevation,
+                        approval_id=dispatch.dispatch_approval_id, persist=False,
+                    )
+                except Exception:
+                    await _dispatches.update(dispatch_id, {
+                        "status": "authorization_pending", "updated_at": utc_now().isoformat(),
+                    })
+                    raise
                 dispatch_policy.decision_id = dispatch.dispatch_policy_decision_id
             else:
                 receipts = await _delivery_receipts.find_many(

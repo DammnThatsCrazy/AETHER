@@ -729,7 +729,7 @@ async def read_observed_mcp_resource(
             "clientInfo":{"name":"aether-agent-runtime", "version":"1"}}}, headers=headers)
         if init.status_code < 200 or init.status_code >= 300:
             raise RuntimeError("provider_initialize_failed")
-        init_body = init.json()
+        init_body = _matching_mcp_response(init, init_id)
         if not isinstance(init_body, dict) or init_body.get("id") != init_id or not isinstance((init_body.get("result") or {}).get("protocolVersion"), str):
             raise RuntimeError("provider_initialize_invalid")
         headers["MCP-Protocol-Version"] = init_body["result"]["protocolVersion"]
@@ -743,7 +743,7 @@ async def read_observed_mcp_resource(
             json={"jsonrpc":"2.0", "id":list_id, "method":"resources/list", "params":{}}, headers=headers)
         if listing.status_code < 200 or listing.status_code >= 300 or len(listing.content) > 1_000_000:
             raise RuntimeError("provider_resource_list_failed")
-        listing_body = listing.json()
+        listing_body = _matching_mcp_response(listing, list_id)
         listed = (listing_body.get("result") or {}).get("resources") if isinstance(listing_body, dict) else None
         if (not isinstance(listing_body, dict) or listing_body.get("jsonrpc") != "2.0"
             or listing_body.get("id") != list_id or listing_body.get("error") is not None
@@ -769,7 +769,7 @@ async def read_observed_mcp_resource(
         response = await send_public_request("POST", url, max_redirects=0,
             json={"jsonrpc":"2.0", "id":execution_id, "method":"resources/read", "params":{"uri":resource_uri}}, headers=headers)
         if response.status_code < 200 or response.status_code >= 300 or len(response.content) > 1_000_000: raise RuntimeError("provider_resource_read_failed")
-        body = response.json()
+        body = _matching_mcp_response(response, execution_id)
         if not isinstance(body, dict) or body.get("jsonrpc") != "2.0" or body.get("id") != execution_id or body.get("error") is not None or not isinstance(body.get("result"), dict):
             raise RuntimeError("provider_resource_result_invalid")
         payload = body["result"]

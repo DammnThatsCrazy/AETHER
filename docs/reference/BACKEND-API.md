@@ -1969,6 +1969,11 @@ An idempotent dispatch replay must supply the same association reference and
 match the persisted tenant, action, canonical action decision, selected action,
 and recommendation tuple. The replay uses the original stored association rather
 than asserting that its Journey intent or Risk decision is still current.
+Before authorization persistence, the reservation is `authorization_pending`.
+An atomic `authorizing` claim serializes retries of that reservation; policy
+evaluation or policy/audit persistence failures restore the pending state without
+calling the connector. A successful retry retains the original dispatch identity.
+Completed dispatches replay without another connector call.
 
 Journey360 and Risk360 dispatch reads also join bounded delivery evidence along
 the canonical `action_dispatches` → deterministic `DeliveryIntent` →
@@ -2328,6 +2333,9 @@ resource-read evidence. Ambiguous receipts fail closed. Resource mutations,
 standing authorization, independent external effects and complete producer
 coverage remain unknown. Neither surface nor
 the full 18-surface contract is complete.
+MCP initialization, tool calls, and resource listing/reads accept JSON or SSE
+responses only when exactly one JSON-RPC response matches the request ID.
+Valid resource-read grants remain separate from invoke-grant coverage.
 
 Journey360 and Risk360 can also include an associated agent execution's
 recorded delegation decision when its tenant, grant reference, status and decision time
@@ -2348,7 +2356,8 @@ and an approved intervention observed, recorded, and effective by dispatch time.
 It also requires the persisted tenant action-dispatch policy decision to be
 allowed for this exact dispatch, tenant, authenticated principal, selected
 action, target, elevation/approval context, and association record, with policy
-evaluation no later than dispatch creation.
+evaluation no later than the recorded dispatch attempt (or creation for older
+records without an attempt timestamp). Future or reversed dispatch times fail closed.
 The Risk decision must also be recorded, observed, and effective by the
 authorization evaluation time.
 Current-decision validation rejects out-of-scope or future-observed or recorded

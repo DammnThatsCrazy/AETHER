@@ -129,7 +129,7 @@ async def test_dispatch_policy_uses_tenant_permission_and_binds_denial_to_durabl
     assert policy["context"]["target_type"] == row["target_type"] == "test"
 
 
-@pytest.mark.parametrize("failure", ["policy persistence", "audit persistence"])
+@pytest.mark.parametrize("failure", ["policy persistence", "audit persistence", "retry evaluation"])
 async def test_dispatch_authorization_persistence_failure_can_retry_without_duplicate_delivery(monkeypatch, failure):
     from governance.security import policy_engine as policy_engine_module
 
@@ -141,7 +141,7 @@ async def test_dispatch_authorization_persistence_failure_can_retry_without_dupl
         "action_type": "review", "status": "planned",
     })
     calls = 0
-    if failure == "policy persistence":
+    if failure != "audit persistence":
         from governance.security.repositories import PolicyDecisionRepository
         original_write = PolicyDecisionRepository.insert
 
@@ -173,6 +173,24 @@ async def test_dispatch_authorization_persistence_failure_can_retry_without_dupl
     ))[0]
     assert reserved["status"] == "authorization_pending"
     assert target.calls == 0
+
+    if failure == "retry evaluation":
+        original_check = policy_engine_module.policy_engine.check_action_dispatch
+        evaluations = 0
+
+        async def fail_recheck(*args, **kwargs):
+            nonlocal evaluations
+            evaluations += 1
+            if evaluations == 2:
+                raise RuntimeError("policy evaluation unavailable")
+            return await original_check(*args, **kwargs)
+
+        with monkeypatch.context() as retry_patch:
+            retry_patch.setattr(policy_engine_module.policy_engine, "check_action_dispatch", fail_recheck)
+            with pytest.raises(RuntimeError, match="evaluation unavailable"):
+                await routes._dispatch_action("action-1", body, _request("tenant-a"))
+        assert (await routes._dispatches.find_by_id(reserved["dispatch_id"]))["status"] == "authorization_pending"
+        assert target.calls == 0
 
     result = await routes._dispatch_action("action-1", body, _request("tenant-a"))
     assert result["data"]["dispatch"]["dispatch_id"] == reserved["dispatch_id"]

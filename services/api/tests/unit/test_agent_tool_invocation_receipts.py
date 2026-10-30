@@ -617,8 +617,9 @@ async def test_invocation_ingress_requires_dispatch_write_and_principal(permissi
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["json", "sse", "sse_wrong_id", "sse_duplicate_id"])
 @pytest.mark.parametrize("response_shape", ["valid", "foreign_uri", "empty_contents"])
-async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_receipt(monkeypatch, response_shape):
+async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_receipt(monkeypatch, response_shape, transport):
     from actions.agent.invocation_runtime import read_observed_mcp_resource
     from actions.agent_access_intelligence.authority import RESOURCE_READ_ACTION, MCP_RESOURCE_PREFIX
     from actions.agent_access_intelligence.models import CapabilityKind
@@ -659,7 +660,16 @@ async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_re
         status_code = 200
         content = b"{}"
         headers = {}
-        def __init__(self, body): self.body = body
+        def __init__(self, body):
+            self.body = body
+            if transport != "json":
+                self.headers = {"content-type": "text/event-stream"}
+                if body.get("id") == execution and transport == "sse_wrong_id":
+                    body = {**body, "id": "different-execution"}
+                event = "data: " + __import__("json").dumps(body) + "\n\n"
+                self.content = event.encode()
+                if body.get("id") == execution and transport == "sse_duplicate_id":
+                    self.content += event.encode()
         def json(self): return self.body
     async def request(method, request_url, *, json, headers, max_redirects):
         calls.append(json)
@@ -687,7 +697,7 @@ async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_re
         expected_workflow_run_id="run-resource")
     assert validated["resourceOperation"] == "read"
     assert len(calls) == 4
-    if response_shape == "valid":
+    if response_shape == "valid" and transport in {"json", "sse"}:
         assert validated["state"] == "provider_resource_read_succeeded"
         assert validated["providerResultDigest"]
     else:
