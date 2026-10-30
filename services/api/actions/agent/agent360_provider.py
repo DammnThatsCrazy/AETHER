@@ -3556,10 +3556,18 @@ class Agent360Provider:
                 and row.get("authorization_kind") == AUTHORIZATION_KIND
                 and isinstance(record_id, str)
                 and record_id
+                and record_id == record_id.strip()
                 and record_id not in seen_ids
                 and bool(capability_id) != bool(server_ref)
                 and all(
-                    value is None or (isinstance(value, str) and value == value.strip())
+                    value is None
+                    or (
+                        isinstance(value, str)
+                        and value
+                        and value == value.strip()
+                        and len(value) <= 256
+                        and not any(ord(char) < 32 or ord(char) == 127 for char in value)
+                    )
                     for value in (capability_id, server_ref)
                 )
                 and isinstance(actions, list)
@@ -3598,7 +3606,8 @@ class Agent360Provider:
             evaluated, error = try_parse_instant(evaluated_at)
             valid = bool(
                 isinstance(row, dict)
-                and isinstance(decision_id, str) and decision_id.strip() and decision_id not in seen
+                and isinstance(decision_id, str) and decision_id.strip()
+                and decision_id == decision_id.strip() and decision_id not in seen
                 and row.get("tenant_id") == tenant_id
                 and row.get("policy_key") == "capability.invoke"
                 and row.get("actor_type") == "tenant_user"
@@ -3614,6 +3623,8 @@ class Agent360Provider:
                 and (not row.get("allowed") or (
                     isinstance(context.get("capability_grant_record_id"), str)
                     and bool(context["capability_grant_record_id"].strip())
+                    and context["capability_grant_record_id"]
+                    == context["capability_grant_record_id"].strip()
                 ))
             )
             if not valid:

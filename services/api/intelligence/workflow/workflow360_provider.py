@@ -433,14 +433,21 @@ class RepositoryWorkflow360Source:
             ):
                 scope_mismatch = True
                 continue
-            edge_tenant_id = _safe_identifier(
+            edge_tenant_id = _exact_identifier(
                 properties.get("tenant_id") or properties.get("tenantId")
             )
-            execution_id = _safe_identifier(properties.get("execution_id"))
+            raw_execution_id = properties.get("execution_id")
+            execution_id = _exact_identifier(raw_execution_id)
             if edge_tenant_id != tenant_id:
                 scope_mismatch = True
                 continue
-            if execution_id is None or execution_id not in execution_agents:
+            if execution_id is None:
+                # A malformed value that normalizes to an admitted execution
+                # is an ambiguous attempted join, so it must affect coverage.
+                if _safe_identifier(raw_execution_id) in execution_agents:
+                    scope_mismatch = True
+                continue
+            if execution_id not in execution_agents:
                 continue
 
             expected_agent_id = execution_agents[execution_id]
@@ -455,9 +462,9 @@ class RepositoryWorkflow360Source:
                 scope_mismatch = True
                 continue
 
-            tool_id = _safe_identifier(target_vertex_id[len(tool_prefix):])
+            tool_id = _exact_identifier(target_vertex_id[len(tool_prefix):])
             called_at = _safe_timestamp(properties.get("called_at"))
-            event_ref = _safe_identifier(
+            event_ref = _exact_identifier(
                 properties.get("source_event_id") or properties.get("idempotency_key")
             )
             if tool_id is None or called_at is None or event_ref is None:
@@ -4577,6 +4584,13 @@ def _safe_identifier(value: Any) -> Optional[str]:
     if not text or len(text) > 256 or any(ord(char) < 32 or ord(char) == 127 for char in text):
         return None
     return text
+
+
+def _exact_identifier(value: Any) -> Optional[str]:
+    """Accept a persisted join key only in its canonical, unpadded form."""
+    if not isinstance(value, str) or value != value.strip():
+        return None
+    return _safe_identifier(value)
 
 
 def _safe_token(value: Any, *, allowed: Optional[set[str]] = None) -> Optional[str]:

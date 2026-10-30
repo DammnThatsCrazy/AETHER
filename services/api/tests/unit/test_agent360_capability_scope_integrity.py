@@ -67,6 +67,25 @@ def test_exact_grant_with_aware_boundaries_is_retained():
     ) == ([record], True)
 
 
+@pytest.mark.parametrize("field,value", [
+    ("authorization_id", " grant-a"),
+    ("capability_id", "tool-a "),
+    ("server_ref", " srv-a"),
+])
+def test_padded_grant_join_identifiers_invalidate_the_read(field, value):
+    record = grant()
+    if field == "server_ref":
+        record.update(capability_id=None, server_ref=value)
+        record["scope"]["resources"] = [f"capability-server:{value.strip()}"]
+    else:
+        record[field] = value
+        if field == "capability_id":
+            record["scope"]["resources"] = [f"capability:{value.strip()}"]
+    assert Agent360Provider._validate_capability_grant_records(
+        [record], "tenant-a", "agent-a"
+    ) == ([], False)
+
+
 def test_capability_policy_decision_requires_exact_tenant_agent_resource_and_time():
     decision = {
         "decision_id": "decision-1", "tenant_id": "tenant-a", "policy_key": "capability.invoke",
@@ -87,6 +106,17 @@ def test_capability_policy_decision_requires_exact_tenant_agent_resource_and_tim
             [candidate], "tenant-a", "agent-a"
         ) == ([], False)
     candidate = {**decision, "context": {**decision["context"], "agent_id": "agent-b"}}
+    assert Agent360Provider._validate_capability_policy_decisions(
+        [candidate], "tenant-a", "agent-a"
+    ) == ([], False)
+    candidate = {**decision, "decision_id": " decision-1"}
+    assert Agent360Provider._validate_capability_policy_decisions(
+        [candidate], "tenant-a", "agent-a"
+    ) == ([], False)
+    candidate = {
+        **decision,
+        "context": {**decision["context"], "capability_grant_record_id": " grant-a"},
+    }
     assert Agent360Provider._validate_capability_policy_decisions(
         [candidate], "tenant-a", "agent-a"
     ) == ([], False)

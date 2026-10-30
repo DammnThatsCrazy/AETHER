@@ -2041,6 +2041,61 @@ async def test_repository_source_joins_tool_call_edges_to_exact_run_executions(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("tenant_id", f" {TENANT_A}"),
+        ("execution_id", " agent-execution-a "),
+        ("idempotency_key", " tool-call-event-a"),
+    ],
+)
+async def test_repository_source_rejects_padded_tool_call_join_identifiers(
+    monkeypatch, field, value
+) -> None:
+    from types import SimpleNamespace
+
+    import shared.graph.graph as graph_module
+
+    execution = _agent_execution_row()
+    properties = {
+        "tenant_id": TENANT_A,
+        "execution_id": execution["execution_id"],
+        "called_at": "2026-10-18T10:00:01Z",
+        "idempotency_key": "tool-call-event-a",
+    }
+    properties[field] = value
+    edge = SimpleNamespace(
+        edge_type=graph_module.EdgeType.CALLED_TOOL,
+        from_vertex_id=f"{TENANT_A}:agent:{execution['agent_id']}",
+        to_vertex_id=f"{TENANT_A}:tool:tool-a",
+        properties=properties,
+    )
+
+    class FakeGraph:
+        async def get_edges_for_tenant(self, tenant_id: str, *, limit: int, edge_types: list[Any]):
+            return [edge], False
+
+        async def get_vertex_for_tenant(self, tenant_id: str, vertex_id: str):
+            return SimpleNamespace(
+                vertex_type="Tool",
+                properties={"tenant_id": tenant_id, "tool_id": "tool-a"},
+            )
+
+    monkeypatch.setattr(graph_module, "GraphClient", FakeGraph)
+    read = await RepositoryWorkflow360Source().run_execution_actions(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(execution,),
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.rows == ()
+    assert read.complete is False
+    assert read.scope_mismatch is True
+
+
+@pytest.mark.asyncio
 async def test_workflow_actions_project_observed_calls_without_inference() -> None:
     invocation = _row(
         "invocation-a",
