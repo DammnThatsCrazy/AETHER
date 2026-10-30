@@ -150,6 +150,7 @@ aether continuations show cont_0123456789abcdef0123456789abcdef --json
 aether access operations list --json
 aether access operations show entities.neighborhood --json
 aether access invoke entities.neighborhood --input-json '{"entity_id":"entity_123","limit":25}' --json
+aether experience360 frame get --surface agent360 --subject-kind agent --subject-id agent_123 --slots identity,tool_usage --json
 aether account context --json
 aether usage summary --json
 aether auth context --json
@@ -158,6 +159,45 @@ aether auth logout
 aether auth sessions list --limit 20 --json
 aether auth sessions revoke SESSION_ID --json
 ```
+
+## Governed 360 frame read (`experience360.frame.get`)
+
+One bounded read maps to the existing authenticated `POST /v1/experience360/frames`
+route (a read; POST carries the structured body). Input is `surface`, `subject`
+(`kind`, `id`), optional `requested_slots` (1-32 unique slot IDs of that surface),
+optional RFC 3339 `as_of`, and optional `include_evidence`. The surface, its
+subject kinds, and its slot IDs are checked against a pinned snapshot of the 360
+catalog (`src/experience360-catalog.mjs`, guarded by a drift test) before any
+request; unknown fields, tenant/actor/policy/lens/paging/query fields, and
+oversized values are rejected locally. Tenant and actor come only from the
+credential, and the server authorizes every call.
+
+```sh
+aether experience360 frame get --surface agent360 --subject-kind agent --subject-id agent_123 --json
+aether access invoke experience360.frame.get --input-json '{"surface":"agent360","subject":{"kind":"agent","id":"agent_123"}}' --json
+```
+
+```js
+const frame = await access.experience360.frame({
+  surface: 'agent360',
+  subject: { kind: 'agent', id: 'agent_123' },
+  requested_slots: ['identity', 'tool_usage'],
+});
+```
+
+MCP hosts call it through `access_invoke_read` with `operation_id`
+`experience360.frame.get`; there is no separate tool. `data` is the server's
+frame, unmodified: slot states (for example `available`, `degraded`, `unknown`,
+`suppressed`), evidence references, limitations, policy dispositions, and
+degradation are never promoted or rewritten, and a frame that does not match
+the requested surface and subject is rejected as a contract error. Audit and
+usage references appear in `interaction.references` only when the API returns
+them in response headers. The call is made once and is never retried.
+Failures keep the HTTP status and add a non-sensitive `category`
+(`unauthenticated`, `forbidden`, `not_found`, `conflict`, `invalid_request`,
+`rate_limited`, `server_error`) and, for HTTP 429, `retry_after_seconds` when
+the server sends a valid `Retry-After`. A frame existing for a surface does not
+mean every slot is backed; check each slot's `state`.
 
 The list API is capped at 100 rows per call. Filters and pagination are passed
 to the existing tenant-scoped REST routes. Results describe observed external
