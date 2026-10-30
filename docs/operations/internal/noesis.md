@@ -24,7 +24,7 @@ Noesis is Aether's graph-native natural-language intelligence layer. It exposes 
 
 ## GA contract
 
-### Supported intents (30)
+### Supported intents (35)
 
 The allowlist in `models.py::SUPPORTED_INTENTS` covers the ten original GA
 intents plus the read-only domain families added since. Every intent is
@@ -104,6 +104,19 @@ relabels an assessment or hypothesis; absent data returns an honest
 `sufficient=False` (a read that raises returns the same rather than crashing the
 surface), and a disabled plane surfaces a `service_disabled` NoesisError in the
 response.
+
+**Agent Behavioral Intelligence** (read-only, flag-gated — default OFF)
+
+| Intent | Description |
+|---|---|
+| `agent_behavior` | Explain one agent's observed behavior from the Agent360 behavior read model: what it usually does, reconstructed decisions, and what Aether cannot see. Agent refs are source-reported; this is not an identity resolution. Requires the external agent registry (`external_agent_telemetry.enabled` or `.registry_enabled`) and the caller's `agent:manage` permission |
+
+`agent_behavior` is served by `services/api/intelligence/noesis/adapters/agent_behavior_adapter.py`,
+which builds the read model with the same bounded Silver read and governance
+inputs as `GET /v1/agent/agents/{agent_ref}/behavior`. A disabled registry
+returns `service_disabled`, a caller without `agent:manage` gets `forbidden`
+(nothing is read), and fleet-wide scope or a missing agent ref asks the user to refine.
+No observed facts gives `sufficient=False`, which does not mean the agent is inactive.
 
 Any prompt that does not match a supported intent falls back to a safe refinement response. Unsupported intents never execute.
 

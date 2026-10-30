@@ -45,10 +45,10 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 | WO-100 – WO-103 snapshots, drift, adaptation, counterfactuals | Built; snapshots are computed on read, not stored | `dynamics.py` | advanced test |
 | WO-110 – WO-113 read models | Built: routes `GET /v1/agent/agents/{agent_ref}/behavior` and `/decisions/{decision_id}`; Profile 360 reconciliation is a function, not yet a Profile 360 section | `intelligence/agent_behavior/read_models.py`, `actions/agent/deployment_routes.py` | `test_agent_behavior_read_models.py` |
 | WO-114 graph UI | Built as the Agent 360 behavior panel | `apps/aether-web/src/features/agent360/agent-behavior-panel.tsx` | `agent360-behavior.test.tsx` |
-| WO-115 query orchestration | Built as a closed capability list; a Noesis intent also needs a handler, prompts and cross-surface parity updates, so it is not registered yet | `read_models.py` (`QUERY_CAPABILITIES`) | read-model test |
+| WO-115 query orchestration | Built: closed capability list plus the read-only Noesis `agent_behavior` intent. It reads the same model as the behavior route and has the same gates (registry flag, `agent:manage`) | `read_models.py` (`QUERY_CAPABILITIES`), `noesis/adapters/agent_behavior_adapter.py` | read-model test, `test_noesis_agent_behavior_intent.py`, Noesis parity suites |
 | WO-120 instrumentation API | Built: server SDK helpers and Python `build_behavior_event` | `packages/sdk/server/src/agent-telemetry.ts`, `packages/sdk/python/aether_agentic/agentic.py` | vitest and pytest |
 | WO-121 – WO-122 web, React, iOS, Android | Event types regenerated into every SDK's contract; no new client helpers (agents are server-side) | generated SDK files | registry parity validators |
-| WO-123 MCP / CLI / Access Kit | **Gap.** The Access Kit operation table declares `read` permission; the behavior routes need `agent:manage`. Adding them needs a read-scoped route first. | — | — |
+| WO-123 MCP / CLI / Access Kit | Built: operations declare `required_server_permission`. `agents.behavior` and `agents.decision` require `agent:manage` and are not advertised to read-only delegated OAuth tokens | `packages/access-kit/src/access-operations.mjs`, `agent-behavior-tools.mjs` | `agent-behavior.test.mjs` |
 | WO-124 external behavioral query API | The two routes above | `deployment_routes.py` | read-model test |
 | WO-130 – WO-132 communications, override, coupling | Built (references only, never content) | `read_models.py` | read-model test |
 | WO-140 – WO-144 syndicates, swarm, contagion, demand, market compatibility | Built; syndicates never imply common control | `intelligence/agent_behavior/population.py` | advanced test |
@@ -59,7 +59,7 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 ## Open items
 
 1. **Continuity review decisions.** Agent continuity items are queued and visible in Agent 360, but there is no approve or reject action for them yet. The existing late-binding approve and merge routes deliberately cannot load them.
-2. **Pipeline wiring.** Risk360 accepts agent behavior evidence through its evidence bundle. No caller assembles that bundle on a schedule yet, no Value 360 provider consumes the Value seam, and Noesis has no behavior intent.
+2. **Pipeline wiring.** Risk360 accepts agent behavior evidence through its evidence bundle. No caller assembles that bundle on a schedule yet, and no Value 360 provider consumes the Value seam.
 3. **Persistence.** Behavior models, snapshots and DecisionEnvelopes are rebuilt on read from at most 1,000 recent facts per agent. Longer histories need a stored, replayable projection. That decision goes through the projection registry.
-4. **Access Kit.** See WO-123 above.
+4. **Access Kit.** Built (WO-123 above).
 5. **Calibration.** Every rate and confidence is uncalibrated. Only Wilson intervals are reported.
