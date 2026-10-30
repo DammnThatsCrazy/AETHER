@@ -117,7 +117,7 @@ async def test_missing_connector_keeps_auditable_plan_without_delivery_claim(mon
     jobs = await DeliveryJobRepository().find_many({"tenant_id": "tenant-a"}, limit=10)
     assert len(jobs) == 1
     assert jobs[0]["provider_adapter"] == "agent_assist"
-    assert jobs[0]["idempotency_key"] == "plan-key"
+    assert jobs[0]["idempotency_key"] == result["data"]["dispatch"]["dispatch_id"]
 
 
 async def test_graph_neighbor_authorization_is_explicit_and_tenant_scoped():
