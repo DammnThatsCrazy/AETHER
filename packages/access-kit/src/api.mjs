@@ -577,6 +577,68 @@ export async function getEntityNeighborhood(entityId, { limit = 25 } = {}, env =
   };
 }
 
+const MAX_AGENT_REF_LENGTH = 256;
+const MAX_DECISION_ID_LENGTH = 256;
+
+function boundedRef(value, maxLength, label) {
+  if (typeof value !== 'string' || !value.trim() || value.length > maxLength) {
+    throw new Error(`${label} must contain 1 through ${maxLength} characters.`);
+  }
+  return value.trim();
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function contractError(result, message) {
+  return new AccessApiError(message, {
+    requestId: result.requestId,
+    apiRequestId: result.responseRequestId,
+    interaction: normalizeInteractionOutcome({
+      operation: 'query', requestId: result.requestId,
+      httpStatus: result.interaction.http_status, responseOk: true, contractError: true,
+      apiRequestId: result.responseRequestId,
+    }),
+  });
+}
+
+/**
+ * Read the backend-owned Agent360 behavior read model. Sections keep their
+ * own evidence and epistemic state; the client passes them through unaltered
+ * and only checks the envelope. The API requires ``agent:manage``.
+ */
+export async function getAgentBehavior(agentRef, env = process.env) {
+  const ref = boundedRef(agentRef, MAX_AGENT_REF_LENGTH, 'Agent refs');
+  const result = await requestAether(
+    `/v1/agent/agents/${encodeURIComponent(ref)}/behavior`, undefined, env,
+  );
+  const data = result.data;
+  const shaped = data.source_status === 'unavailable'
+    ? data.sections === null
+    : isPlainObject(data.sections) && typeof data.source_truncated === 'boolean';
+  if (data.agent_ref !== ref || !shaped) {
+    throw contractError(result, 'Aether API returned an unexpected agent behavior response.');
+  }
+  return result;
+}
+
+/** Read one reconstructed decision envelope with attribution and responsibility. */
+export async function getAgentDecision(agentRef, decisionId, env = process.env) {
+  const ref = boundedRef(agentRef, MAX_AGENT_REF_LENGTH, 'Agent refs');
+  const id = boundedRef(decisionId, MAX_DECISION_ID_LENGTH, 'Decision IDs');
+  const result = await requestAether(
+    `/v1/agent/agents/${encodeURIComponent(ref)}/decisions/${encodeURIComponent(id)}`,
+    undefined, env,
+  );
+  const envelope = result.data.envelope;
+  if (!isPlainObject(envelope) || envelope.decision_id !== id
+      || envelope.decision_actor?.value !== ref) {
+    throw contractError(result, 'Aether API returned an unexpected agent decision response.');
+  }
+  return result;
+}
+
 export function buildTrackBatch({
   eventName,
   eventId,
