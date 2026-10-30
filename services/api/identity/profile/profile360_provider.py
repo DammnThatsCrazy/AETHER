@@ -20,7 +20,10 @@ are filtered by valid-time when bounded and labelled as ledger transitions.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
@@ -93,6 +96,15 @@ MAX_SYNDICATE_LEDGER_ROWS = 1_000
 MAX_PROFILE_PREDICTION_READ = 100
 MAX_PROFILE_REPORTED_OUTCOME_READ = 50
 PROFILE_OUTCOME_LABEL_CONTRACT_VERSION = "profile-outcome-labels.v1"
+
+
+def _finite_metric(value: Any) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -2344,6 +2356,7 @@ class Profile360Provider:
         outcome_lookup_truncated = False
         outcome_authority_read = False
         outcome_section_reason: Optional[str] = None
+        evaluation_cache: dict[tuple[str, str, str], dict[str, Any] | None] = {}
         for output in valid_outputs:
             artifact = artifact_approval_cache[(output.model_id, output.artifact_version)]
             metrics = getattr(artifact, "metrics", None)
@@ -2374,6 +2387,53 @@ class Profile360Provider:
                 observedAt=to_iso_utc(output.generated_at),
             )
             claim_refs = [output_ref, *evidence_refs]
+            evaluation_key = (
+                output.model_id, output.artifact_version, output.artifact_checksum_sha256
+            )
+            if evaluation_key not in evaluation_cache:
+                try:
+                    from intelligence.model_governance.evaluations import ModelEvaluationRepository
+                    evaluation_cache[evaluation_key] = await ModelEvaluationRepository().latest_for_artifact(
+                        request.tenantId, "profile360", output.model_id, output.artifact_version,
+                        output.artifact_checksum_sha256,
+                    )
+                except Exception:  # noqa: BLE001 - unavailable evaluation remains unknown
+                    evaluation_cache[evaluation_key] = None
+            evaluation = evaluation_cache[evaluation_key]
+            if evaluation is not None:
+                metrics = evaluation.get("metrics")
+                sample_count = evaluation.get("sample_count")
+                sample_refs = evaluation.get("sample_refs")
+                manifest = evaluation.get("dataset_manifest_sha256")
+                computed_manifest = None
+                if isinstance(sample_refs, list):
+                    computed_manifest = hashlib.sha256(
+                        json.dumps(
+                            sorted(sample_refs, key=lambda row: str(row.get("predictionId", ""))),
+                            sort_keys=True, separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest()
+                exact_evaluation = (
+                    evaluation.get("tenant_id") == request.tenantId
+                    and evaluation.get("domain") == "profile360"
+                    and evaluation.get("model_id") == output.model_id
+                    and evaluation.get("artifact_version") == output.artifact_version
+                    and evaluation.get("artifact_checksum_sha256") == output.artifact_checksum_sha256
+                    and isinstance(manifest, str)
+                    and re.fullmatch(r"[0-9a-f]{64}", manifest) is not None
+                    and computed_manifest == manifest
+                    and re.fullmatch(r"mge_[0-9a-f]{32}", str(evaluation.get("evaluation_id", ""))) is not None
+                    and evaluation.get("split") in {"evaluation", "holdout"}
+                    and isinstance(sample_count, int) and not isinstance(sample_count, bool) and sample_count >= 0
+                    and isinstance(sample_refs, list) and len(sample_refs) == sample_count
+                    and isinstance(metrics, dict)
+                    and all(_finite_metric(v) for k, v in metrics.items()
+                            if k != "reliability_bins")
+                    and isinstance(evaluation.get("method"), str) and bool(evaluation.get("method"))
+                )
+                if not exact_evaluation:
+                    evaluation_cache[evaluation_key] = None
+                    evaluation = None
             outcome_read = await self._read_reported_outcomes(
                 request.tenantId,
                 output,
@@ -2457,6 +2517,18 @@ class Profile360Provider:
             outcome_lookup_truncated = outcome_lookup_truncated or outcome_read.truncated
             if outcome_section_reason is None and outcome_reason is not None:
                 outcome_section_reason = outcome_reason
+            evaluation_window_start = None
+            evaluation_window_end = None
+            evaluation_observed_at = None
+            if evaluation is not None:
+                try:
+                    evaluation_window_start = to_iso_utc(parse_instant_strict(evaluation.get("window_start")))
+                    evaluation_window_end = to_iso_utc(parse_instant_strict(evaluation.get("window_end")))
+                    if evaluation.get("created_at") is not None:
+                        evaluation_observed_at = to_iso_utc(parse_instant_strict(evaluation.get("created_at")))
+                except (TypeError, ValueError):
+                    evaluation_window_start = evaluation_window_end = None
+                    evaluation_observed_at = None
             item = {
                 "predictionId": output.prediction_id,
                 "states": [state.model_dump(mode="json") for state in output.states],
@@ -2485,6 +2557,29 @@ class Profile360Provider:
                         if calibration_valid else {
                             "state": "unknown",
                             "reason": "artifact_calibration_metric_unavailable_or_invalid",
+                        }
+                    ),
+                    "evaluationEvidence": (
+                        {
+                            "state": "computed" if evaluation and int(evaluation.get("sample_count", 0)) > 0 else "unknown",
+                            "evaluationId": evaluation.get("evaluation_id") if evaluation else None,
+                            "datasetManifestSha256": evaluation.get("dataset_manifest_sha256") if evaluation else None,
+                            "split": evaluation.get("split") if evaluation else None,
+                            "sampleCount": evaluation.get("sample_count", 0) if evaluation else 0,
+                            "windowStart": evaluation_window_start,
+                            "windowEnd": evaluation_window_end,
+                            "method": evaluation.get("method") if evaluation else None,
+                            "metrics": evaluation.get("metrics", {}) if evaluation else {},
+                            "evidenceRef": (
+                                EvidenceRef(
+                                    id=evaluation["evaluation_id"], type="model_output",
+                                    source="model_governance_evaluations",
+                                    observedAt=evaluation_observed_at,
+                                ).model_dump(mode="json")
+                                if evaluation and isinstance(evaluation.get("evaluation_id"), str)
+                                else None
+                            ),
+                            "reason": None if evaluation and int(evaluation.get("sample_count", 0)) > 0 else "no_exact_adjudicated_evaluation_samples",
                         }
                     ),
                     "modelCalibrationVerified": False,
@@ -2551,6 +2646,7 @@ class Profile360Provider:
             canonicalAuthorityRefs=[
                 "profile_prediction_outputs",
                 "model_artifact_registry",
+                "model_governance",
                 "consent_policy_decisions",
                 "analytics_events",
                 *(["outcome_facts"] if outcome_authority_read else []),

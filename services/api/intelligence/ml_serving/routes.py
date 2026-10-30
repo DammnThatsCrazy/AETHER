@@ -23,12 +23,13 @@ import os
 import time
 import warnings
 from typing import Any, Optional
+from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError, ForbiddenError, ServiceUnavailableError
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError, ServiceUnavailableError
 from shared.cache.cache import CacheClient, CacheKey, TTL
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
@@ -218,9 +219,49 @@ class BatchPredictionRequest(BaseModel):
     entities: list[dict[str, Any]] = Field(..., min_length=1, max_length=100)
 
 
+class ProfileEvaluationRequest(BaseModel):
+    model_id: str = Field(min_length=1, max_length=128)
+    artifact_version: str = Field(min_length=1, max_length=128)
+    window_start: datetime
+    window_end: datetime
+    split: str = Field(pattern=r"^(evaluation|holdout)$")
+
+
 # ---------------------------------------------------------------------------
 # Payload builders — canonical-ID-based
 # ---------------------------------------------------------------------------
+
+
+@router.post("/model-governance/profile-evaluations")
+async def evaluate_profile_model(body: ProfileEvaluationRequest, request: Request):
+    """Run a tenant-scoped evaluation from exact persisted predictions/outcomes."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    actor_id = getattr(tenant, "user_id", None)
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        raise ForbiddenError("authenticated tenant administrator required")
+    from intelligence.model_governance.evaluations import evaluate_profile_artifact
+    try:
+        result = await evaluate_profile_artifact(
+            tenant.tenant_id, body.model_id, body.artifact_version,
+            window_start=body.window_start, window_end=body.window_end,
+            split=body.split, actor_id=actor_id,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/model-governance/profile-evaluations/{evaluation_id}")
+async def read_profile_model_evaluation(evaluation_id: str, request: Request):
+    """Read exact tenant evaluation samples for a model-governance admin."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    from intelligence.model_governance.evaluations import ModelEvaluationRepository
+    result = await ModelEvaluationRepository().get_evaluation(tenant.tenant_id, evaluation_id)
+    if result is None or result.get("domain") != "profile360":
+        raise NotFoundError("profile model evaluation not found")
+    return APIResponse(data=result).to_dict()
 
 
 def _build_payload(canonical_id: str, entity_id: str, features: dict[str, Any]) -> dict[str, Any]:

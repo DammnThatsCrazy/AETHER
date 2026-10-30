@@ -125,6 +125,26 @@ async def record_from_silver_outcome(
             "source": "silver_outcome_facts",
         }
     ]
+    prediction_id = row.get("prediction_id")
+    label_contract = row.get("prediction_label_contract_version")
+    claim_type = "derived"
+    # Only this closed, versioned mapping admits source-observed events as
+    # adjudication labels. Legacy outcome labels and other event types retain
+    # their original derived classification and cannot calibrate predictions.
+    try:
+        from intelligence.model_governance.evaluations import (
+            PROFILE_LABEL_CONTRACT, PROFILE_OUTCOME_TO_STATE,
+        )
+        if (
+            isinstance(prediction_id, str) and prediction_id.strip()
+            and label_contract == PROFILE_LABEL_CONTRACT
+            and outcome_type in PROFILE_OUTCOME_TO_STATE
+            and event_id
+            and subject is not None
+        ):
+            claim_type = "observed"
+    except ImportError:
+        pass
     record = OutcomeTruthRecord(
         outcome_id=f"{tenant_id}:{event_id}:{outcome_type}",
         tenant_id=tenant_id,
@@ -139,13 +159,13 @@ async def record_from_silver_outcome(
             if row.get("value_amount") is not None
             else ("zero" if row.get("value_amount") == 0 else "missing")
         ),
-        claim_type="derived",
+        claim_type=claim_type,
         model_version=model_version,
         policy_version=policy_version,
         evidence_refs=_to_evidence_list(evidence_refs),
         source_event_ids=[event_id] if event_id else [],
-        prediction_id=row.get("prediction_id"),
-        prediction_label_contract_version=row.get("prediction_label_contract_version"),
+        prediction_id=prediction_id,
+        prediction_label_contract_version=label_contract,
         observed_at=row.get("occurred_at"),
         goal_id=row.get("goal_id"),
         recommendation_id=row.get("recommendation_id"),

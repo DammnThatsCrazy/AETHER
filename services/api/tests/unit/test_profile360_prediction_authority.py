@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -458,6 +460,65 @@ async def test_profile360_projects_only_valid_prediction_with_predicted_epistemi
         assert governance["calibrationMetric"]["value"] == 0.12
         assert governance["calibrationMetric"]["datasetAndEvaluationScope"] == "unknown"
         assert governance["calibrationMetric"]["predictionApplicability"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifact(monkeypatch):
+    import identity.profile.prediction_authority as authority
+    from intelligence.model_governance.evaluations import ModelEvaluationRepository
+
+    async def allowed_policy(_output):
+        return True
+
+    monkeypatch.setattr(authority, "verify_prediction_policy_evidence", allowed_policy)
+    monkeypatch.setattr(
+        authority, "approved_production_artifact",
+        lambda model, version: SimpleNamespace(
+            model_id=model, artifact_version=version, checksum_sha256="a" * 64,
+            promotion_state="promoted", disabled=False, synthetic_data=False,
+            threshold_passed=True, production_allowed=True, metrics={},
+        ),
+    )
+
+    sample_refs = sorted(
+        ({"predictionId": f"sample-{index}"} for index in range(12)),
+        key=lambda row: row["predictionId"],
+    )
+    dataset_manifest = hashlib.sha256(json.dumps(
+        sample_refs, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+
+    async def exact_evaluation(self, tenant, domain, model, version, checksum):
+        assert (tenant, domain, model, version, checksum) == (
+            TENANT, "profile360", "churn_prediction", "v-production-2", "a" * 64
+        )
+        return {
+            "evaluation_id": "mge_" + "1" * 32, "tenant_id": TENANT, "domain": domain,
+            "model_id": model, "artifact_version": version,
+            "artifact_checksum_sha256": checksum, "dataset_manifest_sha256": dataset_manifest,
+            "split": "holdout", "sample_count": 12,
+            "window_start": "2026-10-29T00:00:00Z", "window_end": "2026-10-30T00:00:00Z",
+            "sample_refs": sample_refs,
+            "created_at": "2026-10-30T00:00:00Z",
+            "method": "profile-state-adjudication.v1", "metrics": {"expected_calibration_error": 0.08},
+        }
+
+    monkeypatch.setattr(ModelEvaluationRepository, "latest_for_artifact", exact_evaluation)
+    output = _output()
+    request = ProjectionRequest(
+        projectionId="profile360", tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=ENTITY), temporalMode="as_of",
+        asOf=NOW.isoformat(), includeSections=["likely_next_states"],
+    )
+    provider = Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    ))
+    result = await provider.project(request, await _context(request))
+    governance = result.sections[0].content["items"][0]["modelGovernance"]
+    assert governance["evaluationEvidence"]["state"] == "computed"
+    assert governance["evaluationEvidence"]["sampleCount"] == 12
+    assert governance["evaluationEvidence"]["metrics"]["expected_calibration_error"] == 0.08
+    assert governance["modelCalibrationVerified"] is False
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]

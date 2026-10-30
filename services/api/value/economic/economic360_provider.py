@@ -471,6 +471,16 @@ def _attribution_model_validation_ref(decision_id: str, created_at: Optional[str
     )
 
 
+def _value_model_approval_ref(decision_id: str, created_at: Optional[str]) -> EvidenceRef:
+    return EvidenceRef(
+        id=decision_id,
+        type="annotation",
+        source="value_model_approval_decisions",
+        observedAt=created_at,
+        uri=f"store://value_model_approval_decisions/{quote(decision_id, safe='')}",
+    )
+
+
 def _campaign_touchpoint_ref(
     touchpoint_id: str,
     received_at: Optional[str],
@@ -551,6 +561,7 @@ class RepositoryAttributionCreditReader:
             from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
             from value.economic.attribution_model_validation import (
                 AttributionModelValidationRepository,
+                ValueModelApprovalRepository,
                 _decision_for,
                 _same_decision,
             )
@@ -558,6 +569,7 @@ class RepositoryAttributionCreditReader:
             repository = AttributionRunRepository()
             touchpoint_repository = TouchpointRepository()
             validation_repository = AttributionModelValidationRepository()
+            approval_repository = ValueModelApprovalRepository()
             runs: list[dict[str, Any]] = []
             records: list[dict[str, Any]] = []
             refs: list[EvidenceRef] = []
@@ -624,8 +636,33 @@ class RepositoryAttributionCreditReader:
                                 "decisionId": decision["decision_id"],
                                 "configSnapshotSha256": decision["config_snapshot_sha256"],
                                 "evidenceRef": decision_ref.model_dump(mode="json"),
+                                "approvalState": "unknown",
                             }
                             refs.append(decision_ref)
+                            approval = await approval_repository.latest(tenant_id, run_id)
+                            if (
+                                isinstance(approval, dict)
+                                and approval.get("tenant_id") == tenant_id
+                                and _attribution_uuid(approval.get("attribution_run_id")) == run_id
+                                and _attribution_uuid(approval.get("model_config_id")) == config_id
+                                and approval.get("model_type") == run.get("model_type")
+                                and approval.get("model_version") == run.get("model_version")
+                                and approval.get("validation_decision_id") == decision.get("decision_id")
+                                and approval.get("decision") in {"approved", "rejected"}
+                                and isinstance(approval.get("actor_id"), str)
+                                and bool(approval.get("actor_id"))
+                                and isinstance(approval.get("reason"), str)
+                                and bool(approval.get("reason"))
+                            ):
+                                approval_ref = _value_model_approval_ref(
+                                    approval["decision_id"],
+                                    _attribution_timestamp(approval.get("created_at")),
+                                )
+                                governance["approvalState"] = approval["decision"]
+                                governance["approvalActorId"] = approval["actor_id"]
+                                governance["approvalReason"] = approval["reason"]
+                                governance["approvalEvidenceRef"] = approval_ref.model_dump(mode="json")
+                                refs.append(approval_ref)
                     except Exception:  # noqa: BLE001 - unavailable governance stays unknown
                         governance["reason"] = "exact_model_validation_read_failed"
                 runs.append(
@@ -4686,7 +4723,49 @@ class Economic360Provider:
                         "decisionId": decision_id,
                         "configSnapshotSha256": raw_governance.get("configSnapshotSha256"),
                         "evidenceRef": expected_ref.model_dump(mode="json"),
+                        "approvalState": "unknown",
                     }
+                    raw_approval_ref = raw_governance.get("approvalEvidenceRef")
+                    approval_state = raw_governance.get("approvalState")
+                    if (
+                        approval_state in {"approved", "rejected"}
+                        and isinstance(raw_approval_ref, dict)
+                        and isinstance(raw_approval_ref.get("id"), str)
+                        and raw_approval_ref.get("source") == "value_model_approval_decisions"
+                        and raw_governance.get("approvalActorId")
+                        and raw_governance.get("approvalReason")
+                    ):
+                        expected_approval_ref = _value_model_approval_ref(
+                            raw_approval_ref["id"],
+                            _attribution_timestamp(raw_approval_ref.get("observedAt")),
+                        )
+                        durable_approval = None
+                        try:
+                            from value.economic.attribution_model_validation import ValueModelApprovalRepository
+                            durable_approval = await ValueModelApprovalRepository().latest(
+                                request.tenantId, run_id
+                            )
+                        except Exception:  # noqa: BLE001 - approval authority is fail-closed
+                            durable_approval = None
+                        if (
+                            raw_approval_ref == expected_approval_ref.model_dump(mode="json")
+                            and isinstance(durable_approval, dict)
+                            and durable_approval.get("tenant_id") == request.tenantId
+                            and _attribution_uuid(durable_approval.get("attribution_run_id")) == run_id
+                            and _attribution_uuid(durable_approval.get("model_config_id")) == config_id
+                            and durable_approval.get("validation_decision_id") == decision_id
+                            and durable_approval.get("decision") == approval_state
+                            and durable_approval.get("decision_id") == raw_approval_ref.get("id")
+                            and durable_approval.get("actor_id") == raw_governance.get("approvalActorId")
+                            and durable_approval.get("reason") == raw_governance.get("approvalReason")
+                            and _attribution_timestamp(durable_approval.get("created_at")) == raw_approval_ref.get("observedAt")
+                        ):
+                            governance.update({
+                                "approvalState": approval_state,
+                                "approvalActorId": raw_governance["approvalActorId"],
+                                "approvalReason": raw_governance["approvalReason"],
+                                "approvalEvidenceRef": expected_approval_ref.model_dump(mode="json"),
+                            })
             key = (conversion_id, run_id)
             runs_by_key[key] = {
                 "tenantId": request.tenantId,

@@ -98,11 +98,37 @@ class CampaignEconomicResponse(BaseModel):
     roas: Optional[float] = None
     cac: Optional[EconomicAmountResponse] = None
     conversions: Optional[int] = None
+
+
     acquired_customers: Optional[int] = None
     attribution_model: Optional[str] = None
     attribution_confidence: Optional[float] = None
     influenced_wallet_connects: Optional[int] = None
     influenced_protocol_deposits: Optional[EconomicAmountResponse] = None
+
+
+class ValueModelApprovalBody(BaseModel):
+    decision: str = Field(pattern=r"^(approved|rejected)$")
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+@router.post("/v1/economic/attribution-runs/{run_id}/model-approval")
+async def decide_attribution_model_approval(run_id: str, body: ValueModelApprovalBody, request: Request):
+    """Record an authenticated tenant-admin decision for an exact validated run."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    actor_id = getattr(tenant, "user_id", None)
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("authenticated tenant administrator required")
+    from value.economic.attribution_model_validation import decide_value_model_approval
+    try:
+        result = await decide_value_model_approval(
+            tenant.tenant_id, run_id, body.decision, actor_id=actor_id, reason=body.reason,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=result).to_dict()
 
 
 class TenantEconomicOverviewResponse(BaseModel):

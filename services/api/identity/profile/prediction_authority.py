@@ -367,6 +367,36 @@ class ProfilePredictionOutputRepository(TypedTableRepository):
         decoded = [self._decode_row(dict(row)) for row in rows]
         return decoded[:bounded], len(decoded) > bounded
 
+    async def list_for_artifact(
+        self, tenant_id: str, model_id: str, artifact_version: str,
+        window_start: datetime, window_end: datetime, *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Bounded exact tenant/model/artifact prediction dataset read."""
+        bounded = min(max(int(limit), 1), 5_000)
+        start, end = _utc(window_start), _utc(window_end)
+        if not tenant_id or not model_id or not artifact_version or start is None or end is None or start >= end:
+            return [], False
+        pool = await self._pool()
+        if pool is None:
+            candidates = [
+                dict(row) for row in self._rows
+                if row.get("tenant_id") == tenant_id
+                and row.get("model_id") == model_id
+                and row.get("artifact_version") == artifact_version
+                and start <= (_utc(row.get("generated_at")) or datetime.min.replace(tzinfo=timezone.utc)) < end
+            ]
+            candidates.sort(key=lambda row: (str(row.get("prediction_id") or "")))
+            return candidates[:bounded], len(candidates) > bounded
+        rows = await pool.fetch(
+            f"""SELECT {', '.join(self.columns)} FROM {self.table_name}
+                WHERE tenant_id = $1 AND model_id = $2 AND artifact_version = $3
+                  AND generated_at >= $4 AND generated_at < $5
+                ORDER BY prediction_id LIMIT $6""",
+            tenant_id, model_id, artifact_version, start, end, bounded + 1,
+        )
+        decoded = [self._decode_row(dict(row)) for row in rows]
+        return decoded[:bounded], len(decoded) > bounded
+
 
 async def record_eligible_profile_prediction(
     *,
