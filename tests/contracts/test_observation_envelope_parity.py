@@ -86,7 +86,7 @@ def _ts_interface_field_requiredness(name: str) -> dict[str, bool]:
 def _py_class_bodies() -> dict[str, str]:
     """Split the model module into per-class bodies keyed by class name."""
     text = _py_text()
-    pattern = re.compile(r"^class ((\w+)Block|SubjectRef|UniversalObservationEnvelope)\(BaseModel\):(.*?)(?=^class |\Z)", re.DOTALL | re.MULTILINE)
+    pattern = re.compile(r"^class ((\w+)Block|SubjectRef|UniversalObservationEnvelope)\((?:BaseModel|_lineage_models\.\w+)\):(.*?)(?=^class |\Z)", re.DOTALL | re.MULTILINE)
     bodies: dict[str, str] = {}
     for match in pattern.finditer(text):
         bodies[match.group(1)] = match.group(3)
@@ -106,6 +106,10 @@ TS_INTERFACE_FOR_BLOCK = {
     "quality": "QualityBlock",
     "lineage": "LineageBlock",
     "rights": "RightsReferenceBlock",
+    "actor_context": "ActorContextBlock",
+    "authority_context": "AuthorityContextBlock",
+    "execution_context": "ExecutionContextBlock",
+    "protocol_context": "ProtocolContextBlock",
 }
 
 
@@ -213,7 +217,7 @@ def test_registry_required_leafs_present_in_py() -> None:
 def test_every_pydantic_model_is_extra_forbid() -> None:
     """extra=forbid must be configured on every envelope model class."""
     py_bodies = _py_class_bodies()
-    assert len(py_bodies) == 12, f"expected 12 model classes, found: {sorted(py_bodies)}"
+    assert len(py_bodies) == 16, f"expected 12 model classes, found: {sorted(py_bodies)}"
     for name, body in py_bodies.items():
         assert "extra=\"forbid\"" in body, f"{name} missing ConfigDict(extra=\"forbid\")"
 
@@ -223,7 +227,9 @@ def test_model_classes_imported_from_barrel() -> None:
     init_text = (REPO_ROOT / "services/api/shared/observation/__init__.py").read_text(encoding="utf-8")
     for name in ("UniversalObservationEnvelope", "ObservationBlock", "TenancyBlock", "SourceBlock",
                  "SubjectRef", "TemporalBlock", "CorrelationBlock", "PrivacyBlock", "ProvenanceBlock",
-                 "QualityBlock", "LineageBlock", "RightsReferenceBlock", "SOURCE_TYPES",
+                 "QualityBlock", "LineageBlock", "RightsReferenceBlock",
+                 "ActorContextBlock", "AuthorityContextBlock", "ExecutionContextBlock",
+                 "ProtocolContextBlock", "SOURCE_TYPES",
                  "IDENTIFIER_TYPES", "CREDENTIAL_CLASSES", "TRUST_CLASSES", "SOURCE_RELATIONSHIPS"):
         assert name in init_text, f"{name} not re-exported from shared/observation/__init__.py"
 
@@ -241,6 +247,52 @@ def test_source_relationship_vocabulary_matches_across_surfaces() -> None:
         "SOURCE_RELATIONSHIPS",
         text=SOURCE_RELATIONSHIP_PY_PATH.read_text(encoding="utf-8"),
     )
+
+
+# ── Lineage context blocks (optional, additive) ──────────────────────────────
+
+LINEAGE_CONTEXT_BLOCKS = {
+    "actor_context": ("ActorContextBlock", "ActorContext"),
+    "authority_context": ("AuthorityContextBlock", "AuthorityContext"),
+    "execution_context": ("ExecutionContextBlock", "ExecutionContext"),
+    "protocol_context": ("ProtocolContextBlock", "ProtocolContext"),
+}
+
+
+def test_lineage_context_blocks_are_optional_everywhere() -> None:
+    """The four lineage blocks are optional in registry, TS and Python (compat)."""
+    registry = _load_registry()
+    blocks = {b["name"]: b for b in registry["blocks"]}
+    ts_text = _ts_text()
+    py_text = _py_text()
+    for name in LINEAGE_CONTEXT_BLOCKS:
+        assert blocks[name]["required"] is False
+        assert all(f["required"] is False for f in blocks[name]["fields"]), name
+        assert name not in registry["envelope_required_fields"]
+        assert re.search(rf"\n\s{{2}}{name}\?: ", ts_text), f"{name} must be optional in TS envelope"
+        assert re.search(rf"\n\s{{4}}{name}: Optional\[\w+\] = None", py_text), (
+            f"{name} must be Optional[...] = None in python envelope"
+        )
+
+
+def test_lineage_context_fields_match_agent_lineage_contract() -> None:
+    """Registry block fields == the agent-lineage seam model fields (no drift)."""
+    import sys
+
+    backend = str(REPO_ROOT / "services" / "api")
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    from shared.agent_lineage import models as lineage_models
+    from shared.observation import envelope
+
+    registry = _load_registry()
+    blocks = {b["name"]: b for b in registry["blocks"]}
+    for name, (block_cls, seam_cls) in LINEAGE_CONTEXT_BLOCKS.items():
+        registry_fields = {f["name"] for f in blocks[name]["fields"]}
+        seam_fields = set(getattr(lineage_models, seam_cls).model_fields)
+        assert registry_fields == seam_fields, f"{name}: registry vs agent_lineage.{seam_cls}"
+        assert set(_ts_interface_field_requiredness(block_cls)) == seam_fields, f"{name}: TS vs seam"
+        assert set(getattr(envelope, block_cls).model_fields) == seam_fields, f"{name}: Py vs seam"
 
 
 # ── Barrel + passive contract guard ──────────────────────────────────────────

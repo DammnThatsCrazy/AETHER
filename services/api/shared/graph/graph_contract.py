@@ -227,3 +227,46 @@ PHASE2_NEW_EDGE_TYPES: frozenset[str] = frozenset({
     # Cluster lifecycle
     "BRIDGES", "MERGED_INTO", "SPLIT_FROM",
 })
+
+# ── Agent lineage semantics (High-Cardinality Agent Lineage, work order §17/§30)
+# Mirrors LINEAGE_RELATIONSHIP_EDGE_TYPES / LINEAGE_EXECUTION_PLANE_ONLY in
+# packages/shared/graph-contract.ts.
+
+from shared.graph.edge_properties import (  # noqa: E402  (grouped with its section)
+    LINEAGE_EDGE_PROPERTIES,
+    LINEAGE_RESOLUTION_METHODS,
+)
+
+# Lineage relationship -> graph EdgeType value. Only durable semantic facts are
+# graph-projected. ``SPAWNED_BY`` is the inverse view of ``SPAWNED`` (one stored
+# edge, read in either direction), never a second edge.
+LINEAGE_RELATIONSHIP_EDGE_TYPES: dict[str, str] = {
+    "PRINCIPAL_OF": EdgeType.PRINCIPAL_OF,
+    "OPERATES": EdgeType.OPERATES,
+    "CONTROLS": EdgeType.CONTROLS,
+    "AUTHORIZED": EdgeType.AUTHORIZED_AGENT,
+    "DELEGATED_TO": EdgeType.DELEGATED_TO,
+    "SPAWNED": EdgeType.SPAWNED_SUBAGENT,
+    "SPAWNED_BY": EdgeType.SPAWNED_SUBAGENT,
+    "EXECUTED_AS": EdgeType.EXECUTED_AS,
+    "ACTED_ON_BEHALF_OF": EdgeType.AGENT_ACTED_ON_BEHALF_OF,
+    "SUPERVISES": EdgeType.SUPERVISES,
+    "USES": EdgeType.AGENT_CONNECTED_VIA_MCP,
+    "COMMUNICATED_WITH": EdgeType.COMMUNICATES_WITH,
+    "PAID": EdgeType.PAYS,
+    "TRANSFERS_TO": EdgeType.TRANSFERS_TO,
+    "PRODUCED_EFFECT": EdgeType.PRODUCED,
+    "PRODUCED_OUTCOME": EdgeType.RESULTED_IN_OUTCOME,
+    "DEPLOYED_AS": EdgeType.DEPLOYED_AS,
+    "INSTANTIATED_AS": EdgeType.INSTANTIATED_AS,
+    "OWNS": EdgeType.OWNS,
+}
+
+# Lineage relationships that are inverse views of another relationship.
+LINEAGE_INVERSE_RELATIONSHIPS: dict[str, str] = {"SPAWNED_BY": "SPAWNED"}
+
+# High-volume relationships that stay in the execution evidence plane
+# (Bronze -> Silver execution facts -> lineage index). They are never
+# graph-projected per call: "Agent B called get_balance 17,492 times" is a
+# Silver query, not 17,492 edges.
+LINEAGE_EXECUTION_PLANE_ONLY: frozenset[str] = frozenset({"INVOKED"})

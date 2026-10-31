@@ -97,6 +97,78 @@ export interface AgentDeploymentContext {
   consentMode: AgentDeploymentConsentMode;
 }
 
+// -----------------------------------------------------------------------------
+// Agent identity hierarchy (High-Cardinality Agent Lineage, AO-2)
+//
+//   Agent Definition --DEPLOYED_AS--> Agent Deployment --INSTANTIATED_AS--> Agent Instance
+//                                                       \--> Run -> Task -> Invocation
+//
+// Only the definition is a logical agent identity. One definition may have 10
+// deployments and 10,000 concurrent instances; those never become 10,010
+// logical identities. Instances are high-cardinality records (they live in the
+// execution facts / lineage index), the deployment registry stays the
+// authority for deployments. A human and an agent are never one canonical
+// entity: connect them with relationships (OPERATES / AUTHORIZED / OWNS /
+// ACTED_ON_BEHALF_OF). Backend twin: services/api/actions/agent/identity_hierarchy.py.
+// -----------------------------------------------------------------------------
+
+export const agentIdentityHierarchyLevels = [
+  'agent_definition',
+  'agent_deployment',
+  'agent_instance',
+  'agent_run',
+  'task',
+  'invocation',
+] as const;
+export type AgentIdentityHierarchyLevel = typeof agentIdentityHierarchyLevels[number];
+
+/** Levels that are a logical identity; the rest are records about a definition. */
+export const agentLogicalIdentityLevels = ['agent_definition'] as const;
+
+export const agentIdentityHierarchyEdges = [
+  { from: 'agent_definition', edge: 'DEPLOYED_AS', to: 'agent_deployment' },
+  { from: 'agent_deployment', edge: 'INSTANTIATED_AS', to: 'agent_instance' },
+] as const;
+
+/** Execution-fact column that carries each level's identifier. */
+export const agentIdentityHierarchyIdColumns: Record<AgentIdentityHierarchyLevel, string> = {
+  agent_definition: 'agent_definition_id',
+  agent_deployment: 'deployment_id',
+  agent_instance: 'agent_instance_id',
+  agent_run: 'source_run_id',
+  task: 'task_id',
+  invocation: 'source_event_id',
+};
+
+/** Identifier names that are never identity-merge evidence for a person/entity. */
+export const agentNonIdentityEvidenceFields = [
+  'agent_id',
+  'deployment_id',
+  'agent_definition_id',
+  'agent_deployment_id',
+  'agent_instance_id',
+  'source_run_id',
+  'canonical_run_id',
+  'root_run_id',
+  'parent_run_id',
+  'task_id',
+  'span_id',
+  'trace_id',
+] as const;
+
+/**
+ * Source-reported hierarchy identifiers an SDK may attach next to its
+ * deployment context. They are claims, scoped to the tenant and source
+ * namespace; canonical run / agent-entity / principal identity is resolved
+ * backend-side and SDKs must never emit it.
+ */
+export interface AgentInstanceContext {
+  agentDefinitionId?: string;
+  agentInstanceId?: string;
+  /** True for short-lived workers (sandbox, serverless invocation, browser worker). */
+  ephemeral?: boolean;
+}
+
 /** Rolling 24h telemetry health counters maintained by the backend. */
 export interface AgentDeploymentHealth {
   healthScore?: number;
