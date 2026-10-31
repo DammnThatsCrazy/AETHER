@@ -594,7 +594,7 @@ export const intelligenceProjectionDefinitions: Record<
     projectionDependencies: ['outcome360', 'profile360', 'relationship360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'FilterExpression', 'GraphResult', 'PageRequest', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'findings', 'outcomes', 'state', 'summary'],
+    outputSections: ['agent_mediated_activity', 'evidence', 'findings', 'outcomes', 'state', 'summary'],
     supportedTemporalModes: ['compare', 'relative', 'window'],
     surfaceIds: ['campaign360', 'economic360', 'product_intelligence'],
     capabilityKeys: ['economic360.explore', 'economic360.read'],
