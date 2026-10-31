@@ -25,15 +25,15 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:6f45c299b91592af685ad78d4821df111a83880a7f0d581eca82d47b35b5a5c9"
+  "services/api/actions/": "sha256:463042f97948e8e1a6ee48d48dab15443d5c4ea07858494b0fb6ccf838069e9a"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:18444d91cac01cd9e6d72e1777d15c9a7c114db270ce6130a6ee2a8594125b25"
+  "services/api/identity/": "sha256:da4e31f1f155f153b9334f1d066f37dc8328f24e2cb39233b54f75560f1c93cc"
   "services/api/ingestion/": "sha256:c4d9da43a31bacace8c0b651c13fd1d5fe69b80c717196b1c86e057fe196c6eb"
-  "services/api/intelligence/": "sha256:4f5bc2f0e3c3952e8d003851ba0c1268b1ba8b5dc56e8475ec6d92fa2033c6da"
+  "services/api/intelligence/": "sha256:f248228dc6536740fb24fdbee2b67fcc4301b420d28b64d3799c97e87fca90c9"
   "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"

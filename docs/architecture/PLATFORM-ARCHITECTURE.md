@@ -67,10 +67,10 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:0ac5ca2ead1b3469e0586d88f550a7d76a46c4115efd761f3ee5286f5db7fa6f"
+  "packages/shared/": "sha256:954c09e3afa3fd2af5abcdf39bfdd7f4b3e2390cf52c9013bff6f624d2382836"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:a4a99e1b7f75401f596da29b4ccc29bc11c986f8fed2cc44853a0e4f23e8145f"
-  "services/api/actions/agent/deployment_routes.py": "sha256:b393e76e5def6836f628d195b3315439460164b91d70713e2da37c69fc635cc2"
+  "services/api/actions/agent/agent360_provider.py": "sha256:0cd2076de5ffcae20f1e2ec9c932a5db0fc511320c34e84b73da22de1e943498"
+  "services/api/actions/agent/deployment_routes.py": "sha256:ab3a4fe324b43551d59061efadbfd8509edfd30e5dfc5bd95b5ef8a2fd835778"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -777,6 +777,15 @@ longer matches the stamp. Legacy unstamped purposes remain unknown; the stamp
 does not evaluate current consent. Memory360 now carries this verified
 historical purpose list into its memory items and `policy_state` decisions;
 unavailable legacy purpose provenance stays explicitly unknown.
+
+Agent360 also serves ten `behavior_*` sections (behavior, decisions, journey,
+influence, authority, value, risk, trust, market, observability) from the same
+builder as `GET /v1/agent/agents/{agent_ref}/behavior`. They fail closed with
+route parity: `not_applicable` when the external agent registry is off,
+`suppressed` without a server-derived `agent_behavior` read authorization for
+the same tenant, subject and projection, and `degraded` when the behavior source
+is unavailable or capped. Agent refs stay source-reported; no identity is
+resolved.
 
 Signals360 `quality` now separately reads a current tenant/site installation
 record for an accepted SDK observation carrying the authenticated server-stamped

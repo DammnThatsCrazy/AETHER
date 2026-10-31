@@ -31,11 +31,11 @@ reviewed_source_commits:
     reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/actions/agent/deployment_routes.py": "sha256:b393e76e5def6836f628d195b3315439460164b91d70713e2da37c69fc635cc2"
+  "services/api/actions/agent/deployment_routes.py": "sha256:ab3a4fe324b43551d59061efadbfd8509edfd30e5dfc5bd95b5ef8a2fd835778"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:46b86d90f68f030ddcf57ef78a12d8b3559e6e1376aaa66818dcaa3826f6be96"
+  "services/api/identity/identity/": "sha256:be67b683c932e47ca6b33b72a31d7a327d05398918b17907dc767f873edb8d1f"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
@@ -191,7 +191,10 @@ and builds the namespace from the tenant, not from client context. When the
 same agent id is registered under another deployment, it queues an
 `agent_continuity_candidate` pending review. `PendingIdentityReviewRepository`
 returns only `late_binding_candidate` items by default, so the existing
-approve/merge routes cannot load an agent continuity item. Continuity and termination count only from facts with a
+approve/merge routes cannot load an agent continuity item. A reviewer decides one through
+`POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm|reject`
+(`agent:manage`). The decision records the reviewer, reason and time with
+`merge_performed: false`; it touches no source identity and resolves nothing. Continuity and termination count only from facts with a
 validated deployment, and an inferred continuity is never a fact until
 reviewed.
 
