@@ -99,6 +99,32 @@ globalThis.fetch = async (url, init = {}) => {
     });
   }
 
+  if (parsedUrl.pathname === '/v1/agent/agents/agent-cli/behavior') {
+    return new Response(JSON.stringify({
+      data: {
+        agent_ref: 'agent-cli', read_model_version: '1', model: {}, source_truncated: false,
+        sections: { behavior: { state: 'unavailable', data: null, reason: 'no facts for this agent' } },
+      },
+      meta: { request_id: 'api-envelope-id' },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'cli-request-id' },
+    });
+  }
+
+  if (parsedUrl.pathname === '/v1/agent/agents/agent-cli/decisions/dec-cli') {
+    return new Response(JSON.stringify({
+      data: {
+        envelope: { decision_id: 'dec-cli', decision_actor: { value: 'agent-cli' }, evidence: ['evt-1'] },
+        attribution: {}, responsibility: null, counterfactual: {},
+      },
+      meta: { request_id: 'api-envelope-id' },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'cli-request-id' },
+    });
+  }
+
   if (parsedUrl.pathname === '/v1/capability-catalog') {
     const hostile = mode === 'capabilities-terminal';
     return new Response(JSON.stringify({

@@ -14,8 +14,8 @@ source_hashes:
   "packages/sdk/react-native/src/bridge.ts": "sha256:c2c2fd02cc736db5105bfda3a4013ac8e38259ec4d22a6647181488c1a4e8730"
   "packages/sdk/react-native/src/index.tsx": "sha256:f4d26aa7381b2af26066e5c995a6486e3a59f7529d0698305dbc0d61e8fbc91e"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
+  "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
+  "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
 ---
 
 # Aether React Native SDK v0.1.0-alpha.0 — Integration Guide
@@ -501,6 +501,8 @@ events `sdkEmitable`: `agent_task_started`, `agent_task_completed`,
 `agent_outcome_recorded`, and `agent_tool_invocation_observed`. Wrapper/type or
 consent-map exposure alone does not make another event eligible for public
 `/v1/batch` ingestion.
+
+Separately, the 37 agent behavior taxonomy types added for agent behavioral intelligence (objectives, decisions, candidates, authorization, tool retry/switch, execution, quotes and transactions, information and memory references) are `sdkEmitable` for the server agent SDK. Ingestion accepts them, and `agent_subagent_spawned`, only with a validated deployment context; see the [external agent telemetry plane](source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md).
 
 Agent event properties remain source-asserted. `context.agentDeployment`,
 `paymentIntentId`, `settlementEventId`, `delegationId`, `delegatedToAgentId`,

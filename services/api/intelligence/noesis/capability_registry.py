@@ -528,6 +528,24 @@ CAPABILITY_REGISTRY: list[NoesisCapability] = [
         ],
         data_sources=["risk_assessments", "fraud_hypotheses"],
     ),
+    NoesisCapability(
+        intent="agent_behavior",
+        label="Agent Behavior",
+        description=(
+            "Read-only. Explain one agent's observed behavior from the Agent360 behavior read model: "
+            "what it usually does, reconstructed decisions, and what Aether cannot see. "
+            "Evidence-qualified inference over source-reported agent refs; not an identity "
+            "resolution. Requires agent:manage."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "What does agent ag_123 usually do?",
+            "Explain the behavior of agent ag_123",
+            "Show the decisions agent ag_123 made",
+        ],
+        data_sources=["silver_agent_execution_facts", "delegation_repository"],
+    ),
 ]
 
 # Fast lookup by intent name

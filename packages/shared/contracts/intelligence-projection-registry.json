@@ -286,7 +286,17 @@
         "evidence",
         "interactions",
         "outcomes",
-        "policy_boundary"
+        "policy_boundary",
+        "behavior",
+        "behavior_decisions",
+        "behavior_journey",
+        "behavior_influence",
+        "behavior_authority",
+        "behavior_value",
+        "behavior_risk",
+        "behavior_trust",
+        "behavior_market",
+        "behavior_observability"
       ],
       "supportedTemporalModes": [
         "window",
@@ -1595,7 +1605,8 @@
         "state",
         "evidence",
         "outcomes",
-        "findings"
+        "findings",
+        "agent_mediated_activity"
       ],
       "supportedTemporalModes": [
         "window",

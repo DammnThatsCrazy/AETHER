@@ -6,13 +6,17 @@ export type AccessOperationId =
   | 'agent_access.observed.list'
   | 'agent_access.observed.overview'
   | 'agent_access.observed.get'
+  | 'agents.behavior'
+  | 'agents.decision'
   | 'usage.summary';
+
+export type AccessServerPermission = 'read' | 'agent:manage';
 
 export interface AccessOperation {
   id: AccessOperationId;
   description: string;
   operation: 'query';
-  required_server_permission: 'read';
+  required_server_permission: AccessServerPermission;
   api: string;
   owner: string;
   cli: string;
@@ -70,6 +74,12 @@ export interface AccessClient {
     list(input?: Record<string, unknown>): Promise<AccessResult>;
     overview(): Promise<AccessResult>;
     get(capabilityId: string): Promise<AccessResult>;
+  };
+  agents: {
+    /** Agent360 behavior read model. The API requires agent:manage. */
+    behavior(agentRef: string): Promise<AccessResult>;
+    /** One reconstructed decision. The API requires agent:manage. */
+    decision(agentRef: string, decisionId: string): Promise<AccessResult>;
   };
   usage: { summary(): Promise<AccessResult> };
   continuations: {

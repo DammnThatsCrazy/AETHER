@@ -10,10 +10,10 @@ source_files: [services/api/intelligence/noesis/service.py, services/api/intelli
 source_hashes:
   "packages/ui/core/src/components/noesis-workspace.tsx": "sha256:27b447f218b3972453d3ce78d5f6bf4b7c0b0955294b079064611fe071d93fb6"
   "services/api/intelligence/noesis/flags.py": "sha256:6069ab729ca23b7a1d4c2be58ef12b39b7761ee7c96d35c0db8253158253f877"
-  "services/api/intelligence/noesis/models.py": "sha256:acfdf6d9368c68ccd7820f22654014242ef04bc3db362a843efd42d059019c42"
+  "services/api/intelligence/noesis/models.py": "sha256:8074780a825f74e9bfbb7de48517e42a9e235ea52a3f68b6d4bddca200795700"
   "services/api/intelligence/noesis/provider.py": "sha256:a391409eba9cc92102f93082ded535354fad7c73ba34f4c7e4c7d7444b930244"
   "services/api/intelligence/noesis/routes.py": "sha256:aab16a72c04293078fb629ed0d15518e19a6a681ae4081293599ec3be3d6ea76"
-  "services/api/intelligence/noesis/service.py": "sha256:8fabd5d42c648b233edacb81e5ae231a823ca05bbe25da25252f89119619f9db"
+  "services/api/intelligence/noesis/service.py": "sha256:81aee501e9730ff10210e3514fa14bf0f25e8193322ba0e43d56f08a5c49cdb2"
 ---
 
 # Noesis
@@ -24,7 +24,7 @@ Noesis is Aether's graph-native natural-language intelligence layer. It exposes 
 
 ## GA contract
 
-### Supported intents (30)
+### Supported intents (35)
 
 The allowlist in `models.py::SUPPORTED_INTENTS` covers the ten original GA
 intents plus the read-only domain families added since. Every intent is
@@ -104,6 +104,19 @@ relabels an assessment or hypothesis; absent data returns an honest
 `sufficient=False` (a read that raises returns the same rather than crashing the
 surface), and a disabled plane surfaces a `service_disabled` NoesisError in the
 response.
+
+**Agent Behavioral Intelligence** (read-only, flag-gated — default OFF)
+
+| Intent | Description |
+|---|---|
+| `agent_behavior` | Explain one agent's observed behavior from the Agent360 behavior read model: what it usually does, reconstructed decisions, and what Aether cannot see. Agent refs are source-reported; this is not an identity resolution. Requires the external agent registry (`external_agent_telemetry.enabled` or `.registry_enabled`) and the caller's `agent:manage` permission |
+
+`agent_behavior` is served by `services/api/intelligence/noesis/adapters/agent_behavior_adapter.py`,
+which builds the read model with the same bounded Silver read and governance
+inputs as `GET /v1/agent/agents/{agent_ref}/behavior`. A disabled registry
+returns `service_disabled`, a caller without `agent:manage` gets `forbidden`
+(nothing is read), and fleet-wide scope or a missing agent ref asks the user to refine.
+No observed facts gives `sufficient=False`, which does not mean the agent is inactive.
 
 Any prompt that does not match a supported intent falls back to a safe refinement response. Unsupported intents never execute.
 

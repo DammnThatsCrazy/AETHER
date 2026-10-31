@@ -170,6 +170,8 @@ test('remote list validates caller session on every request and omits observe wi
   assert.ok(tools.includes('entities_get'));
   assert.ok(tools.includes('account_context'));
   assert.ok(tools.includes('usage_summary'));
+  assert.ok(tools.includes('agents_behavior'));
+  assert.ok(tools.includes('agents_decision'));
   assert.ok(tools.includes('agent_access_capabilities_list'));
   assert.ok(!tools.includes('observe'));
   assert.equal(requests.length, 1);

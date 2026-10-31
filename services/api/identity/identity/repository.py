@@ -1399,6 +1399,17 @@ class IdentityResolutionRepository:
         rows = await self._source_identities.find_many(filters=filters, limit=1)
         return rows[0] if rows else None
 
+    async def list_source_identities_by_identifier(
+        self, tenant_id: str, identifier_type: str, identifier_value: str, *, limit: int = 20,
+    ) -> list[dict]:
+        """Every source identity in one tenant carrying an identifier, across
+        source namespaces. Bounded; used to surface review candidates, never to
+        merge."""
+        return await self._source_identities.find_many(
+            filters={"tenant_id": tenant_id, identifier_type: identifier_value},
+            limit=max(1, min(int(limit), 100)),
+        )
+
     async def get_claims_for_source(self, source_identity_id: str) -> list[dict]:
         """Get all claims for a source identity."""
         filters = {"source_identity_id": source_identity_id}

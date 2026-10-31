@@ -48,7 +48,7 @@ from actions.agentic_observability.provenance import (
 )
 
 
-OUTPUT_SECTIONS: tuple[str, ...] = (
+CORE_SECTIONS: tuple[str, ...] = (
     "summary",
     "state",
     "timeline",
@@ -57,6 +57,41 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "outcomes",
     "policy_boundary",
 )
+
+# Agent behavioral intelligence sections (WO-110). Each maps a projection
+# section to one section of the shared behavior read model
+# (``actions.agent.behavior_read_model``), which the
+# ``/v1/agent/agents/{agent_ref}/behavior`` route also serves.
+BEHAVIOR_SECTIONS: dict[str, str] = {
+    "behavior": "behavior",
+    "behavior_decisions": "decisions",
+    "behavior_journey": "journey",
+    "behavior_influence": "influence",
+    "behavior_authority": "authority",
+    "behavior_value": "value",
+    "behavior_risk": "risk",
+    "behavior_trust": "trust",
+    "behavior_market": "market",
+    "behavior_observability": "observability",
+}
+_BEHAVIOR_TITLES: dict[str, str] = {
+    "behavior": "Observed agent behavior",
+    "behavior_decisions": "Reconstructed agent decisions",
+    "behavior_journey": "Agent journey",
+    "behavior_influence": "Observed and declared influence",
+    "behavior_authority": "Observed actions against recorded grants",
+    "behavior_value": "Agent-mediated value (reported)",
+    "behavior_risk": "Behavior risk signals",
+    "behavior_trust": "Behavior trust profile",
+    "behavior_market": "Market compatibility",
+    "behavior_observability": "What Aether can and cannot see",
+}
+# Silver agent facts are observations; grants come from the delegation store.
+_BEHAVIOR_AUTHORITIES: dict[str, list[str]] = {
+    "behavior_authority": ["observations", "delegations"],
+}
+
+OUTPUT_SECTIONS: tuple[str, ...] = CORE_SECTIONS + tuple(BEHAVIOR_SECTIONS)
 
 MAX_READ_LIMIT = 200
 DEFAULT_READ_LIMIT = 100
@@ -76,6 +111,12 @@ REASON_RISK_UNAVAILABLE = "agent_risk_source_unavailable"
 REASON_COMMUNICATION_UNAVAILABLE = "agent_communication_source_unavailable"
 REASON_TEMPORAL_REPLAY_UNAVAILABLE = "agent_temporal_replay_unavailable"
 REASON_EVIDENCE_PROVENANCE_UNAVAILABLE = "agent_evidence_provenance_source_unavailable"
+REASON_BEHAVIOR_DISABLED = "agent_behavior_disabled"
+REASON_BEHAVIOR_NOT_AUTHORIZED = "agent_behavior_not_authorized"
+#: Capability key a caller's server-derived read authorization must carry.
+BEHAVIOR_CAPABILITY = "agent_behavior"
+REASON_BEHAVIOR_UNAVAILABLE = "agent_behavior_source_unavailable"
+REASON_BEHAVIOR_TRUNCATED = "agent_behavior_source_truncated"
 
 
 @dataclass(frozen=True)
@@ -161,6 +202,10 @@ class Agent360Source(Protocol):
     async def communications(
         self, tenant_id: str, agent_id: str, limit: int
     ) -> Agent360ReadBatch: ...
+
+    async def behavior_read_model(self, tenant_id: str, agent_id: str) -> Agent360ReadBatch:
+        """One-row batch holding the shared behavior read model (optional seam)."""
+        ...
 
 
 class RepositoryAgent360Source:
@@ -771,6 +816,16 @@ class RepositoryAgent360Source:
             scope_mismatch=batch.scope_mismatch or bool(foreign),
             scope_known=batch.scope_known,
         )
+
+    async def behavior_read_model(self, tenant_id: str, agent_id: str) -> Agent360ReadBatch:
+        """Rebuild the behavior read model with the route's shared builder.
+
+        Identity is already composed by Agent360 itself, so continuity review
+        items are not re-read here."""
+        from actions.agent.behavior_read_model import build_agent_behavior_read_model
+
+        model = await build_agent_behavior_read_model(tenant_id, agent_id, include_reviews=False)
+        return Agent360ReadBatch(rows=[model], truncated=bool(model.get("source_truncated")))
 
     async def communications(self, tenant_id: str, agent_id: str, limit: int) -> Agent360ReadBatch:
         """Join observed messages to an agent only through its tenant inbox rows.
@@ -3145,6 +3200,11 @@ class Agent360Provider:
                 warnings=["standing_policy_boundary_not_exposed"],
                 canonicalAuthorityRefs=["agent_executions"],
             )
+        behavior_sections, behavior_claims, behavior_reasons = await self._behavior_sections(
+            request, context, tenant_id, agent_id
+        )
+        claims = [*claims, *behavior_claims]
+        degraded_reasons.extend(behavior_reasons)
         sections = [
             summary_section,
             state_section,
@@ -3153,6 +3213,7 @@ class Agent360Provider:
             interactions_section,
             outcomes_section,
             policy_boundary_section,
+            *behavior_sections,
         ]
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -3167,6 +3228,166 @@ class Agent360Provider:
             temporalMode=request.temporalMode or "window",
             lensIds=request.lensIds,
         )
+
+    async def _behavior_sections(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        tenant_id: str,
+        agent_id: str,
+    ) -> tuple[list[ProjectionSection], list[ClaimEnvelope], list[str]]:
+        """Behavior sections from the shared behavior read model (WO-110).
+
+        The model is a derived, rebuildable projection over source-reported
+        Silver agent facts (ADR-AB-002); it is not an identity resolution and
+        never writes facts (ADR-AB-008). A missing or failing source degrades
+        every behavior section instead of inventing absence."""
+
+        def uniform(
+            state: str, reason: str, warning: Optional[str] = None
+        ) -> list[ProjectionSection]:
+            return [
+                ProjectionSection(
+                    id=section_id,
+                    state=state,  # type: ignore[arg-type]
+                    title=_BEHAVIOR_TITLES[section_id],
+                    content={"state": state, "reason": reason},
+                    warnings=[warning] if warning else None,
+                    canonicalAuthorityRefs=_BEHAVIOR_AUTHORITIES.get(section_id, ["observations"]),
+                )
+                for section_id in BEHAVIOR_SECTIONS
+            ]
+
+        if request.subject.kind != "agent":
+            return uniform(
+                "not_applicable",
+                "behavior facts are keyed by the source-reported runtime agent reference; "
+                "a canonical Agent entity subject has no exact join to them",
+            ), [], []
+        # Gate parity with GET /v1/agent/agents/{agent_ref}/behavior: the
+        # external agent registry must be enabled, and the caller must hold an
+        # explicit server-derived ``agent_behavior`` read authorization (the
+        # route requires agent:manage). Without both the sections fail closed.
+        from config.settings import settings
+
+        telemetry = settings.external_agent_telemetry
+        if not (telemetry.enabled or telemetry.registry_enabled):
+            return uniform(
+                "not_applicable", "external agent telemetry is not enabled",
+                REASON_BEHAVIOR_DISABLED,
+            ), [], [REASON_BEHAVIOR_DISABLED]
+        authorized = any(
+            auth.capabilityKey == BEHAVIOR_CAPABILITY
+            and auth.policyState == "allowed"
+            and auth.tenantId == tenant_id
+            and auth.targetProjectionId == self.projection_id
+            and auth.sourceSubject.kind == request.subject.kind
+            and auth.sourceSubject.id == request.subject.id
+            for auth in context.experience360ReadAuthorizations
+        )
+        if not authorized:
+            return uniform(
+                "suppressed", "agent behavior requires an agent:manage read authorization",
+                REASON_BEHAVIOR_NOT_AUTHORIZED,
+            ), [], [REASON_BEHAVIOR_NOT_AUTHORIZED]
+        if request.timeRange is not None or request.asOf is not None or context.asOf is not None:
+            return uniform(
+                "unknown",
+                "the behavior read model is a current bounded rebuild; event-time windows and "
+                "as-of anchors are not applied to it",
+                "agent_behavior_window_not_applied",
+            ), [], []
+        loader = getattr(self._source, "behavior_read_model", None)
+        model: Optional[dict[str, Any]] = None
+        truncated = False
+        if callable(loader):
+            try:
+                batch = await loader(tenant_id, agent_id)
+                rows = batch.rows if isinstance(batch, Agent360ReadBatch) else batch
+                truncated = bool(getattr(batch, "truncated", False))
+                if (
+                    isinstance(rows, list)
+                    and len(rows) == 1
+                    and isinstance(rows[0], dict)
+                    and rows[0].get("agent_ref") == agent_id
+                    and isinstance(rows[0].get("sections"), dict)
+                ):
+                    model = rows[0]
+            except Exception:  # fail-isolate with a content-free source state
+                model = None
+        if model is None:
+            return uniform(
+                "degraded",
+                "agent behavior source unavailable",
+                REASON_BEHAVIOR_UNAVAILABLE,
+            ), [], [REASON_BEHAVIOR_UNAVAILABLE]
+        truncated = truncated or bool(model.get("source_truncated"))
+        binding = {
+            "agentRef": agent_id,
+            "agentRefBasis": "source_reported",
+            "identityResolution": "not_performed",
+            "model": model.get("model"),
+            "readModelVersion": model.get("read_model_version"),
+            "sourceTruncated": truncated,
+        }
+        sections: list[ProjectionSection] = []
+        for section_id, key in BEHAVIOR_SECTIONS.items():
+            part = model["sections"].get(key) or {}
+            rm_state = part.get("state")
+            warnings: list[str] = []
+            if rm_state == "available" and not truncated:
+                state = "available"
+            elif rm_state in {"available", "partial"}:
+                state = "degraded"
+                warnings.append(REASON_BEHAVIOR_TRUNCATED)
+            elif rm_state == "unavailable":
+                # Absence in a capped read is not proof of absence.
+                state = "unknown" if truncated else "empty"
+                if truncated:
+                    warnings.append(REASON_BEHAVIOR_TRUNCATED)
+            else:
+                state = "unknown"
+            sections.append(
+                ProjectionSection(
+                    id=section_id,
+                    state=state,  # type: ignore[arg-type]
+                    title=_BEHAVIOR_TITLES[section_id],
+                    content={
+                        "state": state,
+                        "readModelState": rm_state,
+                        "reason": part.get("reason"),
+                        "data": part.get("data"),
+                        "binding": binding,
+                    },
+                    warnings=warnings or None,
+                    canonicalAuthorityRefs=_BEHAVIOR_AUTHORITIES.get(section_id, ["observations"]),
+                )
+            )
+        claims: list[ClaimEnvelope] = []
+        decisions = (model["sections"].get("decisions") or {}).get("data") or []
+        for decision in decisions[:MAX_READ_LIMIT]:
+            refs = [
+                EvidenceRef(id=event_id, type="event", source="silver_agent_execution_facts")
+                for event_id in (decision.get("evidence") or [])[:MAX_READ_LIMIT]
+                if isinstance(event_id, str) and event_id
+            ]
+            if not refs or not decision.get("decision_id"):
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"agent360:behavior-decision:{decision['decision_id']}",
+                    kind="agent_behavior_decision",
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[
+                        "A decision envelope was reconstructed from source-reported agent facts. "
+                        f"Disposition: {decision.get('disposition')}. It records what was observed, "
+                        "not the agent's internal reasoning, and is not an authorization decision."
+                    ],
+                    claimState=EpistemicStatus.DERIVED,
+                )
+            )
+        return sections, claims, ([REASON_BEHAVIOR_TRUNCATED] if truncated else [])
 
     async def _safe_read(self, name: str, loader: Any, limit: int) -> _Read:
         try:
@@ -5692,6 +5913,8 @@ def register_provider(registry: ProviderRegistry) -> None:
 __all__ = [
     "Agent360Provider",
     "Agent360Source",
+    "BEHAVIOR_SECTIONS",
+    "CORE_SECTIONS",
     "OUTPUT_SECTIONS",
     "RepositoryAgent360Source",
     "register_provider",

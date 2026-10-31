@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (416 types, contract v0.1.0-alpha.0)
+# Aether Event Registry (453 types, contract v0.1.0-alpha.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Retention Class | Description |
 |---|---|---|---|---|---|
@@ -259,6 +259,43 @@
 | `agent_grounding_observed` | `agent` | agent | behavioral | standard_90d | Agent grounding evidence observed |
 | `agent_guardrail_observed` | `agent` | agent | behavioral | standard_90d | Agent guardrail evaluation observed |
 | `agent_human_override_observed` | `agent` | agent | behavioral | standard_90d | Human override of agent action observed |
+| `agent_objective_created` | `agent` | agent | behavioral | standard_90d | Objective created for or by an external agent, reported by its source |
+| `agent_objective_started` | `agent` | agent | behavioral | standard_90d | External agent began pursuing an objective |
+| `agent_objective_modified` | `agent` | agent | behavioral | standard_90d | Objective goal, constraints or success criteria changed |
+| `agent_objective_completed` | `agent` | agent | behavioral | standard_90d | External agent reported an objective completed |
+| `agent_objective_failed` | `agent` | agent | behavioral | standard_90d | External agent reported an objective failed |
+| `agent_objective_abandoned` | `agent` | agent | behavioral | standard_90d | External agent abandoned an objective |
+| `agent_information_retrieved` | `agent` | agent | behavioral | standard_90d | External agent retrieved information (reference only, no content) |
+| `agent_source_consulted` | `agent` | agent | behavioral | standard_90d | External agent consulted an information source |
+| `agent_context_received` | `agent` | agent | behavioral | standard_90d | External agent received context or instructions (reference only) |
+| `agent_decision_started` | `agent` | agent | behavioral | standard_90d | External agent opened a decision |
+| `agent_candidate_considered` | `agent` | agent | behavioral | standard_90d | Candidate option observed in an external agent decision |
+| `agent_candidate_rejected` | `agent` | agent | behavioral | standard_90d | Candidate option rejected in an external agent decision |
+| `agent_action_selected` | `agent` | agent | behavioral | standard_90d | External agent selected an action in a decision |
+| `agent_decision_completed` | `agent` | agent | behavioral | standard_90d | External agent closed a decision |
+| `agent_authorization_requested` | `agent` | agent | behavioral | standard_90d | External agent requested authorization for an action |
+| `agent_authorization_granted` | `agent` | agent | behavioral | standard_90d | Authorization for an external agent action was granted, reported by its source |
+| `agent_authorization_denied` | `agent` | agent | behavioral | standard_90d | Authorization for an external agent action was denied, reported by its source |
+| `agent_tool_retried` | `agent` | agent | behavioral | standard_90d | External agent retried a tool call |
+| `agent_tool_switched` | `agent` | agent | behavioral | standard_90d | External agent switched from one tool to another |
+| `agent_terminated` | `agent` | agent | behavioral | standard_90d | External agent instance terminated |
+| `agent_task_returned` | `agent` | agent | behavioral | standard_90d | Delegated task returned to its delegator |
+| `agent_execution_started` | `agent` | agent | behavioral | standard_90d | External agent started executing a selected action |
+| `agent_execution_succeeded` | `agent` | agent | behavioral | standard_90d | External agent execution succeeded |
+| `agent_execution_failed` | `agent` | agent | behavioral | standard_90d | External agent execution failed |
+| `agent_execution_aborted` | `agent` | agent | behavioral | standard_90d | External agent execution aborted |
+| `agent_quote_received` | `agent` | financial_activity | behavioral | standard_90d | External agent received a price quote |
+| `agent_price_evaluated` | `agent` | financial_activity | behavioral | standard_90d | External agent evaluated a price |
+| `agent_transaction_initiated` | `agent` | financial_activity | behavioral | standard_90d | External agent initiated a transaction (caller-reported; not settlement proof) |
+| `agent_transaction_authorized` | `agent` | financial_activity | behavioral | standard_90d | External agent transaction authorization reported by its source |
+| `agent_transaction_settled` | `agent` | financial_activity | behavioral | standard_90d | External agent reported a settled transaction (reference; settlement truth stays with its rail) |
+| `agent_transaction_failed` | `agent` | financial_activity | behavioral | standard_90d | External agent transaction failure reported by its source |
+| `agent_message_generated` | `agent` | agent | behavioral | standard_90d | External agent generated a message (reference only, no content) |
+| `agent_memory_created` | `agent` | agent | behavioral | standard_90d | External agent created a memory item (reference only) |
+| `agent_memory_retrieved` | `agent` | agent | behavioral | standard_90d | External agent retrieved a memory item (reference only) |
+| `agent_memory_updated` | `agent` | agent | behavioral | standard_90d | External agent updated a memory item (reference only) |
+| `agent_memory_invalidated` | `agent` | agent | behavioral | standard_90d | External agent invalidated a memory item |
+| `agent_memory_expired` | `agent` | agent | behavioral | standard_90d | External agent memory item expired |
 | `transaction_pending_observed` | `web3_lc` | web3 | financial | standard_365d | Transaction in pending/mempool state observed |
 | `transaction_confirmed_observed` | `web3_lc` | web3 | financial | standard_365d | Transaction confirmed on-chain observed |
 | `transaction_reverted_observed` | `web3_lc` | web3 | financial | standard_365d | Transaction reverted observed |

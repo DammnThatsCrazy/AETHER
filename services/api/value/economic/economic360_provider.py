@@ -72,7 +72,9 @@ from value.economic.revenue_adjustment_observations import (
 )
 
 # Sections the registry declares for economic360 (must match outputSections).
-OUTPUT_SECTIONS: tuple[str, ...] = ("summary", "state", "evidence", "outcomes", "findings")
+OUTPUT_SECTIONS: tuple[str, ...] = (
+    "summary", "state", "evidence", "outcomes", "findings", "agent_mediated_activity",
+)
 
 # Product-frame slots are explicit routing metadata. The composer deliberately
 # does not infer a slot from a projection section or claim kind.
@@ -3254,7 +3256,9 @@ class Economic360Provider:
         conversion_inventory_reader: Optional[ConversionInventoryReader] = None,
         attribution_credit_reader: Optional[AttributionCreditReader] = None,
         revenue_adjustment_reader: Optional[AdjustmentSource] = None,
+        agent_activity_reader: Optional[Any] = None,
     ) -> None:
+        self._agent_activity = agent_activity_reader
         # Injected canonical reader (test seam); default reads repositories.
         self._sources = sources if sources is not None else RepositoryEconomicSourceReader()
         self._agent_identity = (
@@ -3482,6 +3486,7 @@ class Economic360Provider:
             ),
             self._outcomes_section(tenant_filtered, dep_state, source_partial),
             self._findings_section(warnings, evidence, source_partial),
+            await self._agent_mediated_activity_section(request),
         ]
         claims = self._build_claims(
             request,
@@ -4012,6 +4017,36 @@ class Economic360Provider:
                 "normalizationState": _normalization_state(gross_amounts),
             },
             warnings=[reason] if reason else None,
+        )
+
+    async def _agent_mediated_activity_section(self, request: ProjectionRequest) -> ProjectionSection:
+        """agent_mediated_activity — what agents selected/executed/influenced (WO-092).
+
+        Only a canonical Agent subject has an exact join to source-reported agent
+        facts (via the tenant-admin identity binding); every other subject is
+        ``not_applicable``. Amounts are agent-reported until a rail confirms them."""
+        title = "Agent-mediated activity"
+        if request.subject.kind != "agent":
+            return ProjectionSection(
+                id="agent_mediated_activity", state="not_applicable", title=title,
+                content={"reason": "agent_mediated_activity_applies_to_agent_subjects"},
+            )
+        reader = self._agent_activity
+        if reader is None:
+            from value.attribution.agent_activity_reader import BindingSilverAgentActivityReader
+
+            reader = BindingSilverAgentActivityReader()
+        try:
+            content = await reader.activity(request.tenantId, request.subject.id)
+        except Exception:  # noqa: BLE001 - source failure degrades, never fabricates
+            content = {"state": "degraded", "reason": "agent_activity_source_unavailable"}
+        state = content.get("state") if content.get("state") in {
+            "available", "empty", "unknown", "degraded"} else "degraded"
+        return ProjectionSection(
+            id="agent_mediated_activity", state=state, title=title,  # type: ignore[arg-type]
+            content={**content, "executionByAether": False,
+                     "finalityNote": "reported amounts are agent claims; only rail-confirmed rows are settled"},
+            warnings=[content["reason"]] if state in {"degraded", "unknown"} and content.get("reason") else None,
         )
 
     def _findings_section(

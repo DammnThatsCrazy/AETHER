@@ -55,7 +55,7 @@ feature-flagged and default OFF.
 | Area | Status at audit | Canonical location |
 |---|---|---|
 | Canonical ingestion `/v1/batch`, bronze/silver, idempotency | Exists (mature) | `services/api/ingestion/ingestion/batch.py`, `repositories/lake.py`, `services/api/ingestion/silver/` |
-| Canonical event registry (generated) | Exists — 416 events, 25 families | `packages/shared/contracts/event-registry.json` → `generate_contracts.py` |
+| Canonical event registry (generated) | Exists — 453 events, 25 families | `packages/shared/contracts/event-registry.json` → `generate_contracts.py` |
 | Agentic observability pipeline | Exists | `services/api/actions/agentic_observability/` |
 | Agent deployment registry | **Missing** (in-memory registration dict only) | `services/api/actions/agent/routes.py` |
 | Payment provider adapters (Privy/Stripe onramp/Coinbase/MoonPay/Bridge) | **Missing** (Stripe = own billing only; x402 rail exists) | `services/api/billing/billing/`, `services/api/value/x402/` |

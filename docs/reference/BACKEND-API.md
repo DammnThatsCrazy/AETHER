@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:979d247d6edc88d2de235db949064c406da903589f4b2980cf318bd9138378e8"
+  "services/api/actions/": "sha256:86f0c5a07f144b260a478be07474bf8a96ad5159c6470a4bbbc9e92acceac66b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:3dd593027d97ad10ab66370ea2c735c4cc5ea0f7655f9564dd1b76aa80e04a83"
-  "services/api/ingestion/": "sha256:e0f728400c34a5123aa0cebef7799c945003314916470645f37177ec38c44e5b"
-  "services/api/intelligence/": "sha256:9c734b35466479143e1568314736aad8e630b61356fd9d54ba1d22242a457163"
+  "services/api/identity/": "sha256:186128cc10aad39d82c7f123d8feb057c63a477d50e6b5511d0f9b737573cb68"
+  "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
+  "services/api/intelligence/": "sha256:973f80fd1186ea0aa5d8e652bfbb7e2a34c0a398c5cc9e15aab28e802bdb946e"
   "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:875bbf8ca5e61e8158d68460b7061f40556aa04b2b1056d86f6bddd3fccdd7ba"
+  "services/api/value/": "sha256:72b427f971a848bcc429c30dec93aedfe1204450cbaed259efa0fffc1eaf0e4e"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -3843,6 +3843,15 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 ### Agent spawn lineage
 
 - `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
+
+### Agent behavior read models
+
+- `GET /v1/agent/agents/{agent_ref}/behavior` — `agent:manage`, registry flag. Agent360 behavior read model rebuilt from the agent's Silver facts: usual tools and dispositions, features with sample sizes and confidence intervals, capabilities and competencies, preferences (only over observed, permitted alternatives), failure resolution, journey, influence graph and an observability envelope listing what Aether cannot see. It also composes owner-supplied sections: `identity` (recognition state, continuity, non-merge-eligible resolver claims, derived review items, queued `agent_continuity_candidate` reviews, and `continuity_decisions` recording reviewer confirm/reject as `reviewer_asserted` with `merge_performed: false`), `authority` (each value-moving action checked against the agent's active grants: `inside`, `outside` or `unknown`), `value` (agent-selected/executed/influenced totals per currency, `reported` until a rail confirms), `risk` (Risk360 signals, not findings), `trust` (kept separate from reputation) and `market` (per-merchant agent compatibility). Each section reports `available`, `partial` (the 1,000-fact read was capped) or `unavailable` with a reason. Agent refs are source-reported; this is not an identity resolution.
+- `POST /v1/agent/agents/{agent_ref}/behavior/snapshots` — `agent:manage`, registry flag. Body `{window_start, window_end}`. Computes the behavior snapshot for facts inside the window and stores it in `agent_behavior_snapshots` (a rebuildable cache; the same window recomputes to the same row). `GET /v1/agent/agents/{agent_ref}/behavior/drift` compares the two most recent stored windows and returns `insufficient_windows` until two exist; drift requires interval-separated change.
+- Value 360 (`economic360`) adds an `agent_mediated_activity` section: not applicable to non-agent subjects; for a canonical Agent it uses the tenant-admin identity binding, reports totals per currency as `reported` until confirmed, and is `unknown` without a binding.
+- `GET /v1/agent/agents/principals/{entity_id}/agents` — `agent:manage`, registry flag. Agents acting for one person, linked only by an active recorded delegation grant from that person or a declared beneficiary on the agent's own facts, with usual disposition, decision count and human-agent coupling (approval latency, escalations, overrides). Never an identity merge (`identity_merge: not_performed`); at most 25 agents, with `source_truncated` when a fact read was capped.
+- `GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}` — `agent:manage`, registry flag. One reconstructed DecisionEnvelope (open or closed, with missing parts listed), its evidence-association attribution, the nine responsibility roles, and a counterfactual labelled `counterfactual — not observed`. Returns 404 when the decision is not the named agent's or belongs to another tenant.
+- `POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm` and `.../reject` — `agent:manage`, registry flag. Records a reviewer decision on one open `agent_continuity_candidate` item that touches this agent's source identities: `confirmed` (the deployments report one logical agent) or `rejected` (distinct agents). Review context only: nothing is merged, bound or relinked, and the response always carries `merge_performed: false` and `authority: "none"`. Decided items leave the queue shown in Agent 360. Repeating the same decision is idempotent, and the opposite decision returns 409. Another tenant's item, another agent's item, or an unknown id returns 404. The late-binding approve and merge routes cannot load these items.
 
 ### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
 

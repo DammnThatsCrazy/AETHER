@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bb38bc7ee689e493c0b46c108845d4a90e74261d5a003daa0973d92085090601"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:951ef83226b7211555ad7530a69eabf33eac8dd9dd4462409e45e29f7cdc1f64"
 ---
 
 # 360 System Blueprint

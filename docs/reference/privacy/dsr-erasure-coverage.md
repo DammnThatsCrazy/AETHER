@@ -9,7 +9,7 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "config/storage_policies.yaml": "sha256:3012f9d8e0504a79de25b8d17942a3c3cc4dd9d2897cb0a3f559839e82e98645"
+  "config/storage_policies.yaml": "sha256:b3e77ad29290b79c04138504d7ee66a01f9572dbb43da83b9b0a1106c337c5ab"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
   "services/api/governance/consent/erasure_jobs.py": "sha256:2761a882b5af7e261334e64c10ab3a4081c2514ff64414328c39060e4529f669"
   "services/api/governance/consent/erasure_planes.py": "sha256:b4898c154113e82c44e53d319422968ed41545b4ade66e7776e2f801b64b5822"
@@ -103,7 +103,7 @@ regenerable, 7-day derived copy. The value-semantics snapshot stores
 (`value_valuation_snapshots`, `value_rollup_snapshots`,
 `value_price_snapshots`, `valuation_snapshots`,
 `stablecoin_valuation_snapshots`) record asset and metric valuations with no
-subject key; `test_value_snapshot_stores_carry_no_subject_key` pins that. Silver
+subject key; `test_value_snapshot_stores_carry_no_subject_key` pins that. The agent behavior snapshot store (`agent_behavior_snapshots`) is likewise a derived, rebuildable cache: it holds aggregated rates and Silver event ids keyed by tenant, source-reported agent ref and window, with no payloads or person identifiers. It has no DSR component of its own; erasing the underlying Silver facts is followed by recomputation, and `delete_by_agent` / `purge_before` give operators a physical delete. Silver
 tables owned by another component are excluded from `silver_facts`:
 `silver_campaign_touchpoint_facts` and `canonical_conversions`
 (`attribution_records`). The semantic handler owns and hard-deletes

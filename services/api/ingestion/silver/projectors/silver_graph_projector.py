@@ -31,6 +31,10 @@ _EMIT_ENABLED = os.getenv("AETHER_SILVER_GRAPH_EMIT", "true").lower() != "false"
 # Everything else (generic activity, risk signals, trades, …) stays a Silver
 # fact only — high-cardinality per-event nodes never enter the graph.
 _MCP_EVENTS = frozenset({"agent_mcp_connection_observed"})
+_LINEAGE_EDGE_EVENTS = {
+    "agent_subagent_spawned": EdgeType.SPAWNED_SUBAGENT,
+    "agent_delegated_task": EdgeType.DELEGATED_TO,
+}
 _TOOL_EVENTS = frozenset({
     "agent_tool_invocation_observed",
     "agent_tool_observed",
@@ -452,6 +456,8 @@ class SilverGraphProjector:
         - Internal agent MCP/tool observations retain their existing bounded
           projections. External deployments use the separate run projection
           and never join a registry ``agent_id`` to a canonical Agent vertex.
+        - Spawn / delegation events → one ``SPAWNED_SUBAGENT`` or
+          ``DELEGATED_TO`` edge per (parent, child) (WO-021).
         - Everything else (generic activity, risk signals, trades, …) stays a
           Silver fact only — no per-event vertex enters the graph (high-cardinality
           stays in Silver, not the graph).
@@ -526,6 +532,26 @@ class SilverGraphProjector:
                     ),
                     subject_id=agent_id,
                 )
+            elif agent_id and event_name in _LINEAGE_EDGE_EVENTS:
+                # Spawn / delegation lineage (WO-021). Source-reported agent
+                # refs on both ends; the edge is bounded per (parent, child)
+                # and cites the first source event that supports it.
+                target = row.get("child_agent_ref") if event_name == "agent_subagent_spawned" \
+                    else row.get("delegated_to_ref")
+                # The edge source is the reporting agent itself. A payload that
+                # names a different parent cannot plant an edge for another agent.
+                parent = agent_id
+                claimed_parent = row.get("parent_agent_ref")
+                if claimed_parent and str(claimed_parent) != parent:
+                    continue
+                if target and str(target) != str(parent):
+                    await _emit(
+                        _bounded_edge(
+                            _LINEAGE_EDGE_EVENTS[event_name], str(parent), str(target),
+                            tenant_id, source_event_id, occurred_at,
+                        ),
+                        subject_id=str(parent),
+                    )
             # Generic activity remains Silver-only. Events with a validated
             # external deployment and explicit run correlation also add one
             # bounded AgentExecutionRun node and source-scoped task/outcome

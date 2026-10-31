@@ -25,6 +25,63 @@ def _first(mapping: dict[str, Any], *names: str) -> str | None:
     return None
 
 
+async def _register_agent_source(payload: dict[str, Any], tenant_id: str, event_id: str) -> None:
+    from ingestion.ingestion.workers import _validated_agent_deployment_marker
+
+    marker = _validated_agent_deployment_marker(payload)
+    if not marker or not marker.get("deployment_id"):
+        # Source-reported agent refs without a validated deployment stay Silver
+        # facts only; they never create identity records.
+        return
+    # Defense in depth: the marker is server-set at ingestion, but the worker
+    # re-reads the tenant registry and takes the agent id from the record, so a
+    # stale or forged marker cannot create an identity.
+    from actions.agent.deployments import AgentDeploymentStatus, get_deployment_repository
+
+    record = await get_deployment_repository().get_record(tenant_id, marker["deployment_id"])
+    if not record or record.get("status") != AgentDeploymentStatus.ACTIVE.value or not record.get("agent_id"):
+        metrics.increment("identity_agent_source_rejected")
+        return
+    agent_id = str(record["agent_id"])
+    from identity.identity.routes import get_identity_resolver
+    from identity.identity.source_identity_registry import SourceIdentityRegistry
+
+    repo = getattr(get_identity_resolver(), "_repo", None)
+    if repo is None:
+        raise RuntimeError("canonical identity repository is unavailable")
+    source = await SourceIdentityRegistry(repo).register_source_identity(
+        tenant_id=tenant_id,
+        source_system_id="aether-agent-telemetry",
+        source_kind="agent",
+        # Tenant-derived namespace; the client's identity_namespace is not used.
+        source_namespace=f"tenant:{tenant_id}:agent:deployment:{marker['deployment_id']}",
+        agent_id=agent_id,
+        idempotency_key=f"{tenant_id}:{event_id}:agent-source-v1",
+        source_record_id=event_id,
+    )
+    metrics.increment("identity_agent_source_registered")
+
+    # The same agent ref reported by another validated deployment is a
+    # continuity question for a reviewer, not evidence that they are one agent.
+    others = [
+        row for row in await repo.list_source_identities_by_identifier(
+            tenant_id, "agent_id", agent_id, limit=20,
+        )
+        if row.get("id") != source.id and row.get("source_kind") == "agent"
+    ]
+    if others:
+        from identity.identity.pending_review import PendingIdentityReviewRepository
+
+        await PendingIdentityReviewRepository().upsert_candidate(
+            tenant_id=tenant_id,
+            identify_source_identity_id=source.id,
+            candidate_source_identity_ids=[str(row["id"]) for row in others],
+            reason_codes=["agent_ref_reported_by_multiple_deployments"],
+            evidence=[{"source_identity_id": str(row["id"])} for row in [{"id": source.id}, *others]],
+            entry_type="agent_continuity_candidate",
+        )
+
+
 async def resolve_sdk_observation(event: Event, producer: EventProducer) -> None:
     """Register and resolve one accepted identity-bearing SDK observation.
 
@@ -71,6 +128,12 @@ async def resolve_sdk_observation(event: Event, producer: EventProducer) -> None
         context, "orgId", "tenantId"
     )
     namespace = str(context.get("identity_namespace") or f"tenant:{tenant_id}")
+
+    # An agent observed through a validated deployment becomes its own
+    # source identity (WO-013). It is never resolved into a person: agent and
+    # deployment identifiers are non-merge-eligible, and the registry record
+    # stays unresolved until a tenant admin binds it to a canonical Agent.
+    await _register_agent_source(payload, tenant_id, event_id)
 
     wallet_address = _first(properties, "wallet_address", "walletAddress", "address")
     has_source_identity = any((user_id, anonymous_id, device_id, installation_id))
