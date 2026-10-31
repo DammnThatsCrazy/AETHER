@@ -161,6 +161,92 @@
         { "name": "source_grant_refs", "type": "array[string]", "required": false },
         { "name": "rights_decision_refs", "type": "array[string]", "required": false }
       ]
+    },
+    {
+      "name": "actor_context",
+      "kind": "object",
+      "required": false,
+      "description": "Actor roles for machine activity (High-Cardinality Agent Lineage work order \u00a74/\u00a79). The roles principal/initiator/executor/operator/beneficiary/counterparty/controller never collapse into a single actor_id. reported_principal_ref is a source CLAIM; canonical_principal_entity_id is set only by canonical resolution (never copied from the claim). Vocabulary owner: services/api/shared/agent_lineage + packages/shared/agent-lineage.ts.",
+      "fields": [
+        { "name": "principal", "type": "string", "required": false },
+        { "name": "initiator", "type": "string", "required": false },
+        { "name": "executor", "type": "string", "required": false },
+        { "name": "operator", "type": "string", "required": false },
+        { "name": "beneficiary", "type": "string", "required": false },
+        { "name": "counterparty", "type": "string", "required": false },
+        { "name": "controller", "type": "string", "required": false },
+        { "name": "reported_principal_ref", "type": "string", "required": false },
+        { "name": "reported_principal_namespace", "type": "string", "required": false },
+        { "name": "canonical_principal_entity_id", "type": "string", "required": false },
+        { "name": "principal_resolution_method", "type": "string", "required": false },
+        { "name": "principal_resolution_status", "type": "principal_resolution_status", "required": false },
+        { "name": "principal_confidence", "type": "number", "required": false },
+        { "name": "principal_evidence_refs", "type": "array[string]", "required": false }
+      ]
+    },
+    {
+      "name": "authority_context",
+      "kind": "object",
+      "required": false,
+      "description": "Authority under which the activity executed (work order \u00a76). Extends the existing delegation / Agent Access authority machinery by reference; this block carries references and resolution status, never a second authority service.",
+      "fields": [
+        { "name": "authority_type", "type": "authority_type", "required": false },
+        { "name": "authority_ref", "type": "string", "required": false },
+        { "name": "grantor_entity_id", "type": "string", "required": false },
+        { "name": "grantee_entity_id", "type": "string", "required": false },
+        { "name": "scope", "type": "string", "required": false },
+        { "name": "resource_scope", "type": "string", "required": false },
+        { "name": "action_scope", "type": "string", "required": false },
+        { "name": "budget", "type": "string", "required": false },
+        { "name": "currency", "type": "string", "required": false },
+        { "name": "valid_from", "type": "iso8601", "required": false },
+        { "name": "valid_until", "type": "iso8601", "required": false },
+        { "name": "delegation_allowed", "type": "boolean", "required": false },
+        { "name": "maximum_delegation_depth", "type": "integer", "required": false },
+        { "name": "policy_id", "type": "string", "required": false },
+        { "name": "policy_version", "type": "string", "required": false },
+        { "name": "approval_ref", "type": "string", "required": false },
+        { "name": "mandate_ref", "type": "string", "required": false },
+        { "name": "revocation_ref", "type": "string", "required": false },
+        { "name": "revoked_at", "type": "iso8601", "required": false },
+        { "name": "authority_resolution_status", "type": "authority_resolution_status", "required": false },
+        { "name": "authority_evidence_refs", "type": "array[string]", "required": false }
+      ]
+    },
+    {
+      "name": "execution_context",
+      "kind": "object",
+      "required": false,
+      "description": "Execution identity (work order \u00a77/\u00a78/\u00a729). Source and canonical run identifiers are both kept and source values are never overwritten. A trace correlates observations; a run is semantic execution: a trace id is never promoted to a run id.",
+      "fields": [
+        { "name": "source_run_id", "type": "string", "required": false },
+        { "name": "canonical_run_id", "type": "string", "required": false },
+        { "name": "trace_id", "type": "string", "required": false },
+        { "name": "span_id", "type": "string", "required": false },
+        { "name": "parent_span_id", "type": "string", "required": false },
+        { "name": "root_run_id", "type": "string", "required": false },
+        { "name": "parent_run_id", "type": "string", "required": false },
+        { "name": "agent_definition_id", "type": "string", "required": false },
+        { "name": "agent_deployment_id", "type": "string", "required": false },
+        { "name": "agent_instance_id", "type": "string", "required": false },
+        { "name": "task_id", "type": "string", "required": false },
+        { "name": "control_mode", "type": "control_mode", "required": false },
+        { "name": "delegation_depth", "type": "integer", "required": false },
+        { "name": "external_effect_ref", "type": "string", "required": false },
+        { "name": "execution_verification_state", "type": "execution_verification_state", "required": false }
+      ]
+    },
+    {
+      "name": "protocol_context",
+      "kind": "object",
+      "required": false,
+      "description": "Protocol-agnostic lineage (work order \u00a718). Each protocol adapter produces evidence; canonical resolution determines meaning.",
+      "fields": [
+        { "name": "protocol", "type": "string", "required": false },
+        { "name": "protocol_version", "type": "string", "required": false },
+        { "name": "adapter", "type": "string", "required": false },
+        { "name": "adapter_version", "type": "string", "required": false }
+      ]
     }
   ],
   "passthrough_blocks": {
@@ -221,6 +307,10 @@
     "trust_classes": {
       "note": "Field-authority trust classes are owned by event-registry.json (trustClasses, OBSERVED..OPERATOR_ASSERTED). The envelope model validates subject.trust_class against that 10-class rank; the parity test asserts the model's local frozenset equals generated_registry.TRUST_CLASS_ORDER so the vocabulary never drifts.",
       "source": "packages/shared/contracts/event-registry.json#trustClasses"
+    },
+    "lineage_contexts": {
+      "note": "actor_context / authority_context / execution_context / protocol_context are optional, additive blocks (existing producers are unaffected). Their curated vocabularies (control_mode, authority_type, authority_resolution_status, principal_resolution_status, execution_verification_state) are owned by the agent-lineage contract; the parity test binds the block fields to it.",
+      "source": "packages/shared/agent-lineage.ts"
     },
     "purpose_ref": {
       "note": "privacy.purposes reference the consent-registry purpose ids.",

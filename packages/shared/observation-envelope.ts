@@ -23,6 +23,14 @@
 // ambiguous (TS2308). The rank-ordered TRUST_CLASSES const below is still kept
 // as the self-contained Envelope-B mirror the parity test extracts structurally.
 import type { TrustClass } from './events';
+// Lineage vocabularies are owned by the agent-lineage contract (never redeclared).
+import type {
+  AuthorityResolutionStatus,
+  AuthorityType,
+  ControlMode,
+  ExecutionVerificationState,
+  PrincipalResolutionStatus,
+} from './agent-lineage';
 
 // ── Curated vocabularies (mirror of observation-envelope-registry.json) ───────
 
@@ -198,6 +206,81 @@ export interface RightsReferenceBlock {
   rights_decision_refs?: readonly string[];
 }
 
+/**
+ * Optional actor roles — never collapsed into one actor id. `reported_principal_ref`
+ * is a source claim; `canonical_principal_entity_id` is set only by canonical
+ * resolution and is never copied from the claim.
+ */
+export interface ActorContextBlock {
+  principal?: string;
+  initiator?: string;
+  executor?: string;
+  operator?: string;
+  beneficiary?: string;
+  counterparty?: string;
+  controller?: string;
+  reported_principal_ref?: string;
+  reported_principal_namespace?: string;
+  canonical_principal_entity_id?: string;
+  principal_resolution_method?: string;
+  principal_resolution_status?: PrincipalResolutionStatus;
+  principal_confidence?: number;
+  principal_evidence_refs?: readonly string[];
+}
+
+/** Optional authority reference block (references + resolution status only). */
+export interface AuthorityContextBlock {
+  authority_type?: AuthorityType;
+  authority_ref?: string;
+  grantor_entity_id?: string;
+  grantee_entity_id?: string;
+  scope?: string;
+  resource_scope?: string;
+  action_scope?: string;
+  /** Decimal string. */
+  budget?: string;
+  currency?: string;
+  valid_from?: string; // ISO-8601 instant
+  valid_until?: string; // ISO-8601 instant
+  delegation_allowed?: boolean;
+  maximum_delegation_depth?: number;
+  policy_id?: string;
+  policy_version?: string;
+  approval_ref?: string;
+  mandate_ref?: string;
+  revocation_ref?: string;
+  revoked_at?: string; // ISO-8601 instant
+  authority_resolution_status?: AuthorityResolutionStatus;
+  authority_evidence_refs?: readonly string[];
+}
+
+/** Optional execution identity; source and canonical run ids are both kept. */
+export interface ExecutionContextBlock {
+  source_run_id?: string;
+  canonical_run_id?: string;
+  trace_id?: string;
+  span_id?: string;
+  parent_span_id?: string;
+  root_run_id?: string;
+  parent_run_id?: string;
+  agent_definition_id?: string;
+  agent_deployment_id?: string;
+  agent_instance_id?: string;
+  task_id?: string;
+  control_mode?: ControlMode;
+  delegation_depth?: number;
+  external_effect_ref?: string;
+  execution_verification_state?: ExecutionVerificationState;
+}
+
+/** Optional protocol-agnostic evidence about how the agent appeared. */
+export interface ProtocolContextBlock {
+  protocol?: string;
+  protocol_version?: string;
+  adapter?: string;
+  adapter_version?: string;
+}
+
 /** Passthrough A-side sub-envelope (registry passthrough_blocks). */
 export type AetherSubEnvelope = Record<string, unknown>;
 
@@ -222,4 +305,9 @@ export interface UniversalObservationEnvelope {
   quality?: QualityBlock;
   lineage?: LineageBlock;
   rights?: RightsReferenceBlock;
+
+  actor_context?: ActorContextBlock;
+  authority_context?: AuthorityContextBlock;
+  execution_context?: ExecutionContextBlock;
+  protocol_context?: ProtocolContextBlock;
 }

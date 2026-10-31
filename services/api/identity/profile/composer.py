@@ -23,6 +23,7 @@ from repositories.lake import (
 )
 from identity.profile.resolver import ProfileResolver
 from identity.profile.economic import AgentProfile360EconomicComposer
+from identity.profile.agent_lineage import LineageSummaryReader, compose_agent_activity
 
 logger = get_logger("aether.profile.composer")
 
@@ -117,6 +118,37 @@ def _dimension_envelope(dimension: str, value: Any) -> DimensionEnvelope:
     return DimensionEnvelope(dimension=dimension, state="ready", reason_code="ok")
 
 
+# Lineage completeness -> canonical dimension state. ``unavailable`` is a
+# degradation (the dependency did not answer); ``unknown`` is honest absence of
+# a measurable answer, never "no agents".
+_LINEAGE_COMPLETENESS_STATE: dict[str, str] = {
+    "complete": "ready",
+    "partial": "partial",
+    "truncated": "partial",
+    "stale": "stale",
+    "recomputing": "pending",
+    "unknown": "insufficient_data",
+    "unavailable": "degraded",
+}
+
+
+def _lineage_envelope(value: dict[str, Any]) -> DimensionEnvelope:
+    completeness = str(value.get("completeness") or "unavailable")
+    state = _LINEAGE_COMPLETENESS_STATE.get(completeness, "degraded")
+    return DimensionEnvelope(
+        dimension="agent_lineage",
+        state=state,  # type: ignore[arg-type]
+        reason_code=(
+            "ok" if state == "ready"
+            else "dependency_failed" if state == "degraded"
+            else "awaiting_reconciliation" if state == "pending"
+            else "past_freshness_sla" if state == "stale"
+            else "partial_inputs"
+        ),
+        message=value.get("reason") or completeness,
+    )
+
+
 # Envelope states that represent a genuine degradation (surfaced to operators),
 # as opposed to honest absence (``empty`` / ``not_applicable``) or readiness.
 _DEGRADED_STATES = frozenset({"degraded", "error", "stale", "suppressed", "insufficient_data"})
@@ -150,6 +182,7 @@ class ProfileComposer:
         graph: GraphClient,
         cache: CacheClient,
         resolver: ProfileResolver,
+        lineage_reader: Optional[LineageSummaryReader] = None,
     ) -> None:
         self._identity = identity_repo
         self._analytics = analytics_repo
@@ -159,6 +192,9 @@ class ProfileComposer:
         self._resolver = resolver
         self._scorer = TrustScoreComposite()
         self._agent_economic = AgentProfile360EconomicComposer()
+        # Optional: with no reader the agent-activity section degrades to
+        # ``unavailable`` (null counts), it never reports zero agents.
+        self._lineage_reader = lineage_reader
 
     async def get_full_profile(
         self,
@@ -169,6 +205,7 @@ class ProfileComposer:
         include_intelligence: bool = True,
         include_lake: bool = True,
         include_agent_economic: bool = False,
+        include_agent_lineage: bool = False,
         timeline_limit: int = 50,
         graph_depth: int = 1,
     ) -> dict:
@@ -207,6 +244,11 @@ class ProfileComposer:
              lambda: self._agent_economic.compose(
                  agent_id=user_id, tenant_id=tenant_id, limit=timeline_limit),
              {}, include_agent_economic),
+            # Agent activity / delegation SUMMARY (opt-in, additive). Cohorts
+            # and rows come from the cursor-paginated lineage API, never here.
+            ("agent_lineage",
+             lambda: compose_agent_activity(self._lineage_reader, tenant_id, user_id),
+             {}, include_agent_lineage),
         ]
 
         active = [(k, f, d) for (k, f, d, en) in specs if en]
@@ -232,7 +274,10 @@ class ProfileComposer:
                 ))
             else:
                 values[key] = res
-                envelopes.append(_dimension_envelope(key, res))
+                envelopes.append(
+                    _lineage_envelope(res) if key == "agent_lineage" and isinstance(res, dict)
+                    else _dimension_envelope(key, res)
+                )
         # Disabled dimensions carry their default (not queried, not degraded).
         for (key, _factory, default, enabled) in specs:
             values.setdefault(key, default)
@@ -258,6 +303,7 @@ class ProfileComposer:
             "intelligence": values["intelligence"],
             "lake": values["lake"],
             "agent_economic": values["agent_economic"],
+            "agent_lineage": values["agent_lineage"],
             "computed_at": now,
             "readiness": {
                 "state": rollup_state(envelopes),
@@ -269,6 +315,7 @@ class ProfileComposer:
                 "subsystems_queried": [
                     "identity", "graph", "analytics", "consent",
                     "lake_gold", "trust_scorer", "agent_economic",
+                    *(["agent_lineage"] if include_agent_lineage else []),
                 ],
             },
         }
@@ -442,6 +489,7 @@ class ProfileComposer:
             include_graph="graph" in include_set,
             include_intelligence="analytics" in include_set or "identity" in include_set,
             include_lake="financial" in include_set or "analytics" in include_set,
+            include_agent_lineage="agent_lineage" in include_set,
             timeline_limit=timeline_limit,
         )
         graph = full.get("graph") if isinstance(full.get("graph"), dict) else {}
@@ -479,6 +527,8 @@ class ProfileComposer:
             "system": [{"id": "system", "title": "System and automation context", "data": {"agents": full.get("agents", []), "behavior": full.get("behavior", {})}}],
             "financial": [{"id": "financial", "title": "Financial and lake context", "data": lake}],
             "analytics": [{"id": "analytics", "title": "Intelligence and behavioral analytics", "data": intelligence}],
+            # Opt-in summary only (``include=["agent_lineage"]``); never rows.
+            "agent_lineage": [{"id": "agent_lineage", "title": "Agent activity and delegation summary", "data": full.get("agent_lineage") or {}}],
             "debug": [{"id": "alignment", "title": "Tenant and graph alignment audit", "data": {"tenant_id": tenant_id, "surface": "kyber_internal", "graph": graph.get("alignment_audit", {})}}],
         }
         return {
