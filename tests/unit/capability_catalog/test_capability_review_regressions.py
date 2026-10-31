@@ -124,10 +124,19 @@ def test_absent_fields_are_not_assertions():
     # key — so a record has to supply the real field for it to count as asserted.
     full = {
         "provider": "p", "server_name": "s", "tool_name": "t",
+        "resource_uri": "mcp://s/Docs/Readme",
         "protocol_version": "v", "capability_kind": "mcp_tool",
     }
     assert asserted_identity_fields(full) == list(IDENTITY_FIELDS)
     assert asserted_identity_fields({"server": "ignored"}) == []
+
+
+def test_resource_uri_identity_preserves_case_sensitive_paths():
+    """Digest equivalence matches the exact URI equality used by resource authorization."""
+    upper = {"provider": "p", "server_name": "s", "resource_uri": "mcp://s/Docs/Readme"}
+    lower = {"provider": "p", "server_name": "s", "resource_uri": "mcp://s/docs/Readme"}
+    assert artifact_digest_for(upper) != artifact_digest_for(lower)
+    assert asserted_identity_fields({"resource_uri": "  mcp://s/Docs/Readme  "}) == ["resource_uri"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════

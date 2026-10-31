@@ -9,7 +9,7 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "config/storage_policies.yaml": "sha256:2259fde9c9d289d4fc3be0fd9df8c26ae796a6a0a2465c27f85ac2fa9a39369c"
+  "config/storage_policies.yaml": "sha256:b3e77ad29290b79c04138504d7ee66a01f9572dbb43da83b9b0a1106c337c5ab"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
   "services/api/governance/consent/erasure_jobs.py": "sha256:2761a882b5af7e261334e64c10ab3a4081c2514ff64414328c39060e4529f669"
   "services/api/governance/consent/erasure_planes.py": "sha256:b4898c154113e82c44e53d319422968ed41545b4ade66e7776e2f801b64b5822"
@@ -52,6 +52,10 @@ component, and `scripts/release/check_dsr_coverage.py` fails CI when a
   `skipped_legal_hold` with the retained count and a `policy_decision_id`;
   erasure that needs an operator is `requires_manual_review` with
   `requires_retrain`.
+- The storage registry classifies `agent_invocation_claims` and
+  `agent_invocation_receipts` as PostgreSQL rows with legal retention and
+  `delete_behavior: preserve`. This storage policy is not itself a DSR plane
+  receipt; any subject erasure handling must preserve that distinction.
 
 ## Subject resolution
 

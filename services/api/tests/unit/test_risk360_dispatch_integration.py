@@ -91,7 +91,8 @@ async def _produce_dispatch(*, recommendation_subject="entity-1", subject_kind="
     await RecommendationRepository().insert("rec-1", recommendation)
     await DecisionRepository().insert("dec-1", decision)
     await ActionFeedbackRepository().insert("action-1", action)
-    tenant = SimpleNamespace(tenant_id=TENANT_A, user_id="operator", require_permission=lambda permission: None)
+    tenant = SimpleNamespace(tenant_id=TENANT_A, user_id="operator", require_permission=lambda permission: None,
+                             has_permission=lambda permission: permission in {"write", "dispatch"})
     response = await routes._dispatch_action(
         "action-1", routes.DispatchActionRequest(
             target_type="agent_assist", idempotency_key="risk-dispatch",
@@ -116,6 +117,58 @@ async def test_dispatch_rejects_unbound_or_ambiguous_recommendation_subject(
                                 subject_kind=subject_kind, population_id=population_id)
 
 
+async def test_dispatch_rejects_same_tenant_cross_subject_reference():
+    from shared.common.common import BadRequestError
+
+    record = _risk_intervention_record(
+        "risk-cross-subject", subject_kind="entity", subject_id="entity-1",
+        observed_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+    await RiskInterventionRepository().create(record)
+    await RecommendationRepository().insert("rec-cross-subject", {
+        "recommendation_id": "rec-cross-subject", "tenant_id": TENANT_A,
+        "entity_id": "entity-1", "candidate_actions": [],
+    })
+    await DecisionRepository().insert("dec-cross-subject", {
+        "decision_id": "dec-cross-subject", "tenant_id": TENANT_A,
+        "recommendation_id": "rec-cross-subject", "decision_status": "approved",
+        "selected_action": {"action_key": record.intervention_type, "action_type": "review"},
+    })
+    await ActionFeedbackRepository().insert("action-cross-subject", {
+        "action_id": "action-cross-subject", "tenant_id": TENANT_A,
+        "decision_id": "dec-cross-subject", "recommendation_id": "rec-cross-subject",
+        "action_type": "review", "status": "planned",
+    })
+    tenant = SimpleNamespace(tenant_id=TENANT_A, user_id="operator", require_permission=lambda permission: None)
+    with pytest.raises(BadRequestError):
+        await routes._dispatch_action(
+            "action-cross-subject",
+            routes.DispatchActionRequest(
+                target_type="agent_assist", idempotency_key="cross-subject",
+                risk_action_reference={"record_id": record.record_id, "subject_kind": "entity",
+                                       "subject_id": "entity-2"},
+            ),
+            SimpleNamespace(state=SimpleNamespace(tenant=tenant)),
+        )
+
+
+async def test_idempotent_replay_rejects_risk_subject_rebinding():
+    from shared.common.common import ConflictError
+
+    record, _dispatch = await _produce_dispatch()
+    tenant = SimpleNamespace(tenant_id=TENANT_A, user_id="operator", require_permission=lambda permission: None)
+    with pytest.raises(ConflictError):
+        await routes._dispatch_action(
+            "action-1",
+            routes.DispatchActionRequest(
+                target_type="agent_assist", idempotency_key="risk-dispatch",
+                risk_action_reference={"record_id": record.record_id, "subject_kind": "entity",
+                                       "subject_id": "entity-2"},
+            ),
+            SimpleNamespace(state=SimpleNamespace(tenant=tenant)),
+        )
+
+
 def _authorization(subject):
     return ProjectionReadAuthorization(
         tenantId=TENANT_A, sourceSurfaceId="risk360", sourceSubject=subject, sourceSlotId="interventions",
@@ -127,6 +180,18 @@ def _authorization(subject):
 @pytest.mark.parametrize("scope", ["allowed", "missing", "tenant", "subject", "denied"])
 async def test_producer_dispatch_reaches_only_authorized_subject(scope):
     record, dispatch = await _produce_dispatch()
+    from governance.security.repositories import PolicyDecisionRepository
+    policy_decision = await PolicyDecisionRepository().find_by_id(dispatch["dispatch_policy_decision_id"])
+    assert policy_decision["allowed"] is True
+    assert policy_decision["actor_id"] == dispatch["dispatch_actor_id"] == "operator"
+    assert policy_decision["context"] == {
+        "dispatch_id": dispatch["dispatch_id"], "target_type": dispatch["target_type"],
+        "selected_action_key": dispatch["dispatch_action_key"],
+        "selected_action_type": dispatch["dispatch_action_type"],
+        "is_elevated": dispatch["dispatch_requires_elevation"],
+        "approval_id": dispatch["dispatch_approval_id"],
+        "association_record_id": dispatch["risk_action_association_record_id"],
+    }
     request = _request(subject=ProjectionSubject(kind="entity", id=record.subject_id))
     context = await _context(_available_registry())
     auth = _authorization(request.subject)
@@ -145,10 +210,37 @@ async def test_producer_dispatch_reaches_only_authorized_subject(scope):
         assert [item["dispatchId"] for item in row["dispatches"]] == [dispatch["dispatch_id"]]
         assert row["dispatches"][0]["externalEffect"] == "not_independently_verified"
         assert {item["source"] for item in row["dispatches"][0]["evidenceRefs"]} == {
-            "action_dispatches", "action_feedback", "decision_records", "recommendations"}
+            "action_dispatches", "action_feedback", "decision_records", "recommendations",
+            "security_policy_decisions"}
+        assert dispatch["dispatch_policy_decision_id"]
     else:
         assert row["dispatches"] == []
         assert summary["dispatchAssociation"]["state"] == "unknown"
+
+
+async def test_reader_rejects_same_tenant_recommendation_rebound_to_another_subject():
+    record, dispatch = await _produce_dispatch()
+    recommendations = RecommendationRepository()
+    recommendation = await recommendations.find_by_id("rec-1")
+    assert recommendation["tenant_id"] == TENANT_A
+
+    # Simulate a persisted join whose recommendation now names a different
+    # entity in the same tenant. A matching tenant and dispatch ID cannot
+    # carry the dispatch across subjects.
+    recommendation["entity_id"] = "entity-2"
+    await recommendations.insert("rec-1", recommendation)
+
+    request = _request(subject=ProjectionSubject(kind="entity", id=record.subject_id))
+    context = await _context(_available_registry())
+    context.experience360ReadAuthorizations = [_authorization(request.subject)]
+    result = await Risk360Provider().project(request, context)
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    summary = findings.content["interventions"]
+    row = next(item for item in summary["records"] if item["recordId"] == record.record_id)
+    assert row["dispatches"] == []
+    assert summary["dispatchAssociation"]["state"] == "degraded"
+    assert dispatch["dispatch_id"] not in str(result.model_dump())
 
 
 async def test_unavailable_dispatch_reader_degrades_without_disclosure(monkeypatch):
@@ -159,6 +251,26 @@ async def test_unavailable_dispatch_reader_degrades_without_disclosure(monkeypat
         return [], False
 
     monkeypatch.setattr(risk_dispatch_association, "read_risk_dispatches", unavailable)
+    request = _request(subject=ProjectionSubject(kind="entity", id=record.subject_id))
+    context = await _context(_available_registry())
+    context.experience360ReadAuthorizations = [_authorization(request.subject)]
+    result = await Risk360Provider().project(request, context)
+    findings = next(section for section in result.sections if section.id == "findings")
+    summary = findings.content["interventions"]
+    row = next(item for item in summary["records"] if item["recordId"] == record.record_id)
+    assert row["dispatches"] == []
+    assert summary["dispatchAssociation"]["state"] == "degraded"
+    assert dispatch["dispatch_id"] not in str(result.model_dump())
+
+
+async def test_incomplete_dispatch_read_discards_rows_and_degrades(monkeypatch):
+    record, dispatch = await _produce_dispatch()
+    from actions.agent import risk_dispatch_association
+
+    async def incomplete(**kwargs):
+        return ([{"dispatchId": dispatch["dispatch_id"], "status": "queued", "evidenceRefs": []}], False)
+
+    monkeypatch.setattr(risk_dispatch_association, "read_risk_dispatches", incomplete)
     request = _request(subject=ProjectionSubject(kind="entity", id=record.subject_id))
     context = await _context(_available_registry())
     context.experience360ReadAuthorizations = [_authorization(request.subject)]

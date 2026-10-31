@@ -220,6 +220,13 @@ async def test_risk_association_requires_exact_approved_decision_and_resource():
             risk_repository=Risks(), now=NOW,
         )
     decision.observed_at = NOW - timedelta(minutes=1)
+    decision.subject_id = "entity-2"
+    with pytest.raises(ValueError):
+        await validate_action_association(
+            tenant_id=TENANT, action="disable_agent_action", resource="entity-1", risk=ref,
+            risk_repository=Risks(), now=NOW,
+        )
+    decision.subject_id = "entity-1"
     rows, complete = await read_associated_executions(
         tenant_id=TENANT, kind="risk_intervention", record_id="risk-1", subject_id="entity-1",
         subject_kind="entity", intervention_id="other", action="disable_agent_action",

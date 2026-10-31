@@ -3,8 +3,10 @@
 This provider is deliberately narrower than the legacy Kyber profile route.
 It reads the tenant-scoped identity profile repository and canonical entity
 registry, plus tenant-scoped analytics events and ``graph_history_replay`` when
-requested sections need those authorities. It does not resolve arbitrary
-identifiers, compute risk, join financial/outcome projections, infer semantic
+requested sections need those authorities. Profile predictions may include
+exactly linked reported outcome facts after a separate outcomes-domain policy
+check; these are associations, not adjudications. It does not resolve arbitrary
+identifiers, compute risk, join financial projections, infer semantic
 interactions, or evaluate field-level policy. Missing authorities remain
 explicit in the section states and findings.
 
@@ -18,7 +20,10 @@ are filtered by valid-time when bounded and labelled as ledger transitions.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
@@ -27,6 +32,7 @@ from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
     ClaimEnvelope,
     ProjectionContext,
+    ProjectionReadAuthorization,
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
@@ -88,8 +94,129 @@ MAX_COMMUNICATION_LIMIT = 100
 MAX_SYNDICATE_MEMBERSHIPS = 100
 MAX_SYNDICATE_LEDGER_ROWS = 1_000
 MAX_PROFILE_PREDICTION_READ = 100
+MAX_PROFILE_REPORTED_OUTCOME_READ = 50
+PROFILE_OUTCOME_LABEL_CONTRACT_VERSION = "profile-outcome-labels.v1"
 
 
+def _finite_metric(value: Any) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
+def _valid_profile_evaluation_sample(row: Any, evaluation: dict[str, Any]) -> bool:
+    """Validate the manifest's evidence rows before exposing computed metrics."""
+    if not isinstance(row, dict):
+        return False
+    required_strings = (
+        "predictionId", "tenantId", "entityId", "modelId", "artifactVersion", "split",
+        "outcomeId", "sourceEventId", "actualState", "predictedState",
+        "artifactChecksumSha256", "policyDecisionId", "policyVersion", "actorId",
+    )
+    if any(not isinstance(row.get(key), str) or not row[key].strip() for key in required_strings):
+        return False
+    if (row["tenantId"] != evaluation.get("tenant_id")
+            or row["modelId"] != evaluation.get("model_id")
+            or row["artifactVersion"] != evaluation.get("artifact_version")
+            or row["split"] != evaluation.get("split")
+            or row["artifactChecksumSha256"] != evaluation.get("artifact_checksum_sha256")):
+        return False
+    for key in ("predictionGeneratedAt", "predictionValidFrom", "predictionValidUntil", "outcomeObservedAt"):
+        try:
+            parsed = parse_instant_strict(row.get(key))
+        except (TypeError, ValueError):
+            return False
+        if parsed > datetime.now(timezone.utc):
+            return False
+    try:
+        generated = parse_instant_strict(row["predictionGeneratedAt"])
+        valid_from = parse_instant_strict(row["predictionValidFrom"])
+        valid_until = parse_instant_strict(row["predictionValidUntil"])
+        observed = parse_instant_strict(row["outcomeObservedAt"])
+    except (TypeError, ValueError):
+        return False
+    try:
+        window_start = parse_instant_strict(evaluation.get("window_start"))
+        window_end = parse_instant_strict(evaluation.get("window_end"))
+    except (TypeError, ValueError):
+        return False
+    if not (window_start <= generated < window_end and window_start <= observed < window_end
+            and generated <= observed <= valid_until and valid_from <= observed
+            and valid_until <= datetime.now(timezone.utc)):
+        return False
+    evidence = row.get("predictionEvidenceRefs")
+    distribution = row.get("predictedDistribution")
+    if not isinstance(evidence, list) or not isinstance(distribution, list) or not distribution:
+        return False
+    if not any(isinstance(ref, dict) and ref.get("id") == row["policyDecisionId"]
+               and ref.get("source") == "consent_policy_decisions" for ref in evidence):
+        return False
+    expected_artifact_ref = f"{row['modelId']}@{row['artifactVersion']}:{row['artifactChecksumSha256']}"
+    if not any(isinstance(ref, dict) and ref.get("id") == expected_artifact_ref
+               and ref.get("type") == "model_output"
+               and ref.get("source") == "model_artifact_registry" for ref in evidence):
+        return False
+    if not any(isinstance(ref, dict) and ref.get("type") == "event"
+               and ref.get("source") == "analytics_events" for ref in evidence):
+        return False
+    outcome_evidence = row.get("outcomeEvidenceRefs")
+    if (not isinstance(outcome_evidence, list) or len(outcome_evidence) != 1
+            or not isinstance(outcome_evidence[0], dict)
+            or outcome_evidence[0].get("id") != row["sourceEventId"]
+            or outcome_evidence[0].get("source") != "silver_outcome_facts"):
+        return False
+    states, ranks, total = set(), set(), 0.0
+    for item in distribution:
+        if not isinstance(item, dict) or not isinstance(item.get("state"), str):
+            return False
+        probability, rank = item.get("probability"), item.get("rank")
+        if (not _finite_metric(probability) or not 0 <= probability <= 1
+                or not isinstance(rank, int) or isinstance(rank, bool) or rank < 1
+                or item["state"] in states or rank in ranks):
+            return False
+        states.add(item["state"])
+        ranks.add(rank)
+        total += probability
+    return (abs(total - 1.0) <= 1e-6 and row["predictedState"] in states
+            and isinstance(row.get("predictedConfidence"), (int, float))
+            and not isinstance(row.get("predictedConfidence"), bool)
+            and 0 <= row["predictedConfidence"] <= 1
+            and row.get("correct") is (row["predictedState"] == row["actualState"]))
+
+
+def _valid_profile_evaluation_metrics(metrics: Any, sample_count: int) -> bool:
+    if not isinstance(metrics, dict):
+        return False
+    if sample_count == 0:
+        return metrics == {}
+    if set(metrics) != {
+        "top_state_accuracy", "multiclass_brier_score", "expected_calibration_error", "reliability_bins",
+    }:
+        return False
+    accuracy, brier, ece = (metrics.get(key) for key in (
+        "top_state_accuracy", "multiclass_brier_score", "expected_calibration_error",
+    ))
+    if (not all(_finite_metric(value) for value in (accuracy, brier, ece))
+            or not 0 <= accuracy <= 1 or not 0 <= brier <= 2 or not 0 <= ece <= 1):
+        return False
+    bins = metrics.get("reliability_bins")
+    if not isinstance(bins, list) or len(bins) != 10:
+        return False
+    count_sum = 0
+    for item in bins:
+        if not isinstance(item, list) or len(item) != 3:
+            return False
+        count, confidence_sum, correct_count = item
+        if (not isinstance(count, int) or isinstance(count, bool) or count < 0
+                or not _finite_metric(confidence_sum) or confidence_sum < 0 or confidence_sum > count
+                or not isinstance(correct_count, int) or isinstance(correct_count, bool)
+                or correct_count < 0 or correct_count > count):
+            return False
+        count_sum += count
+    return count_sum == sample_count
 @dataclass(frozen=True)
 class ProfileRead:
     """Identity-profile read with availability distinct from no matching row."""
@@ -197,6 +324,18 @@ class PredictionOutputRead:
     available: bool
     scope_known: bool
     truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PredictionOutcomeRead:
+    """Bounded exact tenant/prediction/label-contract outcome read."""
+
+    rows: list[Any]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    invalid_records: bool = False
     reason: Optional[str] = None
 
 
@@ -340,6 +479,15 @@ class Profile360Source(Protocol):
         as_of: datetime,
         limit: int,
     ) -> PredictionOutputRead: ...
+
+    async def reported_outcomes_for_prediction(
+        self,
+        tenant_id: str,
+        prediction_id: str,
+        label_contract_version: str,
+        *,
+        limit: int,
+    ) -> PredictionOutcomeRead: ...
 
     async def subject_history(
         self,
@@ -986,6 +1134,56 @@ class RepositoryProfile360Source:
             available=True,
             scope_known=True,
             truncated=truncated,
+        )
+
+    async def reported_outcomes_for_prediction(
+        self,
+        tenant_id: str,
+        prediction_id: str,
+        label_contract_version: str,
+        *,
+        limit: int,
+    ) -> PredictionOutcomeRead:
+        """Read explicit outcome associations from canonical outcome truth."""
+        try:
+            from shared.backend_interpretation.flags import outcome_truth_store_enabled
+            from shared.backend_interpretation.stores import OutcomeTruthStore
+
+            if not outcome_truth_store_enabled():
+                return PredictionOutcomeRead(
+                    [], False, False, reason="outcome_truth_store_disabled"
+                )
+            rows, truncated, invalid_records = await OutcomeTruthStore().list_for_prediction(
+                tenant_id,
+                prediction_id,
+                label_contract_version,
+                limit=min(max(limit, 1), MAX_PROFILE_REPORTED_OUTCOME_READ),
+            )
+        except Exception as exc:  # noqa: BLE001 - canonical outcome read fails closed
+            return PredictionOutcomeRead(
+                [], False, False,
+                reason=f"profile_outcome_truth_authority_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_truth_invalid_response"
+            )
+        if any(
+            getattr(row, "tenant_id", None) != tenant_id
+            or getattr(row, "prediction_id", None) != prediction_id
+            or getattr(row, "prediction_label_contract_version", None)
+            != label_contract_version
+            for row in rows
+        ):
+            return PredictionOutcomeRead(
+                [], True, False, reason="profile_outcome_truth_scope_mismatch"
+            )
+        return PredictionOutcomeRead(
+            rows,
+            True,
+            True,
+            truncated=truncated,
+            invalid_records=invalid_records,
         )
 
     async def identity_binding(
@@ -1805,7 +2003,7 @@ class Profile360Provider:
             )
         if needs_likely_next_states:
             prediction_section, prediction_claims = await self._likely_next_states(
-                request, temporal
+                request, temporal, context
             )
             base_claims = (
                 result.claims
@@ -2116,6 +2314,7 @@ class Profile360Provider:
         self,
         request: ProjectionRequest,
         temporal: _TemporalRequest,
+        context: ProjectionContext,
     ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
         """Project only persisted, governed future-state model outputs."""
 
@@ -2263,6 +2462,11 @@ class Profile360Provider:
 
         items: list[dict[str, Any]] = []
         claims: list[ClaimEnvelope] = []
+        outcome_read_incomplete = False
+        outcome_lookup_truncated = False
+        outcome_authority_read = False
+        outcome_section_reason: Optional[str] = None
+        evaluation_cache: dict[tuple[str, str, str], dict[str, Any] | None] = {}
         for output in valid_outputs:
             artifact = artifact_approval_cache[(output.model_id, output.artifact_version)]
             metrics = getattr(artifact, "metrics", None)
@@ -2293,6 +2497,218 @@ class Profile360Provider:
                 observedAt=to_iso_utc(output.generated_at),
             )
             claim_refs = [output_ref, *evidence_refs]
+            evaluation_key = (
+                output.model_id, output.artifact_version, output.artifact_checksum_sha256
+            )
+            if evaluation_key not in evaluation_cache:
+                try:
+                    from intelligence.model_governance.evaluations import ModelEvaluationRepository
+                    evaluation_cache[evaluation_key] = await ModelEvaluationRepository().latest_for_artifact(
+                        request.tenantId, "profile360", output.model_id, output.artifact_version,
+                        output.artifact_checksum_sha256,
+                    )
+                except Exception:  # noqa: BLE001 - unavailable evaluation remains unknown
+                    evaluation_cache[evaluation_key] = None
+            evaluation = evaluation_cache[evaluation_key]
+            if evaluation is not None:
+                metrics = evaluation.get("metrics")
+                sample_count = evaluation.get("sample_count")
+                sample_refs = evaluation.get("sample_refs")
+                manifest = evaluation.get("dataset_manifest_sha256")
+                computed_manifest = None
+                if isinstance(sample_refs, list) and all(isinstance(row, dict) for row in sample_refs):
+                    try:
+                        computed_manifest = hashlib.sha256(
+                            json.dumps(
+                                sorted(sample_refs, key=lambda row: row.get("predictionId", "")),
+                                sort_keys=True, separators=(",", ":"),
+                            ).encode("utf-8")
+                        ).hexdigest()
+                    except (TypeError, ValueError):
+                        computed_manifest = None
+                exact_evaluation = (
+                    evaluation.get("tenant_id") == request.tenantId
+                    and evaluation.get("domain") == "profile360"
+                    and evaluation.get("model_id") == output.model_id
+                    and evaluation.get("artifact_version") == output.artifact_version
+                    and evaluation.get("artifact_checksum_sha256") == output.artifact_checksum_sha256
+                    and isinstance(manifest, str)
+                    and re.fullmatch(r"[0-9a-f]{64}", manifest) is not None
+                    and computed_manifest == manifest
+                    and re.fullmatch(r"mge_[0-9a-f]{32}", str(evaluation.get("evaluation_id", ""))) is not None
+                    and evaluation.get("split") in {"evaluation", "holdout"}
+                    and isinstance(sample_count, int) and not isinstance(sample_count, bool) and sample_count >= 0
+                    and isinstance(sample_refs, list) and len(sample_refs) == sample_count
+                    and all(_valid_profile_evaluation_sample(row, evaluation) for row in sample_refs)
+                    and len({row["predictionId"] for row in sample_refs}) == sample_count
+                    and _valid_profile_evaluation_metrics(metrics, sample_count)
+                    and isinstance(evaluation.get("method"), str) and bool(evaluation.get("method"))
+                    and isinstance(evaluation.get("window_start"), (str, datetime))
+                    and isinstance(evaluation.get("window_end"), (str, datetime))
+                    and evaluation.get("created_at") is not None
+                )
+                if exact_evaluation:
+                    try:
+                        eval_start = parse_instant_strict(evaluation["window_start"])
+                        eval_end = parse_instant_strict(evaluation["window_end"])
+                        eval_created = parse_instant_strict(evaluation["created_at"])
+                        exact_evaluation = (eval_start < eval_end <= anchor and eval_created <= anchor)
+                    except (TypeError, ValueError):
+                        exact_evaluation = False
+                if not exact_evaluation:
+                    evaluation_cache[evaluation_key] = None
+                    evaluation = None
+            outcome_read = await self._read_reported_outcomes(
+                request.tenantId,
+                output,
+                context=context,
+                limit=MAX_PROFILE_REPORTED_OUTCOME_READ,
+            )
+            from intelligence.model_governance.evaluations import (
+                PROFILE_LABEL_CONTRACT, PROFILE_OUTCOME_TO_STATE,
+            )
+            adjudication_read = await self._read_reported_outcomes(
+                request.tenantId, output, context=context,
+                limit=MAX_PROFILE_REPORTED_OUTCOME_READ,
+                label_contract_version=PROFILE_LABEL_CONTRACT,
+            )
+            outcome_authority_read = outcome_authority_read or self._outcome_read_authorized(
+                request.tenantId, output, context
+            )
+            outcome_facts: list[dict[str, Any]] = []
+            outcome_invalid = outcome_read.invalid_records
+            ambiguous = len(outcome_read.rows) > 1
+            if outcome_read.available and outcome_read.scope_known and not (
+                outcome_read.truncated or ambiguous or outcome_invalid
+            ):
+                for outcome in outcome_read.rows:
+                    observed_raw = getattr(outcome, "observed_at", None)
+                    achieved_raw = getattr(outcome, "achieved_at", None)
+                    try:
+                        observed_at = parse_instant_strict(observed_raw)
+                        achieved_at = (
+                            parse_instant_strict(achieved_raw)
+                            if achieved_raw is not None else None
+                        )
+                    except (TypeError, ValueError):
+                        outcome_invalid = True
+                        continue
+                    if (
+                        outcome.tenant_id != request.tenantId
+                        or outcome.prediction_id != output.prediction_id
+                        or outcome.prediction_label_contract_version
+                        != PROFILE_OUTCOME_LABEL_CONTRACT_VERSION
+                        or getattr(outcome.subject, "kind", None) != "user"
+                        or getattr(outcome.subject, "id", None) != request.subject.id
+                        or observed_at > anchor
+                        or observed_at < output.generated_at
+                        or observed_at < output.valid_from
+                        or observed_at > output.valid_until
+                        or (achieved_at is not None and (
+                            achieved_at > anchor
+                            or achieved_at < output.generated_at
+                            or achieved_at < output.valid_from
+                            or achieved_at > output.valid_until
+                        ))
+                        or outcome.state == "superseded"
+                        or outcome.superseded_by is not None
+                    ):
+                        outcome_invalid = True
+                        continue
+                    outcome_facts.append({
+                        "outcomeId": outcome.outcome_id,
+                        "definitionRef": outcome.definition_ref,
+                        "state": outcome.state,
+                        "observedAt": to_iso_utc(observed_at),
+                        "achievedAt": to_iso_utc(achieved_at) if achieved_at else None,
+                        "claimType": outcome.claim_type,
+                        "evidenceRefs": [
+                            ref.model_dump(mode="json") for ref in outcome.evidence_refs
+                        ],
+                    })
+            if outcome_read.reason:
+                outcome_reason = outcome_read.reason
+            elif outcome_read.truncated:
+                outcome_reason = "profile_outcome_truth_read_truncated"
+            elif ambiguous:
+                outcome_reason = "profile_outcome_truth_ambiguous"
+            elif outcome_invalid:
+                outcome_reason = "profile_outcome_truth_records_invalid"
+            elif outcome_read.available and outcome_read.scope_known:
+                outcome_reason = None
+            else:
+                outcome_reason = "profile_outcome_truth_unavailable"
+            outcome_complete = (
+                outcome_read.available
+                and outcome_read.scope_known
+                and not outcome_read.truncated
+                and not ambiguous
+                and not outcome_invalid
+            )
+            adjudicated_outcomes: list[dict[str, Any]] = []
+            adjudication_invalid = adjudication_read.invalid_records
+            adjudication_ambiguous = len(adjudication_read.rows) > 1
+            adjudication_reason = adjudication_read.reason
+            if adjudication_read.available and adjudication_read.scope_known and not (
+                adjudication_read.truncated or adjudication_ambiguous or adjudication_invalid
+            ):
+                for record in adjudication_read.rows:
+                    event_ids = list(getattr(record, "source_event_ids", []) or [])
+                    refs = list(getattr(record, "evidence_refs", []) or [])
+                    try:
+                        observed = parse_instant_strict(getattr(record, "observed_at", None))
+                    except (TypeError, ValueError):
+                        adjudication_invalid = True
+                        continue
+                    event_type = getattr(record, "definition_ref", None)
+                    if (
+                        record.tenant_id != request.tenantId
+                        or record.prediction_id != output.prediction_id
+                        or record.prediction_label_contract_version != PROFILE_LABEL_CONTRACT
+                        or getattr(record.subject, "kind", None) != "user"
+                        or getattr(record.subject, "id", None) != output.entity_id
+                        or record.claim_type != "observed"
+                        or event_type not in PROFILE_OUTCOME_TO_STATE
+                        or observed < output.generated_at or observed > output.valid_until
+                        or observed > anchor or record.superseded_by is not None
+                        or len(event_ids) != 1 or len(refs) != 1
+                        or refs[0].id != event_ids[0]
+                        or refs[0].source != "silver_outcome_facts"
+                    ):
+                        adjudication_invalid = True
+                        continue
+                    adjudicated_outcomes.append({
+                        "outcomeId": record.outcome_id,
+                        "sourceEventId": event_ids[0],
+                        "actualState": PROFILE_OUTCOME_TO_STATE[event_type],
+                        "observedAt": to_iso_utc(observed),
+                        "labelContractVersion": PROFILE_LABEL_CONTRACT,
+                        "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+                    })
+            if adjudication_read.truncated:
+                adjudication_reason = "profile_adjudication_read_truncated"
+            elif adjudication_ambiguous:
+                adjudication_reason = "profile_adjudication_ambiguous"
+            elif adjudication_invalid:
+                adjudication_reason = "profile_adjudication_records_invalid"
+            elif adjudication_read.available and adjudication_read.scope_known:
+                adjudication_reason = None
+            outcome_read_incomplete = outcome_read_incomplete or not outcome_complete
+            outcome_lookup_truncated = outcome_lookup_truncated or outcome_read.truncated
+            if outcome_section_reason is None and outcome_reason is not None:
+                outcome_section_reason = outcome_reason
+            evaluation_window_start = None
+            evaluation_window_end = None
+            evaluation_observed_at = None
+            if evaluation is not None:
+                try:
+                    evaluation_window_start = to_iso_utc(parse_instant_strict(evaluation.get("window_start")))
+                    evaluation_window_end = to_iso_utc(parse_instant_strict(evaluation.get("window_end")))
+                    if evaluation.get("created_at") is not None:
+                        evaluation_observed_at = to_iso_utc(parse_instant_strict(evaluation.get("created_at")))
+                except (TypeError, ValueError):
+                    evaluation_window_start = evaluation_window_end = None
+                    evaluation_observed_at = None
             item = {
                 "predictionId": output.prediction_id,
                 "states": [state.model_dump(mode="json") for state in output.states],
@@ -2323,10 +2739,62 @@ class Profile360Provider:
                             "reason": "artifact_calibration_metric_unavailable_or_invalid",
                         }
                     ),
+                    "evaluationEvidence": (
+                        {
+                            "state": "computed" if evaluation and int(evaluation.get("sample_count", 0)) > 0 else "unknown",
+                            "evaluationId": evaluation.get("evaluation_id") if evaluation else None,
+                            "datasetManifestSha256": evaluation.get("dataset_manifest_sha256") if evaluation else None,
+                            "split": evaluation.get("split") if evaluation else None,
+                            "sampleCount": evaluation.get("sample_count", 0) if evaluation else 0,
+                            "windowStart": evaluation_window_start,
+                            "windowEnd": evaluation_window_end,
+                            "method": evaluation.get("method") if evaluation else None,
+                            "metrics": evaluation.get("metrics", {}) if evaluation else {},
+                            "evidenceRef": (
+                                EvidenceRef(
+                                    id=evaluation["evaluation_id"], type="model_output",
+                                    source="model_governance_evaluations",
+                                    observedAt=evaluation_observed_at,
+                                ).model_dump(mode="json")
+                                if evaluation and isinstance(evaluation.get("evaluation_id"), str)
+                                else None
+                            ),
+                            "reason": None if evaluation and int(evaluation.get("sample_count", 0)) > 0 else "no_exact_adjudicated_evaluation_samples",
+                        }
+                    ),
                     "modelCalibrationVerified": False,
                 },
                 "evidenceRefs": [ref.model_dump(mode="json") for ref in claim_refs],
                 "epistemicStatus": EpistemicStatus.PREDICTED.value,
+                "reportedOutcomeAssociations": {
+                    "labelContractVersion": PROFILE_OUTCOME_LABEL_CONTRACT_VERSION,
+                    "facts": outcome_facts,
+                    "coverage": "bounded_exact_lookup" if outcome_complete else "partial_or_unknown",
+                    "complete": outcome_complete,
+                    "truncated": outcome_read.truncated,
+                    "producerCoverage": "unknown",
+                    "reasonCode": outcome_reason,
+                    "interpretation": (
+                        "Explicitly linked reported outcome facts; association does not establish prediction correctness."
+                    ),
+                },
+                "adjudicatedOutcomes": {
+                    "labelContractVersion": PROFILE_LABEL_CONTRACT,
+                    "facts": adjudicated_outcomes if not (
+                        adjudication_invalid or adjudication_ambiguous or adjudication_read.truncated
+                    ) else [],
+                    "coverage": "bounded_exact_lookup" if (
+                        adjudication_read.available and adjudication_read.scope_known
+                        and not (adjudication_invalid or adjudication_ambiguous or adjudication_read.truncated)
+                    ) else "partial_or_unknown",
+                    "complete": (
+                        adjudication_read.available and adjudication_read.scope_known
+                        and not (adjudication_invalid or adjudication_ambiguous or adjudication_read.truncated)
+                    ),
+                    "truncated": adjudication_read.truncated,
+                    "reasonCode": adjudication_reason,
+                    "interpretation": "Explicit contract bound adjudication evidence; scoped evaluation does not establish universal accuracy, calibration, or approved model applicability.",
+                },
             }
             items.append(item)
             claims.append(
@@ -2345,7 +2813,9 @@ class Profile360Provider:
                 )
             )
 
-        degraded = invalid_rows or stale_rows or source_read.truncated
+        degraded = (
+            invalid_rows or stale_rows or source_read.truncated or outcome_read_incomplete
+        )
         section = ProjectionSection(
             id=SLOT_LIKELY_NEXT_STATES,
             state="degraded" if degraded else "available",
@@ -2355,11 +2825,12 @@ class Profile360Provider:
                 "asOf": to_iso_utc(anchor),
                 "coverage": "partial" if degraded else "bounded_exact_subject",
                 "complete": not degraded,
-                "truncated": source_read.truncated,
+                "truncated": source_read.truncated or outcome_lookup_truncated,
                 "reasonCode": (
                     "profile_prediction_records_invalid" if invalid_rows
                     else "profile_prediction_outputs_stale" if stale_rows
                     else "profile_prediction_read_truncated" if source_read.truncated
+                    else outcome_section_reason if outcome_read_incomplete
                     else None
                 ),
                 "freshness": {
@@ -2372,11 +2843,73 @@ class Profile360Provider:
             canonicalAuthorityRefs=[
                 "profile_prediction_outputs",
                 "model_artifact_registry",
+                "model_governance",
                 "consent_policy_decisions",
                 "analytics_events",
+                *(["outcome_facts"] if outcome_authority_read else []),
             ],
         )
         return section, claims
+
+    async def _read_reported_outcomes(
+        self,
+        tenant_id: str,
+        output: Any,
+        *,
+        context: ProjectionContext,
+        limit: int,
+        label_contract_version: str = PROFILE_OUTCOME_LABEL_CONTRACT_VERSION,
+    ) -> PredictionOutcomeRead:
+        """Read only the versioned explicit association for one prediction."""
+        if not self._outcome_read_authorized(tenant_id, output, context):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_read_authorization_unavailable"
+            )
+        method = getattr(self._source, "reported_outcomes_for_prediction", None)
+        if not callable(method):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_truth_authority_unavailable"
+            )
+        try:
+            result = await method(
+                tenant_id,
+                output.prediction_id,
+                label_contract_version,
+                limit=limit,
+            )
+        except Exception as exc:  # noqa: BLE001 - this evidence is optional and fail-closed
+            return PredictionOutcomeRead(
+                [], False, False,
+                reason=f"profile_outcome_truth_authority_{type(exc).__name__}",
+            )
+        if not isinstance(result, PredictionOutcomeRead):
+            return PredictionOutcomeRead(
+                [], False, False, reason="profile_outcome_truth_invalid_response"
+            )
+        return result
+
+    @staticmethod
+    def _outcome_read_authorized(
+        tenant_id: str, output: Any, context: ProjectionContext
+    ) -> bool:
+        return (
+            context.projectionId == PROJECTION_ID
+            and context.tenantId == tenant_id
+            and any(
+                authorization.tenantId == tenant_id
+                and authorization.sourceSurfaceId == "profile360"
+                and authorization.sourceSubject
+                == ProjectionSubject(kind="entity", id=output.entity_id)
+                and authorization.sourceSlotId == SLOT_LIKELY_NEXT_STATES
+                and authorization.consumerProjectionId == PROJECTION_ID
+                and authorization.targetProjectionId == "outcome360"
+                and authorization.capabilityKey == "outcome_facts.read"
+                and authorization.policyState == "allowed"
+                and bool(authorization.policyIds)
+                and bool(authorization.policyEvaluatedAt)
+                for authorization in context.experience360ReadAuthorizations
+            )
+        )
 
     async def _syndicates(
         self,

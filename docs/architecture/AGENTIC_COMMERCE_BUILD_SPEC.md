@@ -15,7 +15,7 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ef6e48798186d84513c8e8ba47e0551895bce03aa225ab354313c9812df8fcb3"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:951ef83226b7211555ad7530a69eabf33eac8dd9dd4462409e45e29f7cdc1f64"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -29,12 +29,12 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:0f2e0ac53d5ed9c4c62ee6cf110ee2bcb5ba5691f4ef246cb093eeb1c1c1fc8b"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:53d23de997742878b27ad968bc8b538e44b551387b252248d271b97cd75b3512"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:c9af48ff73ec21e1c48a91249d97931bd3317b24dc19beb0be84c8be2eb8d8cd"
-  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
+  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:e248ef704d0378f8c721d1cde143c6baab4844ef315820dcae5a845f32bea1d0"
+  "services/api/value/economic/economic360_provider.py": "sha256:ca72986e5834afba378916aff58e180cc08484d900acf1ebbd496b8cfed801d8"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
@@ -79,6 +79,16 @@ intent. Agent-authored declarations, commerce/SKU/checkout subjects, and a
 freshness threshold remain unsupported, so the projection does not grant
 purchase or execution authority and the slot remains partial.
 
+Agent360's capabilities slot exposes bounded persisted `capability.invoke`
+policy evaluations with exact Agent, capability, grant reference, outcome, and
+time. These evaluations are not linked to observed MCP calls. A separate
+authenticated `POST /v1/agents/{agent_id}/executions/{execution_id}/resources/read`
+path now performs exact MCP resource reads under a dedicated read grant and
+records a bound receipt with the provider result digest on success. This proves
+the recorded resource-read attempt and result status, not a mutation or any
+external effect; broader effective tool authorization and tool execution
+evidence remain open.
+
 The current x402 approval records can also bind one server-created execution
 ID and action to a typed approval decision history. Execution360 accepts that
 history only after exact tenant, execution, approval, action, and resource
@@ -90,6 +100,19 @@ was known earlier. These are bounded authority and provenance additions to
 the original design below. The proposed graph-as-lifecycle-truth and broader
 operator control flows in this build specification remain design targets;
 the 360 providers compose governed reads from the owning records.
+
+Economic360 attribution governance is a separate bounded evidence path: a
+validation decision is accepted only for the exact tenant and completed run,
+and only when its model configuration and recorded snapshot match the current
+effective configuration lineage. The decision is deterministic and unique per
+tenant/run; the projection exposes its evidence reference and records
+`exact_config_lineage_validated` while calibration remains `unvalidated`.
+An authenticated tenant administrator can record a separate approval or
+rejection bound to that exact validated run, configuration, and validation
+decision; the projection exposes the decision and evidence reference when the
+binding is valid. Approval is human governance evidence, not model performance
+or calibration validation. This attribution governance does not change the
+commerce operation links described above.
 
 ---
 

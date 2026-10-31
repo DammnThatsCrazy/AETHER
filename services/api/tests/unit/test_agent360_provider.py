@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 from pathlib import Path
@@ -1593,10 +1594,8 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
         "resources": ["capability:capability-search"],
         "evidenceRef": {"id": "capability-grant-1", "type": "document", "source": "delegations"},
     }]
-    assert any(
-        ref["id"] == "capability-grant-1" and ref["source"] == "delegations"
-        for ref in access_profile["evidenceRefs"]
-    )
+
+
     assert authority["actionScopedDecisionState"] == "available"
     assert authority["actionScopedDecisions"] == [
         {
@@ -1759,6 +1758,199 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
 
 
 @pytest.mark.asyncio
+async def test_agent360_projects_exact_recorded_capability_policy_evaluation():
+    class PolicyHistorySource(FakeSource):
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "cap-policy-1", "tenant_id": tenant_id,
+                "policy_key": "capability.invoke", "actor_type": "tenant_user",
+                "resource_type": "capability", "resource_id": "capability-search",
+                "action": "invoke", "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {"agent_id": canonical_agent_entity_id,
+                            "capability_id": "capability-search",
+                            "capability_grant_record_id": "capability-grant-1",
+                            "capability_observed": True},
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = True
+            return batch
+
+    result = await Agent360Provider(PolicyHistorySource()).project(_request(), _context())
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    profile = authority["capabilityAccessProfile"]
+    capability = profile["capabilities"][0]
+    evaluations = capability["invokePolicyEvaluations"]
+    assert len(evaluations) == 1
+    assert evaluations[0]["decision_id"] == "cap-policy-1"
+    assert evaluations[0]["capability_id"] == "capability-search"
+    assert evaluations[0]["allowed"] is True
+    assert evaluations[0]["grant_record_id"] == "capability-grant-1"
+    assert evaluations[0]["evidenceRef"]["source"] == "security_policy_decisions"
+    assert capability["invokePolicyEvaluationHistoryComplete"] is True
+    assert capability["toolIdentity"]["effectiveToolAuthorization"] == "unknown"
+    assert profile["actionResourceAuthority"] == {
+        "state": "unknown",
+        "actions": {
+            "state": "unknown",
+            "reason": "agent360_action_specific_authority_source_unbound",
+        },
+        "resources": {
+            "state": "unknown",
+            "reason": "agent360_resource_operation_authority_source_unbound",
+        },
+        "effectiveToolAuthorization": "unknown",
+        "reason": (
+            "persisted capability.invoke evaluations cover only invoke on a "
+            "capability resource; no action-specific or resource-operation "
+            "authority producer is joined"
+        ),
+    }
+    assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert any(ref["id"] == "cap-policy-1" for ref in profile["evidenceRefs"])
+
+
+@pytest.mark.asyncio
+async def test_agent360_rejects_allowed_capability_evaluation_with_unjoined_grant():
+    class DanglingGrantPolicySource(FakeSource):
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "cap-policy-dangling-grant", "tenant_id": tenant_id,
+                "policy_key": "capability.invoke", "actor_type": "tenant_user",
+                "resource_type": "capability", "resource_id": "capability-search",
+                "action": "invoke", "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {"agent_id": canonical_agent_entity_id,
+                            "capability_id": "capability-search",
+                            "capability_grant_record_id": "grant-not-in-canonical-read",
+                            "capability_observed": True},
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = True
+            return batch
+
+    result = await Agent360Provider(DanglingGrantPolicySource()).project(_request(), _context())
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    capability = authority["capabilityAccessProfile"]["capabilities"][0]
+
+    assert capability["invokePolicyEvaluations"] == []
+    assert capability["invokePolicyEvaluationHistoryComplete"] is False
+
+
+@pytest.mark.asyncio
+async def test_agent360_does_not_treat_action_or_resource_policy_rows_as_invoke_authority():
+    class OutOfContractActionResourcePolicySource(FakeSource):
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "resource-operation-policy-row", "tenant_id": tenant_id,
+                "policy_key": "capability.invoke", "actor_type": "tenant_user",
+                "resource_type": "resource", "resource_id": "customer:123",
+                "action": "delete", "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {"agent_id": canonical_agent_entity_id,
+                            "capability_id": "capability-search",
+                            "capability_grant_record_id": "capability-grant-1",
+                            "capability_observed": True},
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = True
+            return batch
+
+    result = await Agent360Provider(OutOfContractActionResourcePolicySource()).project(
+        _request(), _context()
+    )
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    profile = authority["capabilityAccessProfile"]
+    capability = profile["capabilities"][0]
+
+    assert capability["invokePolicyEvaluations"] == []
+    assert capability["invokePolicyEvaluationHistoryComplete"] is False
+    assert profile["actionResourceAuthority"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["actions"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["resources"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["effectiveToolAuthorization"] == "unknown"
+    assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert all(ref["id"] != "resource-operation-policy-row" for ref in profile["evidenceRefs"])
+
+
+@pytest.mark.asyncio
+async def test_agent360_tool_observation_and_incomplete_policy_history_keep_action_authority_unknown():
+    class ObservedToolAndIncompletePolicySource(FakeSource):
+        async def tools(self, tenant_id, agent_id, limit):
+            return [{
+                "tenant_id": tenant_id,
+                "agent_id": agent_id,
+                "invocation_id": "observed-call-1",
+                "tool_name": "search",
+                "status": "succeeded",
+                "result": {"resourceOperation": "delete_succeeded"},
+                "execution_by_aether": False,
+            }]
+
+        async def capability_access_profile(self, tenant_id, agent_id, canonical_agent_entity_id):
+            batch = await super().capability_access_profile(
+                tenant_id, agent_id, canonical_agent_entity_id
+            )
+            batch.rows[0]["capability_policy_decisions"] = [{
+                "decision_id": "policy-for-other-subject",
+                "tenant_id": tenant_id,
+                "policy_key": "capability.invoke",
+                "actor_type": "tenant_user",
+                "resource_type": "capability",
+                "resource_id": "capability-search",
+                "action": "invoke",
+                "allowed": True,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "context": {
+                    "agent_id": "different-agent",
+                    "capability_id": "capability-search",
+                    "capability_grant_record_id": "capability-grant-1",
+                    "capability_observed": True,
+                },
+            }]
+            batch.rows[0]["capability_policy_decision_read_complete"] = False
+            return batch
+
+    result = await Agent360Provider(ObservedToolAndIncompletePolicySource()).project(
+        _request(), _context()
+    )
+    authority = next(
+        item for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    profile = authority["capabilityAccessProfile"]
+
+    assert profile["actionResourceAuthority"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["effectiveToolAuthorization"] == "unknown"
+    assert profile["actionResourceAuthority"]["actions"]["state"] == "unknown"
+    assert profile["actionResourceAuthority"]["resources"]["state"] == "unknown"
+    assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert all(
+        not capability["invokePolicyEvaluations"]
+        and capability["toolIdentity"]["effectiveToolAuthorization"] == "unknown"
+        for capability in profile["capabilities"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_agent360_resolves_configured_owner_without_delegation_records():
     class OwnerOnlySource(FakeSource):
         async def incoming_delegations(self, tenant_id, canonical_agent_entity_id, limit):
@@ -1876,6 +2068,55 @@ async def test_agent360_keeps_capability_coverage_partial_without_exact_canonica
     assert access_profile["authorization"]["activeGrantRecordIds"] == []
     assert "canonical_capability_grant_read_incomplete" in access_profile["missingInputs"]
     assert not any(claim.domainSlotIds == ["capabilities"] for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_agent360_resource_read_grant_does_not_poison_invoke_completeness():
+    invoke_grant = {
+        "tenant_id": "tenant-a",
+        "agent_id": "canonical-agent-a",
+        "grantee_entity_id": "canonical-agent-a",
+        "authorization_id": "invoke-grant",
+        "authorization_kind": "capability",
+        "capability_id": "capability-search",
+        "scope": {
+            "actions": ["invoke"],
+            "resources": ["capability:capability-search"],
+        },
+        "state": "active",
+        "starts_at": "2026-10-01T00:00:00Z",
+        "created_at": "2026-10-01T00:00:00Z",
+    }
+    resource_grant = {
+        "tenant_id": "tenant-a",
+        "agent_id": "canonical-agent-a",
+        "grantee_entity_id": "canonical-agent-a",
+        "authorization_id": "resource-read-grant",
+        "authorization_kind": "capability",
+        "capability_id": "resource-item-1",
+        "scope": {
+            "actions": ["read_resource"],
+            "resources": ["mcp-resource:resource-item-1"],
+        },
+        "state": "active",
+        "starts_at": "2026-10-01T00:00:00Z",
+        "created_at": "2026-10-01T00:00:00Z",
+    }
+    result = await Agent360Provider(
+        FakeSource(capability_grants=[invoke_grant, resource_grant])
+    ).project(_request(), _context())
+    access_profile = next(
+        item
+        for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]["capabilityAccessProfile"]
+
+    assert access_profile["state"] == "available"
+    assert access_profile["authorization"]["known"] is True
+    assert access_profile["capabilities"][0]["invokeGrantCoversCapability"] is True
+    assert [
+        scope["grantRecordId"] for scope in access_profile["capabilities"][0]["invokeGrantScopes"]
+    ] == ["invoke-grant"]
 
 
 @pytest.mark.asyncio

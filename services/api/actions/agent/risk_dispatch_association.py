@@ -47,7 +47,9 @@ async def validate_current_risk_decision(tenant_id: str, link: dict[str, str], r
 
 async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any = None,
                                actions: Any = None, decisions: Any = None,
-                               recommendations: Any = None, limit: int = 20) -> tuple[list[dict[str, Any]], bool]:
+                               recommendations: Any = None, policy_decisions: Any = None,
+                               delivery_evidence_reader: Any = None,
+                               limit: int = 20) -> tuple[list[dict[str, Any]], bool]:
     from intelligence.intelligence.repositories import (
         ActionDispatchRepository, ActionFeedbackRepository, DecisionRepository, RecommendationRepository,
     )
@@ -56,6 +58,8 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
     actions = actions or ActionFeedbackRepository()
     decisions = decisions or DecisionRepository()
     recommendations = recommendations or RecommendationRepository()
+    from actions.agent.dispatch_authority import read_dispatch_authorization
+    from actions.agent.action_delivery_evidence import read_action_delivery_evidence
     bounded = min(max(limit, 1), 20)
     try:
         if (record.tenant_id != tenant_id or record.record_kind != "decision"
@@ -102,14 +106,38 @@ async def read_risk_dispatches(*, tenant_id: str, record: Any, dispatches: Any =
                     or recommendation.get("tenant_id") != tenant_id or recommendation.get("recommendation_id") != recommendation_id
                     or not recommendation_matches_risk_subject(recommendation, record.subject_kind, record.subject_id)):
                 return [], False
+            dispatch_authorization = await read_dispatch_authorization(
+                tenant_id=tenant_id, action_id=action_id, dispatch=row, policy_decisions=policy_decisions,
+            )
+            if dispatch_authorization is None:
+                return [], False
+            authorization_at = parse_instant_strict(dispatch_authorization.get("evaluated_at"))
+            risk_decision_at = max(record.recorded_at, record.observed_at, record.effective_at)
+            if authorization_at < risk_decision_at:
+                return [], False
+            evidence, delivery_complete = await (delivery_evidence_reader or read_action_delivery_evidence)(
+                tenant_id=tenant_id, dispatch=row,
+            )
+            if not delivery_complete:
+                return [], False
+            evidence_refs = [
+                {"id": dispatch_id, "type": "event", "source": "action_dispatches",
+                 "observedAt": created.isoformat(), "uri": f"store://action_dispatches/{quote(dispatch_id, safe='')}"},
+                {"id": action_id, "type": "event", "source": "action_feedback"},
+                {"id": decision_id, "type": "event", "source": "decision_records"},
+                {"id": recommendation_id, "type": "model_output", "source": "recommendations"},
+                {"id": dispatch_authorization["decision_id"], "type": "event",
+                 "source": "security_policy_decisions", "observedAt": dispatch_authorization["evaluated_at"],
+                 "uri": dispatch_authorization["uri"]},
+                *(delivery["evidenceRef"] for delivery in evidence["connectorReportedDeliveries"]),
+                *(callback["evidenceRef"] for callback in evidence["verifiedCallbacks"]),
+                *(verification["evidenceRef"] for verification in evidence.get("independentExecutionVerifications", [])),
+            ]
             seen.add(dispatch_id)
             output.append({"dispatchId": dispatch_id, "status": row["status"], "createdAt": created.isoformat(),
-                           "externalEffect": "not_independently_verified", "evidenceRefs": [
-                               {"id": dispatch_id, "type": "event", "source": "action_dispatches",
-                                "observedAt": created.isoformat(), "uri": f"store://action_dispatches/{quote(dispatch_id, safe='')}"},
-                               {"id": action_id, "type": "event", "source": "action_feedback"},
-                               {"id": decision_id, "type": "event", "source": "decision_records"},
-                               {"id": recommendation_id, "type": "model_output", "source": "recommendations"}]})
+                           "externalEffect": ("provider_resource_readback_verified" if evidence.get("independentExecutionVerifications") else "not_independently_verified"), "evidenceRefs": evidence_refs,
+                           "dispatchAuthorization": dispatch_authorization,
+                           **evidence})
         return output, True
     except Exception:
         return [], False

@@ -573,6 +573,7 @@ class RepositoryAgent360Source:
         """
         from actions.agent_access_intelligence.authority import capability_authority_service
         from actions.agent_access_intelligence.profiles import capability_profile_service
+        from governance.security.repositories import PolicyDecisionRepository
 
         profile = await capability_profile_service.profile(tenant_id, agent_id)
         grants = await capability_authority_service.list(
@@ -582,6 +583,14 @@ class RepositoryAgent360Source:
             offset=0,
         )
         truncated = len(grants) > CAPABILITY_AUTHORIZATION_SCAN_LIMIT
+        try:
+            policy_decisions = await PolicyDecisionRepository().list_for_tenant(
+                tenant_id, limit=MAX_READ_LIMIT + 1, extra={"policy_key": "capability.invoke"}
+            )
+            policy_decisions_complete = len(policy_decisions) <= MAX_READ_LIMIT
+        except Exception:  # noqa: BLE001 - policy history degrades independently from grant reads
+            policy_decisions = []
+            policy_decisions_complete = False
         return Agent360ReadBatch(
             rows=[
                 {
@@ -591,6 +600,8 @@ class RepositoryAgent360Source:
                     "profile": profile,
                     "canonical_grant_records": grants[:CAPABILITY_AUTHORIZATION_SCAN_LIMIT],
                     "canonical_grant_read_complete": not truncated,
+                    "capability_policy_decisions": policy_decisions[:MAX_READ_LIMIT],
+                    "capability_policy_decision_read_complete": policy_decisions_complete,
                 }
             ],
             truncated=truncated,
@@ -2567,7 +2578,28 @@ class Agent360Provider:
             self._communication_view(row) for row in timeline_communications.rows[:limit]
         ]
 
-        exec_items = [self._execution_view(row) for row in execution_rows[:limit]]
+        from actions.agent.invocation_runtime import validated_agent_receipt
+        invocation_receipts: dict[str, dict[str, Any]] = {}
+        receipt_execution_rows = (
+            timeline_exec.rows[:limit]
+            if resolved_canonical_actor is not None and not invalid_window
+            and request.timeRange is None and data["executions"].available
+            and data["executions"].scope_known and not data["executions"].scope_mismatch
+            else []
+        )
+        for row in receipt_execution_rows:
+            row_agent_id = _first(row, "agent_id")
+            execution_id = _first(row, "execution_id", "id")
+            if row_agent_id == agent_id and isinstance(execution_id, str):
+                receipt = await validated_agent_receipt(
+                    tenant_id=tenant_id, agent_id=row_agent_id, execution=row
+                )
+                if receipt is not None:
+                    invocation_receipts[execution_id] = receipt
+        capability_access_profile_view["providerInvocationReceipts"] = list(invocation_receipts.values())
+        capability_access_profile_view["invocationReceiptCoverage"] = "bounded_unknown_producer_coverage"
+        exec_items = [self._execution_view(row, invocation_receipts.get(_first(row, "execution_id", "id")))
+                      for row in execution_rows[:limit]]
         activity_items = [self._activity_view(row) for row in timeline_activity.rows[:limit]]
         tool_items = [self._tool_view(row) for row in timeline_tools.rows[:limit]]
         timeline_items = (
@@ -2575,7 +2607,7 @@ class Agent360Provider:
                 {
                     "kind": "execution",
                     "timestamp": _first(row, "started_at", "created_at"),
-                    **self._execution_view(row),
+                    **self._execution_view(row, invocation_receipts.get(_first(row, "execution_id", "id"))),
                 }
                 for row in timeline_exec.rows[:limit]
             ]
@@ -2960,6 +2992,20 @@ class Agent360Provider:
                 )
             )
         capability_access_refs: list[EvidenceRef] = []
+        for execution_id, receipt in invocation_receipts.items():
+            resource_read = receipt.get("resourceOperation") == "read"
+            claims.append(ClaimEnvelope(
+                id=f"agent360.provider_invocation:{receipt['receiptId']}",
+                kind=("agent_provider_resource_read_result" if resource_read else "agent_provider_tool_invocation_result"), subject=request.subject,
+                evidenceRefs=[
+                    EvidenceRef(id=receipt["receiptId"], type="event", source="agent_invocation_receipts",
+                                observedAt=receipt["completedAt"]),
+                    EvidenceRef(id=execution_id, type="event", source="agent_executions"),
+                ],
+                claims=[("A server-owned MCP resources/read completion receipt binds this Agent execution to its exact observed resource URI, dedicated resource-read grant and invocation-time policy decision. Mutation and external effects remain unknown."
+                         if resource_read else "A server-owned MCP completion receipt binds this Agent execution to its exact tool, invoke grant and invocation-time policy decision. Resource operations, standing authorization and external effects remain unknown.")],
+                claimState=EpistemicStatus.OBSERVED, domainSlotIds=["capabilities", "evidence_trace"],
+            ))
         for raw_ref in capability_access_profile_view.get("evidenceRefs", []):
             try:
                 capability_access_refs.append(EvidenceRef.model_validate(raw_ref))
@@ -2977,7 +3023,7 @@ class Agent360Provider:
                     subject=request.subject,
                     evidenceRefs=_dedupe_refs(capability_access_refs),
                     claims=[
-                        "Tenant-scoped capability reach is joined to exact active invoke-grant records for the resolved canonical Agent and reflects current repository state at read time; it does not evaluate authorization for a new action or resource."
+                        "Tenant-scoped capability reach is joined to exact active invoke-grant records and bounded prior capability.invoke policy evaluations for the resolved canonical Agent. Evaluation records retain their exact capability, grant, and timestamp; they do not establish current authorization or prove a tool invocation occurred."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=["capabilities"],
@@ -3726,7 +3772,11 @@ class Agent360Provider:
         canonical_agent_entity_id: Any,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Validate canonical grant rows and their invoke scope before projection."""
-        from actions.agent_access_intelligence.authority import AUTHORIZATION_KIND
+        from actions.agent_access_intelligence.authority import (
+            AUTHORIZATION_KIND,
+            MCP_RESOURCE_PREFIX,
+            RESOURCE_READ_ACTION,
+        )
 
         if (
             not isinstance(records, list)
@@ -3752,6 +3802,28 @@ class Agent360Provider:
                 or (isinstance(value, str) and try_parse_instant(value)[0] is not None)
                 for value in (row.get("starts_at"), row.get("ends_at"), row.get("revoked_at"))
             )
+            # Resource-read grants share the canonical capability authorization
+            # repository, but they do not contribute to invoke-grant coverage.
+            # Validate their identity and scope, then leave them out of this view.
+            if (
+                isinstance(record_id, str)
+                and record_id
+                and record_id == record_id.strip()
+                and record_id not in seen_ids
+                and row.get("tenant_id") == tenant_id
+                and row.get("agent_id") == canonical_agent_entity_id
+                and row.get("grantee_entity_id") == canonical_agent_entity_id
+                and row.get("authorization_kind") == AUTHORIZATION_KIND
+                and isinstance(capability_id, str)
+                and bool(capability_id)
+                and not server_ref
+                and actions == [RESOURCE_READ_ACTION]
+                and resources == [f"{MCP_RESOURCE_PREFIX}{capability_id}"]
+                and boundaries_valid
+                and row.get("state") in {"active", "pending", "revoked", "expired"}
+            ):
+                seen_ids.add(record_id)
+                continue
             expected_resource = (
                 f"capability:{capability_id}"
                 if isinstance(capability_id, str) and capability_id
@@ -3766,10 +3838,18 @@ class Agent360Provider:
                 and row.get("authorization_kind") == AUTHORIZATION_KIND
                 and isinstance(record_id, str)
                 and record_id
+                and record_id == record_id.strip()
                 and record_id not in seen_ids
                 and bool(capability_id) != bool(server_ref)
                 and all(
-                    value is None or (isinstance(value, str) and value == value.strip())
+                    value is None
+                    or (
+                        isinstance(value, str)
+                        and value
+                        and value == value.strip()
+                        and len(value) <= 256
+                        and not any(ord(char) < 32 or ord(char) == 127 for char in value)
+                    )
                     for value in (capability_id, server_ref)
                 )
                 and isinstance(actions, list)
@@ -3788,6 +3868,87 @@ class Agent360Provider:
             seen_ids.add(record_id)
             validated.append(row)
         return validated, complete
+
+    @staticmethod
+    def _validate_capability_policy_decisions(
+        records: Any, tenant_id: Any, canonical_agent_entity_id: Any,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        if (not isinstance(records, list) or not isinstance(tenant_id, str)
+                or not isinstance(canonical_agent_entity_id, str)):
+            return [], False
+        now = datetime.now(timezone.utc)
+        validated: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        complete = True
+        for row in records:
+            context = row.get("context") if isinstance(row, dict) else None
+            decision_id = row.get("decision_id") if isinstance(row, dict) else None
+            capability_id = row.get("resource_id") if isinstance(row, dict) else None
+            evaluated_at = row.get("evaluated_at") if isinstance(row, dict) else None
+            evaluated, error = try_parse_instant(evaluated_at)
+            context_agent_id = context.get("agent_id") if isinstance(context, dict) else None
+            valid = bool(
+                isinstance(row, dict)
+                and isinstance(decision_id, str) and decision_id.strip()
+                and decision_id == decision_id.strip() and decision_id not in seen
+                and row.get("tenant_id") == tenant_id
+                and row.get("policy_key") == "capability.invoke"
+                and row.get("actor_type") == "tenant_user"
+                and row.get("resource_type") == "capability"
+                and row.get("action") == "invoke"
+                and isinstance(row.get("allowed"), bool)
+                and isinstance(capability_id, str) and capability_id.strip()
+                and capability_id == capability_id.strip()
+                and isinstance(context, dict)
+                and isinstance(context_agent_id, str) and context_agent_id.strip()
+                and context_agent_id == context_agent_id.strip()
+                and context.get("capability_id") == capability_id
+                and isinstance(context.get("capability_observed"), bool)
+                and evaluated is not None and error is None and evaluated <= now
+                and (not row.get("allowed") or (
+                    isinstance(context.get("capability_grant_record_id"), str)
+                    and bool(context["capability_grant_record_id"].strip())
+                    and context["capability_grant_record_id"]
+                    == context["capability_grant_record_id"].strip()
+                ))
+            )
+            if not valid:
+                complete = False
+                continue
+            seen.add(decision_id)
+            if context_agent_id != canonical_agent_entity_id:
+                # The repository read is tenant scoped, so valid decisions for
+                # other agents do not make this agent's scoped history incomplete.
+                continue
+            validated.append({
+                "decision_id": decision_id,
+                "capability_id": capability_id,
+                "allowed": row["allowed"],
+                "evaluated_at": evaluated.isoformat(),
+                "grant_record_id": context.get("capability_grant_record_id"),
+            })
+        return validated, complete
+
+    @staticmethod
+    def _capability_evaluation_within_grant(
+        evaluation: dict[str, Any], grant: dict[str, Any],
+    ) -> bool:
+        """Require an allowed evaluation to fall inside its grant's recorded interval."""
+        evaluated, error = try_parse_instant(evaluation.get("evaluated_at"))
+        if evaluated is None or error is not None:
+            return False
+        starts_at, starts_error = try_parse_instant(grant.get("starts_at"))
+        if grant.get("starts_at") is not None and (starts_at is None or starts_error is not None):
+            return False
+        if starts_at is not None and evaluated < starts_at:
+            return False
+        for field in ("ends_at", "revoked_at"):
+            boundary, boundary_error = try_parse_instant(grant.get(field))
+            if grant.get(field) is not None and (boundary is None or boundary_error is not None):
+                return False
+            if boundary is not None and evaluated >= boundary:
+                return False
+        return True
 
     @staticmethod
     def _capability_profile_complete(
@@ -3846,6 +4007,29 @@ class Agent360Provider:
         """Project observed capability reach and invoke-grant coverage without
         turning it into an authorization verdict for an arbitrary new action.
         """
+        # Keep unsupported authority explicit even when the capability profile
+        # itself is unavailable or conflicted.
+        action_resource_authority = {
+            "state": "unknown",
+            "actions": {
+                "state": "unknown",
+                "reason": "agent360_action_specific_authority_source_unbound",
+            },
+            "resources": {
+                "state": "unknown",
+                "reason": "agent360_resource_operation_authority_source_unbound",
+            },
+            "effectiveToolAuthorization": "unknown",
+            "reason": (
+                "persisted capability.invoke evaluations cover only invoke on a "
+                "capability resource; no action-specific or resource-operation "
+                "authority producer is joined"
+            ),
+        }
+        authority_gap_inputs = [
+            "agent360_action_specific_authority_source_unbound",
+            "agent360_resource_operation_authority_source_unbound",
+        ]
         if not read.available:
             return {
                 "state": "unavailable",
@@ -3853,6 +4037,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability access profile authority was unavailable",
             }
@@ -3863,6 +4049,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability access profile did not match the requested tenant and agent",
             }
@@ -3873,6 +4061,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "no exact capability access profile was returned",
             }
@@ -3884,6 +4074,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability installations are keyed by runtime agent ID, not entity ID",
             }
@@ -3895,6 +4087,8 @@ class Agent360Provider:
                 "counts": None,
                 "capabilities": [],
                 "authorization": {"known": False, "activeGrantRecordIds": []},
+                "actionResourceAuthority": action_resource_authority,
+                "missingInputs": authority_gap_inputs,
                 "evidenceRefs": [],
                 "reason": "capability access profile returned no profile object",
             }
@@ -3967,8 +4161,47 @@ class Agent360Provider:
             and not read.truncated
             and grant_rows_valid
         )
-        active_grants = [grant for grant in grant_rows if grant.get("state") == "active"]
+        policy_rows, policy_rows_valid = Agent360Provider._validate_capability_policy_decisions(
+            row.get("capability_policy_decisions"), tenant_id, canonical_agent_entity_id,
+        )
         from actions.agent_access_intelligence.authority import server_ref_for
+
+        grant_by_id = {
+            _first(grant, "authorization_id", "delegation_id", "id"): grant
+            for grant in grant_rows
+        }
+        policy_grants_valid = all(
+            not evaluation["allowed"]
+            or (
+                (grant := grant_by_id.get(evaluation["grant_record_id"])) is not None
+                and Agent360Provider._capability_evaluation_within_grant(
+                    evaluation, grant
+                )
+                and (
+                    grant.get("capability_id") == evaluation["capability_id"]
+                    or (
+                        grant.get("server_ref") is not None
+                        and any(
+                            capability.get("capabilityId") == evaluation["capability_id"]
+                            and capability.get("serverKey")
+                            and grant.get("server_ref") == server_ref_for(
+                                tenant_id, capability["serverKey"]
+                            )
+                            for capability in capabilities
+                        )
+                    )
+                )
+            )
+            for evaluation in policy_rows
+        )
+        if not policy_grants_valid:
+            policy_rows = []
+        policy_read_complete = bool(
+            row.get("capability_policy_decision_read_complete") is True
+            and policy_rows_valid
+            and policy_grants_valid
+        )
+        active_grants = [grant for grant in grant_rows if grant.get("state") == "active"]
 
         for capability in capabilities:
             server_key = capability.get("serverKey")
@@ -4008,6 +4241,21 @@ class Agent360Provider:
                 }
                 for grant in matching[:MAX_READ_LIMIT]
             ] if grant_read_complete else []
+            evaluations = [
+                evaluation for evaluation in policy_rows
+                if evaluation["capability_id"] == capability["capabilityId"]
+            ]
+            capability["invokePolicyEvaluations"] = [
+                {
+                    **evaluation,
+                    "evidenceRef": EvidenceRef(
+                        id=evaluation["decision_id"], type="event",
+                        source="security_policy_decisions", observedAt=evaluation["evaluated_at"],
+                    ).model_dump(mode="json", exclude_none=True),
+                }
+                for evaluation in evaluations[:MAX_READ_LIMIT]
+            ]
+            capability["invokePolicyEvaluationHistoryComplete"] = policy_read_complete
 
         evidence_refs: list[dict[str, Any]] = []
         identity = profile.get("identity")
@@ -4032,6 +4280,10 @@ class Agent360Provider:
                     type="entity",
                     source="capability_catalog",
                 ).model_dump(mode="json", exclude_none=True)
+            )
+            evidence_refs.extend(
+                evaluation["evidenceRef"]
+                for evaluation in item.get("invokePolicyEvaluations", [])
             )
         active_record_ids = [
             record_id
@@ -4134,9 +4386,15 @@ class Agent360Provider:
                     "they do not evaluate a new action/resource request"
                 ),
             },
+            # Agent360 currently reads capability.invoke history only. Tool-call
+            # lifecycle edges, catalog/install rows, and invoke grants do not
+            # provide action-specific or resource-operation authority evidence.
+            # Keep these blockers explicit until a canonical producer is joined.
+            "actionResourceAuthority": action_resource_authority,
             "missingInputs": (
                 reach_missing
                 + ([] if grant_read_complete else ["canonical_capability_grant_read_incomplete"])
+                + authority_gap_inputs
             ),
             "evidenceRefs": _dedupe_json_refs(evidence_refs),
             "freshnessSemantics": "current_repository_state; active grant state is derived at read time; no historical replay",
@@ -4780,7 +5038,7 @@ class Agent360Provider:
                     rows_missing += 1
         return _dedupe_refs(refs), rows_missing
 
-    def _execution_view(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _execution_view(self, row: dict[str, Any], invocation_receipt: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         ref = self._ref_one(
             row, "agent_executions", ("execution_id", "id"), ("started_at", "created_at")
         )
@@ -4793,6 +5051,7 @@ class Agent360Provider:
             "triggeredByEventId": _first(row, "triggered_by_event_id"),
             "initiatingPrincipalUserId": _first(row, "initiating_principal_user_id"),
             "evidenceRef": ref.model_dump(mode="json") if ref else None,
+            "toolInvocationReceipt": invocation_receipt or {"state": "unknown"},
         }
 
     def _recorded_execution_decision(

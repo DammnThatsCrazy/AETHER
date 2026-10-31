@@ -139,7 +139,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/agent360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity"),
-        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_entity", "agent_executions", "delegations", "economic_facts", "entities", "evidence", "graph", "identity", "observations", "outcome_facts", "social_observations", "source_provenance", "tools"),
+        "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_entity", "agent_executions", "delegations", "economic_facts", "entities", "evidence", "graph", "identity", "observations", "outcome_facts", "social_observations", "source_provenance", "tools"),
         "hardDependencies": ("agentic_runtime_access", "contract_spine", "identity_resolution", "temporal_kernel"),
         "projectionDependencies": ("profile360",),
         "optionalProjectionDependencies": ("economic360", "outcome360"),
@@ -566,7 +566,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/episode360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
+        "canonicalAuthorities": ("actions", "agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
         "hardDependencies": ("contract_spine", "journey_continuity", "temporal_kernel"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
@@ -1173,7 +1173,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/risk360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "cluster", "contagion_path", "entity", "population", "relationship", "source", "support_case"),
-        "canonicalAuthorities": ("bronze_sdk_events", "cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "observations", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "support_cases", "transfers"),
+        "canonicalAuthorities": ("actions", "bronze_sdk_events", "cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "observations", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "support_cases", "transfers"),
         "hardDependencies": ("computation_substrate", "evidence_provenance", "model_governance"),
         "projectionDependencies": ("cluster360", "economic360", "profile360"),
         "optionalProjectionDependencies": [],
@@ -1533,7 +1533,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("automation", "run", "trigger", "workflow", "workflow_run"),
-        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "graph_edges", "identity", "outcome_facts", "risk_assessments", "tools", "workflow_definition_revisions"),
+        "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "graph_edges", "identity", "outcome_facts", "risk_assessments", "tools", "workflow_definition_revisions"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -2036,12 +2036,12 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "optional"
             },
             {
-                "authorityGapReason": "active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy",
+                "authorityGapReason": "resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer",
                 "canonicalAuthorityRefs": ("actions", "agent_access", "resources", "tools"),
-                "description": "Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent and exact observed MCP tool catalog identity; action and resource authorization remains unknown.",
+                "description": "Observed capability reach and bounded server-owned MCP invocation results joined to exact invoke grants and invocation-time policy decisions; standing authorization and resource operations remain unknown.",
                 "id": "capabilities",
                 "implementationCrosswalk": ("actions_tools_resources",),
-                "partialImplementationReason": "Current active grant join is bounded to 2000 records. Observed catalog identity for an exact MCP tool does not prove remote ownership, effective tool authorization, action or resource policy, or historical authority.",
+                "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "agent360",
@@ -2051,7 +2051,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     }
                 ],
                 "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions", "resources")
+                "unboundCanonicalAuthorityRefs": ("resources",)
             },
             {
                 "canonicalAuthorityRefs": ("communication_facts", "observations"),
@@ -3894,11 +3894,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "A non-executable recommendation record does not join the canonical action execution authority.",
                 "canonicalAuthorityRefs": ("actions", "episode_journey_authority_records", "journeys"),
                 "description": "Exact current-journey-version non-executable action intent records validated against canonical journey and step evidence.",
                 "id": "recommended_actions",
-                "partialImplementationReason": "Current-version intents and exact caller-associated agent lifecycle requests are visible after slot policy; action dispatch, external effects, policy replay, outcomes, full recommendation inventory and freshness remain unknown.",
+                "partialImplementationReason": "Current-version intents and caller-associated dispatches join exact tenant action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the durable intent, job, receipt and resource-link chain, validating the requested payload, provider site, subject and policy context. Other providers lack independent resource verification. Verified business outcomes, complete recommendation and producer coverage, historical replay and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -3907,8 +3906,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "interactions", "summary")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("events", "evidence", "journeys"),
@@ -4988,11 +4986,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
                 "canonicalAuthorityRefs": ("actions", "risk_intervention_records", "risk_outputs"),
                 "description": "Recorded risk interventions and results.",
                 "id": "interventions",
-                "partialImplementationReason": "Exact-subject intervention decisions and reported outcomes can include slot-authorized, caller-associated agent lifecycle requests; dispatch, external effects, actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
+                "partialImplementationReason": "Exact-subject intervention decisions join caller-associated dispatches and their persisted action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the exact tenant, intent, job, receipt, provider site, requested payload and subject chain. Other providers lack independent resource verification. Producer coverage, historical replay, independently verified intervention outcomes and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5001,8 +4998,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "findings", "health")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("risk_outputs", "source_provenance"),
@@ -6395,11 +6391,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Workflow 360",
         "domainSlots": [
             {
-                "authorityGapReason": "Tool-call results and resource-operation outcomes are not joined; execution callbacks and current approved resource records are bounded context only.",
+                "authorityGapReason": "resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer",
                 "canonicalAuthorityRefs": ("actions", "agent_executions", "graph_edges", "resources", "tools"),
                 "description": "Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices.",
                 "id": "actions",
-                "partialImplementationReason": "Bounded call edges may include an exact linked execution's published executor completion or failure and a current approved tenant resource joined through approval and delegation evidence after slot policy. These records do not establish the tool result, resource operation, external effect, complete producer coverage, historical replay, or freshness.",
+                "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "workflow360",
@@ -6409,7 +6405,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     }
                 ],
                 "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions", "resources")
+                "unboundCanonicalAuthorityRefs": ("resources",)
             },
             {
                 "canonicalAuthorityRefs": ("agent_entities", "agent_executions", "ai_execution_facts", "commerce", "identity"),

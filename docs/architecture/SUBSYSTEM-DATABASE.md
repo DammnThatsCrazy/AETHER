@@ -22,27 +22,43 @@ source_files:
   - services/api/alembic/versions/20261022_execution_approval_decisions.py
   - services/api/alembic/versions/20261022_risk_poisoning_evidence.py
   - services/api/alembic/versions/20261024_risk_intervention_records.py
+  - services/api/alembic/versions/20261030_agent_invocation_receipts.py
+  - services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py
+  - services/api/alembic/versions/20261030_merge_authority_heads.py
+  - services/api/actions/agent/invocation_runtime.py
+  - services/api/intelligence/model_governance/evaluations.py
+  - services/api/value/economic/attribution_model_validation.py
+  - config/storage_policies.yaml
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
   - {'commit': '30d10ccb6', 'reason': 'Reviewed CSV import rights-lineage persistence. The body now documents the additive Bronze metadata and silver_import_facts JSONB refs/record IDs; other repository and database dispatch behavior is unchanged.'}
+  - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
+  - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
+  "config/storage_policies.yaml": "sha256:b3e77ad29290b79c04138504d7ee66a01f9572dbb43da83b9b0a1106c337c5ab"
+  "services/api/actions/agent/invocation_runtime.py": "sha256:7ea361c7766345c3ba5da95a252b151d3c85ddf8a12a5fb0da39b4fdb0767890"
+  "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
   "services/api/alembic/versions/20261024_risk_intervention_records.py": "sha256:f3fadd1672c15560cab018906246e307438035404f4fcbcb84c976cae9bdc3b7"
+  "services/api/alembic/versions/20261030_agent_invocation_receipts.py": "sha256:fe1186d525ae2a2923dacccbbb1eae5a76f96407ed6243b85f2a94244e672537"
+  "services/api/alembic/versions/20261030_merge_authority_heads.py": "sha256:62aa6a6049c5f58b668cb788c36529902541581944d4dc5593f15105a4e539f2"
+  "services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py": "sha256:bb313b4f28028cca340689dbd67154cd9c02810ba08d31c3a0b8a48a98a3e842"
+  "services/api/intelligence/model_governance/evaluations.py": "sha256:1dd0ae6aae180640a50cbe95ede4bd4e35b6bdbdded1acc86b8b0491da437b21"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:faea869afaddcfee82abf3d618e845de8018ee9127edc71214cc94d760cae0ef"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
+  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
+  "services/api/value/economic/attribution_model_validation.py": "sha256:da10a304b79537cda1be523999b7fcc35e1f59177b22bc855709d91f937c5aae"
   "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
 ---
 
@@ -214,6 +230,19 @@ references on the exact tenant/run invocation facts to
 outcome scope and evidence, carries the invocation IDs as association lineage,
 and does not infer run causality; the outcome store's feature flag gates the
 read. Policy and freshness remain unknown.
+
+Workflow360's observed-actions projection reads bounded tenant graph edges
+joined to the admitted execution IDs. Tenant, execution, source-event, and
+Tool identifiers must be canonical and unpadded, and a resolved Tool vertex
+must match its exact persisted identity evidence. Invalid edges are omitted
+and mark coverage incomplete. If a bounded or scope-incomplete read still has
+valid edges, the projection reports degraded partial coverage; with no
+admissible edges it reports unknown. This read records tool-call edges only;
+it does not establish action authority, tool completion, or external effect.
+The approved-resource subread separately reports availability, completeness,
+and truncation; reads over its row limit expose no resource rows. An explicit
+`executionReceipt` remains unknown because no server-owned receipt is written
+at the actual tool or resource invocation boundary.
 
 ### Analytics event store
 
@@ -460,6 +489,15 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
   `{tenant}:fleet_hyp:{hash}`. Each record carries a `revision`; every write
   after the first is a compare-and-set on it (the first is insert-if-absent), so
   concurrent reviews and rebuilds cannot overwrite one another.
+
+The invocation claim and completion-receipt tables use PostgreSQL as their
+authoritative and metadata store, with legal retention and `preserve` deletion
+behavior; adaptive materialization and object externalization are disabled.
+Model-governance evaluation reads decode both JSONB `metrics` and `sample_refs`
+when returned in encoded form. Value-model approval inserts conflict on the
+migration's `decision_id` primary key. The invocation and governance migration
+heads are joined by `20261030_merge_authority_heads`; it adds no schema of its
+own.
 
 These migrations are authored in the branch; this page does not claim they
 have been applied.

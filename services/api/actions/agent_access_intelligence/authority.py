@@ -58,6 +58,8 @@ logger = get_logger("aether.agent_access_intelligence.authority")
 
 AUTHORIZATION_KIND = "capability"
 INVOKE_ACTION = "invoke"
+RESOURCE_READ_ACTION = "read_resource"
+MCP_RESOURCE_PREFIX = "mcp-resource:"
 CAPABILITY_RESOURCE_PREFIX = "capability:"
 SERVER_RESOURCE_PREFIX = "capability-server:"
 
@@ -133,9 +135,9 @@ def validate_capability_scope(scope: dict[str, Any]) -> None:
     itself — so the invariants hold at the storage boundary, not just at the API."""
     actions = scope.get("actions") or []
     resources = scope.get("resources") or []
-    if list(actions) != [INVOKE_ACTION]:
+    if list(actions) not in ([INVOKE_ACTION], [RESOURCE_READ_ACTION]):
         raise BadRequestError(
-            f"capability authorization scope.actions must be exactly ['{INVOKE_ACTION}']"
+            "capability authorization scope.actions must be exactly ['invoke'] or ['read_resource']"
         )
     if not resources:
         # An empty resource list matches EVERY resource in DelegationEngine.
@@ -145,10 +147,13 @@ def validate_capability_scope(scope: dict[str, Any]) -> None:
             raise BadRequestError("capability authorization scope.resources entries must be non-empty strings")
         if "*" in resource:
             raise BadRequestError("wildcard resources are not allowed in a capability authorization")
-        if not (
-            resource.startswith(CAPABILITY_RESOURCE_PREFIX)
+        allowed_resource = (
+            resource.startswith(MCP_RESOURCE_PREFIX)
+            if list(actions) == [RESOURCE_READ_ACTION]
+            else resource.startswith(CAPABILITY_RESOURCE_PREFIX)
             or resource.startswith(SERVER_RESOURCE_PREFIX)
-        ):
+        )
+        if not allowed_resource:
             raise BadRequestError(
                 "capability authorization resources must be "
                 f"'{CAPABILITY_RESOURCE_PREFIX}<id>' or '{SERVER_RESOURCE_PREFIX}<ref>'"
@@ -274,6 +279,7 @@ class CapabilityAuthorityService:
         agent_id: str,
         capability_id: Optional[str] = None,
         server_key: Optional[str] = None,
+        resource_uri: Optional[str] = None,
         ends_at: Optional[str] = None,
         starts_at: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
@@ -285,15 +291,31 @@ class CapabilityAuthorityService:
         ends_at = _validate_boundary("ends_at", ends_at)
         if starts_at and ends_at and ends_at <= starts_at:
             raise BadRequestError("ends_at must be after starts_at")
-        if bool(capability_id) == bool(server_key):
+        if sum(bool(value) for value in (capability_id, server_key, resource_uri)) != 1:
             raise BadRequestError(
                 "provide exactly one of capability_id (one capability) or "
-                "server_key (every capability on one server)"
+                "server_key (every capability on one server), or resource_uri (one MCP resource read)"
             )
 
         server_ref: Optional[str] = None
         capability_observed = False
-        if capability_id:
+        action = INVOKE_ACTION
+        if resource_uri:
+            if not resource_uri.strip() or resource_uri != resource_uri.strip() or "*" in resource_uri:
+                raise BadRequestError("resource_uri must be an exact observed URI")
+            rows = await self._catalog.list_capabilities(tenant_id, limit=1001)
+            if len(rows) > 1000:
+                raise BadRequestError("observed resource catalog is truncated")
+            observed = [row for row in rows if row.get("tenant_id") == tenant_id
+                        and row.get("capability_kind") == "resource"
+                        and row.get("resource_uri") == resource_uri]
+            if len(observed) != 1:
+                raise BadRequestError("resource_uri must resolve to one exact observed resource")
+            resources = [f"{MCP_RESOURCE_PREFIX}{observed[0]['capability_id']}"]
+            capability_id = observed[0]["capability_id"]
+            capability_observed = True
+            action = RESOURCE_READ_ACTION
+        elif capability_id:
             if not _SAFE_ID_RE.match(capability_id):
                 raise BadRequestError("capability_id contains unsupported characters")
             resources = [capability_resource(capability_id)]
@@ -326,7 +348,7 @@ class CapabilityAuthorityService:
             server_key = _sanitize_server_url(canonical)
             capability_observed = server_observed
 
-        scope = {"actions": [INVOKE_ACTION], "resources": resources}
+        scope = {"actions": [action], "resources": resources}
         validate_capability_scope(scope)
 
         record = await self._repo.grant_capability(

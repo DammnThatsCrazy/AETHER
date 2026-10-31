@@ -119,8 +119,9 @@ class PolicyEngine:
         self, decision: PolicyDecision, *, actor_type: ActorType,
         ip_address: Optional[str] = None, user_agent: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        persist: bool = True,
     ) -> PolicyDecision:
-        if decision.policy_key in _SENSITIVE_KEYS or not decision.allowed:
+        if persist and (decision.policy_key in _SENSITIVE_KEYS or not decision.allowed):
             await self._repo.insert(decision.decision_id, decision.model_dump())
             await audit_ledger.record(
                 actor_id=decision.actor_id, actor_type=actor_type,
@@ -138,6 +139,7 @@ class PolicyEngine:
         resource_type: str, allowed: bool, reason: str,
         severity: PolicySeverity = 'info', tenant_id: Optional[str] = None,
         resource_id: Optional[str] = None, required_action: Optional[str] = None,
+        context: Optional[dict[str, Any]] = None,
     ) -> PolicyDecision:
         return PolicyDecision(
             tenant_id=tenant_id, actor_id=actor_id, actor_type=actor_type,
@@ -145,6 +147,7 @@ class PolicyEngine:
             action=action, allowed=allowed, reason=reason,
             severity=severity if not allowed else 'info',
             required_action=required_action,
+            context=context or {},
         )
 
     # ── Specific policies ─────────────────────────────────────────────────────
@@ -152,11 +155,36 @@ class PolicyEngine:
     async def check_action_dispatch(
         self, *, actor_id: str, actor_type: ActorType, tenant_id: str,
         decision_status: str, action_id: Optional[str] = None,
+        has_dispatch_permission: bool = False, dispatch_id: Optional[str] = None,
+        target_type: Optional[str] = None, selected_action_key: Optional[str] = None,
+        selected_action_type: Optional[str] = None, association_record_id: Optional[str] = None,
         is_elevated: bool = False, approval_id: Optional[str] = None,
+        persist: bool = True,
         **audit: Any,
     ) -> PolicyDecision:
-        """Block dispatch unless the underlying decision is approved; block
-        elevated/critical dispatch when no approval_id is present."""
+        """Record a dispatch decision bound to one durable dispatch context."""
+        context = {
+            "dispatch_id": dispatch_id,
+            "target_type": target_type,
+            "selected_action_key": selected_action_key,
+            "selected_action_type": selected_action_type,
+            "is_elevated": is_elevated,
+            "approval_id": approval_id,
+            "association_record_id": association_record_id,
+        }
+        context_complete = all(isinstance(value, str) and value.strip() for value in (
+            dispatch_id, target_type, selected_action_key, selected_action_type,
+        ))
+        if not has_dispatch_permission:
+            d = self._decision(
+                policy_key="action.dispatch", actor_id=actor_id, actor_type=actor_type,
+                action="dispatch", resource_type="action", tenant_id=tenant_id,
+                resource_id=action_id, allowed=False, severity='block',
+                reason="actor lacks tenant dispatch permission",
+                required_action="obtain tenant write permission before dispatch",
+                context=context,
+            )
+            return await self._finalize(d, actor_type=actor_type, persist=persist, **audit)
         if decision_status != "approved":
             d = self._decision(
                 policy_key="action.dispatch", actor_id=actor_id, actor_type=actor_type,
@@ -164,8 +192,9 @@ class PolicyEngine:
                 resource_id=action_id, allowed=False, severity='block',
                 reason=f"decision status is {decision_status!r}, not 'approved'",
                 required_action="obtain decision approval before dispatch",
+                context=context,
             )
-            return await self._finalize(d, actor_type=actor_type, **audit)
+            return await self._finalize(d, actor_type=actor_type, persist=persist, **audit)
         if is_elevated and not approval_id:
             d = self._decision(
                 policy_key="action.elevated_dispatch", actor_id=actor_id,
@@ -173,14 +202,33 @@ class PolicyEngine:
                 tenant_id=tenant_id, resource_id=action_id, allowed=False,
                 severity='block', reason="elevated/critical dispatch requires approval_id",
                 required_action="attach approval_id from human-in-the-loop approval",
+                context=context,
             )
-            return await self._finalize(d, actor_type=actor_type, **audit)
+            return await self._finalize(d, actor_type=actor_type, persist=persist, **audit)
+        if not context_complete:
+            d = self._decision(
+                policy_key="action.dispatch", actor_id=actor_id, actor_type=actor_type,
+                action="dispatch", resource_type="action", tenant_id=tenant_id,
+                resource_id=action_id, allowed=False, severity='block',
+                reason="dispatch authorization context is incomplete",
+                required_action="supply exact dispatch, action, and target context",
+                context=context,
+            )
+            return await self._finalize(d, actor_type=actor_type, persist=persist, **audit)
         d = self._decision(
             policy_key="action.dispatch", actor_id=actor_id, actor_type=actor_type,
             action="dispatch", resource_type="action", tenant_id=tenant_id,
-            resource_id=action_id, allowed=True, reason="decision approved",
+            resource_id=action_id, allowed=True,
+            reason="tenant dispatch permission and approved decision validated",
+            context=context,
         )
-        return await self._finalize(d, actor_type=actor_type, **audit)
+        return await self._finalize(d, actor_type=actor_type, persist=persist, **audit)
+
+    async def persist_action_dispatch_decision(self, decision: PolicyDecision) -> PolicyDecision:
+        """Persist the evaluated decision only after its dispatch reservation exists."""
+        if decision.policy_key not in {"action.dispatch", "action.elevated_dispatch"}:
+            raise ValueError("not an action dispatch policy decision")
+        return await self._finalize(decision, actor_type=decision.actor_type)
 
     async def check_cross_tenant(
         self, *, actor_id: str, actor_type: ActorType, actor_tenant: Optional[str],
@@ -420,14 +468,21 @@ class PolicyEngine:
             # invocation. The sanitizer is correct and is not weakened; the key is renamed.
             "capability_grant_id": authorization_id,
         })
+        context = {
+            "agent_id": agent_id,
+            "capability_id": capability_id,
+            "capability_grant_record_id": authorization_id,
+            "capability_observed": capability_observed,
+        }
 
         def _deny(reason: str, required_action: str) -> PolicyDecision:
-            return self._decision(
+            decision = self._decision(
                 policy_key="capability.invoke", actor_id=actor_id, actor_type=actor_type,
                 action="invoke", resource_type="capability", tenant_id=tenant_id,
                 resource_id=capability_id, allowed=False, severity='block',
                 reason=reason, required_action=required_action,
             )
+            return decision.model_copy(update={"context": context})
 
         if not capability_observed:
             return await self._finalize(
@@ -459,6 +514,7 @@ class PolicyEngine:
             resource_id=capability_id, allowed=True,
             reason="active capability authorization",
         )
+        d = d.model_copy(update={"context": context})
         return await self._finalize(d, actor_type=actor_type, metadata=meta, **audit)
 
     async def list_decisions(

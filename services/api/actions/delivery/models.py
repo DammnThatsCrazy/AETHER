@@ -228,6 +228,30 @@ class ExternalResourceLink(BaseModel):
     created_at: str = Field(default_factory=_now_iso)
 
 
+class ProviderExecutionVerification(BaseModel):
+    """Credential-bound provider read-back, separate from delivery receipts/callbacks."""
+    id: str = Field(default_factory=_new_id)
+    tenant_id: str
+    dispatch_id: str
+    intent_id: str
+    job_id: str
+    receipt_id: str
+    provider: str
+    external_id: str
+    verification_kind: str
+    verified: bool
+    observed_at: str = Field(default_factory=_now_iso)
+    policy_decision_id: str
+    policy_evaluated_at: str
+    subject_kind: str
+    subject_id: str
+    association_record_id: str
+    provider_resource_identity: str
+    provider_site: str
+    requested_payload_sha256: str
+    created_at: str = Field(default_factory=_now_iso)
+
+
 # ─── ExternalOutcomeEvent ───────────────────────────────────────────────────
 
 class ExternalOutcomeEvent(BaseModel):
@@ -241,6 +265,10 @@ class ExternalOutcomeEvent(BaseModel):
     receipt_id: Optional[str] = None
     outcome_type: ExternalOutcomeType
     raw_payload: dict[str, Any] = Field(default_factory=dict)
+    # Set only by OutcomeProcessor after signature verification and exact
+    # stored delivery binding. API callers are always recorded as asserted.
+    producer_provenance: str = "caller_asserted"
+    signature_authority: Optional[str] = None
     occurred_at: str = Field(default_factory=_now_iso)
     ingested_at: str = Field(default_factory=_now_iso)
 

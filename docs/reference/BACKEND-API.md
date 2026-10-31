@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:7be6c0348ee597d7d21b7e0d43ca0866cbf1a2da7d7753405d7e773add45406f"
+  "services/api/actions/": "sha256:86f0c5a07f144b260a478be07474bf8a96ad5159c6470a4bbbc9e92acceac66b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
+  "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:08a5c4c6bebfe04eaefbe7eb14c5e74ac47a14a0946e7b48a4a721129aa4bf72"
-  "services/api/ingestion/": "sha256:c4d9da43a31bacace8c0b651c13fd1d5fe69b80c717196b1c86e057fe196c6eb"
-  "services/api/intelligence/": "sha256:19ab6061006b03959c84b9ab86171c0e8c5ef912a5fa39b9f71b935d7a09631b"
-  "services/api/journeys/": "sha256:69772a665c2b21fce736019ec7f196df5f3ce9398391c84eb510937a24fe7d96"
+  "services/api/identity/": "sha256:186128cc10aad39d82c7f123d8feb057c63a477d50e6b5511d0f9b737573cb68"
+  "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
+  "services/api/intelligence/": "sha256:973f80fd1186ea0aa5d8e652bfbb7e2a34c0a398c5cc9e15aab28e802bdb946e"
+  "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:41652f547dc1526dceb077661c51539588f9cb44ad1da7e398d61075cded61fe"
+  "services/api/value/": "sha256:72b427f971a848bcc429c30dec93aedfe1204450cbaed259efa0fffc1eaf0e4e"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -322,6 +322,13 @@ dimension. The API returns durable audit and usage IDs in
 `X-Aether-Access-Surface` request label is limited to `cli`, `mcp_stdio`,
 `mcp_http`, and `access_sdk`; it does not grant permission or choose a tenant.
 The package's operation list describes adapter support, not a tenant grant.
+
+`/v1/capability-declarations` records the tenant's asserted capability identity for
+comparison with the observed catalog. Tool declarations join by the exact tenant,
+provider, server and tool tuple. MCP resource declarations include the exact
+`resource_uri` and join to the matching observed resource ID; URI path and opaque
+identifier case is significant. The digest compares only the fields the declaration
+actually asserts and does not verify publisher identity.
 
 ### Contact & enterprise inquiries (`/v1/contact/*`)
 
@@ -1452,13 +1459,24 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/agent/register` | Register agent in the Intelligence Graph |
-| POST | `/v1/agents/{agent_id}/execute` | Record an agent run after delegation checks; optional `approval_id` requires a current tenant-scoped x402 approval whose agent, action, resource, amount, and latest immutable decision match exactly |
+| POST | `/v1/agents/{agent_id}/executions/{execution_id}/resources/read` | Read one explicitly enabled, observed MCP resource URI under a distinct active `read_resource` grant. Requires authenticated write/dispatch permission and a running tenant-owned execution. Persist an immutable receipt only after the remote attempt; successful contents must match the requested URI exactly. Resource mutations and independent effects are unsupported. |
+| POST | `/v1/ml/model-governance/profile-evaluations` | Authenticated tenant-admin evaluation of an exact model artifact over closed prediction horizons and canonical adjudicated outcomes. Records dataset manifest, sample references, split, window, policy provenance and computed accuracy, Brier score and calibration error; not a calibration certification. |
+| GET | `/v1/ml/model-governance/profile-evaluations/{evaluation_id}` | Tenant-admin read of the exact persisted Profile evaluation. |
+| POST | `/v1/economic/attribution-runs/{run_id}/model-approval` | Authenticated tenant-admin approval or rejection bound to the completed run, model config and lineage decision. Does not establish calibration or attribution correctness. |
+| POST | `/v1/agents/{agent_id}/execute` | Admit and record run bookkeeping after delegation checks; optional `approval_id` requires a current tenant-scoped x402 approval whose agent, action, resource, amount, and latest immutable decision match exactly. This route does not invoke a tool/resource operation or create an invocation receipt. |
+| POST | `/v1/agents/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke` | Require authenticated principal, write and dispatch permissions, tenant-owned running execution, enabled exact observed MCP tool and active invoke grant. Perform public HTTPS MCP initialization and `tools/call` through DNS-pinned transport with redirects disabled. Persist immutable scoped completion receipts; durable claims prevent duplicate calls. Private/credentialed endpoints and resource mutations are unsupported; exact resource reads use the separate endpoint above. |
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
 | GET | `/v1/agent/{id}/graph` | Agent's graph neighborhood within the caller's tenant (404 unless the agent's vertex belongs to it) |
 | GET | `/v1/agent/{id}/trust` | Agent trust score + history (404 unless the agent's vertex belongs to the caller's tenant) |
 | POST | `/v1/agent/{id}/a2h` | Record agent-to-human interaction (notification, recommendation, delivery, escalation) |
+
+The Silver ingestion worker supplies the server-owned Profile adjudication
+policy version. The durable outcome recorder rechecks persisted prediction
+inference-policy evidence and exact tenant, subject, event, contract and time
+bindings; caller-supplied adjudication state cannot establish an observed claim.
+Persisted evaluation reads decode metric and sample-reference JSONB together.
 
 ### Diagnostics Service (Platform Operators Only)
 
@@ -1945,8 +1963,46 @@ The same endpoint accepts one `journey_action_reference` or
 intent or approved risk decision, action, and resource before recording the
 caller association on the lifecycle request. Slot-authorized Journey360 and
 Risk360 reads can show the recorded request with evidence; it does not prove
-dispatch or an external effect. For execution-bound x402 approvals, the decision
-also records the authenticated human's request-time `commerce:approve` check.
+dispatch or an external effect. Journey360 and Risk360 dispatch reads also
+require the persisted tenant `action.dispatch` policy decision for the exact
+dispatch, actor, selected action, target, elevation/approval context, and
+association; this records the application permission and approved-decision
+checks, not event-time authority, connector execution, or an external effect.
+For execution-bound x402 approvals, the decision also records the authenticated
+human's request-time `commerce:approve` check.
+
+An idempotent dispatch replay must supply the same association reference and
+match the persisted tenant, action, canonical action decision, selected action,
+and recommendation tuple. The replay uses the original stored association rather
+than asserting that its Journey intent or Risk decision is still current.
+Before authorization persistence, the reservation is `authorization_pending`.
+An atomic `authorizing` claim serializes retries of that reservation; policy
+evaluation or policy/audit persistence failures restore the pending state without
+calling the connector. A successful retry retains the original dispatch identity.
+Completed dispatches replay without another connector call.
+
+Journey360 and Risk360 dispatch reads also join bounded delivery evidence along
+the canonical `action_dispatches` → deterministic `DeliveryIntent` →
+`DeliveryJob` → `ProviderReceipt` → external-resource-link chain. Connector
+delivery is reported only when the exact tenant, dispatch, job, receipt,
+provider, external ID, and temporal links agree. Missing provider evidence is
+reported as unknown; ambiguous, malformed, cross-tenant, or incomplete reads
+fail closed. The intelligence dispatch receipt endpoint and its receipts do
+not substitute for this worker evidence chain.
+
+The tenant-facing `/v1/delivery/outcomes/ingest` endpoint records
+`producer_provenance: caller_asserted` and clears caller-supplied signature
+authority. Such events are not treated as verified callbacks by the projection
+reader. Callback events enter the verified evidence set only after signature
+verification and exact binding to the tenant, provider receipt, and external
+resource. Connector receipts and verified callbacks alone leave `externalEffect`
+as `not_independently_verified`. Separately, Jira delivery can produce a durable,
+credential-bound issue read-back matching the requested key, project, and title.
+The reader requires exact tenant, subject, dispatch, policy, receipt, provider-site,
+payload-digest, and temporal bindings before reporting
+`provider_resource_readback_verified`. Other providers remain unsupported for
+this verification; issue existence does not prove a business outcome or complete
+execution coverage.
 
 Communication360 Agent authorship requires an exact tenant-owned canonical
 Agent author binding with provider scope, event-time role validity, and trusted
@@ -2003,8 +2059,17 @@ historical point-in-time reconstruction, and Profile-specific freshness remain
 unknown, so the slot stays degraded.
 Profile360 `likely_next_states` rechecks the recorded inference decision and,
 for session models, the exact current identity binding before returning a
-prediction. This read does not re-evaluate current consent or establish
-historical identity, model calibration, or an observed outcome.
+prediction. It reads outcome truth only through the exact tenant, prediction
+ID, and `profile-outcome-labels.v1` contract. A unique same-subject fact whose
+observed time and any recorded achieved time fall within the prediction
+validity interval and no later than the request anchor is returned under
+`reportedOutcomeAssociations` with its evidence references. This read requires an independent outcomes-domain
+policy decision; permission for the Profile slot alone does not authorize it.
+The association is reported evidence, not an evaluation of predicted-state
+success or correctness; ambiguous, invalid, future, and truncated reads do not
+return linked facts and report incomplete coverage. This
+read does not re-evaluate current consent or establish historical identity,
+model calibration, complete outcome coverage, or outcome verification.
 Agent360's `evidence_trace` joins agentic compatibility rows to canonical
 Bronze only when tenant, agent, source-row ID, event ID, schema version, event
 type, and timestamp match exactly. Historical rows without the reciprocal link
@@ -2256,9 +2321,27 @@ complete, continuous path with exact records and canonical party evidence.
 It does not infer transitive authority or an effective authorization decision.
 The Agent360 capability profile also exposes exact recorded invoke action and
 resource scopes with delegation evidence on a complete grant read. Ambiguous
-dual-target grants are rejected; these records are not an authorization decision.
-These provider joins add no new HTTP endpoints and do not complete their
-surfaces or the full 18-surface contract.
+dual-target grants are rejected. It also exposes bounded persisted
+`capability.invoke` evaluations linked to exact tenant, Agent, capability, grant,
+result, and evaluation time. These records describe prior policy evaluations,
+not current authorization or actual tool invocations. The separate authenticated
+tool invocation endpoint now produces server-owned MCP completion receipts.
+Agent360 capabilities and Workflow360 actions admit those receipts only with
+exact tenant, agent, execution, tool, grant, policy and workflow scope and valid
+invocation timing. Failed initialization cannot become a tool invocation claim;
+observations and executor callbacks cannot produce these receipts. This binds
+supported invoke actions. The separate resource-read endpoint uses the configured
+`resource_uris` allowlist, exact observed resource identity, a distinct active
+`read_resource` grant, and MCP `resources/list` followed by `resources/read`.
+Registration persists that allowlist; updates advance the agent policy version.
+Only attempted reads with exact requested-URI contents can report successful
+resource-read evidence. Ambiguous receipts fail closed. Resource mutations,
+standing authorization, independent external effects and complete producer
+coverage remain unknown. Neither surface nor
+the full 18-surface contract is complete.
+MCP initialization, tool calls, and resource listing/reads accept JSON or SSE
+responses only when exactly one JSON-RPC response matches the request ID.
+Valid resource-read grants remain separate from invoke-grant coverage.
 
 Journey360 and Risk360 can also include an associated agent execution's
 recorded delegation decision when its tenant, grant reference, status and decision time
@@ -2276,9 +2359,18 @@ state does not establish an external effect or complete dispatch coverage.
 Risk360 can separately read associated dispatch lifecycle records after an
 actions-domain policy decision. The join requires an exact entity recommendation
 and an approved intervention observed, recorded, and effective by dispatch time.
+It also requires the persisted tenant action-dispatch policy decision to be
+allowed for this exact dispatch, tenant, authenticated principal, selected
+action, target, elevation/approval context, and association record, with policy
+evaluation no later than the recorded dispatch attempt (or creation for older
+records without an attempt timestamp). Future or reversed dispatch times fail closed.
+The Risk decision must also be recorded, observed, and effective by the
+authorization evaluation time.
 Current-decision validation rejects out-of-scope or future-observed or recorded
 history, and invalid decisions cannot yield a complete empty dispatch read.
-This evidence does not establish event-time authorization or an external effect.
+The persisted dispatch check records the tenant dispatch permission and approved
+decision gate; it does not establish event-time authority, connector execution,
+or an external effect.
 
 The latest provider slice adds Agent360 `risk_summary`, Execution360
 `risk_events`, and Value360 `ltv` evidence without adding routes. Agent360 no

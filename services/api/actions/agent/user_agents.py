@@ -76,6 +76,7 @@ class AgentRegister(BaseModel):
     owner_entity_id: str
     model: str
     tools: list[str] = Field(default_factory=list)
+    resource_uris: list[str] = Field(default_factory=list, max_length=100)
     constraints: dict[str, Any] = Field(default_factory=dict)
     risk_tolerance: str = Field(default="medium", pattern="^(low|medium|high)$")
 
@@ -83,6 +84,7 @@ class AgentRegister(BaseModel):
 class AgentUpdate(BaseModel):
     model: Optional[str] = None
     tools: Optional[list[str]] = None
+    resource_uris: Optional[list[str]] = Field(default=None, max_length=100)
     constraints: Optional[dict[str, Any]] = None
     risk_tolerance: Optional[str] = Field(default=None, pattern="^(low|medium|high)$")
 
@@ -305,6 +307,14 @@ class AgentExecutionOutcome(BaseModel):
     error: dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentToolInvocation(BaseModel):
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentResourceRead(BaseModel):
+    resource_uri: str
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────
 
 @router.post("")
@@ -322,6 +332,7 @@ async def register(
         tenant_id=tenant.tenant_id,
         model=body.model,
         tools=body.tools,
+        resource_uris=body.resource_uris,
         constraints=body.constraints,
         risk_tolerance=body.risk_tolerance,
     )
@@ -379,7 +390,7 @@ async def update(agent_id: str, body: AgentUpdate, request: Request):
     if existing is None or existing.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Agent")
     patch = {k: v for k, v in body.model_dump(exclude_none=True).items()}
-    if "tools" in patch or "constraints" in patch or "risk_tolerance" in patch:
+    if any(key in patch for key in ("tools", "resource_uris", "constraints", "risk_tolerance")):
         patch["policy_version"] = (existing.get("policy_version") or 1) + 1
     updated = await _configs.update(agent_id, patch)
     return APIResponse(data=updated).to_dict()
@@ -523,11 +534,11 @@ async def execute(
         },
         causality={"triggered_by_event_id": body.triggered_by_event_id},
     ))
-    # The actual execution runtime is out of scope for this layer — Profile 360
-    # only owns the bookkeeping. Callers may follow up with `/executions/{id}`
-    # PATCH-style updates as the runtime progresses; v1 here records the
-    # synchronous "started" row, treating the immediate response as the result
-    # of a succeeded planning step.
+    # This route owns admission and bookkeeping only; it does not invoke an
+    # agent tool or resource operation. The returned AgentExecution and its
+    # later worker callback therefore cannot serve as an invocation receipt.
+    # A receipt producer must be wired into the runtime's actual tool/resource
+    # call boundary before Agent360 or Workflow360 can report those claims.
     record = await _executions.record(
         execution_id=execution_id,
         agent_id=agent_id,
@@ -612,6 +623,61 @@ async def read_execution(agent_id: str, execution_id: str, request: Request):
             or record.get("agent_id") != agent_id:
         raise NotFoundError("Execution")
     return APIResponse(data=record).to_dict()
+
+
+@router.post("/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke")
+async def invoke_agent_tool(agent_id: str, execution_id: str, tool_name: str,
+                            body: AgentToolInvocation, request: Request,
+                            engine: DelegationEngine = Depends(_get_engine)):
+    """Authenticated server-side MCP invocation; receipts come from the provider call."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    tenant.require_permission("dispatch")
+    principal = getattr(tenant, "user_id", None)
+    if not isinstance(principal, str) or not principal or principal != principal.strip():
+        raise ForbiddenError("Tool invocation requires an authenticated principal")
+    config = await _configs.find_by_id(agent_id)
+    execution = await _executions.find_by_id(execution_id)
+    if (config is None or config.get("tenant_id") != tenant.tenant_id
+            or execution is None or execution.get("tenant_id") != tenant.tenant_id
+            or execution.get("agent_id") != agent_id):
+        raise NotFoundError("Execution")
+    if execution.get("status") != "running":
+        raise ConflictError("Tool invocation requires a running execution")
+    from actions.agent.invocation_runtime import invoke_observed_mcp_tool
+    receipt = await invoke_observed_mcp_tool(
+        tenant_id=tenant.tenant_id, agent_id=agent_id, execution_id=execution_id,
+        tool_name=tool_name, arguments=body.arguments, config=config, engine=engine,
+        workflow_run_id=execution.get("workflow_run_id"),
+        workflow_definition_link=execution.get("workflow_definition_link"),
+        initiating_principal_user_id=principal,
+    )
+    return APIResponse(data=receipt).to_dict()
+
+
+@router.post("/{agent_id}/executions/{execution_id}/resources/read")
+async def read_agent_resource(agent_id: str, execution_id: str, body: AgentResourceRead,
+                              request: Request, engine: DelegationEngine = Depends(_get_engine)):
+    """Authenticated, exact MCP resource read under a dedicated read grant."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    tenant.require_permission("dispatch")
+    principal = getattr(tenant, "user_id", None)
+    if not isinstance(principal, str) or not principal or principal != principal.strip():
+        raise ForbiddenError("Resource read requires an authenticated principal")
+    config, execution = await _configs.find_by_id(agent_id), await _executions.find_by_id(execution_id)
+    if (config is None or config.get("tenant_id") != tenant.tenant_id or execution is None
+        or execution.get("tenant_id") != tenant.tenant_id or execution.get("agent_id") != agent_id):
+        raise NotFoundError("Execution")
+    if execution.get("status") != "running":
+        raise ConflictError("Resource read requires a running execution")
+    from actions.agent.invocation_runtime import read_observed_mcp_resource
+    receipt = await read_observed_mcp_resource(tenant_id=tenant.tenant_id, agent_id=agent_id,
+        execution_id=execution_id, resource_uri=body.resource_uri, config=config, engine=engine,
+        workflow_run_id=execution.get("workflow_run_id"),
+        workflow_definition_link=execution.get("workflow_definition_link"),
+        initiating_principal_user_id=principal)
+    return APIResponse(data=receipt).to_dict()
 
 
 @router.post("/{agent_id}/executions/{execution_id}/status")

@@ -3128,6 +3128,8 @@ class Episode360Provider:
                     )
                 except Exception:  # noqa: BLE001 - authority failures degrade this slot
                     rows, complete = [], False
+                if not complete:
+                    rows = []
                 item["actionDispatches"] = rows
                 item["actionDispatchRead"] = "complete_within_bound" if complete else "unknown"
                 intent_refs = list(item["evidenceRefs"])

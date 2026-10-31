@@ -50,6 +50,14 @@ class OutcomeProjector(BaseProjector):
             "value_amount": value_amount,
             "value_currency": value_currency,
             "succeeded": event["type"] in {"goal_achieved", "recommendation_accepted", "retention_observed"},
+            # These are explicit producer references. They are intentionally
+            # not derived from entity, recommendation, or event time. A
+            # consumer may adjudicate a prediction only when both the
+            # prediction ID and its versioned label contract are present.
+            "prediction_id": _explicit_ref(p.get("predictionId"), max_length=128),
+            "prediction_label_contract_version": _explicit_ref(
+                p.get("predictionLabelContractVersion"), max_length=128
+            ),
         })
         if exact:
             row.update(exact)  # value_amount_exact / value_currency_exact
@@ -61,3 +69,13 @@ def _as_float(value: Any) -> float | None:
         return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+def _explicit_ref(value: Any, *, max_length: int) -> str | None:
+    """Keep only compact explicit references; never construct a join key."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > max_length:
+        return None
+    return value

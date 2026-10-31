@@ -48,17 +48,17 @@ source_hashes:
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/actions/delivery/adapters/webhook.py": "sha256:e3ecc854d8b57fa74ba2a88b0867a81e40ce3f2a1a08dc675dd525085c3bc7f5"
-  "services/api/actions/delivery/outcome_processor.py": "sha256:41f3f3623ba08361567fe7b17b13b6f39592358b5b0384ff9df52a66d305e79e"
+  "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
   "services/api/connectors/provider_runtime/": "sha256:7bc893666ac1be2acf3c02a8318ff9fdbeffac4ab46229ecdfbc28f29fbdc5e2"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:0f2e0ac53d5ed9c4c62ee6cf110ee2bcb5ba5691f4ef246cb093eeb1c1c1fc8b"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:53d23de997742878b27ad968bc8b538e44b551387b252248d271b97cd75b3512"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:c9af48ff73ec21e1c48a91249d97931bd3317b24dc19beb0be84c8be2eb8d8cd"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
-  "services/api/repositories/repos.py": "sha256:c84eb3895639d7a9e0dbd8575fe0c1a1e0e83ce794f57ab4aca464d4a7c0e4a8"
+  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
@@ -634,6 +634,17 @@ callback route still answers 200. The Jira inbound webhook and the Telegram
 callback have no per-connection secret yet, so they answer 404 until
 `INBOUND_JIRA_WEBHOOK_ENABLED` / `INBOUND_TELEGRAM_CALLBACK_ENABLED` is set to
 `true`.
+
+The manual `POST /v1/delivery/outcomes/ingest` path records outcomes with
+`producer_provenance="caller_asserted"` and no signature authority; the
+caller-provided outcome is not signature-verified evidence. For inbox
+callbacks, a valid provider signature alone does not establish trusted outcome
+provenance. `verified_callback` is recorded only when the callback also binds
+to exactly one canonical stored receipt and job with matching tenant, intent,
+provider, and external ID. Missing, conflicting, or ambiguous binding
+candidates are rejected as `unbound_delivery`; a legacy callback binding that
+does not satisfy the complete receipt/job checks can retain its routing
+behavior but its outcome remains caller-asserted.
 
 ### Before deploying
 
