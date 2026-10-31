@@ -70,7 +70,7 @@ source_hashes:
   "packages/shared/": "sha256:1fb98379a712e988639c0196eff2ebb37d6bf31db25d5d72f7620bb7be4074cc"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:0cd2076de5ffcae20f1e2ec9c932a5db0fc511320c34e84b73da22de1e943498"
-  "services/api/actions/agent/deployment_routes.py": "sha256:80b605f4687c27f09c6f177b7179facbffd381967e70bcbb755a52df75d56c2e"
+  "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"

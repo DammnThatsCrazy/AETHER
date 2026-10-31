@@ -13,7 +13,7 @@ source_hashes:
   "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ef6e48798186d84513c8e8ba47e0551895bce03aa225ab354313c9812df8fcb3"
   "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
-  "services/api/actions/agent/": "sha256:9b40f6b6561bd2103b35d4ed1b090ff4fa4a859944b2c88627573200941b13bc"
+  "services/api/actions/agent/": "sha256:4baab4a866f15eb72be17645ead6fb03802d7892b1e3c97a88375850bcd10773"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"

@@ -31,11 +31,11 @@ reviewed_source_commits:
     reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/actions/agent/deployment_routes.py": "sha256:80b605f4687c27f09c6f177b7179facbffd381967e70bcbb755a52df75d56c2e"
+  "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:be67b683c932e47ca6b33b72a31d7a327d05398918b17907dc767f873edb8d1f"
+  "services/api/identity/identity/": "sha256:03e45877cab00de3d3f110db123b4d9ec3ca42921d2b443dfc27be66b7f3ca9f"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
@@ -194,7 +194,7 @@ returns only `late_binding_candidate` items by default, so the existing
 approve/merge routes cannot load an agent continuity item. A reviewer decides one through
 `POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm|reject`
 (`agent:manage`). The decision records the reviewer, reason and time with
-`merge_performed: false`; it touches no source identity and resolves nothing. Continuity and termination count only from facts with a
+`merge_performed: false`; it touches no source identity and resolves nothing. Agent 360 shows decided items as `continuity_decisions` (basis `reviewer_asserted`); no identity claim or binding is derived from them. Continuity and termination count only from facts with a
 validated deployment, and an inferred continuity is never a fact until
 reviewed.
 

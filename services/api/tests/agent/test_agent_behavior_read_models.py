@@ -305,3 +305,24 @@ async def test_agent360_behavior_sections_fail_closed_without_gate_parity(_route
                                             enabled=False, registry_enabled=False))
     res = await Agent360Provider(source).project(*_projection())
     assert {sec.state for sec in res.sections if sec.id in BEHAVIOR_SECTIONS} == {"not_applicable"}
+
+
+@pytest.mark.asyncio
+async def test_principal_agents_route_reconciles_without_merging(_routes):
+    from repositories.repos import DelegationRepository
+
+    await _persist(_events("GS-A"))
+    repo = DelegationRepository()
+    await repo.grant(delegation_id="d-live", tenant_id=T, grantor_entity_id="gsa-person-1",
+                     grantee_entity_id="gsa-orch", scope={"actions": ["task"]})
+    await repo.grant(delegation_id="d-other", tenant_id=T, grantor_entity_id="someone-else",
+                     grantee_entity_id="gsa-wkr-flights", scope={"actions": ["task"]})
+    data = (await agent_routes.principal_agents("gsa-person-1", _request()))["data"]
+    assert data["identity_merge"] == "not_performed"
+    assert [a["agent_ref"] for a in data["agents"]] == ["gsa-orch"]
+    assert data["agents"][0]["link_basis"] == "recorded_grant"
+    other = (await agent_routes.principal_agents("gsa-person-1", _request("other-tenant")))["data"]
+    assert other["agents"] == []
+    await repo.revoke("d-live", "gsa-person-1")
+    revoked = (await agent_routes.principal_agents("gsa-person-1", _request()))["data"]
+    assert revoked["agents"] == []

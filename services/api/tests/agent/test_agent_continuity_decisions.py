@@ -86,7 +86,9 @@ async def test_decision_is_recorded_and_never_merges(continuity, route, decision
     assert f"agent_continuity_{decision}" in data["reason_codes"]
 
     assert await _source_rows() == before  # nothing merged, bound or relinked
-    assert await agent_routes._agent_continuity_reviews(T, AGENT) == []  # leaves the queue
+    listed = await agent_routes._agent_continuity_reviews(T, AGENT)
+    assert [r["status"] for r in listed] == [decision]  # no longer open; carried as a decision
+    assert listed[0]["decision"]["merge_performed"] is False
     stored = await PendingIdentityReviewRepository().get(
         T, review["id"], entry_type="agent_continuity_candidate")
     assert stored["status"] == decision
@@ -153,3 +155,29 @@ async def test_requires_agent_manage(continuity):
     stored = await PendingIdentityReviewRepository().get(
         T, review["id"], entry_type="agent_continuity_candidate")
     assert stored["status"] == "open"
+
+
+@pytest.mark.asyncio
+async def test_decided_continuity_appears_as_reviewer_asserted_not_resolution(monkeypatch):
+    """Agent360's identity section shows decisions separately from the open queue
+    and never as a merge or a resolved identity."""
+    from actions.agent.behavior_read_model import agent_continuity_reviews
+    from intelligence.agent_behavior.read_models import agent360_behavior
+    from intelligence.agent_behavior.facts import normalize_rows
+
+    queued = [
+        {"id": "r-open", "status": "open", "candidate_source_identity_ids": ["s2"],
+         "identify_source_identity_id": "s1", "reason_codes": [], "seen_count": 1},
+        {"id": "r-done", "status": "confirmed", "candidate_source_identity_ids": ["s4"],
+         "identify_source_identity_id": "s3", "reason_codes": [],
+         "decision": {"decision": "confirmed", "decided_by": "analyst-1",
+                      "decided_at": "2026-10-31T00:00:00+00:00", "merge_performed": False}},
+    ]
+    row = {"source_event_id": "e1", "source_event_type": "agent_task_started", "tenant_id": "t-id",
+           "agent_id": "a1", "occurred_at": "2026-10-31T00:00:00Z", "payload": {}}
+    sec = agent360_behavior(normalize_rows([row], "t-id"), "a1", queued_reviews=queued)["sections"]["identity"]["data"]
+    assert [r["id"] for r in sec["queued_reviews"]] == ["r-open"]
+    [dec] = sec["continuity_decisions"]
+    assert dec["basis"] == "reviewer_asserted" and dec["merge_performed"] is False
+    assert dec["decided_by"] == "analyst-1" and dec["decision"] == "confirmed"
+    assert agent_continuity_reviews  # shared lister now includes decided items

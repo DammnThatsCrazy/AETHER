@@ -58,9 +58,9 @@ Design decisions are in the [ADRs](../decisions/agent-behavior/README.md).
 
 ## Open items
 
-1. **Continuity decisions feed nothing.** Confirm and reject routes record the reviewer's decision and never merge. A confirmed decision does not yet feed any continuity claim, and no UI action calls the routes.
+1. **Continuity decisions are context, not resolution.** Confirm and reject routes record the reviewer's decision and never merge. Agent 360's identity section shows decided items as `continuity_decisions` with basis `reviewer_asserted` and `merge_performed: false`. No identity claim or binding is derived from them, and no UI action calls the routes.
 2. **Projection authorization issuer.** The Agent360 `behavior_*` sections need a server-derived `agent_behavior` read authorization. The projection runtime does not issue one yet, so today the sections are visible through the route only.
 3. **Scheduled pipelines.** Risk360 accepts agent behavior evidence through its evidence bundle, but no caller assembles that bundle on a schedule. Nothing records behavior snapshots on a schedule either; windows are recorded on request.
 4. **Behavior is bounded.** Models and DecisionEnvelopes are rebuilt on read from at most 1,000 recent facts per agent. Snapshots are stored per window but the model itself is not a stored projection.
-5. **Profile 360.** Human-agent reconciliation is a function, not a Profile 360 section.
+5. **Profile 360 section.** Human-agent reconciliation is served by `GET /v1/agent/agents/principals/{entity_id}/agents` (recorded grants or declared beneficiary, no identity merge). It is not a Profile 360 projection section: that needs a surface-catalog slot and policy domain, and the generated 360 catalog tests are already failing on `development`.
 6. **Calibration.** Every rate and confidence is uncalibrated. Only Wilson intervals are reported.

@@ -16,7 +16,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ef6e48798186d84513c8e8ba47e0551895bce03aa225ab354313c9812df8fcb3"
-  "services/api/actions/agent/deployment_routes.py": "sha256:80b605f4687c27f09c6f177b7179facbffd381967e70bcbb755a52df75d56c2e"
+  "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"

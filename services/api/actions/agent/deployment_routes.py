@@ -717,6 +717,32 @@ async def reject_agent_continuity(agent_ref: str, review_id: str, request: Reque
     return await _decide_agent_continuity(agent_ref, review_id, request, "rejected")
 
 
+@lineage_router.get("/principals/{entity_id}/agents")
+async def principal_agents(entity_id: str, request: Request):
+    """Agents acting for one person, by recorded grant or declared beneficiary.
+
+    A reconciliation view, never an identity merge: the person and each agent
+    stay separate subjects, agent refs stay source-reported, and bounded fact
+    reads are flagged when capped."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.read_models import profile360_agents
+    from repositories.repos import DelegationRepository
+
+    grants = [g for g in await DelegationRepository().find_many(
+        filters={"tenant_id": tenant.tenant_id, "grantor_entity_id": entity_id}, limit=100)
+        if g.get("tenant_id") == tenant.tenant_id and not g.get("revoked_at")]
+    facts, truncated = [], False
+    for ref in sorted({g["grantee_entity_id"] for g in grants if g.get("grantee_entity_id")})[:25]:
+        agent_facts, was_truncated = await _behavior_facts(tenant.tenant_id, ref)
+        facts.extend(agent_facts)
+        truncated = truncated or was_truncated
+    data = profile360_agents(entity_id, facts, grants)
+    data["source_truncated"] = truncated
+    data["agents_capped_at"] = 25
+    return APIResponse(data=data).to_dict()
+
+
 @lineage_router.get("/{agent_ref}/behavior")
 async def agent_behavior_read_model(agent_ref: str, request: Request):
     """Agent360 behavior read model: rebuildable, evidence-qualified, with what

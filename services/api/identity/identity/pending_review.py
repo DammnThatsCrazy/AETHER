@@ -187,6 +187,15 @@ class PendingIdentityReviewRepository:
             if row.get("tenant_id") == tenant_id and row.get("status") in reviewable
         ]
 
+    async def list_agent_continuity(self, tenant_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        """Open and reviewer-decided agent continuity items for one tenant."""
+        rows = await self._store.find_many(
+            filters={"tenant_id": tenant_id, "entry_type": "agent_continuity_candidate"},
+            limit=limit, sort_by="created_at", sort_order="desc",
+        )
+        return [row for row in rows if row.get("tenant_id") == tenant_id
+                and row.get("status") in {"open", *AGENT_CONTINUITY_DECISIONS}]
+
     async def list_open(self, tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
         """Backward-compatible name for the tenant review queue query."""
         return await self.list_for_review(tenant_id, limit=limit)

@@ -93,7 +93,21 @@ def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
             "continuity": agent_continuity(tenant_id=tenant, agent_ref=agent_ref, facts=facts),
             "resolver_claims": claims,
             "review_items": [h for h in continuity_hypotheses(tenant, facts) if h["subject"] == agent_ref],
-            "queued_reviews": queued_reviews if queued_reviews is not None else [],
+            "queued_reviews": [r for r in (queued_reviews or []) if r.get("status") == "open"],
+            # A reviewer's judgement, not an Aether resolution: nothing is merged,
+            # bound or relinked, and the agent refs stay source-reported.
+            "continuity_decisions": [
+                {"review_id": r.get("id"), "decision": (r.get("decision") or {}).get("decision") or r.get("status"),
+                 "decided_by": (r.get("decision") or {}).get("decided_by"),
+                 "decided_at": (r.get("decision") or {}).get("decided_at"),
+                 "basis": "reviewer_asserted", "merge_performed": False,
+                 "source_identity_ids": sorted({str(i) for i in (r.get("candidate_source_identity_ids") or [])}
+                                               | {str(r.get("identify_source_identity_id"))}),
+                 "claim": ("reviewer judged the deployments report one logical agent"
+                           if r.get("status") == "confirmed"
+                           else "reviewer judged the deployments report distinct agents")}
+                for r in (queued_reviews or []) if r.get("status") in {"confirmed", "rejected"}
+            ],
         }) if mine else _section("unavailable", None, "no facts for this agent"),
         "authority": _section("available" if checks else "unavailable", checks,
                               None if checks else "no value-moving actions observed"),

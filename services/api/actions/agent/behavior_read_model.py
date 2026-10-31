@@ -56,7 +56,7 @@ async def load_behavior_inputs(tenant_id: str, agent_ref: str) -> BehaviorInputs
 
 
 async def agent_continuity_reviews(tenant_id: str, agent_ref: str) -> list[dict[str, Any]]:
-    """Open agent continuity review items touching this agent's source identities."""
+    """Open and reviewer-decided continuity items touching this agent's source identities."""
     from identity.identity.pending_review import PendingIdentityReviewRepository
     from identity.identity.routes import get_identity_resolver
 
@@ -65,11 +65,10 @@ async def agent_continuity_reviews(tenant_id: str, agent_ref: str) -> list[dict[
         return []
     ids = {str(row.get("id")) for row in await repo.list_source_identities_by_identifier(
         tenant_id, "agent_id", agent_ref, limit=20)}
-    items = await PendingIdentityReviewRepository().list_for_review(
-        tenant_id, entry_type="agent_continuity_candidate")
+    items = await PendingIdentityReviewRepository().list_agent_continuity(tenant_id)
     return [
         {k: item.get(k) for k in ("id", "status", "reason_codes", "candidate_source_identity_ids",
-                                  "identify_source_identity_id", "created_at", "seen_count")}
+                                  "identify_source_identity_id", "created_at", "seen_count", "decision")}
         for item in items
         if ids & ({item.get("identify_source_identity_id")} | set(item.get("candidate_source_identity_ids") or []))
     ]
