@@ -735,6 +735,37 @@ async def agent_behavior_read_model(agent_ref: str, request: Request):
     return APIResponse(data=data).to_dict()
 
 
+class BehaviorSnapshotRequest(BaseModel):
+    window_start: str = Field(min_length=10, max_length=40)
+    window_end: str = Field(min_length=10, max_length=40)
+
+
+@lineage_router.post("/{agent_ref}/behavior/snapshots")
+async def record_behavior_snapshot(agent_ref: str, body: BehaviorSnapshotRequest, request: Request):
+    """Compute and store one window snapshot (a rebuildable cache, not evidence)."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.snapshot_store import BehaviorSnapshotRepository, record_window
+
+    if body.window_end <= body.window_start:
+        raise BadRequestError("window_end must be after window_start")
+    facts, truncated = await _behavior_facts(tenant.tenant_id, agent_ref)
+    snap = await record_window(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref, facts,
+                               (body.window_start, body.window_end))
+    return APIResponse(data={"snapshot": snap, "source_truncated": truncated}).to_dict()
+
+
+@lineage_router.get("/{agent_ref}/behavior/drift")
+async def behavior_drift(agent_ref: str, request: Request):
+    """Drift between the two most recent stored windows (needs two windows)."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.snapshot_store import BehaviorSnapshotRepository, drift_over_stored_windows
+
+    drift = await drift_over_stored_windows(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref)
+    return APIResponse(data={"agent_ref": agent_ref, "drift": drift}).to_dict()
+
+
 @lineage_router.get("/{agent_ref}/decisions/{decision_id}")
 async def agent_decision_detail(agent_ref: str, decision_id: str, request: Request):
     """One reconstructed DecisionEnvelope with attribution, responsibility roles

@@ -43,7 +43,7 @@ source_hashes:
   "docs/reference/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:77e53b782c1633240ba44d8151a7b0f3712f44a497cf9691b7c0421a466c56f8"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:b8e155e472289a5a0024e91e1af025f0c300b927f91cb9b6f3d34e02dfaf00c6"
-  "services/api/actions/agent/deployment_routes.py": "sha256:ab3a4fe324b43551d59061efadbfd8509edfd30e5dfc5bd95b5ef8a2fd835778"
+  "services/api/actions/agent/deployment_routes.py": "sha256:80b605f4687c27f09c6f177b7179facbffd381967e70bcbb755a52df75d56c2e"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"

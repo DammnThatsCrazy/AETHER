@@ -111,9 +111,8 @@ def test_event_ids_are_unique_across_scenarios():
 
 @pytest.mark.parametrize("sid", list(SCENARIOS))
 def test_pending_expectations_name_their_work_order(sid):
-    pending = list(_pending_blocks(SCENARIOS[sid]["expected"]))
-    assert pending, "a scenario with nothing pending should drop its pending blocks"
-    for name, block in pending:
+    # Pending blocks are optional: a scenario that is fully current has none.
+    for name, block in _pending_blocks(SCENARIOS[sid]["expected"]):
         assert WORK_ORDER.match(block.get("owner_work_order", "")), name
 
 
@@ -350,18 +349,69 @@ def test_current_decision_envelopes_match(sid):
     facts = normalize_rows(_project(SCENARIOS[sid]), TENANT)
     env = build_envelope(design["decision_id"], group_decisions(facts)[design["decision_id"]], facts).to_dict()
     assert env["decision_actor"]["value"] == design["decision_actor"]
-    assert env["objective"]["value"] == design["objective_ref"]
-    assert [c["candidate"] for c in env["candidates"]["candidates"]] == design["candidates"]
-    assert [c["ref"] for c in env["constraints"]] == design["constraint_refs"]
-    assert env["disposition"]["disposition"] == design["disposition"]
-    assert design["authority_check_event_id"] in env["evidence"]
-    assert env["outcome"]["evidence"] == [design["outcome_event_id"]]
     assert env["status"] == design["status"]
+    assert env["disposition"]["disposition"] == design["disposition"]
+    if "objective_ref" in design:
+        assert env["objective"]["value"] == design["objective_ref"]
+    if "candidates" in design:
+        assert [c["candidate"] for c in env["candidates"]["candidates"]] == design["candidates"]
+    if "constraint_refs" in design:
+        assert [c["ref"] for c in env["constraints"]] == design["constraint_refs"]
+    if "authority_check_event_id" in design:
+        assert design["authority_check_event_id"] in env["evidence"]
+    if "outcome_event_id" in design:
+        assert env["outcome"]["evidence"] == [design["outcome_event_id"]]
+    if "outcome" in design:
+        assert env["outcome"]["value"] == design["outcome"]
     for key in ("opportunity_envelope", "action_disposition"):
         if expected.get(key, {}).get("status") == "current":
             want = expected[key]["design"]
             got = env["opportunity"] if key == "opportunity_envelope" else env["disposition"]
             assert {k: got[k] for k in want} == want
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sid", [s for s in SCENARIOS
+                                 if SCENARIOS[s]["expected"]["agent_journey"]["status"] == "current"])
+async def test_current_agent_journeys_match(sid):
+    from intelligence.agent_behavior.activity import agent_journey
+    from intelligence.agent_behavior.facts import normalize_rows
+
+    design = SCENARIOS[sid]["expected"]["agent_journey"]["design"]
+    facts = normalize_rows(_project(SCENARIOS[sid]), TENANT)
+    journey = agent_journey(facts, design["root_agent"])
+    if "agents" in design:
+        assert [a["agent"] for a in journey["agents"]] == design["agents"]
+    if "agent_count" in design:
+        assert len(journey["agents"]) == design["agent_count"]
+    if "outcome" in design:
+        assert journey["outcome"]["value"] == design["outcome"]
+    if "human_journey_id" in design:
+        assert journey["human_journey"]["basis"] == design["join_without_handoff"]
+        assert journey["human_journey"]["value"] == {"journey_id": design["human_journey_id"]}
+        link = {"journey_id": design["human_journey_id"], "link_basis": "explicit_handoff"}
+        joined = agent_journey(facts, design["root_agent"], handoffs=[link])["human_journey"]
+        assert joined["basis"] == design["join_with_recorded_handoff"]
+        assert joined["value"]["link_basis"] == "explicit_handoff"
+    else:
+        assert design["human_journey"] == "unknown" and journey["human_journey"]["basis"] == "unknown"
+
+
+@pytest.mark.parametrize("sid", [s for s in SCENARIOS
+                                 if SCENARIOS[s]["expected"]["read_model"]["status"] == "current"])
+def test_current_read_models_match(sid):
+    from intelligence.agent_behavior.facts import normalize_rows
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    design = SCENARIOS[sid]["expected"]["read_model"]["design"]
+    facts = normalize_rows(_project(SCENARIOS[sid]), TENANT)
+    model = agent360_behavior(facts, design["subject"])
+    for section, state in design["sections"].items():
+        assert model["sections"][section]["state"] == state, section
+    if "attribution" in design:
+        assert model["sections"]["influence"]["data"]["by_state"]["observed"] >= 1
+    if "failure_resolution_episodes" in design:
+        assert len(model["sections"]["behavior"]["data"]["failure_resolution"]) == design["failure_resolution_episodes"]
 
 
 def test_gs_d_failure_resolution_is_current():

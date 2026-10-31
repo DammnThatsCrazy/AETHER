@@ -53,11 +53,9 @@ Today the current expectations cover:
 - `AGENT_USED_TOOL_OBS` and `SPAWNED_SUBAGENT` graph edges from Silver, and the delegation authority's `DELEGATES` grant edge (asserted through the grant route).
 - The handoff link.
 
-Still pending:
+Every scenario's DecisionEnvelope, AgentJourney and Agent 360 read model expectation is now current. Where a scenario emits no explicit decision events (GS-A, GS-B, GS-D), the envelope is derived from the agent's task window, its actor and objective are labelled `derived`, and its disposition is `unknown`. GS-A's orchestrator reports a `journeyId`: with a recorded handoff the join to the human journey is `observed`, otherwise only `declared`. GS-B's workers carry task references so their decisions derive; a worker with no outcome keeps an `open` envelope.
 
-- DecisionEnvelopes for GS-A, GS-B and GS-D (WO-050). These need explicit decision events, which those scenarios do not emit.
-- AgentJourney join to the human journey (WO-060). GS-A emits no `journeyId`.
-- Scenario read models (WO-093, WO-110 – WO-112).
+Nothing is pending. A future work order that adds an expectation marks it `pending` with its `owner_work_order` until the code supports it.
 
 ## Rules for the fixture
 

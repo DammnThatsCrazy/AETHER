@@ -2690,6 +2690,29 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Agent behavior snapshots (intelligence/agent_behavior/snapshot_store.py).
+  # Derived, rebuildable caches of dynamics.snapshot() keyed by tenant, agent
+  # ref and window: aggregated rates plus Silver event ids, no payloads and no
+  # person data (ADR-AB-002). Deleting them loses no evidence; erasure of the
+  # underlying Silver facts is followed by recomputation, and
+  # delete_by_agent()/purge_before() give operators a physical delete.
+  - resource_type: agent_behavior_snapshots
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: agent_economic_identities
     authoritative_store: postgres
     metadata_store: postgres

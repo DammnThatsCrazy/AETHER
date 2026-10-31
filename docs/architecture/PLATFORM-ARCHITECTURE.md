@@ -67,10 +67,10 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:954c09e3afa3fd2af5abcdf39bfdd7f4b3e2390cf52c9013bff6f624d2382836"
+  "packages/shared/": "sha256:1fb98379a712e988639c0196eff2ebb37d6bf31db25d5d72f7620bb7be4074cc"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:0cd2076de5ffcae20f1e2ec9c932a5db0fc511320c34e84b73da22de1e943498"
-  "services/api/actions/agent/deployment_routes.py": "sha256:ab3a4fe324b43551d59061efadbfd8509edfd30e5dfc5bd95b5ef8a2fd835778"
+  "services/api/actions/agent/deployment_routes.py": "sha256:80b605f4687c27f09c6f177b7179facbffd381967e70bcbb755a52df75d56c2e"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:1c816eeb373ef4d4d4fb62e8c07dfc98ae76dc7558551cbf18b10beef3a34bd0"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -107,7 +107,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
   "services/api/value/commerce/routes.py": "sha256:9b68c0d975d7b81b530ff8eb91e95ee6c37e10034498dbf248f1889f026c5897"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:c4876df0c44da2b2322921a43301c8917d40e9dda50d986890b537b3a4e9e844"
+  "services/api/value/economic/economic360_provider.py": "sha256:e248ef704d0378f8c721d1cde143c6baab4844ef315820dcae5a845f32bea1d0"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
@@ -607,6 +607,11 @@ implemented native providers) and the shared request/context/result contracts
 Economic360 accepts `journey` subjects so its Evidence section can expose
 source-linked commerce operation records carried by Journey steps; it does not
 copy operation amounts or claim settlement from those links.
+Economic360 also serves an `agent_mediated_activity` section: `not_applicable`
+for non-agent subjects; for a canonical Agent it resolves source agent refs only
+through the tenant-admin deployment identity binding and reports
+agent-selected, executed and influenced totals per currency, `reported` until a
+rail confirms them. No active binding is `unknown`, not `empty`.
 `implementationState` is repo metadata describing
 
 how far a projection has been converged onto the plane (`in_flight` = an
