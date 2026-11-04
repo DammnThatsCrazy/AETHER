@@ -953,9 +953,13 @@ async def test_signals360_unjoined_risk_flags_do_not_query_risk360() -> None:
         projection_runtime=Runtime(),
     )
 
-    assert projection_calls == []
+    # Signals360 owns the typed, exact-subject RiskSignal read. The slot is
+    # intentionally independent of Risk360, whose assessment/evidence path is
+    # reserved for joined risk claims.
+    assert projection_calls == [("signals360", "signal-1", ("risk_flags",))]
+    assert all(projection_id != "risk360" for projection_id, _, _ in projection_calls)
     assert frame.slots[0].state == "unknown"
-    assert "slot_provider_not_connected" in frame.slots[0].reasonCodes
+    assert "exact_slot_claim_missing" in frame.slots[0].reasonCodes
     assert frame.slots[0].evidenceRefs == []
 
 
@@ -1020,13 +1024,18 @@ async def test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360() ->
         generated_at="2026-10-18T12:30:00Z",
     )
 
-    assert calls == [("risk360", "agent", ("evidence", "findings"))]
+    assert calls == [
+        ("agent360", "agent", ("state",)),
+        ("risk360", "agent", ("evidence", "findings")),
+    ]
     assert frame.slots[0].state == "degraded"
-    assert "slot_canonical_authority_gap" in frame.slots[0].reasonCodes
-    assert (
-        "agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined"
-        in frame.slots[0].reasonCodes
+    assert "slot_partial_implementation" in frame.slots[0].reasonCodes
+    agent_risk_slot = next(
+        item
+        for item in PRODUCT_360_SURFACE_DEFINITIONS["agent360"]["domainSlots"]
+        if item["id"] == "risk_summary"
     )
+    assert agent_risk_slot["partialImplementationReason"] in frame.slots[0].reasonCodes
     risk_payload = next(
         payload
         for payload in frame.slots[0].content["sections"]
@@ -2861,7 +2870,7 @@ async def test_profile_value_summary_routes_exact_subject_to_economic360_after_p
 
 
 @pytest.mark.asyncio
-async def test_profile_relationships_routes_exact_entity_to_relationship360_after_policy():
+async def test_profile_relationships_routes_exact_entity_to_profile360_after_policy():
     events: list[tuple[str, str, str]] = []
     entity_id = "profile-relationship-entity-1"
     subject = ProjectionSubject(kind="entity", id=entity_id)
@@ -2904,7 +2913,7 @@ async def test_profile_relationships_routes_exact_entity_to_relationship360_afte
             assert projection_request.tenantId == TENANT
             assert projection_request.subject == subject
             claim = ClaimEnvelope(
-                id="relationship360.graph-event.profile-relationship-1",
+                id="profile360.relationship-event.profile-relationship-1",
                 kind="relationship_graph_event",
                 subject=subject,
                 evidenceRefs=[relationship_evidence],
@@ -2912,7 +2921,7 @@ async def test_profile_relationships_routes_exact_entity_to_relationship360_afte
                 domainSlotIds=["relationships"],
             )
             return ProjectionResult(
-                projectionId="relationship360",
+                projectionId=projection_request.projectionId,
                 tenantId=projection_request.tenantId,
                 contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
                 sections=[
@@ -2946,21 +2955,17 @@ async def test_profile_relationships_routes_exact_entity_to_relationship360_afte
     )
 
     assert events[0] == ("policy", "profile360", entity_id)
-    assert runtime.calls == [
-        ("relationship360", entity_id, ("evidence", "interactions", "summary"))
-    ]
-    assert events[1] == ("projection", "relationship360", entity_id)
+    assert runtime.calls == [("profile360", entity_id, ("relationships",))]
+    assert events[1] == ("projection", "profile360", entity_id)
     slot = frame.slots[0]
     assert slot.state == "degraded"
     assert slot.content is not None
     assert [claim.id for claim in slot.claims] == [
-        "relationship360.graph-event.profile-relationship-1"
+        "profile360.relationship-event.profile-relationship-1"
     ]
     assert slot.evidenceRefs == [relationship_evidence]
     assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
-        "evidence",
-        "interactions",
-        "summary",
+        "relationships",
     }
     assert "slot_partial_implementation" in slot.reasonCodes
 
