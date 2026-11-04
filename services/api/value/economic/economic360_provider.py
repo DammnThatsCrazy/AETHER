@@ -650,9 +650,20 @@ class RepositoryAttributionCreditReader:
                                 and approval.get("validation_decision_id") == decision.get("decision_id")
                                 and approval.get("decision") in {"approved", "rejected"}
                                 and isinstance(approval.get("actor_id"), str)
-                                and bool(approval.get("actor_id"))
+                                and bool(approval.get("actor_id").strip())
                                 and isinstance(approval.get("reason"), str)
-                                and bool(approval.get("reason"))
+                                and bool(approval.get("reason").strip())
+                                and approval.get("authorization_action") == "value.model_approval"
+                                and approval.get("authorization_permission") == "admin"
+                                and approval.get("authorization_decision") == "allow"
+                                and approval.get("authorization_actor_id") == approval.get("actor_id")
+                                and approval.get("authorization_evaluated_at") is not None
+                                and _attribution_timestamp(approval.get("authorization_evaluated_at")) is not None
+                                and _attribution_timestamp(approval.get("created_at")) is not None
+                                and _attribution_timestamp(approval.get("authorization_evaluated_at"))
+                                    <= _attribution_timestamp(approval.get("created_at"))
+                                and _attribution_timestamp(approval.get("created_at"))
+                                    >= _attribution_timestamp(run.get("completed_at"))
                             ):
                                 approval_ref = _value_model_approval_ref(
                                     approval["decision_id"],
@@ -4759,6 +4770,13 @@ class Economic360Provider:
                             and durable_approval.get("actor_id") == raw_governance.get("approvalActorId")
                             and durable_approval.get("reason") == raw_governance.get("approvalReason")
                             and _attribution_timestamp(durable_approval.get("created_at")) == raw_approval_ref.get("observedAt")
+                            and durable_approval.get("authorization_action") == "value.model_approval"
+                            and durable_approval.get("authorization_permission") == "admin"
+                            and durable_approval.get("authorization_decision") == "allow"
+                            and durable_approval.get("authorization_actor_id") == durable_approval.get("actor_id")
+                            and durable_approval.get("authorization_evaluated_at") is not None
+                            and _attribution_timestamp(durable_approval.get("authorization_evaluated_at"))
+                                <= _attribution_timestamp(durable_approval.get("created_at"))
                         ):
                             governance.update({
                                 "approvalState": approval_state,

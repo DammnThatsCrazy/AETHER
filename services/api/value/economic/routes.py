@@ -125,6 +125,13 @@ async def decide_attribution_model_approval(run_id: str, body: ValueModelApprova
     try:
         result = await decide_value_model_approval(
             tenant.tenant_id, run_id, body.decision, actor_id=actor_id, reason=body.reason,
+            authorization_evidence={
+                "action": "value.model_approval",
+                "permission": "admin",
+                "decision": "allow",
+                "actor_id": actor_id,
+                "evaluated_at": datetime.now(timezone.utc),
+            },
         )
     except ValueError as exc:
         raise BadRequestError(str(exc)) from exc

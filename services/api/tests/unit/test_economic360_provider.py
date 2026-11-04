@@ -725,6 +725,10 @@ async def test_value_confidence_reader_rejoins_exact_durable_approval(
             "model_type": "last_touch", "model_version": "v2",
             "validation_decision_id": validation_id, "decision": "approved",
             "actor_id": "admin-1", "reason": "Reviewed exact run evidence.",
+            "authorization_action": "value.model_approval",
+            "authorization_permission": "admin", "authorization_decision": "allow",
+            "authorization_actor_id": "admin-1",
+            "authorization_evaluated_at": "2026-10-29T09:59:59+00:00",
             "created_at": approval_time,
         }
 

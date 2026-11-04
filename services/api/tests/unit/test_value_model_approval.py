@@ -61,6 +61,9 @@ async def test_value_approval_is_derived_from_authenticated_actor_and_exact_run_
     repository = ValueModelApprovalRepository()
     result = await decide_value_model_approval(
         TENANT, RUN_ID, "approved", actor_id="admin-1", reason="Reviewed exact run evidence.",
+        authorization_evidence={"action": "value.model_approval", "permission": "admin",
+                                "decision": "allow", "actor_id": "admin-1",
+                                "evaluated_at": "2026-01-03T00:00:00Z"},
         runs=Runs(), decisions=Decisions(), approvals=repository,
     )
     assert result["tenant_id"] == TENANT
@@ -69,6 +72,10 @@ async def test_value_approval_is_derived_from_authenticated_actor_and_exact_run_
     assert result["validation_decision_id"].startswith("amv_")
     assert result["actor_id"] == "admin-1"
     assert result["decision"] == "approved"
+    assert result["authorization_action"] == "value.model_approval"
+    assert result["authorization_permission"] == "admin"
+    assert result["authorization_decision"] == "allow"
+    assert result["authorization_evaluated_at"].isoformat() == "2026-01-03T00:00:00+00:00"
     assert (await repository.latest(TENANT, RUN_ID))["decision_id"] == result["decision_id"]
 
 
@@ -78,10 +85,35 @@ async def test_value_approval_rejects_free_form_decision_and_missing_actor(monke
     with pytest.raises(ValueError):
         await decide_value_model_approval(
             TENANT, RUN_ID, "calibrated", actor_id="admin-1", reason="Review",
+            authorization_evidence={"action": "value.model_approval", "permission": "admin",
+                                    "decision": "allow", "actor_id": "admin-1",
+                                    "evaluated_at": "2026-01-03T00:00:00Z"},
             runs=Runs(), decisions=Decisions(), approvals=ValueModelApprovalRepository(),
         )
     with pytest.raises(ValueError):
         await decide_value_model_approval(
             TENANT, RUN_ID, "approved", actor_id=" ", reason="Review",
+            authorization_evidence={"action": "value.model_approval", "permission": "admin",
+                                    "decision": "allow", "actor_id": " ",
+                                    "evaluated_at": "2026-01-03T00:00:00Z"},
             runs=Runs(), decisions=Decisions(), approvals=ValueModelApprovalRepository(),
         )
+
+
+@pytest.mark.asyncio
+async def test_value_approval_rejects_missing_or_mismatched_policy_evidence():
+    for evidence in (
+        {},
+        {"action": "value.model_approval", "permission": "read", "decision": "allow",
+         "actor_id": "admin-1", "evaluated_at": "2026-01-03T00:00:00Z"},
+        {"action": "value.model_approval", "permission": "admin", "decision": "deny",
+         "actor_id": "admin-1", "evaluated_at": "2026-01-03T00:00:00Z"},
+        {"action": "value.model_approval", "permission": "admin", "decision": "allow",
+         "actor_id": "other-admin", "evaluated_at": "2026-01-03T00:00:00Z"},
+    ):
+        with pytest.raises(ValueError, match="authorization evidence"):
+            await decide_value_model_approval(
+                TENANT, RUN_ID, "approved", actor_id="admin-1", reason="Reviewed run.",
+                authorization_evidence=evidence, runs=Runs(), decisions=Decisions(),
+                approvals=ValueModelApprovalRepository(),
+            )
