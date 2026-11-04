@@ -77,6 +77,10 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "risk_assessment_explain",
     "fraud_hypothesis_summarize",
     "risk_fraud_contradiction_lookup",
+    # Agent Behavioral Intelligence (read-only — Noesis reads the backend-owned
+    # Agent360 behavior read model; it never writes canonical facts, resolves
+    # agent identity, or upgrades inferred claims. Requires agent:manage.)
+    "agent_behavior",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
@@ -234,6 +238,8 @@ class QueryPlan(BaseModel):
         "risk_assessment_explain",
         "fraud_hypothesis_summarize",
         "risk_fraud_contradiction_lookup",
+        # Agent behavioral intelligence intent (read-only, agent:manage)
+        "agent_behavior",
         # Agentic intelligence intents (must mirror _agentic_dispatch keys)
         "agent_inventory_lookup",
         "agent_activity_lookup",

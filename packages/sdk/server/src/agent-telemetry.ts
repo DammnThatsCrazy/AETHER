@@ -398,4 +398,160 @@ export class AgentTelemetryClient extends AetherServerSDK {
       },
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Agent behavior taxonomy (WO-030 / WO-120). References and measurements
+  // only: no prompt, response, message or memory content is accepted.
+  // ---------------------------------------------------------------------------
+
+  /** Observe an objective lifecycle step. */
+  objective(params: {
+    objectiveId: string;
+    status: 'created' | 'started' | 'modified' | 'completed' | 'failed' | 'abandoned';
+    parentObjectiveId?: string;
+    ownerActorId?: string;
+    goal?: string;
+    objectiveType?: string;
+    successCriteria?: string[];
+    constraints?: string[];
+    priority?: number;
+    changes?: Record<string, unknown>;
+    modifiedBy?: string;
+    runId?: string;
+    taskId?: string;
+  }): void {
+    const { status, ...props } = params;
+    this.track({ type: `agent_objective_${status}` as EventType, properties: { ...props } });
+  }
+
+  /** Observe one step of a decision: opened, candidates, selection, closure. */
+  decision(params: {
+    decisionId: string;
+    phase: 'started' | 'candidate_considered' | 'candidate_rejected' | 'action_selected' | 'completed';
+    objectiveId?: string;
+    candidateId?: string;
+    amount?: string;
+    currency?: string;
+    vendor?: string;
+    reason?: string;
+    actionType?: string;
+    recommendedBy?: string;
+    candidateSetComplete?: boolean;
+    outcome?: string;
+    runId?: string;
+    taskId?: string;
+  }): void {
+    const { phase, ...props } = params;
+    assertDecimalString(props.amount);
+    const type = (
+      phase === 'started' || phase === 'completed' ? `agent_decision_${phase}`
+        : phase === 'action_selected' ? 'agent_action_selected' : `agent_${phase}`
+    ) as EventType;
+    this.track({ type, properties: { ...props } });
+  }
+
+  /** Observe an authorization request or its source-reported answer. */
+  authorization(params: {
+    authorizationId: string;
+    status: 'requested' | 'granted' | 'denied';
+    decisionId?: string;
+    approverActorId?: string;
+    actionType?: string;
+    resourceRef?: string;
+  }): void {
+    const { status, ...props } = params;
+    this.track({ type: `agent_authorization_${status}` as EventType, properties: { ...props } });
+  }
+
+  /** Observe a tool retry or a switch to another tool. */
+  toolAdaptation(params: {
+    kind: 'retried' | 'switched';
+    toolName: string;
+    fromToolName?: string;
+    attempt?: number;
+    runId?: string;
+    taskId?: string;
+    decisionId?: string;
+  }): void {
+    const { kind, ...props } = params;
+    this.track({ type: `agent_tool_${kind}` as EventType, properties: { ...props } });
+  }
+
+  /** Observe execution of a selected action (observation only). */
+  execution(params: {
+    status: 'started' | 'succeeded' | 'failed' | 'aborted';
+    decisionId?: string;
+    actionType?: string;
+    actionId?: string;
+    resourceRef?: string;
+    verifiedBy?: string;
+    errorCode?: string;
+    runId?: string;
+    taskId?: string;
+  }): void {
+    const { status, ...props } = params;
+    this.track({ type: `agent_execution_${status}` as EventType, properties: { ...props } });
+  }
+
+  /** Observe a quote, price evaluation or transaction step. Amounts are decimal strings. */
+  economic(params: {
+    kind: 'quote_received' | 'price_evaluated' | 'transaction_initiated' | 'transaction_authorized'
+      | 'transaction_settled' | 'transaction_failed';
+    amount?: string;
+    currency?: string;
+    decisionId?: string;
+    objectType?: string;
+    objectId?: string;
+    resourceRef?: string;
+    authorizationId?: string;
+    fundingActorId?: string;
+    runId?: string;
+  }): void {
+    const { kind, ...props } = params;
+    assertDecimalString(props.amount);
+    this.track({ type: `agent_${kind}` as EventType, properties: { ...props } });
+  }
+
+  /** Observe an information input by reference (never its content). */
+  information(params: {
+    kind: 'information_retrieved' | 'source_consulted' | 'context_received';
+    sourceRef: string;
+    decisionId?: string;
+    trust?: 'trusted' | 'untrusted' | 'external';
+    runId?: string;
+  }): void {
+    const { kind, ...props } = params;
+    this.track({ type: `agent_${kind}` as EventType, properties: { ...props } });
+  }
+
+  /** Observe a memory lifecycle step by reference (never its content). */
+  memory(params: {
+    memoryId: string;
+    op: 'created' | 'retrieved' | 'updated' | 'invalidated' | 'expired';
+    decisionId?: string;
+    runId?: string;
+  }): void {
+    const { op, ...props } = params;
+    this.track({ type: `agent_memory_${op}` as EventType, properties: { ...props } });
+  }
+
+  /** Observe this agent spawning a sub-agent. */
+  spawned(params: { childAgentId: string; runId: string; rootAgentId?: string; taskId?: string }): void {
+    this.track({
+      type: 'agent_subagent_spawned',
+      properties: { parentAgentId: this.deployment.agentId, ...params },
+    });
+  }
+
+  /** Observe this agent instance terminating. */
+  terminated(params: { runId?: string; reason?: string } = {}): void {
+    this.track({ type: 'agent_terminated', properties: { ...params } });
+  }
+}
+
+function assertDecimalString(amount: unknown): void {
+  if (amount === undefined) return;
+  if (typeof amount !== 'string' || !/^-?\d+(\.\d+)?$/.test(amount)) {
+    throw new TypeError('amount must be a decimal string such as "12.50"');
+  }
 }

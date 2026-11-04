@@ -228,7 +228,9 @@ async def test_project_emits_exact_registry_sections(healthy_source: FakeSource)
     result = await provider.project(_request(), await _make_context(ProviderRegistry()))
 
     assert [s.id for s in result.sections] == list(OUTPUT_SECTIONS)
-    assert OUTPUT_SECTIONS == ("summary", "state", "evidence", "outcomes", "findings")
+    assert OUTPUT_SECTIONS == (
+        "summary", "state", "evidence", "outcomes", "findings", "agent_mediated_activity",
+    )
 
 
 async def test_section_states_are_typed(healthy_source: FakeSource) -> None:

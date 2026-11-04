@@ -32,6 +32,7 @@ services:
   admin: {class: core, stage: tenant, reason: "tenant management, billing and API key administration"}
   agent: {class: experimental, stage: intelligence, reason: "agent orchestration, task management and worker coordination"}
   agent_access_intelligence: {class: experimental, stage: intelligence, reason: "agent capability catalog, authority and governance"}
+  agent_behavior: {class: experimental, stage: intelligence, reason: "derived, rebuildable agent behavior projections over canonical agent facts (ADR-AB-001)"}
   agent_comm_observability: {class: experimental, stage: intake, reason: "observation-only agent communication routes"}
   agent_marketplace: {class: experimental, stage: intake, reason: "provider-neutral, observation-only agent marketplace catalog and run lineage"}
   agentic_observability: {class: experimental, stage: intake, reason: "observation-only agent activity routes"}

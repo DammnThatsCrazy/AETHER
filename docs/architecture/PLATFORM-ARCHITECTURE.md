@@ -71,10 +71,10 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:541123c2d695e7d4f1fcd3008869591f8d9ee2295a5fc27db78a5093b42e526d"
+  "packages/shared/": "sha256:802e47ed919f193588a7d02748e2e958b9ae05c0bad64f039a0e5fd3973e5419"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:47c1b8102d5c37e37ae142d11a472ca6a9027fa3adac2ed546377b8a9682c663"
-  "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
+  "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
+  "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -94,7 +94,7 @@ source_hashes:
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1254be67a69e089a6d9ed814a92fca7fb7a5fcf7fd4d6757e22918c596cfe7c5"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:53d23de997742878b27ad968bc8b538e44b551387b252248d271b97cd75b3512"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:4a6d24b8c9f765dc05801de7e93c0b83f75ef35ad220d06c884b917bd91a1601"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
@@ -111,7 +111,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
   "services/api/value/commerce/routes.py": "sha256:9b68c0d975d7b81b530ff8eb91e95ee6c37e10034498dbf248f1889f026c5897"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:b74b82c445bc94df99019c193f260c3d0dcb6f6c1421d981ef95898d69a9cc33"
+  "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
@@ -611,6 +611,11 @@ implemented native providers) and the shared request/context/result contracts
 Economic360 accepts `journey` subjects so its Evidence section can expose
 source-linked commerce operation records carried by Journey steps; it does not
 copy operation amounts or claim settlement from those links.
+Economic360 also serves an `agent_mediated_activity` section: `not_applicable`
+for non-agent subjects; for a canonical Agent it resolves source agent refs only
+through the tenant-admin deployment identity binding and reports
+agent-selected, executed and influenced totals per currency, `reported` until a
+rail confirms them. No active binding is `unknown`, not `empty`.
 `implementationState` is repo metadata describing
 
 how far a projection has been converged onto the plane (`in_flight` = an
@@ -796,6 +801,15 @@ longer matches the stamp. Legacy unstamped purposes remain unknown; the stamp
 does not evaluate current consent. Memory360 now carries this verified
 historical purpose list into its memory items and `policy_state` decisions;
 unavailable legacy purpose provenance stays explicitly unknown.
+
+Agent360 also serves ten `behavior_*` sections (behavior, decisions, journey,
+influence, authority, value, risk, trust, market, observability) from the same
+builder as `GET /v1/agent/agents/{agent_ref}/behavior`. They fail closed with
+route parity: `not_applicable` when the external agent registry is off,
+`suppressed` without a server-derived `agent_behavior` read authorization for
+the same tenant, subject and projection, and `degraded` when the behavior source
+is unavailable or capped. Agent refs stay source-reported; no identity is
+resolved.
 
 Signals360 `quality` now separately reads a current tenant/site installation
 record for an accepted SDK observation carrying the authenticated server-stamped

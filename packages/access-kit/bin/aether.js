@@ -22,6 +22,8 @@ Usage:
   aether agents capabilities list [--provider NAME] [--server-name NAME] [--tool-name NAME]
                                   [--limit N] [--offset N] [--json]
   aether agents capabilities show CAPABILITY_ID [--json]
+  aether agents behavior show AGENT_REF [--json]
+  aether agents decisions show AGENT_REF DECISION_ID [--json]
   aether entities list [--entity-type TYPE] [--limit N] [--offset N] [--json]
   aether entities show ENTITY_ID [--json]
   aether entities neighborhood ENTITY_ID [--limit N] [--json]
@@ -522,6 +524,25 @@ async function main() {
         ? positiveInteger(options.limit, '--limit', { min: 1, max: 50 })
         : 25,
     });
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${terminalText(JSON.stringify(result.data, null, 2))}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'agents' && ['behavior', 'decisions'].includes(command) && subcommand === 'show') {
+    const decision = command === 'decisions';
+    if (positionals.length !== (decision ? 5 : 4) || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for agents ${command} show.\n\n${HELP}`);
+    }
+    const result = decision
+      ? await invokeAccessOperation('agents.decision', { agent_ref: arg, decision_id: positionals[4] })
+      : await invokeAccessOperation('agents.behavior', { agent_ref: arg });
     const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
     else {

@@ -25,6 +25,7 @@ source_files:
   - services/api/alembic/versions/20261030_agent_invocation_receipts.py
   - services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py
   - services/api/alembic/versions/20261030_merge_authority_heads.py
+  - services/api/alembic/versions/20261104_merge_value_behavior_heads.py
   - services/api/actions/agent/invocation_runtime.py
   - services/api/intelligence/model_governance/evaluations.py
   - services/api/value/economic/attribution_model_validation.py
@@ -38,7 +39,7 @@ reviewed_source_commits:
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "config/storage_policies.yaml": "sha256:639439095e7bb6053dbce0aa9402e734c9959005defb14679028d7565c638d62"
+  "config/storage_policies.yaml": "sha256:d1a4596e20e66397c024ea20d450fe8af0fc04811b6d386f1265d8ecc6568cbb"
   "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
   "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
@@ -50,6 +51,7 @@ source_hashes:
   "services/api/alembic/versions/20261030_agent_invocation_receipts.py": "sha256:fe1186d525ae2a2923dacccbbb1eae5a76f96407ed6243b85f2a94244e672537"
   "services/api/alembic/versions/20261030_merge_authority_heads.py": "sha256:62aa6a6049c5f58b668cb788c36529902541581944d4dc5593f15105a4e539f2"
   "services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py": "sha256:bb313b4f28028cca340689dbd67154cd9c02810ba08d31c3a0b8a48a98a3e842"
+  "services/api/alembic/versions/20261104_merge_value_behavior_heads.py": "sha256:1a84e8f75dfc529b50d8d82f4dc83de87fe5499c4370b2d2580b4f315e39d52c"
   "services/api/intelligence/model_governance/evaluations.py": "sha256:1dd0ae6aae180640a50cbe95ede4bd4e35b6bdbdded1acc86b8b0491da437b21"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
@@ -508,6 +510,11 @@ tenant/run/config-bound temporal credit eligibility evaluations with sample
 references, manifest hash, bounded counts, evaluation window and authorization
 provenance. Legal-retention storage policy preserves these rows. The evaluation
 is not attribution correctness or confidence calibration.
+
+`20261104_merge_value_behavior_heads` joins this Value evidence lineage with
+`20261031_merge_agent_behavior_snapshots_heads` after integration with the
+agent behavior snapshot migrations. It adds no schema and restores a single
+Alembic head without rewriting either published lineage.
 
 These migrations are authored in the branch; this page does not claim they
 have been applied.

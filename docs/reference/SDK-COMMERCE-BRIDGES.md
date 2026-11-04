@@ -15,7 +15,7 @@ source_hashes:
   "packages/sdk/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
   "packages/shared/commerce-bridge.ts": "sha256:60e4ac490718505e43a1091dc0574bdc84fa4a0318c6ed95f49963e2f3c9ae46"
   "packages/shared/commerce.ts": "sha256:a2e6ae5be860985cd8265972f12c38da18d4475bbece666ca4ea332877c40bb3"
-  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
   "services/api/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
   "services/api/shared/integration_contracts/commerce_bridge.py": "sha256:bc2dd396267ac6902568ad055c633d2de906c7cdd83f7020c0fe100caa67c9e8"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"

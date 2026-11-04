@@ -50,7 +50,7 @@ from .dimensions import RISK_DIMENSION_KEYS
 
 #: Producer keys the dispatcher understands.
 KNOWN_PRODUCERS: frozenset[str] = frozenset(
-    {"fraud", "fraud_network", "device_risk", "geo", "behavioral", "trust"}
+    {"fraud", "fraud_network", "device_risk", "geo", "behavioral", "trust", "agent_behavior"}
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -268,6 +268,9 @@ class RiskEvidenceBundle(RiskContract):
     geo_lookup: Optional[dict[str, Any]] = None
     behavioral_scan: Optional[dict[str, Any]] = None
     trust_vector: Optional[dict[str, Any]] = None
+    #: Agent behavior artifact (WO-093): ``{"model": AgentBehaviorModel,
+    #: "authority_checks": [...], "adversarial": [...], "drift": {...}}``.
+    agent_behavior: Optional[dict[str, Any]] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -791,6 +794,44 @@ def signal_from_trust_vector(
 # Dispatcher + bundle orchestration
 # ═══════════════════════════════════════════════════════════════════════════
 
+def signal_from_agent_behavior(
+    artifact: Any,
+    *,
+    subject_kind: str,
+    subject_id: str,
+    tenant_id: str,
+    observed_at: Optional[datetime] = None,
+) -> list[RiskSignal]:
+    """Adapt an agent behavior artifact (see ``agent_behavior_signals``).
+
+    Only agent subjects are accepted: behavior evidence about an agent never
+    becomes a signal about a person.
+    """
+    if artifact is None:
+        return []
+    if subject_kind != "agent":
+        raise ValueError("agent behavior evidence applies to agent subjects only")
+    from .agent_behavior_signals import (
+        signals_from_adversarial, signals_from_authority_checks,
+        signals_from_behavior_model, signals_from_drift,
+    )
+
+    out: list[RiskSignal] = []
+    model = _field(artifact, "model")
+    if model:
+        if model.get("agent_ref") != subject_id:
+            raise ValueError("behavior model subject does not match the risk subject")
+        out.extend(signals_from_behavior_model(tenant_id, model))
+    out.extend(signals_from_authority_checks(tenant_id, subject_id, _field(artifact, "authority_checks") or []))
+    out.extend(signals_from_adversarial(tenant_id, subject_id, _field(artifact, "adversarial") or []))
+    drift = _field(artifact, "drift")
+    if drift:
+        out.extend(signals_from_drift(tenant_id, subject_id, drift))
+    if observed_at is not None:
+        out = [sig.model_copy(update={"observed_at": observed_at}) for sig in out]
+    return out
+
+
 _PRODUCER_ADAPTERS: Mapping[str, Any] = {
     "fraud": signal_from_fraud_result,
     "fraud_network": signals_from_fraud_network_evidence,
@@ -798,6 +839,7 @@ _PRODUCER_ADAPTERS: Mapping[str, Any] = {
     "geo": signal_from_geo_lookup,
     "behavioral": signal_from_behavioral_scan,
     "trust": signal_from_trust_vector,
+    "agent_behavior": signal_from_agent_behavior,
 }
 
 
@@ -899,6 +941,17 @@ def signals_from_evidence_bundle(
                 observed_at=observed_at,
             )
         )
+    if bundle.agent_behavior is not None:
+        signals.extend(
+            adapt_producer_signal(
+                "agent_behavior",
+                bundle.agent_behavior,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                tenant_id=tenant_id,
+                observed_at=observed_at,
+            )
+        )
     if bundle.trust_vector is not None:
         signals.extend(
             adapt_producer_signal(
@@ -920,6 +973,7 @@ __all__ = [
     "KNOWN_PRODUCERS",
     "RiskEvidenceBundle",
     "adapt_producer_signal",
+    "signal_from_agent_behavior",
     "signal_from_behavioral_scan",
     "signal_from_device_risk",
     "signal_from_fraud_result",

@@ -45,6 +45,7 @@ They have distinct owners and meanings:
 | `GET/POST /v1/capability-authorizations` and revoke | `CapabilityAuthorizationService` over the existing delegation store | Read grants or perform grant/revoke writes. Writes require `write`; do not duplicate delegation storage or lifecycle. |
 | `POST /v1/capability-policy/evaluate`, `GET /v1/capability-policy/decisions` | `PolicyEngine` and Agent Access Intelligence | Evaluation records a sensitive policy decision and audit event; it does not invoke the external capability or mutate a tenant resource. Decisions are tenant-scoped reads. |
 | `GET /v1/entities`, `GET /v1/entities/{entity_id}`, and `GET /v1/entities/{entity_id}/neighborhood` | Identity entity and entity-intelligence routes | Tenant-scoped reads (`read`). Explicit offset pages use durable entity-ID ordering. Neighborhood is a one-hop bounded graph projection with graph-family metering. Entity and graph mutations remain in their owner API and mutation gateway. |
+| `GET /v1/agent/agents/{agent_ref}/behavior` and `GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}` | `services/api/actions/agent/deployment_routes.py` over `intelligence.agent_behavior.read_models` | Tenant-scoped reads requiring `agent:manage`. Evidence-qualified Agent360 behavior read model and one reconstructed decision; another agent's or tenant's decision is not found. |
 | `GET /v1/me` | `services/api/tenancy/me/routes.py:get_my_profile` | Existing tenant-scoped caller account profile, plan, billing summary, API key count, and admin flag. Middleware requires `read`; client projection omits tenant/graph IDs, contact email, and Stripe customer ID. |
 | `POST /v1/auth/login` | `services/api/tenancy/auth/routes.py:login` | Existing email/password authentication. When human sessions are enabled it creates a durable session; otherwise it follows the legacy reusable API-key response. It is not a delegated CLI grant. |
 | `POST /v1/auth/sso/callback` | `services/api/tenancy/auth/routes.py:sso_callback` | Exchanges an already-issued Auth0 access token for a server session or legacy key. `session_required: true` refuses before token validation or membership effects unless human sessions are enabled, so the CLI cannot receive a reusable API key. The CLI obtains the Auth0 token using Device Authorization. Membership resolution selects one existing tenant association/invitation and exposes no chooser. |
@@ -78,7 +79,9 @@ not a new service route or data authority.
 | CLI | `aether entities list [--entity-type TYPE] [--limit N] [--offset N] [--json]` | Entity list, max 50; stable explicit-offset paging | Query, `read` |
 | CLI | `aether entities show ENTITY_ID [--json]` | Entity detail | Query, `read` |
 | CLI | `aether entities neighborhood ENTITY_ID [--limit N] [--json]` | One-hop graph projection, max 50 neighbors and 100 edges | Query, `read` |
-| CLI | `aether access operations list/show` and `aether access invoke` | Closed adapter read declaration and delegated API call | Discovery is local; invoke is query, `read` |
+| CLI | `aether agents behavior show AGENT_REF [--json]` | Agent behavior read model (`agents.behavior`) | Query, `agent:manage` |
+| CLI | `aether agents decisions show AGENT_REF DECISION_ID [--json]` | One reconstructed decision (`agents.decision`) | Query, `agent:manage` |
+| CLI | `aether access operations list/show` and `aether access invoke` | Closed adapter read declaration and delegated API call | Discovery is local; invoke is query with the operation's declared `required_server_permission` (`read` unless stated) |
 | CLI | `aether account context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth login [--no-browser] [--json]` | Auth0 Device Authorization then `POST /v1/auth/sso/callback` with `session_required: true` | Human-session login; native OS credential store |
@@ -92,6 +95,7 @@ not a new service route or data authority.
 | MCP | `entities_get` | Entity detail | Read-only tool, `read` |
 | MCP | `entities_neighborhood`, `access_operations_list`, `access_invoke_read` | Named graph read and closed adapter read declaration/dispatch | Read-only tools; API retains authorization |
 | MCP | `account_context` | `/v1/me` safe projection | Read-only tool, `read` |
+| MCP | `agents_behavior`, `agents_decision` | Agent behavior read model and decision detail | Read-only tools, `agent:manage`; not advertised to delegated OAuth tokens |
 | Node ESM/TypeScript | `createAccessClient().operations.invoke(...)` and named entity/account/usage reads | Same closed REST adapters | Query, `read`; surface `access_sdk` |
 | CLI / MCP / Node | `continuations create/show`, `continuations_create/get`, `createAccessClient().continuations` | Existing `POST /v1/continuations` and `GET /v1/continuations/{id}` | Principal-scoped durable resource create (`write`) and bounded readback (`read`); API feature is opt-in |
 | CLI | `aether ingest EVENT_NAME ...` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
