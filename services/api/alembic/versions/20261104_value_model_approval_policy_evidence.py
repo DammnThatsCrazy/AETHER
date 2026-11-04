@@ -2,7 +2,7 @@
 from alembic import op
 
 revision = "20261104_value_model_approval_policy_evidence"
-down_revision = "20261030_model_governance_evaluations_approvals"
+down_revision = "20261030_merge_authority_heads"
 branch_labels = None
 depends_on = None
 
