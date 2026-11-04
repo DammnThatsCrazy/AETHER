@@ -1321,6 +1321,8 @@ def _attribution_evidence_refs(value: Any) -> list[EvidenceRef]:
         "attribution_runs": "model_output",
         "attribution_credits": "model_output",
         "attribution_model_validation_decisions": "model_output",
+        "value_model_approval_decisions": "annotation",
+        "value_confidence_evaluations": "model_output",
         (
             "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
             "silver_campaign_touchpoint_facts"
@@ -4347,12 +4349,27 @@ class Economic360Provider:
                 confidence = _attribution_confidence(record.get("modelConfidence"))
                 model_lineage_reported = bool(model_type and model_version)
                 governance = record.get("modelGovernance") or {}
-                governance_note = (
-                    "; exact tenant run/model-config snapshot lineage validated by append-only decision "
-                    f"{governance.get('decisionId')}; model approval and calibration remain unvalidated"
-                    if governance.get("state") == "validated"
-                    else "; model governance validation is unavailable"
-                )
+                approval_state = governance.get("approvalState")
+                if governance.get("state") != "validated":
+                    governance_note = "; model governance validation is unavailable"
+                elif approval_state == "approved":
+                    governance_note = (
+                        "; exact tenant run/model-config snapshot lineage validated by append-only decision "
+                        f"{governance.get('decisionId')}; durable model approval approved by "
+                        f"{governance.get('approvalActorId')}; confidence calibration remains unvalidated"
+                    )
+                elif approval_state == "rejected":
+                    governance_note = (
+                        "; exact tenant run/model-config snapshot lineage validated by append-only decision "
+                        f"{governance.get('decisionId')}; durable model approval rejected; "
+                        "confidence calibration remains unvalidated"
+                    )
+                else:
+                    governance_note = (
+                        "; exact tenant run/model-config snapshot lineage validated by append-only decision "
+                        f"{governance.get('decisionId')}; model approval is unknown and "
+                        "confidence calibration remains unvalidated"
+                    )
                 confidence_note = (
                     f"; model-reported attribution confidence {confidence:.3f} "
                     "(calibration and applicability to realized value are not independently validated)"
@@ -4820,7 +4837,19 @@ class Economic360Provider:
                             and evaluation.get("attribution_run_id") == run_id
                             and evaluation.get("model_config_id") == config_id
                             and evaluation.get("validation_decision_id") == decision_id
+                            and evaluation.get("actor_id")
+                            and evaluation.get("authorization_actor_id") == evaluation.get("actor_id")
+                            and evaluation.get("authorization_action") == "value.model_evaluation"
+                            and evaluation.get("authorization_permission") == "write"
+                            and evaluation.get("authorization_decision") == "allow"
+                            and _attribution_timestamp(evaluation.get("authorization_evaluated_at")) is not None
                             and _attribution_timestamp(evaluation.get("created_at")) is not None
+                            and _attribution_timestamp(evaluation.get("authorization_evaluated_at"))
+                                <= _attribution_timestamp(evaluation.get("created_at"))
+                            and type(evaluation.get("sample_count")) is int
+                            and evaluation.get("sample_count") > 0
+                            and type(evaluation.get("eligible_count")) is int
+                            and 0 <= evaluation.get("eligible_count") <= evaluation.get("sample_count")
                         ):
                             governance["evaluationEvidence"] = {
                                 "state": "computed",
@@ -4830,6 +4859,16 @@ class Economic360Provider:
                                 "sampleCount": evaluation["sample_count"],
                                 "metric": "temporal_eligibility_accuracy",
                                 "value": evaluation["eligible_count"] / evaluation["sample_count"],
+                                "actorId": evaluation["actor_id"],
+                                "authorization": {
+                                    "action": evaluation["authorization_action"],
+                                    "permission": evaluation["authorization_permission"],
+                                    "decision": evaluation["authorization_decision"],
+                                    "actorId": evaluation["authorization_actor_id"],
+                                    "evaluatedAt": _attribution_timestamp(
+                                        evaluation.get("authorization_evaluated_at")
+                                    ),
+                                },
                                 "calibrationState": "unvalidated",
                                 "causalAttributionState": "unknown",
                                 "evidenceRef": _value_confidence_evaluation_ref(
@@ -4980,6 +5019,39 @@ class Economic360Provider:
                 governance_ref = EvidenceRef.model_validate(governance["evidenceRef"])
                 row_refs.append(governance_ref)
                 evidence_refs.append(governance_ref)
+                approval_state = governance.get("approvalState")
+                approval_ref_data = governance.get("approvalEvidenceRef")
+                if approval_state in {"approved", "rejected"}:
+                    expected_approval_ref = _value_model_approval_ref(
+                        governance.get("approvalEvidenceRef", {}).get("id", ""),
+                        _attribution_timestamp(
+                            governance.get("approvalEvidenceRef", {}).get("observedAt")
+                        ),
+                    ) if isinstance(approval_ref_data, dict) else None
+                    try:
+                        approval_ref = EvidenceRef.model_validate(approval_ref_data)
+                    except Exception:  # noqa: BLE001 - malformed approval evidence fails closed
+                        approval_ref = None
+                    if (expected_approval_ref is None or approval_ref is None
+                            or approval_ref.model_dump(mode="json") != expected_approval_ref.model_dump(mode="json")
+                            or not governance.get("approvalActorId")):
+                        invalid_rows += 1
+                        continue
+                    row_refs.append(approval_ref)
+                    evidence_refs.append(approval_ref)
+                evaluation_evidence = governance.get("evaluationEvidence")
+                if isinstance(evaluation_evidence, dict) and evaluation_evidence.get("state") == "computed":
+                    evaluation_ref = EvidenceRef.model_validate(evaluation_evidence.get("evidenceRef"))
+                    if (evaluation_ref.source != "value_confidence_evaluations"
+                            or evaluation_ref.id != evaluation_evidence.get("evaluationId")
+                            or evaluation_ref.uri != (
+                                f"store://value_confidence_evaluations/"
+                                f"{quote(evaluation_evidence.get('evaluationId', ''), safe='')}"
+                            )):
+                        invalid_rows += 1
+                        continue
+                    row_refs.append(evaluation_ref)
+                    evidence_refs.append(evaluation_ref)
             credit_confidence = _attribution_confidence(raw_record.get("modelConfidence"))
             output_records.append(
                 {

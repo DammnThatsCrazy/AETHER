@@ -31,6 +31,19 @@ def _instant(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
 
 
+def _not_future(value: Any, *, as_of: datetime) -> datetime | None:
+    """Parse an aware source time and reject timestamps beyond the producer clock."""
+    parsed = _instant(value)
+    return parsed if parsed is not None and parsed <= as_of else None
+
+
+def _optional_source_times_valid(row: dict[str, Any], fields: tuple[str, ...], *, as_of: datetime) -> bool:
+    return all(
+        field not in row or row[field] is None or _not_future(row[field], as_of=as_of) is not None
+        for field in fields
+    )
+
+
 def _uuid(value: Any) -> str | None:
     try:
         return str(UUID(str(value)))
@@ -105,6 +118,10 @@ async def evaluate_attribution_run(
     run = await runs.get_run(run_uuid, tenant_id=tenant_id)
     if not isinstance(run, dict) or run.get("tenant_id") != tenant_id or _uuid(run.get("attribution_run_id")) != run_uuid or run.get("status") != "complete":
         raise ValueError("exact completed tenant attribution run is required")
+    if (any(_not_future(run.get(field), as_of=producer_now) is None
+            for field in ("created_at", "completed_at"))
+            or not _optional_source_times_valid(run, ("started_at",), as_of=producer_now)):
+        raise ValueError("attribution run creation and completion times must be valid and not future")
     config_id = _uuid(run.get("model_config_id"))
     if not config_id:
         raise ValueError("attribution run has no exact model config")
@@ -120,8 +137,9 @@ async def evaluate_attribution_run(
             or _uuid(conversion.get("conversion_id")) != conversion_id
             or conversion.get("conversion_status") != "confirmed" or conversion.get("attribution_eligible") is not True):
         raise ValueError("independently confirmed canonical conversion is required")
-    conversion_at = _instant(conversion.get("occurred_at"))
-    if conversion_at is None:
+    conversion_at = _not_future(conversion.get("occurred_at"), as_of=producer_now)
+    if (conversion_at is None or not _optional_source_times_valid(
+            conversion, ("observed_at", "confirmed_at"), as_of=producer_now)):
         raise ValueError("canonical conversion event time is unavailable")
     credits = await runs.list_credits_for_run(tenant_id, run_uuid, limit=MAX_CREDITS + 1)
     if not isinstance(credits, list) or len(credits) > MAX_CREDITS:
@@ -141,19 +159,29 @@ async def evaluate_attribution_run(
         if (not isinstance(touchpoint, dict) or touchpoint.get("tenant_id") != tenant_id
                 or _uuid(touchpoint.get("touchpoint_id")) != touchpoint_id):
             raise ValueError("canonical touchpoint is unavailable or out of tenant scope")
-        touchpoint_at = _instant(touchpoint.get("occurred_at"))
-        if touchpoint_at is None:
-            raise ValueError("canonical touchpoint event time is unavailable")
+        touchpoint_at = _not_future(touchpoint.get("occurred_at"), as_of=producer_now)
+        if (touchpoint_at is None or not _optional_source_times_valid(
+                touchpoint, ("received_at", "processed_at", "source_classified_at"), as_of=producer_now)):
+            raise ValueError("canonical touchpoint event time is unavailable or future")
+        credit_created_at = _not_future(credit.get("created_at"), as_of=producer_now)
+        if credit_created_at is None:
+            raise ValueError("attribution credit creation time is unavailable or future")
         eligible = touchpoint_at <= conversion_at
         samples.append({"creditId": credit_id, "touchpointId": touchpoint_id,
                         "conversionId": conversion_id, "touchpointOccurredAt": touchpoint_at.isoformat(),
                         "conversionOccurredAt": conversion_at.isoformat(), "temporallyEligible": eligible,
-                        "creditObservedAt": _instant(credit.get("created_at")).isoformat() if _instant(credit.get("created_at")) else None})
+                        "creditObservedAt": credit_created_at.isoformat()})
     if not samples:
         raise ValueError("no canonical attribution credits are available for evaluation")
     samples.sort(key=lambda x: x["creditId"])
-    window_start = min(_instant(s["touchpointOccurredAt"]) for s in samples)
-    window_end = conversion_at
+    # The evaluation window covers the entire canonical sample interval, including
+    # conversion time even when every credited touchpoint occurs afterward.
+    window_start = min(
+        [conversion_at, *(_instant(s["touchpointOccurredAt"]) for s in samples)]
+    )
+    window_end = max(
+        [conversion_at, *(_instant(s["touchpointOccurredAt"]) for s in samples)]
+    )
     eligible_count = sum(1 for sample in samples if sample["temporallyEligible"])
     row = {
         "evaluation_id": "vce_" + uuid4().hex, "tenant_id": tenant_id,
@@ -183,7 +211,10 @@ def validate_evaluation(row: Any) -> bool:
     if not isinstance(row, dict) or row.get("contract_version") != CONTRACT:
         return False
     samples = row.get("sample_refs")
-    if not isinstance(samples, list) or not samples or len(samples) != row.get("sample_count") or len(samples) > MAX_CREDITS:
+    sample_count, eligible_count = row.get("sample_count"), row.get("eligible_count")
+    if (not isinstance(samples, list) or not samples or len(samples) > MAX_CREDITS
+            or type(sample_count) is not int or sample_count != len(samples)
+            or type(eligible_count) is not int or not 0 <= eligible_count <= sample_count):
         return False
     if not all(
         isinstance(sample, dict)
@@ -192,6 +223,7 @@ def validate_evaluation(row: Any) -> bool:
         and _uuid(sample.get("conversionId")) is not None
         and _instant(sample.get("touchpointOccurredAt")) is not None
         and _instant(sample.get("conversionOccurredAt")) is not None
+        and _instant(sample.get("creditObservedAt")) is not None
         and isinstance(sample.get("temporallyEligible"), bool)
         and sample["temporallyEligible"] == (
             _instant(sample["touchpointOccurredAt"]) <= _instant(sample["conversionOccurredAt"])
@@ -202,9 +234,11 @@ def validate_evaluation(row: Any) -> bool:
     start, end = _instant(row.get("window_start")), _instant(row.get("window_end"))
     if start is None or end is None or start > end:
         return False
-    sample_starts = [_instant(sample["touchpointOccurredAt"]) for sample in samples]
-    sample_ends = [_instant(sample["conversionOccurredAt"]) for sample in samples]
-    if start != min(sample_starts) or end != max(sample_ends):
+    sample_times = [
+        instant for sample in samples
+        for instant in (_instant(sample["touchpointOccurredAt"]), _instant(sample["conversionOccurredAt"]))
+    ]
+    if start != min(sample_times) or end != max(sample_times):
         return False
     if _manifest_sha(tenant_id=row.get("tenant_id"), run_id=_uuid(row.get("attribution_run_id")),
                      config_id=_uuid(row.get("model_config_id")), validation_id=row.get("validation_decision_id"),
@@ -212,6 +246,9 @@ def validate_evaluation(row: Any) -> bool:
         return False
     if row.get("eligible_count") != sum(1 for s in samples if isinstance(s, dict) and s.get("temporallyEligible") is True):
         return False
+    authorization_at = _instant(row.get("authorization_evaluated_at"))
+    created_at = _instant(row.get("created_at"))
+    validation_now = datetime.now(timezone.utc)
     return bool(isinstance(row.get("evaluation_id"), str) and row["evaluation_id"].startswith("vce_")
                 and isinstance(row.get("tenant_id"), str) and row["tenant_id"].strip()
                 and isinstance(row.get("actor_id"), str) and row["actor_id"].strip()
@@ -220,12 +257,19 @@ def validate_evaluation(row: Any) -> bool:
                 and row.get("authorization_permission") == "write"
                 and row.get("authorization_decision") == "allow"
                 and row.get("authorization_actor_id") == row.get("actor_id")
-                and _instant(row.get("authorization_evaluated_at")) is not None
-                and _instant(row.get("authorization_evaluated_at")) <= (_instant(row.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)))
+                and authorization_at is not None and created_at is not None
+                and authorization_at <= created_at <= validation_now
+                and authorization_at <= validation_now
+                and all(
+                    max(_instant(sample["touchpointOccurredAt"]), _instant(sample["conversionOccurredAt"]),
+                         _instant(sample["creditObservedAt"])) <= created_at
+                    for sample in samples
+                ))
 
 
 async def verify_evaluation_sources(tenant_id: str, row: Any, *, runs: Any = None,
-                                   conversions: Any = None, touchpoints: Any = None) -> bool:
+                                   conversions: Any = None, touchpoints: Any = None,
+                                   validations: Any = None) -> bool:
     """Rejoin every persisted sample to current canonical run, credit and event rows."""
     if not validate_evaluation(row) or row.get("tenant_id") != tenant_id:
         return False
@@ -238,6 +282,9 @@ async def verify_evaluation_sources(tenant_id: str, row: Any, *, runs: Any = Non
     if touchpoints is None:
         from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         touchpoints = TouchpointRepository()
+    if validations is None:
+        from value.economic.attribution_model_validation import AttributionModelValidationRepository
+        validations = AttributionModelValidationRepository()
     run_id = _uuid(row.get("attribution_run_id"))
     run = await runs.get_run(run_id, tenant_id=tenant_id) if run_id else None
     if (not isinstance(run, dict) or run.get("tenant_id") != tenant_id
@@ -245,13 +292,31 @@ async def verify_evaluation_sources(tenant_id: str, row: Any, *, runs: Any = Non
             or _uuid(run.get("model_config_id")) != _uuid(row.get("model_config_id"))
             or run.get("status") != "complete"):
         return False
+    evaluation_created_at = _instant(row.get("created_at"))
+    verifier_now = datetime.now(timezone.utc)
+    if (evaluation_created_at is None or evaluation_created_at > verifier_now
+            or any(_not_future(run.get(field), as_of=evaluation_created_at) is None
+                   for field in ("created_at", "completed_at"))
+            or not _optional_source_times_valid(run, ("started_at",), as_of=evaluation_created_at)):
+        return False
     conversion_id = _uuid(run.get("conversion_id"))
     conversion = await conversions.get(tenant_id, conversion_id) if conversion_id else None
-    conversion_at = _instant(conversion.get("occurred_at")) if isinstance(conversion, dict) else None
+    conversion_at = _not_future(conversion.get("occurred_at"), as_of=evaluation_created_at) if isinstance(conversion, dict) else None
     if (not isinstance(conversion, dict) or conversion.get("tenant_id") != tenant_id
             or _uuid(conversion.get("conversion_id")) != conversion_id
             or conversion.get("conversion_status") != "confirmed"
-            or conversion.get("attribution_eligible") is not True or conversion_at is None):
+            or conversion.get("attribution_eligible") is not True or conversion_at is None
+            or not _optional_source_times_valid(
+                conversion, ("observed_at", "confirmed_at"), as_of=evaluation_created_at)):
+        return False
+    from value.economic.attribution_model_validation import _decision_for, _same_decision
+    config_id = _uuid(row.get("model_config_id"))
+    config = await runs.get_model_config(tenant_id, config_id) if config_id else None
+    expected_validation = _decision_for(tenant_id, run, config) if isinstance(config, dict) else None
+    validation = await validations.get(tenant_id, run_id)
+    if (expected_validation is None or not isinstance(validation, dict)
+            or validation.get("decision_id") != row.get("validation_decision_id")
+            or not _same_decision(validation, expected_validation)):
         return False
     credits = await runs.list_credits_for_run(tenant_id, run_id, limit=MAX_CREDITS + 1)
     if not isinstance(credits, list) or len(credits) > MAX_CREDITS or len(credits) != len(row["sample_refs"]):
@@ -271,7 +336,13 @@ async def verify_evaluation_sources(tenant_id: str, row: Any, *, runs: Any = Non
         touchpoint = await touchpoints.get(tenant_id, touchpoint_id) if touchpoint_id else None
         touchpoint_at = _instant(touchpoint.get("occurred_at")) if isinstance(touchpoint, dict) else None
         if (not isinstance(touchpoint, dict) or touchpoint.get("tenant_id") != tenant_id
-                or _uuid(touchpoint.get("touchpoint_id")) != touchpoint_id or touchpoint_at is None):
+                or _uuid(touchpoint.get("touchpoint_id")) != touchpoint_id
+                or _not_future(touchpoint.get("occurred_at"), as_of=evaluation_created_at) is None
+                or touchpoint_at is None
+                or not _optional_source_times_valid(
+                    touchpoint, ("received_at", "processed_at", "source_classified_at"),
+                    as_of=evaluation_created_at)
+                or _not_future(credit.get("created_at"), as_of=evaluation_created_at) is None):
             return False
         expected_samples.append({"creditId": _uuid(credit.get("credit_id")), "touchpointId": touchpoint_id,
                                  "conversionId": conversion_id, "touchpointOccurredAt": touchpoint_at.isoformat(),

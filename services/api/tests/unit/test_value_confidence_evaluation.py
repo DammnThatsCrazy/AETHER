@@ -17,7 +17,8 @@ def fixtures():
               "model_version": "v2", "status": "active", "effective_from": now - timedelta(days=1)}
     run = {"tenant_id": "tenant-a", "attribution_run_id": run_id, "model_config_id": config_id,
            "conversion_id": conversion_id, "model_type": "linear", "model_version": "v2",
-           "status": "complete", "created_at": now,
+           "status": "complete", "created_at": now - timedelta(seconds=2),
+           "completed_at": now - timedelta(seconds=1),
            "model_config_snapshot": {**config, "effective_from": str(config["effective_from"]),
              "click_lookback_window": 24, "view_lookback_window": 168, "identity_confidence_min": 0.0,
              "fraud_policy": "exclude", "direct_traffic_policy": "include", "engaged_view_threshold_ms": 0}}
@@ -85,7 +86,8 @@ async def test_authenticated_producer_persists_reproducible_exact_run_evaluation
     assert result["metric"] == "temporal_eligibility_accuracy" and result["value"] == 1.0
     assert result["calibration_state"] == "unvalidated" and result["causal_attribution_state"] == "unknown"
     assert validate_evaluation(row)
-    assert await verify_evaluation_sources("tenant-a", row, runs=sources, conversions=sources, touchpoints=sources)
+    assert await verify_evaluation_sources("tenant-a", row, runs=sources, conversions=sources,
+        touchpoints=sources, validations=Validations(validation))
     row["sample_refs"][0]["temporallyEligible"] = False
     assert not validate_evaluation(row)
 
@@ -101,7 +103,8 @@ async def test_producer_repository_reader_round_trip_rejoins_canonical_source_st
     loaded = await repository.latest_for_run("tenant-a", run["attribution_run_id"])
     assert loaded["evaluation_id"] == result["evaluation_id"]
     assert loaded["dataset_manifest_sha256"] == result["dataset_manifest_sha256"]
-    assert await verify_evaluation_sources("tenant-a", loaded, runs=sources, conversions=sources, touchpoints=sources)
+    assert await verify_evaluation_sources("tenant-a", loaded, runs=sources, conversions=sources,
+        touchpoints=sources, validations=Validations(validation))
     assert await repository.latest_for_run("tenant-b", run["attribution_run_id"]) is None
 
 
@@ -153,7 +156,96 @@ async def test_producer_rejects_forged_or_missing_authorization_and_reader_rejoi
     result = await evaluate_attribution_run("tenant-a", run["attribution_run_id"], actor_id="user-1",
         authorization_evidence=AUTH, runs=sources, conversions=sources, touchpoints=sources,
         validations=Validations(validation), evaluations=persisted)
-    assert await verify_evaluation_sources("tenant-a", persisted.rows[0], runs=sources, conversions=sources, touchpoints=sources)
+    assert await verify_evaluation_sources("tenant-a", persisted.rows[0], runs=sources, conversions=sources,
+        touchpoints=sources, validations=Validations(validation))
     touchpoint["occurred_at"] += timedelta(days=1)
-    assert not await verify_evaluation_sources("tenant-a", persisted.rows[0], runs=sources, conversions=sources, touchpoints=sources)
+    assert not await verify_evaluation_sources("tenant-a", persisted.rows[0], runs=sources, conversions=sources,
+        touchpoints=sources, validations=Validations(validation))
     assert result["sample_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_all_ineligible_samples_have_valid_window_covering_conversion_and_touchpoints():
+    run, config, validation, conversion, touchpoint, credit = fixtures()
+    touchpoint["occurred_at"] = conversion["occurred_at"] + timedelta(hours=1)
+    sources, persisted = Sources(run, config, validation, conversion, touchpoint, credit), Persisted()
+    result = await evaluate_attribution_run("tenant-a", run["attribution_run_id"], actor_id="user-1",
+        authorization_evidence=AUTH, runs=sources, conversions=sources, touchpoints=sources,
+        validations=Validations(validation), evaluations=persisted)
+    row = persisted.rows[0]
+    assert result["value"] == 0.0
+    assert row["window_start"] == conversion["occurred_at"]
+    assert row["window_end"] == touchpoint["occurred_at"]
+    assert validate_evaluation(row)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutate", [
+    lambda r: r.update(sample_count=True),
+    lambda r: r.update(eligible_count=1.0),
+    lambda r: r.update(eligible_count=2),
+    lambda r: r.update(created_at=datetime.now(timezone.utc) - timedelta(days=2)),
+    lambda r: r.update(created_at=datetime.now(timezone.utc) + timedelta(days=1)),
+    lambda r: r.update(authorization_evaluated_at=datetime.now(timezone.utc) + timedelta(days=1)),
+])
+async def test_reader_rejects_malformed_counts_and_invalid_timestamp_order(mutate):
+    run, config, validation, conversion, touchpoint, credit = fixtures()
+    sources, persisted = Sources(run, config, validation, conversion, touchpoint, credit), Persisted()
+    await evaluate_attribution_run("tenant-a", run["attribution_run_id"], actor_id="user-1",
+        authorization_evidence=AUTH, runs=sources, conversions=sources, touchpoints=sources,
+        validations=Validations(validation), evaluations=persisted)
+    row = dict(persisted.rows[0])
+    mutate(row)
+    assert not validate_evaluation(row)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["created_at", "completed_at"])
+async def test_producer_rejects_future_run_source_times(field):
+    run, config, validation, conversion, touchpoint, credit = fixtures()
+    run[field] = datetime.now(timezone.utc) + timedelta(seconds=1)
+    sources = Sources(run, config, validation, conversion, touchpoint, credit)
+    with pytest.raises(ValueError, match="not future"):
+        await evaluate_attribution_run("tenant-a", run["attribution_run_id"], actor_id="user-1",
+            authorization_evidence=AUTH, runs=sources, conversions=sources, touchpoints=sources,
+            validations=Validations(validation), evaluations=Persisted())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_time", ["conversion", "touchpoint", "credit", "authorization"])
+async def test_producer_rejects_future_event_creation_and_authorization_times(source_time):
+    run, config, validation, conversion, touchpoint, credit = fixtures()
+    future = datetime.now(timezone.utc) + timedelta(minutes=1)
+    auth = dict(AUTH)
+    if source_time == "conversion":
+        conversion["occurred_at"] = future
+        expected = "conversion event time"
+    elif source_time == "touchpoint":
+        touchpoint["received_at"] = future
+        expected = "touchpoint event time"
+    elif source_time == "credit":
+        credit["created_at"] = future
+        expected = "credit creation time"
+    else:
+        auth["evaluated_at"] = future
+        expected = "authorization"
+    sources = Sources(run, config, validation, conversion, touchpoint, credit)
+    with pytest.raises(ValueError, match=expected):
+        await evaluate_attribution_run("tenant-a", run["attribution_run_id"], actor_id="user-1",
+            authorization_evidence=auth, runs=sources, conversions=sources, touchpoints=sources,
+            validations=Validations(validation), evaluations=Persisted())
+
+
+@pytest.mark.asyncio
+async def test_reader_requires_exact_durable_validation_and_rejects_future_source_events():
+    run, config, validation, conversion, touchpoint, credit = fixtures()
+    sources, persisted = Sources(run, config, validation, conversion, touchpoint, credit), Persisted()
+    await evaluate_attribution_run("tenant-a", run["attribution_run_id"], actor_id="user-1",
+        authorization_evidence=AUTH, runs=sources, conversions=sources, touchpoints=sources,
+        validations=Validations(validation), evaluations=persisted)
+    row = persisted.rows[0]
+    assert not await verify_evaluation_sources("tenant-a", row, runs=sources, conversions=sources,
+        touchpoints=sources, validations=Validations({**validation, "decision_id": "other"}))
+    touchpoint["occurred_at"] = row["created_at"] + timedelta(seconds=1)
+    assert not await verify_evaluation_sources("tenant-a", row, runs=sources, conversions=sources,
+        touchpoints=sources, validations=Validations(validation))
