@@ -41,7 +41,7 @@ def test_generated_catalog_exposes_all_slots_direct_providers_and_gaps() -> None
     assert "This product catalog has 18 surface contracts" in catalog
     assert "originally reviewed 3,013-line" not in catalog
     assert "| Direct surface provider | Implementation gap |" in catalog
-    assert "Unbound: `" in catalog
+    assert "| Unbound required slots |" in catalog
     assert "Partial: `" in catalog
     assert "Lens alignment: `source_aligned`" in catalog
 
@@ -89,22 +89,50 @@ def test_each_product_binding_declares_a_shared_canonical_authority() -> None:
 
 def test_partial_binding_must_expose_exact_missing_authorities() -> None:
     registry = _registry()
-    agent = next(surface for surface in registry["productSurfaces"] if surface["id"] == "agent360")
-    capabilities = next(slot for slot in agent["domainSlots"] if slot["id"] == "capabilities")
-    assert capabilities["unboundCanonicalAuthorityRefs"] == ["actions", "resources", "tools"]
+    value = next(surface for surface in registry["productSurfaces"] if surface["id"] == "value360")
+    confidence = next(slot for slot in value["domainSlots"] if slot["id"] == "confidence")
+    assert confidence["unboundCanonicalAuthorityRefs"] == ["model_governance"]
 
-    capabilities["unboundCanonicalAuthorityRefs"] = ["actions"]
+    confidence["unboundCanonicalAuthorityRefs"] = ["ai_execution_facts"]
     assert any(
         "unboundCanonicalAuthorityRefs must exactly list authorities" in violation.message
         for violation in validate_product_surface_catalog(registry)
     )
 
-    capabilities["unboundCanonicalAuthorityRefs"] = ["actions", "resources", "tools"]
-    capabilities.pop("authorityGapReason")
+    confidence["unboundCanonicalAuthorityRefs"] = ["model_governance"]
+    confidence.pop("authorityGapReason")
     assert any(
         violation.message == "a partially bound slot must explain its unbound authorities"
         for violation in validate_product_surface_catalog(registry)
     )
+
+
+def test_agent_and_workflow_resource_reads_are_bound_to_canonical_authority() -> None:
+    registry = _registry()
+    projections = {item["id"]: item for item in registry["projections"]}
+    surfaces = {item["id"]: item for item in registry["productSurfaces"]}
+
+    for projection_id, surface_id, slot_id in (
+        ("agent360", "agent360", "capabilities"),
+        ("workflow360", "workflow360", "actions"),
+    ):
+        assert "resources" in projections[projection_id]["canonicalAuthorities"]
+        slot = next(item for item in surfaces[surface_id]["domainSlots"] if item["id"] == slot_id)
+        assert "resources" in slot["canonicalAuthorityRefs"]
+        assert "resources" not in slot.get("unboundCanonicalAuthorityRefs", [])
+        assert "authorityGapReason" not in slot
+        reason = slot["partialImplementationReason"].lower()
+        for bounded_limit in (
+            "public https mcp",
+            "receipt",
+            "mutation",
+            "external effects",
+            "standing authorization",
+            "historical replay",
+            "freshness",
+            "producer coverage",
+        ):
+            assert bounded_limit in reason
 
 
 def test_partial_implementation_reason_must_be_nonempty_on_a_bound_slot() -> None:

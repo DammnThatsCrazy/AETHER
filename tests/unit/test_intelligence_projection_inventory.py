@@ -154,6 +154,12 @@ def test_real_registry_inventory_has_zero_errors() -> None:
     assert errors == [], [v.message for v in errors]
 
 
+def test_agent_and_workflow_projection_inventory_includes_resource_authority() -> None:
+    projections = {item["id"]: item for item in _real_registry()["projections"]}
+    for projection_id in ("agent360", "workflow360"):
+        assert "resources" in projections[projection_id]["canonicalAuthorities"]
+
+
 def test_real_registry_routes_resolve_independently() -> None:
     """Every legacy route resolves against route_registry.yaml OR backend source.
 

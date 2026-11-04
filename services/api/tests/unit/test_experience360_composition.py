@@ -316,13 +316,26 @@ def test_dispatch_actions_authority_is_bound_without_claiming_slot_completion(
 @pytest.mark.parametrize(("surface_id", "slot_id"), [
     ("agent360", "capabilities"), ("workflow360", "actions"),
 ])
-def test_mcp_invocation_actions_bound_but_resource_operations_unbound(surface_id, slot_id):
+def test_mcp_invocation_and_receipt_backed_resource_reads_remain_bounded(surface_id, slot_id):
     slot = next(item for item in PRODUCT_360_SURFACE_DEFINITIONS[surface_id]["domainSlots"]
                 if item["id"] == slot_id)
-    assert set(slot["unboundCanonicalAuthorityRefs"]) == {"resources"}
+    assert "resources" in slot["canonicalAuthorityRefs"]
+    assert "resources" not in slot.get("unboundCanonicalAuthorityRefs", [])
     assert "actions" in slot["canonicalAuthorityRefs"]
-    assert "server-owned" in slot["partialImplementationReason"].lower()
-    assert "resource-operation" in slot["partialImplementationReason"]
+    reason = slot["partialImplementationReason"].lower()
+    for bounded_limit in (
+        "server-owned",
+        "public https mcp",
+        "resources/read",
+        "receipt",
+        "mutation",
+        "external effects",
+        "standing authorization",
+        "historical replay",
+        "freshness",
+        "producer coverage",
+    ):
+        assert bounded_limit in reason
 
 
 def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> None:

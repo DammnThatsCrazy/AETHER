@@ -222,7 +222,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/agent360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity'],
-    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_entity', 'agent_executions', 'delegations', 'economic_facts', 'entities', 'evidence', 'graph', 'identity', 'observations', 'outcome_facts', 'social_observations', 'source_provenance', 'tools'],
+    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_entity', 'agent_executions', 'delegations', 'economic_facts', 'entities', 'evidence', 'graph', 'identity', 'observations', 'outcome_facts', 'resources', 'social_observations', 'source_provenance', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'contract_spine', 'identity_resolution', 'temporal_kernel'],
     projectionDependencies: ['profile360'],
     optionalProjectionDependencies: ['economic360', 'outcome360'],
@@ -1616,7 +1616,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['automation', 'run', 'trigger', 'workflow', 'workflow_run'],
-    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'evidence', 'execution_facts', 'graph_edges', 'identity', 'outcome_facts', 'risk_assessments', 'tools', 'workflow_definition_revisions'],
+    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'evidence', 'execution_facts', 'graph_edges', 'identity', 'outcome_facts', 'resources', 'risk_assessments', 'tools', 'workflow_definition_revisions'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -2157,12 +2157,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'optional'
       },
       {
-        authorityGapReason: 'resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer',
         canonicalAuthorityRefs: ['actions', 'agent_access', 'resources', 'tools'],
-        description: 'Observed capability reach and bounded server-owned MCP invocation results joined to exact invoke grants and invocation-time policy decisions; standing authorization and resource operations remain unknown.',
+        description: 'Observed capability reach, bounded server-owned MCP tools/call results, and receipt-backed observed reads of exact public HTTPS MCP resources; returned content is established only when complete. Mutation, external effects, standing authorization, historical replay, freshness, and producer coverage remain unknown.',
         id: 'capabilities',
         implementationCrosswalk: ['actions_tools_resources'],
-        partialImplementationReason: 'Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown.',
+        partialImplementationReason: 'Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant, and invocation-time policy decision. Separate server-owned MCP resources/read receipts bind exact tenant, agent, execution, resource ID and URI, authenticated initiating principal, dedicated resource-read grant, invocation-time policy decision, and timestamps; returned content is observed only when complete and digest-validated. Initialization failures, caller observations, worker callbacks, and ambiguous or mismatched evidence cannot establish a read. Credentialed or private MCP endpoints are unsupported. Mutation, external effects, standing authorization, historical replay, freshness, and complete producer coverage remain unknown.',
         projectionBindings: [
           {
             projectionId: 'agent360',
@@ -2171,8 +2170,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence', 'state']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['resources']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['communication_facts', 'observations'],
@@ -6510,11 +6508,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     displayName: 'Workflow 360',
     domainSlots: [
       {
-        authorityGapReason: 'resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer',
         canonicalAuthorityRefs: ['actions', 'agent_executions', 'graph_edges', 'resources', 'tools'],
-        description: 'Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices.',
+        description: 'Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices, with bounded receipt-backed observed reads of exact public HTTPS MCP resources.',
         id: 'actions',
-        partialImplementationReason: 'Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown.',
+        partialImplementationReason: 'Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant, and invocation-time policy decision. Separate server-owned MCP resources/read receipts are joined to exact admitted tenant, agent, execution, workflow run, resource ID and URI, authenticated initiating principal, dedicated resource-read grant, invocation-time policy decision, and timestamps; returned content is observed only when complete and digest-validated. Initialization failures, caller observations, worker callbacks, and ambiguous or mismatched evidence cannot establish a read. Credentialed or private MCP endpoints are unsupported. Mutation, external effects, standing authorization, historical replay, freshness, and complete producer coverage remain unknown.',
         projectionBindings: [
           {
             projectionId: 'workflow360',
@@ -6523,8 +6520,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['actions']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['resources']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'identity'],
