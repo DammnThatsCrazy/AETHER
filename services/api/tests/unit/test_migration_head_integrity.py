@@ -130,6 +130,35 @@ def _reachable_from(heads: set[str], graph: dict[str, Revision]) -> set[str]:
     return seen
 
 
+def _is_ancestor(ancestor: str, descendant: str, graph: dict[str, Revision]) -> bool:
+    """Return whether ``ancestor`` is in the parent lineage of ``descendant``."""
+    seen: set[str] = set()
+    stack = list(graph[descendant].parents)
+    while stack:
+        rid = stack.pop()
+        if rid == ancestor:
+            return True
+        if rid in seen:
+            continue
+        seen.add(rid)
+        stack.extend(graph[rid].parents)
+    return False
+
+
+def _is_genuine_merge(rev: Revision, graph: dict[str, Revision]) -> bool:
+    """A merge is genuine when no parent is already in another parent's lineage.
+
+    This is stable under later graph integration, unlike removing a historical
+    merge and counting heads in the final graph.
+    """
+    return len(rev.parents) >= 2 and all(
+        not _is_ancestor(left, right, graph)
+        and not _is_ancestor(right, left, graph)
+        for index, left in enumerate(rev.parents)
+        for right in rev.parents[index + 1 :]
+    )
+
+
 def test_single_valid_head() -> None:
     graph = _graph()
     heads = _heads(graph)
@@ -170,21 +199,44 @@ def test_all_down_revisions_reference_existing_unique_revisions() -> None:
 
 
 def test_every_merge_consolidates_the_lineage() -> None:
-    """A tuple ``down_revision`` may only appear on a genuine merge that reduces
-    the head count — removing it must leave MORE than one head."""
+    """Every merge joins parent lineages that were independent at that point."""
     graph = _graph()
     merges = [rev for rev in graph.values() if len(rev.parents) >= 2]
     assert merges, "expected at least one merge-point migration"
-    full_head_count = len(_heads(graph))
-    assert full_head_count == 1
     for rev in merges:
-        pruned = {rid: r for rid, r in graph.items() if rid != rev.revision}
-        head_count_without = len(_heads(pruned))
-        assert head_count_without > full_head_count, (
-            f"merge revision {rev.revision!r} ({rev.filename}) does not "
-            "consolidate the lineage — removing it leaves the same head count. "
-            "A merge must join multiple chains into one."
+        assert _is_genuine_merge(rev, graph), (
+            f"merge revision {rev.revision!r} ({rev.filename}) has parent "
+            "lineages where one parent is already an ancestor of another; "
+            "this is a redundant merge rather than a consolidation."
         )
+
+
+def test_historical_merge_remains_genuine_after_later_integration() -> None:
+    """Later merges can mask a historical merge when it is pruned from the DAG."""
+    graph = {
+        "left": Revision("left", "left.py", ()),
+        "right": Revision("right", "right.py", ()),
+        "historical_merge": Revision("historical_merge", "historical_merge.py", ("left", "right")),
+        "left_later": Revision("left_later", "left_later.py", ("left",)),
+        "right_later": Revision("right_later", "right_later.py", ("right",)),
+        "integration": Revision("integration", "integration.py", ("historical_merge", "left_later", "right_later")),
+        "head": Revision("head", "head.py", ("integration",)),
+    }
+    merge = graph["historical_merge"]
+    pruned = {rid: rev for rid, rev in graph.items() if rid != merge.revision}
+
+    assert len(_heads(pruned)) == 1  # final-graph pruning loses historical signal
+    assert _is_genuine_merge(merge, graph)
+
+
+def test_redundant_merge_with_ancestor_parent_is_rejected() -> None:
+    graph = {
+        "base": Revision("base", "base.py", ()),
+        "later": Revision("later", "later.py", ("base",)),
+        "redundant_merge": Revision("redundant_merge", "redundant_merge.py", ("base", "later")),
+    }
+
+    assert not _is_genuine_merge(graph["redundant_merge"], graph)
 
 
 def test_merge_parents_are_distinct_existing_revisions() -> None:
