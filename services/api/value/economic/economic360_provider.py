@@ -481,6 +481,16 @@ def _value_model_approval_ref(decision_id: str, created_at: Optional[str]) -> Ev
     )
 
 
+def _value_confidence_evaluation_ref(evaluation_id: str, created_at: Optional[str]) -> EvidenceRef:
+    return EvidenceRef(
+        id=evaluation_id,
+        type="model_output",
+        source="value_confidence_evaluations",
+        observedAt=created_at,
+        uri=f"store://value_confidence_evaluations/{quote(evaluation_id, safe='')}",
+    )
+
+
 def _campaign_touchpoint_ref(
     touchpoint_id: str,
     received_at: Optional[str],
@@ -875,6 +885,8 @@ class RepositoryAttributionCreditReader:
                                 run_ref.model_dump(mode="json"),
                                 credit_ref.model_dump(mode="json"),
                                 *([governance["evidenceRef"]] if governance.get("state") == "validated" else []),
+                                *([governance["evaluationEvidence"]["evidenceRef"]]
+                                  if governance.get("evaluationEvidence", {}).get("state") == "computed" else []),
                                 *(
                                     [touchpoint_ref.model_dump(mode="json")]
                                     if touchpoint_ref is not None
@@ -4348,6 +4360,17 @@ class Economic360Provider:
                     if confidence is not None and model_lineage_reported
                     else ""
                 )
+                evaluation_evidence = governance.get("evaluationEvidence") if isinstance(governance, dict) else None
+                if (isinstance(evaluation_evidence, dict)
+                        and evaluation_evidence.get("state") == "computed"
+                        and isinstance(evaluation_evidence.get("value"), (int, float))
+                        and isinstance(evaluation_evidence.get("sampleCount"), int)):
+                    confidence_note += (
+                        f"; bounded temporal eligibility evaluation is {evaluation_evidence['value']:.3f} "
+                        f"over {evaluation_evidence['sampleCount']} exact canonical credit samples "
+                        f"({evaluation_evidence.get('contractVersion')}); causal contribution and "
+                        "confidence calibration remain unknown"
+                    )
                 domain_slot_ids = [
                     VALUE_ATTRIBUTION_CREDITS_SLOT_ID,
                     VALUE_EVIDENCE_TRACE_SLOT_ID,
@@ -4784,6 +4807,38 @@ class Economic360Provider:
                                 "approvalReason": raw_governance["approvalReason"],
                                 "approvalEvidenceRef": expected_approval_ref.model_dump(mode="json"),
                             })
+                    try:
+                        from value.economic.value_confidence_evaluation import (
+                            ValueConfidenceEvaluationRepository, verify_evaluation_sources,
+                        )
+                        evaluation = await ValueConfidenceEvaluationRepository().latest_for_run(
+                            request.tenantId, run_id,
+                        )
+                        if (
+                            await verify_evaluation_sources(request.tenantId, evaluation)
+                            and evaluation.get("tenant_id") == request.tenantId
+                            and evaluation.get("attribution_run_id") == run_id
+                            and evaluation.get("model_config_id") == config_id
+                            and evaluation.get("validation_decision_id") == decision_id
+                            and _attribution_timestamp(evaluation.get("created_at")) is not None
+                        ):
+                            governance["evaluationEvidence"] = {
+                                "state": "computed",
+                                "contractVersion": evaluation["contract_version"],
+                                "evaluationId": evaluation["evaluation_id"],
+                                "datasetManifestSha256": evaluation["dataset_manifest_sha256"],
+                                "sampleCount": evaluation["sample_count"],
+                                "metric": "temporal_eligibility_accuracy",
+                                "value": evaluation["eligible_count"] / evaluation["sample_count"],
+                                "calibrationState": "unvalidated",
+                                "causalAttributionState": "unknown",
+                                "evidenceRef": _value_confidence_evaluation_ref(
+                                    evaluation["evaluation_id"],
+                                    _attribution_timestamp(evaluation.get("created_at")),
+                                ).model_dump(mode="json"),
+                            }
+                    except Exception:  # noqa: BLE001 - absent evaluation remains unknown
+                        pass
             key = (conversion_id, run_id)
             runs_by_key[key] = {
                 "tenantId": request.tenantId,

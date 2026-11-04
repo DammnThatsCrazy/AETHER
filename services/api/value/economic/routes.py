@@ -138,6 +138,28 @@ async def decide_attribution_model_approval(run_id: str, body: ValueModelApprova
     return APIResponse(data=result).to_dict()
 
 
+@router.post("/v1/economic/attribution-runs/{run_id}/confidence-evaluation")
+async def evaluate_attribution_confidence(run_id: str, request: Request):
+    """Persist bounded temporal eligibility evidence for this exact run."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    actor_id = getattr(tenant, "user_id", None)
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("authenticated tenant writer required")
+    from value.economic.value_confidence_evaluation import evaluate_attribution_run
+    try:
+        result = await evaluate_attribution_run(
+            tenant.tenant_id, run_id, actor_id=actor_id,
+            authorization_evidence={"action": "value.model_evaluation", "permission": "write",
+                                    "decision": "allow", "actor_id": actor_id,
+                                    "evaluated_at": datetime.now(timezone.utc)},
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=result).to_dict()
+
+
 class TenantEconomicOverviewResponse(BaseModel):
     tenant_id: str
     total_value_observed: Optional[EconomicAmountResponse] = None
