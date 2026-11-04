@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
   "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:3dd593027d97ad10ab66370ea2c735c4cc5ea0f7655f9564dd1b76aa80e04a83"
+  "services/api/identity/": "sha256:8b96ac2515b327e399fe4e2b3bddb0080aed18e04de158aaf13f1a54ef7ca760"
   "services/api/ingestion/": "sha256:e0f728400c34a5123aa0cebef7799c945003314916470645f37177ec38c44e5b"
   "services/api/intelligence/": "sha256:9c734b35466479143e1568314736aad8e630b61356fd9d54ba1d22242a457163"
   "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
@@ -2070,6 +2070,13 @@ success or correctness; ambiguous, invalid, future, and truncated reads do not
 return linked facts and report incomplete coverage. This
 read does not re-evaluate current consent or establish historical identity,
 model calibration, complete outcome coverage, or outcome verification.
+Separately, `profile-state-adjudication.v1` supports policy-authorized canonical
+churn/retention adjudications and exact-artifact evaluations over closed prediction
+horizons. The provider validates the evaluator, sample contract, final state and
+source-event evidence and recomputes evaluation metrics from the admitted sample
+manifest before exposing them. These paths bind the slot's `outcome_facts` and
+`model_governance` references; `modelCalibrationVerified` remains false and
+applicability remains unknown.
 Agent360's `evidence_trace` joins agentic compatibility rows to canonical
 Bronze only when tenant, agent, source-row ID, event ID, schema version, event
 type, and timestamp match exactly. Historical rows without the reciprocal link

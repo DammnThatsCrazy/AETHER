@@ -551,8 +551,6 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]
-    # A self-consistent sample manifest cannot authorize metrics that do not
-    # recompute from those exact rows.
     reported_metrics[0] = {**reported_metrics[0], "top_state_accuracy": 0.5}
     tampered_metrics = await Profile360Provider(source=_PredictionSource(
         PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
@@ -623,6 +621,16 @@ def test_profile_evaluation_manifest_rows_fail_closed_on_malformed_shape_and_fut
         "outcomeObservedAt": "2026-10-29T02:00:00Z",
     }
     assert _valid_profile_evaluation_sample(row, evaluation) is True
+    assert _valid_profile_evaluation_sample({**row, "predictedConfidence": 0.7}, evaluation) is False
+    assert _valid_profile_evaluation_sample(
+        {**row, "predictedState": "active", "correct": False}, evaluation
+    ) is False
+    assert _valid_profile_evaluation_sample(
+        {**row, "actualState": "unsupported", "correct": False}, evaluation
+    ) is False
+    assert _valid_profile_evaluation_sample(
+        {**row, "labelContractVersion": "profile-state-adjudication.v2"}, evaluation
+    ) is False
     assert _valid_profile_evaluation_sample({**row, "predictedDistribution": "bad"}, evaluation) is False
     assert _valid_profile_evaluation_sample({**row, "outcomeObservedAt": "2030-01-01T00:00:00Z"}, evaluation) is False
 

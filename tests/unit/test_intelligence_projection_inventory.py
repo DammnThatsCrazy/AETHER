@@ -252,3 +252,16 @@ def test_deprecated_requires_deprecated_reason() -> None:
     assert any(
         v.rule == "inventory" and "deprecatedReason" in v.message for v in violations
     )
+
+
+def test_profile_prediction_authorities_have_canonical_provider_bindings() -> None:
+    registry = json.loads(_REGISTRY_JSON.read_text(encoding="utf-8"))
+    projection = next(item for item in registry["projections"] if item["id"] == "profile360")
+    surface = next(item for item in registry["productSurfaces"] if item["id"] == "profile360")
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "likely_next_states")
+    authorities = {"model_governance", "outcome_facts"}
+    assert authorities <= set(projection["canonicalAuthorities"])
+    assert authorities <= set(slot["canonicalAuthorityRefs"])
+    assert authorities.isdisjoint(slot.get("unboundCanonicalAuthorityRefs", []))
+    assert "profile-state-adjudication.v1" in slot["partialImplementationReason"]
+    assert "modelCalibrationVerified remains false" in slot["partialImplementationReason"]

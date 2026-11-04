@@ -182,10 +182,14 @@ def _valid_profile_evaluation_sample(row: Any, evaluation: dict[str, Any]) -> bo
         states.add(item["state"])
         ranks.add(rank)
         total += probability
-    return (abs(total - 1.0) <= 1e-6 and row["predictedState"] in states
+    top_state = max(distribution, key=lambda item: (item["probability"], -item["rank"]))
+    return (abs(total - 1.0) <= 1e-6 and ranks == set(range(1, len(distribution) + 1))
+            and row["actualState"] in {"churned", "retained"}
+            and row["predictedState"] == top_state["state"]
             and isinstance(row.get("predictedConfidence"), (int, float))
             and not isinstance(row.get("predictedConfidence"), bool)
             and 0 <= row["predictedConfidence"] <= 1
+            and row["predictedConfidence"] == top_state["probability"]
             and row.get("correct") is (row["predictedState"] == row["actualState"]))
 
 

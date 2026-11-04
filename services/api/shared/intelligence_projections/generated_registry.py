@@ -1053,7 +1053,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/profile360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("agent_access", "agent_executions", "analytics_events", "cohort_membership", "communication_facts", "consent_policy_decisions", "entity_registry", "episode_facts", "evidence", "graph", "identity", "identity_source_identities", "journeys", "model_artifact_registry", "observations", "population_definitions", "profile_prediction_outputs", "relationship_facts", "temporal"),
+        "canonicalAuthorities": ("agent_access", "agent_executions", "analytics_events", "cohort_membership", "communication_facts", "consent_policy_decisions", "entity_registry", "episode_facts", "evidence", "graph", "identity", "identity_source_identities", "journeys", "model_artifact_registry", "model_governance", "observations", "outcome_facts", "population_definitions", "profile_prediction_outputs", "relationship_facts", "temporal"),
         "hardDependencies": ("contract_spine", "evidence_provenance", "identity_resolution", "temporal_kernel"),
         "projectionDependencies": [],
         "optionalProjectionDependencies": ("relationship360", "risk360"),
@@ -4635,11 +4635,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Model calibration and independent outcome verification are not joined to prediction outputs.",
                 "canonicalAuthorityRefs": ("analytics_events", "consent_policy_decisions", "identity_source_identities", "model_artifact_registry", "model_governance", "outcome_facts", "profile_prediction_outputs"),
                 "description": "Policy-admitted append-only future-state predictions for an exact canonical human entity, versioned state schema, active production artifact checksum, source event evidence, and bounded validity and freshness.",
                 "id": "likely_next_states",
-                "partialImplementationReason": "The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, alongside the future-state schema, current production artifact, validity interval, and freshness. An artifact-reported calibration metric may be exposed with unknown evaluation scope. Current serving outputs omit required fields; historical identity, current consent, revocation history, outcome verification, and independently validated model calibration remain unknown.",
+                "partialImplementationReason": "Exact prediction-linked canonical OutcomeTruthStore adjudications bind outcome_facts for profile-state-adjudication.v1 churn_observed and retention_observed labels, with policy, final-state, source-event, subject and validity-window checks. Artifact-scoped append-only model evaluations bind model_governance through exact tenant, artifact checksum, evaluator, versioned sample manifest and recomputed accuracy, Brier score and calibration-error metrics. Missing, conflicting, future or truncated evidence remains unknown. These bounded joins do not certify universal model calibration or applicability, historical identity, current consent, revocation history or complete producer coverage; modelCalibrationVerified remains false.",
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -4648,8 +4647,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("likely_next_states",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("model_governance", "outcome_facts")
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("geo_observations", "temporal"),

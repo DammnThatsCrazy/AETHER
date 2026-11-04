@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:618869cdb95fc977fd2c3ca931a577a7d421357c5d68628b9796ba7c9e4a1bfa"
+  "packages/shared/": "sha256:c3cfb558cd4098acd83880debc0fcefbff01d965a2036be082bcd6068cb58e29"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:5a12241f8489bffcc23d6dd47d98d6da6dd7d8c06842729ba4bdcf9c2734c20a"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -691,7 +691,10 @@ independent outcomes-domain read authorization and exact prediction-ID and
 validity-window checks. Under the explicit `profile-state-adjudication.v1`
 contract, persisted predictions with exact adjudicated outcomes can also feed
 artifact-scoped evaluation and expose a bounded sample manifest and computed
-metrics. This does not establish universal accuracy, approved model
+metrics. The reader recomputes accuracy, Brier score, calibration error and
+reliability bins and rejects mismatched metrics, unsupported sample contracts
+or missing evaluator provenance. These supported paths bind `outcome_facts`
+and `model_governance` in the Profile slot. This does not establish universal accuracy, approved model
 applicability, or `modelCalibrationVerified`; that flag remains false. Current
 consent, historical identity, and complete outcome coverage remain unresolved.
 Account360's required `communications` slot now reads Communication360

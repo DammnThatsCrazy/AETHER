@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bb38bc7ee689e493c0b46c108845d4a90e74261d5a003daa0973d92085090601"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bf1ee5d29beb632181bf7bcf664f942c300f5cf78ccb8c1f902def829065f48a"
 ---
 
 # 360 System Blueprint
@@ -57,8 +57,13 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Four slots declare five unbound canonical authority references after the exact
-bindings in this slice. Journey360 and Risk360 now bind the actions authority
+Three slots declare three unbound canonical authority references after the exact
+Profile360 adjudication and evaluation bindings. Profile360 `likely_next_states`
+binds `outcome_facts` through policy-authorized v1 churn/retention adjudications
+and `model_governance` through exact-artifact evaluations whose sample manifests
+and metrics are validated and recomputed by the reader. Universal calibration,
+model applicability, current consent and complete coverage remain unproven;
+`modelCalibrationVerified` remains false. Journey360 and Risk360 bind the actions authority
 through persisted dispatch authorization and credential-bound Jira resource
 read-back. The supported verification checks the provider site, requested payload,
 tenant, subject, intent, job, receipt and policy decision. Other providers remain
