@@ -2649,7 +2649,9 @@ async def _workflow_actions_section(
             id=f"workflow360.provider_invocation.{quote(receipt['receiptId'], safe='')}",
             kind=("workflow_linked_provider_resource_read" if is_resource_read else "workflow_linked_provider_tool_result"), subject=subject,
             evidenceRefs=[ref for ref in [execution_ref, receipt_ref] if ref is not None],
-            claims=[("The exact tenant, agent, execution, workflow run, observed resource URI, dedicated resource-read grant and policy decision are joined to a server-owned MCP resources/read completion receipt. It proves the returned resource content only; mutation and external effects remain unknown."
+            claims=[("The exact tenant, agent, execution, workflow run, observed resource URI, authenticated initiating principal, dedicated resource-read grant and policy decision are joined to a server-owned MCP resources/read receipt. It proves returned content only when complete; mutation and external effects remain unknown."
+                     if is_resource_read and receipt.get("providerResultComplete") is True else
+                     "The exact tenant, agent, execution, workflow run, observed resource URI, authenticated initiating principal, dedicated resource-read grant and policy decision are joined to a server-owned MCP resources/read receipt; returned content is unverified. Mutation and external effects remain unknown."
                      if is_resource_read else "The exact tenant, agent, execution, workflow run, policy decision and active capability grant are joined to a server-owned MCP provider completion receipt; the receipt proves the provider tool result only, not a resource operation or external effect.")],
             claimState=EpistemicStatus.OBSERVED, domainSlotIds=["actions", "evidence_trace"],
         ))
@@ -2667,6 +2669,21 @@ async def _workflow_actions_section(
         "evidenceScope": "CALLED_TOOL edges joined to exact admitted tenant and workflow-run execution IDs",
         "actions": actions,
         "providerInvocationReceipts": provider_invocation_views,
+        "resourceReadAuthority": {
+            "state": "observed" if any(
+                receipt.get("resourceOperation") == "read" for receipt in provider_invocation_views
+            ) else "unknown",
+            "supportedOperations": ["read"] if any(
+                receipt.get("resourceOperation") == "read" for receipt in provider_invocation_views
+            ) else [],
+            "receiptIds": [
+                receipt["receiptId"] for receipt in provider_invocation_views
+                if receipt.get("resourceOperation") == "read"
+            ],
+            "coverage": "bounded_observed_receipts_only",
+            "mutation": "unknown",
+            "externalEffect": "unknown",
+        },
         "observedCount": len(actions),
         "executionInventoryReadComplete": execution_inventory_complete,
         "actionEdgeReadComplete": read.complete and not read.scope_mismatch and not invalid_rows,

@@ -2540,9 +2540,52 @@ class Agent360Provider:
                     tenant_id=tenant_id, agent_id=row_agent_id, execution=row
                 )
                 if receipt is not None:
-                    invocation_receipts[execution_id] = receipt
+                    invocation_receipts[execution_id] = {**receipt, "executionId": execution_id}
         capability_access_profile_view["providerInvocationReceipts"] = list(invocation_receipts.values())
-        capability_access_profile_view["invocationReceiptCoverage"] = "bounded_unknown_producer_coverage"
+        resource_read_receipts = [
+            receipt for receipt in invocation_receipts.values()
+            if receipt.get("resourceOperation") == "read"
+        ]
+        capability_access_profile_view["invocationReceiptCoverage"] = "bounded_observed_receipts_only"
+        if resource_read_receipts:
+            capability_access_profile_view["actionResourceAuthority"] = {
+                "state": "partial",
+                "actions": {
+                    "state": "unknown",
+                    "reason": "agent360_action_specific_authority_source_unbound",
+                },
+                "resources": {
+                    "state": "observed",
+                    "supportedOperations": ["read"],
+                    "receipts": [
+                        {
+                            "receiptId": receipt["receiptId"],
+                            "executionId": receipt["executionId"],
+                            "resourceId": receipt["resourceId"],
+                            "resourceUri": receipt["resourceUri"],
+                            "operation": "read",
+                            "resultStatus": receipt["resultStatus"],
+                            "providerResultDigest": receipt.get("providerResultDigest"),
+                            "providerResultComplete": receipt.get("providerResultComplete"),
+                            "grantId": receipt["grantId"],
+                            "principalUserId": receipt["initiatingPrincipalUserId"],
+                            "policyDecision": receipt["policyDecision"],
+                            "invokedAt": receipt["invokedAt"],
+                            "completedAt": receipt["completedAt"],
+                        }
+                        for receipt in resource_read_receipts
+                    ],
+                    "coverage": "bounded_observed_receipts_only",
+                    "externalEffect": "unknown",
+                    "mutation": "unknown",
+                },
+                "effectiveToolAuthorization": "unknown",
+                "reason": "Server-owned receipts prove exact attempted MCP resource reads and returned content only when complete; producer coverage and standing authorization remain unknown.",
+            }
+            capability_access_profile_view["missingInputs"] = [
+                item for item in capability_access_profile_view.get("missingInputs", [])
+                if item != "agent360_resource_operation_authority_source_unbound"
+            ]
         exec_items = [self._execution_view(row, invocation_receipts.get(_first(row, "execution_id", "id")))
                       for row in execution_rows[:limit]]
         activity_items = [self._activity_view(row) for row in timeline_activity.rows[:limit]]
@@ -2947,7 +2990,9 @@ class Agent360Provider:
                                 observedAt=receipt["completedAt"]),
                     EvidenceRef(id=execution_id, type="event", source="agent_executions"),
                 ],
-                claims=[("A server-owned MCP resources/read completion receipt binds this Agent execution to its exact observed resource URI, dedicated resource-read grant and invocation-time policy decision. Mutation and external effects remain unknown."
+                claims=[("A server-owned MCP resources/read receipt binds this Agent execution to its exact observed resource URI, dedicated resource-read grant, authenticated initiating principal and invocation-time policy decision. It proves returned content only when the result is complete; mutation and external effects remain unknown."
+                         if resource_read and receipt.get("providerResultComplete") is True else
+                         "A server-owned MCP resources/read receipt binds this Agent execution to an exact attempted resource URI, dedicated resource-read grant, authenticated initiating principal and invocation-time policy decision; returned content is unverified. Mutation and external effects remain unknown."
                          if resource_read else "A server-owned MCP completion receipt binds this Agent execution to its exact tool, invoke grant and invocation-time policy decision. Resource operations, standing authorization and external effects remain unknown.")],
                 claimState=EpistemicStatus.OBSERVED, domainSlotIds=["capabilities", "evidence_trace"],
             ))
@@ -3796,19 +3841,15 @@ class Agent360Provider:
             },
             "resources": {
                 "state": "unknown",
-                "reason": "agent360_resource_operation_authority_source_unbound",
+                "reason": "no_validated_resource_read_receipt_for_selected_execution_window",
             },
             "effectiveToolAuthorization": "unknown",
             "reason": (
-                "persisted capability.invoke evaluations cover only invoke on a "
-                "capability resource; no action-specific or resource-operation "
-                "authority producer is joined"
+                "persisted capability.invoke evaluations cover only invoke on a capability resource; "
+                "no validated resource-read receipt matched the selected execution window"
             ),
         }
-        authority_gap_inputs = [
-            "agent360_action_specific_authority_source_unbound",
-            "agent360_resource_operation_authority_source_unbound",
-        ]
+        authority_gap_inputs = ["agent360_action_specific_authority_source_unbound"]
         if not read.available:
             return {
                 "state": "unavailable",

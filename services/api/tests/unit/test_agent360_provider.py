@@ -1802,17 +1802,16 @@ async def test_agent360_projects_exact_recorded_capability_policy_evaluation():
         },
         "resources": {
             "state": "unknown",
-            "reason": "agent360_resource_operation_authority_source_unbound",
+            "reason": "no_validated_resource_read_receipt_for_selected_execution_window",
         },
         "effectiveToolAuthorization": "unknown",
         "reason": (
-            "persisted capability.invoke evaluations cover only invoke on a "
-            "capability resource; no action-specific or resource-operation "
-            "authority producer is joined"
+            "persisted capability.invoke evaluations cover only invoke on a capability resource; "
+            "no validated resource-read receipt matched the selected execution window"
         ),
     }
     assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
-    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" not in profile["missingInputs"]
     assert any(ref["id"] == "cap-policy-1" for ref in profile["evidenceRefs"])
 
 
@@ -1886,7 +1885,7 @@ async def test_agent360_does_not_treat_action_or_resource_policy_rows_as_invoke_
     assert profile["actionResourceAuthority"]["resources"]["state"] == "unknown"
     assert profile["actionResourceAuthority"]["effectiveToolAuthorization"] == "unknown"
     assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
-    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" not in profile["missingInputs"]
     assert all(ref["id"] != "resource-operation-policy-row" for ref in profile["evidenceRefs"])
 
 
@@ -1942,7 +1941,7 @@ async def test_agent360_tool_observation_and_incomplete_policy_history_keep_acti
     assert profile["actionResourceAuthority"]["actions"]["state"] == "unknown"
     assert profile["actionResourceAuthority"]["resources"]["state"] == "unknown"
     assert "agent360_action_specific_authority_source_unbound" in profile["missingInputs"]
-    assert "agent360_resource_operation_authority_source_unbound" in profile["missingInputs"]
+    assert "agent360_resource_operation_authority_source_unbound" not in profile["missingInputs"]
     assert all(
         not capability["invokePolicyEvaluations"]
         and capability["toolIdentity"]["effectiveToolAuthorization"] == "unknown"

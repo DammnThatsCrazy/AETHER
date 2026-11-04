@@ -553,6 +553,34 @@ async def test_provider_receipt_reaches_agent_capabilities(monkeypatch):
         for claim in result.claims
     )
 
+    async def validated_resource_read(**_kwargs):
+        return {
+            "state": "provider_resource_read_succeeded", "receiptId": "read-receipt-a",
+            "resourceId": "resource-a", "resourceUri": "https://data.example/item/a",
+            "resourceOperation": "read", "action": "read_resource", "grantId": "read-grant-a",
+            "initiatingPrincipalUserId": "operator-a",
+            "policyDecision": {"allowed": True, "delegation_id": "read-grant-a",
+                               "matched_scope": {"actions": ["read_resource"], "resources": ["mcp-resource:resource-a"]},
+                               "evaluated_at": "2026-10-18T10:00:00Z"},
+            "invokedAt": "2026-10-18T10:00:01Z", "completedAt": "2026-10-18T10:00:02Z",
+            "resultStatus": "succeeded", "providerResultDigest": "a" * 64,
+            "providerResultComplete": True, "providerResult": {"contents": [{"uri": "https://data.example/item/a", "text": "value"}]},
+            "externalEffect": "unknown",
+        }
+
+    monkeypatch.setattr("actions.agent.invocation_runtime.validated_agent_receipt", validated_resource_read)
+    read_result = await Agent360Provider(ReceiptSource()).project(_request(), _context())
+    read_profile = next(item for item in _sections(read_result)["state"].content["dimensions"]
+                        if item["id"] == "authority_and_delegation")["content"]["capabilityAccessProfile"]
+    read_authority = read_profile["actionResourceAuthority"]
+    assert read_authority["resources"]["state"] == "observed"
+    assert read_authority["resources"]["supportedOperations"] == ["read"]
+    assert read_authority["resources"]["receipts"][0]["principalUserId"] == "operator-a"
+    assert read_authority["actions"]["state"] == "unknown"
+    assert read_authority["effectiveToolAuthorization"] == "unknown"
+    assert "agent360_resource_operation_authority_source_unbound" not in read_profile["missingInputs"]
+    assert any(claim.kind == "agent_provider_resource_read_result" for claim in read_result.claims)
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("authorized", [True, False])
@@ -580,12 +608,59 @@ async def test_workflow_receipt_without_graph_edge_requires_authorization(monkey
         resource_read=ApprovedResourceRead((), True, True),
     )
     assert bool(section.content["providerInvocationReceipts"]) is authorized
+    assert section.content["resourceReadAuthority"]["state"] == "unknown"
     assert (
         any(claim.kind == "workflow_linked_provider_tool_result" for claim in claims) is authorized
     )
     if authorized:
         assert section.state == "available"
         assert "actions" in section.canonicalAuthorityRefs
+
+
+@pytest.mark.asyncio
+async def test_workflow_actions_slot_projects_only_bound_resource_read_receipts(monkeypatch):
+    from intelligence.workflow.workflow360_provider import _workflow_actions_section, WorkflowActionRead
+    from intelligence.workflow.action_authorities import ApprovedResourceRead
+    from shared.intelligence_projections.contracts import ProjectionSubject, EvidenceRef
+
+    _row, run = await _completed_invocation(monkeypatch)
+    async def validated_resource_read(**_kwargs):
+        return {
+            "state": "provider_resource_read_succeeded", "receiptId": "read-receipt-a",
+            "resourceId": "resource-a", "resourceUri": "https://data.example/item/a",
+            "resourceOperation": "read", "action": "read_resource", "grantId": "read-grant-a",
+            "initiatingPrincipalUserId": "operator-a",
+            "policyDecision": {"allowed": True, "delegation_id": "read-grant-a",
+                               "matched_scope": {"actions": ["read_resource"], "resources": ["mcp-resource:resource-a"]},
+                               "evaluated_at": "2026-10-18T10:00:00Z"},
+            "invokedAt": "2026-10-18T10:00:01Z", "completedAt": "2026-10-18T10:00:02Z",
+            "resultStatus": "succeeded", "providerResultDigest": "a" * 64,
+            "providerResultComplete": True, "providerResult": {"contents": [{"uri": "https://data.example/item/a", "text": "value"}]},
+            "externalEffect": "unknown",
+        }
+    monkeypatch.setattr("actions.agent.invocation_runtime.validated_agent_receipt", validated_resource_read)
+    section, claims = await _workflow_actions_section(
+        ProjectionSubject(kind="workflow_run", id="run-a"), tenant_id="tenant-a",
+        read=WorkflowActionRead((), True, True), execution_rows=[run],
+        execution_refs=[EvidenceRef(id="exec-a", type="event", source="agent_executions")],
+        execution_inventory_complete=True, time_range=None, requested=True, historical=False,
+        execution_results_authorized=True, resource_read=ApprovedResourceRead((), True, True),
+    )
+    authority = section.content["resourceReadAuthority"]
+    assert authority == {"state": "observed", "supportedOperations": ["read"],
+                        "receiptIds": ["read-receipt-a"], "coverage": "bounded_observed_receipts_only",
+                        "mutation": "unknown", "externalEffect": "unknown"}
+    assert any(claim.kind == "workflow_linked_provider_resource_read" for claim in claims)
+
+    denied, denied_claims = await _workflow_actions_section(
+        ProjectionSubject(kind="workflow_run", id="run-a"), tenant_id="tenant-a",
+        read=WorkflowActionRead((), True, True), execution_rows=[run],
+        execution_refs=[EvidenceRef(id="exec-a", type="event", source="agent_executions")],
+        execution_inventory_complete=True, time_range=None, requested=True, historical=False,
+        execution_results_authorized=False, resource_read=ApprovedResourceRead((), True, True),
+    )
+    assert denied.content["resourceReadAuthority"]["state"] == "unknown"
+    assert not any(claim.kind == "workflow_linked_provider_resource_read" for claim in denied_claims)
 
 
 @pytest.mark.asyncio
@@ -617,7 +692,7 @@ async def test_invocation_ingress_requires_dispatch_write_and_principal(permissi
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("transport", ["json", "sse", "sse_wrong_id", "sse_duplicate_id"])
+@pytest.mark.parametrize("transport", ["json", "sse", "sse_wrong_id", "sse_duplicate_id", "listing_duplicate", "listing_cursor_cycle"])
 @pytest.mark.parametrize("response_shape", ["valid", "foreign_uri", "empty_contents"])
 async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_receipt(monkeypatch, response_shape, transport):
     from actions.agent.invocation_runtime import read_observed_mcp_resource
@@ -678,7 +753,13 @@ async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_re
             return Response({"jsonrpc":"2.0", "id":json["id"], "result":{"protocolVersion":"2025-03-26"}})
         if json["method"] == "notifications/initialized": return Response({})
         if json["method"] == "resources/list":
-            return Response({"jsonrpc":"2.0", "id":json["id"], "result":{"resources":[{"uri":uri,"name":"item"}]}})
+            items = [{"uri":uri,"name":"item"}]
+            result = {"resources": items}
+            if transport == "listing_duplicate":
+                result["resources"] = items * 2
+            if transport == "listing_cursor_cycle":
+                result["nextCursor"] = "same-cursor"
+            return Response({"jsonrpc":"2.0", "id":json["id"], "result":result})
         assert json["method"] == "resources/read" and json["params"] == {"uri":uri}
         contents = [{"uri": uri if response_shape == "valid" else "other-resource", "text": "value"}]
         if response_shape == "empty_contents":
@@ -695,7 +776,13 @@ async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_re
     validated = await validated_agent_receipt(tenant_id=tenant, agent_id=agent,
         execution={**execution_record, "ended_at":(datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=1)).isoformat()},
         expected_workflow_run_id="run-resource")
+    if transport in {"listing_duplicate", "listing_cursor_cycle"}:
+        assert receipt["result_status"] == "failed"
+        assert validated is None
+        assert len(calls) == (4 if transport == "listing_cursor_cycle" else 3)
+        return
     assert validated["resourceOperation"] == "read"
+    assert validated["initiatingPrincipalUserId"] == "owner"
     assert len(calls) == 4
     if response_shape == "valid" and transport in {"json", "sse"}:
         assert validated["state"] == "provider_resource_read_succeeded"
@@ -703,7 +790,28 @@ async def test_resource_read_requires_distinct_grant_and_creates_reader_bound_re
     else:
         assert validated["state"] == "provider_resource_read_failed"
         assert validated["providerResult"] is None
+    if transport == "listing_cursor_cycle":
+        assert len(calls) == 5  # initialize, ack, and two bounded list pages; no content read
     assert grant["scope"]["actions"] == [RESOURCE_READ_ACTION]
+
+    # The provider reader rejects receipts whose actor, tenant, resource, or
+    # invocation-time policy binding no longer matches the immutable operation.
+    async def tampered(changed):
+        async def read(*_args):
+            return [changed]
+        monkeypatch.setattr(InvocationReceiptRepository, "for_execution", read)
+        return await validated_agent_receipt(
+            tenant_id=tenant, agent_id=agent,
+            execution={**execution_record, "ended_at":(datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=1)).isoformat()},
+            expected_workflow_run_id="run-resource",
+        )
+
+    assert await tampered({**receipt, "initiating_principal_user_id": " owner"}) is None
+    assert await tampered({**receipt, "tenant_id": "other-tenant"}) is None
+    assert await tampered({**receipt, "resource_uri": "https://data.example/items/other"}) is None
+    assert await tampered({**receipt, "grant_scope": {"actions": ["invoke"], "resources": [receipt["resource"]]}}) is None
+    assert await tampered({**receipt, "policy_decision": {**receipt["policy_decision"], "matched_scope": {"actions": ["invoke"], "resources": [receipt["resource"]]}}}) is None
+    assert await tampered({**receipt, "policy_decision": {**receipt["policy_decision"], "evaluated_at": (datetime.now(timezone.utc) + __import__("datetime").timedelta(minutes=1)).isoformat()}}) is None
 
     async def not_attempted(*_args):
         return [{**receipt, "resource_read_attempted": False}]

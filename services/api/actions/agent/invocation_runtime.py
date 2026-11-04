@@ -310,6 +310,7 @@ async def _validated_resource_receipt(row: dict[str, Any], tenant_id: str, agent
     return {"state": state,
         "receiptId": row["receipt_id"], "resourceId": row["resource_id"], "resourceUri": row["resource_uri"],
         "resourceOperation": "read", "action": row["action"], "policyDecision": policy, "grantId": row["grant_id"],
+        "initiatingPrincipalUserId": row["initiating_principal_user_id"],
         "invokedAt": invoked.isoformat(), "completedAt": completed.isoformat(), "resultStatus": row["result_status"],
         "providerResult": row.get("provider_result"), "providerResultDigest": row.get("provider_result_digest"),
         "providerResultComplete": row.get("provider_result_complete"), "providerError": row.get("provider_error"),
@@ -738,17 +739,37 @@ async def read_observed_mcp_resource(
         ack = await send_public_request("POST", url, max_redirects=0,
             json={"jsonrpc":"2.0", "method":"notifications/initialized"}, headers=headers)
         if ack.status_code < 200 or ack.status_code >= 300: raise RuntimeError("provider_initialize_ack_failed")
-        list_id = f"{execution_id}:resources-list"
-        listing = await send_public_request("POST", url, max_redirects=0,
-            json={"jsonrpc":"2.0", "id":list_id, "method":"resources/list", "params":{}}, headers=headers)
-        if listing.status_code < 200 or listing.status_code >= 300 or len(listing.content) > 1_000_000:
-            raise RuntimeError("provider_resource_list_failed")
-        listing_body = _matching_mcp_response(listing, list_id)
-        listed = (listing_body.get("result") or {}).get("resources") if isinstance(listing_body, dict) else None
-        if (not isinstance(listing_body, dict) or listing_body.get("jsonrpc") != "2.0"
-            or listing_body.get("id") != list_id or listing_body.get("error") is not None
-            or not isinstance(listed, list) or not all(isinstance(item, dict) for item in listed)
-            or sum(item.get("uri") == resource_uri for item in listed) != 1):
+        listed: list[dict[str, Any]] = []
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        for page in range(50):
+            list_id = f"{execution_id}:resources-list:{page}"
+            params = {"cursor": cursor} if cursor is not None else {}
+            listing = await send_public_request("POST", url, max_redirects=0,
+                json={"jsonrpc":"2.0", "id":list_id, "method":"resources/list", "params":params}, headers=headers)
+            if listing.status_code < 200 or listing.status_code >= 300 or len(listing.content) > 1_000_000:
+                raise RuntimeError("provider_resource_list_failed")
+            listing_body = _matching_mcp_response(listing, list_id)
+            result = listing_body.get("result") if isinstance(listing_body, dict) else None
+            page_resources = result.get("resources") if isinstance(result, dict) else None
+            next_cursor = result.get("nextCursor") if isinstance(result, dict) else None
+            if (not isinstance(listing_body, dict) or listing_body.get("jsonrpc") != "2.0"
+                or listing_body.get("id") != list_id or listing_body.get("error") is not None
+                or not isinstance(page_resources, list) or not all(isinstance(item, dict) for item in page_resources)
+                or (next_cursor is not None and (not isinstance(next_cursor, str) or not next_cursor.strip()))):
+                raise RuntimeError("provider_resource_list_invalid")
+            listed.extend(page_resources)
+            if len(listed) > 1000:
+                raise RuntimeError("provider_resource_inventory_truncated")
+            if next_cursor is None:
+                break
+            if next_cursor in seen_cursors:
+                raise RuntimeError("provider_resource_cursor_repeated")
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+        else:
+            raise RuntimeError("provider_resource_inventory_truncated")
+        if sum(item.get("uri") == resource_uri for item in listed) != 1:
             raise RuntimeError("provider_resource_not_exactly_observed")
         listing_digest = hashlib.sha256(json.dumps(listed, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
         latest = await grants.find_by_id(grant.get("delegation_id", grant.get("id")))
