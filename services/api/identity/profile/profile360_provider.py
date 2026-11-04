@@ -115,6 +115,7 @@ def _valid_profile_evaluation_sample(row: Any, evaluation: dict[str, Any]) -> bo
         "predictionId", "tenantId", "entityId", "modelId", "artifactVersion", "split",
         "outcomeId", "sourceEventId", "actualState", "predictedState",
         "artifactChecksumSha256", "policyDecisionId", "policyVersion", "actorId",
+        "labelContractVersion",
     )
     if any(not isinstance(row.get(key), str) or not row[key].strip() for key in required_strings):
         return False
@@ -122,7 +123,8 @@ def _valid_profile_evaluation_sample(row: Any, evaluation: dict[str, Any]) -> bo
             or row["modelId"] != evaluation.get("model_id")
             or row["artifactVersion"] != evaluation.get("artifact_version")
             or row["split"] != evaluation.get("split")
-            or row["artifactChecksumSha256"] != evaluation.get("artifact_checksum_sha256")):
+            or row["artifactChecksumSha256"] != evaluation.get("artifact_checksum_sha256")
+            or row["labelContractVersion"] != "profile-state-adjudication.v1"):
         return False
     for key in ("predictionGeneratedAt", "predictionValidFrom", "predictionValidUntil", "outcomeObservedAt"):
         try:
@@ -217,6 +219,57 @@ def _valid_profile_evaluation_metrics(metrics: Any, sample_count: int) -> bool:
             return False
         count_sum += count
     return count_sum == sample_count
+
+
+def _profile_metrics_match_samples(metrics: Any, samples: list[dict[str, Any]]) -> bool:
+    """Recompute persisted evaluation metrics from the committed sample manifest."""
+    if not samples:
+        return metrics == {}
+    count = len(samples)
+    correct = 0
+    brier = 0.0
+    bins = [[0, 0.0, 0] for _ in range(10)]
+    for row in samples:
+        actual = row["actualState"]
+        distribution = row["predictedDistribution"]
+        score = sum(
+            (float(item["probability"]) - (1.0 if item["state"] == actual else 0.0)) ** 2
+            for item in distribution
+        )
+        if actual not in {item["state"] for item in distribution}:
+            score += 1.0
+        brier += score
+        matched = row["predictedState"] == actual
+        correct += int(matched)
+        confidence = float(row["predictedConfidence"])
+        bucket = min(int(confidence * 10), 9)
+        bins[bucket][0] += 1
+        bins[bucket][1] += confidence
+        bins[bucket][2] += int(matched)
+    ece = sum(
+        size / count * abs(confidence_sum / size - correct_count / size)
+        for size, confidence_sum, correct_count in bins if size
+    )
+    expected = {
+        "top_state_accuracy": correct / count,
+        "multiclass_brier_score": brier / count,
+        "expected_calibration_error": ece,
+        "reliability_bins": bins,
+    }
+    return (
+        isinstance(metrics, dict)
+        and all(
+            abs(float(metrics[key]) - expected[key]) <= 1e-9
+            for key in (
+                "top_state_accuracy",
+                "multiclass_brier_score",
+                "expected_calibration_error",
+            )
+        )
+        and metrics.get("reliability_bins") == bins
+    )
+
+
 @dataclass(frozen=True)
 class ProfileRead:
     """Identity-profile read with availability distinct from no matching row."""
@@ -2542,7 +2595,11 @@ class Profile360Provider:
                     and all(_valid_profile_evaluation_sample(row, evaluation) for row in sample_refs)
                     and len({row["predictionId"] for row in sample_refs}) == sample_count
                     and _valid_profile_evaluation_metrics(metrics, sample_count)
-                    and isinstance(evaluation.get("method"), str) and bool(evaluation.get("method"))
+                    and _profile_metrics_match_samples(metrics, sample_refs)
+                    and isinstance(evaluation.get("method"), str)
+                    and evaluation["method"].startswith("profile-state-adjudication.v1;")
+                    and isinstance(evaluation.get("actor_id"), str)
+                    and bool(evaluation["actor_id"].strip())
                     and isinstance(evaluation.get("window_start"), (str, datetime))
                     and isinstance(evaluation.get("window_end"), (str, datetime))
                     and evaluation.get("created_at") is not None
@@ -2657,6 +2714,8 @@ class Profile360Provider:
                     refs = list(getattr(record, "evidence_refs", []) or [])
                     try:
                         observed = parse_instant_strict(getattr(record, "observed_at", None))
+                        achieved_raw = getattr(record, "achieved_at", None)
+                        achieved = parse_instant_strict(achieved_raw) if achieved_raw is not None else None
                     except (TypeError, ValueError):
                         adjudication_invalid = True
                         continue
@@ -2668,11 +2727,18 @@ class Profile360Provider:
                         or getattr(record.subject, "kind", None) != "user"
                         or getattr(record.subject, "id", None) != output.entity_id
                         or record.claim_type != "observed"
+                        or getattr(record, "state", None) != "final"
                         or event_type not in PROFILE_OUTCOME_TO_STATE
-                        or observed < output.generated_at or observed > output.valid_until
+                        or observed < output.generated_at or observed < output.valid_from
+                        or observed > output.valid_until
                         or observed > anchor or record.superseded_by is not None
+                        or (achieved is not None and (
+                            achieved < output.generated_at or achieved < output.valid_from
+                            or achieved > output.valid_until or achieved > anchor
+                        ))
                         or len(event_ids) != 1 or len(refs) != 1
                         or refs[0].id != event_ids[0]
+                        or refs[0].type != "event"
                         or refs[0].source != "silver_outcome_facts"
                     ):
                         adjudication_invalid = True

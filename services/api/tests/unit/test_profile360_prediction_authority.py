@@ -483,6 +483,7 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
     sample_refs = sorted(({
         "tenantId": TENANT, "entityId": ENTITY, "modelId": "churn_prediction",
         "artifactVersion": "v-production-2", "split": "holdout",
+        "labelContractVersion": "profile-state-adjudication.v1",
         "predictionId": f"sample-{index}", "outcomeId": f"outcome-{index}",
         "sourceEventId": f"event-{index}", "actualState": "churned",
         "predictedState": "churned", "predictedConfidence": 0.8,
@@ -508,6 +509,11 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
         sample_refs, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")).hexdigest()]
     created_at = ["2026-10-30T00:00:00Z"]
+    reported_metrics = [{
+        "top_state_accuracy": 1.0, "multiclass_brier_score": 0.08,
+        "expected_calibration_error": 0.2,
+        "reliability_bins": [[0, 0.0, 0] for _ in range(8)] + [[12, 9.6, 12], [0, 0.0, 0]],
+    }]
 
     async def exact_evaluation(self, tenant, domain, model, version, checksum):
         assert (tenant, domain, model, version, checksum) == (
@@ -521,11 +527,9 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
             "window_start": "2026-10-29T00:00:00Z", "window_end": "2026-10-30T00:00:00Z",
             "sample_refs": sample_refs,
             "created_at": created_at[0],
-            "method": "profile-state-adjudication.v1", "metrics": {
-                "top_state_accuracy": 1.0, "multiclass_brier_score": 0.08,
-                "expected_calibration_error": 0.2,
-                "reliability_bins": [[0, 0.0, 0] for _ in range(8)] + [[12, 9.6, 12], [0, 0.0, 0]],
-            },
+            "method": "profile-state-adjudication.v1; exact test method",
+            "actor_id": "evaluator-1",
+            "metrics": reported_metrics[0],
         }
 
     monkeypatch.setattr(ModelEvaluationRepository, "latest_for_artifact", exact_evaluation)
@@ -547,6 +551,14 @@ async def test_profile360_reads_exact_computed_evaluation_for_prediction_artifac
     assert result.claims[0].claimState.value == "predicted"
     assert result.claims[0].domainSlotIds == ["likely_next_states"]
     assert "these are predictions, not observed states" in result.claims[0].claims[0]
+    # A self-consistent sample manifest cannot authorize metrics that do not
+    # recompute from those exact rows.
+    reported_metrics[0] = {**reported_metrics[0], "top_state_accuracy": 0.5}
+    tampered_metrics = await Profile360Provider(source=_PredictionSource(
+        PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
+    )).project(request, await _context(request))
+    assert tampered_metrics.sections[0].content["items"][0]["modelGovernance"]["evaluationEvidence"]["state"] == "unknown"
+    reported_metrics[0] = {**reported_metrics[0], "top_state_accuracy": 1.0}
     dataset_manifest[0] = "0" * 64
     bad_manifest = await Profile360Provider(source=_PredictionSource(
         PredictionOutputRead([output.model_dump(mode="python")], available=True, scope_known=True)
@@ -591,6 +603,7 @@ def test_profile_evaluation_manifest_rows_fail_closed_on_malformed_shape_and_fut
     row = {
         "tenantId": TENANT, "entityId": ENTITY, "modelId": "churn_prediction",
         "artifactVersion": "v-production-2", "split": "holdout",
+        "labelContractVersion": "profile-state-adjudication.v1",
         "predictionId": "p-1", "outcomeId": "o-1", "sourceEventId": "e-1",
         "actualState": "churned", "predictedState": "churned", "predictedConfidence": 0.8,
         "predictedDistribution": [{"state": "churned", "probability": 0.8, "rank": 1},
