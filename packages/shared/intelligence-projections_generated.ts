@@ -589,7 +589,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/economic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['account', 'agent', 'campaign', 'cluster', 'conversion', 'entity', 'episode', 'journey', 'profile', 'source'],
-    canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'campaign_touchpoints', 'canonical_activity', 'canonical_conversions', 'commerce', 'commerce_order_payment_ledger', 'currency_value_normalization', 'economic_facts', 'entity_registry', 'evidence', 'graph', 'identity_clusters_v2', 'journey_steps', 'outcome_facts', 'payments', 'revenue_adjustments'],
+    canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'campaign_touchpoints', 'canonical_activity', 'canonical_conversions', 'commerce', 'commerce_order_payment_ledger', 'currency_value_normalization', 'economic_facts', 'entity_registry', 'evidence', 'graph', 'identity_clusters_v2', 'journey_steps', 'model_governance', 'outcome_facts', 'payments', 'revenue_adjustments'],
     hardDependencies: ['measurement_outcome_contract', 'temporal_kernel'],
     projectionDependencies: ['outcome360', 'profile360', 'relationship360'],
     optionalProjectionDependencies: [],
@@ -6213,11 +6213,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        authorityGapReason: 'model_governance_calibration_and_validation_not_joined',
         canonicalAuthorityRefs: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'canonical_conversions', 'model_governance'],
         description: 'Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI.',
         id: 'confidence',
-        partialImplementationReason: 'Exact conversion/run/credit-linked model-reported confidence may include a persisted check of recorded run configuration lineage against the current matching config. Model governance approval, calibration, historical config immutability, and applicability to realized value remain unvalidated.',
+        partialImplementationReason: 'Exact conversion/run/credit-linked model-reported confidence binds model_governance through durable exact tenant/run/config snapshot lineage and authenticated administrator approval or rejection with actor, permission and authorization-time provenance. A separately identified value-credit-temporal-eligibility.v1 evaluation rejoins bounded canonical credit, conversion and touchpoint samples and validates its manifest and temporal eligibility metric; it does not calibrate model-reported confidence. Missing, changed, conflicting, future or truncated evidence remains unknown. Confidence calibration remains unvalidated; independent attribution correctness, causal value, credit-weight validity, historical config immutability, applicability to realized value and complete producer coverage remain unknown.',
         projectionBindings: [
           {
             projectionId: 'economic360',
@@ -6226,8 +6225,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['model_governance']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['ai_execution_facts', 'canonical_conversions', 'entity_registry', 'identity_clusters_v2'],

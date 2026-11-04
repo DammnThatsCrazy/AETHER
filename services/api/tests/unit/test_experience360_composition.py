@@ -338,7 +338,7 @@ def test_mcp_invocation_and_receipt_backed_resource_reads_remain_bounded(surface
         assert bounded_limit in reason
 
 
-def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> None:
+def test_value360_confidence_binds_scoped_governance_without_calibration() -> None:
     confidence = next(
         slot
         for slot in PRODUCT_360_SURFACE_DEFINITIONS["value360"]["domainSlots"]
@@ -352,11 +352,13 @@ def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> 
         "canonical_conversions",
         "model_governance",
     }
-    assert set(confidence["unboundCanonicalAuthorityRefs"]) == {"model_governance"}
-    assert confidence["authorityGapReason"] == (
-        "model_governance_calibration_and_validation_not_joined"
-    )
-    assert confidence["partialImplementationReason"]
+    assert not confidence.get("unboundCanonicalAuthorityRefs")
+    assert not confidence.get("authorityGapReason")
+    reason = confidence["partialImplementationReason"]
+    assert "authenticated administrator approval or rejection" in reason
+    assert "value-credit-temporal-eligibility.v1" in reason
+    assert "Confidence calibration remains unvalidated" in reason
+    assert "complete producer coverage remain unknown" in reason
     assert len(confidence["projectionBindings"]) == 1
     binding = confidence["projectionBindings"][0]
     assert binding["projectionId"] == "economic360"

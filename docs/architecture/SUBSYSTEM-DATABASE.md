@@ -38,8 +38,8 @@ reviewed_source_commits:
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "config/storage_policies.yaml": "sha256:3012f9d8e0504a79de25b8d17942a3c3cc4dd9d2897cb0a3f559839e82e98645"
-  "services/api/actions/agent/invocation_runtime.py": "sha256:7ea361c7766345c3ba5da95a252b151d3c85ddf8a12a5fb0da39b4fdb0767890"
+  "config/storage_policies.yaml": "sha256:639439095e7bb6053dbce0aa9402e734c9959005defb14679028d7565c638d62"
+  "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
   "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -52,13 +52,13 @@ source_hashes:
   "services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py": "sha256:bb313b4f28028cca340689dbd67154cd9c02810ba08d31c3a0b8a48a98a3e842"
   "services/api/intelligence/model_governance/evaluations.py": "sha256:1dd0ae6aae180640a50cbe95ede4bd4e35b6bdbdded1acc86b8b0491da437b21"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/attribution_model_validation.py": "sha256:da10a304b79537cda1be523999b7fcc35e1f59177b22bc855709d91f937c5aae"
+  "services/api/value/economic/attribution_model_validation.py": "sha256:582d2bbef8f45d36d9fbc05217c78541e9b0efd722e52ad16686384eabf6d4d5"
   "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
 ---
 
@@ -498,6 +498,16 @@ when returned in encoded form. Value-model approval inserts conflict on the
 migration's `decision_id` primary key. The invocation and governance migration
 heads are joined by `20261030_merge_authority_heads`; it adds no schema of its
 own.
+
+`20261104_value_model_approval_policy_evidence` follows that merge and adds the
+authenticated administrator's action, permission, decision, actor and
+authorization timestamp to Value approval records. Legacy rows without this
+evidence remain unavailable to the approval reader.
+`20261104_value_confidence_evaluations` follows it and stores append-only,
+tenant/run/config-bound temporal credit eligibility evaluations with sample
+references, manifest hash, bounded counts, evaluation window and authorization
+provenance. Legal-retention storage policy preserves these rows. The evaluation
+is not attribution correctness or confidence calibration.
 
 These migrations are authored in the branch; this page does not claim they
 have been applied.

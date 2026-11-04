@@ -16,9 +16,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bf1ee5d29beb632181bf7bcf664f942c300f5cf78ccb8c1f902def829065f48a"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:47c86f117f006cbd5ab7023120944ffb80c4c8226116a9d76a882d0def795c3a"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:fb3acc6d08b0bd7acdfd39653cdbbdf13cdd62ce6cc72010c7986dbe68a946cc"
+  "services/api/actions/agent/": "sha256:1ee676b84cf9359a9876e3a72e9d03756f24795b36f38ec81f90a0a9bbb13037"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -38,7 +38,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/": "sha256:fbc31678aeaf5a4817cb48787708c394a1ab96a05e3554af88ac291273d57b47"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
@@ -47,7 +47,7 @@ source_hashes:
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:a98f9f5e6bd1ae986f284fcc52b6711b397597e3494da6be3ae497d6dd9613b8"
+  "services/api/value/economic/economic360_provider.py": "sha256:b74b82c445bc94df99019c193f260c3d0dcb6f6c1421d981ef95898d69a9cc33"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
@@ -190,8 +190,11 @@ matching endpoint identity bindings; account/workspace aliases, membership
 fanout, source freshness, and historical consent coverage remain unresolved.
 Value360's `confidence` slot now carries Economic360 model confidence only when
 the score and model type/version are present. It remains model-reported and
-uncalibrated for realized value or ROI, with model-governance calibration
-evidence unbound.
+uncalibrated for realized value or ROI. Exact run/config lineage and durable
+authenticated administrator approval bind scoped model-governance provenance.
+A separately identified temporal eligibility evaluation rejoins canonical
+credit/conversion/touchpoint samples and its manifest. Approval and temporal
+eligibility do not establish calibration, causal credit or independent value.
 
 Execution360 derives server-recorded lifecycle elapsed time from valid,
 timezone-aware start and end timestamps and carries the lifecycle evidence
@@ -306,6 +309,10 @@ still reports approved-resource read availability, completeness, and
 truncation. It exposes validated run-bound provider receipts separately from
 observed action edges; an edge without an exact receipt link retains unknown
 execution-receipt authority.
+The resources registry reference is bound for the exact observed public HTTPS
+MCP resource-read path, not for mutation or general resource-operation claims.
+Bounded inventory pagination rejects looping cursors, duplicate requested URIs,
+malformed pages and overflow before invocation.
 The invocation client accepts JSON and Streamable HTTP SSE replies only when
 exactly one JSON-RPC 2.0 response matches the expected request ID. This check
 also applies to initialization and resource list/read exchanges; unrelated SSE

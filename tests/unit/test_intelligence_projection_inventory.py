@@ -271,3 +271,16 @@ def test_profile_prediction_authorities_have_canonical_provider_bindings() -> No
     assert authorities.isdisjoint(slot.get("unboundCanonicalAuthorityRefs", []))
     assert "profile-state-adjudication.v1" in slot["partialImplementationReason"]
     assert "modelCalibrationVerified remains false" in slot["partialImplementationReason"]
+
+
+def test_value_confidence_binds_governance_without_claiming_calibration() -> None:
+    registry = json.loads(_REGISTRY_JSON.read_text(encoding="utf-8"))
+    projection = next(item for item in registry["projections"] if item["id"] == "economic360")
+    surface = next(item for item in registry["productSurfaces"] if item["id"] == "value360")
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "confidence")
+    assert "model_governance" in projection["canonicalAuthorities"]
+    assert "model_governance" in slot["canonicalAuthorityRefs"]
+    assert "model_governance" not in slot.get("unboundCanonicalAuthorityRefs", [])
+    assert "not a calibrated estimate" in slot["description"]
+    assert "Confidence calibration remains unvalidated" in slot["partialImplementationReason"]
+    assert "value-credit-temporal-eligibility.v1" in slot["partialImplementationReason"]

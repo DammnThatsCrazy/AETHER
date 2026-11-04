@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:979d247d6edc88d2de235db949064c406da903589f4b2980cf318bd9138378e8"
+  "services/api/actions/": "sha256:a86b5296c8bb85f8000b70ec0193aeaee3a894e4e7bff901bdb479e248559ebb"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -33,11 +33,11 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:8b96ac2515b327e399fe4e2b3bddb0080aed18e04de158aaf13f1a54ef7ca760"
   "services/api/ingestion/": "sha256:e0f728400c34a5123aa0cebef7799c945003314916470645f37177ec38c44e5b"
-  "services/api/intelligence/": "sha256:9c734b35466479143e1568314736aad8e630b61356fd9d54ba1d22242a457163"
+  "services/api/intelligence/": "sha256:3cb4d51d24052ac722be6445711ea46c4e247ac6e1c947df85601b32874c987f"
   "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:875bbf8ca5e61e8158d68460b7061f40556aa04b2b1056d86f6bddd3fccdd7ba"
+  "services/api/value/": "sha256:054de0672956983e08ca6a1dde7a9d3221752f38d1a5d6f34c131e7671051ac3"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1844,10 +1844,12 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 | GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
 | GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
 | POST | `/v1/economic/attribution-runs/{run_id}/model-validation` | Record a tenant-scoped check of a completed run's configuration lineage against the current model configuration; requires `write` |
+| POST | `/v1/economic/attribution-runs/{run_id}/model-approval` | Record an append-only approval or rejection with authenticated actor and admin authorization evidence for the exact completed run, configuration and lineage decision; requires `admin`. Approval is not calibration. |
+| POST | `/v1/economic/attribution-runs/{run_id}/confidence-evaluation` | Persist a bounded, reproducible evaluation of canonical credit touchpoint temporal eligibility for an exact completed run and validated configuration; requires an authenticated principal and `write`. This does not calibrate confidence or validate causal credit weights. |
 
 **Query params:** entity endpoints accept `?window=realtime|24h|7d|30d|90d|lifetime` (default `lifetime`; tenant overview defaults to `30d`).
 
-**Permissions:** `read` for economic reads; `write` for the model-lineage check. The check does not approve or calibrate the model, prove historic configuration immutability, or validate realized value.
+**Permissions:** `read` for economic reads; `write` for model-lineage checks and temporal eligibility evaluations; `admin` for run-bound model approval. These records do not calibrate confidence, prove historic configuration immutability, or validate realized value.
 
 ---
 
@@ -2346,6 +2348,10 @@ resource-read evidence. Ambiguous receipts fail closed. Resource mutations,
 standing authorization, independent external effects and complete producer
 coverage remain unknown. Neither surface nor
 the full 18-surface contract is complete.
+The `resources` registry reference is bound for this exact observed read path,
+not for general resource operations. Resource inventory pagination is bounded;
+repeated cursors, duplicate matching URIs and malformed or overflowing listings
+fail closed before the read.
 MCP initialization, tool calls, and resource listing/reads accept JSON or SSE
 responses only when exactly one JSON-RPC response matches the request ID.
 Valid resource-read grants remain separate from invoke-grant coverage.

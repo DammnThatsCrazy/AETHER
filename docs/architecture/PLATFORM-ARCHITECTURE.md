@@ -71,9 +71,9 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:c3cfb558cd4098acd83880debc0fcefbff01d965a2036be082bcd6068cb58e29"
+  "packages/shared/": "sha256:541123c2d695e7d4f1fcd3008869591f8d9ee2295a5fc27db78a5093b42e526d"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/agent360_provider.py": "sha256:5a12241f8489bffcc23d6dd47d98d6da6dd7d8c06842729ba4bdcf9c2734c20a"
+  "services/api/actions/agent/agent360_provider.py": "sha256:47c1b8102d5c37e37ae142d11a472ca6a9027fa3adac2ed546377b8a9682c663"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
   "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
@@ -97,7 +97,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1254be67a69e089a6d9ed814a92fca7fb7a5fcf7fd4d6757e22918c596cfe7c5"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:4a6d24b8c9f765dc05801de7e93c0b83f75ef35ad220d06c884b917bd91a1601"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
@@ -111,7 +111,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
   "services/api/value/commerce/routes.py": "sha256:9b68c0d975d7b81b530ff8eb91e95ee6c37e10034498dbf248f1889f026c5897"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:a98f9f5e6bd1ae986f284fcc52b6711b397597e3494da6be3ae497d6dd9613b8"
+  "services/api/value/economic/economic360_provider.py": "sha256:b74b82c445bc94df99019c193f260c3d0dcb6f6c1421d981ef95898d69a9cc33"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
@@ -710,6 +710,10 @@ application to realized value or ROI are unvalidated. Exact run/config
 lineage validation and a separately recorded tenant-admin approval or rejection
 may be exposed as governance evidence; neither establishes calibration or
 application to realized value or ROI.
+These exact approval and lineage joins bind the scoped model-governance
+reference. A separate bounded temporal credit eligibility evaluation rejoins
+canonical credit, conversion and touchpoint rows and preserves its manifest,
+actor and permission provenance. This metric is not confidence calibration.
 Value360's `financial_risk` slot now requires separate Economic360 and Risk360
 claims for the same tenant and exact subject. Economic evidence must be a
 direct subject-scoped fact, and Risk360 must provide an assessed economic,
@@ -825,6 +829,10 @@ malformed or padded grant and policy-decision identifiers. Its dedicated MCP
 resource-read route now records invocation-bound read receipts under an exact
 read grant; this establishes the bounded read attempt and result digest, while
 mutation authority and external effects remain unknown.
+Agent360 and Workflow360 bind the resources registry reference for this
+observed read path only. Resource inventory pagination is bounded; looping
+cursors, duplicate requested URIs and malformed or overflowing pages fail
+closed. Validated receipt scope and operation-time policy remain required.
 Workflow definition-to-run linkage, complete actor and step coverage, workflow-wide approval authority,
 policy, and freshness remain unknown. Account360 adds bounded member Risk360 frames from
 exact tenant-owned `MEMBER_OF` edges after account-slot and per-member policy

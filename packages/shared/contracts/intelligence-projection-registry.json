@@ -1571,6 +1571,7 @@
         "graph",
         "identity_clusters_v2",
         "journey_steps",
+        "model_governance",
         "outcome_facts",
         "payments",
         "revenue_adjustments"
@@ -7462,11 +7463,7 @@
               ]
             }
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "model_governance"
-          ],
-          "authorityGapReason": "model_governance_calibration_and_validation_not_joined",
-          "partialImplementationReason": "Exact conversion/run/credit-linked model-reported confidence may include a persisted check of recorded run configuration lineage against the current matching config. Model governance approval, calibration, historical config immutability, and applicability to realized value remain unvalidated."
+          "partialImplementationReason": "Exact conversion/run/credit-linked model-reported confidence binds model_governance through durable exact tenant/run/config snapshot lineage and authenticated administrator approval or rejection with actor, permission and authorization-time provenance. A separately identified value-credit-temporal-eligibility.v1 evaluation rejoins bounded canonical credit, conversion and touchpoint samples and validates its manifest and temporal eligibility metric; it does not calibrate model-reported confidence. Missing, changed, conflicting, future or truncated evidence remains unknown. Confidence calibration remains unvalidated; independent attribution correctness, causal value, credit-weight validity, historical config immutability, applicability to realized value and complete producer coverage remain unknown."
         },
         {
           "id": "evidence_trace",

@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:bf1ee5d29beb632181bf7bcf664f942c300f5cf78ccb8c1f902def829065f48a"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:47c86f117f006cbd5ab7023120944ffb80c4c8226116a9d76a882d0def795c3a"
 ---
 
 # 360 System Blueprint
@@ -57,8 +57,10 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Three slots declare three unbound canonical authority references after the exact
-Profile360 adjudication and evaluation bindings. Profile360 `likely_next_states`
+No slots declare unbound canonical authority references after the exact
+Profile360 adjudication/evaluation, MCP resource-read and scoped Value governance
+bindings. This is authority-path coverage, not complete product implementation
+or proof of every claim an authority could support. Profile360 `likely_next_states`
 binds `outcome_facts` through policy-authorized v1 churn/retention adjudications
 and `model_governance` through exact-artifact evaluations whose sample manifests
 and metrics are validated and recomputed by the reader. Universal calibration,
@@ -69,9 +71,13 @@ read-back. The supported verification checks the provider site, requested payloa
 tenant, subject, intent, job, receipt and policy decision. Other providers remain
 unverified; neither slot is complete, and business outcomes, producer coverage,
 historical replay and freshness are not established by resource existence.
-Value360 can expose a recorded check of attribution run
-configuration lineage against the current config, while model governance and
-calibration remain unbound. Campaign360
+Value360 can expose a recorded check of attribution run configuration lineage,
+an authenticated run-bound model approval, and a reproducible bounded evaluation
+of credit touchpoint temporal eligibility. Temporal eligibility does not
+calibrate model-reported confidence or establish causal attribution or correct
+credit weights. Its governance reference binds provenance and governed model use
+through exact approval and validation evidence, not confidence calibration.
+Calibration remains unvalidated. Campaign360
 `signal_sources` now binds exact gateway-admitted SDK Bronze observations and
 current touchpoint classification revisions to touchpoint-linked canonical
 events; broader source-fact producer coverage remains unknown. Agent360 `risk_summary` exposes its exact canonical Agent identity
@@ -94,7 +100,13 @@ performs the actual tools/call. Durable claims prevent duplicate execution, and
 immutable completion receipts bind the principal, tenant, agent, execution, tool,
 workflow, policy, grant interval and provider result. Handshake failures do not
 prove invocation. Readers reject ambiguous, cross-scope, out-of-window and
-out-of-grant evidence. Resource operations remain unbound. Agent360 `capabilities` resolves
+out-of-grant evidence. Dedicated resource-read grants and operation-time policy
+checks also bind the resources authority through bounded, paginated MCP
+`resources/list` and `resources/read` operations and exact immutable receipts.
+Agent360 joins these receipts to executions; Workflow360 requires an authorized
+run-linked read. Successful content must match its exact URI and digest.
+Resource mutation, independent effects, historical replay, freshness and complete
+producer coverage remain unknown. Agent360 `capabilities` resolves
 observed MCP catalog tool identity only for an exact tenant/provider/server/tool
 tuple. For a complete canonical grant read, it also exposes the exact recorded
 invoke action and capability or server resource with delegation evidence;
