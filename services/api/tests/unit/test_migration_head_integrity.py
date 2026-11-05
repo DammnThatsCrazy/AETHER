@@ -225,7 +225,7 @@ def test_historical_merge_remains_genuine_after_later_integration() -> None:
     merge = graph["historical_merge"]
     pruned = {rid: rev for rid, rev in graph.items() if rid != merge.revision}
 
-    assert len(_heads(pruned)) == 1  # final-graph pruning loses historical signal
+    assert len(_heads(pruned)) == 1
     assert _is_genuine_merge(merge, graph)
 
 

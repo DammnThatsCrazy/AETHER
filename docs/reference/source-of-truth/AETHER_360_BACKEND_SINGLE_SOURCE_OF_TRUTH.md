@@ -44,6 +44,26 @@ calibrates model-reported confidence. The registry has no unbound authority
 references for these supported paths; partial slot implementation, calibration,
 applicability and complete producer coverage remain separate limitations.
 
+### Branch integration and verification handoff (2026-11-04)
+
+Draft PR #843 continues the authority work from merged PR #841 on
+`feat/360-canonical-authority-producers-20261029`. Development integration
+preserves both published migration lineages under the single
+`20261104_merge_value_behavior_heads` head; no applied revision is rewritten.
+The migration integrity regression now tests merge-parent independence rather
+than removing historical merges from the final graph, where later integration
+can mask a genuine consolidation. Synthetic regressions preserve rejection of
+redundant ancestor-parent merges.
+
+Focused integration evidence includes 488 backend authority tests, 117 root
+projection tests, 488 storage-policy checks, and the nine-test migration
+integrity suite. The source registry has zero slots with unbound canonical
+authority references for the supported paths. These checks are not canonical
+PR readiness evidence. Keep the PR in draft during accumulation; final
+architecture review, verification disposition, and executed hosted authority
+remain pending. Calibration, external effects and full producer coverage retain
+the limitations described here.
+
 - **Episode360 `timeline`:** resolves only observation IDs explicitly recorded by an episode through tenant-scoped semantic Silver rows. Untyped source namespaces, complete activity/session coverage, policy, and freshness remain unresolved.
 - **Episode360 `risk_flags`:** reads current RiskSignals only for the exact tenant-scoped, typed primary subject on an EpisodeRecord, preserving signal and component evidence. Risk history, complete signal coverage, policy, freshness, and causality remain unknown; an empty read does not establish absence.
 - **Campaign360 `signal_sources` and `source_classification`:** join exact campaign touchpoint event references to tenant-scoped canonical events, matching gateway-admitted SDK Bronze observations, and current touchpoint source-classification revisions verified by tenant, touchpoint, revision ID, class, classifier version, and time. Campaign registry source, broader source-fact and observation producers, complete event coverage, and freshness remain unresolved.
