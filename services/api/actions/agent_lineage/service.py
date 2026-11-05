@@ -47,6 +47,14 @@ MAX_CACHED_ENGINES = 4
 STALE_AFTER_SECONDS = 6 * 3600.0
 #: Facts read per reconcile. Hitting it is disclosed on every affected summary.
 MAX_FACTS_PER_RECONCILE = 20_000_000
+#: Rows per export part, sized so a part of ``EXPORT_COLUMNS`` stays inside the artifact cap.
+EXPORT_PART_ROWS = 50_000
+EXPORT_COLUMNS = (
+    "principal_entity_id", "agent_entity_id", "parent_agent_id", "root_agent_id", "depth",
+    "relationship_type", "relationship_status", "direct_or_indirect", "attribution_class", "evidence_class",
+    "authority_ref", "authority_resolution_status", "lineage_status", "active_state", "first_seen", "last_seen",
+    "evidence_count", "evidence_digest", "agent_definition_id", "agent_deployment_id",
+)
 ALIAS_FIELDS = ("agent_id", "parent_agent_ref", "child_agent_ref", "delegated_to_ref", "root_agent_ref")
 
 SilverPageReader = Callable[[str, Optional[str]], Awaitable[tuple[list[dict[str, Any]], Optional[str]]]]
@@ -502,17 +510,33 @@ class AgentLineageService:
         next_cursor = encode_cursor(scope, [rows[size - 1]["id"]]) if len(rows) > size else None
         return _page(rows[:size], size, await self._disclosure(tenant_id, principal), next_cursor)
 
-    async def export_rows(self, tenant_id: str, principal: str, filters: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
-        """Every row for the asynchronous export job; not reachable from a request path."""
+    async def export_part(
+        self, tenant_id: str, principal: str, *, filters: Optional[dict[str, Any]] = None,
+        after: Optional[str] = None, part_rows: int = EXPORT_PART_ROWS,
+    ) -> dict[str, Any]:
+        """One part of a full extraction, for the asynchronous export job.
+
+        An artifact has a size cap, so a large principal exports in parts: rows carry
+        the evidence fields rather than the whole read-model record, and a part that
+        stops early names where the next one starts. Not reachable from a read route.
+        """
         clean = validate_filters(filters)
-        out: list[dict[str, Any]] = []
-        after: Optional[str] = None
-        while True:
-            rows = await self.repo.list_rows(tenant_id, principal, clean, after, vocab.MAX_PAGE_SIZE)
-            out.extend(rows)
-            if len(rows) < vocab.MAX_PAGE_SIZE:
-                return out
-            after = rows[-1]["agent_entity_id"]
+        rows: list[dict[str, Any]] = []
+        cursor = after
+        complete = False
+        while len(rows) < part_rows:
+            page = await self.repo.list_rows(
+                tenant_id, principal, clean, cursor, min(vocab.MAX_PAGE_SIZE, part_rows - len(rows)),
+            )
+            rows.extend({column: row.get(column) for column in EXPORT_COLUMNS} for row in page)
+            if len(page) < min(vocab.MAX_PAGE_SIZE, part_rows - len(rows) + len(page)):
+                complete = True
+                break
+            cursor = page[-1]["agent_entity_id"]
+        if not complete:
+            # Exactly part_rows read: only one more row says whether another part exists.
+            complete = not await self.repo.list_rows(tenant_id, principal, clean, cursor, 1)
+        return {"rows": rows, "next_after": None if complete else cursor, "complete": complete}
 
 
 def _apply_aliases(row: dict[str, Any], aliases: dict[str, str]) -> dict[str, Any]:

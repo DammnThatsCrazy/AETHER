@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "482948261"
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
+  "services/api/actions/agent/deployment_routes.py": "sha256:9e177294d7cff6c2b4ec9f17d48a1eb5e2a1eb5cfb6b59742ae15f9d4110cfc1"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -22,7 +22,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
-  "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
+  "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
 ---
 
 # Target Architecture

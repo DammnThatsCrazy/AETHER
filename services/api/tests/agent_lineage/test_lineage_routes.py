@@ -134,3 +134,11 @@ def test_a_declaration_cannot_certify_itself_as_proof(populated):
     assert response.json()["data"]["evidence_class"] == "TENANT_DECLARED"
     bad = client.post("/v1/agent-lineage/bindings", json={"kind": "agent", "principal_entity_id": "human:h9"})
     assert bad.status_code == 400
+
+
+def test_a_binding_cannot_make_an_agent_its_own_principal(populated):
+    client = _app(_Tenant(T, {"agent:manage"}))
+    response = client.post("/v1/agent-lineage/bindings", json={
+        "kind": "agent", "principal_entity_id": "same", "agent_entity_id": "same",
+    })
+    assert response.status_code == 400

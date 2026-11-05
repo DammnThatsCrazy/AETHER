@@ -442,5 +442,8 @@ async def _agent_lineage_exporter(tenant_id: str, params: dict) -> ExportPayload
         raise BadRequestError("agent_lineage export requires principal_entity_id")
     service = await get_service()
     filters = {key: params.get(key) for key in ("relationship", "attribution_class")}
-    rows = await service.export_rows(tenant_id, str(principal), filters)
-    return ExportPayload(rows=rows, per_source={"principal_agent_lineage": len(rows)})
+    part = await service.export_part(tenant_id, str(principal), filters=filters, after=params.get("after"))
+    # ``rows_remaining`` tells the caller to request the next part, after the last row's agent.
+    return ExportPayload(rows=part["rows"], per_source={
+        "principal_agent_lineage": len(part["rows"]), "rows_remaining": 0 if part["complete"] else 1,
+    })

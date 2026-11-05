@@ -132,6 +132,8 @@ class LineageExportRequest(BaseModel):
     format: str = Field(default="ndjson", pattern="^(json|ndjson|csv)$")
     relationship: Optional[str] = None
     attribution_class: Optional[str] = None
+    # Resume after this agent id. A part that reports ``rows_remaining`` continues here.
+    after: Optional[str] = Field(default=None, max_length=256)
 
 
 @router.post("/principals/{principal_id}/export", status_code=202)
@@ -148,7 +150,7 @@ async def principal_export(principal_id: str, body: LineageExportRequest, reques
         export_type="agent_lineage",
         params={
             "principal_entity_id": principal_id, "format": body.format,
-            "relationship": body.relationship, "attribution_class": body.attribution_class,
+            "relationship": body.relationship, "attribution_class": body.attribution_class, "after": body.after,
         },
         requested_by=getattr(tenant, "user_id", None),
         correlation_id=getattr(request.state, "request_id", None),
@@ -196,6 +198,8 @@ async def declare_binding(body: PrincipalBindingRequest, request: Request):
     proof, so it is stored ``TENANT_DECLARED`` and resolves as inferred at most.
     """
     tenant_id = _tenant_id(request)
+    from actions.agent.identity_hierarchy import ensure_distinct_human_agent
+
     from ._common import stable_hash
     from .evidence import PrincipalBinding
     from .repository import PrincipalBindingRepository
@@ -204,6 +208,8 @@ async def declare_binding(body: PrincipalBindingRequest, request: Request):
         binding = PrincipalBinding.from_mapping({
             "tenant_id": tenant_id, "evidence_class": "TENANT_DECLARED", **body.model_dump(),
         })
+        if binding.agent_entity_id:
+            ensure_distinct_human_agent(human_entity_id=binding.principal_entity_id, agent_entity_id=binding.agent_entity_id)
     except ValueError as exc:
         raise BadRequestError(str(exc))
     binding_id = "alb_" + stable_hash(tenant_id, *binding.key)

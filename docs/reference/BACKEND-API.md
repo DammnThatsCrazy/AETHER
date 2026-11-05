@@ -25,20 +25,20 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:86f0c5a07f144b260a478be07474bf8a96ad5159c6470a4bbbc9e92acceac66b"
+  "services/api/actions/": "sha256:ea5b9398747185d315e173287915c9661d2e772ad4cfedf9188bd5a4d86bef58"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
+  "services/api/governance/": "sha256:e2f5eaa288cdadd530a6e01d1d42b5a74d8bab78522dcdf18f9b0b3449e03f9e"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:186128cc10aad39d82c7f123d8feb057c63a477d50e6b5511d0f9b737573cb68"
-  "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
-  "services/api/intelligence/": "sha256:973f80fd1186ea0aa5d8e652bfbb7e2a34c0a398c5cc9e15aab28e802bdb946e"
+  "services/api/identity/": "sha256:1a9b3248f06212ad116b5d3665c190fa2ed3fa139d6c8be474a76fe4ba677d43"
+  "services/api/ingestion/": "sha256:96f3a40e731d5d20a6025ad552d85ae86d45ef63f26af06af36b63a4396b0f1f"
+  "services/api/intelligence/": "sha256:0115648d33d00b33049b91ba7ce8971f0a852df7407112658e579a478bfa4503"
   "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:72b427f971a848bcc429c30dec93aedfe1204450cbaed259efa0fffc1eaf0e4e"
-  "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
+  "services/api/workers/": "sha256:16fd1430c57ce6fb2fd055de8d9a183b384c4f0cc925403aac798656869c87af"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -3854,7 +3854,7 @@ All routes need `agent:manage` and the deployment registry flag. Tenant scope co
 - `GET /v1/agent-lineage/principals/{id}/tree` — one delegation level, each branch collapsed to its descendant count; `parent` expands a branch.
 - `GET /v1/agent-lineage/principals/{id}/risk` — Risk360 fan-out assessment. Scale is reported as context and cannot raise the level on its own; `triggered_signals` lists the behavioral evidence.
 - `GET /v1/agent-lineage/principals/{id}/restatements` — what corrections changed.
-- `POST /v1/agent-lineage/principals/{id}/export` — also needs `export` or `admin`. Enqueues the full extraction as a job; `GET /v1/agent-lineage/exports/{job_id}` reports it.
+- `POST /v1/agent-lineage/principals/{id}/export` — also needs `export` or `admin`. Enqueues the extraction as a job; `GET /v1/agent-lineage/exports/{job_id}` reports it. Each part holds at most 50,000 rows of evidence fields. A part with `rows_remaining: 1` continues with `after` set to its last agent id.
 - `GET /v1/agent-lineage/agents/{id}` — Agent360 lineage block: hierarchy, principals, ancestors, counts, effects, outcomes, evidence. `/counts`, `/descendants` (cursor) and `/ancestors` read parts of it.
 - `POST /v1/agent-lineage/reconcile` — folds new evidence; `full=true` rebuilds and logs restatements. The durable job type `agent_lineage.reconcile` does the same from a `job_schedules` row. Incremental passes stop at the first page holding nothing new, so schedule a periodic `full` to pick up facts arriving with old timestamps.
 - `POST /v1/agent-lineage/bindings` — records a tenant's declaration of a principal link. No evidence class is accepted: declarations are stored `TENANT_DECLARED` and resolve as inferred at most.
@@ -4290,7 +4290,8 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
   (continuations, installations, client-sync), the semantic-intelligence
   plane (observations, sentiment, Gold aggregate state, review queue), and
   every other `DSR_COMPONENTS` entry (identity, graph, Profile 360, features,
-  exports, caches, replay, connectors, financial snapshots, Silver, Bronze) —
+  exports, caches, replay, connectors, financial snapshots, Silver, Bronze, the
+  derived agent lineage read model) —
   marking each `dsr_propagation` component with its own receipt.
 
 Provider readiness is truthful: without a credential a provider reports

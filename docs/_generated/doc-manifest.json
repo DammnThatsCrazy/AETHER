@@ -528,6 +528,22 @@
       ]
     },
     {
+      "path": "docs/architecture/HIGH-CARDINALITY-AGENT-LINEAGE.md",
+      "title": "High-Cardinality Agent Lineage",
+      "slug": "architecture/high-cardinality-agent-lineage",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "security"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0",
+      "canonical_owner": "graph@aether"
+    },
+    {
       "path": "docs/architecture/IDENTITY-RESOLUTION.md",
       "title": "Identity Resolution",
       "slug": "concepts/identity-resolution",
@@ -7111,6 +7127,19 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/product/productization/agent-lineage-scale-proof-ledger.md",
+      "title": "Agent Lineage Scale Proof Ledger",
+      "slug": "operations/agent-lineage-scale-proof-ledger",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
     },
     {
       "path": "docs/product/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",

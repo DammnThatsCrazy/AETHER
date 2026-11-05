@@ -250,13 +250,37 @@ async def test_investigation_answers_the_operator_questions_in_bounded_reads(rep
         assert len(page["items"]) <= 25
 
 
-async def test_export_reads_every_row_past_the_page_budget(repo):
+async def test_export_parts_cover_every_row_once_past_the_page_budget(repo):
     fixture = S.build_fixture(1000)
     service = _service(repo, fixture)
     await service.reconcile(T)
-    rows = await service.export_rows(T, S.LEGIT_HUMAN)
     summary = await service.summary(T, S.LEGIT_HUMAN)
-    assert len(rows) == summary["activity"]["agent_count"] > V.MAX_PAGE_SIZE
+    seen, after, parts = [], None, 0
+    while True:
+        part = await service.export_part(T, S.LEGIT_HUMAN, after=after, part_rows=150)
+        parts += 1
+        seen.extend(row["agent_entity_id"] for row in part["rows"])
+        assert all("evidence_digest" in row and "confidence" not in row for row in part["rows"])
+        after = part["next_after"]
+        if part["complete"]:
+            break
+    assert len(seen) == len(set(seen)) == summary["activity"]["agent_count"] > V.MAX_PAGE_SIZE
+    assert parts == 1 + (len(seen) - 1) // 150
+
+
+async def test_export_part_stays_inside_the_artifact_cap():
+    import json as _json
+
+    from actions.agent_lineage.service import EXPORT_COLUMNS, EXPORT_PART_ROWS
+    from repositories.artifacts import MAX_ARTIFACT_BYTES
+
+    fixture = S.build_fixture(1000)
+    service = _service(InMemoryLineageRepository(), fixture)
+    await service.reconcile(T)
+    part = await service.export_part(T, S.MALICIOUS_HUMAN, part_rows=200)
+    per_row = len(_json.dumps(part["rows"])) / len(part["rows"])
+    assert per_row * EXPORT_PART_ROWS < MAX_ARTIFACT_BYTES
+    assert set(part["rows"][0]) == set(EXPORT_COLUMNS)
 
 
 def test_delegation_rows_map_to_authority_records():
