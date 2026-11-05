@@ -587,7 +587,7 @@ async def deployment_activity(
 async def agent_spawn_lineage(
     root_agent_ref: str,
     request: Request,
-    max_depth: int = Query(default=8, ge=1, le=8),
+    max_depth: int = Query(default=8, ge=1, le=32),
 ):
     """Orchestrator -> sub-agent tree with per-agent tool/outcome rollups.
 

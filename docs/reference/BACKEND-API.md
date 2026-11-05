@@ -3842,7 +3842,23 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 
 ### Agent spawn lineage
 
-- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
+- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` (up to 32) — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
+
+### High-cardinality principal and agent lineage
+
+All routes need `agent:manage` and the deployment registry flag. Tenant scope comes from the authenticated context, never the path. Lists are cursor-paged (`page_size` up to 500) and bound to the scope that issued the cursor. Every aggregate carries a `disclosure` with `as_of`, `completeness` and truncation reasons. A count the evidence cannot support is `null`, never `0`, and a subject with no materialized lineage reports `completeness: unknown`.
+
+- `GET /v1/agent-lineage/principals/{id}/summary` — materialized counts for one principal: direct, indirect, probabilistic and unresolved agents, instances, runs, depth, verified and inferred links.
+- `GET /v1/agent-lineage/principals/{id}/agents` — lineage rows. Filters: `relationship`, `attribution_class`, `active_state`, `lineage_status`, `risk`, `cluster_id`, `deployment_id`, `operator_entity_id`, `authority_status`, `min_depth`, `max_depth`. An unknown filter value is a 400.
+- `GET /v1/agent-lineage/principals/{id}/clusters` — derived groupings, largest first, each stating its `bases`. `implies_common_control` is true only for an all-verified, non-weak grouping.
+- `GET /v1/agent-lineage/principals/{id}/tree` — one delegation level, each branch collapsed to its descendant count; `parent` expands a branch.
+- `GET /v1/agent-lineage/principals/{id}/risk` — Risk360 fan-out assessment. Scale is reported as context and cannot raise the level on its own; `triggered_signals` lists the behavioral evidence.
+- `GET /v1/agent-lineage/principals/{id}/restatements` — what corrections changed.
+- `POST /v1/agent-lineage/principals/{id}/export` — also needs `export` or `admin`. Enqueues the full extraction as a job; `GET /v1/agent-lineage/exports/{job_id}` reports it.
+- `GET /v1/agent-lineage/agents/{id}` — Agent360 lineage block: hierarchy, principals, ancestors, counts, effects, outcomes, evidence. `/counts`, `/descendants` (cursor) and `/ancestors` read parts of it.
+- `POST /v1/agent-lineage/reconcile` — folds new evidence; `full=true` rebuilds and logs restatements. The durable job type `agent_lineage.reconcile` does the same from a `job_schedules` row. Incremental passes stop at the first page holding nothing new, so schedule a periodic `full` to pick up facts arriving with old timestamps.
+- `POST /v1/agent-lineage/bindings` — records a tenant's declaration of a principal link. No evidence class is accepted: declarations are stored `TENANT_DECLARED` and resolve as inferred at most.
+- `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/principals/{id}/investigation` — `admin` and the Kyber telemetry flag. The operator's first screen in bounded reads, with `/agents`, `/tree` and `/tenants/{tenant}/agents/{id}` for drilldown.
 
 ### Agent behavior read models
 

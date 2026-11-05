@@ -2001,6 +2001,14 @@ export const api = {
       agentTelemetryDeployment: (tenantId: string, deploymentId: string) =>
         restClient.get(`/v1/admin/kyber/agent-telemetry/deployments/${encodeURIComponent(tenantId)}/${encodeURIComponent(deploymentId)}`, wrap(unknownSchema)).then(r => r.data),
 
+      // ── High-cardinality principal lineage investigation ──────────────────
+      agentLineageInvestigation: (tenantId: string, principalId: string) =>
+        restClient.get(`/v1/admin/kyber/agent-lineage/tenants/${encodeURIComponent(tenantId)}/principals/${encodeURIComponent(principalId)}/investigation`, wrap(unknownSchema)).then(r => r.data),
+      agentLineageAgents: (tenantId: string, principalId: string, query: Record<string, string>) =>
+        restClient.get(`/v1/admin/kyber/agent-lineage/tenants/${encodeURIComponent(tenantId)}/principals/${encodeURIComponent(principalId)}/agents?${new URLSearchParams(query).toString()}`, wrap(unknownSchema)).then(r => r.data),
+      agentLineageAgent: (tenantId: string, agentId: string) =>
+        restClient.get(`/v1/admin/kyber/agent-lineage/tenants/${encodeURIComponent(tenantId)}/agents/${encodeURIComponent(agentId)}`, wrap(unknownSchema)).then(r => r.data),
+
       // ── Payment rail observability (fleet health, aggregate-only) ─────────
       paymentRailsHealth: () =>
         restClient.get('/v1/admin/kyber/payment-rails/health', wrap(fleetHealthResponseSchema)).then(r => r.data),

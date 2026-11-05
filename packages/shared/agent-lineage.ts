@@ -375,6 +375,12 @@ export interface LineageRow {
   agent_entity_id: string;
   agent_definition_id: Nullable<string>;
   agent_instance_id: Nullable<string>;
+  agent_deployment_id: Nullable<string>;
+  operator_entity_id: Nullable<string>;
+  agent_instance_count: number;
+  agent_run_count: number;
+  competing_principal_ids: string[];
+  cluster_ids: string[];
   root_agent_id: Nullable<string>;
   parent_agent_id: Nullable<string>;
   root_run_id: Nullable<string>;
@@ -427,6 +433,7 @@ export interface LineageSummary {
   services_used: Nullable<number>;
   verified_links: Nullable<number>;
   inferred_links: Nullable<number>;
+  activity: Nullable<Record<string, unknown>>;
   disclosure: Disclosure;
 }
 

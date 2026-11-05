@@ -1497,12 +1497,17 @@ def create_app() -> FastAPI:
         from actions.agent.deployment_routes import deployments_router, lineage_router
         app.include_router(deployments_router)
         app.include_router(lineage_router)
+        if telemetry_flags.registry_enabled:
+            from actions.agent_lineage.routes import router as agent_lineage_router
+            app.include_router(agent_lineage_router)
         logger.info(
             "External Agent Telemetry: deployment/catalog routes mounted "
             "(/v1/agent/deployments)"
         )
     if telemetry_flags.kyber_enabled:
         from actions.agent.deployment_routes import kyber_router as agent_telemetry_kyber_router
+        from actions.agent_lineage.routes import kyber_router as agent_lineage_kyber_router
+        app.include_router(agent_lineage_kyber_router)
         app.include_router(agent_telemetry_kyber_router)
         logger.info("External Agent Telemetry: Kyber diagnostics mounted (/v1/admin/kyber/agent-telemetry)")
     if not (

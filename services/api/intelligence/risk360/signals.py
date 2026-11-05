@@ -50,7 +50,7 @@ from .dimensions import RISK_DIMENSION_KEYS
 
 #: Producer keys the dispatcher understands.
 KNOWN_PRODUCERS: frozenset[str] = frozenset(
-    {"fraud", "fraud_network", "device_risk", "geo", "behavioral", "trust", "agent_behavior"}
+    {"fraud", "fraud_network", "device_risk", "geo", "behavioral", "trust", "agent_behavior", "agent_lineage_fanout"}
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -271,6 +271,7 @@ class RiskEvidenceBundle(RiskContract):
     #: Agent behavior artifact (WO-093): ``{"model": AgentBehaviorModel,
     #: "authority_checks": [...], "adversarial": [...], "drift": {...}}``.
     agent_behavior: Optional[dict[str, Any]] = None
+    agent_lineage_fanout: Optional[dict[str, Any]] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -832,6 +833,36 @@ def signal_from_agent_behavior(
     return out
 
 
+def signals_from_agent_lineage_fanout(
+    artifact: Any,
+    *,
+    subject_kind: str,
+    subject_id: str,
+    tenant_id: str,
+    observed_at: Optional[datetime] = None,
+) -> list[RiskSignal]:
+    """Adapt a principal's lineage summary (see ``fanout``).
+
+    The subject is the principal. Only behavioral triggers produce a signal, so a
+    large clean fleet converges to none, and nothing is asserted about any
+    individual agent or anyone downstream.
+    """
+    if artifact is None:
+        return []
+    if subject_kind == "agent":
+        raise ValueError("fan-out evidence applies to principal subjects, not agents")
+    summary = _field(artifact, "summary")
+    if summary.get("principal_entity_id") != subject_id or summary.get("tenant_id") != tenant_id:
+        raise ValueError("lineage summary does not match the risk subject")
+    from .fanout import assess_principal, signals_from_assessment
+
+    assessment = assess_principal(summary, clusters=_field(artifact, "clusters") or [])
+    out = signals_from_assessment(summary, assessment, subject_kind=subject_kind)
+    if observed_at is not None:
+        out = [sig.model_copy(update={"observed_at": observed_at}) for sig in out]
+    return out
+
+
 _PRODUCER_ADAPTERS: Mapping[str, Any] = {
     "fraud": signal_from_fraud_result,
     "fraud_network": signals_from_fraud_network_evidence,
@@ -840,6 +871,7 @@ _PRODUCER_ADAPTERS: Mapping[str, Any] = {
     "behavioral": signal_from_behavioral_scan,
     "trust": signal_from_trust_vector,
     "agent_behavior": signal_from_agent_behavior,
+    "agent_lineage_fanout": signals_from_agent_lineage_fanout,
 }
 
 
@@ -946,6 +978,17 @@ def signals_from_evidence_bundle(
             adapt_producer_signal(
                 "agent_behavior",
                 bundle.agent_behavior,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                tenant_id=tenant_id,
+                observed_at=observed_at,
+            )
+        )
+    if bundle.agent_lineage_fanout is not None:
+        signals.extend(
+            adapt_producer_signal(
+                "agent_lineage_fanout",
+                bundle.agent_lineage_fanout,
                 subject_kind=subject_kind,
                 subject_id=subject_id,
                 tenant_id=tenant_id,

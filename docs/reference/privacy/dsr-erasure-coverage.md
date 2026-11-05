@@ -96,6 +96,7 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `risk_poisoning_evidence` | `risk_poisoning_evidence` | hard delete exact tenant rows whose subject or source ID equals a subject ref; legal holds respected | rows deleted |
 | `risk_intervention_records` | `risk_intervention_records` | hard delete exact tenant rows whose subject or actor ID equals a subject ref; legal holds respected | rows deleted |
 | `social_relationship_evidence_events` | `social_relationship_evidence_events` | hard delete exact tenant assertions naming the subject as the indexed subject, source, target, a path participant, or the authenticated actor; legal holds respected | rows deleted |
+| `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings` | hard delete rows naming a subject ref as principal or agent; the cached engine is dropped so the next reconcile rebuilds from already-erased evidence. `delegations` rows are not erased by this component, so a surviving grant can re-attribute an agent on rebuild | rows deleted across the tables |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a

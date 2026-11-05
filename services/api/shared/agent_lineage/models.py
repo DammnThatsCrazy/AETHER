@@ -129,6 +129,12 @@ class LineageRow(_Model):
     agent_entity_id: str
     agent_definition_id: Optional[str] = None
     agent_instance_id: Optional[str] = None
+    agent_deployment_id: Optional[str] = None
+    operator_entity_id: Optional[str] = None
+    agent_instance_count: int = 0
+    agent_run_count: int = 0
+    competing_principal_ids: list[str] = Field(default_factory=list)
+    cluster_ids: list[str] = Field(default_factory=list)
     root_agent_id: Optional[str] = None
     parent_agent_id: Optional[str] = None
     root_run_id: Optional[str] = None
@@ -184,6 +190,9 @@ class LineageSummary(_Model):
     services_used: Optional[int] = None
     verified_links: Optional[int] = None
     inferred_links: Optional[int] = None
+    # Neutral activity counters consumed by Risk360 fan-out; classification is
+    # Risk360's, never the projection's.
+    activity: Optional[dict] = None
     disclosure: Disclosure
 
 

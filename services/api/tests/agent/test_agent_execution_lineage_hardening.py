@@ -71,7 +71,7 @@ def test_every_lineage_column_is_emitted_and_migrated():
     migrated = set(declared) | {"delegation_depth"}
     # parent_run_id predates this revision (20261022_agent_spawn_lineage).
     assert migrated == set(LINEAGE_COLUMNS) - {"parent_run_id"}
-    assert re.search(r'down_revision = "20261027_attribution_model_validation_decisions"', _MIGRATION.read_text())
+    assert re.search(r'down_revision = "20261031_merge_agent_behavior_snapshots_heads"', _MIGRATION.read_text())
 
 
 def test_legacy_producer_without_lineage_context_still_projects():

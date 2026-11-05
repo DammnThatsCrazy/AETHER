@@ -64,6 +64,7 @@ export const navigationDestinations = {
   'kyber-semantic-ops': { product: 'kyber', path: '/intelligence/semantic-review', icon: 'braces', label: 'Semantic Ops', decorativeByDefault: true, description: 'Semantic review.' },
   'kyber-traffic-intelligence': { product: 'kyber', path: '/measurement/traffic-intelligence', icon: 'traffic-cone', label: 'Traffic Intel', decorativeByDefault: true, description: 'Traffic intelligence.' },
   'kyber-connectors': { product: 'kyber', path: '/connectors', icon: 'cable', label: 'Connectors', decorativeByDefault: true, description: 'Connector health.' },
+  'kyber-agent-lineage': { product: 'kyber', path: '/agent-lineage', icon: 'cpu', label: 'Agent Lineage', decorativeByDefault: true, description: 'Principal and fleet lineage investigation.' },
   'kyber-agent-telemetry': { product: 'kyber', path: '/agent-telemetry', icon: 'cpu', label: 'Agent Telemetry', decorativeByDefault: true, description: 'Agent telemetry.' },
   'kyber-payment-rails': { product: 'kyber', path: '/payment-rails', icon: 'landmark', label: 'Payment Rails', decorativeByDefault: true, description: 'Payment-rail operations.' },
   'kyber-ai-efficiency': { product: 'kyber', path: '/ai-efficiency', icon: 'badge-dollar-sign', label: 'AI Efficiency', decorativeByDefault: true, description: 'AI economic operations.' },

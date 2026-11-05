@@ -60,6 +60,9 @@ Component → store map (see ``docs/reference/privacy/dsr-erasure-coverage.md``)
   financial_value_snapshots derivatives_pnl_snapshots of the subject's trading
                            accounts (hard delete); the value_* / valuation snapshot
                            stores carry no subject key (asset-level)
+  agent_lineage_projection principal_agent_lineage + summary, clusters, nodes,
+                           restatements and tenant-declared bindings (hard delete);
+                           derived and rebuildable from already-erased evidence
   silver_facts             every Silver fact table via the writer's introspected
                            schemas (typed columns and lake JSONB) — hard delete
   bronze_events            bronze_sdk_events: chain-preserving tombstone (+ re-pack
@@ -103,6 +106,7 @@ X402_COMMERCE_COMPONENT = "x402_commerce"
 RISK_POISONING_EVIDENCE_COMPONENT = "risk_poisoning_evidence"
 RISK_INTERVENTION_RECORDS_COMPONENT = "risk_intervention_records"
 SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT = "social_relationship_evidence_events"
+AGENT_LINEAGE_COMPONENT = "agent_lineage_projection"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -1471,6 +1475,27 @@ async def erase_social_relationship_evidence_plane(
     }
 
 
+async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receipt]:
+    """Erase the derived lineage read model naming a subject as principal or agent.
+
+    The cached engine is dropped too, so the next reconcile rebuilds from
+    evidence that has already been erased rather than from its in-memory fold.
+    """
+    from actions.agent_lineage.repository import PrincipalBindingRepository
+    from actions.agent_lineage.service import get_service
+
+    service = await get_service()
+    counts = await service.repo.erase_subject(subject.tenant_id, subject.refs)
+    bindings = PrincipalBindingRepository()
+    declared = await bindings.delete_for_tenant_where(
+        subject.tenant_id, "principal_entity_id", subject.refs,
+    )
+    service.forget(subject.tenant_id)
+    return {
+        AGENT_LINEAGE_COMPONENT: Receipt(records_impacted=sum(counts.values()) + declared)
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Plane registry (execution order)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1508,6 +1533,7 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
         (SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT,),
         erase_social_relationship_evidence_plane,
     ),
+    ("agent_lineage", (AGENT_LINEAGE_COMPONENT,), erase_agent_lineage_plane),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )
 ML_ARTIFACT_COMPONENTS = (TRAINING_DATASETS_COMPONENT, MODEL_ARTIFACTS_COMPONENT)

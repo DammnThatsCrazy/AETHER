@@ -11,6 +11,7 @@ const settled = (data: unknown): Read => ({ data, isLoading: false, error: null,
 
 const s = vi.hoisted(() => ({ reads: {} as Record<string, unknown> }));
 
+vi.mock('@aether-app/features/agent360', () => ({ PrincipalAgentLineagePanel: () => <div>AGENT LINEAGE</div> }));
 vi.mock('@aether-app/features/users/use-user-profile', () => {
   const names = [
     'useUserProfile', 'useUserSessions', 'useUserDevices', 'useUserPlatforms', 'useUserJourneys',

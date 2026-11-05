@@ -129,3 +129,11 @@ async def test_lineage_route_is_tenant_scoped_and_reads_activity(monkeypatch):
     assert data["source_status"] == "available"
     assert data["totals"]["tool_call_count"] == 1
     assert all(f["tenant_id"] == T for f in calls)
+
+
+def test_traversal_is_iterative_past_the_recursion_limit_and_reaches_durable_depth():
+    assert MAX_DEPTH >= 32
+    spawns = [_spawn(f"n{i}", f"n{i + 1}", "2026-10-22T10:00:01Z") for i in range(5000)]
+    shape = build_lineage_tree(tenant_id=T, root_agent_ref="n0", spawn_rows=spawns, max_nodes=100)
+    assert shape["totals"]["max_depth"] == MAX_DEPTH
+    assert shape["truncated"] == ["max_depth"]
