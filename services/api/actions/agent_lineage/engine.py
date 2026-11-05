@@ -420,10 +420,15 @@ class LineageEngine:
     def set_risk_flags(self, flags: dict[str, int]) -> None:
         """Risk-signal counts per agent from the risk plane (input, never derived here)."""
         self._risk_input_seen = True
-        for agent, count in flags.items():
-            self._risk_flags[agent] = int(count)
-            if agent in self._nodes:
+        current = {agent: int(count) for agent, count in flags.items()}
+        for agent in set(self._risk_flags) | set(current):
+            if self._risk_flags.get(agent) != current.get(agent) and agent in self._nodes:
                 self._dirty.add(agent)
+        self._risk_flags = current
+
+    def clear_source_truncation(self) -> None:
+        """Reasons describe one reconcile pass; a later clean pass must not inherit them."""
+        self._source_truncation = []
 
     def disclose_source_truncation(self, reason: str) -> None:
         if reason not in self._source_truncation:

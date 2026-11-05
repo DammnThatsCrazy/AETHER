@@ -158,6 +158,24 @@ async def _registered_owner_bindings(tenant_id: str) -> list[PrincipalBinding]:
         offset += DELEGATION_PAGE
 
 
+async def _agent_risk_flags(tenant_id: str) -> dict[str, int]:
+    """Stored Risk360 signals per agent subject. Risk owns these; lineage only counts them."""
+    from intelligence.risk360.store import RiskSignalRepository
+
+    repo = RiskSignalRepository()
+    counts: dict[str, int] = {}
+    offset = 0
+    while True:
+        page = await repo.list_scoped(tenant_id, {"subject_kind": "agent"}, limit=DELEGATION_PAGE, offset=offset)
+        for row in page:
+            subject = ref(row.get("subject_id"))
+            if subject:
+                counts[subject] = counts.get(subject, 0) + 1
+        if len(page) < DELEGATION_PAGE:
+            return counts
+        offset += DELEGATION_PAGE
+
+
 async def _agent_aliases(tenant_id: str) -> dict[str, str]:
     """Source ref -> canonical agent, only where a tenant binding is unambiguous."""
     from actions.agent_marketplace.identity_binding import AgentDeploymentIdentityBindingRepository
@@ -208,6 +226,7 @@ class AgentLineageService:
         authority_loader: Loader = _delegation_authority,
         binding_loader: Loader = _stored_bindings,
         alias_loader: AliasLoader = _agent_aliases,
+        risk_loader: Callable[[str], Awaitable[dict[str, int]]] = _agent_risk_flags,
         config: LineageConfig = DEFAULT_CONFIG,
         stale_after_seconds: float = STALE_AFTER_SECONDS,
     ) -> None:
@@ -216,6 +235,7 @@ class AgentLineageService:
         self._authority_loader = authority_loader
         self._binding_loader = binding_loader
         self._alias_loader = alias_loader
+        self._risk_loader = risk_loader
         self._config = config
         self._stale_after = stale_after_seconds
         self._engines: OrderedDict[str, tuple[LineageEngine, str]] = OrderedDict()
@@ -248,6 +268,12 @@ class AgentLineageService:
             engine.upsert_authority(record)
         for binding in await self._binding_loader(tenant_id):
             engine.upsert_binding(binding)
+        engine.clear_source_truncation()
+        try:
+            engine.set_risk_flags(await self._risk_loader(tenant_id))
+        except Exception as exc:  # noqa: BLE001 - disclosed; lineage itself is unaffected
+            logger.warning("agent_lineage_risk_flags_unavailable", extra={"error": type(exc).__name__})
+            engine.disclose_source_truncation("risk_signals_unavailable")
         facts_read = applied = 0
         cursor: Optional[str] = None
         while True:

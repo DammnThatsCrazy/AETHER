@@ -61,7 +61,8 @@ Component → store map (see ``docs/reference/privacy/dsr-erasure-coverage.md``)
                            accounts (hard delete); the value_* / valuation snapshot
                            stores carry no subject key (asset-level)
   agent_lineage_projection principal_agent_lineage + summary, clusters, nodes,
-                           restatements and tenant-declared bindings (hard delete);
+                           restatements, tenant-declared bindings and delegations naming
+                           the subject (hard delete, legal hold respected); the rest is
                            derived and rebuildable from already-erased evidence
   silver_facts             every Silver fact table via the writer's introspected
                            schemas (typed columns and lake JSONB) — hard delete
@@ -1483,6 +1484,21 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
     """
     from actions.agent_lineage.repository import PrincipalBindingRepository
     from actions.agent_lineage.service import get_service
+    from repositories.repos import DelegationRepository
+    from shared.storage.lifecycle import StorageLifecycle
+
+    lifecycle = StorageLifecycle()
+    for store in (AGENT_LINEAGE_COMPONENT, "delegations"):
+        for ref in sorted(subject.refs):
+            hold = await lifecycle.active_hold(subject.tenant_id, store, ref)
+            if hold is not None:
+                return {
+                    AGENT_LINEAGE_COMPONENT: Receipt(
+                        status="skipped_legal_hold",
+                        policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                        blocked_reason=str(hold.get("reason") or "legal hold"),
+                    )
+                }
 
     service = await get_service()
     counts = await service.repo.erase_subject(subject.tenant_id, subject.refs)
@@ -1490,9 +1506,14 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
     declared = await bindings.delete_for_tenant_where(
         subject.tenant_id, "principal_entity_id", subject.refs,
     )
+    # A surviving grant would re-attribute the subject on the next rebuild.
+    delegations = DelegationRepository()
+    grants = 0
+    for field in ("grantor_entity_id", "grantee_entity_id"):
+        grants += await delegations.delete_for_tenant_where(subject.tenant_id, field, subject.refs)
     service.forget(subject.tenant_id)
     return {
-        AGENT_LINEAGE_COMPONENT: Receipt(records_impacted=sum(counts.values()) + declared)
+        AGENT_LINEAGE_COMPONENT: Receipt(records_impacted=sum(counts.values()) + declared + grants)
     }
 
 

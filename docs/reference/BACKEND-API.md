@@ -25,11 +25,11 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:2248e87c472017a625f57aa1a406d274fd23e0d2ee84ecfe18fae9e025679c89"
+  "services/api/actions/": "sha256:ba0ce638a67604e4f4e908d568cc87fcfb731c9483cd14fb768261f733f6834f"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:e2f5eaa288cdadd530a6e01d1d42b5a74d8bab78522dcdf18f9b0b3449e03f9e"
+  "services/api/governance/": "sha256:49ee87365efd967b5dfd2c1f882b40551f824a5b303a905123a77c8a4892c67f"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:1a9b3248f06212ad116b5d3665c190fa2ed3fa139d6c8be474a76fe4ba677d43"
   "services/api/ingestion/": "sha256:96f3a40e731d5d20a6025ad552d85ae86d45ef63f26af06af36b63a4396b0f1f"

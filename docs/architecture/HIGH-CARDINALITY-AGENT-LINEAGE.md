@@ -143,12 +143,9 @@ never becomes a finding about anyone downstream.
 ## Known gaps
 
 - Reconciliation needs a `job_schedules` row per tenant. No default schedule is seeded.
-- The DSR component erases the read model and the bindings, but `delegations` rows are
-  not erased by any DSR component, so a surviving grant can re-attribute an agent on a
-  later rebuild.
+  An incremental pass misses facts with old timestamps until a periodic full rebuild.
 - `delegated_by_risky_actor`, `interacted_with_risky_resource`, `resembles_risky_behavior`,
   `identity_churn` and `coordinated_execution_score` have no input yet and report `null`.
-- Risk flags from the risk plane have an engine input (`set_risk_flags`), but the
-  service does not load them yet. Row risk counts come from source-reported
-  `risk_level` only.
+- `RiskEvidenceBundle.agent_lineage_fanout` is caller-supplied and no caller populates
+  it yet. The `/risk` route reads the assessment directly.
 - A source ref bound to different canonical agents in two namespaces stays a source ref.

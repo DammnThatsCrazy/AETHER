@@ -12,7 +12,7 @@ source_hashes:
   "config/storage_policies.yaml": "sha256:7913c041065c5065936a10baed9462d980be38e89b5aba2912c3cf800ef5195d"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
   "services/api/governance/consent/erasure_jobs.py": "sha256:e7209845abf90683109a52f895142862b5c8a421f80bf427cb4a90c4143c9a96"
-  "services/api/governance/consent/erasure_planes.py": "sha256:ce58048407dd0f79843d6075d801ae69cf4694a3574fc023f9bc48074fe1cc8b"
+  "services/api/governance/consent/erasure_planes.py": "sha256:10bbd58a09dd3438b3490055ad58a02be50f31054ad2dfd425c9c150afd94152"
   "services/api/governance/dsr_propagation/models.py": "sha256:132e4816b38b5abe03ba6105b92836da2380fe728e522afdd282e05fc0f8efc5"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
@@ -96,7 +96,7 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `risk_poisoning_evidence` | `risk_poisoning_evidence` | hard delete exact tenant rows whose subject or source ID equals a subject ref; legal holds respected | rows deleted |
 | `risk_intervention_records` | `risk_intervention_records` | hard delete exact tenant rows whose subject or actor ID equals a subject ref; legal holds respected | rows deleted |
 | `social_relationship_evidence_events` | `social_relationship_evidence_events` | hard delete exact tenant assertions naming the subject as the indexed subject, source, target, a path participant, or the authenticated actor; legal holds respected | rows deleted |
-| `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings` | hard delete rows naming a subject ref as principal or agent; the cached engine is dropped so the next reconcile rebuilds from already-erased evidence. `delegations` rows are not erased by this component, so a surviving grant can re-attribute an agent on rebuild | rows deleted across the tables |
+| `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings`, `delegations` | hard delete rows naming a subject ref as principal, agent, grantor or grantee, legal holds respected; the cached engine is dropped so the next reconcile rebuilds from already-erased evidence. The 60-second `active_for` delegation cache expires on its own | rows deleted across the tables |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a

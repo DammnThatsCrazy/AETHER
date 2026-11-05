@@ -36,8 +36,11 @@ def _service(repo, fixture):
     async def aliases(tenant):
         return {}
 
+    async def risk(tenant):
+        return {}
+
     return AgentLineageService(
-        repo, silver_reader=silver, authority_loader=authority, binding_loader=bindings, alias_loader=aliases,
+        repo, silver_reader=silver, authority_loader=authority, binding_loader=bindings, alias_loader=aliases, risk_loader=risk,
     )
 
 
@@ -299,6 +302,7 @@ async def test_the_dsr_plane_erases_the_read_model_and_forces_a_rebuild(fixture)
     from actions.agent_lineage.repository import PrincipalBindingRepository
     from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, ErasureSubject, erase_agent_lineage_plane
     from governance.dsr_propagation.models import DSR_COMPONENTS
+    from repositories.repos import DelegationRepository
 
     assert AGENT_LINEAGE_COMPONENT in DSR_COMPONENTS
     repo = InMemoryLineageRepository()
@@ -310,6 +314,9 @@ async def test_the_dsr_plane_erases_the_read_model_and_forces_a_rebuild(fixture)
         "id": "alb_dsr", "tenant_id": T, "kind": "agent", "principal_entity_id": S.LEGIT_HUMAN,
         "agent_entity_id": "legit-orch", "evidence_class": "TENANT_DECLARED",
     })
+    delegations = DelegationRepository()
+    await delegations.grant("grant-dsr", T, S.LEGIT_HUMAN, "legit-orch", {})
+    await delegations.grant("grant-other", T, S.MALICIOUS_HUMAN, "mal-orch", {})
     try:
         receipts = await erase_agent_lineage_plane(ErasureSubject(
             tenant_id=T, user_id="u", anonymous_id=None,
@@ -319,5 +326,39 @@ async def test_the_dsr_plane_erases_the_read_model_and_forces_a_rebuild(fixture)
         svc.set_service(None)
     assert receipts[AGENT_LINEAGE_COMPONENT].records_impacted > 500
     assert await bindings.find_by_id("alb_dsr") is None
+    assert await delegations.find_by_id("grant-dsr") is None
+    assert (await delegations.find_by_id("grant-other")) is not None
     assert (await service.summary(T, S.LEGIT_HUMAN))["direct_agents"] is None
     assert T not in service._engines
+
+
+async def test_stored_risk_signals_reach_rows_and_a_failed_read_is_disclosed(fixture):
+    service = _service(InMemoryLineageRepository(), fixture)
+    flags = {"legit-orch": 2}
+
+    async def risk(_tenant):
+        return flags
+
+    service._risk_loader = risk
+    await service.reconcile(T)
+    row = (await service.agents(T, S.LEGIT_HUMAN, filters={"relationship": "direct"}))["items"][0]
+    assert row["risk_signal_count"] == 2
+
+    # A cleared signal stops counting on the next pass, without a rebuild.
+    flags.clear()
+    await service.reconcile(T)
+    row = (await service.agents(T, S.LEGIT_HUMAN, filters={"relationship": "direct"}))["items"][0]
+    assert row["risk_signal_count"] == 0
+
+    async def broken(_tenant):
+        raise RuntimeError("store down")
+
+    service._risk_loader = broken
+    await service.reconcile(T)
+    disclosure = (await service.summary(T, S.LEGIT_HUMAN))["disclosure"]
+    assert "risk_signals_unavailable" in disclosure["truncation_reasons"]
+
+    service._risk_loader = risk
+    await service.reconcile(T)
+    disclosure = (await service.summary(T, S.LEGIT_HUMAN))["disclosure"]
+    assert "risk_signals_unavailable" not in disclosure["truncation_reasons"]
