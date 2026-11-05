@@ -113,6 +113,7 @@ async def register_support_sla_measurement_contract(
             timer_kind=body.timer_kind,
             custom_timer_name=body.custom_timer_name,
             target_duration_seconds=body.target_duration_seconds,
+            measurement_method_version="active_elapsed_v1",
             registered_by=actor.actor_id,
             registered_at=datetime.now(timezone.utc),
         )
@@ -129,6 +130,7 @@ async def register_support_sla_measurement_contract(
         "source_policy_version": stored.source_policy_version,
         "timer_kind": stored.timer_kind,
         "target_duration_seconds": stored.target_duration_seconds,
+        "measurement_method_version": stored.measurement_method_version,
         "registered_at": stored.registered_at.isoformat(),
     }).to_dict()
 

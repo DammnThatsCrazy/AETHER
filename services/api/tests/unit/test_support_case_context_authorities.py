@@ -47,6 +47,7 @@ from journeys.support360.sla_measurement import (  # noqa: E402
     SupportSLAMeasurementContractError,
     SupportSLAMeasurementContractRepository,
     SupportSLAMeasurementContractService,
+    evaluate_active_elapsed_v1,
     reset_local_support_sla_contract_store,
 )
 from graph.operational_intelligence.models import EntityRef, EvidenceRef, TimeRangeFilter  # noqa: E402
@@ -256,6 +257,56 @@ def _contract(case_id: str, *, target: int = 1800) -> SupportSLAMeasurementContr
         target_duration_seconds=target,
         registered_by=ACTOR,
         registered_at=NOW,
+    )
+
+
+def _timer_row(contract, event_type, minute, *, event_id=None):
+    effective = NOW + timedelta(minutes=minute)
+    return {
+        "contextEventId": event_id or f"event-{event_type}-{minute}",
+        "eventType": event_type,
+        "effectiveAt": effective.isoformat(),
+        "sourceObservedAt": effective.isoformat(),
+        "receivedAt": (effective + timedelta(seconds=1)).isoformat(),
+        "payload": {
+            "source_sla_id": contract.source_sla_id,
+            "timer_kind": contract.timer_kind,
+            "custom_timer_name": contract.custom_timer_name,
+            "source_policy_id": contract.source_policy_id,
+            "source_policy_version": contract.source_policy_version,
+            "target_duration_seconds": contract.target_duration_seconds,
+            "effective_at": effective.isoformat(),
+        },
+    }
+
+
+def test_sla_active_elapsed_evaluation_rejects_incomplete_ambiguous_and_reported_breach():
+    contract = _contract(str(uuid4()))
+    events = [
+        _timer_row(contract, "support_sla_timer_started", 0),
+        _timer_row(contract, "support_sla_timer_stopped", 30),
+    ]
+    assert evaluate_active_elapsed_v1(contract, events, complete=False)["state"] == "unknown"
+
+    ambiguous = [*events, _timer_row(contract, "support_sla_timer_paused", 30)]
+    assert evaluate_active_elapsed_v1(contract, ambiguous, complete=True)["reasonCode"] == (
+        "support_sla_timer_event_order_ambiguous"
+    )
+
+    reported_breach = [
+        _timer_row(contract, "support_sla_timer_started", 0),
+        _timer_row(contract, "support_sla_timer_breached", 31),
+    ]
+    assert evaluate_active_elapsed_v1(contract, reported_breach, complete=True)["reasonCode"] == (
+        "support_sla_timer_transition_ambiguous_or_unsupported"
+    )
+
+    wrong_policy = [dict(events[0], payload={**events[0]["payload"], "source_policy_version": "other"})]
+    assert evaluate_active_elapsed_v1(contract, wrong_policy, complete=True)["state"] == "unknown"
+
+    invalid_anchor = [dict(events[0], receivedAt=(NOW - timedelta(seconds=1)).isoformat())]
+    assert evaluate_active_elapsed_v1(contract, invalid_anchor, complete=True)["reasonCode"] == (
+        "support_sla_timer_timestamp_anchor_invalid"
     )
 
 
@@ -484,6 +535,33 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         actor_id=ACTOR,
         actor_type="tenant_user",
     )
+    for event_type, state, minute in (
+        (SupportSLAEventType.TIMER_PAUSED, "paused", 10),
+        (SupportSLAEventType.TIMER_RESUMED, "running", 15),
+        (SupportSLAEventType.TIMER_STOPPED, "stopped", 35),
+    ):
+        effective_at = NOW + timedelta(minutes=minute, seconds=1 if minute == 35 else 0)
+        await service.ingest(
+            "sla",
+            TENANT,
+            CONNECTION,
+            SupportSLAEventInput(
+                case_id=case["case_id"],
+                source_sla_id="source-sla-1",
+                source_revision_id=f"sla-{event_type.value}",
+                source_event_id=f"sla-{event_type.value}",
+                event_type=event_type,
+                timer_kind=SupportSLATimerKind.FIRST_RESPONSE,
+                source_policy_id="response-policy",
+                source_policy_version="v2",
+                source_timer_state=state,
+                target_duration_seconds=(1800 if event_type is SupportSLAEventType.TIMER_RESUMED else None),
+                source_observed_at=effective_at,
+                effective_at=effective_at,
+            ),
+            actor_id=ACTOR,
+            actor_type="tenant_user",
+        )
     link = await service.ingest(
         "journey_links",
         TENANT,
@@ -552,12 +630,26 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
     assert slots["participants"]["sourceAuthority"] == "communication360_facts"
     assert slots["participants"]["sourceAuthenticationState"] == "tenant_webhook_hmac_verified"
     assert slots["sla"]["state"] == "degraded"
-    assert slots["sla"]["timers"][0]["sourceTimerState"] == "running"
+    assert slots["sla"]["timers"][0]["sourceTimerState"] == "stopped"
     assert slots["sla"]["timers"][0]["measurementContract"]["contractId"] == registered_contract.contract_id
     assert slots["sla"]["measurementContractJoin"]["boundTimerCount"] == 1
     assert slots["sla"]["policyAuthority"] == "tenant_registered_source_policy_revision_partial"
     assert any(ref.id == registered_contract.contract_id for ref in slots["sla"]["evidenceRefs"])
-    assert slots["sla"]["breachEvaluation"] == "source_reported_only_no_local_timer_inference"
+    assert slots["sla"]["breachEvaluation"] == "measured_explicit_active_elapsed_v1"
+    assert slots["sla"]["timers"][0]["measurementEvaluation"] == {
+        "state": "measured",
+        "methodVersion": "active_elapsed_v1",
+        "activeDurationSeconds": 1801,
+        "targetDurationSeconds": 1800,
+        "comparison": "over_target",
+        "stoppedAt": (NOW + timedelta(minutes=35, seconds=1)).isoformat(),
+        "startAndStopEvents": [
+            next(event["contextEventId"] for event in slots["sla"]["events"] if event["eventType"] == "support_sla_timer_started"),
+            next(event["contextEventId"] for event in slots["sla"]["events"] if event["eventType"] == "support_sla_timer_stopped"),
+        ],
+        "pausedDurationExcluded": True,
+        "outcomeAuthority": "locally_measured_explicit_timer_semantics",
+    }
     assert slots["journey_links"]["links"][0]["canonicalJourneyId"] == journey_id
     episode_facts = slots["journey_links"]["episodeFacts"]
     assert episode_facts["state"] == "degraded"

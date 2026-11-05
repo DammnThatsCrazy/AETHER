@@ -63,6 +63,7 @@ from journeys.support360.sla_measurement import (
     SupportSLAMeasurementContractRead,
     SupportSLAMeasurementContractRepository,
     contract_evidence,
+    evaluate_active_elapsed_v1,
 )
 from repositories.repos import EntityRepository
 
@@ -3488,7 +3489,12 @@ def _validated_support_sla_slot(
         for raw in contract_read.rows:
             try:
                 contract = SupportSLAMeasurementContract.model_validate(
-                    {key: value for key, value in raw.items() if key != "contract_id"}
+                    {
+                        **{key: value for key, value in raw.items() if key != "contract_id"},
+                        "measurement_method_version": raw.get(
+                            "measurement_method_version", "source_reported_only_v0"
+                        ),
+                    }
                 )
             except Exception:  # noqa: BLE001 - malformed authority remains unbound
                 valid_contracts = False
@@ -3515,7 +3521,10 @@ def _validated_support_sla_slot(
                 if len(matches) != 1:
                     continue
                 contract = matches[0]
-                if timer["targetDurationSeconds"] != contract.target_duration_seconds:
+                if (
+                    timer["targetDurationSeconds"] is not None
+                    and timer["targetDurationSeconds"] != contract.target_duration_seconds
+                ):
                     contract_reason = "support_sla_source_target_conflicts_with_registered_contract"
                     continue
                 evidence = contract_evidence(contract)
@@ -3524,10 +3533,14 @@ def _validated_support_sla_slot(
                     "state": "bound",
                     "contractId": contract.contract_id,
                     "targetDurationSeconds": contract.target_duration_seconds,
+                    "measurementMethodVersion": contract.measurement_method_version,
                     "registeredAt": contract.registered_at.isoformat(),
                     "historicalApplicabilityState": "unknown",
                     "evidenceRefs": [evidence.model_dump(mode="json", by_alias=True)],
                 }
+                timer["measurementEvaluation"] = evaluate_active_elapsed_v1(
+                    contract, rows, complete=read.complete and not read.truncated
+                )
                 timer["evidenceRefs"] = [*timer["evidenceRefs"], evidence.model_dump(mode="json", by_alias=True)]
                 joined_contracts += 1
             if joined_contracts:
@@ -3571,7 +3584,14 @@ def _validated_support_sla_slot(
             "sourceAuthenticationState": "tenant_authorized_principal_only",
             "sourceHistoryComplete": False,
             "freshness": {"state": "unknown", "reasonCode": "support_case_sla_freshness_sla_unavailable"},
-            "breachEvaluation": "source_reported_only_no_local_timer_inference",
+            "breachEvaluation": (
+                "measured_explicit_active_elapsed_v1"
+                if any(
+                    timer.get("measurementEvaluation", {}).get("state") == "measured"
+                    for timer in timers
+                )
+                else "source_reported_only_no_local_timer_inference"
+            ),
             "evidenceRefs": refs,
         },
         refs,
