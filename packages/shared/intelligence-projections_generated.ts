@@ -3574,10 +3574,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['actions', 'resources', 'tools'],
-        description: 'Tenant-scoped CALLED_TOOL lifecycle edges joined to admitted executions and canonical agent identity; source completeness and external receipt remain unknown.',
+        description: 'Tenant-scoped CALLED_TOOL lifecycle observations and separately validated server-owned MCP invocation receipts joined to admitted executions and canonical agent identity; general external effects and producer coverage remain unknown.',
         id: 'tool_calls',
         implementationCrosswalk: ['action_tool_resource_trace'],
-        partialImplementationReason: 'Exact lifecycle edges are exposed, but source completeness, authorization outcome, and external execution receipt remain unknown.',
+        partialImplementationReason: 'Exact lifecycle edges remain observations. Bounded server-owned MCP invocation receipts expose tool results with exact execution, agent, principal, tool, resource, grant, policy and time bindings, without requiring a lifecycle edge. General external effects, mutations, historical policy replay, freshness and complete producer coverage remain unknown.',
         projectionBindings: [
           {
             projectionId: 'execution360',

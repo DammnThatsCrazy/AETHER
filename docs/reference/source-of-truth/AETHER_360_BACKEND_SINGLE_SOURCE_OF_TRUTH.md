@@ -126,6 +126,17 @@ Episode360 `touchpoints` is now a partial exact-reference path: canonical episod
 
 Location360 `timezone` remains unknown with `canonical_timezone_authority_not_joined`: location facts, geocoding labels, and source-clock timezone metadata do not provide an exact tenant-scoped geographic timezone mapping. No timezone is inferred from coordinates or place names.
 
+### Execution360 receipt integration (2026-11-05)
+
+The `tool_calls` slot now reads bounded, execution-scoped server-owned MCP
+invocation receipts independently of lifecycle edges. Exact execution, agent,
+principal, tool, resource, grant, policy and invocation-time bindings are required.
+The projection exposes receipt-backed result status and canonical receipt
+evidence separately from lifecycle observations. Invalid, ambiguous or incomplete
+reads fail closed. General effects, mutations, historical policy replay,
+freshness and complete producer coverage remain unknown; this slice does not
+complete Execution360.
+
 ## 0. Decision
 
 Build the 360 system as a backend read-model layer over canonical Aether graph, identity, signal, journey, communication, value, risk, and agentic systems.

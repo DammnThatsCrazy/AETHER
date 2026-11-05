@@ -184,6 +184,28 @@ async def test_real_provider_completion_receipt_joins_workflow_reader(monkeypatc
     assert evidence["receiptId"] == row["receipt_id"]
     assert evidence["capabilityId"] == cap and evidence["resourceOperation"] == "unknown"
     assert row["grant_id"] == "grant-a" and row["policy_decision"]["allowed"] is True
+    from actions.agent.execution360_provider import (
+        RepositoryExecution360Source,
+        _project_tool_call_read,
+    )
+
+    class EmptyGraph:
+        async def get_edges_for_tenant(self, *args, **kwargs):
+            return [], False
+
+    run.update({
+        "initiating_principal_user_id": "owner",
+        "canonical_agent_identity": True,
+        "canonical_agent_entity_id": "agent-entity-a",
+    })
+    tool_read = await RepositoryExecution360Source(
+        graph_client=EmptyGraph()
+    )._read_execution_tool_calls(tenant, [run])
+    projected = _project_tool_call_read(tool_read, admitted_execution_ids={execution})
+    assert projected.rows == []
+    assert len(projected.receipt_results) == 1
+    assert projected.receipt_results[0]["receiptId"] == row["receipt_id"]
+    assert projected.receipt_results[0]["externalEffect"] == "unknown"
     with pytest.raises(ConflictError):
         await invoke_observed_mcp_tool(
             tenant_id=tenant,

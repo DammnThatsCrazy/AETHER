@@ -16,9 +16,9 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8e810ee699120044ed1fa45cf3cbdaf574bdbf6b9e5b89929e7eccb50cc7fae6"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:90b7fe9c5a318f2c6e0b0a3bd71cf31f218d078c40f463b133b819605ba43d31"
   "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
-  "services/api/actions/agent/": "sha256:33b05e5723d0c33ef1bc63660a180bb4eadac31feb544d4d7f6d28c2e220ec44"
+  "services/api/actions/agent/": "sha256:af00b0d15d21c37e260c09d4a88e1c301637479068b848a8a7d97656500ef6bb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
@@ -299,6 +299,13 @@ rejects malformed or padded capability-grant and policy-decision identifiers.
 Allowed Agent360 invoke evaluations now bind to the referenced grant only when
 their recorded time falls within its start and end/revocation interval; valid
 rows for other agents do not make this agent's scoped history incomplete.
+Execution360 now consumes server-owned MCP invocation receipts independently of
+lifecycle call edges. Exact execution, agent, principal, tool, resource, grant,
+operation-time policy and time bindings gate receipt-backed result claims and
+canonical evidence. Incomplete or ambiguous reads fail closed. These results
+do not establish general external effects, mutations, historical replay,
+freshness or complete producer coverage.
+
 Separate authenticated Agent routes now perform exact MCP tool invocations
 under invoke grants and exact resource reads under a resource-read grant
 and records an invocation-bound receipt with provider and resource identity,

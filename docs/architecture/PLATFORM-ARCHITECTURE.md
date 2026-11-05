@@ -71,11 +71,11 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:802e47ed919f193588a7d02748e2e958b9ae05c0bad64f039a0e5fd3973e5419"
+  "packages/shared/": "sha256:45d6125637c0b92106afe077261abc4e2ac6247030b7c6cbc4369e0ef83d9006"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
-  "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
+  "services/api/actions/agent/execution360_provider.py": "sha256:c224bc3be2745382c4952d6fd43e2494302c027cb9829d454e73c34633aba000"
   "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
@@ -979,6 +979,14 @@ persisted run/config lineage check and a separately recorded tenant-admin
 approval or rejection bound to that exact run, configuration, and validation
 decision. Current configuration rows are mutable; the human approval record
 does not establish model calibration.
+
+Execution360 `tool_calls` separately consumes bounded server-owned MCP invocation
+receipts for admitted executions, even when no `CALLED_TOOL` edge exists. The
+reader validates execution, agent, initiating principal, tool, resource, grant,
+operation-time policy and timestamps before exposing result status and canonical
+receipt evidence. Lifecycle edges remain observations; receipts do not establish
+external effects, mutations, historical policy replay, freshness or full producer
+coverage.
 
 Execution360 can also resolve an admitted external telemetry event to a unique
 same-tenant Bronze event and its recorded observation envelope. The join checks

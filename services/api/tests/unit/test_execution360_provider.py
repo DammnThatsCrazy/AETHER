@@ -1200,6 +1200,7 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
         "completeness": "unknown",
         "sourceReportedToolRelatedFactCount": 1,
         "joinedExecutionToolCalls": [],
+        "receiptBackedToolCallResults": [],
         "evidenceRefs": [],
         "sourceReportedEvidenceRefs": [
             {
@@ -1681,6 +1682,7 @@ async def test_canonical_tool_call_edge_joins_exact_execution_and_remains_partia
     [
         ({}, "principal-1", True),
         ({"toolName": "other-tool"}, "principal-1", False),
+        ({"receiptId": "another-receipt"}, "principal-1", False),
         ({}, "other-principal", False),
         ({"action": "delete"}, "principal-1", False),
         ({"invokedAt": "2026-10-16T10:00:00+00:00"}, "principal-1", False),
@@ -1695,7 +1697,13 @@ async def test_execution_tool_receipt_requires_exact_edge_bindings(
     import actions.agent.invocation_runtime as invocation_runtime
     from actions.agent.execution360_provider import _read_execution_tool_receipt
 
-    raw = {"initiating_principal_user_id": principal}
+    raw = {
+        "initiating_principal_user_id": principal,
+        "receipt_id": "receipt-1",
+        "tenant_id": TENANT,
+        "agent_id": "runtime-agent-1",
+        "execution_id": "exec-1",
+    }
 
     class ReceiptRepository:
         async def find_many(self, *, filters, limit):
@@ -1779,6 +1787,55 @@ async def test_ambiguous_execution_actor_binding_does_not_join_tool_edges() -> N
     assert read.scope_known is False
     assert read.rows == []
     assert read.reason == "execution_identity_ambiguous_for_tool_join"
+
+
+@pytest.mark.parametrize("invalid", [None, "duplicate", "truncated", "unavailable", "scope", "malformed", "status_shape"])
+async def test_execution_receipt_projection_fails_closed_and_preserves_evidence(invalid) -> None:
+    receipt = {
+        "executionId": "exec-1",
+        "receiptId": "receipt-1",
+        "toolName": "payments.send",
+        "action": "invoke",
+        "resource": "capability:cap-1",
+        "policyResource": "capability:cap-1",
+        "principalUserId": "principal-1",
+        "grantId": "grant-1",
+        "policyDecision": {"allowed": True},
+        "invokedAt": "2026-10-16T10:00:01+00:00",
+        "completedAt": "2026-10-16T10:00:02+00:00",
+        "resultStatus": "succeeded",
+    }
+    if invalid == "malformed":
+        receipt.pop("completedAt")
+    if invalid == "status_shape":
+        receipt["resultStatus"] = {}
+    source_read = ExecutionToolCallRead(
+        rows=[],
+        available=invalid != "unavailable",
+        scope_known=invalid != "scope",
+        truncated=invalid == "truncated",
+        receipt_results=[receipt, receipt] if invalid == "duplicate" else [receipt],
+    )
+    request = _request()
+    result = await Execution360Provider(FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()], available=True, scope_known=True,
+            agent_ids=(AGENT,), tool_calls=source_read,
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )).project(request, await _context(request))
+    linkage = next(section for section in result.sections if section.id == "interactions").content["toolInvocationLinkage"]
+    receipt_claims = [claim for claim in result.claims if claim.kind == "server_validated_execution_tool_invocation_receipt"]
+    if invalid is not None:
+        assert linkage["receiptBackedToolCallResults"] == []
+        assert receipt_claims == []
+    else:
+        assert linkage["state"] == "partial"
+        assert linkage["receiptBackedToolCallResults"] == [receipt]
+        assert linkage["evidenceRefs"][0]["id"] == "receipt-1"
+        assert receipt_claims[0].evidenceRefs[0].source == "agent_invocation_receipts"
+        evidence = next(section for section in result.sections if section.id == "evidence")
+        assert any(ref["id"] == "receipt-1" for ref in evidence.content["evidence"])
 
 
 async def test_untrusted_tool_and_risk_ids_do_not_complete_execution_slots() -> None:

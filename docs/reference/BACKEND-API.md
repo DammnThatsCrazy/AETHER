@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:77de8d3c6771575abd5b2c1ba7356a0e3ddcd73855ce0dc203d57c82d41807e4"
+  "services/api/actions/": "sha256:195337b09819a77baacdcbdb805e1046da0d6fbfe97ca483888f8cb00afd47e2"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -2197,6 +2197,14 @@ or full path completeness. Episode360 `communications` binds only communication
 facts carrying the exact episode ID; the complete message spine and conversation
 membership are not joined. These additions remain partial provider paths and do
 not complete their respective 360 surfaces.
+
+Execution360 `tool_calls` also exposes bounded server-owned MCP invocation
+receipts independently of `CALLED_TOOL` lifecycle edges. Receipt-backed results
+require exact execution, agent, initiating principal, tool, resource, grant,
+operation-time policy and timestamp validation. Canonical receipt evidence is
+included in interactions and evidence; lifecycle observations remain separate.
+External effects, mutations, historical replay, freshness and full producer
+coverage remain unknown.
 
 The 2026-10-23 provider wave adds Episode360 `timeline` resolution for exact
 episode-recorded observation IDs against tenant-scoped active semantic Silver

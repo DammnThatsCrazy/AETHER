@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8e810ee699120044ed1fa45cf3cbdaf574bdbf6b9e5b89929e7eccb50cc7fae6"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:90b7fe9c5a318f2c6e0b0a3bd71cf31f218d078c40f463b133b819605ba43d31"
 ---
 
 # 360 System Blueprint
@@ -27,6 +27,16 @@ limits, and explicit unknown or degraded states. It does not create a parallel
 truth store or mutate graph state. Agent and execution views must distinguish
 observed activity from event-time authority to act, and attributed value from
 independently verified outcomes.
+
+## Next implementation wave (2026-11-05)
+
+Execution360 `tool_calls` now separately exposes bounded server-owned MCP
+invocation results after exact execution, agent, principal, tool, resource,
+grant, operation-time policy and time validation. The receipt path does not
+depend on a `CALLED_TOOL` lifecycle edge. Both claim and evidence output retain
+the canonical receipt reference; general external effects, mutations, freshness,
+historical policy replay and producer coverage remain unknown. The slot and
+projection remain partial.
 
 ## Full product catalog and current partial slots
 
