@@ -263,9 +263,12 @@ class CommunicationMessage(CommunicationContract):
     tenant_id: str
     fact_id: Optional[str] = None  # silver_comms_facts row id
     provider: Optional[str] = None
+    provider_account_id: Optional[str] = None
     provider_event_id: Optional[str] = None
     external_message_id: Optional[str] = None
     external_thread_id: Optional[str] = None
+    reply_to_external_message_id: Optional[str] = None
+    reply_correlation_method: Optional[str] = None
     channel: Optional[str] = "email"
     direction: Optional[str] = None  # inbound | outbound
     message_category: Optional[MessageCategory] = (

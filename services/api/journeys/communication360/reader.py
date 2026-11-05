@@ -96,6 +96,12 @@ class CommunicationSource:
         """Raw fact rows for the tenant, optionally filtered by ``kind``."""
         raise NotImplementedError
 
+    async def reply_targets(
+        self, tenant_id: str, provider: str, provider_account_id: str,
+        external_thread_id: str, external_message_id: str,
+    ) -> tuple[list[CommunicationMessage], bool]:
+        raise NotImplementedError
+
     async def available(self, tenant_id: str) -> bool:
         """True when the backing store responds (even with zero rows)."""
         raise NotImplementedError
@@ -256,6 +262,14 @@ def to_message(row: dict[str, Any]) -> CommunicationMessage:
     capped at ``EpistemicStatus.OBSERVED``.
     """
     tenant_id = _first_present(row, "tenant_id") or ""
+    payload = row.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            payload = None
+    if not isinstance(payload, dict):
+        payload = {}
     fact_id = _first_present(row, "fact_id")
     message_id = _first_present(row, "message_id", "canonical_activity_key")
     if message_id is None:
@@ -302,9 +316,15 @@ def to_message(row: dict[str, Any]) -> CommunicationMessage:
         tenant_id=tenant_id,
         fact_id=fact_id,
         provider=_first_present(row, "provider"),
+        provider_account_id=_first_present(row, "provider_account_id"),
         provider_event_id=_first_present(row, "provider_event_id"),
         external_message_id=_first_present(row, "external_message_id"),
         external_thread_id=_first_present(row, "external_thread_id"),
+        reply_to_external_message_id=(
+            _first_present(row, "reply_to_external_message_id")
+            or payload.get("reply_to_external_message_id")
+        ),
+        reply_correlation_method=payload.get("reply_correlation_method"),
         channel=_first_present(row, "channel") or "email",
         direction=_first_present(row, "direction"),
         message_category=_coerce_message_category(row.get("message_category")),
@@ -415,6 +435,24 @@ class SilverCommsSource:
                 or str(r.get("message_category") or "") == kind
             ]
         return [r for r in rows if str(r.get("tenant_id", "")) == str(tenant_id)]
+
+    async def reply_targets(
+        self, tenant_id: str, provider: str, provider_account_id: str,
+        external_thread_id: str, external_message_id: str,
+    ) -> tuple[list[CommunicationMessage], bool]:
+        rows, complete = await self._repo.reply_targets(
+            tenant_id, provider, provider_account_id, external_thread_id,
+            external_message_id, limit=2,
+        )
+        messages: list[CommunicationMessage] = []
+        for row in rows:
+            if not isinstance(row, dict) or str(row.get("tenant_id", "")) != str(tenant_id):
+                continue
+            try:
+                messages.append(to_message(row))
+            except Exception:  # noqa: BLE001 - malformed target remains unresolved
+                continue
+        return messages, complete
 
     async def available(self, tenant_id: str) -> bool:
         """True when the silver backing responds (even with zero rows).

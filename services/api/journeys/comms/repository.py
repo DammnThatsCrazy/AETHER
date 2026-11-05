@@ -168,6 +168,40 @@ class CommsFactsRepository:
             )
         return row
 
+    async def reply_targets(
+        self, tenant_id: str, provider: str, provider_account_id: str,
+        external_thread_id: str, external_message_id: str, *, limit: int = 2,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Read exact provider reply targets; completeness is bounded to ambiguity detection."""
+        if not all((tenant_id, provider, provider_account_id, external_thread_id, external_message_id)):
+            return [], True
+        cap = min(max(int(limit), 1), 2)
+
+        def matches(row: dict[str, Any]) -> bool:
+            return (
+                row.get("tenant_id") == tenant_id
+                and row.get("provider") == provider
+                and row.get("provider_account_id") == provider_account_id
+                and row.get("external_thread_id") == external_thread_id
+                and row.get("external_message_id") == external_message_id
+            )
+
+        pool = await self._pool()
+        if pool is None:
+            rows = [row for row in _local_facts.values() if matches(row)]
+            return rows[:cap], len(rows) <= cap
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                """SELECT * FROM silver_comms_facts
+                   WHERE tenant_id = $1 AND provider = $2 AND provider_account_id = $3
+                     AND external_thread_id = $4 AND external_message_id = $5
+                   ORDER BY occurred_at DESC, fact_id DESC LIMIT $6""",
+                tenant_id, provider, provider_account_id, external_thread_id,
+                external_message_id, cap + 1,
+            )
+        fetched = [dict(row) for row in records]
+        return fetched[:cap], len(fetched) <= cap
+
     # ── Read: Profile360 ─────────────────────────────────────────────────────
 
     async def list_for_entity(

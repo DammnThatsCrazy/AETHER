@@ -283,6 +283,9 @@ class ResponseEventRead:
     state: str
     reason: str
     evidence: tuple[EvidenceRef, ...] = ()
+    response_to_message_id: Optional[str] = None
+    association_state: str = "unknown"
+    association_reason: str = "provider_reply_reference_missing"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -290,7 +293,9 @@ class ResponseEventRead:
             "messageId": self.message_id,
             "state": self.state,
             "reason": self.reason,
-            "responseToMessageId": None,
+            "responseToMessageId": self.response_to_message_id,
+            "replyAssociationState": self.association_state,
+            "replyAssociationReason": self.association_reason,
             "causalStatus": "unverified",
             "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True) for ref in self.evidence],
         }
@@ -1677,12 +1682,13 @@ def _row_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
     )
 
 
-def _response_event_links(
+async def _response_event_links(
     *,
     request: ProjectionRequest,
     scope: _Scope,
     messages: list[CommunicationMessage],
     rows: list[dict[str, Any]],
+    source: CommunicationSource,
 ) -> tuple[list[ResponseEventRead], bool]:
     """Join a response-like act only to its exact identity-bound message."""
     response_rows = [
@@ -1737,6 +1743,58 @@ def _response_event_links(
                 if message.sender_identity_evidence_ref is not None else []
             ),
         ])
+        target_id = message.reply_to_external_message_id
+        target_message: Optional[CommunicationMessage] = None
+        association_state = "unknown"
+        target_reason = "provider_reply_reference_missing"
+        target_refs: list[EvidenceRef] = []
+        if target_id:
+            if not (
+                message.reply_correlation_method == "in_reply_to"
+                and message.provider
+                and message.provider_account_id
+                and message.external_thread_id
+            ):
+                target_reason = "reply_reference_scope_or_method_invalid"
+            else:
+                try:
+                    candidates, complete = await source.reply_targets(
+                        str(message.tenant_id), message.provider,
+                        message.provider_account_id, message.external_thread_id, target_id,
+                    )
+                except Exception:  # noqa: BLE001 - unavailable target authority stays unknown
+                    candidates, complete = [], False
+                exact = [
+                    item for item in candidates
+                    if item.tenant_id == message.tenant_id
+                    and item.provider == message.provider
+                    and item.provider_account_id == message.provider_account_id
+                    and item.external_thread_id == message.external_thread_id
+                    and item.external_message_id == target_id
+                    and item.message_id != message.message_id
+                ]
+                if not complete:
+                    target_reason = "reply_target_read_truncated"
+                elif len(exact) > 1:
+                    target_reason = "reply_target_not_unique"
+                elif len(exact) == 1:
+                    target = exact[0]
+                    def instant(value: str) -> Optional[datetime]:
+                        try:
+                            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                        except (TypeError, ValueError):
+                            return None
+                        return parsed if parsed.tzinfo is not None else None
+                    reply_at, target_at = instant(message.occurred_at), instant(target.occurred_at)
+                    if reply_at is None or target_at is None or target_at > reply_at:
+                        target_reason = "reply_target_time_invalid_or_future"
+                    else:
+                        target_message = target
+                        association_state = "provider_reported_reply_association"
+                        target_reason = "exact_provider_reply_target_joined"
+                        target_refs = list(target.evidence_refs)
+                else:
+                    target_reason = "reply_target_not_found_in_exact_scope"
         links.append(
             ResponseEventRead(
                 fact_ref.id,
@@ -1744,7 +1802,10 @@ def _response_event_links(
                 "linked" if actor_bound else "unknown",
                 "response_act_exact_message_and_sender_identity_joined"
                 if actor_bound else "response_actor_or_sender_identity_unverified",
-                tuple(refs),
+                tuple(_dedupe_refs([*refs, *target_refs])),
+                response_to_message_id=target_message.message_id if target_message else None,
+                association_state=association_state,
+                association_reason=target_reason,
             )
         )
     return links, truncated
@@ -2206,11 +2267,12 @@ class Communication360Provider:
                 if str(m.tenant_id) == tenant_id and _message_matches_scope(m, scope)
             ]
 
-        response_links, response_links_truncated = _response_event_links(
+        response_links, response_links_truncated = await _response_event_links(
             request=request,
             scope=scope,
             messages=messages,
             rows=in_scope_rows,
+            source=self._silver,
         )
 
         policy_state = await self._read_policy_state(
@@ -4460,7 +4522,7 @@ class Communication360Provider:
         links: list[ResponseEventRead],
     ) -> list[ClaimEnvelope]:
         subject = ProjectionSubject(kind=request.subject.kind, id=request.subject.id)
-        return [
+        claims = [
             ClaimEnvelope(
                 id=f"communication_response_link.{link.fact_id}",
                 kind="communication_response_message_observation",
@@ -4468,7 +4530,13 @@ class Communication360Provider:
                 evidenceRefs=list(link.evidence),
                 claims=[
                     f"response-like communication act {link.fact_id} references exact message {link.message_id}",
-                    "the message replied to and causal response outcome are not established",
+                    (
+                        f"provider explicitly associated the reply with target message "
+                        f"{link.response_to_message_id}"
+                        if link.response_to_message_id
+                        else "no exact provider reply target was verified"
+                    ),
+                    "causal response outcome, completeness, identity, and authority are not established",
                 ],
                 confidence=1.0,
                 claimState=EpistemicStatus.OBSERVED,
@@ -4477,6 +4545,25 @@ class Communication360Provider:
             for link in links
             if link.state == "linked" and link.message_id and link.evidence
         ]
+        claims.extend(
+            ClaimEnvelope(
+                id=f"communication_reply_target.{link.fact_id}",
+                kind="provider_reported_reply_association",
+                subject=subject,
+                evidenceRefs=list(link.evidence),
+                claims=[
+                    f"provider-reported reply reference associates message {link.message_id} "
+                    f"with exact target message {link.response_to_message_id}",
+                    "this association does not establish causal response outcome, completeness, identity, or authority",
+                ],
+                confidence=1.0,
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["response_events"],
+            )
+            for link in links
+            if link.response_to_message_id and link.message_id and link.evidence
+        )
+        return claims
 
     def _author_delegation_claims(
         self,
