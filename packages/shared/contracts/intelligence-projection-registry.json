@@ -4127,7 +4127,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Only explicitly authored typed observation references are resolved against exact semantic Silver event, namespace, timestamp, and evidence fields. EpisodeEngine can produce the exact typed link when its caller supplies a semantic observation authority marker, but no live semantic-to-episode association caller is connected. Legacy Silver rows without authenticated source namespace remain unknown; broader activity/session completeness, source freshness, and policy remain unverified."
+          "partialImplementationReason": "The live validated-event semantic consumer routes qualifying classified observations with a supported resolved subject type, authenticated source namespace, timezone-aware occurrence time, and evidence through EpisodeEngine into tenant/subject-scoped semantic observation streams. Exact typed links are revalidated against canonical semantic Silver event, namespace, timestamp, and evidence fields. Legacy or unsupported observations remain unlinked; broader activity/session completeness, source freshness, policy, historical completeness, and continuity remain unverified."
         },
         {
           "id": "participants",

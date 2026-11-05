@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:45d6125637c0b92106afe077261abc4e2ac6247030b7c6cbc4369e0ef83d9006"
+  "packages/shared/": "sha256:fc24158a30578cdc7c8c70ed6c33f6b69ad796738b5d9fa1aed7d3a0f7f46ddf"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
@@ -1141,9 +1141,12 @@ remain partial projection paths.
 EpisodeEngine can persist a typed episode-to-semantic observation reference
 when its caller supplies both an exact observation ID and the semantic Silver
 authority marker. The link writer verifies tenant, namespace, status, time,
-and event evidence. The live semantic pipeline does not yet supply the
-episode association, so this producer seam does not establish complete
-Episode360 timelines or source coverage.
+and event evidence. The validated-event semantic consumer now forwards qualifying
+classified observations with a supported resolved subject type, authenticated
+source namespace, aware occurrence time, and evidence into tenant/subject-scoped
+`semantic_observation_stream` episodes. Unsupported or untyped observations are
+not linked. This live producer does not establish complete Episode360 timelines,
+source coverage, policy applicability, freshness, historical completeness, or continuity.
 
 Exploration surfaces compose over the engine through projection-backed surface adapters
 

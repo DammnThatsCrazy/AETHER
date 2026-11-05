@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:90b7fe9c5a318f2c6e0b0a3bd71cf31f218d078c40f463b133b819605ba43d31"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff1d9913aa35e29fb829e4ad4f50e908a31180d32f0c8eb7c63d8b7bd32d79de"
 ---
 
 # 360 System Blueprint
@@ -37,6 +37,14 @@ depend on a `CALLED_TOOL` lifecycle edge. Both claim and evidence output retain
 the canonical receipt reference; general external effects, mutations, freshness,
 historical policy replay and producer coverage remain unknown. The slot and
 projection remain partial.
+
+Episode360 `timeline` now has a live validated-event semantic producer. Qualifying
+classified observations with supported resolved subject types, authenticated
+source namespaces, aware occurrence times, and evidence reach tenant/subject-scoped
+`semantic_observation_stream` episodes through exact canonical typed links.
+Unclassified, untyped, or unsupported observations remain unlinked. Complete
+activity/session coverage, policy, freshness, historical completeness, and
+continuity remain unknown; the slot and projection remain partial.
 
 ## Full product catalog and current partial slots
 

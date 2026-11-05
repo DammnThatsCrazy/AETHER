@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
   "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
-  "services/api/intelligence/": "sha256:e6cbcb1ab7fda286e9c0c4ab0bd56735c4da55592e71b8759962c2dd2d459c3e"
+  "services/api/intelligence/": "sha256:659b8ebd0a157d948c9859303811fa4cb68026e74813adda72a4bee0505640e8"
   "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -2215,8 +2215,11 @@ unknown or partial states. Semantic SDK rows now carry a backend-stamped
 source namespace. When an EpisodeEngine caller explicitly supplies a semantic
 Silver observation ID and authority marker, the engine attempts an exact
 tenant, namespace, status, timestamp, and event-evidence link after persisting
-the episode. The live semantic pipeline does not yet supply the explicit
-episode association. Full activity and session coverage, policy, and freshness
+the episode. The live validated-event consumer now supplies this association for
+qualifying classified observations with a supported resolved subject type,
+authenticated source namespace, aware occurrence time, and evidence, grouped in
+tenant/subject-scoped `semantic_observation_stream` episodes. Full activity and
+session coverage, historical completeness, continuity, policy, and freshness
 remain unresolved; Campaign360 now joins exact gateway-admitted SDK Bronze observations
 when tenant, event ID, type, and event time match the touchpoint-linked
 canonical event. Exact current touchpoint classification revisions join by

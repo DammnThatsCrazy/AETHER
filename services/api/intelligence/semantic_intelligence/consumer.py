@@ -217,6 +217,7 @@ class SemanticEventConsumer:
             subject = await self._subject_resolver.resolve(payload, tenant_id)
             actor = await self._actor_resolver.resolve(payload, tenant_id)
             sem_payload["primary_subject_ref"] = subject.ref
+            sem_payload["target_type"] = subject.type.value
             sem_payload["actor_ref"] = actor.ref
             sem_payload["subject_resolution_confidence"] = subject.confidence
 

@@ -29,6 +29,8 @@ from journeys.measurement.episodes.related_authorities import (  # noqa: E402
     EpisodeJourneyAuthorityRepository,
 )
 from intelligence.semantic_intelligence.consumer import SemanticEventConsumer  # noqa: E402
+from intelligence.semantic_intelligence import engine as semantic_engine  # noqa: E402
+from shared.events.events import Event, Topic  # noqa: E402
 from journeys.measurement.episodes.provider import Episode360Provider  # noqa: E402
 from repositories.repos import reset_in_memory_stores as reset_fact_stores  # noqa: E402
 from shared.backend_interpretation import flags  # noqa: E402
@@ -221,15 +223,28 @@ async def test_episode_semantic_reference_producer_respects_flag(monkeypatch):
 @pytest.mark.asyncio
 async def test_semantic_ingestion_producer_reaches_episode360_reader(monkeypatch):
     monkeypatch.setattr(flags, "episode_engine_enabled", lambda: True)
-    observation = await _seed_semantic_observation(observation_id="sem-live")
-    observation.target_type = SubjectType.AGENT
+    monkeypatch.setattr(semantic_engine, "_store", DurableSemanticSentimentStore())
     consumer = SemanticEventConsumer()
-
-    await consumer._produce_episode_observation(TENANT, observation)
+    event = Event(
+        topic=Topic.SDK_EVENTS_VALIDATED,
+        tenant_id=TENANT,
+        source_service="ingestion.batch",
+        payload={
+            "event_id": "event-live",
+            "event_type": "feedback_submitted",
+            "properties": {
+                "agent_id": "agent-1",
+                "content": "I recommend this product, it is excellent",
+            },
+            "context": {"identity_namespace": "site:shop-a"},
+        },
+    )
+    await consumer.on_validated_event(event)
+    await consumer.on_validated_event(event)
 
     (episode,) = await EpisodeEngine().store.list_for_subject(TENANT, "agent", "agent-1")
     assert episode.kind == "semantic_observation_stream"
-    assert episode.observation_ids == ["sem-live"]
+    assert len(episode.observation_ids) == 1
     references = await _references(episode.episode_id)
     assert references.complete
     assert len(references.records) == 1
@@ -253,7 +268,7 @@ async def test_semantic_ingestion_producer_reaches_episode360_reader(monkeypatch
     assert [
         row["observationId"]
         for row in interactions.content["observationReferences"]["observations"]
-    ] == ["sem-live"]
+    ] == episode.observation_ids
 
 
 @pytest.mark.asyncio
@@ -264,4 +279,36 @@ async def test_semantic_ingestion_producer_rejects_incomplete_observation(monkey
 
     await SemanticEventConsumer()._produce_episode_observation(TENANT, observation)
 
+    assert await EpisodeEngine().store.list_for_subject(TENANT, "agent", "agent-1") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["disabled", "namespace", "quarantined", "untyped"])
+async def test_validated_event_does_not_create_unsupported_episode(monkeypatch, boundary):
+    monkeypatch.setattr(flags, "episode_engine_enabled", lambda: boundary != "disabled")
+    monkeypatch.setattr(semantic_engine, "_store", DurableSemanticSentimentStore())
+    payload = {
+        "event_id": f"event-{boundary}",
+        "event_type": "feedback_submitted",
+        "properties": {
+            "agent_id": "agent-1",
+            "content": "I recommend this product, it is excellent",
+        },
+        "context": {"identity_namespace": "site:shop-a"},
+    }
+    if boundary == "namespace":
+        payload["context"] = {}
+    elif boundary == "quarantined":
+        payload["event_type"] = "unregistered-episode-event"
+    elif boundary == "untyped":
+        payload["primary_subject_ref"] = "agent-1"
+        payload["properties"].pop("agent_id")
+    await SemanticEventConsumer().on_validated_event(
+        Event(
+            topic=Topic.SDK_EVENTS_VALIDATED,
+            tenant_id=TENANT,
+            source_service="ingestion.batch",
+            payload=payload,
+        )
+    )
     assert await EpisodeEngine().store.list_for_subject(TENANT, "agent", "agent-1") == []
