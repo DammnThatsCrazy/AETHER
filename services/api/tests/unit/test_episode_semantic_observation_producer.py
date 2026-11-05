@@ -17,6 +17,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from graph.operational_intelligence.models import EntityRef  # noqa: E402
 from intelligence.semantic_intelligence.models import (  # noqa: E402
+    EvidenceRef,
     SemanticObservation,
     SubjectType,
 )
@@ -27,9 +28,16 @@ from journeys.measurement.episodes.engine import EpisodeEngine  # noqa: E402
 from journeys.measurement.episodes.related_authorities import (  # noqa: E402
     EpisodeJourneyAuthorityRepository,
 )
+from intelligence.semantic_intelligence.consumer import SemanticEventConsumer  # noqa: E402
+from journeys.measurement.episodes.provider import Episode360Provider  # noqa: E402
 from repositories.repos import reset_in_memory_stores as reset_fact_stores  # noqa: E402
 from shared.backend_interpretation import flags  # noqa: E402
 from shared.store import reset_in_memory_stores as reset_episode_stores  # noqa: E402
+from shared.intelligence_projections.contracts import (  # noqa: E402
+    ProjectionContext,
+    ProjectionRequest,
+    ProjectionSubject,
+)
 
 TENANT = "tenant-episode-semantic-producer"
 AUTHORITY = "semantic_intelligence.silver_semantic_observations"
@@ -57,6 +65,13 @@ async def _seed_semantic_observation(
         actor_type=SubjectType.AGENT,
         primary_subject_ref="agent-1",
         target_type=SubjectType.AGENT,
+        evidence_refs=[
+            EvidenceRef(
+                evidence_id=f"evidence-{observation_id}",
+                source_type="event",
+                source_ref=f"event-{observation_id}",
+            )
+        ],
     )
     return await DurableSemanticSentimentStore().put_semantic(observation)
 
@@ -201,3 +216,52 @@ async def test_episode_semantic_reference_producer_respects_flag(monkeypatch):
         observation_authority=AUTHORITY,
     )
     assert (await _references(episode.episode_id)).records == ()
+
+
+@pytest.mark.asyncio
+async def test_semantic_ingestion_producer_reaches_episode360_reader(monkeypatch):
+    monkeypatch.setattr(flags, "episode_engine_enabled", lambda: True)
+    observation = await _seed_semantic_observation(observation_id="sem-live")
+    observation.target_type = SubjectType.AGENT
+    consumer = SemanticEventConsumer()
+
+    await consumer._produce_episode_observation(TENANT, observation)
+
+    (episode,) = await EpisodeEngine().store.list_for_subject(TENANT, "agent", "agent-1")
+    assert episode.kind == "semantic_observation_stream"
+    assert episode.observation_ids == ["sem-live"]
+    references = await _references(episode.episode_id)
+    assert references.complete
+    assert len(references.records) == 1
+
+    provider = Episode360Provider()
+    request = ProjectionRequest(
+        projectionId="episode360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="episode", id=episode.episode_id),
+    )
+    context = ProjectionContext(
+        projectionId="episode360",
+        tenantId=TENANT,
+        registryState="in_flight",
+        dependencyState=[],
+        warnings=[],
+    )
+    result = await provider.project(request, context)
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["observationReferences"]["state"] == "available"
+    assert [
+        row["observationId"]
+        for row in interactions.content["observationReferences"]["observations"]
+    ] == ["sem-live"]
+
+
+@pytest.mark.asyncio
+async def test_semantic_ingestion_producer_rejects_incomplete_observation(monkeypatch):
+    monkeypatch.setattr(flags, "episode_engine_enabled", lambda: True)
+    observation = await _seed_semantic_observation(observation_id="sem-incomplete")
+    observation.source_namespace = None
+
+    await SemanticEventConsumer()._produce_episode_observation(TENANT, observation)
+
+    assert await EpisodeEngine().store.list_for_subject(TENANT, "agent", "agent-1") == []
