@@ -6035,9 +6035,9 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['measurement_contract', 'support_case_context_events', 'support_cases'],
-        description: 'Support service level contract and timer state.',
+        description: 'Support service level contract, source timer state, and versioned explicit active elapsed timer comparison.',
         id: 'sla',
-        partialImplementationReason: 'Exact tenant-registered source policy revisions bind matching case timers and target durations, with contract evidence. Historical applicability, measured breach evaluation, source-history completeness, and freshness remain unknown.',
+        partialImplementationReason: 'Exact tenant-registered source policy revisions bind matching case timers and targets. Versioned active elapsed comparison requires complete bounded explicit start/pause/resume/stop events and retains sequence evidence; reported breaches are not measured results. Upstream authentication, historical applicability, source-history completeness, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'support360',

@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff1d9913aa35e29fb829e4ad4f50e908a31180d32f0c8eb7c63d8b7bd32d79de"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:b84914a25e0f7e6821b4945cba2af715a754ec2efb95dc05517ed1f2072eb0e3"
 ---
 
 # 360 System Blueprint
@@ -137,8 +137,11 @@ resource operation or independent external effect. Credentialed/private MCP
 endpoints, standing authorization, freshness and full producer coverage remain
 unsupported or unknown. The slot
 remains partial. Support360 `sla` now joins an operator-registered source policy revision
-to an exact case timer and target. Breach evaluation, historical applicability,
-source completeness, and freshness remain partial.
+to an exact case timer and target. `active_elapsed_v1` compares explicit complete
+start/pause/resume/stop sequences with that target, excluding pauses and retaining
+sequence evidence. This is locally measured timer semantics, not an authenticated
+upstream breach. Historical applicability, source completeness, and freshness
+remain unknown.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link
 to a current exact cluster definition and consent-scoped cluster or cohort
 memberships backed by graph-ledger replay. A policy-authorized bounded graph

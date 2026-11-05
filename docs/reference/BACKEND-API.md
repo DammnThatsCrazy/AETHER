@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
   "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
   "services/api/intelligence/": "sha256:659b8ebd0a157d948c9859303811fa4cb68026e74813adda72a4bee0505640e8"
-  "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
+  "services/api/journeys/": "sha256:2e1efaefa442884761738b21dfa3ba7835d89bdf962605f28bceed0e65b776bd"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:4241c421c34c32b4249dce7d2444eaf0c54e25c650d1b9b8239eae1c9f10ba47"
@@ -2510,8 +2510,15 @@ one immutable source SLA policy revision and target duration for a canonical
 case on a verified provider connection. Support360 binds it to a source timer
 only when the tenant, case, connection, provider, source SLA and policy IDs,
 policy version, timer kind, and target duration agree. The response and frame
-carry the contract ID and evidence; registration does not evaluate breach,
-prove historical applicability, or establish complete source history.
+carry the contract ID and evidence. New contracts select `active_elapsed_v1`;
+legacy contracts without a method version remain source-reported-only. An explicit
+`support_sla_timer_stopped` event completes a reproducible start/pause/resume/stop
+sequence. Support360 compares active elapsed time with the registered target,
+excluding pauses and retaining all sequence event IDs. Incomplete reads, mixed
+policy revisions, ambiguous ordering, target conflicts, and future timestamps
+suppress measurement. Reported met/breached/cancelled events are not measured
+results. Registration and this local calculation do not establish upstream
+authenticity, historical applicability, complete source history, or freshness.
 
 
 ---

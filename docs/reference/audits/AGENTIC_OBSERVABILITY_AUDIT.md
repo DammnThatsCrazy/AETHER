@@ -16,7 +16,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ff1d9913aa35e29fb829e4ad4f50e908a31180d32f0c8eb7c63d8b7bd32d79de"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:b84914a25e0f7e6821b4945cba2af715a754ec2efb95dc05517ed1f2072eb0e3"
   "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
   "services/api/actions/agent/": "sha256:af00b0d15d21c37e260c09d4a88e1c301637479068b848a8a7d97656500ef6bb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -40,7 +40,7 @@ source_hashes:
   "services/api/intelligence/risk360/": "sha256:000ac8a15d0cbeb7515100f7eb586745f0f8e51675031b0880913d1b5eed6f18"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/": "sha256:ba659f251b7fee8447346551f72354390c293179924ee24156c487b826c5d1a8"
-  "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
+  "services/api/journeys/support360/": "sha256:53c95f3ae62972de99334412228b49ef8c7f34d60b597f39de6d7965ccee5c3a"
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
@@ -590,6 +590,14 @@ typed, tenant-scoped poisoning evidence with lifecycle and restatement history,
 but no production detector currently writes those records. These additions
 close evidence-path pieces; they do not complete Agent360, Execution360,
 Risk360, or the full 18-surface contract.
+
+Support360 `sla` now supports a versioned local active elapsed comparison from
+complete explicit start/pause/resume/stop context events and an exact registered
+timer/policy target. It excludes pauses and retains all sequence event IDs;
+reported met/breached/cancelled states do not substitute for the calculation.
+Ambiguous, mixed-revision, future, conflicting-target, and incomplete sequences
+remain unmeasured. Upstream authenticity, historical applicability, complete
+source history, and freshness remain unknown.
 
 Execution360 additionally joins an admitted external Silver telemetry event
 to one exact tenant Bronze event when ID, event type, and occurrence time match

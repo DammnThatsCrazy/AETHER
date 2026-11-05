@@ -113,6 +113,9 @@ def evaluate_active_elapsed_v1(
         return {**unknown, "reasonCode": "support_sla_timer_history_incomplete_or_unsupported"}
 
     matching = []
+    now = datetime.now(timezone.utc)
+    if contract.registered_at > now:
+        return {**unknown, "reasonCode": "support_sla_timer_timestamp_anchor_invalid"}
     expected_timer = contract.timer_kind
     for event in events:
         payload = event.get("payload")
@@ -122,10 +125,13 @@ def evaluate_active_elapsed_v1(
             payload.get("source_sla_id") != contract.source_sla_id
             or payload.get("timer_kind") != expected_timer
             or payload.get("custom_timer_name") != contract.custom_timer_name
-            or payload.get("source_policy_id") != contract.source_policy_id
-            or payload.get("source_policy_version") != contract.source_policy_version
         ):
             continue
+        if (
+            payload.get("source_policy_id") != contract.source_policy_id
+            or payload.get("source_policy_version") != contract.source_policy_version
+        ):
+            return {**unknown, "reasonCode": "support_sla_timer_policy_revision_ambiguous"}
         target = payload.get("target_duration_seconds")
         if target is not None and target != contract.target_duration_seconds:
             return {**unknown, "reasonCode": "support_sla_source_target_conflicts_with_registered_contract"}
@@ -151,6 +157,7 @@ def evaluate_active_elapsed_v1(
         if (
             effective is None or observed is None or received is None or payload_effective is None
             or effective != payload_effective or observed < effective or received < observed
+            or received > now
         ):
             return {**unknown, "reasonCode": "support_sla_timer_timestamp_anchor_invalid"}
         anchored.append((effective, event))
@@ -195,6 +202,7 @@ def evaluate_active_elapsed_v1(
                     else "over_target"
                 ),
                 "stoppedAt": effective.isoformat(),
+                "sequenceEventIds": [item[1]["contextEventId"] for item in anchored],
                 "startAndStopEvents": [
                     item[1]["contextEventId"] for item in anchored
                     if item[1].get("eventType") in {

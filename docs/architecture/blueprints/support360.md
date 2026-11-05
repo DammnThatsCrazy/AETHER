@@ -41,7 +41,14 @@ Case-scoped callback, assignment and handoff, SLA, and journey context events
 are retained by their own append-only support authorities. The projection
 rechecks exact tenant, case, provider connection, event, and canonical identity
 links where applicable. A source-reported SLA timer is not a measured breach;
-a journey link does not by itself prove an episode relationship. When an
+a journey link does not by itself prove an episode relationship. The versioned
+`active_elapsed_v1` contract permits a local active elapsed comparison only over
+complete bounded explicit start/pause/resume/stop events for the exact case,
+provider, timer, and policy revision. Pauses are excluded; every sequence event
+ID is retained. Future timestamps, mixed revisions, ambiguous ordering, and
+conflicting targets suppress measurement. Legacy contracts stay reported-only.
+This does not authenticate upstream timer facts or prove general SLA compliance.
+When an
 EpisodeRecord explicitly cites the verified case journey-link event and names
 the same journey, the provider can report that exact relation as partial
 evidence. These reads do not establish upstream event authorship, complete

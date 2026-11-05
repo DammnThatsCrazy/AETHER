@@ -11361,7 +11361,7 @@
         {
           "id": "sla",
           "requirement": "required",
-          "description": "Support service level contract and timer state.",
+          "description": "Support service level contract, source timer state, and versioned explicit active elapsed timer comparison.",
           "canonicalAuthorityRefs": [
             "measurement_contract",
             "support_case_context_events",
@@ -11380,7 +11380,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Exact tenant-registered source policy revisions bind matching case timers and target durations, with contract evidence. Historical applicability, measured breach evaluation, source-history completeness, and freshness remain unknown."
+          "partialImplementationReason": "Exact tenant-registered source policy revisions bind matching case timers and targets. Versioned active elapsed comparison requires complete bounded explicit start/pause/resume/stop events and retains sequence evidence; reported breaches are not measured results. Upstream authentication, historical applicability, source-history completeness, and freshness remain unknown."
         },
         {
           "id": "journey_links",
@@ -11838,7 +11838,7 @@
   ],
   "productSurfaceBlueprintSource": {
     "document": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
-    "sha256": "23d0b1fb212aa7cc6e52c632cf05676f78dc64a216303adade0950f3f4540341",
+    "sha256": "8bf57f87c17ffb83874ef87077c61abc9c07771832638aef9f9d95d7287c7ce6",
     "surfaceSectionPrefix": "11.",
     "scope": "18 product surfaces; backend contract only"
   }

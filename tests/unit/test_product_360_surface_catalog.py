@@ -32,6 +32,16 @@ def _registry() -> dict:
     return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
 
 
+def test_support_sla_catalog_bounds_local_measurement_claims() -> None:
+    support = next(surface for surface in _registry()["productSurfaces"] if surface["id"] == "support360")
+    slot = next(slot for slot in support["domainSlots"] if slot["id"] == "sla")
+    reason = slot["partialImplementationReason"]
+    assert "complete bounded explicit start/pause/resume/stop events" in reason
+    assert "reported breaches are not measured results" in reason
+    assert "source-history completeness, and freshness remain unknown" in reason
+    assert "measurement_contract" in slot["canonicalAuthorityRefs"]
+
+
 def test_product_surface_catalog_is_structurally_valid() -> None:
     assert validate_product_surface_catalog(_registry()) == []
 

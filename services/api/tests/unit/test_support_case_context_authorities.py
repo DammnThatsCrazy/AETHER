@@ -310,6 +310,28 @@ def test_sla_active_elapsed_evaluation_rejects_incomplete_ambiguous_and_reported
     )
 
 
+def test_sla_measurement_rejects_future_and_mixed_revision_sequences():
+    contract = _contract(str(uuid4()))
+    events = [
+        _timer_row(contract, "support_sla_timer_started", 0),
+        _timer_row(contract, "support_sla_timer_paused", 10),
+        _timer_row(contract, "support_sla_timer_resumed", 15),
+        _timer_row(contract, "support_sla_timer_stopped", 30),
+    ]
+    measured = evaluate_active_elapsed_v1(contract, events, complete=True)
+    assert measured["sequenceEventIds"] == [event["contextEventId"] for event in events]
+    mixed = [*events, _timer_row(contract, "support_sla_timer_paused", 20)]
+    mixed[-1]["payload"]["source_policy_version"] = "other"
+    assert evaluate_active_elapsed_v1(contract, mixed, complete=True)["reasonCode"] == (
+        "support_sla_timer_policy_revision_ambiguous"
+    )
+    future = [dict(event) for event in events]
+    future[-1]["receivedAt"] = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    assert evaluate_active_elapsed_v1(contract, future, complete=True)["reasonCode"] == (
+        "support_sla_timer_timestamp_anchor_invalid"
+    )
+
+
 @pytest.mark.asyncio
 async def test_registered_sla_contract_is_immutable_and_case_provider_scoped():
     cases, case = await _case()
@@ -643,6 +665,10 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         "targetDurationSeconds": 1800,
         "comparison": "over_target",
         "stoppedAt": (NOW + timedelta(minutes=35, seconds=1)).isoformat(),
+        "sequenceEventIds": [
+            event["contextEventId"]
+            for event in sorted(slots["sla"]["events"], key=lambda event: event["effectiveAt"])
+        ],
         "startAndStopEvents": [
             next(event["contextEventId"] for event in slots["sla"]["events"] if event["eventType"] == "support_sla_timer_started"),
             next(event["contextEventId"] for event in slots["sla"]["events"] if event["eventType"] == "support_sla_timer_stopped"),
