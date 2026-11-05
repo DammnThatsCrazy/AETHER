@@ -183,6 +183,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/derivatives/ops` | derivatives adapter fleet | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/interoperability/ops` | interoperability providers | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/delivery` | delivery operations | no | I | A | — | — | I | `kyber-noncritical-empty-routes.test.tsx` |
+| `/agent-lineage` | principal and fleet lineage investigation | no | I | — | A | A | A | `agent-lineage-page.test.tsx` |
 | `/agent-telemetry` | agent fleet and telemetry | yes | A | A | A | A | A | `agent-telemetry-page.test.tsx` |
 | `/agent-access` | agent access control | yes | A | A | A | A | I | `agent-access-page.test.tsx` |
 | `/payment-rails` | payment provider and tenant fleet | yes | A | A | A | A | A | `payment-rails-page.test.tsx` |
@@ -198,10 +199,10 @@ The denominator is the 164 data-bearing route patterns above: 77 Aether and
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 35 / 164 (21.3%) | tracked for every route |
-| Empty-state assertions | 150 / 164 (91.5%) | at least 90% overall |
-| Error/unavailable assertions | 130 / 164 (79.3%) | 100% of critical routes |
-| Populated-state assertions | 64 / 164 (39.0%) | tracked for every route |
+| Explicit loading-state assertions | 35 / 165 (21.3%) | tracked for every route |
+| Empty-state assertions | 150 / 165 (91.5%) | at least 90% overall |
+| Error/unavailable assertions | 131 / 165 (79.3%) | 100% of critical routes |
+| Populated-state assertions | 65 / 165 (39.0%) | tracked for every route |
 | Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

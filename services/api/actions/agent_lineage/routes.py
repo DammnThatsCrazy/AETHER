@@ -143,8 +143,21 @@ async def principal_export(principal_id: str, body: LineageExportRequest, reques
     tenant = request.state.tenant
     if not (tenant.has_permission("export") or tenant.has_permission("admin")):
         tenant.require_permission("export")
+    from governance.security.export_governance import audit_export_governance
     from ingestion.export.service import request_export
+    from shared.privacy.ip_hmac import audit_ip_token
 
+    # Same governance as POST /v1/exports: permission, tenant boundary and audit record.
+    await audit_export_governance.authorize_create(
+        actor_id=getattr(tenant, "user_id", None) or tenant_id,
+        actor_type="tenant_user",
+        tenant_id=tenant_id,
+        export_type="agent_lineage",
+        has_export_permission=True,
+        target_tenant=tenant_id,
+        manifest={"params": {"principal_entity_id": principal_id, "after": body.after}, "format": body.format},
+        ip_address=audit_ip_token(request.client.host if request.client else None, tenant_id),
+    )
     job = await request_export(
         tenant_id,
         export_type="agent_lineage",
@@ -177,8 +190,16 @@ async def export_status(job_id: str, request: Request):
 async def reconcile(request: Request, full: bool = False):
     """Fold new evidence into the projection. ``full`` rebuilds and logs restatements."""
     tenant_id = _tenant_id(request)
-    service = await get_service()
-    return await _call(service.reconcile(tenant_id, full=full))
+    from workers.jobs.service import get_jobs_service
+
+    from .jobs import JOB_TYPE
+
+    job = await get_jobs_service().enqueue(
+        tenant_id, JOB_TYPE, {"full": full},
+        correlation_id=getattr(request.state, "request_id", None),
+        requested_by=getattr(request.state.tenant, "user_id", None),
+    )
+    return APIResponse(data={"job_id": job["id"], "status": job.get("status", "queued"), "full": full}).to_dict()
 
 
 class PrincipalBindingRequest(BaseModel):

@@ -142,3 +142,40 @@ def test_a_binding_cannot_make_an_agent_its_own_principal(populated):
         "kind": "agent", "principal_entity_id": "same", "agent_entity_id": "same",
     })
     assert response.status_code == 400
+
+
+def test_reconcile_enqueues_a_job_instead_of_running_in_the_request(populated, monkeypatch):
+    calls = []
+
+    class _Jobs:
+        async def enqueue(self, tenant_id, job_type, payload, **_):
+            calls.append((tenant_id, job_type, payload))
+            return {"id": "job-1", "status": "queued"}
+
+    monkeypatch.setattr("workers.jobs.service.get_jobs_service", lambda: _Jobs())
+    response = _app(_Tenant(T, {"agent:manage"})).post("/v1/agent-lineage/reconcile?full=true")
+    assert response.status_code == 202
+    assert calls == [(T, "agent_lineage.reconcile", {"full": True})]
+
+
+def test_export_goes_through_export_governance_and_needs_export_permission(populated, monkeypatch):
+    audited, queued = [], []
+
+    async def authorize(**kwargs):
+        audited.append(kwargs)
+
+    async def request_export(tenant_id, **kwargs):
+        queued.append((tenant_id, kwargs["params"]))
+        return {"job_id": "job-2", "status": "queued"}
+
+    from governance.security.export_governance import audit_export_governance
+
+    monkeypatch.setattr(audit_export_governance, "authorize_create", authorize)
+    monkeypatch.setattr("ingestion.export.service.request_export", request_export)
+    path = f"/v1/agent-lineage/principals/{S.LEGIT_HUMAN}/export"
+    assert _app(_Tenant(T, {"agent:manage"})).post(path, json={}).status_code == 403
+    assert audited == [] and queued == []
+    response = _app(_Tenant(T, {"agent:manage", "export"})).post(path, json={"after": "a1"})
+    assert response.status_code == 202
+    assert audited[0]["export_type"] == "agent_lineage"
+    assert queued[0][1]["after"] == "a1"

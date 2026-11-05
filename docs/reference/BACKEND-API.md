@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:ea5b9398747185d315e173287915c9661d2e772ad4cfedf9188bd5a4d86bef58"
+  "services/api/actions/": "sha256:2248e87c472017a625f57aa1a406d274fd23e0d2ee84ecfe18fae9e025679c89"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
@@ -3856,7 +3856,7 @@ All routes need `agent:manage` and the deployment registry flag. Tenant scope co
 - `GET /v1/agent-lineage/principals/{id}/restatements` — what corrections changed.
 - `POST /v1/agent-lineage/principals/{id}/export` — also needs `export` or `admin`. Enqueues the extraction as a job; `GET /v1/agent-lineage/exports/{job_id}` reports it. Each part holds at most 50,000 rows of evidence fields. A part with `rows_remaining: 1` continues with `after` set to its last agent id.
 - `GET /v1/agent-lineage/agents/{id}` — Agent360 lineage block: hierarchy, principals, ancestors, counts, effects, outcomes, evidence. `/counts`, `/descendants` (cursor) and `/ancestors` read parts of it.
-- `POST /v1/agent-lineage/reconcile` — folds new evidence; `full=true` rebuilds and logs restatements. The durable job type `agent_lineage.reconcile` does the same from a `job_schedules` row. Incremental passes stop at the first page holding nothing new, so schedule a periodic `full` to pick up facts arriving with old timestamps.
+- `POST /v1/agent-lineage/reconcile` — enqueues the durable `agent_lineage.reconcile` job, which folds new evidence; `full=true` rebuilds and logs restatements. A `job_schedules` row can run the same job. Incremental passes stop at the first page holding nothing new, so schedule a periodic `full` to pick up facts arriving with old timestamps.
 - `POST /v1/agent-lineage/bindings` — records a tenant's declaration of a principal link. No evidence class is accepted: declarations are stored `TENANT_DECLARED` and resolve as inferred at most.
 - `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/principals/{id}/investigation` — `admin` and the Kyber telemetry flag. The operator's first screen in bounded reads, with `/agents`, `/tree` and `/tenants/{tenant}/agents/{id}` for drilldown.
 
