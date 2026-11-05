@@ -244,6 +244,12 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_export_expiry_sweep_coro()
 
+    def _agent_behavior_jobs() -> Coroutine[Any, Any, None]:
+        """Snapshot, drift and Risk360 evidence for deployment agents (default OFF)."""
+        from intelligence.agent_behavior.scheduler import build_agent_behavior_coro
+
+        return build_agent_behavior_coro()
+
     def _journey_handoff_sweep() -> Coroutine[Any, Any, None]:
         from journeys.handoff.sweep import build_journey_handoff_sweep_coro
 
@@ -612,6 +618,14 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="journey_handoff_sweep",
             factory=_journey_handoff_sweep,
+        ),
+        # Agent behavior snapshots, drift and Risk360 evidence assembly. Derived
+        # caches only; OFF unless AETHER_AGENT_BEHAVIOR_JOBS_ENABLED. Not required:
+        # a stalled pass leaves the last stored snapshots in place.
+        WorkerSpec(
+            name="agent_behavior_jobs",
+            factory=_agent_behavior_jobs,
+            enabled=lambda: bool(settings.external_agent_telemetry.behavior_jobs_enabled),
         ),
         # Rights Authority retention DELETION EXECUTOR: the sweep that actually
         # deletes artifacts whose retention expiry has passed (before it, only
