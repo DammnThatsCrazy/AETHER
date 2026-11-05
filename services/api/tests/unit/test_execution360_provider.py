@@ -1676,6 +1676,82 @@ async def test_canonical_tool_call_edge_joins_exact_execution_and_remains_partia
     assert not [claim for claim in result.claims if "risk_events" in claim.domainSlotIds]
 
 
+@pytest.mark.parametrize(
+    "receipt_override,principal,accepted",
+    [
+        ({}, "principal-1", True),
+        ({"toolName": "other-tool"}, "principal-1", False),
+        ({}, "other-principal", False),
+        ({"action": "delete"}, "principal-1", False),
+        ({"invokedAt": "2026-10-16T10:00:00+00:00"}, "principal-1", False),
+    ],
+)
+async def test_execution_tool_receipt_requires_exact_edge_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+    receipt_override: dict,
+    principal: str,
+    accepted: bool,
+) -> None:
+    import actions.agent.invocation_runtime as invocation_runtime
+    from actions.agent.execution360_provider import _read_execution_tool_receipt
+
+    raw = {"initiating_principal_user_id": principal}
+
+    class ReceiptRepository:
+        async def find_many(self, *, filters, limit):
+            assert filters == {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-1",
+                "execution_id": "exec-1",
+            }
+            assert limit == 101
+            return [raw]
+
+    async def validate(**kwargs):
+        assert kwargs["tenant_id"] == TENANT
+        assert kwargs["agent_id"] == "runtime-agent-1"
+        return {
+            "state": "provider_invocation_succeeded",
+            "receiptId": "receipt-1",
+            "toolName": "payments.send",
+            "capabilityId": "cap-1",
+            "action": "invoke",
+            "resource": "capability:cap-1",
+            "policyResource": "capability:cap-1",
+            "policyDecision": {"allowed": True},
+            "grantId": "grant-1",
+            "invokedAt": "2026-10-16T10:00:01+00:00",
+            "completedAt": "2026-10-16T10:00:02+00:00",
+            "resultStatus": "succeeded",
+            "providerResultDigest": "a" * 64,
+            "providerResultComplete": True,
+            **receipt_override,
+        }
+
+    monkeypatch.setattr(invocation_runtime, "InvocationReceiptRepository", ReceiptRepository)
+    monkeypatch.setattr(invocation_runtime, "validated_agent_receipt", validate)
+    execution = {
+        "tenant_id": TENANT,
+        "agent_id": "runtime-agent-1",
+        "execution_id": "exec-1",
+        "initiating_principal_user_id": "principal-1",
+        "started_at": "2026-10-16T10:00:00+00:00",
+        "ended_at": "2026-10-16T10:00:03+00:00",
+    }
+    result = await _read_execution_tool_receipt(
+        tenant_id=TENANT,
+        execution=execution,
+        expected_tool="payments.send",
+        called_at="2026-10-16T10:00:01+00:00",
+    )
+
+    assert (result is not None) is accepted
+    if result is not None:
+        assert result["receiptId"] == "receipt-1"
+        assert result["externalEffect"] == "unknown"
+        assert result["mutation"] == "unknown"
+
+
 async def test_ambiguous_execution_actor_binding_does_not_join_tool_edges() -> None:
     read = await RepositoryExecution360Source()._read_execution_tool_calls(
         TENANT,

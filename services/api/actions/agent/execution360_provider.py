@@ -95,6 +95,93 @@ _SILVER_SOURCE = "silver_agent_execution_facts"
 _INTERNAL_SOURCE = "agent_executions"
 
 
+async def _read_execution_tool_receipt(
+    *,
+    tenant_id: str,
+    execution: dict[str, Any],
+    expected_tool: str,
+    called_at: str,
+) -> dict[str, Any] | None:
+    def exact(value: Any) -> bool:
+        return isinstance(value, str) and bool(value) and value == value.strip() and "*" not in value
+
+    execution_id = _safe_text(execution.get("execution_id"))
+    agent_id = _safe_text(execution.get("agent_id"))
+    principal_id = _safe_text(execution.get("initiating_principal_user_id"))
+    if not execution_id or not agent_id or not principal_id:
+        return None
+    try:
+        from actions.agent.invocation_runtime import (
+            InvocationReceiptRepository,
+            validated_agent_receipt,
+        )
+
+        repository = InvocationReceiptRepository()
+        raw_rows = await repository.find_many(
+            filters={
+                "tenant_id": tenant_id,
+                "agent_id": agent_id,
+                "execution_id": execution_id,
+            },
+            limit=101,
+        )
+        if not isinstance(raw_rows, list) or len(raw_rows) != 1:
+            return None
+        raw = raw_rows[0]
+        if not isinstance(raw, dict) or raw.get("initiating_principal_user_id") != principal_id:
+            return None
+        validated = await validated_agent_receipt(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            execution=execution,
+            expected_workflow_run_id=execution.get("workflow_run_id"),
+        )
+    except Exception:
+        return None
+    if not isinstance(validated, dict):
+        return None
+    try:
+        receipt_time = datetime.fromisoformat(validated["invokedAt"].replace("Z", "+00:00"))
+        called_time = datetime.fromisoformat(called_at.replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if (
+        validated.get("state") not in {
+            "provider_invocation_succeeded",
+            "provider_invocation_failed",
+        }
+        or validated.get("toolName") != expected_tool
+        or validated.get("action") != "invoke"
+        or not exact(validated.get("receiptId"))
+        or not exact(validated.get("resource"))
+        or not exact(validated.get("policyResource"))
+        or not exact(validated.get("grantId"))
+        or not isinstance(validated.get("policyDecision"), dict)
+        or validated["policyDecision"].get("allowed") is not True
+        or raw.get("initiating_principal_user_id") != principal_id
+        or receipt_time != called_time
+    ):
+        return None
+    return {
+        "executionId": execution_id,
+        "toolName": validated["toolName"],
+        "action": validated["action"],
+        "resource": validated["resource"],
+        "policyResource": validated["policyResource"],
+        "principalUserId": principal_id,
+        "grantId": validated["grantId"],
+        "policyDecision": validated["policyDecision"],
+        "receiptId": validated["receiptId"],
+        "invokedAt": validated["invokedAt"],
+        "completedAt": validated["completedAt"],
+        "resultStatus": validated["resultStatus"],
+        "providerResultDigest": validated.get("providerResultDigest"),
+        "providerResultComplete": validated.get("providerResultComplete"),
+        "externalEffect": "unknown",
+        "mutation": "unknown",
+    }
+
+
 async def _resolve_agent_identity_map(
     tenant_id: str, source_agent_ids: set[str]
 ) -> tuple[dict[str, dict[str, Any]], bool, bool]:
@@ -143,6 +230,7 @@ class ExecutionToolCallRead:
     scope_known: bool
     truncated: bool = False
     reason: Optional[str] = None
+    receipt_results: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -1044,6 +1132,7 @@ class RepositoryExecution360Source:
             )
 
         items: list[dict[str, Any]] = []
+        receipt_results: list[dict[str, Any]] = []
         scope_known = not ambiguous_execution_ids
         for edge in edges:
             props = getattr(edge, "properties", None)
@@ -1106,8 +1195,7 @@ class RepositoryExecution360Source:
             if evidence is None:
                 scope_known = False
                 continue
-            items.append(
-                {
+            lifecycle = {
                     "executionId": execution_id,
                     "toolId": tool_id,
                     "calledAt": called_at,
@@ -1116,12 +1204,30 @@ class RepositoryExecution360Source:
                     "authorityDecision": "not_established_by_tool_call_edge",
                     "evidenceRef": evidence.model_dump(mode="json", by_alias=True, exclude_none=True),
                 }
+            items.append(lifecycle)
+            execution = next(
+                (row for row in execution_rows if row.get("execution_id") == execution_id),
+                None,
             )
+            if execution is None:
+                scope_known = False
+                continue
+            receipt_result = await _read_execution_tool_receipt(
+                tenant_id=tenant_id,
+                execution=execution,
+                expected_tool=tool_id,
+                called_at=called_at,
+            )
+            if receipt_result is not None:
+                receipt_results.append(receipt_result)
+        if truncated or not scope_known:
+            receipt_results = []
         return ExecutionToolCallRead(
             rows=items,
             available=True,
             scope_known=scope_known,
             truncated=bool(truncated),
+            receipt_results=receipt_results,
             reason=(
                 "execution_tool_call_graph_scan_truncated"
                 if truncated
@@ -2139,6 +2245,7 @@ def _project_tool_call_read(
             available=bool(read and read.available),
             scope_known=False,
             truncated=bool(read and read.truncated),
+            receipt_results=[],
             reason="temporal_anchor_not_reconstructable_from_current_sources",
         )
     if read is None:
@@ -2147,6 +2254,7 @@ def _project_tool_call_read(
             available=False,
             scope_known=False,
             reason="execution_tool_call_exact_join_not_available",
+            receipt_results=[],
         )
 
     rows: list[dict[str, Any]] = []
@@ -2165,6 +2273,7 @@ def _project_tool_call_read(
             scope_known=False,
             truncated=read.truncated,
             reason="execution_time_window_invalid",
+            receipt_results=[],
         )
 
     for raw in read.rows:
@@ -2221,6 +2330,33 @@ def _project_tool_call_read(
             }
         )
 
+    receipt_results: list[dict[str, Any]] = []
+    receipt_ids: set[str] = set()
+    duplicate_or_invalid_receipt = False
+    for raw in read.receipt_results or []:
+        if not isinstance(raw, dict):
+            scope_known = False
+            duplicate_or_invalid_receipt = True
+            continue
+        execution_id = _safe_text(raw.get("executionId"))
+        receipt_id = _safe_text(raw.get("receiptId"))
+        instant = _parse_aware_instant(raw.get("invokedAt"))
+        if (
+            not execution_id
+            or execution_id not in admitted_execution_ids
+            or not receipt_id
+            or receipt_id in receipt_ids
+            or instant is None
+        ):
+            scope_known = False
+            duplicate_or_invalid_receipt = True
+            continue
+        receipt_ids.add(receipt_id)
+        if (lower is not None and instant < lower) or (upper is not None and instant > upper):
+            continue
+        receipt_results.append(raw)
+    if duplicate_or_invalid_receipt:
+        receipt_results = []
     reason = read.reason
     if rows and not reason:
         reason = "execution_tool_call_source_completeness_unknown"
@@ -2238,6 +2374,7 @@ def _project_tool_call_read(
         scope_known=scope_known,
         truncated=read.truncated,
         reason=reason,
+        receipt_results=receipt_results,
     )
 
 
@@ -3815,6 +3952,31 @@ class Execution360Provider:
                     ],
                 )
             )
+        for row in tool_calls.receipt_results or []:
+            try:
+                receipt_evidence = _evidence_ref(
+                    evidence_id=row["receiptId"],
+                    source="agent_invocation_receipts",
+                    observed_at=row["completedAt"],
+                    store="agent_invocation_receipts",
+                )
+            except (KeyError, TypeError):
+                receipt_evidence = None
+            if receipt_evidence is None:
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:tool-receipt:{row['receiptId']}",
+                    kind="server_validated_execution_tool_invocation_receipt",
+                    subject=subject,
+                    evidenceRefs=[receipt_evidence],
+                    claims=[
+                        f"The server-owned MCP invocation receipt records {row['resultStatus']} for tool {row['toolName']} under grant {row['grantId']} linked to execution {row['executionId']}; external effects, mutations, and source completeness remain unknown."
+                    ],
+                    claimState=EpistemicStatus.RESOLVED,
+                    domainSlotIds=[SLOT_TOOL_CALLS, SLOT_EVIDENCE],
+                )
+            )
             if (
                 subject.kind == "workflow_run"
                 and row.get("workflowRunId") == subject.id
@@ -4478,6 +4640,7 @@ class Execution360Provider:
                 else None
             ),
             "joinedExecutionToolCalls": list(tool_calls.rows),
+            "receiptBackedToolCallResults": list(tool_calls.receipt_results or []),
             "evidenceRefs": [
                 ref.model_dump(mode="json", by_alias=True, exclude_none=True)
                 for ref in tool_call_evidence
