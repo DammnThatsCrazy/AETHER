@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,6 +39,7 @@ from journeys.support360.context_authorities import (  # noqa: E402
     reset_local_support_case_context_store,
 )
 from journeys.support360.provider import (  # noqa: E402
+    SUPPORT_SLOT_SECTIONS,
     Support360Provider,
     SupportFactsRead,
     _validated_case_journey_episodes,
@@ -59,6 +61,8 @@ from shared.intelligence_projections import (  # noqa: E402
     ProjectionSection,
     ProjectionSubject,
 )
+from shared.intelligence_projections.composition import _compose_slot_content  # noqa: E402
+from shared.intelligence_projections.generated_registry import PRODUCT_360_SURFACE_DEFINITIONS  # noqa: E402
 
 TENANT = "tenant-support-context-a"
 CONNECTION = "support-context-connection-a"
@@ -701,6 +705,43 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
     assert slots["risk"]["state"] == "ready"
     assert slots["evidence_trace"]["count"] > 0
     assert any(claim.domainSlotIds == ["participants", "evidence_trace"] for claim in result.claims)
+
+    for slot_id in ("sla", "participants", "journey_links", "resolution", "case_summary", "evidence_trace"):
+        slot_result = await provider.project(
+            request.model_copy(update={"includeSections": [SUPPORT_SLOT_SECTIONS[slot_id]]}),
+            context,
+        )
+        assert len(slot_result.sections) == 1
+        section = slot_result.sections[0]
+        assert section.id == SUPPORT_SLOT_SECTIONS[slot_id]
+        assert section.state == "available"
+        assert section.content["evidenceRefs"]
+        assert section.content["scope"] == "bounded_current_store_observations"
+        assert section.warnings
+        assert slot_result.claims
+        definition = deepcopy(next(
+            item for item in PRODUCT_360_SURFACE_DEFINITIONS["support360"]["domainSlots"]
+            if item["id"] == slot_id
+        ))
+        for binding in definition["projectionBindings"]:
+            binding["sectionIds"] = [SUPPORT_SLOT_SECTIONS[slot_id]]
+        composed, reasons, missing = _compose_slot_content(
+            slot_id=slot_id, slot_definition=definition, results={"support360": slot_result},
+            include_evidence=True, tenant_id=TENANT, requested_as_of=None,
+            subject_kind="support_case", requires_exact_claim=True,
+        )
+        assert missing == set()
+        assert "projection_section_authority_refs_invalid" not in reasons
+        assert composed["content"]["sections"][0]["content"] == section.content
+        assert composed["evidenceRefs"]
+        if slot_id == "sla":
+            assert section.content["timers"][0]["measurementEvaluation"]["activeDurationSeconds"] == 1801
+            assert section.content["sourceAuthenticationState"] == "tenant_authorized_principal_only"
+            assert section.content["sourceHistoryComplete"] is False
+        if slot_id == "participants":
+            assert section.content["participants"][0]["canonicalEntityId"] == ENTITY
+        if slot_id == "journey_links":
+            assert section.content["episodeFacts"]["relations"][0]["canonicalEpisodeId"] == episode.episode_id
 
     windowed_request = request.model_copy(
         update={
