@@ -46,6 +46,18 @@ def test_product_surface_catalog_is_structurally_valid() -> None:
     assert validate_product_surface_catalog(_registry()) == []
 
 
+def test_communications_reply_catalog_keeps_association_and_outcome_separate() -> None:
+    surface = next(item for item in _registry()["productSurfaces"] if item["id"] == "communications360")
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "response_events")
+    reason = slot["partialImplementationReason"]
+    assert "explicit In-Reply-To" in reason
+    assert "unique evidence-backed target" in reason
+    assert "provider account and thread" in reason
+    assert "causal response outcome" in reason
+    assert "identity or authority" in reason
+    assert slot["projectionBindings"][0]["projectionId"] == "communication360"
+
+
 def test_generated_catalog_exposes_all_slots_direct_providers_and_gaps() -> None:
     catalog = platform_contracts.gen_product_360_surface_catalog_md(_registry())
     assert "This product catalog has 18 surface contracts" in catalog
@@ -101,7 +113,11 @@ def test_partial_binding_must_expose_exact_missing_authorities() -> None:
     registry = _registry()
     value = next(surface for surface in registry["productSurfaces"] if surface["id"] == "value360")
     confidence = next(slot for slot in value["domainSlots"] if slot["id"] == "confidence")
-    assert confidence["unboundCanonicalAuthorityRefs"] == ["model_governance"]
+    projection = next(item for item in registry["projections"] if item["id"] == "economic360")
+    projection["canonicalAuthorities"].remove("model_governance")
+    confidence["unboundCanonicalAuthorityRefs"] = ["model_governance"]
+    confidence["authorityGapReason"] = "synthetic_missing_model_governance"
+    assert validate_product_surface_catalog(registry) == []
 
     confidence["unboundCanonicalAuthorityRefs"] = ["ai_execution_facts"]
     assert any(
@@ -281,7 +297,7 @@ def test_risk360_required_slots_include_agent_subjects() -> None:
     assert source_binding["subjectKinds"] == ["source"]
 
 
-def test_signals360_keeps_unjoined_risk_unknown_and_binds_derived_summary() -> None:
+def test_signals360_binds_exact_subject_risk_and_derived_summary() -> None:
     """A signal risk flag needs an exact signal-to-risk join before it can render."""
     registry = _registry()
     signals_surface = next(
@@ -289,8 +305,12 @@ def test_signals360_keeps_unjoined_risk_unknown_and_binds_derived_summary() -> N
     )
     slots = {slot["id"]: slot for slot in signals_surface["domainSlots"]}
     assert slots["risk_flags"]["canonicalAuthorityRefs"] == ["risk_outputs"]
-    assert slots["risk_flags"]["projectionBindings"] == []
-    assert slots["risk_flags"]["unboundReason"]
+    assert slots["risk_flags"]["projectionBindings"] == [{
+        "projectionId": "signals360", "role": "primary",
+        "subjectKinds": ["event", "observation", "signal", "source", "stream"],
+        "sectionIds": ["risk_flags"],
+    }]
+    assert "producer coverage" in slots["risk_flags"]["partialImplementationReason"]
     assert slots["signal_summary"]["projectionBindings"] == [
         {
             "projectionId": "signals360",
@@ -388,7 +408,7 @@ def test_episode360_communications_binds_exact_facts_with_partial_message_covera
         }
     ]
     assert slot["partialImplementationReason"] == (
-        "episode_communication_facts_are_exact_but_message_spine_join_and_completeness_are_unavailable"
+        "Episode communication facts join by exact typed episode references and preserve evidence, but this does not establish complete message or conversation coverage, source freshness, or provider policy evaluation."
     )
 
 
@@ -405,6 +425,7 @@ def test_execution360_risk_events_binds_exact_recorded_signals_with_partial_cove
         "agent_executions",
         "execution_facts",
         "risk_signals",
+        "risk_assessments",
     ]
     assert slot["projectionBindings"] == [
         {
@@ -415,7 +436,7 @@ def test_execution360_risk_events_binds_exact_recorded_signals_with_partial_cove
         }
     ]
     assert slot["partialImplementationReason"] == (
-        "only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_and_freshness_threshold_unknown"
+        "bounded_execution_subject_risk_signals_and_assessment_snapshots_joined_to_admitted_lifecycle_executions_producer_coverage_history_freshness_and_causality_unknown"
     )
 
 
@@ -457,13 +478,16 @@ def test_account_and_identity_direct_providers_are_separate_from_projection_bind
             "providerKind": "surface_frame_provider",
             "bindingStatus": "runtime_wired",
             "subjectKinds": ["entity"],
-            "domainSlotIds": ["account_summary", "members", "agents", "profiles", "risk"],
+            "domainSlotIds": ["account_summary", "members", "agents", "profiles", "risk", "journeys", "contracts"],
             "canonicalAuthorityRefs": [
+                "commerce",
                 "entities",
                 "entity_registry",
                 "graph",
                 "identity",
+                "journeys",
                 "risk_outputs",
+                "tenant_contract_profiles",
             ],
             "implementationRef": "services/api/identity/account360_provider.py",
             "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
@@ -490,8 +514,10 @@ def test_account_and_identity_direct_providers_are_separate_from_projection_bind
             "canonicalAuthorityRefs": [
                 "entities",
                 "entity_registry",
+                "entity_wallets",
                 "evidence",
                 "identity",
+                "provider_registry",
                 "source_provenance",
             ],
             "implementationRef": "services/api/identity/identity/identity360_provider.py",

@@ -14,7 +14,7 @@ source_hashes:
   "services/api/alembic/versions/20260703_comms_intelligence.py": "sha256:651ee8f17a6e86e00d49d09cdbc0041d525682817851af1368576984c27fec76"
   "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
-  "services/api/journeys/communication360/contracts.py": "sha256:f826cef4a2425cd8b8ad5beafb914794cbb45bd6db9e1dab3bc7d19fb9befa9f"
+  "services/api/journeys/communication360/contracts.py": "sha256:f9d4b4218ed8b19f87cadea775ac6e6548beeef6c3085205d1f2418dedc70362"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/repository.py": "sha256:e04eb5071d50f46e28ea795be1ebbb8d98006fb5ce186e962e18c55682f59f89"
 ---
@@ -47,6 +47,12 @@ source_hashes:
    `{"enabled": false}`); the cursor persists, so re-enabling resumes.
 
 ## Replay (Bronze → Silver)
+
+Explicit `In-Reply-To` target and correlation-method metadata persist in the
+Silver payload, separately from the reply's own provider message ID. Replay does
+not infer missing references or account/thread scope in older records. Such
+records remain unresolved in Communication360; cursor and dedupe procedures are
+unchanged, and a resolved association does not prove complete provider history.
 
 Bronze is durable before acknowledgement, so any Silver-side incident is
 recoverable by replaying the Bronze range through the dispatcher:

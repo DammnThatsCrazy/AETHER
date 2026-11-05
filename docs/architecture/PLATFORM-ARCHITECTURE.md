@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:5f41d6e503de0593be0e6ca91dd0e0007cf39474c0b8c2dea056fd79a90eb0ed"
+  "packages/shared/": "sha256:2c6aad548830452a36ede201c05fba0ada0fffb575847c28d0b2507600892cf1"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
@@ -99,7 +99,7 @@ source_hashes:
   "services/api/intelligence/risk360/provider.py": "sha256:4a6d24b8c9f765dc05801de7e93c0b83f75ef35ad220d06c884b917bd91a1601"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
+  "services/api/journeys/communication360/provider.py": "sha256:288a68882c5c9518bac3a46d66657b25d0d4585e86bb80fcf9b5a24976186e20"
   "services/api/journeys/support360/": "sha256:53c95f3ae62972de99334412228b49ef8c7f34d60b597f39de6d7965ccee5c3a"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
@@ -647,6 +647,13 @@ required slots, subjects, lenses, owner, and purpose. All 18 entries are now
 marked `source_aligned` for contract metadata and slot IDs. This is contract
 alignment only: it does not prove a complete provider path, evidence coverage,
 policy behavior, freshness, API reachability, or surface-level verification.
+
+Communications360 response events now preserve explicit `In-Reply-To` references
+and join a unique evidence-backed Silver target through bounded exact tenant,
+provider, account and thread reads. The target must not postdate the reply;
+invalid, self-referencing, mixed-scope, ambiguous or incomplete reads remain
+unknown. Provider-reported reply association is separate from sender identity,
+authority, causal outcome, complete history and freshness.
 
 Recent backend slices bind Account360 profiles through exact tenant membership
 and policy-scoped Profile360 reads, Campaign360 targeting-leakage findings,

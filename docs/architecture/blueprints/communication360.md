@@ -49,6 +49,18 @@ blueprint captured in
 
 ## What it is
 
+### Explicit reply associations (2026-11-05)
+
+Inbound normalization preserves the reply's own provider message ID separately
+from its explicit `In-Reply-To` target. The target reference and correlation
+method persist in the Silver payload. Communication360 uses a bounded lookup
+scoped to tenant, provider, provider account and provider thread; only a unique,
+evidence-backed target occurring no later than the reply is associated.
+Malformed, mixed-scope, self-referencing, ambiguous or truncated reads remain
+unknown. This is an observed provider-reported reply association, separate from
+sender identity and authority. It proves neither causality nor complete response
+coverage, provider history or freshness. No new route or database column is added.
+
 Communication360 is Aether's **communication and information-flow projection** —
 a `sequence_360` over canonical communication truth for subjects of kind
 `campaign`, `episode`, or `source`. It answers "what information existed, who or

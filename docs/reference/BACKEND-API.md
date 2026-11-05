@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
   "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
   "services/api/intelligence/": "sha256:659b8ebd0a157d948c9859303811fa4cb68026e74813adda72a4bee0505640e8"
-  "services/api/journeys/": "sha256:2e1efaefa442884761738b21dfa3ba7835d89bdf962605f28bceed0e65b776bd"
+  "services/api/journeys/": "sha256:c9156f33e6bb82a698564bc15e61af54e901813ab83608e908c4de11009377b3"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:4241c421c34c32b4249dce7d2444eaf0c54e25c650d1b9b8239eae1c9f10ba47"
@@ -1864,6 +1864,13 @@ Python). Nine 360s are implemented native providers (`outcome360`,
 `temporal360`, `population360`, `geographic360`); the rest are `in_flight`.
 `implementationState` is repo metadata, **not** readiness. `infrastructure360`
 was the first projection to expose a classified public route, and
+Communications360 response-event evidence includes bounded provider-reported
+reply associations for explicit `In-Reply-To` references, resolved to a unique
+evidence-backed Silver target in the exact tenant/provider/account/thread scope
+and no later than the reply. Incomplete or invalid reads remain unknown. This
+adds no endpoint and establishes neither identity/authority nor causal response
+outcomes, complete message history or freshness.
+
 `communication360` follows the same read-only route template (every route a GET,
 tenant-scoped from the authenticated tenant, capability-gated on
 `infrastructure360.read` / `communication360.read`); `risk360` and `fraud360`

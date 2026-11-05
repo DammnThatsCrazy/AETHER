@@ -446,12 +446,20 @@ class SilverCommsSource:
         )
         messages: list[CommunicationMessage] = []
         for row in rows:
-            if not isinstance(row, dict) or str(row.get("tenant_id", "")) != str(tenant_id):
-                continue
+            if not isinstance(row, dict) or any(
+                row.get(field) != expected
+                for field, expected in (
+                    ("tenant_id", tenant_id), ("provider", provider),
+                    ("provider_account_id", provider_account_id),
+                    ("external_thread_id", external_thread_id),
+                    ("external_message_id", external_message_id),
+                )
+            ):
+                return [], False
             try:
                 messages.append(to_message(row))
             except Exception:  # noqa: BLE001 - malformed target remains unresolved
-                continue
+                return [], False
         return messages, complete
 
     async def available(self, tenant_id: str) -> bool:

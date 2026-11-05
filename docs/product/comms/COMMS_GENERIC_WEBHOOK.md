@@ -16,7 +16,7 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
   "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
-  "services/api/journeys/communication360/contracts.py": "sha256:f826cef4a2425cd8b8ad5beafb914794cbb45bd6db9e1dab3bc7d19fb9befa9f"
+  "services/api/journeys/communication360/contracts.py": "sha256:f9d4b4218ed8b19f87cadea775ac6e6548beeef6c3085205d1f2418dedc70362"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/repository.py": "sha256:e04eb5071d50f46e28ea795be1ebbb8d98006fb5ce186e962e18c55682f59f89"
 ---
@@ -158,6 +158,7 @@ POST /v1/comms/replies
   "in_reply_to": "<msg-5@esp>",
   "references": ["<msg-5@esp>"],
   "provider_thread_id": "th-1",
+  "provider_account_id": "account-1",
   "received_at": "2026-07-01T12:34:00Z",
   "raw_evidence_ref": "s3://…"           // reference only — bodies are never accepted
 }]}
@@ -167,6 +168,13 @@ Correlation priority: `In-Reply-To` → `References` → provider thread →
 external message id → reply-to token (`replies+<token>@…`). Automated
 responses (DSN, out-of-office, mail loops) are detected and excluded from
 engagement while remaining recorded as facts.
+
+Communication360 target evidence is narrower than this correlation hierarchy:
+only explicit `In-Reply-To` references with exact provider account and thread
+scope resolve to a unique evidence-backed Silver target no later than the reply.
+The reply's own message ID remains separate from its target. Missing scope,
+invalid, ambiguous or incomplete reads remain unknown; association does not prove
+causal response, sender identity, actor authority or complete provider history.
 
 ## Signed click tokens
 

@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:b84914a25e0f7e6821b4945cba2af715a754ec2efb95dc05517ed1f2072eb0e3"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:393c63e391f846dad10b493047a03d2561601e7fdba2872ee368afe64247b56f"
 ---
 
 # 360 System Blueprint
@@ -74,6 +74,13 @@ full backend contract today.
 | Memory360 | 10 | 4 | memories, cards, embeddings_meta, policy_state |
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
+
+Communications360 response events also expose explicit `In-Reply-To` associations
+through bounded exact tenant/provider/account/thread Silver target reads. Only
+unique evidence-backed targets no later than the reply are admitted; malformed,
+mixed-scope, self-referencing, ambiguous or truncated reads remain unknown. This
+provider-reported association does not establish identity, authority, causal
+response outcomes, complete history or freshness.
 
 No slots declare unbound canonical authority references after the exact
 Profile360 adjudication/evaluation, MCP resource-read and scoped Value governance

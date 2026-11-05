@@ -3040,9 +3040,9 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['communication', 'communication_facts', 'evidence', 'identity'],
-        description: 'Response-like canonical communication acts joined to exact tenant-scoped message and authenticated sender identity where available.',
+        description: 'Response-like canonical communication acts joined to exact tenant-scoped messages, authenticated sender identity where available, and observed provider-reported reply associations through explicit In-Reply-To references.',
         id: 'response_events',
-        partialImplementationReason: 'Only bounded exact act-to-message and sender joins are observed. Reply target, causal response outcome, complete message history, and source freshness remain unknown.',
+        partialImplementationReason: 'Bounded exact act-to-message and sender joins support observed provider-reported reply associations only for explicit In-Reply-To references with a unique evidence-backed target in the exact tenant, provider, provider account and thread, occurring no later than the reply. Missing, malformed, mismatched, ambiguous or truncated target reads remain unknown. Reply association does not establish actor identity or authority, causal response outcome, complete message history or source freshness.',
         projectionBindings: [
           {
             projectionId: 'communication360',

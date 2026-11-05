@@ -7,7 +7,15 @@
 
 This document replaces the prior broad 360 architecture blueprint as the implementation authority for backend work. It defines the contracts, module layout, registry, services, migrations, risk/contagion subsystem, API handlers, tests, rollout order, and acceptance gates needed to build the entire 360 system inside the repo.
 
-## Repository implementation status (2026-11-04)
+## Repository implementation status (2026-11-05)
+
+Communications360 `response_events` now exposes bounded provider-reported reply
+associations for explicit `In-Reply-To` references. The canonical Silver payload
+preserves the target separately from the reply's own provider message ID. A
+unique evidence-backed target must match tenant, provider, provider account and
+thread and occur no later than the reply; malformed, mixed-scope, self-referencing,
+ambiguous and truncated reads fail closed. Sender identity, actor authority,
+causality, complete response history and freshness remain separate unknowns.
 
 This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository has partial provider paths across required slots, with the remaining limits recorded explicitly; no product surface is complete:
 

@@ -1310,7 +1310,7 @@ def _communication_required_slot_coverage(
         response_slot = slot(
             "degraded",
             "partial",
-            "response_acts_join_exact_messages_and_senders_but_reply_targets_and_inventory_are_unknown",
+            "bounded_response_message_sender_and_explicit_reply_associations_observed_inventory_unknown",
             linked_response_refs,
         )
     elif response_refs:
@@ -1766,15 +1766,19 @@ async def _response_event_links(
                     candidates, complete = [], False
                 exact = [
                     item for item in candidates
-                    if item.tenant_id == message.tenant_id
+                    if isinstance(item, CommunicationMessage)
+                    and item.tenant_id == message.tenant_id
                     and item.provider == message.provider
                     and item.provider_account_id == message.provider_account_id
                     and item.external_thread_id == message.external_thread_id
                     and item.external_message_id == target_id
                     and item.message_id != message.message_id
+                    and item.external_message_id != message.external_message_id
                 ]
                 if not complete:
                     target_reason = "reply_target_read_truncated"
+                elif len(exact) != len(candidates):
+                    target_reason = "reply_target_read_scope_invalid"
                 elif len(exact) > 1:
                     target_reason = "reply_target_not_unique"
                 elif len(exact) == 1:
@@ -1788,6 +1792,8 @@ async def _response_event_links(
                     reply_at, target_at = instant(message.occurred_at), instant(target.occurred_at)
                     if reply_at is None or target_at is None or target_at > reply_at:
                         target_reason = "reply_target_time_invalid_or_future"
+                    elif not target.evidence_refs:
+                        target_reason = "reply_target_evidence_missing"
                     else:
                         target_message = target
                         association_state = "provider_reported_reply_association"
