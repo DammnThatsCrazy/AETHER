@@ -335,6 +335,8 @@ async def register(
         resource_uris=body.resource_uris,
         constraints=body.constraints,
         risk_tolerance=body.risk_tolerance,
+        # Server-derived: only an owner registering their own agent proves ownership.
+        asserted_by_entity_id=getattr(tenant, "user_id", None),
     )
     # Project agent + ownership.
     gateway = GraphMutationGateway(graph_client=graph)

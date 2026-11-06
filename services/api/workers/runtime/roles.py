@@ -167,7 +167,7 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # payment_rail_sync / bronze_object_compaction): a single periodic loop
     # that re-reads its flag every pass, not a dedicated runtime role.
     "materializer": frozenset(
-        {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
+        {"export_expiry_sweep", "agent_lineage_reconcile_sweep", "payment_rail_sync", "payment_canonical_repair",
          "bronze_object_compaction", "x402_settlement_reconciliation",
          "payment_alert_eval", "provider_sync_scheduler",
          # Derivatives venue reconciliation sweep + the shared dead-letter

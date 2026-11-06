@@ -99,6 +99,9 @@ async def grant(
         starts_at=body.starts_at,
         ends_at=body.ends_at,
         metadata=body.metadata,
+        # Server-derived, never from the body: only a grant its own grantor made
+        # counts as proof of a principal link.
+        asserted_by_entity_id=getattr(tenant, "user_id", None),
     )
 
     # Synchronously project to the graph as a best-effort mirror; the

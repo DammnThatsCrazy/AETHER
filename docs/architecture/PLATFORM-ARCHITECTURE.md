@@ -76,7 +76,7 @@ source_hashes:
   "services/api/actions/agent/agent360_provider.py": "sha256:951e8928e5f352e55612edad6b7c79c2faae10dacffa6b5ab1c5f2c048c0d0ff"
   "services/api/actions/agent/deployment_routes.py": "sha256:9e177294d7cff6c2b4ec9f17d48a1eb5e2a1eb5cfb6b59742ae15f9d4110cfc1"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
-  "services/api/actions/agent/user_agents.py": "sha256:bb87cb40149f8184e5e6c02f889eff78cdb3bcfe49bb2c370a1fce7e41b23508"
+  "services/api/actions/agent/user_agents.py": "sha256:356d379e0dd2c8bf55eee3843149e3323b09c610f3ef8bfa30ac97ab60f831c0"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -103,7 +103,7 @@ source_hashes:
   "services/api/journeys/support360/": "sha256:1b359b89b1ca74bdc9651d371667e6e888794388a9495506cc55defdcf5ebb4f"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
-  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
@@ -113,7 +113,7 @@ source_hashes:
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_provider.py": "sha256:ca72986e5834afba378916aff58e180cc08484d900acf1ebbd496b8cfed801d8"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
-  "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
+  "services/api/workers/runtime/specs.py": "sha256:21900a2dc6370f54d34f6189ab709db07855179053900f1e07a324e0ad0b6f8f"
 ---
 # Aether vNext — Architecture Guide
 

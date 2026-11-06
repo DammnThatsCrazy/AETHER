@@ -1491,6 +1491,21 @@ async def _rows_naming(repo: Any, tenant_id: str, field: str, refs: Iterable[str
     return rows
 
 
+async def _erase_fanout_signals(tenant_id: str, refs: Iterable[str]) -> int:
+    from intelligence.risk360.fanout import SOURCE
+    from intelligence.risk360.store import RiskSignalRepository
+
+    store = RiskSignalRepository()
+    deleted = 0
+    for ref in sorted(refs):
+        for row in await store.list_by_subject(tenant_id, "entity", ref, limit=500):
+            if str(row.get("source") or "").startswith(f"{SOURCE}.") and await store.delete_scoped(
+                tenant_id, row["signal_id"],
+            ):
+                deleted += 1
+    return deleted
+
+
 async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receipt]:
     """Erase the lineage read model and the inputs that would rebuild it for this subject.
 
@@ -1550,6 +1565,8 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
     for field in ("principal_entity_id", "agent_entity_id"):
         changed += await bindings.delete_for_tenant_where(tenant, field, subject.refs)
     counts = await (await get_service()).erase_subject(tenant, subject.refs)
+    # Published after the generation bump, so no in-flight reconcile can restore these.
+    changed += await _erase_fanout_signals(tenant, subject.refs)
     return {
         AGENT_LINEAGE_COMPONENT: Receipt(records_impacted=sum(counts.values()) + changed)
     }

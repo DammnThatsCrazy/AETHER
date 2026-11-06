@@ -58,12 +58,12 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b547896e3b2f2775c7bb63a75ea2376bf422be9745fd600467cb6dd60d499006"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
-  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
-  "services/api/workers/runtime/roles.py": "sha256:177a03032ec77edbb35748aa4ca71521f8cc26e50c0ee9f6ecc0bcb9d864b9a8"
-  "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
+  "services/api/workers/runtime/roles.py": "sha256:fd8ad122ef0c00cf89201200d7ea98a7f41dfa16b49cb79751353d95aa6d6640"
+  "services/api/workers/runtime/specs.py": "sha256:21900a2dc6370f54d34f6189ab709db07855179053900f1e07a324e0ad0b6f8f"
 ---
 # Operations Runbook v0.1.0-alpha.0
 

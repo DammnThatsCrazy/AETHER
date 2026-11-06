@@ -324,7 +324,9 @@ describe('Aether Value page', () => {
       await waitFor(() => expect(m.valueCreated).toHaveBeenCalledTimes(2));
       const [cur, prev] = m.valueCreated.mock.calls.map(c => c[0] as { start: string; end: string });
       expect(prev!.end).toBe(cur!.start);
-      expect(Date.parse(prev!.end) - Date.parse(prev!.start)).toBe(Date.parse(cur!.end) - Date.parse(cur!.start));
+      // Equal in calendar days: a window crossing a clock change is an hour longer or shorter.
+      const days = (w: { start: string; end: string }) => Math.round((Date.parse(w.end) - Date.parse(w.start)) / 86_400_000);
+      expect(days(prev!)).toBe(days(cur!));
       expect(screen.getByTestId('value-compare')).toHaveAttribute('aria-checked', 'true');
       expect(screen.getByTestId('value-range')).toHaveTextContent(' · vs ');
 

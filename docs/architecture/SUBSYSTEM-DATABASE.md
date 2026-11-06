@@ -40,7 +40,7 @@ reviewed_source_commits:
 source_hashes:
   "config/storage_policies.yaml": "sha256:2a7ee282ad41fe82307f876ffa099439226d0b88d62ce16ac95035a8c536f018"
   "services/api/actions/agent/invocation_runtime.py": "sha256:7ea361c7766345c3ba5da95a252b151d3c85ddf8a12a5fb0da39b4fdb0767890"
-  "services/api/actions/agent/user_agents.py": "sha256:bb87cb40149f8184e5e6c02f889eff78cdb3bcfe49bb2c370a1fce7e41b23508"
+  "services/api/actions/agent/user_agents.py": "sha256:356d379e0dd2c8bf55eee3843149e3323b09c610f3ef8bfa30ac97ab60f831c0"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -55,7 +55,7 @@ source_hashes:
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/attribution_model_validation.py": "sha256:da10a304b79537cda1be523999b7fcc35e1f59177b22bc855709d91f937c5aae"

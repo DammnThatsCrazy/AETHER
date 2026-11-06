@@ -28,14 +28,19 @@ from .signals import _evidence_id, _signal_id
 SOURCE = "agent_lineage_fanout"
 DETECTOR_VERSION = "agent_lineage_fanout/1"
 
+#: Reported on every assessment. Thresholds have never been fit to adjudicated
+#: outcomes, so nothing here may be read as a calibrated probability.
+POLICY = {
+    "version": DETECTOR_VERSION, "calibrated": False, "elevated_rate": 0.05, "min_population": 5,
+}
 #: Evidence of misbehaviour, as opposed to mere size. Only these drive a segment.
 BEHAVIORAL_SIGNALS = frozenset({
     "authority_failure_rate", "revoked_agent_activity", "out_of_scope_execution_rate",
 })
 #: Rates at or above this are elevated. Deliberately uncalibrated and reported as
 #: heuristic: the score is ``None`` and the claim state ``DERIVED``.
-ELEVATED_RATE = 0.05
-MIN_POPULATION = 5
+ELEVATED_RATE = POLICY["elevated_rate"]
+MIN_POPULATION = POLICY["min_population"]
 
 
 def _rate(numerator: Optional[int], denominator: Optional[int]) -> Optional[float]:
@@ -73,6 +78,13 @@ def temporal_profile(activity: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _identity_churn(summary: dict[str, Any], agents: Optional[int]) -> Optional[float]:
+    definitions = summary.get("unique_agent_definitions")
+    if definitions is None or not agents:
+        return None
+    return round(max(0.0, 1 - definitions / agents), 6)
+
+
 def fanout_signals(summary: dict[str, Any]) -> dict[str, Optional[float]]:
     """The work order's fan-out vocabulary. Unsupported signals stay ``None``."""
     activity = summary.get("activity") or {}
@@ -95,14 +107,14 @@ def fanout_signals(summary: dict[str, Any]) -> dict[str, Optional[float]]:
         "provider_fanout": providers or None,
         "transaction_fanout": transactions or None,
         "runtime_churn": _rate(instance_total, agents) if instance_total else None,
-        # Identity churn has no input yet: no continuity break is counted here.
-        "identity_churn": None,
+        # Agent ids beyond the logical identities they report. Context, never a trigger.
+        "identity_churn": _identity_churn(summary, agents),
         "authority_failure_rate": _rate(activity.get("denied_event_count"), events),
         "revoked_agent_activity": activity.get("revoked_agent_activity"),
         "out_of_scope_execution_rate": _rate(summary.get("out_of_scope_agents"), agents),
         "shared_infrastructure_density": _rate(activity.get("shared_infra_largest_share"), agents),
-        # Coordination needs calibrated behavioural similarity; not asserted here.
-        "coordinated_execution_score": None,
+        # Largest same-window, same-tools group. An uncalibrated share, context only.
+        "coordinated_execution_score": _rate(activity.get("largest_coordinated_group"), agents),
     }
     return {name: signals[name] for name in V.FANOUT_RISK_SIGNALS}
 
@@ -131,8 +143,8 @@ def assess_principal(
     if agents is None:
         benign = None
     else:
-        held_out = (unresolved or 0) + (probabilistic or 0) + (elevated or 0) + (confirmed_malicious_agents or 0)
-        benign = max(0, agents - held_out)
+        # ``agents`` counts linked agents only; unresolved ones are their own segment.
+        benign = max(0, agents - (elevated or 0) - (confirmed_malicious_agents or 0))
     level = "unknown" if agents is None else ("elevated" if triggered else "no_behavioral_indicators")
     if confirmed_malicious_agents:
         level = "confirmed_activity"
@@ -141,6 +153,7 @@ def assess_principal(
         "principal_entity_id": summary.get("principal_entity_id"),
         "assessment_level": level,
         "scale_is_context": True,
+        "policy": dict(POLICY),
         "segments": {
             "attributable_agents": agents,
             "no_indicators": benign,
@@ -189,16 +202,16 @@ def _attribution_kinds(
     confirmed: Optional[int],
 ) -> dict[str, Optional[int]]:
     """Each kind of risk relationship counted on its own; none implies another."""
+    activity = summary.get("activity") or {}
     flagged_cluster_members = sum(
         cluster.get("member_count") or 0 for cluster in clusters if cluster.get("risk_flagged_count")
     ) if clusters else None
     return {
         "agent_is_risky": summary.get("risk_flagged_agents"),
         "agent_in_risky_cluster": flagged_cluster_members,
-        # Not derivable from the projection alone: left unknown rather than guessed.
-        "delegated_by_risky_actor": None,
-        "interacted_with_risky_resource": None,
-        "resembles_risky_behavior": None,
+        "delegated_by_risky_actor": activity.get("delegated_by_risky_actor"),
+        "interacted_with_risky_resource": activity.get("interacted_with_risky_resource"),
+        "resembles_risky_behavior": activity.get("resembles_risky_behavior"),
         "confirmed_malicious": confirmed,
     }
 

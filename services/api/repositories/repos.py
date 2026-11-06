@@ -2765,8 +2765,10 @@ class AgentConfigRepository(BaseRepository):
         constraints: Optional[dict] = None,
         risk_tolerance: str = "medium",
         resource_uris: Optional[list[str]] = None,
+        asserted_by_entity_id: Optional[str] = None,
     ) -> dict:
         return await self.insert(agent_id, {
+            "asserted_by_entity_id": asserted_by_entity_id,
             "agent_id": agent_id,
             "owner_entity_id": owner_entity_id,
             "tenant_id": tenant_id,
@@ -2948,8 +2950,10 @@ class DelegationRepository(BaseRepository):
         starts_at: Optional[str] = None,
         ends_at: Optional[str] = None,
         metadata: Optional[dict] = None,
+        asserted_by_entity_id: Optional[str] = None,
     ) -> dict:
         record = await self.insert(delegation_id, {
+            "asserted_by_entity_id": asserted_by_entity_id,
             "delegation_id": delegation_id,
             "tenant_id": tenant_id,
             "grantor_entity_id": grantor_entity_id,

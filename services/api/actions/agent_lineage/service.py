@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from dataclasses import dataclass, field
 import json
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -67,7 +68,7 @@ ALIAS_FIELDS = ("agent_id", "parent_agent_ref", "child_agent_ref", "delegated_to
 
 SilverPageReader = Callable[[str, Optional[str]], Awaitable[tuple[list[dict[str, Any]], Optional[str]]]]
 Loader = Callable[[str], Awaitable[list[Any]]]
-AliasLoader = Callable[[str], Awaitable[dict[str, str]]]
+AliasLoader = Callable[[str], Awaitable[Any]]
 
 
 async def _silver_pages(tenant_id: str, cursor: Optional[str]) -> tuple[list[dict[str, Any]], Optional[str]]:
@@ -81,7 +82,7 @@ async def _silver_pages(tenant_id: str, cursor: Optional[str]) -> tuple[list[dic
 
 
 async def _delegation_authority(tenant_id: str) -> list[AuthorityRecord]:
-    """Issued delegations are verified authority; revocation bumps the version."""
+    """Issued delegations, verified only when self-asserted; revocation bumps the version."""
     from repositories.repos import DelegationRepository
 
     repo = DelegationRepository()
@@ -120,7 +121,9 @@ def authority_from_delegation(tenant_id: str, row: dict[str, Any]) -> Optional[A
         valid_from=epoch(row.get("starts_at")),
         valid_until=epoch(row.get("ends_at")),
         revoked_at=epoch(row.get("revoked_at")),
-        verified=True,
+        # Any writer can name any grantor, so a row proves nothing unless the grantor
+        # itself made it. Anything else is a declaration and resolves as inferred at most.
+        verified=bool(grantor and row.get("asserted_by_entity_id") == grantor),
         version=2 if row.get("revoked_at") else 1,
         evidence_refs=(f"delegation:{delegation_id}",),
     )
@@ -145,7 +148,7 @@ async def _stored_bindings(tenant_id: str) -> list[PrincipalBinding]:
 
 
 async def _registered_owner_bindings(tenant_id: str) -> list[PrincipalBinding]:
-    """An agent registered under an owner is a deterministic binding to that owner."""
+    """A registered owner: deterministic if the owner registered it, otherwise declared."""
     from repositories.repos import AgentConfigRepository
 
     repo = AgentConfigRepository()
@@ -159,11 +162,34 @@ async def _registered_owner_bindings(tenant_id: str) -> list[PrincipalBinding]:
             if row.get("tenant_id") == tenant_id and agent and owner:
                 out.append(PrincipalBinding(
                     tenant_id=tenant_id, kind="agent", principal_entity_id=owner, agent_entity_id=agent,
-                    evidence_class="DETERMINISTIC_BINDING", evidence_refs=(f"agent_config:{agent}",),
+                    evidence_class=(
+                        "DETERMINISTIC_BINDING" if row.get("asserted_by_entity_id") == owner else "TENANT_DECLARED"
+                    ),
+                    source="registry", evidence_refs=(f"agent_config:{agent}",),
                 ))
         if len(page) < DELEGATION_PAGE:
             return out
         offset += DELEGATION_PAGE
+
+
+#: Risk360 subject kinds that name something an agent touches rather than an agent.
+RISKY_RESOURCE_KINDS = ("wallet", "account", "tool", "provider", "resource")
+
+
+async def _risky_resources(tenant_id: str) -> set[str]:
+    from intelligence.risk360.store import RiskSignalRepository
+
+    repo = RiskSignalRepository()
+    found: set[str] = set()
+    for kind in RISKY_RESOURCE_KINDS:
+        offset = 0
+        while True:
+            page = await repo.list_scoped(tenant_id, {"subject_kind": kind}, limit=DELEGATION_PAGE, offset=offset)
+            found.update(subject for row in page if (subject := ref(row.get("subject_id"))))
+            if len(page) < DELEGATION_PAGE:
+                break
+            offset += DELEGATION_PAGE
+    return found
 
 
 async def _agent_risk_flags(tenant_id: str) -> dict[str, int]:
@@ -184,26 +210,65 @@ async def _agent_risk_flags(tenant_id: str) -> dict[str, int]:
         offset += DELEGATION_PAGE
 
 
-async def _agent_aliases(tenant_id: str) -> dict[str, str]:
-    """Source ref -> canonical agent, only where a tenant binding is unambiguous."""
+@dataclass(frozen=True)
+class AgentAliases:
+    """Source ref -> canonical agent. A ref bound in several namespaces needs the fact's."""
+
+    unique: dict[str, str] = field(default_factory=dict)
+    scoped: dict[tuple[str, str], str] = field(default_factory=dict)
+    deployment_namespace: dict[str, str] = field(default_factory=dict)
+
+    def key(self) -> str:
+        material = [sorted(self.unique.items()), sorted(map(list, ((*k, v) for k, v in self.scoped.items()))),
+                    sorted(self.deployment_namespace.items())]
+        return hashlib.sha256(json.dumps(material).encode()).hexdigest()
+
+    def __bool__(self) -> bool:
+        return bool(self.unique or self.scoped)
+
+
+async def _agent_aliases(tenant_id: str) -> AgentAliases:
+    """Active tenant bindings. Only an explicit tenant binding ever names a canonical agent."""
+    from actions.agent.deployments import get_deployment_repository
     from actions.agent_marketplace.identity_binding import AgentDeploymentIdentityBindingRepository
 
     repo = AgentDeploymentIdentityBindingRepository()
     targets: dict[str, set[str]] = {}
+    scoped: dict[tuple[str, str], str] = {}
     offset = 0
     while True:
         page = await repo.find_many(filters={"tenant_id": tenant_id}, limit=DELEGATION_PAGE, offset=offset)
         for row in page:
             source = ref(row.get("source_agent_ref"))
             canonical = ref(row.get("canonical_agent_entity_id"))
+            namespace = ref(row.get("source_namespace"))
             if row.get("tenant_id") == tenant_id and row.get("status") == "active" and source and canonical:
                 targets.setdefault(source, set()).add(canonical)
+                if namespace:
+                    scoped[(namespace, source)] = canonical
         if len(page) < DELEGATION_PAGE:
             break
         offset += DELEGATION_PAGE
-    # One ref bound differently in two namespaces stays a source ref: picking one
-    # would merge agents the evidence does not say are the same.
-    return {source: next(iter(ids)) for source, ids in targets.items() if len(ids) == 1}
+    if not targets:
+        return AgentAliases()
+    namespaces: dict[str, str] = {}
+    cursor: Optional[str] = None
+    deployments = get_deployment_repository()
+    while True:
+        rows, cursor, _ = await deployments.list_page(tenant_id, limit=DELEGATION_PAGE, cursor=cursor)
+        for row in rows:
+            namespace = ref(row.get("agent_source_namespace"))
+            if ref(row.get("id")) and namespace:
+                namespaces[row["id"]] = namespace.lower()
+        if not cursor:
+            break
+    # Without the fact's namespace, a ref bound two ways stays a source ref: picking
+    # one would merge agents the evidence does not say are the same.
+    return AgentAliases(
+        unique={source: next(iter(ids)) for source, ids in targets.items() if len(ids) == 1},
+        scoped=scoped,
+        deployment_namespace=namespaces,
+    )
 
 
 def _unavailable_disclosure(reason: str, completeness: str = "unavailable") -> dict[str, Any]:
@@ -235,6 +300,8 @@ class AgentLineageService:
         binding_loader: Loader = _stored_bindings,
         alias_loader: AliasLoader = _agent_aliases,
         risk_loader: Callable[[str], Awaitable[dict[str, int]]] = _agent_risk_flags,
+        resource_loader: Callable[[str], Awaitable[set[str]]] = _risky_resources,
+        signal_store: Any = None,
         config: LineageConfig = DEFAULT_CONFIG,
         stale_after_seconds: float = STALE_AFTER_SECONDS,
     ) -> None:
@@ -244,6 +311,8 @@ class AgentLineageService:
         self._binding_loader = binding_loader
         self._alias_loader = alias_loader
         self._risk_loader = risk_loader
+        self._resource_loader = resource_loader
+        self._signal_store = signal_store
         self._config = config
         self._stale_after = stale_after_seconds
         self._engines: OrderedDict[str, tuple[LineageEngine, str, int]] = OrderedDict()
@@ -284,7 +353,9 @@ class AgentLineageService:
         # Read before any evidence: an erasure after this point fails the write below.
         generation = await self.repo.erasure_generation(tenant_id)
         aliases = await self._alias_loader(tenant_id)
-        alias_key = hashlib.sha256(json.dumps(sorted(aliases.items())).encode()).hexdigest()
+        if isinstance(aliases, dict):
+            aliases = AgentAliases(unique=aliases)
+        alias_key = aliases.key()
         cached = self._engines.get(tenant_id)
         rebuild = full or cached is None or cached[1] != alias_key or cached[2] != generation
         engine = LineageEngine(tenant_id, self._config) if rebuild else cached[0]
@@ -295,6 +366,7 @@ class AgentLineageService:
             engine.upsert_binding(binding)
         try:
             engine.set_risk_flags(await self._risk_loader(tenant_id))
+            engine.set_risky_resources(await self._resource_loader(tenant_id))
             engine.set_pass_disclosures([])
         except Exception as exc:  # noqa: BLE001 - disclosed; lineage itself is unaffected
             logger.warning("agent_lineage_risk_flags_unavailable", extra={"error": type(exc).__name__})
@@ -318,6 +390,7 @@ class AgentLineageService:
             await self._diff_rebuild(tenant_id, engine, result)
         await self.repo.apply(result, expected_generation=generation)
         self._engines[tenant_id] = (engine, alias_key, generation)
+        published = await self._publish_fanout_signals(tenant_id, result, generation)
         self._engines.move_to_end(tenant_id)
         while len(self._engines) > MAX_CACHED_ENGINES:
             self._engines.popitem(last=False)
@@ -329,8 +402,59 @@ class AgentLineageService:
             "facts_applied": applied,
             "as_of": result.as_of,
             "restatements": len(result.restatements) + result.restatements_dropped,
+            "fanout_signals_published": published,
             **result.stats,
         }
+
+    def _signals(self) -> Any:
+        if self._signal_store is None:
+            from intelligence.risk360.store import RiskSignalRepository
+
+            self._signal_store = RiskSignalRepository()
+        return self._signal_store
+
+    async def _publish_fanout_signals(self, tenant_id: str, result: ResolveResult, generation: int) -> Optional[int]:
+        """Store each principal's behavioral signals so Risk360 assessments read them.
+
+        A signal that no longer holds is removed: assessments read what is stored, so a
+        principal whose violations were corrected must not stay elevated. Failure leaves
+        the projection correct and is reported as ``None``, not as zero signals.
+        """
+        from intelligence.risk360.fanout import SOURCE
+        from intelligence.risk360.signals import adapt_producer_signal
+
+        try:
+            # An erasure after this read would otherwise be undone by the writes below.
+            if await self.repo.erasure_generation(tenant_id) != generation:
+                return None
+            store = self._signals()
+            published = 0
+            # A principal with no agents left must not stay elevated on old signals.
+            for principal in result.summaries_removed:
+                for row in await store.list_by_subject(tenant_id, "entity", principal):
+                    if str(row.get("source") or "").startswith(f"{SOURCE}."):
+                        await store.delete_scoped(tenant_id, row["signal_id"])
+            for summary in result.summaries:
+                principal = summary["principal_entity_id"]
+                if principal == UNATTRIBUTED:
+                    continue
+                signals = adapt_producer_signal(
+                    "agent_lineage_fanout",
+                    {"summary": summary, "clusters": result.clusters.get(principal, [])},
+                    subject_kind="entity", subject_id=principal, tenant_id=tenant_id,
+                )
+                current = {signal.signal_id for signal in signals}
+                for row in await store.list_by_subject(tenant_id, "entity", principal):
+                    source = str(row.get("source") or "")
+                    if source.startswith(f"{SOURCE}.") and row.get("signal_id") not in current:
+                        await store.delete_scoped(tenant_id, row["signal_id"])
+                for signal in signals:
+                    await store.upsert_scoped(tenant_id, signal.signal_id, signal.model_dump(mode="json"))
+                    published += 1
+            return published
+        except Exception as exc:  # noqa: BLE001 - the read model is already consistent
+            logger.warning("agent_lineage_signal_publish_failed", extra={"error": type(exc).__name__})
+            return None
 
     async def _diff_rebuild(self, tenant_id: str, engine: LineageEngine, result: ResolveResult) -> None:
         prior = await self.repo.prior_rows(tenant_id)
@@ -586,14 +710,23 @@ class AgentLineageService:
         return {"rows": rows, "next_after": None if complete else cursor, "complete": complete}
 
 
-def _apply_aliases(row: dict[str, Any], aliases: dict[str, str]) -> dict[str, Any]:
+def _apply_aliases(row: dict[str, Any], aliases: AgentAliases) -> dict[str, Any]:
+    namespace = aliases.deployment_namespace.get(row.get("deployment_id") or "")
     mapped = None
     for column in ALIAS_FIELDS:
         value = row.get(column)
-        if isinstance(value, str) and value in aliases:
+        if not isinstance(value, str):
+            continue
+        scope = namespace
+        if column == "delegated_to_ref":
+            # A delegation target is namespaced independently from the actor.
+            scope = ref(row.get("delegated_to_namespace")) or namespace
+        canonical = aliases.scoped.get((scope, value)) if scope else None
+        canonical = canonical or aliases.unique.get(value)
+        if canonical:
             if mapped is None:
                 mapped = dict(row)
-            mapped[column] = aliases[value]
+            mapped[column] = canonical
     return mapped if mapped is not None else row
 
 

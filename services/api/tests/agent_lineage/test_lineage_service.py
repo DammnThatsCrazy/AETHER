@@ -18,6 +18,21 @@ from shared.agent_lineage.models import Disclosure, LineageSummary, Page
 T = S.TENANT
 
 
+class _MemorySignals:
+    def __init__(self):
+        self.rows = {}
+
+    async def list_by_subject(self, tenant_id, kind, subject, limit=100):
+        return [r for r in self.rows.values()
+                if (r["tenant_id"], r["subject_kind"], r["subject_id"]) == (tenant_id, kind, subject)]
+
+    async def upsert_scoped(self, tenant_id, signal_id, data):
+        self.rows[signal_id] = {**data, "tenant_id": tenant_id, "signal_id": signal_id}
+
+    async def delete_scoped(self, tenant_id, signal_id):
+        return self.rows.pop(signal_id, None) is not None
+
+
 def _service(repo, fixture):
     facts = list(fixture.facts)
 
@@ -39,8 +54,12 @@ def _service(repo, fixture):
     async def risk(tenant):
         return {}
 
+    async def resources(tenant):
+        return set()
+
     return AgentLineageService(
-        repo, silver_reader=silver, authority_loader=authority, binding_loader=bindings, alias_loader=aliases, risk_loader=risk,
+        repo, silver_reader=silver, authority_loader=authority, binding_loader=bindings, alias_loader=aliases, risk_loader=risk, resource_loader=resources,
+        signal_store=_MemorySignals(),
     )
 
 
@@ -258,6 +277,7 @@ async def test_export_parts_cover_every_row_once_past_the_page_budget(repo):
     service = _service(repo, fixture)
     await service.reconcile(T)
     summary = await service.summary(T, S.LEGIT_HUMAN)
+    total = sum(summary[k] for k in ("direct_agents", "indirect_agents", "probabilistic_agents", "unresolved_agents"))
     seen, after, parts = [], None, 0
     while True:
         part = await service.export_part(T, S.LEGIT_HUMAN, after=after, part_rows=150)
@@ -267,7 +287,7 @@ async def test_export_parts_cover_every_row_once_past_the_page_budget(repo):
         after = part["next_after"]
         if part["complete"]:
             break
-    assert len(seen) == len(set(seen)) == summary["activity"]["agent_count"] > V.MAX_PAGE_SIZE
+    assert len(seen) == len(set(seen)) == total > V.MAX_PAGE_SIZE
     assert parts == 1 + (len(seen) - 1) // 150
 
 
@@ -286,8 +306,41 @@ async def test_export_part_stays_inside_the_artifact_cap():
     assert set(part["rows"][0]) == set(EXPORT_COLUMNS)
 
 
+def test_only_a_grantors_own_grant_is_verified_authority():
+    row = {"delegation_id": "d2", "tenant_id": T, "grantor_entity_id": "victim", "grantee_entity_id": "a"}
+    assert authority_from_delegation(T, row).verified is False
+    assert authority_from_delegation(T, {**row, "asserted_by_entity_id": "attacker"}).verified is False
+    assert authority_from_delegation(T, {**row, "asserted_by_entity_id": "victim"}).verified is True
+
+
+async def test_owner_registered_by_someone_else_is_only_declared(fixture):
+    from actions.agent_lineage.service import _registered_owner_bindings
+    from repositories.repos import AgentConfigRepository
+
+    tenant = "tenant-owner-provenance"
+    repo = AgentConfigRepository()
+    await repo.register("forged", "victim", tenant, "m", asserted_by_entity_id="attacker")
+    await repo.register("own", "owner", tenant, "m", asserted_by_entity_id="owner")
+    found = {b.agent_entity_id: b.evidence_class for b in await _registered_owner_bindings(tenant)}
+    assert found == {"forged": "TENANT_DECLARED", "own": "DETERMINISTIC_BINDING"}
+
+
+async def test_erasure_scrubs_the_subject_from_records_about_others(repo):
+    fixture = S.build_fixture(100)
+    service = _service(repo, fixture)
+    await service.reconcile(T)
+    # conflict-* agents list both competing principals.
+    assert (await repo.rows_for_agent(T, "conflict-0"))[0]["competing_principal_ids"]
+    await repo.erase_subject(T, {"org:rival"})
+    rows = await repo.rows_for_agent(T, "conflict-0")
+    assert [r["principal_entity_id"] for r in rows] == ["org:vendor"]
+    assert rows[0]["competing_principal_ids"] == ["org:vendor"]
+    assert (await repo.node(T, "conflict-0"))["principal_entity_ids"] == ["org:vendor"]
+
+
 def test_delegation_rows_map_to_authority_records():
     row = {"delegation_id": "d1", "tenant_id": T, "grantor_entity_id": "h", "grantee_entity_id": "a",
+           "asserted_by_entity_id": "h",
            "scope": {"delegation_allowed": False, "maximum_delegation_depth": 2},
            "starts_at": "2026-01-01T00:00:00Z", "revoked_at": "2026-02-01T00:00:00Z"}
     record = authority_from_delegation(T, row)
@@ -334,6 +387,7 @@ async def test_the_dsr_plane_erases_lineage_and_the_inputs_that_would_rebuild_it
     from actions.agent_lineage.service import _registered_owner_bindings
     from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, erase_agent_lineage_plane
     from governance.dsr_propagation.models import DSR_COMPONENTS
+    from intelligence.risk360.store import RiskSignalRepository
 
     assert AGENT_LINEAGE_COMPONENT in DSR_COMPONENTS
     world = await _erasure_world(fixture, monkeypatch)
@@ -341,6 +395,10 @@ async def test_the_dsr_plane_erases_lineage_and_the_inputs_that_would_rebuild_it
     await bindings.insert("alb_dsr", {
         "id": "alb_dsr", "tenant_id": T, "kind": "agent", "principal_entity_id": S.LEGIT_HUMAN,
         "agent_entity_id": "legit-orch", "evidence_class": "TENANT_DECLARED",
+    })
+    signal_id = "rsk_fanout_dsr"
+    await RiskSignalRepository().upsert_scoped(T, signal_id, {
+        "subject_kind": "entity", "subject_id": S.LEGIT_HUMAN, "source": "agent_lineage_fanout.out_of_scope_execution_rate",
     })
     try:
         receipts = await erase_agent_lineage_plane(_subject())
@@ -352,6 +410,7 @@ async def test_the_dsr_plane_erases_lineage_and_the_inputs_that_would_rebuild_it
     assert await world["delegations"].find_by_id(world["grant"]) is None
     assert await world["delegations"].find_by_id(world["other"]) is not None
     assert (await service.summary(T, S.LEGIT_HUMAN))["direct_agents"] is None
+    assert await RiskSignalRepository().get_scoped(T, signal_id) is None
     assert T not in service._engines
     # The registered agent stays, but it can no longer rebuild an owner link.
     config = await world["configs"].find_by_id(world["agent"])
@@ -457,3 +516,111 @@ async def test_stored_risk_signals_reach_rows_and_a_failed_read_is_disclosed(fix
     await service.reconcile(T)
     disclosure = (await service.summary(T, S.LEGIT_HUMAN))["disclosure"]
     assert "risk_signals_unavailable" not in disclosure["truncation_reasons"]
+
+
+async def test_reconcile_publishes_behavioral_signals_and_withdraws_corrected_ones(fixture):
+    from dataclasses import replace
+
+    service = _service(InMemoryLineageRepository(), fixture)
+    stats = await service.reconcile(T)
+    assert stats["fanout_signals_published"] > 0
+    rows = service._signal_store.rows
+    assert rows and {r["subject_id"] for r in rows.values()} == {S.MALICIOUS_HUMAN}
+    assert all(r["score"] is None for r in rows.values())
+
+    # Remove the depth limit and the revoked branch: behavioral triggers should fall away.
+    fixture.authorities[:] = [
+        replace(a, maximum_delegation_depth=None, version=2) if a.authority_ref == "grant-h1-orch" else a
+        for a in fixture.authorities if a.authority_ref != "grant-revoked-branch"
+    ]
+    fixture.facts[:] = [f for f in fixture.facts if f.get("policy_decision") != "denied"]
+    await service.reconcile(T, full=True)
+    assert not [r for r in rows.values() if r["source"].endswith("out_of_scope_execution_rate")]
+
+
+async def test_signal_publish_failure_reports_unknown_and_keeps_the_projection(fixture):
+    class _Broken(_MemorySignals):
+        async def list_by_subject(self, *a, **k):
+            raise RuntimeError("store down")
+
+    service = _service(InMemoryLineageRepository(), fixture)
+    service._signal_store = _Broken()
+    stats = await service.reconcile(T)
+    assert stats["fanout_signals_published"] is None
+    assert (await service.summary(T, S.MALICIOUS_HUMAN))["direct_agents"] == 1
+
+
+async def test_risk_relationship_kinds_are_populated_from_their_own_evidence(fixture):
+    service = _service(InMemoryLineageRepository(), fixture)
+
+    async def resources(_tenant):
+        return {"wallet-3"}
+
+    service._resource_loader = resources
+    await service.reconcile(T)
+    risk = await service.risk(T, S.MALICIOUS_HUMAN)
+    kinds = risk["attribution_kinds"]
+    assert kinds["delegated_by_risky_actor"] > 0
+    assert kinds["interacted_with_risky_resource"] >= 1
+    assert kinds["resembles_risky_behavior"] > 0
+    assert kinds["confirmed_malicious"] is None
+    assert risk["policy"]["calibrated"] is False
+    assert 0 <= risk["signals"]["coordinated_execution_score"] <= 1
+    assert 0 <= risk["signals"]["identity_churn"] <= 1
+    # Likeness and churn are context: they do not appear as triggers.
+    assert not {"resembles_risky_behavior", "identity_churn", "coordinated_execution_score"} & set(risk["triggered_signals"])
+    # The clean fleet stays clean even with the new signals populated.
+    legit = await service.risk(T, S.LEGIT_HUMAN)
+    assert legit["assessment_level"] == "no_behavioral_indicators"
+    assert legit["signals"]["identity_churn"] > 0.5
+    assert legit["attribution_kinds"]["interacted_with_risky_resource"] == 0
+
+
+def test_a_ref_bound_in_two_namespaces_resolves_by_the_facts_deployment():
+    from actions.agent_lineage.service import AgentAliases, _apply_aliases
+
+    aliases = AgentAliases(
+        unique={"solo": "agent:solo"},
+        scoped={("ns-a", "shared"): "agent:a", ("ns-b", "shared"): "agent:b", ("ns-a", "solo"): "agent:solo"},
+        deployment_namespace={"dep-a": "ns-a", "dep-b": "ns-b"},
+    )
+    assert _apply_aliases({"agent_id": "shared", "deployment_id": "dep-a"}, aliases)["agent_id"] == "agent:a"
+    assert _apply_aliases({"agent_id": "shared", "deployment_id": "dep-b"}, aliases)["agent_id"] == "agent:b"
+    # With no namespace to go on it stays a source ref rather than merging two agents.
+    assert _apply_aliases({"agent_id": "shared", "deployment_id": "dep-x"}, aliases)["agent_id"] == "shared"
+    assert _apply_aliases({"agent_id": "solo"}, aliases)["agent_id"] == "agent:solo"
+    delegated = _apply_aliases(
+        {"agent_id": "x", "delegated_to_ref": "shared", "delegated_to_namespace": "ns-b", "deployment_id": "dep-a"},
+        aliases,
+    )
+    assert delegated["delegated_to_ref"] == "agent:b"
+
+
+async def test_the_sweep_enqueues_each_tenant_once_an_hour_and_rebuilds_daily(monkeypatch):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from actions.agent_lineage import jobs as J
+    from config import settings as settings_module
+
+    calls = []
+
+    class _Jobs:
+        async def enqueue(self, tenant_id, job_type, payload, idempotency_key=None):
+            calls.append((tenant_id, job_type, payload["full"], idempotency_key))
+
+    async def tenants():
+        return ["t1", "t2"]
+
+    monkeypatch.setattr(settings_module, "settings", SimpleNamespace(
+        external_agent_telemetry=SimpleNamespace(registry_enabled=True)))
+    at = datetime(2026, 11, 6, J.FULL_REBUILD_HOUR_UTC, tzinfo=timezone.utc)
+    assert await J.sweep_once(at, tenants=tenants, jobs=_Jobs()) == 2
+    assert all(call[2] is True for call in calls)
+    assert calls[0][3] == "agent_lineage:t1:2026110603"
+    calls.clear()
+    await J.sweep_once(at.replace(hour=4), tenants=tenants, jobs=_Jobs())
+    assert all(call[2] is False for call in calls)
+    monkeypatch.setattr(settings_module, "settings", SimpleNamespace(
+        external_agent_telemetry=SimpleNamespace(registry_enabled=False)))
+    assert await J.sweep_once(at, tenants=tenants, jobs=_Jobs()) == 0

@@ -264,8 +264,9 @@ async def test_status_constants_match_spec():
     # the analytics event store, the geographic-plane store (G4.5-C3), the
     # population-plane artifacts (P3.3), the mobile-plane + kyber device-plane
     # components sit just before them, in stable order.
-    assert DSR_COMPONENTS[-2:] == ("silver_facts", "bronze_events")
-    tail = DSR_COMPONENTS[:-2]
+    silver = DSR_COMPONENTS.index("silver_facts")
+    assert DSR_COMPONENTS[silver:silver + 2] == ("silver_facts", "bronze_events")
+    tail = DSR_COMPONENTS[:silver]
     assert tail[-1:] == ("analytics_events",)
     assert tail[-2:-1] == ("location_facts",)
     assert tail[-5:-2] == (

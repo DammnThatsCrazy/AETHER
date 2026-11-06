@@ -264,6 +264,14 @@ class InMemoryLineageRepository:
         for agent in wanted & set(self._nodes[tenant_id]):
             del self._nodes[tenant_id][agent]
             nodes += 1
+        # Records about other subjects keep no trace of the erased one.
+        for node in self._nodes[tenant_id].values():
+            if wanted & set(node.get("principal_entity_ids") or ()):
+                node["principal_entity_ids"] = [p for p in node["principal_entity_ids"] if p not in wanted]
+        for store in self._rows[tenant_id].values():
+            for row in store.values():
+                if wanted & set(row.get("competing_principal_ids") or ()):
+                    row["competing_principal_ids"] = [p for p in row["competing_principal_ids"] if p not in wanted]
         self._sorted_nodes.pop(tenant_id, None)
         kept = []
         for entry in self._restatements[tenant_id]:
@@ -604,6 +612,29 @@ class PostgresLineageRepository:
                 restatements = await conn.execute(
                     "DELETE FROM agent_lineage_restatements WHERE tenant_id = $1 "
                     "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]))",
+                    tenant_id, wanted,
+                )
+                # Records about other subjects keep no trace of the erased one.
+                await conn.execute(
+                    """
+                    UPDATE agent_lineage_nodes SET data = jsonb_set(data, '{principal_entity_ids}', (
+                        SELECT COALESCE(jsonb_agg(item), '[]'::jsonb)
+                        FROM jsonb_array_elements_text(data->'principal_entity_ids') AS item
+                        WHERE item <> ALL($2::text[])
+                    ))
+                    WHERE tenant_id = $1 AND data->'principal_entity_ids' ?| $2::text[]
+                    """,
+                    tenant_id, wanted,
+                )
+                await conn.execute(
+                    """
+                    UPDATE principal_agent_lineage SET data = jsonb_set(data, '{competing_principal_ids}', (
+                        SELECT COALESCE(jsonb_agg(item), '[]'::jsonb)
+                        FROM jsonb_array_elements_text(data->'competing_principal_ids') AS item
+                        WHERE item <> ALL($2::text[])
+                    ))
+                    WHERE tenant_id = $1 AND data->'competing_principal_ids' ?| $2::text[]
+                    """,
                     tenant_id, wanted,
                 )
         return {

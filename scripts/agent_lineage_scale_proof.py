@@ -126,6 +126,45 @@ def _projector_throughput(fixture: Any) -> dict[str, Any]:
             "events_per_second": round(len(events) / elapsed) if elapsed else None}
 
 
+def _run_high_volume(tier: int) -> dict[str, Any]:
+    """Past the agent tiers: instances, runs and tool observations on one legitimate principal."""
+    from actions.agent_lineage import synthetic as S
+    from actions.agent_lineage.engine import LineageEngine
+
+    events_per_agent, instances_per_agent, runs_per_agent = 200, 20, 40
+    fixture = S.build_fixture(tier)
+    engine = LineageEngine(S.TENANT)
+    S.load(engine, fixture)
+    engine.resolve()
+    agents = sorted(agent for agent in fixture.truth if agent.startswith("legit-"))
+    stream = S.high_volume_facts(
+        agents, events_per_agent=events_per_agent, instances_per_agent=instances_per_agent,
+        runs_per_agent=runs_per_agent,
+    )
+    applied, fold_seconds = _timed(lambda: engine.ingest(stream))
+    result, resolve_seconds = _timed(engine.resolve)
+    summary = next(s for s in result.summaries if s["principal_entity_id"] == S.LEGIT_HUMAN)
+    expected_instances = len(agents) * instances_per_agent
+    expected_runs = len(agents) * runs_per_agent
+    score = S.score(engine, fixture)
+    return {
+        "agents_with_volume": len(agents),
+        "tool_observations_added": applied,
+        "fold_seconds": round(fold_seconds, 2),
+        "facts_per_second": round(applied / fold_seconds),
+        "resolve_seconds": round(resolve_seconds, 2),
+        "principal_instances": summary["agent_instances"],
+        "principal_runs": summary["agent_runs"],
+        "instances_at_least_generated": summary["agent_instances"] >= expected_instances,
+        "runs_at_least_generated": summary["agent_runs"] >= expected_runs,
+        "instances_generated": expected_instances,
+        "runs_generated": expected_runs,
+        "false_principal_attribution": score["false_principal_attribution"],
+        "attribution_class_mismatch": score["attribution_class_mismatch"],
+        "peak_rss_mb": round(_peak_rss_mb(), 1),
+    }
+
+
 def _run_tier(tier: int) -> dict[str, Any]:
     from actions.agent_lineage import synthetic as S
     from actions.agent_lineage.engine import LineageEngine
@@ -428,6 +467,26 @@ def render_ledger(payload: dict[str, Any]) -> str:
             _row("`principal_agent_lineage` size, MB", tiers, lambda t: round(t["stores"]["postgres"]["lineage_table_bytes"] / (1024 * 1024), 1)),
             "",
         ]
+    hv = payload.get("high_volume")
+    if hv:
+        lines += [
+            "## High-volume run",
+            "",
+            f"{hv['tool_observations_added']:,} tool observations streamed across {hv['agents_with_volume']:,} agents "
+            "of one legitimate principal, on top of the largest tier, folded in one process.",
+            "",
+            "| Measure | Result |",
+            "|---|---:|",
+            f"| Instances resolved for the principal | {hv['principal_instances']:,} |",
+            f"| Runs resolved for the principal | {hv['principal_runs']:,} |",
+            f"| Instances and runs generated | {hv['instances_generated']:,} / {hv['runs_generated']:,} |",
+            f"| Fold, facts/s | {hv['facts_per_second']:,} |",
+            f"| Fold, s | {hv['fold_seconds']} |",
+            f"| Resolve, s | {hv['resolve_seconds']} |",
+            f"| Peak RSS, MB | {hv['peak_rss_mb']:,} |",
+            f"| False principal attribution | {hv['false_principal_attribution']} |",
+            "",
+        ]
     lines += [
         "## What this does and does not prove",
         "",
@@ -436,8 +495,8 @@ def render_ledger(payload: dict[str, Any]) -> str:
         "",
         "Not measured, so not claimed:",
         "",
-        "- The work order's capacity targets beyond these tiers: 1M+ instances, millions of runs and tens of "
-        "millions of tool observations per principal. Fixtures carry about 2.7 facts per agent.",
+        "- Volume beyond the high-volume run above, and that volume in the Postgres store. The agent tiers carry "
+        "about 2.7 facts per agent; only the high-volume run is denser.",
         "- End-to-end ingestion through the API and Bronze, concurrent readers, multi-replica reconciliation, "
         "and any production-sized database or hardware.",
         "- Calibration of the fan-out thresholds against real traffic. They are stated heuristics.",
@@ -461,10 +520,15 @@ def main() -> int:
     parser.add_argument("--tiers", default="100,1000,10000,100000")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--one-tier", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--high-volume-tier", type=int, default=100000)
+    parser.add_argument("--one-volume", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--render-only", action="store_true", help="re-render the ledger from --output")
     args = parser.parse_args()
     if args.render_only:
         LEDGER.write_text(render_ledger(json.loads(Path(args.output).read_text())))
+        return 0
+    if args.one_volume:
+        print(json.dumps(_run_high_volume(args.one_volume)))
         return 0
     if args.one_tier:
         print(json.dumps(_run_tier(args.one_tier)))
@@ -482,7 +546,16 @@ def main() -> int:
         results.append(json.loads(line))
         print(f"tier {tier}: resolved in {results[-1]['identity_and_lineage_resolution_seconds']}s, "
               f"peak {results[-1]['peak_rss_mb']} MB", file=sys.stderr)
+    done = subprocess.run(
+        [sys.executable, __file__, "--one-volume", str(args.high_volume_tier)],
+        capture_output=True, text=True, check=False,
+    )
+    if done.returncode != 0:
+        print(done.stderr, file=sys.stderr)
+        return done.returncode
+    high_volume = json.loads(done.stdout.strip().splitlines()[-1])
     payload = {
+        "high_volume": high_volume,
         "environment": {
             "platform": platform.platform(), "machine": platform.machine(),
             "python": platform.python_version(), "cpu_count": os.cpu_count(),
