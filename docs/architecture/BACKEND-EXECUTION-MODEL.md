@@ -19,12 +19,12 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
-  "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
+  "services/api/config/settings.py": "sha256:abde25ae3783e080355d11c81bafcfdff643240934ea50a0859e4fabdfb97441"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:177a03032ec77edbb35748aa4ca71521f8cc26e50c0ee9f6ecc0bcb9d864b9a8"
+  "services/api/workers/runtime/roles.py": "sha256:583eeb2de1dc946b6f57e4fbc4498f9855a30965f669496c2ecd0db27bba171d"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
+  "services/api/workers/runtime/specs.py": "sha256:52c3a3a3ccfd84bd0a22fa25d63012e6c8e902d873a0a7700ef2ea0de0894774"
 ---
 
 # Backend Execution Model
@@ -254,6 +254,12 @@ depending on an operator manually draining a queue:
   journey handoff rows older than 90 days (they hold anonymous IDs). Runs even
   when `JOURNEY_HANDOFF_ENABLED` is off so disabling the feature never strands
   rows.
+- **`agent_behavior_jobs`** (`maintenance`, `AETHER_AGENT_BEHAVIOR_JOBS_ENABLED`,
+  default off) — per active deployment agent, records the last complete UTC day
+  as a stored behavior snapshot, compares the two latest stored windows for
+  drift, and persists a deterministic Risk360 assessment when the behavior
+  evidence yields signals. Derived, rebuildable writes only; one failing agent
+  never stops a pass. Not `required`: a stalled pass leaves the last snapshots.
 
 Every loop is cancellation-safe and isolates a failing tick (one bad tick logs
 and continues rather than killing the supervised loop). The `/v1/ready`
