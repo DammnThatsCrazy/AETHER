@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
+
+from shared.agent_lineage import vocabulary as lineage_vocab
+
 from .base import BaseProjector, ProjectionResult
 
 _SOURCE_REF_MAX_LENGTH = 256
@@ -26,6 +29,66 @@ def _source_reference(value: Any) -> str | None:
     ):
         return None
     return normalized
+
+
+_MAX_DELEGATION_DEPTH = 10_000
+_CONTROL_MODES = frozenset(lineage_vocab.CONTROL_MODES)
+_AUTHORITY_TYPES = frozenset(lineage_vocab.AUTHORITY_TYPES)
+
+# High-cardinality lineage context blocks (observation-envelope v1.x). They may
+# ride at the event top level or under ``context``; both snake_case (envelope
+# wire) and camelCase (SDK wire) spellings are accepted.
+_LINEAGE_BLOCKS = {
+    "actor": ("actor_context", "actorContext"),
+    "authority": ("authority_context", "authorityContext"),
+    "execution": ("execution_context", "executionContext"),
+    "protocol": ("protocol_context", "protocolContext"),
+}
+
+
+def _camel(name: str) -> str:
+    head, *rest = name.split("_")
+    return head + "".join(part.capitalize() for part in rest)
+
+
+def _lineage_block(event: dict[str, Any], context: dict[str, Any], block: str) -> dict[str, Any]:
+    for holder in (event, context):
+        for key in _LINEAGE_BLOCKS[block]:
+            value = holder.get(key)
+            if isinstance(value, dict):
+                return value
+    return {}
+
+
+def _block_ref(block: dict[str, Any], name: str) -> str | None:
+    return _source_reference(block.get(name) if name in block else block.get(_camel(name)))
+
+
+def _bounded_depth(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 0 <= value <= _MAX_DELEGATION_DEPTH else None
+
+
+def _control_mode(*candidates: Any) -> str:
+    """First reported value that is in the vocabulary; otherwise ``UNKNOWN``.
+
+    Control mode describes how authority flowed, never whether behaviour was
+    legitimate, and an unrecognised value must not leak into Silver as a new
+    category.
+    """
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip() in _CONTROL_MODES:
+            return candidate.strip()
+    return "UNKNOWN"
+
+
+def _authority_type(value: Any) -> str | None:
+    """``None`` when no authority was reported; ``unknown`` when it is unrecognised."""
+    ref = _source_reference(value)
+    if ref is None:
+        return None
+    return ref if ref in _AUTHORITY_TYPES else "unknown"
 
 
 _AGENT_TYPES = frozenset({
@@ -176,11 +239,21 @@ class AgentExecutionProjector(BaseProjector):
         correlation = context.get("correlation") or {}
         event_name = str(event.get("type") or "")
         row = self._base_row(event)
-        run_ref = _source_reference(p.get("runId") or p.get("run_id"))
+        actor_ctx = _lineage_block(event, context, "actor")
+        authority_ctx = _lineage_block(event, context, "authority")
+        execution_ctx = _lineage_block(event, context, "execution")
+        protocol_ctx = _lineage_block(event, context, "protocol")
+        # A real run reference only. A trace correlates observations; it is not
+        # a run, so it is never promoted into source_run_id / canonical_run_id.
+        run_ref = _source_reference(
+            p.get("runId") or p.get("run_id")
+        ) or _block_ref(execution_ctx, "source_run_id")
         trace_ref = _source_reference(
             correlation.get("traceId") or correlation.get("trace_id")
-        )
-        task_ref = _source_reference(p.get("taskId") or p.get("task_id"))
+        ) or _block_ref(execution_ctx, "trace_id")
+        task_ref = _source_reference(
+            p.get("taskId") or p.get("task_id")
+        ) or _block_ref(execution_ctx, "task_id")
         outcome_ref = _source_reference(p.get("outcomeId") or p.get("outcome_id"))
         # These are caller-reported record references for later exact lookup.
         # They do not make the SDK authoritative for payment state or value.
@@ -205,6 +278,29 @@ class AgentExecutionProjector(BaseProjector):
         spawn_child_ref = _source_reference(
             p.get("childAgentId") or p.get("child_agent_id")
         )
+        # Source-reported principal. ``beneficiaryActorId`` is a claim about who
+        # benefits, not a resolved principal: it is stored only as a reported
+        # reference and canonical_principal_entity_id stays NULL here (canonical
+        # resolution owns that column and never copies the claim).
+        beneficiary_claim = _source_reference(
+            context.get("beneficiaryActorId") or context.get("beneficiary_actor_id")
+        )
+        reported_principal_ref = (
+            _block_ref(actor_ctx, "reported_principal_ref")
+            or _block_ref(actor_ctx, "principal")
+            or beneficiary_claim
+        )
+        authority_type = _authority_type(
+            authority_ctx.get("authority_type", authority_ctx.get("authorityType"))
+        )
+        authority_ref = _block_ref(authority_ctx, "authority_ref")
+        if not authority_ref and authority_type == "mandate":
+            authority_ref = _block_ref(authority_ctx, "mandate_ref")
+        elif not authority_ref and authority_type == "approval":
+            authority_ref = _block_ref(authority_ctx, "approval_ref")
+        validated_agent_ref = _source_reference(
+            deployment.get("agentId") or deployment.get("agent_id")
+        )
         event_status = {
             "agent_task_started": "started",
             "agent_task_completed": "completed",
@@ -216,6 +312,10 @@ class AgentExecutionProjector(BaseProjector):
             # when an accepted event has validated deployment context.
             "agent_id": deployment.get("agentId") or deployment.get("agent_id") or p.get("agentId") or p.get("workerId"),
             "deployment_id": deployment.get("deploymentId") or deployment.get("deployment_id"),
+            # Legacy correlation columns, kept for existing readers: ``run_id``
+            # still falls back to the trace id and says so in
+            # ``run_correlation_source``. Canonical lineage must use
+            # ``source_run_id`` / ``canonical_run_id`` below instead.
             "run_id": run_ref or trace_ref,
             "run_correlation_source": "run_id" if run_ref else (
                 "trace_id" if trace_ref else None
@@ -223,7 +323,7 @@ class AgentExecutionProjector(BaseProjector):
             "trace_id": trace_ref,
             "span_id": _source_reference(
                 correlation.get("spanId") or correlation.get("span_id")
-            ),
+            ) or _block_ref(execution_ctx, "span_id"),
             "correlation_id": _source_reference(
                 correlation.get("correlationId") or correlation.get("correlation_id")
             ),
@@ -248,7 +348,7 @@ class AgentExecutionProjector(BaseProjector):
             ),
             "parent_run_id": _source_reference(
                 p.get("parentRunId") or p.get("parent_run_id")
-            ),
+            ) or _block_ref(execution_ctx, "parent_run_id"),
             # A delegation target is namespaced independently from the actor.
             # Authority resolution must not infer this from the actor provider.
             "delegated_to_namespace": _source_reference(
@@ -287,9 +387,7 @@ class AgentExecutionProjector(BaseProjector):
                 if isinstance(item, str) and item.strip() and len(item) <= 256
                 and not any(ord(char) < 32 or ord(char) == 127 for char in item)
             ][:32],
-            "principal_id": _source_reference(
-                context.get("beneficiaryActorId") or context.get("beneficiary_actor_id")
-            ),
+            "principal_id": beneficiary_claim,
             "task_id": task_ref or _source_reference(
                 p.get("sessionId") or p.get("session_id")
             ),
@@ -313,7 +411,8 @@ class AgentExecutionProjector(BaseProjector):
             "resource_uri": p.get("resourceUri") or p.get("resource_uri"),
             "server_name": p.get("serverName"),
             "server_url": p.get("serverUrl"),
-            "protocol_version": p.get("protocolVersion"),
+            "protocol_version": _block_ref(protocol_ctx, "protocol_version")
+            or p.get("protocolVersion"),
             "risk_level": p.get("riskLevel"),
             "reason_codes": p.get("reasonCodes"),
             "provider": p.get("provider"),
@@ -349,5 +448,68 @@ class AgentExecutionProjector(BaseProjector):
             ),
             "amount": _decimal_text(p.get("amount")),
             "currency": _source_reference(p.get("currency")),
+            # --- High-cardinality lineage (work order AO-3). Source values are
+            # stored as reported and never overwritten; every *canonical_* /
+            # *_entity_id resolution output below stays NULL until the lineage
+            # resolver fills it.
+            "source_run_id": run_ref,
+            "canonical_run_id": None,
+            "root_run_id": _source_reference(p.get("rootRunId") or p.get("root_run_id"))
+            or _block_ref(execution_ctx, "root_run_id"),
+            "agent_definition_id": validated_agent_ref
+            or _source_reference(p.get("agentDefinitionId") or p.get("agent_definition_id"))
+            or _block_ref(execution_ctx, "agent_definition_id"),
+            "agent_instance_id": _source_reference(
+                p.get("agentInstanceId") or p.get("agent_instance_id")
+                or p.get("instanceId") or p.get("instance_id")
+            ) or _block_ref(execution_ctx, "agent_instance_id"),
+            "parent_agent_entity_id": None,
+            "root_agent_entity_id": None,
+            "reported_principal_ref": reported_principal_ref,
+            "reported_principal_namespace": _block_ref(
+                actor_ctx, "reported_principal_namespace"
+            ),
+            "canonical_principal_entity_id": None,
+            "principal_resolution_status": "unresolved" if reported_principal_ref else None,
+            # Actor roles are producer-reported entity references. They are kept
+            # distinct (never collapsed into actor_id) and are NOT evidence of
+            # principal attribution; that is decided by canonical resolution.
+            "initiator_entity_id": _block_ref(actor_ctx, "initiator"),
+            "executor_entity_id": _block_ref(actor_ctx, "executor"),
+            "operator_entity_id": _block_ref(actor_ctx, "operator"),
+            "beneficiary_entity_id": _block_ref(actor_ctx, "beneficiary"),
+            "control_mode": _control_mode(
+                execution_ctx.get("control_mode", execution_ctx.get("controlMode")),
+                p.get("controlMode"), p.get("control_mode"),
+            ),
+            "authority_type": authority_type,
+            "authority_ref": authority_ref,
+            "delegation_depth": _bounded_depth(next(
+                (
+                    holder[key]
+                    for holder, key in (
+                        (execution_ctx, "delegation_depth"),
+                        (execution_ctx, "delegationDepth"),
+                        (p, "delegationDepth"),
+                        (p, "delegation_depth"),
+                    )
+                    if holder.get(key) is not None
+                ),
+                None,
+            )),
+            "protocol": _block_ref(protocol_ctx, "protocol")
+            or _source_reference(p.get("protocol")),
+            "external_effect_ref": _source_reference(
+                p.get("externalEffectRef") or p.get("external_effect_ref")
+            ) or _block_ref(execution_ctx, "external_effect_ref"),
+            # Derived by Aether, never accepted from the producer: a deployment
+            # the registry validated is deployment_verified, everything else is
+            # the producer's own report.
+            "execution_verification_state": (
+                "deployment_verified" if deployment else "source_reported"
+            ),
+            "parent_span_id": _source_reference(
+                correlation.get("parentSpanId") or correlation.get("parent_span_id")
+            ) or _block_ref(execution_ctx, "parent_span_id"),
         })
         return ProjectionResult(table="silver_agent_execution_facts", rows=[row])

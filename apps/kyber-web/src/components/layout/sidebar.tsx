@@ -58,6 +58,7 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   { path: '/intelligence/semantic-review', label: 'Semantic Ops', destination: 'kyber-semantic-ops' },
   { path: '/measurement/traffic-intelligence', label: 'Traffic Intel', destination: 'kyber-traffic-intelligence' },
   { path: '/connectors', label: 'Connectors', destination: 'kyber-connectors', requirement: { flag: 'connectors_enabled' } },
+  { path: '/agent-lineage', label: 'Agent Lineage', destination: 'kyber-agent-lineage', envFlag: 'enableExternalAgentTelemetry' },
   { path: '/agent-telemetry', label: 'Agent Telemetry', destination: 'kyber-agent-telemetry', envFlag: 'enableExternalAgentTelemetry' },
   { path: '/payment-rails', label: 'Payment Rails', destination: 'kyber-payment-rails', requirement: { domain: 'payments' }, envFlag: 'enablePaymentRails' },
   { path: '/ai-efficiency', label: 'AI Efficiency', destination: 'kyber-ai-efficiency', requirement: { domain: 'economic' }, envFlag: 'enableAiEfficiency' },

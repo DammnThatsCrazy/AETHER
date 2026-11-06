@@ -4,3 +4,5 @@ export { AgentRunEvidence as AgentRunEvidencePanel } from './agent-run-evidence'
 export { AgentMarketplaceCatalogPanel } from './agent-marketplace-catalog';
 export type { Agent360Profile } from './use-agent360';
 export { AgentBehaviorPanel } from './agent-behavior-panel';
+export { AgentLineagePanel } from './agent-lineage-panel';
+export { PrincipalAgentLineagePanel } from './principal-agent-lineage-panel';

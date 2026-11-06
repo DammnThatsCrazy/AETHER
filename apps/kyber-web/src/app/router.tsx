@@ -73,6 +73,7 @@ const KyberDerivativesOpsPage = lazy(() => import('@kyber/pages/derivatives/kybe
 const KyberInteropOpsPage = lazy(() => import('@kyber/pages/interop/kyber-interop-ops-page').then(m => ({ default: m.KyberInteropOpsPage })));
 const Campaign360Page = lazy(() => import('@kyber/pages/measurement/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
 const DeliveryOpsPage = lazy(() => import('@kyber/pages/delivery').then(m => ({ default: m.DeliveryOpsPage })));
+const AgentLineagePage = lazy(() => import('@kyber/pages/agent-lineage').then(m => ({ default: m.AgentLineagePage })));
 const AgentTelemetryPage = lazy(() => import('@kyber/pages/agent-telemetry').then(m => ({ default: m.AgentTelemetryPage })));
 const AgentAccessPage = lazy(() => import('@kyber/pages/agent-access').then(m => ({ default: m.AgentAccessPage })));
 // Kyber's own operating plane: platform topology, the tenant's own view, the
@@ -209,6 +210,7 @@ export function AppRouter() {
                 <Route path="/derivatives/ops" element={<PageSuspense><KyberDerivativesOpsPage /></PageSuspense>} />
                 <Route path="/interoperability/ops" element={<PageSuspense><KyberInteropOpsPage /></PageSuspense>} />
                 <Route path="/delivery" element={<PageSuspense><DeliveryOpsPage /></PageSuspense>} />
+                <Route path="/agent-lineage" element={<PageSuspense><AgentLineagePage /></PageSuspense>} />
                 <Route path="/agent-telemetry" element={<PageSuspense><AgentTelemetryPage /></PageSuspense>} />
                 <Route path="/agent-access" element={<PageSuspense><AgentAccessPage /></PageSuspense>} />
                 <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />

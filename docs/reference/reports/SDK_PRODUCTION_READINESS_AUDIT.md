@@ -14,8 +14,8 @@ source_hashes:
   "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:b2f66953e7f1975c22fd64fca62834321c5c83d5602ddbd5dbb9c4cab30bdf03"
   "packages/sdk/web/src/index.ts": "sha256:1ea4b4df56cacf5fd355f5f6edca6dca9eeafac7b5ab4a2341abd7ca18bc152a"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
-  "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
+  "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
+  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
   "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
 ---
 

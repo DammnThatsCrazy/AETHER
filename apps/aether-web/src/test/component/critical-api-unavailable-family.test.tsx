@@ -78,6 +78,10 @@ const mocks = vi.hoisted(() => ({
   notificationChannelsUpdateConfig: vi.fn(),
 }));
 
+vi.mock('@aether-app/features/agent360', async (original) => ({
+  ...(await original<typeof import('@aether-app/features/agent360')>()),
+  PrincipalAgentLineagePanel: () => null,
+}));
 vi.mock('@aether-app/lib/api/endpoints', () => ({
   api: {
     billing: {

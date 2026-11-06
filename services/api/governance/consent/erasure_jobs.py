@@ -507,6 +507,7 @@ async def _run_completeness_planes(
             "risk_poisoning_evidence",
             "risk_intervention_records",
             "social_relationship_evidence_events",
+            "agent_lineage_projection",
         )
     ))
     try:

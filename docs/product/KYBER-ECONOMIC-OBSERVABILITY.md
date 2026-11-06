@@ -10,7 +10,7 @@ source_files: [services/api/value/economic/routes.py, services/api/identity/prof
 related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
-  "services/api/identity/profile/routes.py": "sha256:73c002b436a26ade807bfa2b0ff77a2ee574021ce86dadbdf4ff055b821c0dce"
+  "services/api/identity/profile/routes.py": "sha256:8b085907602875b4bdad089fdbc084f1d5308c4559fb5678d2a836eb8134c589"
   "services/api/value/economic/routes.py": "sha256:ceff2b0583bf08e2603f6693b19d70979a435eaa4afd7567a77a074413a97167"
 ---
 
