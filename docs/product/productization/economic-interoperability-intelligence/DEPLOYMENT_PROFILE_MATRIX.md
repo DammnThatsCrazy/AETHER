@@ -18,7 +18,7 @@ source_files:
   - scripts/release/check_staging_task_definition_contract.py
 canonical_owner: platform@aether
 source_hashes:
-  "config/environments/.env.example": "sha256:177fd70ce5976a6f94ae0757d388dc6c81ea2a4629ae7f7cae25e86382b1db8f"
+  "config/environments/.env.example": "sha256:d5c32df6e26b4efd5a195a9b7c7bd37effb8a1420d8952786e95ac9735cb6a24"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/outputs.tf": "sha256:5c5a051e56e3e00f811c86663f6a2e8a9f8fd34df133723fef76e7ea1338f816"
@@ -26,7 +26,7 @@ source_hashes:
   "scripts/bootstrap_aws_secrets.py": "sha256:ae5e53eee269aad3fa855ad2b2494d99738b32532fe6101cf9d2f86134f81d9c"
   "scripts/lib/preflight_env.py": "sha256:e465c85941e68d7e0375827096a51a2783a03e99606d137090a4bec9582fbc94"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:3b38ca65a936f122927c214b814d9742913e6b65f7b7b9295f040fdac5e61fa3"
-  "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
+  "services/api/config/settings.py": "sha256:abde25ae3783e080355d11c81bafcfdff643240934ea50a0859e4fabdfb97441"
 ---
 
 # Deployment Profile Matrix
@@ -48,7 +48,7 @@ All flags default OFF; enabling is per-capability and per-domain.
 
 Env blocks are documented in `config/environments/.env.example`
 (`AETHER_STABLECOIN_*`, `AETHER_DERIVATIVES_*`, `AETHER_PREDICTION_MARKET_*`, `AETHER_INTEROP_*`,
-`AETHER_AGENT_MARKETPLACE_CATALOG_*`,
+`AETHER_AGENT_MARKETPLACE_CATALOG_*`, `AETHER_AGENT_BEHAVIOR_JOBS_*`,
 `KYBER_*_OPS_ENABLED`); `Settings.__post_init__` rejects incoherent
 combinations (LayerZero without adapters).
 

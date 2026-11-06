@@ -131,6 +131,12 @@ does not identity-match the deployment to either party or evaluate grant
 scope. These links express correlation; they do not establish causality,
 grant-scope authorization, or payment finality.
 
+Scheduled behavior jobs (`AETHER_AGENT_BEHAVIOR_JOBS_ENABLED`, interval
+`AETHER_AGENT_BEHAVIOR_JOBS_INTERVAL_SECONDS`, default off) run under the
+`maintenance` worker role: stored daily behavior snapshots, drift between stored
+windows and Risk360 assessments from agent behavior evidence, for agents of
+active registered deployments.
+
 Python (`packages/sdk/python/aether_agentic`): `build_behavior_event(...)` emits the same behavior types (deployment required, content keys and float amounts rejected); `build_deployment_context(...)`
 plus an optional `deployment=` parameter on all envelope builders; emits the
 same camelCase `agentDeployment` wire shape. `execution_by_aether` remains

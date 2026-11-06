@@ -22,7 +22,7 @@ reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the 360 PR main.py diff: it mounts Social360 evidence and Workflow definition routers. Universal Provider Runtime connection, credential, and webhook mounts are unchanged."
 source_hashes:
-  "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
+  "services/api/config/settings.py": "sha256:abde25ae3783e080355d11c81bafcfdff643240934ea50a0859e4fabdfb97441"
   "services/api/connectors/provider_runtime/": "sha256:7bc893666ac1be2acf3c02a8318ff9fdbeffac4ab46229ecdfbc28f29fbdc5e2"
   "services/api/connectors/providers/": "sha256:086060aa67b187df1b1ea59ab1d556fd0bca1df379b3162447117f3ecbff7aeb"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
