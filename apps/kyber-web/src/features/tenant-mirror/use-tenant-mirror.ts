@@ -76,6 +76,8 @@ const surfaceSchema = z
     minimum_disclosure: z.string(),
     backend_capability: z.string().nullish(),
     operator_augmentations: z.array(z.string()).nullish(),
+    // Identifiers the backend requires as query parameters for this surface.
+    mirror_params: z.array(z.string()).nullish(),
   })
   .passthrough();
 
@@ -311,11 +313,19 @@ export interface MirrorQuery {
   readonly surface: string;
   /** Reduced-disclosure (D2) variant. Redacted values are NOT the tenant's values. */
   readonly masked?: boolean | undefined;
+  /** The surface's `mirror_params`, by name. */
+  readonly params?: Readonly<Record<string, string>> | undefined;
+}
+
+function paramPairs(params: Readonly<Record<string, string>> | undefined): string[] {
+  return Object.entries(params ?? {}).map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
 }
 
 function mirrorPath(query: MirrorQuery): string {
   const base = `/v1/kyber/tenants/${encodeURIComponent(query.tenantId)}/mirror/${encodeURIComponent(query.surface)}`;
-  return query.masked === true ? `${base}/masked` : base;
+  const path = query.masked === true ? `${base}/masked` : base;
+  const pairs = paramPairs(query.params);
+  return pairs.length > 0 ? `${path}?${pairs.join('&')}` : path;
 }
 
 export function fetchTenantMirror(query: MirrorQuery): Promise<MirrorAccess<MirrorEnvelope>> {
@@ -339,6 +349,8 @@ export interface ParityQuery {
    * returns its digest only and `comparison` is null, which is *not* parity.
    */
   readonly compare?: string | undefined;
+  /** The surface's `mirror_params`, by name. */
+  readonly params?: Readonly<Record<string, string>> | undefined;
 }
 
 /** Refused client-side with the backend's own limit rather than sent and rejected. */
@@ -349,10 +361,9 @@ export function compareTooLarge(compare: string): boolean {
 export function fetchTenantMirrorParity(query: ParityQuery): Promise<MirrorAccess<ParityReport>> {
   const base = `/v1/kyber/tenants/${encodeURIComponent(query.tenantId)}/mirror/${encodeURIComponent(query.surface)}/parity`;
   const compare = query.compare;
-  const path =
-    compare !== undefined && compare.trim() !== ''
-      ? `${base}?compare=${encodeURIComponent(compare)}`
-      : base;
+  const pairs = paramPairs(query.params);
+  if (compare !== undefined && compare.trim() !== '') pairs.push(`compare=${encodeURIComponent(compare)}`);
+  const path = pairs.length > 0 ? `${base}?${pairs.join('&')}` : base;
   return restClient
     .get(path, parityResponseSchema)
     .then(
@@ -466,7 +477,7 @@ export function useTenantMirror(
 ): MirrorQueryState<MirrorAccess<MirrorEnvelope>> {
   const enabled = query !== null && query.tenantId.trim() !== '' && query.surface.trim() !== '';
   const { data, isLoading, error, refetch } = useQuery<MirrorAccess<MirrorEnvelope>>({
-    key: `${KEY_PREFIX}:read:${query?.tenantId ?? ''}:${query?.surface ?? ''}:${query?.masked === true ? 'masked' : 'visible'}`,
+    key: `${KEY_PREFIX}:read:${query?.tenantId ?? ''}:${query?.surface ?? ''}:${query?.masked === true ? 'masked' : 'visible'}:${paramPairs(query?.params).join('&')}`,
     fetcher: () => fetchTenantMirror(query as MirrorQuery),
     staleTime: STALE,
     enabled,
@@ -480,7 +491,7 @@ export function useTenantMirrorParity(
 ): MirrorQueryState<MirrorAccess<ParityReport>> {
   const enabled = query !== null && query.tenantId.trim() !== '' && query.surface.trim() !== '';
   const { data, isLoading, error, refetch } = useQuery<MirrorAccess<ParityReport>>({
-    key: `${KEY_PREFIX}:parity:${query?.tenantId ?? ''}:${query?.surface ?? ''}:${query?.compare ?? ''}`,
+    key: `${KEY_PREFIX}:parity:${query?.tenantId ?? ''}:${query?.surface ?? ''}:${query?.compare ?? ''}:${paramPairs(query?.params).join('&')}`,
     fetcher: () => fetchTenantMirrorParity(query as ParityQuery),
     staleTime: STALE,
     enabled,

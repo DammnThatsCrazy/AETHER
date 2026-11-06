@@ -13,7 +13,8 @@ are checked here:
 
   1. **Coverage, both directions.** Every ``tenant_parity_required`` surface in
      ``packages/shared/contracts/kyber-feature-surface-manifest.json`` must have
-     a resolver in ``SURFACE_VERTEX_TYPES``, and nothing else may. A coverage map
+     a resolver in ``SURFACE_VERTEX_TYPES`` or ``SURFACE_READ_PARAMS``, and nothing
+     else may. A manifest ``mirror_params`` list must match the resolver's. A coverage map
      that silently stops covering a surface is worse than no map: the surface
      still renders, it just renders unwatched.
 
@@ -133,7 +134,7 @@ def _known_vertex_types() -> set[str]:
     return {value for name, value in vars(VertexType).items() if name.isupper() and isinstance(value, str)}
 
 
-def check_coverage(surface_vertex_types: dict) -> int:
+def check_coverage(surface_vertex_types: dict, surface_read_params: dict) -> int:
     if not MANIFEST.is_file():
         fail("coverage", f"manifest missing: {MANIFEST}")
         return 0
@@ -143,19 +144,19 @@ def check_coverage(surface_vertex_types: dict) -> int:
         for entry in manifest.get("surfaces", [])
         if entry.get("tenant_parity_required")
     }
-    declared = set(surface_vertex_types)
+    declared = set(surface_vertex_types) | set(surface_read_params)
 
     for feature_id in sorted(required - declared):
         fail(
             "coverage",
             f"manifest surface {feature_id!r} requires tenant parity but "
-            f"SURFACE_VERTEX_TYPES declares no resolver for it — the surface "
+            f"neither SURFACE_VERTEX_TYPES nor SURFACE_READ_PARAMS declares a resolver — the surface "
             f"would render unwatched",
         )
     for feature_id in sorted(declared - required):
         fail(
             "coverage",
-            f"SURFACE_VERTEX_TYPES declares {feature_id!r}, which is not a "
+            f"a resolver map declares {feature_id!r}, which is not a "
             f"parity-required manifest surface — stale coverage, remove it or "
             f"regenerate the manifest",
         )
@@ -172,6 +173,18 @@ def check_coverage(surface_vertex_types: dict) -> int:
                 "coverage",
                 f"{feature_id!r} reads unknown vertex types {unknown}; a type nothing can "
                 f"hold reads to an operator as an empty tenant",
+            )
+    for entry in manifest.get("surfaces", []):
+        feature_id = str(entry.get("feature_id"))
+        if not entry.get("tenant_parity_required"):
+            continue
+        listed = tuple(entry.get("mirror_params") or ())
+        needed = tuple(surface_read_params.get(feature_id, ()))
+        if listed != needed:
+            fail(
+                "coverage",
+                f"{feature_id!r} lists mirror_params {list(listed)} but its resolver requires "
+                f"{list(needed)}; an operator could not supply what the read needs",
             )
     return len(required)
 
@@ -311,13 +324,13 @@ def main() -> int:
             PRESENTATION_KEY_REASONS,
             PRESENTATION_KEYS,
         )
-        from governance.kyber.mirror.service import SURFACE_VERTEX_TYPES
+        from governance.kyber.mirror.service import SURFACE_READ_PARAMS, SURFACE_VERTEX_TYPES
     except ImportError as exc:
         print(f"  RESULT: FAIL — services/api/governance/kyber/mirror is not importable: {exc}")
         print("=" * 70)
         return 1
 
-    required = check_coverage(SURFACE_VERTEX_TYPES)
+    required = check_coverage(SURFACE_VERTEX_TYPES, SURFACE_READ_PARAMS)
     check_augmentations(DIAGNOSTIC_SECTIONS)
     scanned, used = check_imports()
     check_stale_allowances(used)
@@ -325,7 +338,7 @@ def main() -> int:
 
     print(
         f"  parity-required surfaces: {required}   resolvers: "
-        f"{len(SURFACE_VERTEX_TYPES)}   modules scanned: {scanned}   "
+        f"{len(set(SURFACE_VERTEX_TYPES) | set(SURFACE_READ_PARAMS))}   modules scanned: {scanned}   "
         f"presentation keys: {len(PRESENTATION_KEYS)}"
     )
     print("-" * 70)

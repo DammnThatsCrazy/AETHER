@@ -62,9 +62,11 @@ Component → store map (see ``docs/reference/privacy/dsr-erasure-coverage.md``)
                            stores carry no subject key (asset-level)
   agent_lineage_projection principal_agent_lineage + summary, clusters, nodes,
                            restatements, tenant-declared bindings and delegations naming
-                           the subject (hard delete); owner cleared on agent_configs; legal
-                           holds checked per affected row. The rest is derived and
-                           rebuildable from already-erased evidence
+                           the subject (hard delete); Delegation vertices projected from
+                           those grants tombstoned and the active-grant cache dropped;
+                           owner cleared on agent_configs; legal holds checked per affected
+                           row and per deleted table. The rest is derived and rebuildable
+                           from already-erased evidence
   silver_facts             every Silver fact table via the writer's introspected
                            schemas (typed columns and lake JSONB) — hard delete
   bronze_events            bronze_sdk_events: chain-preserving tombstone (+ re-pack
@@ -1535,6 +1537,39 @@ async def _erase_fanout_signals(tenant_id: str, refs: Iterable[str]) -> int:
     return deleted
 
 
+async def _erase_delegation_projection(tenant_id: str, grants: dict[str, dict]) -> int:
+    """Tombstone the Delegation vertices projected from these grants, and their edges.
+
+    Edges on the subject's own vertex belong to the identity plane. These vertices also
+    name the counterparty, through a property and a GRANTED_TO or GRANTED_BY edge. Runs
+    before the rows go, because a retry finds the affected grants by reading those rows.
+    """
+    from actions.agent_marketplace.authority import delegation_vertex
+    from shared.graph.graph import Vertex, VertexType, get_graph_client
+    from shared.graph.mutation_gateway import GraphMutationGateway
+    from shared.graph.mutation_intents import vertex_intent
+
+    vertex_ids = {delegation_vertex(row).vertex_id for row in grants.values()}
+    if not vertex_ids:
+        return 0
+    revoked = await _revoke_graph_edges(tenant_id, vertex_ids)
+    gateway = GraphMutationGateway(graph_client=get_graph_client())
+    for vertex_id in sorted(vertex_ids):
+        # A graph upsert merges properties, so each one is blanked by name.
+        await gateway.apply(vertex_intent(
+            Vertex(vertex_type=VertexType.DELEGATION, vertex_id=vertex_id, properties={
+                "tenant_id": tenant_id, "delegation_id": "", "grantor_entity_id": "",
+                "grantee_entity_id": "", "starts_at": None, "ends_at": None, "revoked_at": None,
+                "erased": True,
+            }),
+            operation="node_tombstoned",
+            tenant_id=tenant_id,
+            actor_id=ERASURE_ACTOR,
+            reason_code=ERASURE_REASON,
+        ))
+    return revoked
+
+
 async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receipt]:
     """Erase the lineage read model and the inputs that would rebuild it for this subject.
 
@@ -1544,15 +1579,20 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
     fold discards it and any in-flight write fails. A full rebuild then runs from the
     evidence that remains, which removes every derived copy of the subject's id.
     """
-    from actions.agent_lineage.repository import AdjudicationRepository, PrincipalBindingRepository
+    from actions.agent_lineage.repository import (
+        READ_MODEL_TABLES,
+        AdjudicationRepository,
+        PrincipalBindingRepository,
+    )
     from actions.agent_lineage.service import get_service
     from actions.agent_marketplace.identity_binding import AgentDeploymentIdentityBindingRepository
+    from dependencies.providers import get_registry
     from repositories.repos import AgentConfigRepository, DelegationRepository
     from shared.storage.lifecycle import StorageLifecycle
 
     tenant = subject.tenant_id
     refs = subject.refs
-    delegations = DelegationRepository()
+    delegations = DelegationRepository(cache=get_registry().cache)
     configs = AgentConfigRepository()
     bindings = PrincipalBindingRepository()
     adjudications = AdjudicationRepository()
@@ -1576,8 +1616,8 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
 
     checks: set[tuple[str, str]] = {
         (store, ref) for ref in refs
-        for store in (AGENT_LINEAGE_COMPONENT, "delegations", "agent_configs", "risk_signals",
-                      "agent_lineage_principal_bindings", "agent_lineage_adjudications",
+        for store in (AGENT_LINEAGE_COMPONENT, *READ_MODEL_TABLES, "delegations", "agent_configs",
+                      "risk_signals", "agent_lineage_principal_bindings", "agent_lineage_adjudications",
                       "agent_deployment_identity_bindings")
     }
     for grant_id, row in {**grants, **grants_asserted}.items():
@@ -1608,7 +1648,7 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
                 )
             }
 
-    changed = 0
+    changed = await _erase_delegation_projection(tenant, grants)
     for repo, rows in (
         (delegations, grants), (configs, agents_subject), (bindings, declared), (adjudications, verdicts),
         (identity_bindings, bound),
@@ -1626,6 +1666,10 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
             }
             await delegations.update(grant_id, {**row, **scrubbed})
             changed += 1
+    # The hot-path cache would keep serving these rows as active until its TTL.
+    for row in {**grants, **grants_asserted}.values():
+        if row.get("grantee_entity_id"):
+            await delegations._invalidate_cache(str(row["grantee_entity_id"]), tenant)  # noqa: SLF001
     for config_id, row in agents_owned.items():
         if config_id not in agents_subject:
             cleared = {"asserted_by_entity_id": None} if row.get("asserted_by_entity_id") in refs else {}

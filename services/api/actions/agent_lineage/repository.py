@@ -24,6 +24,13 @@ ROW_FILTERS = frozenset({
 })
 
 
+#: Every read-model table the lineage erasure deletes from, for its legal-hold check.
+READ_MODEL_TABLES = (
+    "principal_agent_lineage", "principal_agent_lineage_summary", "principal_agent_lineage_clusters",
+    "agent_lineage_nodes", "agent_lineage_restatements",
+)
+
+
 class PrincipalBindingRepository(BaseRepository):
     """Tenant principal declarations (table ``agent_lineage_principal_bindings``)."""
 

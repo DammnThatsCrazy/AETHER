@@ -1171,6 +1171,21 @@ snapshot, while Kyber's agentic-observability surface is a separate operator
 contract and does not reproduce that customer view. It is not a byte-parity
 Tenant Mirror surface until an equivalent resolver and parity proof exist.
 
+Twelve surfaces read relational stores or one entity's neighbourhood rather than a
+tenant-wide vertex scan: `/relationships`, `/syndicates`, `/journeys`, `/episodes`,
+`/communications` (each with its detail route), `/signals` and `/risk`. The scoped
+gateway's `read_surface` serves them after the same ordered authorization gate.
+`services/api/governance/kyber/graph/surface_reads.py` calls Aether's own route
+handlers under a read-only tenant context whose tenant comes from the authorized
+scope, so the mirror has no second query to drift. Relationship surfaces use the
+gateway's neighbourhood walk instead, which renders vertices rather than the tenant
+route's traversal payload. Detail surfaces require their identifiers as query
+parameters, which the manifest lists as `mirror_params`, and a foreign identifier
+gets the same 404 as a missing one. A failed source is `null` with a disclosed missing
+input, and that rendering is not parity-comparable. Below D3, every string in a handler
+payload is masked unless its key names a closed vocabulary or a timestamp. No parity
+comparison against live tenant data has been run yet.
+
 Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
 generates `packages/shared/lenses_generated.ts`, and projection availability
 continues to come from the intelligence-projection registry. Frontend lens

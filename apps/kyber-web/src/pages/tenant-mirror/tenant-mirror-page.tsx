@@ -454,14 +454,18 @@ export function TenantMirrorPage() {
   const [compareDraft, setCompareDraft] = useState('');
   const [appliedCompare, setAppliedCompare] = useState('');
   const [opened, setOpened] = useState(false);
+  const [paramDrafts, setParamDrafts] = useState<Readonly<Record<string, string>>>({});
 
   const surface = findMirrorSurface(surfaceId);
   const exempt = surface !== null && !surface.tenant_parity_required;
   const tooLarge = compareTooLarge(compareDraft);
+  const paramNames = surface?.mirror_params ?? [];
+  const surfaceParams = Object.fromEntries(paramNames.map(name => [name, (paramDrafts[name] ?? '').trim()]));
+  const paramsMissing = paramNames.some(name => surfaceParams[name] === '');
 
   const mirrorQuery: MirrorQuery | null =
-    opened && !exempt && surface !== null && tenantId.trim() !== ''
-      ? { tenantId: tenantId.trim(), surface: surface.feature_id, masked }
+    opened && !exempt && !paramsMissing && surface !== null && tenantId.trim() !== ''
+      ? { tenantId: tenantId.trim(), surface: surface.feature_id, masked, params: surfaceParams }
       : null;
 
   const mirror = useTenantMirror(mirrorQuery);
@@ -473,6 +477,7 @@ export function TenantMirrorPage() {
       : {
           tenantId: mirrorQuery.tenantId,
           surface: mirrorQuery.surface,
+          params: surfaceParams,
           compare: appliedCompare.trim() === '' ? undefined : appliedCompare.trim(),
         },
   );
@@ -522,9 +527,23 @@ export function TenantMirrorPage() {
                   setOpened(false);
                 }}
               />
+              {paramNames.map(name => (
+                <label key={name} className="text-xs font-mono text-text-muted">
+                  {name} (required)
+                  <Input
+                    aria-label={name}
+                    value={paramDrafts[name] ?? ''}
+                    placeholder={name}
+                    onChange={e => {
+                      setParamDrafts(current => ({ ...current, [name]: e.target.value }));
+                      setOpened(false);
+                    }}
+                  />
+                </label>
+              ))}
               <Button
                 size="sm"
-                disabled={tenantId.trim() === '' || exempt}
+                disabled={tenantId.trim() === '' || exempt || paramsMissing}
                 onClick={() => setOpened(true)}
               >
                 Open mirror

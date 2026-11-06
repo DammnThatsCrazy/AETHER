@@ -717,6 +717,53 @@ async def test_a_declared_link_cannot_put_a_confirmed_finding_on_someone():
     assert not [r for r in service._signal_store.rows.values() if r["claim_state"] == "verified"]
 
 
+@pytest.mark.parametrize("table", [
+    "principal_agent_lineage", "principal_agent_lineage_summary", "principal_agent_lineage_clusters",
+    "agent_lineage_nodes", "agent_lineage_restatements",
+])
+async def test_a_hold_on_any_read_model_table_stops_the_plane(fixture, monkeypatch, table):
+    from actions.agent_lineage import service as svc
+    from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, erase_agent_lineage_plane
+
+    world = await _erasure_world(fixture, monkeypatch, holds=((table, S.LEGIT_HUMAN),))
+    try:
+        receipts = await erase_agent_lineage_plane(_subject())
+    finally:
+        svc.set_service(None)
+    assert receipts[AGENT_LINEAGE_COMPONENT].status == "skipped_legal_hold"
+    assert await world["delegations"].find_by_id(world["grant"]) is not None
+
+
+async def test_erasure_drops_the_cached_grant_and_the_projected_delegation(fixture, monkeypatch):
+    from actions.agent_lineage import service as svc
+    from actions.agent_marketplace.authority import delegation_relationships, delegation_vertex
+    from dependencies.providers import get_registry
+    from governance.consent.erasure_planes import erase_agent_lineage_plane
+    from repositories.repos import DelegationRepository
+    from shared.graph.graph import get_graph_client
+
+    world = await _erasure_world(fixture, monkeypatch)
+    row = await world["delegations"].find_by_id(world["grant"])
+    cached = DelegationRepository(cache=get_registry().cache)
+    assert [g["delegation_id"] for g in await cached.active_for(row["grantee_entity_id"], T)] == [world["grant"]]
+
+    graph = get_graph_client()
+    node = delegation_vertex(row)
+    await graph.upsert_vertex(node)
+    for edge in delegation_relationships(row, "evt-1"):
+        await graph.add_edge(edge)
+    assert await graph.get_edges(node.vertex_id, direction="both")
+    try:
+        await erase_agent_lineage_plane(_subject())
+    finally:
+        svc.set_service(None)
+    # Read through the cache: a stale entry would still name the erased grantor.
+    assert await cached.active_for(row["grantee_entity_id"], T) == []
+    vertex = await graph.get_vertex(node.vertex_id)
+    assert vertex.properties["grantor_entity_id"] == "" and vertex.properties["grantee_entity_id"] == ""
+    assert not await graph.get_edges(node.vertex_id, direction="both")
+
+
 async def test_the_plane_honours_typed_holds_on_every_store_and_scrubs_asserters(fixture, monkeypatch):
     from actions.agent_lineage import service as svc
     from actions.agent_lineage.repository import AdjudicationRepository
