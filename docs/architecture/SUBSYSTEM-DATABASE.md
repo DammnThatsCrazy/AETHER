@@ -38,9 +38,9 @@ reviewed_source_commits:
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "config/storage_policies.yaml": "sha256:b3e77ad29290b79c04138504d7ee66a01f9572dbb43da83b9b0a1106c337c5ab"
+  "config/storage_policies.yaml": "sha256:2a7ee282ad41fe82307f876ffa099439226d0b88d62ce16ac95035a8c536f018"
   "services/api/actions/agent/invocation_runtime.py": "sha256:7ea361c7766345c3ba5da95a252b151d3c85ddf8a12a5fb0da39b4fdb0767890"
-  "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
+  "services/api/actions/agent/user_agents.py": "sha256:bb87cb40149f8184e5e6c02f889eff78cdb3bcfe49bb2c370a1fce7e41b23508"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -482,6 +482,11 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
   drops row keys without a column, so those fields were not persisted before.
   Silver stores the event type in `source_event_type`; there is no `event_name`
   column.
+- `20261030_agent_exec_lineage_hardening` separates source from canonical run and principal
+  identity on `silver_agent_execution_facts`; canonical columns stay NULL at projection.
+- `20261105_principal_agent_lineage` creates the derived, rebuildable lineage read model:
+  `principal_agent_lineage`, its summary and cluster tables, `agent_lineage_nodes`,
+  `agent_lineage_restatements`, plus tenant-declared `agent_lineage_principal_bindings`.
 - `20261022_journey_handoffs` creates `journey_handoffs` (token hash only,
   tenant/app/journey bound, single-use state), owned by
   `repositories/journey_handoff_repo.py` with DDL parity tested.

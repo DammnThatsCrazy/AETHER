@@ -15,6 +15,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Iterable, Optional
 
+from shared.agent_lineage.vocabulary import MIN_DURABLE_DELEGATION_DEPTH
+
 SPAWN_EVENT = "agent_subagent_spawned"
 TOOL_EVENTS = frozenset({
     "agent_tool_called", "agent_tool_invocation_observed", "agent_tool_observed",
@@ -23,7 +25,8 @@ TOOL_EVENTS = frozenset({
 OUTCOME_EVENTS = frozenset({
     "agent_task_completed", "agent_task_failed", "agent_outcome_recorded",
 })
-MAX_DEPTH = 8
+# Durable delegation depth. High-cardinality reads use ``actions.agent_lineage``.
+MAX_DEPTH = MIN_DURABLE_DELEGATION_DEPTH
 MAX_NODES = 100
 _TOOL_SAMPLE = 20
 # Per-read fact bounds. A read that returns more than its limit is cut at the
@@ -127,7 +130,7 @@ def build_lineage_tree(
     cycle_edges: list[dict[str, str]] = []
     flat: list[dict[str, Any]] = []
 
-    def build(ref: str, depth: int, via: Optional[dict[str, Any]]) -> dict[str, Any]:
+    def make(ref: str, depth: int, via: Optional[dict[str, Any]]) -> dict[str, Any]:
         node: dict[str, Any] = {
             "agent_ref": ref,
             "depth": depth,
@@ -136,24 +139,34 @@ def build_lineage_tree(
             "children": [],
         }
         flat.append(node)
-        for edge in children.get(ref, []):
-            child = edge["child"]
-            if child in seen:
-                cycle_edges.append({"parent": ref, "child": child})
-                continue
-            if depth >= max_depth:
-                if "max_depth" not in truncated:
-                    truncated.append("max_depth")
-                continue
-            if len(seen) >= max_nodes:
-                if "max_nodes" not in truncated:
-                    truncated.append("max_nodes")
-                continue
-            seen.add(child)
-            node["children"].append(build(child, depth + 1, edge))
         return node
 
-    tree = build(root_agent_ref, 0, None)
+    # Explicit stack: delegation depth comes from reported data, so traversal
+    # must not be able to exhaust the interpreter's recursion limit.
+    tree = make(root_agent_ref, 0, None)
+    stack = [(tree, iter(children.get(root_agent_ref, [])))]
+    while stack:
+        node, edges = stack[-1]
+        edge = next(edges, None)
+        if edge is None:
+            stack.pop()
+            continue
+        child = edge["child"]
+        if child in seen:
+            cycle_edges.append({"parent": node["agent_ref"], "child": child})
+            continue
+        if node["depth"] >= max_depth:
+            if "max_depth" not in truncated:
+                truncated.append("max_depth")
+            continue
+        if len(seen) >= max_nodes:
+            if "max_nodes" not in truncated:
+                truncated.append("max_nodes")
+            continue
+        seen.add(child)
+        built = make(child, node["depth"] + 1, edge)
+        node["children"].append(built)
+        stack.append((built, iter(children.get(child, []))))
     totals = _rollup([])
     totals.update({
         "agent_count": len(flat),

@@ -503,6 +503,10 @@ async def execute(
             f"reason={decision.reason}"
         )
 
+    if not config.get("owner_entity_id"):
+        # The owner was erased (DSR). No beneficiary can be named, so the agent cannot run.
+        raise ForbiddenError("Agent has no owner and cannot execute")
+
     started_at = datetime.now(timezone.utc).isoformat()
 
     # Execution started — emit event with v2 envelope so consumers see the full context.

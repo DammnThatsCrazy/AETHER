@@ -13,7 +13,7 @@ source_files: [services/api/ingestion/export/service.py, services/api/ingestion/
 source_hashes:
   "services/api/governance/security/export_governance.py": "sha256:51fd9d785bdc2169eca5004ca48ded372fa4ddc6c2b4deb2fc4a772bae96ca8e"
   "services/api/ingestion/export/routes.py": "sha256:a8aab800e0dc0e9af0d6e9a6e31671faf76e9696379f0427427039b3a242e049"
-  "services/api/ingestion/export/service.py": "sha256:8e717e6df23691e33b3efb9f48b0c8d6f81197bbcfd8e999745c6d156c71b7bb"
+  "services/api/ingestion/export/service.py": "sha256:e3c17a3b77ba64378cbf4aaf7a0147864041415462c0060a17b6d79a185fd59a"
   "services/api/repositories/artifacts.py": "sha256:5dc3ac07e04abfbcaae88bcec626252c8f90e66ebc8ebd060d5c21824d04fa89"
 ---
 
@@ -66,6 +66,9 @@ a dead worker's lease is swept and the job requeues (at-least-once). A terminal
 - `artifact exceeds 33554432 byte cap` — the serialized export is over the 32 MB
   `MAX_ARTIFACT_BYTES` limit. Narrow the export (time window, `sources`, a single
   `export_id`) and re-request; do not raise the cap without a storage review.
+  `agent_lineage` exports are built to stay under it: each part holds at most
+  50,000 rows. When the manifest's `rows_remaining` is 1, request the next part
+  with `after` set to the last row's `agent_entity_id`.
 - `artifact checksum verification failed after write` — the stored bytes did not
   re-hash to the manifest sha256. This is the fail-closed guard doing its job:
   the job stays `failed` and no download is offered. Do NOT hand-serve the row;

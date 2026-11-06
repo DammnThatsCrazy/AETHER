@@ -241,6 +241,19 @@ New edge types added in v8.10.0 with their required EDGE_LAYER_MAP entries:
 
 ---
 
+## Agent Lineage Semantics
+
+Agent lineage edges are durable semantic facts, not execution events: an agent being
+spawned, authorized or paying a provider becomes an edge, while its 17,492 tool calls
+stay queryable in `silver_agent_execution_facts`. Lineage edges carry `evidence_refs`,
+`relationship_confidence`, `authority_ref`, `valid_from`, `valid_to`, `observed_at`,
+`source_namespace`, `relationship_status` and `resolution_method`.
+
+`principal_agent_lineage` is a read model derived from this evidence. The graph stays
+authoritative, and the read model can be rebuilt from it and from Silver. Graph query
+budgets (below) bound a response, never what is known: a principal with 100,000 agents
+is reached through `/v1/agent-lineage` summaries, clusters and cursor pages.
+
 ## Boolean Filter Language
 
 The `POST /v1/graph/query` and `POST /v1/graph/facets` endpoints accept a structured `filter` field using the following grammar:
