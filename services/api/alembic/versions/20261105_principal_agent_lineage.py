@@ -146,9 +146,20 @@ def upgrade() -> None:
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_alpb_tenant ON agent_lineage_principal_bindings (tenant_id, id)"
     )
+    # Holds a counter only. An erasure bumps it so no worker reuses a fold, or writes
+    # a delta, that was read before the erasure.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_lineage_tenant_state (
+            tenant_id TEXT PRIMARY KEY,
+            erasure_generation BIGINT NOT NULL DEFAULT 0
+        )
+        """
+    )
 
 
 def downgrade() -> None:
+    op.execute("DROP TABLE IF EXISTS agent_lineage_tenant_state")
     op.execute("DROP TABLE IF EXISTS agent_lineage_principal_bindings")
     op.execute("DROP TABLE IF EXISTS agent_lineage_restatements")
     op.execute("DROP TABLE IF EXISTS agent_lineage_nodes")

@@ -46,9 +46,11 @@ export job.
 | Surfaces | Profile360 and Agent360 panels in `apps/aether-web/src/features/agent360/`, Kyber `apps/kyber-web/src/pages/agent-lineage/` |
 
 The tables are `principal_agent_lineage`, `principal_agent_lineage_summary`,
-`principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`
-and `agent_lineage_principal_bindings`. All but the last are derived: dropping them
-loses no evidence. Bindings are tenant declarations, which are inputs.
+`principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`,
+`agent_lineage_tenant_state` and `agent_lineage_principal_bindings`. The first five are
+derived: dropping them loses no evidence. Tenant state holds an erasure counter that
+stops a worker reusing a fold read before an erasure. Bindings are tenant declarations,
+which are inputs.
 
 ## Resolution
 

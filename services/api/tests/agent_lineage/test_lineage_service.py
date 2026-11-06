@@ -297,39 +297,134 @@ def test_delegation_rows_map_to_authority_records():
     assert UNATTRIBUTED == "unattributed"
 
 
-async def test_the_dsr_plane_erases_the_read_model_and_forces_a_rebuild(fixture):
+async def _erasure_world(fixture, monkeypatch, holds=()):
     from actions.agent_lineage import service as svc
-    from actions.agent_lineage.repository import PrincipalBindingRepository
-    from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, ErasureSubject, erase_agent_lineage_plane
-    from governance.dsr_propagation.models import DSR_COMPONENTS
-    from repositories.repos import DelegationRepository
+    from repositories.repos import AgentConfigRepository, DelegationRepository
+    from shared.storage.lifecycle import StorageLifecycle
 
-    assert AGENT_LINEAGE_COMPONENT in DSR_COMPONENTS
+    async def active_hold(self, tenant, store, ref):
+        return {"hold_id": "h1", "reason": "litigation"} if (store, ref) in holds else None
+
+    monkeypatch.setattr(StorageLifecycle, "active_hold", active_hold)
     repo = InMemoryLineageRepository()
     service = _service(repo, fixture)
     await service.reconcile(T)
     svc.set_service(service)
+    suffix = base64.urlsafe_b64encode(repr(holds).encode()).decode()[:12]
+    world = {
+        "service": service,
+        "grant": f"grant-dsr-{suffix}", "other": f"grant-other-{suffix}", "agent": f"owned-{suffix}",
+        "delegations": DelegationRepository(), "configs": AgentConfigRepository(),
+    }
+    await world["delegations"].grant(world["grant"], T, S.LEGIT_HUMAN, f"counterparty-{suffix}", {})
+    await world["delegations"].grant(world["other"], T, S.MALICIOUS_HUMAN, "mal-orch", {})
+    await world["configs"].register(world["agent"], S.LEGIT_HUMAN, T, "model-x")
+    return world
+
+
+def _subject():
+    from governance.consent.erasure_planes import ErasureSubject
+
+    return ErasureSubject(tenant_id=T, user_id="u", entity_ids=frozenset({S.LEGIT_HUMAN}))
+
+
+async def test_the_dsr_plane_erases_lineage_and_the_inputs_that_would_rebuild_it(fixture, monkeypatch):
+    from actions.agent_lineage import service as svc
+    from actions.agent_lineage.repository import PrincipalBindingRepository
+    from actions.agent_lineage.service import _registered_owner_bindings
+    from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, erase_agent_lineage_plane
+    from governance.dsr_propagation.models import DSR_COMPONENTS
+
+    assert AGENT_LINEAGE_COMPONENT in DSR_COMPONENTS
+    world = await _erasure_world(fixture, monkeypatch)
     bindings = PrincipalBindingRepository()
     await bindings.insert("alb_dsr", {
         "id": "alb_dsr", "tenant_id": T, "kind": "agent", "principal_entity_id": S.LEGIT_HUMAN,
         "agent_entity_id": "legit-orch", "evidence_class": "TENANT_DECLARED",
     })
-    delegations = DelegationRepository()
-    await delegations.grant("grant-dsr", T, S.LEGIT_HUMAN, "legit-orch", {})
-    await delegations.grant("grant-other", T, S.MALICIOUS_HUMAN, "mal-orch", {})
     try:
-        receipts = await erase_agent_lineage_plane(ErasureSubject(
-            tenant_id=T, user_id="u", anonymous_id=None,
-            entity_ids=frozenset({S.LEGIT_HUMAN}),
-        ))
+        receipts = await erase_agent_lineage_plane(_subject())
     finally:
         svc.set_service(None)
+    service = world["service"]
     assert receipts[AGENT_LINEAGE_COMPONENT].records_impacted > 500
     assert await bindings.find_by_id("alb_dsr") is None
-    assert await delegations.find_by_id("grant-dsr") is None
-    assert (await delegations.find_by_id("grant-other")) is not None
+    assert await world["delegations"].find_by_id(world["grant"]) is None
+    assert await world["delegations"].find_by_id(world["other"]) is not None
     assert (await service.summary(T, S.LEGIT_HUMAN))["direct_agents"] is None
     assert T not in service._engines
+    # The registered agent stays, but it can no longer rebuild an owner link.
+    config = await world["configs"].find_by_id(world["agent"])
+    assert config["owner_entity_id"] is None
+    owners = await _registered_owner_bindings(T)
+    assert S.LEGIT_HUMAN not in {binding.principal_entity_id for binding in owners}
+
+
+async def test_a_hold_on_a_counterparty_stops_the_plane_before_anything_changes(fixture, monkeypatch):
+    from actions.agent_lineage import service as svc
+    from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, erase_agent_lineage_plane
+
+    holds = (("delegations", "counterparty-held"),)
+    world = await _erasure_world(fixture, monkeypatch, holds=holds)
+    await world["delegations"].grant("grant-held", T, S.LEGIT_HUMAN, holds[0][1], {})
+    try:
+        receipts = await erase_agent_lineage_plane(_subject())
+    finally:
+        svc.set_service(None)
+    assert receipts[AGENT_LINEAGE_COMPONENT].status == "skipped_legal_hold"
+    assert await world["delegations"].find_by_id("grant-held") is not None
+    assert (await world["configs"].find_by_id(world["agent"]))["owner_entity_id"] == S.LEGIT_HUMAN
+    assert (await world["service"].summary(T, S.LEGIT_HUMAN))["direct_agents"] == 1
+    await world["delegations"].delete("grant-held")
+
+
+async def test_a_reconcile_racing_an_erasure_rebuilds_instead_of_rewriting_the_subject(repo, fixture):
+    service = _service(repo, fixture)
+    await service.reconcile(T)
+    original = service._silver_reader
+    raced = []
+
+    async def racing(tenant, cursor):
+        page = await original(tenant, cursor)
+        if not raced:
+            raced.append(True)
+            # Another worker erases the subject and its evidence while this pass reads.
+            await repo.erase_subject(T, {S.LEGIT_HUMAN})
+            fixture.authorities[:] = [a for a in fixture.authorities if a.grantor_entity_id != S.LEGIT_HUMAN]
+        return page
+
+    service._silver_reader = racing
+    await service.reconcile(T)
+    assert raced
+    rows = await service.agents(T, S.LEGIT_HUMAN, filters={"relationship": "direct"})
+    assert rows["items"] == []
+
+
+async def test_a_worker_with_an_older_fold_rebuilds_after_another_worker_erases(repo, fixture):
+    worker = _service(repo, fixture)
+    await worker.reconcile(T)
+    other = _service(repo, fixture)
+    await other.erase_subject(T, {S.LEGIT_HUMAN})
+    fixture.authorities[:] = [a for a in fixture.authorities if a.grantor_entity_id != S.LEGIT_HUMAN]
+    stats = await worker.reconcile(T)
+    assert stats["mode"] == "full"
+    assert (await worker.agents(T, S.LEGIT_HUMAN, filters={"relationship": "direct"}))["items"] == []
+
+
+async def test_a_fact_budget_truncation_stays_disclosed_until_a_clean_rebuild(fixture, monkeypatch):
+    from actions.agent_lineage import service as svc
+
+    monkeypatch.setattr(svc, "MAX_FACTS_PER_RECONCILE", 1000)
+    service = _service(InMemoryLineageRepository(), fixture)
+    await service.reconcile(T)
+    reason = "fact_budget:1000"
+    assert reason in (await service.summary(T, S.LEGIT_HUMAN))["disclosure"]["truncation_reasons"]
+    # An incremental pass reads nothing past the first page, so the data is still cut.
+    monkeypatch.setattr(svc, "MAX_FACTS_PER_RECONCILE", 10_000_000)
+    await service.reconcile(T)
+    assert reason in (await service.summary(T, S.LEGIT_HUMAN))["disclosure"]["truncation_reasons"]
+    await service.reconcile(T, full=True)
+    assert reason not in (await service.summary(T, S.LEGIT_HUMAN))["disclosure"]["truncation_reasons"]
 
 
 async def test_stored_risk_signals_reach_rows_and_a_failed_read_is_disclosed(fixture):

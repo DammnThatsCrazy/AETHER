@@ -35,7 +35,13 @@ from ._common import (
 from .config import DEFAULT_CONFIG, PROJECTION_VERSION, LineageConfig
 from .engine import LineageEngine, ResolveResult, compare_rows
 from .evidence import AuthorityRecord, PrincipalBinding
-from .repository import InMemoryLineageRepository, LineageRepository, PostgresLineageRepository, validate_filters
+from .repository import (
+    InMemoryLineageRepository,
+    LineageRepository,
+    PostgresLineageRepository,
+    StaleLineageGeneration,
+    validate_filters,
+)
 
 logger = get_logger("aether.agent_lineage.service")
 
@@ -43,6 +49,8 @@ SILVER_TABLE = "silver_agent_execution_facts"
 SILVER_PAGE = 1000
 DELEGATION_PAGE = 500
 MAX_CACHED_ENGINES = 4
+#: Erasures can race a reconcile; each retry rebuilds from evidence read after the last one.
+RECONCILE_ATTEMPTS = 3
 #: A projection this old is reported ``stale`` instead of ``complete``.
 STALE_AFTER_SECONDS = 6 * 3600.0
 #: Facts read per reconcile. Hitting it is disclosed on every affected summary.
@@ -238,7 +246,7 @@ class AgentLineageService:
         self._risk_loader = risk_loader
         self._config = config
         self._stale_after = stale_after_seconds
-        self._engines: OrderedDict[str, tuple[LineageEngine, str]] = OrderedDict()
+        self._engines: OrderedDict[str, tuple[LineageEngine, str, int]] = OrderedDict()
         self._locks: dict[str, asyncio.Lock] = {}
 
     # ── reconciliation ────────────────────────────────────────────────────
@@ -255,25 +263,42 @@ class AgentLineageService:
             raise LineageQueryError("reconcile requires a tenant")
         lock = self._locks.setdefault(tenant_id, asyncio.Lock())
         async with lock:
-            return await self._reconcile_locked(tenant_id, full)
+            for attempt in range(RECONCILE_ATTEMPTS):
+                try:
+                    return await self._reconcile_locked(tenant_id, full)
+                except StaleLineageGeneration:
+                    self._engines.pop(tenant_id, None)
+                    if attempt == RECONCILE_ATTEMPTS - 1:
+                        raise
+        raise AssertionError("unreachable")
+
+    async def erase_subject(self, tenant_id: str, refs: Any) -> dict[str, int]:
+        """Erase from the read model under the tenant lock and invalidate every worker's fold."""
+        lock = self._locks.setdefault(tenant_id, asyncio.Lock())
+        async with lock:
+            counts = await self.repo.erase_subject(tenant_id, refs)
+            self._engines.pop(tenant_id, None)
+        return counts
 
     async def _reconcile_locked(self, tenant_id: str, full: bool) -> dict[str, Any]:
+        # Read before any evidence: an erasure after this point fails the write below.
+        generation = await self.repo.erasure_generation(tenant_id)
         aliases = await self._alias_loader(tenant_id)
         alias_key = hashlib.sha256(json.dumps(sorted(aliases.items())).encode()).hexdigest()
         cached = self._engines.get(tenant_id)
-        rebuild = full or cached is None or cached[1] != alias_key
+        rebuild = full or cached is None or cached[1] != alias_key or cached[2] != generation
         engine = LineageEngine(tenant_id, self._config) if rebuild else cached[0]
 
         for record in await self._authority_loader(tenant_id):
             engine.upsert_authority(record)
         for binding in await self._binding_loader(tenant_id):
             engine.upsert_binding(binding)
-        engine.clear_source_truncation()
         try:
             engine.set_risk_flags(await self._risk_loader(tenant_id))
+            engine.set_pass_disclosures([])
         except Exception as exc:  # noqa: BLE001 - disclosed; lineage itself is unaffected
             logger.warning("agent_lineage_risk_flags_unavailable", extra={"error": type(exc).__name__})
-            engine.disclose_source_truncation("risk_signals_unavailable")
+            engine.set_pass_disclosures(["risk_signals_unavailable"])
         facts_read = applied = 0
         cursor: Optional[str] = None
         while True:
@@ -291,8 +316,8 @@ class AgentLineageService:
         result = engine.resolve()
         if rebuild:
             await self._diff_rebuild(tenant_id, engine, result)
-        await self.repo.apply(result)
-        self._engines[tenant_id] = (engine, alias_key)
+        await self.repo.apply(result, expected_generation=generation)
+        self._engines[tenant_id] = (engine, alias_key, generation)
         self._engines.move_to_end(tenant_id)
         while len(self._engines) > MAX_CACHED_ENGINES:
             self._engines.popitem(last=False)
@@ -321,10 +346,6 @@ class AgentLineageService:
         result.nodes_removed = sorted({key[1] for key in removed if key[1] not in current})
         live = {key[0] for key in engine.rows()}
         result.summaries_removed = sorted({key[0] for key in prior if key[0] not in live})
-
-    def forget(self, tenant_id: str) -> None:
-        """Drop cached state so the next reconcile rebuilds (used after erasure)."""
-        self._engines.pop(tenant_id, None)
 
     # ── analytical reads ──────────────────────────────────────────────────
 

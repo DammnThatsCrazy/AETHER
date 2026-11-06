@@ -221,6 +221,7 @@ class LineageEngine:
         self._risk_flags: dict[str, int] = {}
         self._risk_input_seen = False
         self._source_truncation: list[str] = []
+        self._pass_disclosures: list[str] = []
         self._persisted_summaries: set[str] = set()
         self.duplicates_ignored = 0
         self.cross_tenant_rejected = 0
@@ -426,9 +427,9 @@ class LineageEngine:
                 self._dirty.add(agent)
         self._risk_flags = current
 
-    def clear_source_truncation(self) -> None:
-        """Reasons describe one reconcile pass; a later clean pass must not inherit them."""
-        self._source_truncation = []
+    def set_pass_disclosures(self, reasons: Iterable[str]) -> None:
+        """Reasons true of this pass only. Source truncation stays until a clean rebuild."""
+        self._pass_disclosures = list(reasons)
 
     def disclose_source_truncation(self, reason: str) -> None:
         if reason not in self._source_truncation:
@@ -1165,7 +1166,7 @@ class LineageEngine:
             if node.last is not None and (last is None or node.last > last):
                 last = node.last
         statuses = Counter(row["lineage_status"] for row in rows)
-        reasons = list(self._source_truncation)
+        reasons = [*self._source_truncation, *self._pass_disclosures]
         if statuses.get("depth_limited"):
             reasons.append(f"depth_limited:{statuses['depth_limited']}")
         partial_reasons = [

@@ -73,8 +73,13 @@ def _row_matches(row: dict[str, Any], filters: dict[str, Any]) -> bool:
     return True
 
 
+class StaleLineageGeneration(RuntimeError):
+    """An erasure ran after this reconcile read its evidence, so its delta may name the subject."""
+
+
 class LineageRepository(Protocol):
-    async def apply(self, result: ResolveResult) -> None: ...
+    async def apply(self, result: ResolveResult, *, expected_generation: Optional[int] = None) -> None: ...
+    async def erasure_generation(self, tenant_id: str) -> int: ...
     async def summary(self, tenant_id: str, principal: str) -> Optional[dict[str, Any]]: ...
     async def list_rows(
         self, tenant_id: str, principal: str, filters: dict[str, Any], after: Optional[str], limit: int,
@@ -103,9 +108,15 @@ class InMemoryLineageRepository:
         self._sorted_nodes: dict[str, list[str]] = {}
         self._restatements: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._reconciled_at: dict[tuple[str, str], str] = {}
+        self._generations: dict[str, int] = defaultdict(int)
 
-    async def apply(self, result: ResolveResult) -> None:
+    async def erasure_generation(self, tenant_id: str) -> int:
+        return self._generations[tenant_id]
+
+    async def apply(self, result: ResolveResult, *, expected_generation: Optional[int] = None) -> None:
         tenant = result.tenant_id
+        if expected_generation is not None and self._generations[tenant] != expected_generation:
+            raise StaleLineageGeneration(tenant)
         now = datetime.now(timezone.utc).isoformat()
         principals = set()
         for row in result.rows_upserted:
@@ -234,6 +245,7 @@ class InMemoryLineageRepository:
 
     async def erase_subject(self, tenant_id, refs):
         wanted = {str(value) for value in refs if value}
+        self._generations[tenant_id] += 1
         rows = nodes = summaries = clusters = restatements = 0
         for principal in list(self._rows[tenant_id]):
             store = self._rows[tenant_id][principal]
@@ -273,10 +285,30 @@ class PostgresLineageRepository:
     def __init__(self, pool: Any) -> None:
         self._pool = pool
 
-    async def apply(self, result: ResolveResult) -> None:
+    async def erasure_generation(self, tenant_id: str) -> int:
+        value = await self._pool.fetchval(
+            "SELECT erasure_generation FROM agent_lineage_tenant_state WHERE tenant_id = $1", tenant_id,
+        )
+        return int(value or 0)
+
+    async def apply(self, result: ResolveResult, *, expected_generation: Optional[int] = None) -> None:
         tenant = result.tenant_id
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                if expected_generation is not None:
+                    # The row lock orders this write against a concurrent erasure.
+                    await conn.execute(
+                        "INSERT INTO agent_lineage_tenant_state (tenant_id) VALUES ($1) "
+                        "ON CONFLICT (tenant_id) DO NOTHING",
+                        tenant,
+                    )
+                    current = await conn.fetchval(
+                        "SELECT erasure_generation FROM agent_lineage_tenant_state "
+                        "WHERE tenant_id = $1 FOR UPDATE",
+                        tenant,
+                    )
+                    if int(current) != expected_generation:
+                        raise StaleLineageGeneration(tenant)
                 await self._apply_rows(conn, tenant, result)
                 await self._apply_nodes(conn, tenant, result)
                 await self._apply_summaries(conn, tenant, result)
@@ -541,10 +573,15 @@ class PostgresLineageRepository:
         wanted = sorted({str(value) for value in refs if value})
         if not tenant_id:
             raise ValueError("erase_subject requires a tenant_id")
-        if not wanted:
-            return {"rows": 0, "nodes": 0, "summaries": 0, "clusters": 0, "restatements": 0}
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                # Bumped even with nothing to delete: evidence may have just been erased.
+                await conn.execute(
+                    "INSERT INTO agent_lineage_tenant_state (tenant_id, erasure_generation) VALUES ($1, 1) "
+                    "ON CONFLICT (tenant_id) DO UPDATE SET "
+                    "erasure_generation = agent_lineage_tenant_state.erasure_generation + 1",
+                    tenant_id,
+                )
                 rows = await conn.execute(
                     "DELETE FROM principal_agent_lineage WHERE tenant_id = $1 "
                     "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]))",

@@ -19,7 +19,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "services/api/actions/agent/deployment_routes.py": "sha256:9e177294d7cff6c2b4ec9f17d48a1eb5e2a1eb5cfb6b59742ae15f9d4110cfc1"
-  "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
+  "services/api/actions/agent/user_agents.py": "sha256:bb87cb40149f8184e5e6c02f889eff78cdb3bcfe49bb2c370a1fce7e41b23508"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
