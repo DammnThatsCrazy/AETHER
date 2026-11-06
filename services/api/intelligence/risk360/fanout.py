@@ -111,7 +111,7 @@ def fanout_signals(summary: dict[str, Any]) -> dict[str, Optional[float]]:
         "identity_churn": _identity_churn(summary, agents),
         "authority_failure_rate": _rate(activity.get("denied_event_count"), events),
         "revoked_agent_activity": activity.get("revoked_agent_activity"),
-        "out_of_scope_execution_rate": _rate(summary.get("out_of_scope_agents"), agents),
+        "out_of_scope_execution_rate": _rate(activity.get("out_of_scope_agents"), agents),
         "shared_infrastructure_density": _rate(activity.get("shared_infra_largest_share"), agents),
         # Largest same-window, same-tools group. An uncalibrated share, context only.
         "coordinated_execution_score": _rate(activity.get("largest_coordinated_group"), agents),
@@ -138,7 +138,7 @@ def assess_principal(
     risk_flagged = summary.get("risk_flagged_agents")
     verified_effects = activity.get("verified_effect_count")
     # Elevated counts only what the evidence directly names, never the whole fleet.
-    violators = (summary.get("out_of_scope_agents") or 0) + (summary.get("revoked_agents") or 0)
+    violators = (activity.get("out_of_scope_agents") or 0) + (activity.get("revoked_agents") or 0)
     elevated = None
     if agents is not None:
         elevated = min(agents, violators) if triggered else 0

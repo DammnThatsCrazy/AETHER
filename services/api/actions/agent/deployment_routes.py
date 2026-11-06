@@ -210,6 +210,12 @@ async def bind_deployment_agent_identity(
         raise BadRequestError(
             "Deployment requires agent_source_namespace and agent_id before identity binding"
         )
+    # A binding makes this deployment's signed events speak as the canonical agent,
+    # so it carries the same gate as registering a key for that agent.
+    if deployment.get("attestation_public_key"):
+        await _authorize_attestation_key(
+            request, body.canonical_agent_entity_id, deployment["attestation_public_key"], deployment_id,
+        )
 
     entity = await EntityRepository().find_by_id(body.canonical_agent_entity_id)
     if (

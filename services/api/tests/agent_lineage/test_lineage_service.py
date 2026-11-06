@@ -213,7 +213,7 @@ async def test_full_rebuild_is_stable_and_logs_real_restatements(repo, fixture):
     fixture.authorities[fixture.authorities.index(record)] = replace(record, revoked_at=1.0, version=2)
     await service.reconcile(T)
     summary = await service.summary(T, S.MALICIOUS_HUMAN)
-    assert summary["revoked_agents"] == summary["activity"]["agent_count"]
+    assert summary["revoked_agents"] == summary["direct_agents"] + summary["indirect_agents"]
     restated = await service.restatements(T, S.MALICIOUS_HUMAN, page_size=5)
     assert restated["items"] and restated["items"][0]["after"]["relationship_status"] == "revoked"
     profile = await compose_agent_activity(_Reader(service), T, S.MALICIOUS_HUMAN)
@@ -710,8 +710,10 @@ async def test_a_declared_link_cannot_put_a_confirmed_finding_on_someone():
     service._adjudication_loader = verdicts
     await service.reconcile(T)
     risk = await service.risk(T, "human:innocent")
-    assert risk["segments"]["confirmed_abusive"] == 0
+    assert not risk["segments"]["confirmed_abusive"]
     assert risk["assessment_level"] != "confirmed_activity"
+    summary = await service.summary(T, "human:innocent")
+    assert summary["activity"]["confirmed_malicious_inferred_links"] == 1
     assert not [r for r in service._signal_store.rows.values() if r["claim_state"] == "verified"]
 
 
@@ -782,4 +784,106 @@ def test_silver_erasure_reaches_agent_reference_columns():
 
     for column in ("agent_id", "parent_agent_ref", "child_agent_ref", "delegated_to_ref", "operator_entity_id"):
         assert column in SILVER_SUBJECT_COLUMNS
+
+
+async def test_a_grant_someone_else_wrote_cannot_raise_the_named_principals_risk():
+    from actions.agent_lineage.evidence import AuthorityRecord
+
+    fixture = S.Fixture(tier=1)
+    for index in range(10):
+        agent = f"a{index}"
+        fixture.authorities.append(AuthorityRecord(
+            tenant_id=T, authority_ref=f"g{index}", grantor_entity_id="human:victim", grantee_entity_id=agent,
+            grantor_kind="principal", verified=False, maximum_delegation_depth=0, delegation_allowed=False,
+        ))
+        fixture.facts.append({
+            "tenant_id": T, "source_event_id": f"e{index}", "source_event_type": "agent_policy_evaluated",
+            "agent_id": agent, "occurred_at": "2026-11-06T10:00:00Z", "policy_decision": "deny",
+        })
+    service = _service(InMemoryLineageRepository(), fixture)
+    await service.reconcile(T)
+    risk = await service.risk(T, "human:victim")
+    assert risk["triggered_signals"] == []
+    assert risk["attribution"]["inferred_links"] == 10
+    assert not service._signal_store.rows
+
+
+async def test_erasing_an_adjudicator_keeps_the_verdict_without_their_name(fixture, monkeypatch):
+    from actions.agent_lineage import service as svc
+    from actions.agent_lineage.repository import AdjudicationRepository
+    from governance.consent.erasure_planes import erase_agent_lineage_plane
+
+    await _erasure_world(fixture, monkeypatch, holds=(("x", "z"),))
+    verdicts = AdjudicationRepository()
+    await verdicts.insert("ala_keep", {
+        "id": "ala_keep", "tenant_id": T, "agent_entity_id": "mal-1", "verdict": "confirmed_malicious",
+        "adjudicated_by": S.LEGIT_HUMAN,
+    })
+    try:
+        await erase_agent_lineage_plane(_subject())
+    finally:
+        svc.set_service(None)
+    kept = await verdicts.find_by_id("ala_keep")
+    assert kept["verdict"] == "confirmed_malicious" and kept["adjudicated_by"] is None
+    await verdicts.delete("ala_keep")
+
+
+async def test_a_hold_on_a_rows_counterparty_stops_the_plane(fixture, monkeypatch):
+    from actions.agent_lineage import service as svc
+    from actions.agent_lineage.repository import PrincipalBindingRepository
+    from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, erase_agent_lineage_plane
+
+    await _erasure_world(fixture, monkeypatch, holds=(("agent_lineage_principal_bindings", "agent:held"),))
+    bindings = PrincipalBindingRepository()
+    await bindings.insert("alb_held", {
+        "id": "alb_held", "tenant_id": T, "kind": "agent", "principal_entity_id": S.LEGIT_HUMAN,
+        "agent_entity_id": "agent:held", "evidence_class": "TENANT_DECLARED",
+    })
+    try:
+        receipts = await erase_agent_lineage_plane(_subject())
+    finally:
+        svc.set_service(None)
+    assert receipts[AGENT_LINEAGE_COMPONENT].status == "skipped_legal_hold"
+    assert await bindings.find_by_id("alb_held") is not None
+    await bindings.delete("alb_held")
+
+
+async def test_erasure_reaches_source_refs_bound_to_a_canonical_agent(monkeypatch):
+    from actions.agent_marketplace.identity_binding import AgentDeploymentIdentityBindingRepository
+    from governance.consent.erasure_planes import ErasureSubject, _bound_agent_source_refs
+
+    tenant = "tenant-bound-refs"
+    repo = AgentDeploymentIdentityBindingRepository()
+    await repo.insert("b1", {
+        "id": "b1", "tenant_id": tenant, "canonical_agent_entity_id": "agent:canon",
+        "source_agent_ref": "source-ref", "source_namespace": "ns", "status": "active",
+    })
+    refs = await _bound_agent_source_refs(tenant, {"agent:canon"})
+    assert refs == frozenset({"source-ref"})
+    subject = ErasureSubject(tenant_id=tenant, user_id="u", entity_ids=frozenset({"agent:canon"}), source_refs=refs)
+    assert "source-ref" in subject.refs
+    await repo.delete("b1")
+
+
+async def test_erase_clears_rows_and_restatements_naming_the_subject_as_parent(repo):
+    from actions.agent_lineage.engine import ResolveResult
+
+    def row(principal, agent, parent):
+        return {
+            "tenant_id": T, "principal_entity_id": principal, "agent_entity_id": agent, "direct_or_indirect": "indirect",
+            "attribution_class": "verified", "active_state": "active", "lineage_status": "complete", "depth": 2,
+            "parent_agent_id": parent, "root_agent_id": parent,
+        }
+
+    await repo.apply(ResolveResult(
+        tenant_id=T, as_of=None, rows_upserted=[row("human:p", "child", "erased"), row("human:p", "other", "kept")],
+        restatements=[{
+            "tenant_id": T, "principal_entity_id": "human:p", "agent_entity_id": "child", "change_kind": "restated",
+            "before": {"parent_agent_id": "erased"}, "after": {"parent_agent_id": "kept"},
+        }],
+    ))
+    await repo.erase_subject(T, {"erased"})
+    assert await repo.rows_for_agent(T, "child") == []
+    assert len(await repo.rows_for_agent(T, "other")) == 1
+    assert await repo.restatements(T, "human:p", None, 10) == []
 

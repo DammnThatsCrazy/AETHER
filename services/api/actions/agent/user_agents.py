@@ -327,7 +327,9 @@ async def register(
     tenant.require_permission("write")
     agent_id = body.agent_id or str(uuid.uuid4())
     # Insert would replace the row, handing any writer the agent's ownership.
-    if body.agent_id and await _configs.find_by_id(agent_id) is not None:
+    existing = await _configs.find_by_id(agent_id) if body.agent_id else None
+    # A row in another tenant falls through to insert's generic refusal.
+    if existing is not None and existing.get("tenant_id") == tenant.tenant_id:
         raise ConflictError("Agent is already registered")
     record = await _configs.register(
         agent_id=agent_id,

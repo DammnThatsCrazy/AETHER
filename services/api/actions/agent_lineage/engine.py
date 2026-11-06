@@ -1199,9 +1199,10 @@ class LineageEngine:
         rows = [self._rows[(principal, agent)] for agent in agents]
         by_attr = Counter(row["attribution_class"] for row in rows)
         attributed = [row for row in rows if row["attribution_class"] in ("verified", "inferred")]
-        # Behavioral inputs count linked agents only: a self-claimed child must not be
-        # able to raise the risk of the principal it names.
-        linked_nodes = [self._nodes[row["agent_entity_id"]] for row in attributed]
+        # Behavioral inputs count proof-class links only: a self-claimed child or a grant
+        # someone else wrote must not be able to raise the risk of the principal it names.
+        proven = [row for row in rows if row["attribution_class"] == "verified"]
+        proven_nodes = [self._nodes[row["agent_entity_id"]] for row in proven]
         direct = sum(1 for row in attributed if row["direct_or_indirect"] == "direct")
         active = sum(1 for row in rows if row["active_state"] == "active")
         unknown_state = sum(1 for row in rows if row["active_state"] == "unknown")
@@ -1272,7 +1273,17 @@ class LineageEngine:
                 "truncated": bool(reasons),
                 "truncation_reasons": reasons + partial_reasons,
             },
-            "activity": self._activity(principal, linked_nodes, attributed, clusters, as_of),
+            "activity": {
+                **self._activity(principal, proven_nodes, proven, clusters, as_of),
+                # Reported beside the verified total: context, and never published as verified.
+                "confirmed_malicious_inferred_links": sum(
+                    1 for row in attributed
+                    if row["attribution_class"] == "inferred"
+                    and self._adjudications.get(row["agent_entity_id"]) == "confirmed_malicious"
+                ),
+                "revoked_agents": sum(1 for row in proven if row["relationship_status"] == "revoked"),
+                "out_of_scope_agents": sum(1 for row in proven if row["authority_resolution_status"] == "out_of_scope"),
+            },
         }
 
     def _activity(
@@ -1373,11 +1384,6 @@ class LineageEngine:
                     and self._adjudications.get(row["agent_entity_id"]) == "confirmed_malicious"
                 )
                 if any(node.agent_id in self._adjudications for node in nodes) else None
-            ),
-            "confirmed_malicious_inferred_links": sum(
-                1 for row in rows
-                if row["attribution_class"] == "inferred"
-                and self._adjudications.get(row["agent_entity_id"]) == "confirmed_malicious"
             ),
             "shared_infra_largest_share": max(
                 (c["member_count"] for c in clusters if c["kind"] in ("infrastructure_cluster", "agent_fleet")),

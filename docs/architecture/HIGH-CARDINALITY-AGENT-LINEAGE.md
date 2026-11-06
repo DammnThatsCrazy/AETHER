@@ -94,8 +94,9 @@ and both rows list `competing_principal_ids`. Two weak claims both stay inferred
 id named as a principal that is also seen reporting as an agent is not attribution,
 which keeps human and agent identities apart. A ref in someone else's spawn or binding
 is only a claim, so it cannot turn a principal into an agent. Bindings from different
-sources never supersede each other. Behavioral risk inputs count verified and inferred
-links only, so a self-claimed child cannot raise the risk of the principal it names.
+sources never supersede each other. Behavioral risk inputs count verified links only,
+so neither a self-claimed child nor a grant someone else wrote can raise the risk of the
+principal it names. Inferred links are reported beside them, not added to them.
 
 **Authority.** A grant's `delegation_allowed` and `maximum_delegation_depth` carry down
 the chain. Descendants past them are `out_of_scope`, and revoked or expired authority

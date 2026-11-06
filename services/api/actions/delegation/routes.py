@@ -91,7 +91,9 @@ async def grant(
 
     delegation_id = body.delegation_id or str(uuid.uuid4())
     # Insert would replace the row, rewriting the grantor or undoing a revocation.
-    if body.delegation_id and await repo.find_by_id(delegation_id) is not None:
+    existing = await repo.find_by_id(delegation_id) if body.delegation_id else None
+    # A row in another tenant falls through to insert's generic refusal.
+    if existing is not None and existing.get("tenant_id") == tenant.tenant_id:
         raise ConflictError("Delegation already exists")
     record = await repo.grant(
         delegation_id=delegation_id,

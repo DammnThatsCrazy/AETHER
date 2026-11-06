@@ -264,11 +264,20 @@ class InMemoryLineageRepository:
                     summaries += 1
                 clusters += len(self._clusters[tenant_id].pop(principal, []))
                 continue
-            for agent in wanted & set(store):
+            # A surviving row naming the subject as parent or root would carry that id into
+            # the rebuild's restatement log, so it goes too. The rebuild restores what remains.
+            doomed = wanted & set(store) | {
+                agent for agent, row in store.items()
+                if row.get("parent_agent_id") in wanted or row.get("root_agent_id") in wanted
+            }
+            for agent in doomed:
                 del store[agent]
                 rows += 1
                 self._sorted.pop((tenant_id, principal), None)
-        for agent in wanted & set(self._nodes[tenant_id]):
+        for agent in [
+            agent for agent, node in self._nodes[tenant_id].items()
+            if agent in wanted or node.get("parent_agent_id") in wanted or node.get("root_agent_id") in wanted
+        ]:
             del self._nodes[tenant_id][agent]
             nodes += 1
         # Records about other subjects keep no trace of the erased one.
@@ -282,7 +291,11 @@ class InMemoryLineageRepository:
         self._sorted_nodes.pop(tenant_id, None)
         kept = []
         for entry in self._restatements[tenant_id]:
-            if entry["principal_entity_id"] in wanted or entry["agent_entity_id"] in wanted:
+            states = [entry.get("before") or {}, entry.get("after") or {}]
+            if (
+                entry["principal_entity_id"] in wanted or entry["agent_entity_id"] in wanted
+                or any(state.get(field) in wanted for state in states for field in ("parent_agent_id", "root_agent_id"))
+            ):
                 restatements += 1
             else:
                 kept.append(entry)
@@ -599,11 +612,13 @@ class PostgresLineageRepository:
                 )
                 rows = await conn.execute(
                     "DELETE FROM principal_agent_lineage WHERE tenant_id = $1 "
-                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]))",
+                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]) "
+                    "OR parent_agent_id = ANY($2::text[]) OR root_agent_id = ANY($2::text[]))",
                     tenant_id, wanted,
                 )
                 nodes = await conn.execute(
-                    "DELETE FROM agent_lineage_nodes WHERE tenant_id = $1 AND agent_entity_id = ANY($2::text[])",
+                    "DELETE FROM agent_lineage_nodes WHERE tenant_id = $1 AND (agent_entity_id = ANY($2::text[]) "
+                    "OR parent_agent_id = ANY($2::text[]) OR root_agent_id = ANY($2::text[]))",
                     tenant_id, wanted,
                 )
                 summaries = await conn.execute(
@@ -618,7 +633,11 @@ class PostgresLineageRepository:
                 )
                 restatements = await conn.execute(
                     "DELETE FROM agent_lineage_restatements WHERE tenant_id = $1 "
-                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]))",
+                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]) "
+                    "OR before_state->>'parent_agent_id' = ANY($2::text[]) "
+                    "OR before_state->>'root_agent_id' = ANY($2::text[]) "
+                    "OR after_state->>'parent_agent_id' = ANY($2::text[]) "
+                    "OR after_state->>'root_agent_id' = ANY($2::text[]))",
                     tenant_id, wanted,
                 )
                 # Records about other subjects keep no trace of the erased one.
