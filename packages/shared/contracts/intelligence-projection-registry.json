@@ -763,7 +763,10 @@
         "entity",
         "episode",
         "journey",
-        "source"
+        "message",
+        "profile",
+        "source",
+        "thread"
       ],
       "canonicalAuthorities": [
         "campaign_touchpoints",
@@ -806,7 +809,18 @@
         "timeline",
         "evidence",
         "interactions",
-        "outcomes"
+        "outcomes",
+        "thread_summary",
+        "message_inventory",
+        "participants",
+        "campaign_links",
+        "profile_links",
+        "journey_links",
+        "response_events",
+        "agent_authorship",
+        "policy_state",
+        "risk_flags",
+        "evidence_trace"
       ],
       "supportedTemporalModes": [
         "window",
@@ -1837,11 +1851,13 @@
         "agent",
         "cluster",
         "contagion_path",
+        "conversation",
         "entity",
         "population",
         "relationship",
         "source",
-        "support_case"
+        "support_case",
+        "ticket"
       ],
       "canonicalAuthorities": [
         "actions",
@@ -1857,6 +1873,7 @@
         "graph",
         "model_governance",
         "observations",
+        "provider_connections",
         "relationship_facts",
         "risk_assessments",
         "risk_intervention_records",
@@ -1864,6 +1881,7 @@
         "risk_signals",
         "social_relationship_evidence_events",
         "source_provenance",
+        "support_case_subjects",
         "support_cases",
         "transfers"
       ],
@@ -6070,7 +6088,7 @@
         {
           "id": "thread_summary",
           "requirement": "required",
-          "description": "Bounded message-thread composition by exact provider account and thread observations; canonical Conversation membership and full history remain unknown.",
+          "description": "Bounded provider/account/thread message composition with explicit authenticated canonical Conversation membership; full upstream history remains unknown.",
           "canonicalAuthorityRefs": [
             "communication_facts"
           ],
@@ -6079,16 +6097,21 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "interactions"
+                "thread_summary"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
-                "source"
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
-          ]
+          ],
+          "partialImplementationReason": "Exact persisted authenticated membership joins canonical Conversation IDs to provider account and external thread scope. Message IDs, canonical Conversation IDs, resolved profiles and explicit episode/journey references are never inferred aliases. Historical membership replay, upstream history completeness, freshness, identity and authority remain unproven."
         },
         {
           "id": "message_inventory",
@@ -6103,13 +6126,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "timeline",
-                "evidence"
+                "message_inventory"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
-                "source"
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ]
@@ -6117,7 +6144,7 @@
         {
           "id": "participants",
           "requirement": "required",
-          "description": "Typed, source-authenticated participant role bindings joined through exact tenant-owned provider identity mappings; canonical conversation membership remains unresolved.",
+          "description": "Bounded latest authenticated participant rosters joined to explicit canonical Conversation membership and exact tenant-owned identity evidence.",
           "canonicalAuthorityRefs": [
             "communication_facts",
             "entities",
@@ -6129,15 +6156,21 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "interactions"
+                "participants"
               ],
               "subjectKinds": [
                 "agent",
-                "campaign"
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
-          "partialImplementationReason": "participant_roles_are_observed_from_signed_provider_rosters_and_exact_tenant_identity_mappings_but_canonical_conversation_membership_and_full_message_coverage_are_unresolved; provider_delegation_refs_are_not_canonical_grants"
+          "partialImplementationReason": "Complete means bounded roster evidence with exact Conversation membership, provider/account/thread, actor, event, timestamps and identity joins. Conflicting or partial latest rosters fail closed. Source authentication does not independently prove upstream authorship, historical membership, current authority, full message coverage or freshness."
         },
         {
           "id": "campaign_links",
@@ -6152,11 +6185,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "campaign_links"
               ],
               "subjectKinds": [
-                "campaign"
+                "agent",
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ]
@@ -6176,15 +6215,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "evidence"
+                "profile_links"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
                 "episode",
                 "journey",
-                "source"
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6203,15 +6244,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "evidence"
+                "journey_links"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
                 "episode",
                 "journey",
-                "source"
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6232,12 +6275,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "interactions"
+                "response_events"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
-                "source"
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6257,11 +6305,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "interactions",
-                "evidence"
+                "agent_authorship"
               ],
               "subjectKinds": [
-                "agent"
+                "agent",
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6281,14 +6335,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary"
+                "policy_state"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
                 "episode",
                 "journey",
-                "source"
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6315,11 +6372,11 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "evidence"
+                "risk_flags"
               ],
               "subjectKinds": [
                 "agent",
+                "profile",
                 "source"
               ]
             }
@@ -6339,12 +6396,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "evidence"
+                "evidence_trace"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
-                "source"
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ]
@@ -11467,12 +11529,14 @@
         {
           "id": "risk",
           "requirement": "required",
-          "description": "Risk outputs associated with the exact support case.",
+          "description": "Exact canonical case RiskAssessment and RiskSignal observations, with ticket/conversation scope admitted only through authenticated persisted subject mappings and current verified provider/account connections.",
           "canonicalAuthorityRefs": [
+            "evidence",
+            "provider_connections",
             "risk_outputs",
             "risk_signals",
-            "support_cases",
-            "evidence"
+            "support_case_subjects",
+            "support_cases"
           ],
           "projectionBindings": [
             {
@@ -11485,14 +11549,16 @@
                 "findings"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
           "implementationCrosswalk": [
             "risk_and_contagion"
           ],
-          "partialImplementationReason": "The tenant-owned support case and its exact risk assessment and signals are joined with canonical evidence; risk-history completeness, support-case freshness SLA, and business outcome remain unknown."
+          "partialImplementationReason": "Mapped ticket/conversation reads validate exact tenant, subject, case, provider, connection, account, source event and temporal evidence before Risk reads. Claims retain the requested subject and policy boundary; invalid mappings and incomplete signal reads release no partial signal evidence. Historical mappings, upstream authenticity, risk/source history completeness, freshness, business outcomes and contagion remain unknown."
         },
         {
           "id": "resolution",
@@ -11877,7 +11943,7 @@
   ],
   "productSurfaceBlueprintSource": {
     "document": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
-    "sha256": "6df463b450752b0758bc1a9c3e06445e8088836acb00899e7e21f8cc132de8f8",
+    "sha256": "b1a60301c0ebfb1dccefc23c62bd552c27c525d58ee20cf412e5979c023d6767",
     "surfaceSectionPrefix": "11.",
     "scope": "18 product surfaces; backend contract only"
   }

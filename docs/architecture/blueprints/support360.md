@@ -124,7 +124,11 @@ connection before secondary reads; communication facts must also match the case
 provider identity. Available sections mean evidence-backed bounded observations,
 not complete history or independently verified outcomes. Ticket and conversation
 subjects now dispatch these nine sections through their persisted case joins.
-Risk remains restricted to canonical support cases until its own mapped-subject
-authority path is implemented. Existing entity, agent, episode, and source
+Risk360 now admits mapped ticket/conversation subjects only after revalidating
+the persisted alias, authenticated tenant, verified current provider connection,
+selected account and canonical case before any Risk read. Claims retain their
+requested subject and slot policy; invalid mappings withhold binding evidence,
+and incomplete signal reads release no partial signal evidence. Historical
+mapped Risk reads remain unsupported. Existing entity, agent, episode, and source
 communication reads retain their exact source bindings; they do not imply
 case-only authority.

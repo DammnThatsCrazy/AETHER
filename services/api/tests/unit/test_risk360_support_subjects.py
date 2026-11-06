@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,7 +32,6 @@ from journeys.support360.subjects import (  # noqa: E402
     SupportSubjectRepository, reset_local_support_subject_store,
 )
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from shared.intelligence_projections import generated_registry  # noqa: E402
 from shared.intelligence_projections.contracts import (  # noqa: E402
     Experience360FrameRequest, Experience360PolicyDisposition, Experience360PolicyEvaluation,
     ProjectionSubject,
@@ -339,31 +337,16 @@ async def test_mapping_identity_alone_does_not_invent_risk():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["ticket", "conversation"])
-@pytest.mark.parametrize("proposed,allowed,binding_valid", [
-    (False, True, True), (True, True, True), (True, False, True), (True, True, False),
+@pytest.mark.parametrize("allowed,binding_valid", [
+    (True, True), (False, True), (True, False),
 ])
 async def test_real_support_frame_preserves_policy_subject_and_registry_boundary(
-    kind, proposed, allowed, binding_valid, monkeypatch,
+    kind, allowed, binding_valid,
 ):
     provider, request, _, _, _, _, _ = await setup_subject(kind)
     if not binding_valid:
         provider._support_subject_repository = SubjectRead(SupportSubjectRead(None, True, False))
         provider._sources = NoRiskReads()
-    if proposed:
-        surface = deepcopy(generated_registry.PRODUCT_360_SURFACE_DEFINITIONS["support360"])
-        definition = deepcopy(generated_registry.INTELLIGENCE_PROJECTION_DEFINITIONS["risk360"])
-        definition["subjectKinds"] = [*definition["subjectKinds"], "ticket", "conversation"]
-        definition["canonicalAuthorities"] = [
-            *definition["canonicalAuthorities"], "support_case_subjects", "provider_connections",
-        ]
-        risk_slot = next(slot for slot in surface["domainSlots"] if slot["id"] == "risk")
-        risk_slot["canonicalAuthorityRefs"] = [
-            *risk_slot["canonicalAuthorityRefs"], "support_case_subjects", "provider_connections",
-        ]
-        binding = risk_slot["projectionBindings"][0]
-        binding["subjectKinds"] = [*binding["subjectKinds"], "ticket", "conversation"]
-        monkeypatch.setitem(generated_registry.PRODUCT_360_SURFACE_DEFINITIONS, "support360", surface)
-        monkeypatch.setitem(generated_registry.INTELLIGENCE_PROJECTION_DEFINITIONS, "risk360", definition)
     registry = _available_registry()
     registry.register(provider)
     runtime = ProjectionRuntime(executor=ProjectionExecutor(registry=registry))
@@ -394,12 +377,12 @@ async def test_real_support_frame_preserves_policy_subject_and_registry_boundary
         ), policy_evaluator=Policy(), projection_runtime=Runtime(),
     )
     slot = frame.slots[0]
-    if proposed and allowed and binding_valid:
+    if allowed and binding_valid:
         assert len(calls) == 1
         assert slot.content and slot.claims and slot.evidenceRefs
         assert all(claim.subject == request.subject and "risk" in claim.domainSlotIds for claim in slot.claims)
         assert {ref.source for ref in slot.evidenceRefs} >= {"support_case_subjects", "support_cases"}
-    elif proposed and allowed:
+    elif allowed:
         assert len(calls) == 1
         assert provider._sources.calls == []
         assert not slot.claims and not slot.evidenceRefs

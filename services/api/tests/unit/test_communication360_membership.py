@@ -403,10 +403,29 @@ async def test_context_producer_exposes_isolated_campaign_and_resolved_journey_l
 
 
 @pytest.mark.asyncio
-async def test_real_registry_frame_membership_and_denied_sibling_isolation():
-    await write_membership()
+@pytest.mark.parametrize("slot_id", ["thread_summary", "message_inventory", "participants", "evidence_trace"])
+@pytest.mark.parametrize("subject_kind,subject_id", [
+    ("campaign", "campaign-a"),
+    ("message", "original"),
+    ("thread", "canonical-conversation-a"),
+    ("profile", "canonical-recipient-1"),
+    ("episode", "episode-a"),
+    ("journey", "journey-a"),
+    ("source", "source-a"),
+])
+async def test_real_registry_frame_membership_and_denied_sibling_isolation(subject_kind, subject_id, slot_id):
+    assertion = roster()
+    assertion.context_links.episode_ids = ["episode-a"]
+    assertion.context_links.journey_ids = ["journey-a"]
+    await write_membership(assertion)
     await silver_repository.CommsFactsRepository().upsert(silver_row())
-    provider = Communication360Provider()
+    profiles = AsyncMock()
+    profiles.resolve.return_value = ProfileLinkRead(
+        state="resolved", profile_id="canonical-recipient-1",
+        canonical_entity_id="canonical-recipient-1",
+        evidence=(EvidenceRef(id="canonical-recipient-1", type="entity", source="entity_registry"),),
+    )
+    provider = Communication360Provider(profile_link_reader=profiles)
     provider._read_risk_flags = AsyncMock(side_effect=AssertionError("denied risk read"))
     provider._read_profile_links = AsyncMock(side_effect=AssertionError("denied profile read"))
 
@@ -416,7 +435,7 @@ async def test_real_registry_frame_membership_and_denied_sibling_isolation():
                 surfaceId="communications360", tenantId=TENANT, evaluatedAt=NOW,
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "thread_summary": Experience360PolicyDisposition(state="allowed"),
+                    slot_id: Experience360PolicyDisposition(state="allowed"),
                     "risk_flags": Experience360PolicyDisposition(state="denied"),
                     "profile_links": Experience360PolicyDisposition(state="denied"),
                 },
@@ -431,12 +450,22 @@ async def test_real_registry_frame_membership_and_denied_sibling_isolation():
     frame = await build_experience360_frame(
         Experience360FrameRequest(
             surfaceId="communications360", tenantId=TENANT,
-            subject=ProjectionSubject(kind="campaign", id="campaign-a"),
-            requestedSlotIds=["thread_summary", "risk_flags", "profile_links"], includeEvidence=True,
+            subject=ProjectionSubject(kind=subject_kind, id=subject_id),
+            requestedSlotIds=[slot_id, "risk_flags", "profile_links"], includeEvidence=True,
         ), policy_evaluator=Policy(), projection_runtime=Runtime(),
     )
-    thread_slot = next(slot for slot in frame.slots if slot.id == "thread_summary")
-    assert "canonical-conversation-a" in str(thread_slot.content)
+    selected_slot = next(slot for slot in frame.slots if slot.id == slot_id)
+    assert selected_slot.content and selected_slot.evidenceRefs
+    assert [section["sectionId"] for section in selected_slot.content["sections"]] == [slot_id]
+    if slot_id == "thread_summary":
+        assert "canonical-conversation-a" in str(selected_slot.content)
+    if slot_id == "message_inventory":
+        assert selected_slot.content["sections"][0]["content"]["messages"][0]["messageId"] == "original"
+    if slot_id == "evidence_trace":
+        evidence_content = selected_slot.content["sections"][0]["content"]
+        assert evidence_content["scope"] == "bounded_current_store_observations"
+        assert evidence_content["state"] == "degraded"
+        assert evidence_content["coverage"] == "partial"
     for slot in frame.slots:
         if slot.id in {"risk_flags", "profile_links"}:
             assert slot.state == "suppressed" and not slot.content and not slot.evidenceRefs

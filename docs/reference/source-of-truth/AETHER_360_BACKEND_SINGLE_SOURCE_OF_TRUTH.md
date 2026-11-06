@@ -7,7 +7,17 @@
 
 This document replaces the prior broad 360 architecture blueprint as the implementation authority for backend work. It defines the contracts, module layout, registry, services, migrations, risk/contagion subsystem, API handlers, tests, rollout order, and acceptance gates needed to build the entire 360 system inside the repo.
 
-## Repository implementation status (2026-11-05)
+## Repository implementation status (2026-11-06)
+
+Communications360 now persists explicit authenticated provider/account/thread
+membership in canonical Conversations atomically with participant roles. The
+production registry routes all eleven required slots to isolated namesake
+sections, including canonical message/thread/profile paths and explicit
+episode/journey links. Risk remains restricted to exact agent/source/profile
+authority paths. Latest roster, identity, evidence, time and scope checks fail
+closed; denied sibling slots cannot trigger secondary reads. Bounded membership
+and reply observations do not prove historical membership, upstream authorship,
+freshness, full history, causal outcomes or current action authority.
 
 Communications360 now composes bounded provider/account/thread message groups
 from durable Silver-backed observations. The writer atomically persists the
@@ -15,8 +25,9 @@ provider-thread observation with the Silver fact, and replay retains first-write
 scope. Source-subject inventory requires an exact canonical source-reference read
 and bounded observation-to-Silver rejoin. Durable replies need no synthetic act
 to expose an explicit provider-reported reply association. These paths preserve
-unknown canonical Conversation membership, identity, authority, causal outcomes,
-upstream history completeness and freshness; they are not full product closure.
+unknown identity, authority, causal outcomes, upstream history completeness and
+freshness; canonical Conversation membership requires the separate explicit
+authenticated join, never provider-thread identifiers alone.
 
 Communications360 `response_events` now exposes bounded provider-reported reply
 associations for explicit `In-Reply-To` references. The canonical Silver payload
@@ -125,7 +136,7 @@ the limitations described here.
 - **Account360 `risk`:** keeps direct account risk separate and adds bounded member Risk360 frames from exact tenant `MEMBER_OF` edges. The account risk slot and each member `risk_summary` policy must allow the read; roster completeness, temporal member risk, related-account aggregation, and freshness remain unknown.
 - **Communications360 `risk_flags`:** reads exact-subject RiskSignals for resolved agents and sources and mapped recipient entities. All three paths require current analytics consent; recipient reads also require exact identity mappings and evidence. Message-edge transfer, composite Risk360 output, complete coverage, and freshness remain unknown.
 - **Communications360 `profile_links`:** joins explicit profile identifiers on evidence-backed communication facts to exact tenant profile records. Historical identity snapshots, temporal validity, unresolved-link coverage, and freshness remain unknown.
-- **Communications360 `participants`:** accepts typed participant-role rosters only through tenant-authenticated, HMAC-verified webhook ingestion, resolves provider recipient/profile IDs through exact tenant-owned identity mappings, and persists evidence-backed bindings in `communication360_facts`. The signature proves source authenticity, not identity; complete rosters remain partial until canonical Conversation membership and full message coverage are joined, and provider delegation references remain source claims.
+- **Communications360 `participants`:** accepts typed participant-role rosters only through tenant-authenticated, HMAC-verified webhook ingestion, resolves provider recipient/profile IDs through exact tenant-owned identity mappings, and atomically persists explicit canonical Conversation membership and evidence-backed role bindings in `communication360_facts`. A bounded complete latest roster requires the exact membership; the signature proves source authentication, not independent identity, upstream authorship, complete message coverage or current authority. Provider delegation references remain source claims.
 - **Journey360 `agent_interventions`:** joins only activity IDs explicitly recorded on the current journey version to unique current tenant-scoped agent-family journey steps, with journey-version and step evidence. Agent identity, delegated authority, intervention outcome, and full step-inventory completeness remain unknown.
 - **Journey360 `episodes`:** joins only tenant-scoped EpisodeRecords that explicitly persist the exact `journey_id`, with episode-record and source evidence. Legacy/unlinked records, relationship-population completeness, store freshness, policy, and historical replay remain unknown; absence is never inferred from a missing link.
 - **Journey360 `attribution`:** reads active completed attribution credits through same-tenant attribution runs linked to the exact current `journey_id` and `journey_version_id`. Inactive and historical runs, conversion and touchpoint resolution, policy, freshness, and causal validity remain unknown.
@@ -2505,8 +2516,11 @@ connection/source/case bindings in `support_case_subjects`; the nine isolated
 Support-owned slots revalidate those mappings before reads. Mapped conversations
 expose case context, not conversation-exclusive history. Journey-link ingestion
 persists an EpisodeRecord citing the exact case-context event when episode
-production is enabled. Risk still requires a canonical support-case subject;
-mapped-subject Risk integration remains incomplete. Upstream completeness,
+production is enabled. Risk360 now validates mapped ticket/conversation subjects
+against their persisted alias, verified current connection, selected account and
+exact canonical case before reading risk. Claims retain requested-subject scope
+and independent slot policy. Invalid mappings and incomplete signal reads
+withhold partial evidence; historical mapped reads remain unsupported. Upstream completeness,
 freshness, and independent business outcome attribution remain unverified.
 
 **Required slots:**

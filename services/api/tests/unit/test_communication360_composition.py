@@ -114,6 +114,36 @@ async def test_silver_writer_to_thread_inventory_and_response_without_synthetic_
     }
     assert source_sections["summary"]["requiredSlotCoverage"]["message_inventory"]["coverage"] == "complete"
 
+    class Policy:
+        async def evaluate(self, request):
+            return Experience360PolicyEvaluation(
+                surfaceId="communications360", tenantId=TENANT, evaluatedAt=NOW,
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={"response_events": Experience360PolicyDisposition(state="allowed")},
+            )
+
+    class Runtime:
+        async def execute_projection(self, request, **kwargs):
+            context = await ProviderRegistry().build_context("communication360", request)
+            return await Communication360Provider().project(request, context)
+
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="communications360", tenantId=TENANT,
+            subject=ProjectionSubject(kind="source", id="source-a"),
+            requestedSlotIds=["response_events"], includeEvidence=True,
+        ), policy_evaluator=Policy(), projection_runtime=Runtime(),
+    )
+    response_slot = frame.slots[0]
+    assert response_slot.evidenceRefs
+    assert [section["sectionId"] for section in response_slot.content["sections"]] == ["response_events"]
+    response_content = response_slot.content["sections"][0]["content"]
+    assert response_content["scope"] == "bounded_current_store_observations"
+    assert response_content["state"] == "degraded"
+    assert response_content["coverage"] == "partial"
+    assert response_content["responseEventLinks"][0]["responseToMessageId"] == "original"
+    assert response_content["responseEventLinks"][0]["causalStatus"] == "unverified"
+
 
 @pytest.mark.asyncio
 async def test_observation_replay_uses_persisted_first_write_not_replacement_claims():
@@ -286,8 +316,9 @@ async def test_source_inventory_survives_real_registry_frame_composition():
     inventory = next(slot for slot in frame.slots if slot.id == "message_inventory")
     assert inventory.state in {"available", "degraded"}
     assert inventory.evidenceRefs
-    timeline = next(section["content"] for section in inventory.content["sections"] if section["sectionId"] == "timeline")
-    assert [entry["messageId"] for entry in timeline["entries"]] == ["original"]
+    assert [section["sectionId"] for section in inventory.content["sections"]] == ["message_inventory"]
+    messages = inventory.content["sections"][0]["content"]["messages"]
+    assert [message["messageId"] for message in messages] == ["original"]
 
 
 @pytest.mark.asyncio

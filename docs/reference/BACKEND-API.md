@@ -33,8 +33,8 @@ source_hashes:
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
   "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
   "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
-  "services/api/intelligence/": "sha256:659b8ebd0a157d948c9859303811fa4cb68026e74813adda72a4bee0505640e8"
-  "services/api/journeys/": "sha256:8d9e10f18ae4e5d19d445d333fdf8727d3782204530e9c07dce661f3b7421998"
+  "services/api/intelligence/": "sha256:39f963f2374dbd88b1f3c6fcb7719e56324f5aa9b8e77edcccb1626d04287786"
+  "services/api/journeys/": "sha256:7f210a06ccdeefe382656cbbea0122128ac78363ad0567963b867a924c5aaf8d"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:4241c421c34c32b4249dce7d2444eaf0c54e25c650d1b9b8239eae1c9f10ba47"
@@ -1876,8 +1876,15 @@ database transaction. Communication360 composes bounded provider/account/thread
 message groups and resolves source-subject inventories through exact canonical
 source references and Silver fact rejoins. Durable Silver replies require no
 synthetic act to expose the same bounded reply association. Incomplete or
-ambiguous inventory reads are withheld; canonical Conversation membership and
-upstream completeness remain unknown. No new endpoint or migration is added.
+ambiguous inventory reads are withheld; upstream completeness remains unknown.
+Explicit authenticated webhook roster membership separately joins canonical
+Conversations to provider/account/thread scope atomically with participant
+roles. External thread IDs are never canonical Conversation aliases. All eleven
+Communications360 product slots use isolated namesake sections, with exact
+message/thread/profile routing and explicit episode/journey references. Risk
+supports only exact agent/source/profile authority paths. Historical membership,
+freshness, upstream authorship and causal outcomes remain unsupported. No new
+endpoint or migration is added.
 
 `communication360` follows the same read-only route template (every route a GET,
 tenant-scoped from the authenticated tenant, capability-gated on
@@ -2520,7 +2527,13 @@ The response returns a generated canonical `subject_id`; exact immutable replay
 returns the original mapping, while conflicts return 409. All nine Support-owned
 frame slots now route these subjects through the validated persisted case join.
 Mapped conversations expose case context, not conversation-exclusive messages.
-The Risk slot remains limited to canonical support-case subjects.
+The separately policy-gated Risk slot also accepts these persisted ticket and
+conversation subjects. Risk360 rechecks the exact mapping, current verified
+connection, selected account and canonical case before reading case-keyed risk.
+Claims remain bound to the requested subject. Invalid mappings suppress all
+Risk reads and join evidence; incomplete signal reads expose no partial signal
+evidence. Historical mapped reads, freshness, source-history completeness and
+business outcomes remain unverified.
 
 The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or

@@ -1655,8 +1655,8 @@ async def test_source_subject_without_canonical_facts_is_missing_not_zero() -> N
 @pytest.mark.parametrize(
     ("subject_kind", "reference_key", "expected_slot_ids"),
     [
-        ("episode", "episode_id", ["communications"]),
-        ("journey", "journey_id", ["communications"]),
+        ("episode", "episode_id", ["communications", "evidence_trace"]),
+        ("journey", "journey_id", ["communications", "evidence_trace"]),
         ("source", "source_id", ["evidence_trace"]),
     ],
 )

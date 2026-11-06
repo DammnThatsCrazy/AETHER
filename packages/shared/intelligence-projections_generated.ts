@@ -461,13 +461,13 @@ export const intelligenceProjectionDefinitions: Record<
     implementationState: 'implemented',
     implementationBlueprint: 'docs/architecture/blueprints/communication360.md',
     ownsCanonicalTruth: false,
-    subjectKinds: ['agent', 'campaign', 'entity', 'episode', 'journey', 'source'],
+    subjectKinds: ['agent', 'campaign', 'entity', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
     canonicalAuthorities: ['campaign_touchpoints', 'communication', 'communication_facts', 'consent_policy_decisions', 'delegations', 'entities', 'entity_registry', 'evidence', 'identity', 'journeys', 'outcomes', 'risk_assessments', 'risk_outputs', 'risk_signals'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: ['episode360', 'outcome360', 'profile360', 'relationship360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'GraphSnapshotRef', 'PageRequest', 'RelationshipRef', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'interactions', 'outcomes', 'state', 'summary', 'timeline'],
+    outputSections: ['agent_authorship', 'campaign_links', 'evidence', 'evidence_trace', 'interactions', 'journey_links', 'message_inventory', 'outcomes', 'participants', 'policy_state', 'profile_links', 'response_events', 'risk_flags', 'state', 'summary', 'thread_summary', 'timeline'],
     supportedTemporalModes: ['as_of', 'relative', 'window'],
     surfaceIds: ['profile360', 'timeline'],
     capabilityKeys: ['communication360.explore', 'communication360.read'],
@@ -1255,8 +1255,8 @@ export const intelligenceProjectionDefinitions: Record<
     implementationState: 'implemented',
     implementationBlueprint: 'docs/architecture/blueprints/risk360.md',
     ownsCanonicalTruth: false,
-    subjectKinds: ['agent', 'cluster', 'contagion_path', 'entity', 'population', 'relationship', 'source', 'support_case'],
-    canonicalAuthorities: ['actions', 'bronze_sdk_events', 'cluster_membership', 'computation', 'consent_policy_decisions', 'economic_facts', 'entity_graph', 'evidence', 'flow_trace_paths', 'flow_traces', 'graph', 'model_governance', 'observations', 'relationship_facts', 'risk_assessments', 'risk_intervention_records', 'risk_outputs', 'risk_signals', 'social_relationship_evidence_events', 'source_provenance', 'support_cases', 'transfers'],
+    subjectKinds: ['agent', 'cluster', 'contagion_path', 'conversation', 'entity', 'population', 'relationship', 'source', 'support_case', 'ticket'],
+    canonicalAuthorities: ['actions', 'bronze_sdk_events', 'cluster_membership', 'computation', 'consent_policy_decisions', 'economic_facts', 'entity_graph', 'evidence', 'flow_trace_paths', 'flow_traces', 'graph', 'model_governance', 'observations', 'provider_connections', 'relationship_facts', 'risk_assessments', 'risk_intervention_records', 'risk_outputs', 'risk_signals', 'social_relationship_evidence_events', 'source_provenance', 'support_case_subjects', 'support_cases', 'transfers'],
     hardDependencies: ['computation_substrate', 'evidence_provenance', 'model_governance'],
     projectionDependencies: ['cluster360', 'economic360', 'profile360'],
     optionalProjectionDependencies: [],
@@ -2929,8 +2929,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent'],
-            sectionIds: ['evidence', 'interactions']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['agent_authorship']
           }
         ],
         requirement: 'required'
@@ -2944,8 +2944,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['campaign'],
-            sectionIds: ['evidence', 'state']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['campaign_links']
           }
         ]
       },
@@ -2958,8 +2958,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign', 'source'],
-            sectionIds: ['evidence']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['evidence_trace']
           }
         ]
       },
@@ -2972,8 +2972,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'source'],
-            sectionIds: ['evidence', 'summary']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['journey_links']
           }
         ],
         requirement: 'required'
@@ -2987,22 +2987,22 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign', 'source'],
-            sectionIds: ['evidence', 'timeline']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['message_inventory']
           }
         ]
       },
       {
         canonicalAuthorityRefs: ['communication_facts', 'entities', 'evidence', 'identity'],
-        description: 'Typed, source-authenticated participant role bindings joined through exact tenant-owned provider identity mappings; canonical conversation membership remains unresolved.',
+        description: 'Bounded latest authenticated participant rosters joined to explicit canonical Conversation membership and exact tenant-owned identity evidence.',
         id: 'participants',
-        partialImplementationReason: 'participant_roles_are_observed_from_signed_provider_rosters_and_exact_tenant_identity_mappings_but_canonical_conversation_membership_and_full_message_coverage_are_unresolved; provider_delegation_refs_are_not_canonical_grants',
+        partialImplementationReason: 'Complete means bounded roster evidence with exact Conversation membership, provider/account/thread, actor, event, timestamps and identity joins. Conflicting or partial latest rosters fail closed. Source authentication does not independently prove upstream authorship, historical membership, current authority, full message coverage or freshness.',
         projectionBindings: [
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign'],
-            sectionIds: ['interactions']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['participants']
           }
         ],
         requirement: 'required'
@@ -3017,8 +3017,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'source'],
-            sectionIds: ['summary']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['policy_state']
           }
         ],
         requirement: 'required'
@@ -3032,8 +3032,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'source'],
-            sectionIds: ['evidence', 'summary']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['profile_links']
           }
         ],
         requirement: 'required'
@@ -3047,8 +3047,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign', 'source'],
-            sectionIds: ['interactions']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['response_events']
           }
         ],
         requirement: 'required'
@@ -3062,25 +3062,26 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'source'],
-            sectionIds: ['evidence', 'summary']
+            subjectKinds: ['agent', 'profile', 'source'],
+            sectionIds: ['risk_flags']
           }
         ],
         requirement: 'required'
       },
       {
-        id: 'thread_summary',
-        requirement: 'required',
-        description: 'Bounded message-thread composition by exact provider account and thread observations; canonical Conversation membership and full history remain unknown.',
         canonicalAuthorityRefs: ['communication_facts'],
+        description: 'Bounded provider/account/thread message composition with explicit authenticated canonical Conversation membership; full upstream history remains unknown.',
+        id: 'thread_summary',
+        partialImplementationReason: 'Exact persisted authenticated membership joins canonical Conversation IDs to provider account and external thread scope. Message IDs, canonical Conversation IDs, resolved profiles and explicit episode/journey references are never inferred aliases. Historical membership replay, upstream history completeness, freshness, identity and authority remain unproven.',
         projectionBindings: [
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign', 'source'],
-            sectionIds: ['interactions', 'summary']
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'message', 'profile', 'source', 'thread'],
+            sectionIds: ['thread_summary']
           }
-        ]
+        ],
+        requirement: 'required'
       }
     ],
     freshnessPolicy: {
@@ -6004,16 +6005,16 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['evidence', 'risk_outputs', 'risk_signals', 'support_cases'],
-        description: 'Risk outputs associated with the exact support case.',
+        canonicalAuthorityRefs: ['evidence', 'provider_connections', 'risk_outputs', 'risk_signals', 'support_case_subjects', 'support_cases'],
+        description: 'Exact canonical case RiskAssessment and RiskSignal observations, with ticket/conversation scope admitted only through authenticated persisted subject mappings and current verified provider/account connections.',
         id: 'risk',
         implementationCrosswalk: ['risk_and_contagion'],
-        partialImplementationReason: 'The tenant-owned support case and its exact risk assessment and signals are joined with canonical evidence; risk-history completeness, support-case freshness SLA, and business outcome remain unknown.',
+        partialImplementationReason: 'Mapped ticket/conversation reads validate exact tenant, subject, case, provider, connection, account, source event and temporal evidence before Risk reads. Claims retain the requested subject and policy boundary; invalid mappings and incomplete signal reads release no partial signal evidence. Historical mappings, upstream authenticity, risk/source history completeness, freshness, business outcomes and contagion remain unknown.',
         projectionBindings: [
           {
             projectionId: 'risk360',
             role: 'primary',
-            subjectKinds: ['support_case'],
+            subjectKinds: ['conversation', 'support_case', 'ticket'],
             sectionIds: ['evidence', 'findings', 'state', 'summary']
           }
         ],

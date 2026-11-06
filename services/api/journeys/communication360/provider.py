@@ -2552,8 +2552,14 @@ class Communication360Provider:
                         if row.get("kind") == "participant_binding"
                         and _trusted_participant_source_evidence(row)
                     ]
+                observed = bool(content.get("evidenceRefs")) and content["state"] not in {
+                    "unknown", "suppressed",
+                }
                 domain_sections.append(ProjectionSection(
-                    id=section_id, state=content["state"], content=content,
+                    id=section_id,
+                    state="available" if observed else content["state"],
+                    content={"scope": "bounded_current_store_observations", **content},
+                    warnings=[content["reason"]] if content.get("reason") else [],
                 ))
             sections = [section for section in sections if section.id in request.includeSections]
             sections.extend(domain_sections)

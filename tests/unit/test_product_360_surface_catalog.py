@@ -63,7 +63,8 @@ def test_support_mapped_subjects_route_all_owned_slots_without_expanding_risk() 
             assert binding["sectionIds"] == [f"support_{slot['id']}"]
             assert {"ticket", "conversation"} <= set(binding["subjectKinds"])
         if slot["id"] == "risk":
-            assert all(binding["subjectKinds"] == ["support_case"] for binding in slot["projectionBindings"])
+            assert {"support_case_subjects", "provider_connections"} <= set(slot["canonicalAuthorityRefs"])
+            assert all(set(binding["subjectKinds"]) == {"support_case", "ticket", "conversation"} for binding in slot["projectionBindings"])
 
 
 def test_communications_reply_catalog_keeps_association_and_outcome_separate() -> None:
@@ -84,7 +85,21 @@ def test_communications_durable_source_reads_reach_observational_slots() -> None
         if slot["id"] in {"thread_summary", "message_inventory", "response_events", "evidence_trace"}:
             assert "source" in slot["projectionBindings"][0]["subjectKinds"]
     thread = next(item for item in surface["domainSlots"] if item["id"] == "thread_summary")
-    assert "canonical Conversation membership and full history remain unknown" in thread["description"]
+    assert "explicit authenticated canonical Conversation membership" in thread["description"]
+    assert "full upstream history remains unknown" in thread["description"]
+
+
+def test_communications_slots_use_isolated_sections_and_exact_risk_subjects() -> None:
+    registry = _registry()
+    projection = next(item for item in registry["projections"] if item["id"] == "communication360")
+    surface = next(item for item in registry["productSurfaces"] if item["id"] == "communications360")
+    assert set(surface["subjectKinds"]) <= set(projection["subjectKinds"])
+    for slot in surface["domainSlots"]:
+        binding = slot["projectionBindings"][0]
+        assert binding["sectionIds"] == [slot["id"]]
+        assert slot["id"] in projection["outputSections"]
+        expected_subjects = {"agent", "source", "profile"} if slot["id"] == "risk_flags" else set(surface["subjectKinds"])
+        assert set(binding["subjectKinds"]) == expected_subjects
 
 
 def test_generated_catalog_exposes_all_slots_direct_providers_and_gaps() -> None:

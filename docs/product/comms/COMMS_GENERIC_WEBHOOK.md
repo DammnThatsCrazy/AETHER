@@ -17,10 +17,10 @@ source_hashes:
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
   "services/api/journeys/comms/repository.py": "sha256:77159f4735202850df8f8c8766b3676d8eb345b3c143515d527881feefab53f2"
   "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
-  "services/api/journeys/communication360/contracts.py": "sha256:f9d4b4218ed8b19f87cadea775ac6e6548beeef6c3085205d1f2418dedc70362"
+  "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
   "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
-  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/repository.py": "sha256:a6539b4af4a1c8c4c9ad14da52081fd4fe1ad375f49c4b237619e2b19e821046"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
+  "services/api/journeys/communication360/repository.py": "sha256:acd4fe9dd547ff1092511e4571910085494ba818c03d7d8efa2fe1576867b989"
 ---
 
 # Generic Signed Communications Webhook
@@ -139,8 +139,13 @@ rejected and counted (`comms_webhook_signature_failures_total`).
   resolve through the exact tenant/provider/account identity mapping before
   role facts are written. HMAC authenticates the submitting source; it does
   not independently verify participant identity or role. Provider conversation
-  IDs are not canonical Conversation IDs, so the participant slot remains
-  partial until membership and message coverage are joined.
+  IDs are not canonical Conversation IDs. An optional explicit `membership`
+  names `conversation_id`, `external_thread_id` and evidence; the writer
+  atomically persists canonical Conversation membership and role bindings,
+  rejecting conflicting reassignment. Optional `context_links` records exact
+  campaign, source, profile, journey and episode references with evidence.
+  Bounded latest-roster and membership reads can expose participant evidence,
+  but do not establish full message coverage, historical membership or freshness.
 - For connector-originated events, canonical sender/recipient identities and
   consent receipts are resolved by server-side authorities. Provider payload
   fields cannot set canonical entity IDs or consent state. Missing identity

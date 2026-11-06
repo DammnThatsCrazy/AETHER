@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:470485e19b3d98bd2811dcc16114ba2ca3d0a423e764d1f4d817bf35cd9865b5"
+  "packages/shared/": "sha256:2fc3e277476828f0f0bc3cc71abf4f6b618a4725bf70bf134f495baceeb3a4e3"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
@@ -96,10 +96,10 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:53d23de997742878b27ad968bc8b538e44b551387b252248d271b97cd75b3512"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/provider.py": "sha256:4a6d24b8c9f765dc05801de7e93c0b83f75ef35ad220d06c884b917bd91a1601"
+  "services/api/intelligence/risk360/provider.py": "sha256:aee0b1bff1e5640f03c052ef1755653f62ddd14324d618f7cf43b1fc6baa8fe0"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
-  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/provider.py": "sha256:e821aa053be704359aa8b93ed97b07b899d753a13879de019a441a40dfa84cc9"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
+  "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:9569bcf4e236e16cff12deb230a1b445986bd257b61a5ae878273a41960ed1ea"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
@@ -995,7 +995,10 @@ authenticated immutable `support_case_subjects` mappings to the exact tenant,
 case, connection, provider account, and source subject before these nine slots
 can read case context. Journey-link ingestion produces an EpisodeRecord citing
 the exact persisted context event when episode production is enabled. Mapped
-Risk subjects remain unimplemented; these paths do not prove upstream history,
+Risk subjects now resolve in Risk360 through the persisted mapping, verified
+current connection, selected account and exact case before any Risk read, while
+retaining requested-subject claims and separate slot policy. Invalid mappings
+and incomplete signal reads withhold partial evidence. These paths do not prove upstream history,
 conversation-exclusive membership, freshness, or business outcomes.
 
 Value360 can include a
@@ -1107,8 +1110,13 @@ observed provider/account/thread groups; exact source-reference queries and
 bounded Silver rejoins expose source-linked message inventory. Durable replies
 can resolve explicit provider-reported targets without synthetic acts. Replay
 retains persisted scope, and ambiguous or incomplete joins withhold inventory.
-Canonical Conversation membership, upstream history, freshness, identity,
-authority and causal outcomes remain separate unknowns.
+Explicit authenticated webhook membership now atomically persists canonical
+Conversation, provider/account/thread and participant-role joins. External thread
+IDs are not Conversation aliases. Eleven isolated product sections route exact
+message/thread/profile and explicit episode/journey reads without denied sibling
+reads; Risk remains limited to exact agent/source/profile subjects. Historical
+membership, upstream history, freshness, current authority and causal outcomes
+remain separate unknowns.
 
 The Communication360 Agent authorship slot now requires an exact canonical
 Agent entity in an author participant binding, the same tenant, explicit
@@ -1116,8 +1124,8 @@ provider account and conversation IDs, a valid role window at the recorded
 event time, and both fact and trusted source-role evidence. A loose `agent_id`,
 principal reference, or event actor cannot establish the author. Noncurrent
 frames leave authorship unknown because participant-role history cannot be
-replayed yet. The signed roster remains a source assertion; canonical
-Conversation membership and complete author coverage are still missing.
+replayed yet. The signed roster remains a source assertion; explicit canonical
+Conversation membership is separate from complete author coverage.
 
 The next backend authority slice adds append-only, tenant-owned Workflow360
 definition revisions at `/v1/workflows/definitions`. Registration stamps the

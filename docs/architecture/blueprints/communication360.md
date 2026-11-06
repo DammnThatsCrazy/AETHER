@@ -78,9 +78,35 @@ unavailable or truncated joins withhold the linked inventory. Backing outages
 remain unavailable rather than becoming available-empty reads. Durable Silver
 replies can expose exact `In-Reply-To` associations without manufacturing a
 communication act or verified author. The catalog routes source subjects to the
-thread, message, response and evidence slots. History completeness, freshness,
-canonical Conversation membership, identity, authority and causal outcomes remain
-unknown; the supported observation paths do not complete the product contract.
+thread, message, response and evidence slots. Explicit authenticated membership
+can additionally join these observations to canonical Conversations. History
+completeness, freshness, current authority and causal outcomes remain unknown.
+
+### Canonical membership and isolated product slots (2026-11-06)
+
+Signed webhook rosters may explicitly name a canonical Conversation and its
+provider/account/external-thread membership. The authenticated writer atomically
+persists the Conversation, membership and participant-role evidence; conflicting
+reassignment fails closed. Bounded readers revalidate scope, actor, event,
+timestamps, provenance, evidence and the latest roster. External thread IDs are
+never canonical Conversation aliases. Profile reads require an exact canonical
+profile/entity identity; episode and journey reads require explicit references.
+
+The production registry binds each of the eleven required product slots to its
+namesake isolated output section. Message, thread, profile, campaign, episode,
+agent, journey and source subjects use their exact canonical source paths.
+Risk is restricted to resolved agent, source and profile subjects; no message,
+thread, campaign, episode or journey risk is inferred through association.
+Denied sibling slots cannot trigger their secondary-authority reads.
+
+An isolated section may expose bounded observed evidence as available while its
+content retains degraded or partial domain coverage and explicit reasons. This
+preserves reply associations and evidence traces through frame composition
+without promoting them to complete provenance or verified outcomes.
+
+Available membership or participant evidence describes bounded current-store
+observations, not historical membership replay, upstream authorship, freshness,
+full history, causal outcomes or current action authority.
 
 Communication360 is Aether's **communication and information-flow projection** —
 a `sequence_360` over canonical communication truth for subjects of kind
@@ -181,9 +207,10 @@ table already includes this kind, so no schema migration is needed.
 The provider reads only the canonical entity-bound participant rows and
 surfaces their role evidence. It does not promote a provider conversation ID
 to a canonical `Conversation`, nor infer complete message coverage from the
-roster. Consequently a complete provider roster still produces a partial
-`participants` slot until explicit provider-thread-to-canonical-conversation
-membership is available; incomplete or unknown rosters remain partial as well.
+roster. A complete latest roster can support a bounded available `participants`
+slot only with explicit provider-thread-to-canonical-Conversation membership and
+exact identity evidence. Incomplete, conflicting or unknown rosters remain
+partial; neither roster nor membership establishes full message coverage.
 
 ### Epistemic honesty (message ≠ information; inference ≠ fact)
 

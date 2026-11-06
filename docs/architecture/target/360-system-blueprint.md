@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:75e380e1664360ef0d888f619012e75a4ffdf7feca46daf2209399c236ae666a"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:209491209fec895f441cbc2a7aace505812ad66b81f0c0ba5536bbe3f89ef083"
 ---
 
 # 360 System Blueprint
@@ -35,8 +35,13 @@ qualifying Silver messages and composes bounded provider/account/thread groups.
 Exact canonical source-reference reads rejoin Silver fact and message scope
 before exposing source-subject inventory. Explicit durable reply references can
 produce observed target associations without synthetic acts. Canonical
-Conversation membership, actor authority, causal outcomes, upstream completeness
-and freshness remain unknown; this is not full projection completion.
+Conversation membership requires a separate explicit authenticated roster join;
+the writer now persists that join atomically with participant roles. Product
+slots use eleven isolated namesake sections, including exact canonical message,
+thread and profile routing and explicit episode/journey context. Risk remains
+restricted to exact agent/source/profile paths. Historical membership, current
+actor authority, causal outcomes, upstream completeness and freshness remain
+unknown; bounded observations do not establish universal projection completeness.
 
 Execution360 `tool_calls` now separately exposes bounded server-owned MCP
 invocation results after exact execution, agent, principal, tool, resource,

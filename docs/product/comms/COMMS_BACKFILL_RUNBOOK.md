@@ -15,10 +15,10 @@ source_hashes:
   "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
   "services/api/journeys/comms/repository.py": "sha256:77159f4735202850df8f8c8766b3676d8eb345b3c143515d527881feefab53f2"
-  "services/api/journeys/communication360/contracts.py": "sha256:f9d4b4218ed8b19f87cadea775ac6e6548beeef6c3085205d1f2418dedc70362"
+  "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
   "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
-  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/repository.py": "sha256:a6539b4af4a1c8c4c9ad14da52081fd4fe1ad375f49c4b237619e2b19e821046"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
+  "services/api/journeys/communication360/repository.py": "sha256:acd4fe9dd547ff1092511e4571910085494ba818c03d7d8efa2fe1576867b989"
 ---
 
 # Communications Backfill & Replay Runbook
@@ -104,9 +104,13 @@ then writes role facts only after every participant resolves through an exact
 tenant/provider/account identity mapping. A Bronze-to-Silver replay does not
 replace that identity-bound roster writer. If roster authoring fails after the
 Bronze write, resolve the mapping issue and retry the same signed event; the
-roster facts are idempotent. Provider conversation IDs remain source claims,
-so this path does not establish canonical Conversation membership or complete
-message coverage.
+roster facts are idempotent. Explicit authenticated `membership` assertions now
+atomically persist the canonical Conversation, exact provider/account/thread
+membership and participant roles. Conflicting reassignment fails closed. Source
+thread IDs alone and ordinary Silver replay do not create membership; older
+events need an explicit signed membership assertion, not inferred links. Bounded
+latest-roster evidence does not establish historical membership, complete
+message coverage or freshness.
 
 ## Rollback
 
