@@ -10,7 +10,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE TABLE support_case_subjects (
+        CREATE TABLE IF NOT EXISTS support_case_subjects (
             tenant_id TEXT NOT NULL,
             subject_id UUID NOT NULL,
             subject_kind TEXT NOT NULL CHECK (subject_kind IN ('ticket', 'conversation')),

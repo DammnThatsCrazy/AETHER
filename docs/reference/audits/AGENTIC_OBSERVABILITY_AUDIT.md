@@ -16,7 +16,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ca1f90175874c885f94744d4a8ff74c3233eed345bdea57166449c9ca0a0be55"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:75e380e1664360ef0d888f619012e75a4ffdf7feca46daf2209399c236ae666a"
   "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
   "services/api/actions/agent/": "sha256:af00b0d15d21c37e260c09d4a88e1c301637479068b848a8a7d97656500ef6bb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -40,7 +40,7 @@ source_hashes:
   "services/api/intelligence/risk360/": "sha256:000ac8a15d0cbeb7515100f7eb586745f0f8e51675031b0880913d1b5eed6f18"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/": "sha256:c096b2b49261679c652c2ed76ebbdf7c4f9282bd5a968765f1f6580a35c59668"
-  "services/api/journeys/support360/": "sha256:e598b554f6336af7e0f8829e05a52ead0797914b220fd86148b4c59b44849a81"
+  "services/api/journeys/support360/": "sha256:9569bcf4e236e16cff12deb230a1b445986bd257b61a5ae878273a41960ed1ea"
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
@@ -622,6 +622,10 @@ selected by frame policy before secondary reads. Lifecycle events must match
 tenant, case, and provider connection; case messages must match provider identity.
 The production registry and frame tests preserve structured slot results while
 preventing denied sibling reads. Risk remains a separate Risk360 dispatch.
+Authenticated persisted ticket/conversation mappings now reach these nine
+sections only after exact tenant, case, connection, provider, account, source
+subject, and timestamp validation. They expose case context rather than
+conversation-exclusive history. Risk mapped-subject routing remains incomplete.
 
 Execution360 additionally joins an admitted external Silver telemetry event
 to one exact tenant Bronze event when ID, event type, and occurrence time match
@@ -629,8 +633,9 @@ the recorded observation envelope. It publishes sanitized ingress provenance
 and a Bronze evidence reference, with source identity and external execution
 still unknown. Support360's journey context can report an exact episode
 relation only if an EpisodeRecord cites the verified case journey-link event
-and names the same journey. No live producer currently writes that association;
-historical state, population completeness, and freshness are unproven.
+and names the same journey. Live context ingestion now writes that immutable
+association when episode production is enabled; replay repairs a failed episode
+write. Historical state, population completeness, and freshness are unproven.
 
 Execution360's `authority_check` now exposes the delegation-engine outcome
 stored in `agent_executions.policy_log.delegation_check` only when it joins to

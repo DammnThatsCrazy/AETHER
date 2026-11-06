@@ -2499,9 +2499,15 @@ Support-owned required slots now have isolated `support_<slot_id>` output
 sections selected by frame policy before secondary authority reads. Exact
 tenant/case/connection lifecycle checks precede those reads, and communications
 must match the case provider. Risk remains separately dispatched to Risk360.
-Available sections describe evidence-backed bounded observations; ticket and
-conversation case joins, upstream completeness, freshness, and independent
-business outcome attribution remain unsupported.
+Available sections describe evidence-backed bounded observations. Authenticated
+ticket and conversation mappings now persist exact tenant/provider/account/
+connection/source/case bindings in `support_case_subjects`; the nine isolated
+Support-owned slots revalidate those mappings before reads. Mapped conversations
+expose case context, not conversation-exclusive history. Journey-link ingestion
+persists an EpisodeRecord citing the exact case-context event when episode
+production is enabled. Risk still requires a canonical support-case subject;
+mapped-subject Risk integration remains incomplete. Upstream completeness,
+freshness, and independent business outcome attribution remain unverified.
 
 **Required slots:**
 

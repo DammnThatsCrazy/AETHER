@@ -30,6 +30,15 @@ support-case subjects, it joins communication facts through the exact tenant,
 provider connection, and source case ID from the canonical case record, then
 rechecks each returned fact.
 
+Ticket and conversation subjects use generated canonical UUIDs from the durable
+`support_case_subjects` authority. The authenticated ingestion route requires a
+verified connection, a selected provider account, and an existing exact case.
+Immutable mappings retain tenant, kind, account, source subject, source case,
+connection, event, actor, and timestamps. Conflicting replay is rejected; the
+case foreign key cascades retention deletion. Readers revalidate this mapping
+before projecting any of the nine isolated Support-owned slots. A mapped
+conversation exposes case context, not conversation-exclusive history.
+
 The provider emits structural interaction metadata, event timestamps, and
 evidence references. It suppresses message bodies and unresolved participant
 IDs. The case path joins persisted lifecycle events and reports communication
@@ -52,7 +61,10 @@ When an
 EpisodeRecord explicitly cites the verified case journey-link event and names
 the same journey, the provider can report that exact relation as partial
 evidence. These reads do not establish upstream event authorship, complete
-source history, or historical state.
+source history, or historical state. The journey-link ingestion path now
+persists this exact EpisodeRecord when the episode-engine feature flag is
+enabled; replay repairs a failed episode write without inventing a relation
+from a shared journey ID.
 
 ## Runtime contract
 
@@ -111,4 +123,8 @@ Lifecycle events are revalidated against the exact tenant, case, and provider
 connection before secondary reads; communication facts must also match the case
 provider identity. Available sections mean evidence-backed bounded observations,
 not complete history or independently verified outcomes. Ticket and conversation
-subjects remain unknown until their exact canonical case joins exist.
+subjects now dispatch these nine sections through their persisted case joins.
+Risk remains restricted to canonical support cases until its own mapped-subject
+authority path is implemented. Existing entity, agent, episode, and source
+communication reads retain their exact source bindings; they do not imply
+case-only authority.

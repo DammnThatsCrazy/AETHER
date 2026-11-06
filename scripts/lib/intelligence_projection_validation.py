@@ -205,6 +205,7 @@ AUTHORITY_INDEX = frozenset(
         "support_case_context_events",
         "support_cases",
         "support_case_events",
+        "support_case_subjects",
         "sync_state",
         "temporal",
         "temporal_kernel",

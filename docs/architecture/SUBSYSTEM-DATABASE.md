@@ -39,7 +39,7 @@ reviewed_source_commits:
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "config/storage_policies.yaml": "sha256:d1a4596e20e66397c024ea20d450fe8af0fc04811b6d386f1265d8ecc6568cbb"
+  "config/storage_policies.yaml": "sha256:a51af30dd5d6b9d87fb33f3b42ffa0d89aa19e9dfd3ab49eaa27e1f94c43c262"
   "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
   "services/api/actions/agent/user_agents.py": "sha256:5b0140fa8a6e2befb2d4d7de786f60999e6aa8125f57887e938e3dab08116815"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
@@ -75,6 +75,15 @@ All relational data is stored via the repository pattern in `repositories/repos.
 - `AETHER_ENV=staging/production` → PostgreSQL via `asyncpg`
 
 ## Schema
+
+`support_case_subjects` stores immutable authenticated ticket and conversation
+identities linked by a tenant/case/connection foreign key to `support_cases`.
+Uniqueness binds the provider account and source subject, and separately the
+account and source event, to prevent remapping or conflicting replay. Case
+deletion cascades these metadata-only mappings. The storage policy uses standard
+retention and hard deletion with legal-hold support; deployment requires the
+`20261105_support_case_subjects` migration. A mapping is not proof of upstream
+authorship or an independent business outcome.
 
 All tables use a JSONB document model with auto-creation:
 

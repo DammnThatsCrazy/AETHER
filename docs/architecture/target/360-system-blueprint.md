@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ca1f90175874c885f94744d4a8ff74c3233eed345bdea57166449c9ca0a0be55"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:75e380e1664360ef0d888f619012e75a4ffdf7feca46daf2209399c236ae666a"
 ---
 
 # 360 System Blueprint
@@ -55,6 +55,15 @@ activity/session coverage, policy, freshness, historical completeness, and
 continuity remain unknown; the slot and projection remain partial.
 
 ## Full product catalog and current partial slots
+
+Support360 now routes ticket and conversation subjects through authenticated,
+immutable canonical case mappings for all nine isolated Support-owned required
+slots. Producer-to-real-registry frame tests preserve slot policy isolation.
+Journey context ingestion can produce the exact episode/event relation under
+the episode-engine flag. This closes those mapping and producer paths, not
+mapped-subject Risk routing or full Support360 completion; upstream history,
+freshness, conversation-exclusive membership, and business outcomes remain
+unverified.
 
 The count below is from required slots with `partialImplementationReason` in
 the registry on this branch. The other 69 required slots have no partial flag;

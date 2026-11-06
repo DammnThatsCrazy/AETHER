@@ -11,7 +11,6 @@ import socket
 import subprocess
 import tempfile
 from datetime import datetime, timedelta, timezone
-from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -433,22 +432,9 @@ def test_subject_ingress_rejects_noncanonical_case_ids(case_id):
     ("agents", ["agents"]), ("sla", ["sla", "sla_contract"]),
     ("journey_links", ["journey_links"]), ("participants", ["participants"]),
 ])
-async def test_proposed_alias_bindings_compose_through_real_frame_without_registry_edits(
-    kind, slot_id, reads, monkeypatch,
+async def test_production_alias_bindings_compose_through_real_frame(
+    kind, slot_id, reads,
 ):
-    from shared.intelligence_projections import generated_registry
-
-    surface = deepcopy(generated_registry.PRODUCT_360_SURFACE_DEFINITIONS["support360"])
-    projection = deepcopy(generated_registry.INTELLIGENCE_PROJECTION_DEFINITIONS["support360"])
-    projection["canonicalAuthorities"] = [*projection["canonicalAuthorities"], "support_case_subjects"]
-    for slot in surface["domainSlots"]:
-        if slot["id"] in SUPPORT_SLOT_SECTIONS:
-            slot["canonicalAuthorityRefs"] = [*slot["canonicalAuthorityRefs"], "support_case_subjects"]
-            for binding in slot["projectionBindings"]:
-                if binding["projectionId"] == "support360":
-                    binding["subjectKinds"] = [*binding["subjectKinds"], "ticket", "conversation"]
-    monkeypatch.setitem(generated_registry.PRODUCT_360_SURFACE_DEFINITIONS, "support360", surface)
-    monkeypatch.setitem(generated_registry.INTELLIGENCE_PROJECTION_DEFINITIONS, "support360", projection)
     cases, subjects, _, _, record = await make_binding(kind)
     dependencies = Dependencies()
     support = provider(cases, subjects, dependencies)

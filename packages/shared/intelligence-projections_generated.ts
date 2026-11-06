@@ -1495,8 +1495,8 @@ export const intelligenceProjectionDefinitions: Record<
     implementationState: 'in_flight',
     implementationBlueprint: 'docs/architecture/blueprints/support360.md',
     ownsCanonicalTruth: false,
-    subjectKinds: ['callback', 'entity', 'support_case'],
-    canonicalAuthorities: ['agent_entities', 'communication_facts', 'episode_facts', 'evidence', 'identity', 'journeys', 'measurement_contract', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_cases'],
+    subjectKinds: ['agent', 'callback', 'conversation', 'entity', 'episode', 'source', 'support_case', 'ticket'],
+    canonicalAuthorities: ['agent_entities', 'communication_facts', 'episode_facts', 'evidence', 'identity', 'journeys', 'measurement_contract', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_case_subjects', 'support_cases'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -5850,7 +5850,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     displayName: 'Support 360',
     domainSlots: [
       {
-        canonicalAuthorityRefs: ['agent_entities', 'communication_facts', 'support_case_agent_assignment_events', 'support_cases'],
+        canonicalAuthorityRefs: ['agent_entities', 'communication_facts', 'support_case_agent_assignment_events', 'support_case_subjects', 'support_cases'],
         description: 'Validated support agent assignments and handoffs.',
         id: 'agents',
         partialImplementationReason: 'Append-only exact case assignment and handoff events resolve canonical Agent identities and assigning principals; upstream history, delegation authority, and freshness remain unknown.',
@@ -5858,14 +5858,14 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['support_case'],
+            subjectKinds: ['conversation', 'support_case', 'ticket'],
             sectionIds: ['support_agents']
           }
         ],
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['evidence', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_events', 'support_cases'],
+        canonicalAuthorityRefs: ['evidence', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_events', 'support_case_subjects', 'support_cases'],
         description: 'Canonical callback schedule and execution records joined to the exact tenant, support case, provider connection, and retained callback events.',
         id: 'callbacks',
         partialImplementationReason: 'callback_schedule_and_execution_authority_is_tenant_case_connection_scoped_but_upstream_provider_origin_and_actor_attribution_are_unverified; source_history_completeness_and_freshness_remain_unknown',
@@ -5873,14 +5873,14 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['callback', 'support_case'],
+            subjectKinds: ['callback', 'conversation', 'support_case', 'ticket'],
             sectionIds: ['support_callbacks']
           }
         ],
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['evidence', 'provider_connections', 'support_case_events', 'support_cases'],
+        canonicalAuthorityRefs: ['evidence', 'provider_connections', 'support_case_events', 'support_case_subjects', 'support_cases'],
         description: 'Exact tenant-owned support case identity and observed lifecycle state from persisted source events.',
         id: 'case_summary',
         partialImplementationReason: 'persisted_case_events_do_not_prove_source_history_completeness_or_freshness_sla',
@@ -5888,14 +5888,14 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['support_case'],
+            subjectKinds: ['conversation', 'support_case', 'ticket'],
             sectionIds: ['support_case_summary']
           }
         ],
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['communication_facts', 'evidence', 'provider_connections', 'support_case_events', 'support_cases'],
+        canonicalAuthorityRefs: ['communication_facts', 'evidence', 'provider_connections', 'support_case_events', 'support_case_subjects', 'support_cases'],
         description: 'Tenant scoped support communication metadata; bodies require separate content permission.',
         id: 'conversation_history',
         partialImplementationReason: 'Canonical support_case history joins only through the exact tenant, provider connection, and source case key; message bodies and participant identities stay suppressed without their separate authorities, source-history completeness is unverified, and no freshness SLA is available.',
@@ -5903,7 +5903,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['entity', 'support_case'],
+            subjectKinds: ['conversation', 'entity', 'support_case', 'ticket'],
             sectionIds: ['support_conversation_history']
           }
         ],
@@ -5930,7 +5930,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['communication_facts', 'evidence', 'provider_connections', 'support_case_events', 'support_cases'],
+        canonicalAuthorityRefs: ['communication_facts', 'evidence', 'provider_connections', 'support_case_events', 'support_case_subjects', 'support_cases'],
         description: 'Source references for exact support communication metadata or case lifecycle; message bodies are excluded.',
         id: 'evidence_trace',
         partialImplementationReason: 'source_history_completeness_and_freshness_sla_are_unverified',
@@ -5938,14 +5938,14 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['entity', 'support_case'],
+            subjectKinds: ['conversation', 'entity', 'support_case', 'ticket'],
             sectionIds: ['support_evidence_trace']
           }
         ],
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['episode_facts', 'journeys', 'support_case_context_events', 'support_cases'],
+        canonicalAuthorityRefs: ['episode_facts', 'journeys', 'support_case_context_events', 'support_case_subjects', 'support_cases'],
         description: 'Exact support case to journey relationships.',
         id: 'journey_links',
         partialImplementationReason: 'Append-only support case journey-link events join current exact tenant journey records. An EpisodeRecord is linked only when it names the same journey and cites the exact verified case context event; no live producer populates that relation today, and source authorship, historical state, complete population, and freshness remain unknown.',
@@ -5953,7 +5953,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['support_case'],
+            subjectKinds: ['conversation', 'support_case', 'ticket'],
             sectionIds: ['support_journey_links']
           }
         ],
@@ -5974,7 +5974,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['communication_facts', 'identity', 'provider_connections', 'support_cases'],
+        canonicalAuthorityRefs: ['communication_facts', 'identity', 'provider_connections', 'support_case_subjects', 'support_cases'],
         description: 'Case participants with identity and content policy.',
         id: 'participants',
         partialImplementationReason: 'Participants require exact support-scoped communication thread and current provider account binding; identity linkage, source history, historical membership, and freshness may remain unknown.',
@@ -5982,14 +5982,14 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['support_case'],
+            subjectKinds: ['conversation', 'support_case', 'ticket'],
             sectionIds: ['support_participants']
           }
         ],
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['support_case_events', 'support_cases'],
+        canonicalAuthorityRefs: ['support_case_events', 'support_case_subjects', 'support_cases'],
         description: 'Recorded support outcome and resolution state; lifecycle resolution alone does not prove the business outcome.',
         id: 'resolution',
         partialImplementationReason: 'exact_applied_case_lifecycle_event_and_provider_connection_evidence_support_resolved_or_closed_state; canonical_business_outcome_facts_remain_unavailable',
@@ -5997,7 +5997,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['support_case'],
+            subjectKinds: ['conversation', 'support_case', 'ticket'],
             sectionIds: ['support_resolution']
           }
         ],
@@ -6034,7 +6034,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['measurement_contract', 'support_case_context_events', 'support_cases'],
+        canonicalAuthorityRefs: ['measurement_contract', 'support_case_context_events', 'support_case_subjects', 'support_cases'],
         description: 'Support service level contract, source timer state, and versioned explicit active elapsed timer comparison.',
         id: 'sla',
         partialImplementationReason: 'Exact tenant-registered source policy revisions bind matching case timers and targets. Versioned active elapsed comparison requires complete bounded explicit start/pause/resume/stop events and retains sequence evidence; reported breaches are not measured results. Upstream authentication, historical applicability, source-history completeness, and freshness remain unknown.',
@@ -6042,7 +6042,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['support_case'],
+            subjectKinds: ['conversation', 'support_case', 'ticket'],
             sectionIds: ['support_sla']
           }
         ],
@@ -6071,7 +6071,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['entity'],
+            subjectKinds: ['agent', 'entity', 'episode', 'source'],
             sectionIds: ['evidence', 'interactions', 'outcomes', 'state', 'summary', 'timeline']
           }
         ]
@@ -6158,7 +6158,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['agent_entities', 'agent_entity', 'communication_facts', 'episode_facts', 'events', 'evidence', 'identity', 'journeys', 'measurement_contract', 'outcome_facts', 'provider_connections', 'risk_outputs', 'risk_signals', 'source_coverage', 'source_provenance', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_cases'],
+      canonicalAuthorities: ['agent_entities', 'agent_entity', 'communication_facts', 'episode_facts', 'events', 'evidence', 'identity', 'journeys', 'measurement_contract', 'outcome_facts', 'provider_connections', 'risk_outputs', 'risk_signals', 'source_coverage', 'source_provenance', 'support_callback_events', 'support_callbacks', 'support_case_agent_assignment_events', 'support_case_context_events', 'support_case_events', 'support_case_subjects', 'support_cases'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },

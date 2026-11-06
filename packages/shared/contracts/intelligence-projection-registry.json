@@ -2295,7 +2295,12 @@
       "subjectKinds": [
         "entity",
         "support_case",
-        "callback"
+        "callback",
+        "ticket",
+        "conversation",
+        "agent",
+        "episode",
+        "source"
       ],
       "canonicalAuthorities": [
         "agent_entities",
@@ -2311,7 +2316,8 @@
         "support_case_agent_assignment_events",
         "support_case_context_events",
         "support_case_events",
-        "support_cases"
+        "support_cases",
+        "support_case_subjects"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -11274,7 +11280,8 @@
             "support_cases",
             "support_case_events",
             "provider_connections",
-            "evidence"
+            "evidence",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11284,7 +11291,9 @@
                 "support_case_summary"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ]
@@ -11298,7 +11307,8 @@
             "evidence",
             "provider_connections",
             "support_cases",
-            "support_case_events"
+            "support_case_events",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11309,7 +11319,9 @@
               ],
               "subjectKinds": [
                 "entity",
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11326,7 +11338,8 @@
             "support_cases",
             "support_case_events",
             "provider_connections",
-            "evidence"
+            "evidence",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11337,7 +11350,9 @@
               ],
               "subjectKinds": [
                 "support_case",
-                "callback"
+                "callback",
+                "ticket",
+                "conversation"
               ]
             }
           ]
@@ -11350,7 +11365,8 @@
             "communication_facts",
             "identity",
             "provider_connections",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11360,7 +11376,9 @@
                 "support_participants"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11373,7 +11391,8 @@
           "canonicalAuthorityRefs": [
             "measurement_contract",
             "support_case_context_events",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11383,7 +11402,9 @@
                 "support_sla"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11397,7 +11418,8 @@
             "episode_facts",
             "journeys",
             "support_case_context_events",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11407,7 +11429,9 @@
                 "support_journey_links"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11421,7 +11445,8 @@
             "agent_entities",
             "communication_facts",
             "support_case_agent_assignment_events",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11431,7 +11456,9 @@
                 "support_agents"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11473,7 +11500,8 @@
           "description": "Recorded support outcome and resolution state; lifecycle resolution alone does not prove the business outcome.",
           "canonicalAuthorityRefs": [
             "support_cases",
-            "support_case_events"
+            "support_case_events",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11483,7 +11511,9 @@
                 "support_resolution"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11499,7 +11529,8 @@
             "evidence",
             "provider_connections",
             "support_cases",
-            "support_case_events"
+            "support_case_events",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
@@ -11510,7 +11541,9 @@
               ],
               "subjectKinds": [
                 "entity",
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ]
@@ -11562,7 +11595,10 @@
                 "outcomes"
               ],
               "subjectKinds": [
-                "entity"
+                "entity",
+                "agent",
+                "episode",
+                "source"
               ]
             }
           ]
@@ -11735,6 +11771,7 @@
           "support_case_agent_assignment_events",
           "support_case_context_events",
           "support_case_events",
+          "support_case_subjects",
           "support_cases"
         ],
         "ownsCanonicalTruth": false,
@@ -11840,7 +11877,7 @@
   ],
   "productSurfaceBlueprintSource": {
     "document": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
-    "sha256": "6c6f9ed2243ef6c7f5efe03cf897540938c7c2a3bd145ae234fa5ab7f5563668",
+    "sha256": "6df463b450752b0758bc1a9c3e06445e8088836acb00899e7e21f8cc132de8f8",
     "surfaceSectionPrefix": "11.",
     "scope": "18 product surfaces; backend contract only"
   }

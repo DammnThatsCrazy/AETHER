@@ -46,6 +46,26 @@ def test_product_surface_catalog_is_structurally_valid() -> None:
     assert validate_product_surface_catalog(_registry()) == []
 
 
+def test_support_mapped_subjects_route_all_owned_slots_without_expanding_risk() -> None:
+    registry = _registry()
+    projection = next(item for item in registry["projections"] if item["id"] == "support360")
+    assert "support_case_subjects" in projection["canonicalAuthorities"]
+    assert {"ticket", "conversation", "agent", "episode", "source"} <= set(projection["subjectKinds"])
+    surface = next(item for item in registry["productSurfaces"] if item["id"] == "support360")
+    owned = {
+        "case_summary", "conversation_history", "callbacks", "participants", "sla",
+        "journey_links", "agents", "resolution", "evidence_trace",
+    }
+    for slot in surface["domainSlots"]:
+        if slot["id"] in owned:
+            assert "support_case_subjects" in slot["canonicalAuthorityRefs"]
+            binding = next(item for item in slot["projectionBindings"] if item["projectionId"] == "support360")
+            assert binding["sectionIds"] == [f"support_{slot['id']}"]
+            assert {"ticket", "conversation"} <= set(binding["subjectKinds"])
+        if slot["id"] == "risk":
+            assert all(binding["subjectKinds"] == ["support_case"] for binding in slot["projectionBindings"])
+
+
 def test_communications_reply_catalog_keeps_association_and_outcome_separate() -> None:
     surface = next(item for item in _registry()["productSurfaces"] if item["id"] == "communications360")
     slot = next(item for item in surface["domainSlots"] if item["id"] == "response_events")

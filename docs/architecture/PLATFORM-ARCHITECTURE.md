@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:cb6add0de65172fde86cb331902639c81b1c5139129906cc2a86532438737ba6"
+  "packages/shared/": "sha256:470485e19b3d98bd2811dcc16114ba2ca3d0a423e764d1f4d817bf35cd9865b5"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
@@ -100,7 +100,7 @@ source_hashes:
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/provider.py": "sha256:e821aa053be704359aa8b93ed97b07b899d753a13879de019a441a40dfa84cc9"
-  "services/api/journeys/support360/": "sha256:e598b554f6336af7e0f8829e05a52ead0797914b220fd86148b4c59b44849a81"
+  "services/api/journeys/support360/": "sha256:9569bcf4e236e16cff12deb230a1b445986bd257b61a5ae878273a41960ed1ea"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
@@ -990,8 +990,13 @@ authentication and historical applicability remain unknown.
 Support-owned required slots now select isolated `support_<slot_id>` sections
 after frame policy. Exact lifecycle scope is validated before secondary reads,
 and permitted resolution reads do not fetch denied sibling authorities. Risk
-retains its separate Risk360 binding. These observations do not supply missing
-ticket/conversation case joins or complete upstream history.
+retains its separate Risk360 binding. Ticket and conversation subjects now use
+authenticated immutable `support_case_subjects` mappings to the exact tenant,
+case, connection, provider account, and source subject before these nine slots
+can read case context. Journey-link ingestion produces an EpisodeRecord citing
+the exact persisted context event when episode production is enabled. Mapped
+Risk subjects remain unimplemented; these paths do not prove upstream history,
+conversation-exclusive membership, freshness, or business outcomes.
 
 Value360 can include a
 persisted run/config lineage check and a separately recorded tenant-admin

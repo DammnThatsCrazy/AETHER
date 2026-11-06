@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
   "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
   "services/api/intelligence/": "sha256:659b8ebd0a157d948c9859303811fa4cb68026e74813adda72a4bee0505640e8"
-  "services/api/journeys/": "sha256:81370a8f859526d9bd475dd5288c463fb419a9ac2b8b563bf47ae814ba58b766"
+  "services/api/journeys/": "sha256:8d9e10f18ae4e5d19d445d333fdf8727d3782204530e9c07dce661f3b7421998"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:4241c421c34c32b4249dce7d2444eaf0c54e25c650d1b9b8239eae1c9f10ba47"
@@ -2510,6 +2510,17 @@ sections before reads. A permitted resolution slot does not fetch denied sibling
 authorities. Lifecycle scope must match the tenant, case, and connection;
 case-linked communications must additionally match the provider identity.
 Risk remains independently policy-gated through Risk360.
+
+`POST /v1/support/cases/subjects/ingest` requires tenant `write` permission and
+an authenticated principal. Its `connection_id` and typed `binding` name an
+existing canonical case, matching source case, provider account and source
+subject, explicit `ticket` or `conversation` kind, source event, and aware
+occurrence time. The connection must be verified and the account selected.
+The response returns a generated canonical `subject_id`; exact immutable replay
+returns the original mapping, while conflicts return 409. All nine Support-owned
+frame slots now route these subjects through the validated persisted case join.
+Mapped conversations expose case context, not conversation-exclusive messages.
+The Risk slot remains limited to canonical support-case subjects.
 
 The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or

@@ -9,7 +9,7 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "config/storage_policies.yaml": "sha256:d1a4596e20e66397c024ea20d450fe8af0fc04811b6d386f1265d8ecc6568cbb"
+  "config/storage_policies.yaml": "sha256:a51af30dd5d6b9d87fb33f3b42ffa0d89aa19e9dfd3ab49eaa27e1f94c43c262"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
   "services/api/governance/consent/erasure_jobs.py": "sha256:2761a882b5af7e261334e64c10ab3a4081c2514ff64414328c39060e4529f669"
   "services/api/governance/consent/erasure_planes.py": "sha256:b4898c154113e82c44e53d319422968ed41545b4ade66e7776e2f801b64b5822"
@@ -58,6 +58,12 @@ component, and `scripts/release/check_dsr_coverage.py` fails CI when a
   receipt; any subject erasure handling must preserve that distinction.
 
 ## Subject resolution
+
+The `support_case_subjects` storage policy classifies ticket/conversation case
+mappings as standard-retention PostgreSQL metadata with hard deletion and legal
+hold support. Its canonical case foreign key cascades case deletion. This policy
+and database cascade do not create a separate user-subject DSR erasure receipt
+or prove that a DSR request resolved and erased the mapped case.
 
 The DSR names `user_id` (and optionally the SDK `anonymous_id`). Before any
 store is touched, `resolve_subject` reads `identity_aliases` (the `user_id` and
