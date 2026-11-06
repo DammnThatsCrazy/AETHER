@@ -74,7 +74,7 @@ rests on.
 
 | Source | Evidence class | Attribution |
 |---|---|---|
-| Grant its own grantor made | `VERIFIED_AUTHORITY` | verified |
+| Grant its own grantor made, over an unowned agent or as its registered owner | `VERIFIED_AUTHORITY` | verified |
 | Agent registered by its owner | `DETERMINISTIC_BINDING` | verified |
 | Attestation | `CRYPTOGRAPHICALLY_ATTESTED` | verified |
 | Claim with a provider binding | `PROVIDER_ASSERTED` | inferred |
@@ -158,20 +158,45 @@ Risk360 assessments read them, and withdraws signals that no longer hold. A fail
 publish reports `fanout_signals_published: null` and leaves the projection correct. The
 DSR component erases those signals.
 
+## Attestation
+
+A deployment may register `attestation_public_key`, a base64 Ed25519 public key.
+Registering or rotating one needs `admin` and a named user, and an agent has one key, so
+the trust root is the tenant admin. The agent signs each event with the private key,
+which Aether never holds: `AgentTelemetryClient` does this when given
+`attestationPrivateKey`, and `attestAgentEvent` is available to other callers.
+
+The signature covers the deployment, agent, event id, type and timestamp, plus a hash of
+all properties and lineage context, so it cannot be reused for another event and no
+effect or delegation field can be added under it. An event that verifies is recorded
+`attested`, and an attested spawn from its parent is a deterministic hop. A missing or
+bad signature does not reject the event; it stays `deployment_verified`, which is not
+proof. A value that does not survive the JSON round trip the same way in both languages
+fails verification, which leaves the event unattested rather than wrongly attested.
+
+## Adjudication and calibration
+
+`PUT /v1/agent-lineage/agents/{id}/adjudication` records a named person's verdict,
+`confirmed_malicious` or `cleared`, with evidence. It needs `admin` and a user, not an
+API key. Verdicts are the only source of `confirmed_malicious`, and a principal with
+none reports `null`, because nobody having decided is not the same as none found. Only
+verified links count toward a principal's confirmed total, so a declared link cannot put
+a confirmed finding on someone; inferred ones are reported separately.
+
+`GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/calibration` reports precision and
+recall for candidate thresholds against adjudicated principals. It changes nothing and
+recommends no threshold below 50 labels per class. A person updates `fanout.POLICY`.
+
 ## Known gaps
 
-- Nothing in the platform emits `attested` execution state yet, and grants count as
-  proof only when the authenticated actor is the grantor. Until attestation exists,
-  expect most indirect links to read inferred rather than verified. This is deliberate:
-  the costly failure is a false verified link.
-- Fan-out thresholds are uncalibrated. Calibrating them needs adjudicated outcomes from
-  real traffic, which do not exist yet, so assessments carry `policy.calibrated: false`
-  and signals carry `score=None`.
-- `confirmed_malicious` stays `null` until an adjudication input is supplied.
-- `resembles_risky_behavior` (same tool set as a flagged agent), `identity_churn` and
-  `coordinated_execution_score` are simple heuristics. They are context only and can
-  never raise a principal's level.
-- Risky resources come from `risk_signals` subjects of kind wallet, account, tool,
-  provider or resource. Until the risk plane stores such subjects, that count is 0.
+- Fan-out thresholds are uncalibrated until there are enough real adjudications:
+  `policy.calibrated` stays `false`. The tooling exists, the labels do not.
+- Verified indirect links need deployments to register keys and sign events. Until they
+  do, expect most indirect links to read inferred. This is deliberate: the costly failure
+  is a false verified link.
+- A grant counts as proof only when the authenticated actor is the grantor, so tenants
+  whose user ids differ from their entity ids get no verified grants.
+- `resembles_risky_behavior`, `identity_churn` and `coordinated_execution_score` are
+  simple heuristics. They are context only and can never raise a principal's level.
 - A source ref bound two ways stays a source ref when a fact's deployment has no known
   namespace.

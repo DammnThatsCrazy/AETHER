@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Optional
 
+from shared.temporal.instant import assume_utc
+
 from shared.agent_lineage import vocabulary as vocab
 
 #: Reserved principal bucket for agents and clusters with no attributable
@@ -72,7 +74,7 @@ def attribution_for(evidence_class: Optional[str]) -> str:
 
 def _assume_utc(value: datetime) -> datetime:
     """A naive instant in evidence is read as UTC, the projector's storage zone."""
-    return datetime(*value.timetuple()[:6], value.microsecond, tzinfo=timezone.utc) if value.tzinfo is None else value
+    return assume_utc(value) if value.tzinfo is None else value
 
 
 @lru_cache(maxsize=1 << 16)

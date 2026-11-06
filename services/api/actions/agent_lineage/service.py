@@ -172,8 +172,9 @@ async def _registered_owner_bindings(tenant_id: str) -> list[PrincipalBinding]:
         offset += DELEGATION_PAGE
 
 
-#: Risk360 subject kinds that name something an agent touches rather than an agent.
-RISKY_RESOURCE_KINDS = ("wallet", "account", "tool", "provider", "resource")
+#: Risk360 subject kinds that can name something an agent touches. Wallets and accounts
+#: are usually stored as ``entity`` subjects, so that kind is matched by id.
+RISKY_RESOURCE_KINDS = ("entity", "wallet", "account", "tool", "provider", "resource")
 
 
 async def _risky_resources(tenant_id: str) -> set[str]:
@@ -185,7 +186,12 @@ async def _risky_resources(tenant_id: str) -> set[str]:
         offset = 0
         while True:
             page = await repo.list_scoped(tenant_id, {"subject_kind": kind}, limit=DELEGATION_PAGE, offset=offset)
-            found.update(subject for row in page if (subject := ref(row.get("subject_id"))))
+            found.update(
+                subject for row in page
+                if (subject := ref(row.get("subject_id")))
+                # A principal's own fan-out signal says nothing about a resource.
+                and not str(row.get("source") or "").startswith("agent_lineage_fanout.")
+            )
             if len(page) < DELEGATION_PAGE:
                 break
             offset += DELEGATION_PAGE
@@ -207,6 +213,23 @@ async def _agent_risk_flags(tenant_id: str) -> dict[str, int]:
                 counts[subject] = counts.get(subject, 0) + 1
         if len(page) < DELEGATION_PAGE:
             return counts
+        offset += DELEGATION_PAGE
+
+
+async def _agent_adjudications(tenant_id: str) -> dict[str, str]:
+    from .repository import AdjudicationRepository
+
+    repo = AdjudicationRepository()
+    verdicts: dict[str, str] = {}
+    offset = 0
+    while True:
+        page = await repo.find_many(filters={"tenant_id": tenant_id}, limit=DELEGATION_PAGE, offset=offset)
+        for row in page:
+            agent = ref(row.get("agent_entity_id"))
+            if row.get("tenant_id") == tenant_id and agent and row.get("verdict"):
+                verdicts[agent] = row["verdict"]
+        if len(page) < DELEGATION_PAGE:
+            return verdicts
         offset += DELEGATION_PAGE
 
 
@@ -302,6 +325,7 @@ class AgentLineageService:
         risk_loader: Callable[[str], Awaitable[dict[str, int]]] = _agent_risk_flags,
         resource_loader: Callable[[str], Awaitable[set[str]]] = _risky_resources,
         signal_store: Any = None,
+        adjudication_loader: Callable[[str], Awaitable[dict[str, str]]] = _agent_adjudications,
         config: LineageConfig = DEFAULT_CONFIG,
         stale_after_seconds: float = STALE_AFTER_SECONDS,
     ) -> None:
@@ -313,6 +337,7 @@ class AgentLineageService:
         self._risk_loader = risk_loader
         self._resource_loader = resource_loader
         self._signal_store = signal_store
+        self._adjudication_loader = adjudication_loader
         self._config = config
         self._stale_after = stale_after_seconds
         self._engines: OrderedDict[str, tuple[LineageEngine, str, int]] = OrderedDict()
@@ -367,6 +392,7 @@ class AgentLineageService:
         try:
             engine.set_risk_flags(await self._risk_loader(tenant_id))
             engine.set_risky_resources(await self._resource_loader(tenant_id))
+            engine.set_adjudications(await self._adjudication_loader(tenant_id))
             engine.set_pass_disclosures([])
         except Exception as exc:  # noqa: BLE001 - disclosed; lineage itself is unaffected
             logger.warning("agent_lineage_risk_flags_unavailable", extra={"error": type(exc).__name__})
@@ -574,6 +600,26 @@ class AgentLineageService:
         summary = await self.summary(tenant_id, principal)
         clusters = await self.repo.list_clusters(tenant_id, principal, None, vocab.MAX_PAGE_SIZE)
         return assess_principal(summary, clusters=clusters)
+
+    async def calibration(self, tenant_id: str) -> dict[str, Any]:
+        """Candidate thresholds against this tenant's adjudicated principals. Changes nothing."""
+        from intelligence.risk360.fanout import fanout_signals
+        from intelligence.risk360.fanout_calibration import evaluate
+
+        verdicts = await self._adjudication_loader(tenant_id)
+        labels: dict[str, bool] = {}
+        for agent, verdict in verdicts.items():
+            for row in await self.repo.rows_for_agent(tenant_id, agent):
+                if row["attribution_class"] not in ("verified", "inferred"):
+                    continue
+                principal = row["principal_entity_id"]
+                labels[principal] = labels.get(principal, False) or verdict == "confirmed_malicious"
+        points = []
+        for principal, confirmed in labels.items():
+            summary = await self.repo.summary(tenant_id, principal)
+            if summary is not None:
+                points.append({"signals": fanout_signals(summary), "confirmed": confirmed})
+        return evaluate(points)
 
     async def investigation(self, tenant_id: str, principal: str) -> dict[str, Any]:
         """Everything the operator's first screen needs, in bounded reads."""

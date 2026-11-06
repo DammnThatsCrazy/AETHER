@@ -34,9 +34,8 @@ class _MemorySignals:
 
 
 def _service(repo, fixture):
-    facts = list(fixture.facts)
-
     async def silver(tenant, cursor):
+        facts = fixture.facts
         start = int(cursor or 0)
         page = [f for f in facts[start:start + 1000]]
         next_cursor = str(start + 1000) if start + 1000 < len(facts) else None
@@ -57,8 +56,11 @@ def _service(repo, fixture):
     async def resources(tenant):
         return set()
 
+    async def adjudications(tenant):
+        return {}
+
     return AgentLineageService(
-        repo, silver_reader=silver, authority_loader=authority, binding_loader=bindings, alias_loader=aliases, risk_loader=risk, resource_loader=resources,
+        repo, silver_reader=silver, authority_loader=authority, binding_loader=bindings, alias_loader=aliases, risk_loader=risk, resource_loader=resources, adjudication_loader=adjudications,
         signal_store=_MemorySignals(),
     )
 
@@ -400,6 +402,9 @@ async def test_the_dsr_plane_erases_lineage_and_the_inputs_that_would_rebuild_it
     await RiskSignalRepository().upsert_scoped(T, signal_id, {
         "subject_kind": "entity", "subject_id": S.LEGIT_HUMAN, "source": "agent_lineage_fanout.out_of_scope_execution_rate",
     })
+    # The delegation store is the real authority source in production; the fixture's
+    # loader stands in for it here, so drop what the plane deletes there.
+    fixture.authorities[:] = [a for a in fixture.authorities if a.grantor_entity_id != S.LEGIT_HUMAN]
     try:
         receipts = await erase_agent_lineage_plane(_subject())
     finally:
@@ -411,7 +416,6 @@ async def test_the_dsr_plane_erases_lineage_and_the_inputs_that_would_rebuild_it
     assert await world["delegations"].find_by_id(world["other"]) is not None
     assert (await service.summary(T, S.LEGIT_HUMAN))["direct_agents"] is None
     assert await RiskSignalRepository().get_scoped(T, signal_id) is None
-    assert T not in service._engines
     # The registered agent stays, but it can no longer rebuild an owner link.
     config = await world["configs"].find_by_id(world["agent"])
     assert config["owner_entity_id"] is None
@@ -624,3 +628,158 @@ async def test_the_sweep_enqueues_each_tenant_once_an_hour_and_rebuilds_daily(mo
     monkeypatch.setattr(settings_module, "settings", SimpleNamespace(
         external_agent_telemetry=SimpleNamespace(registry_enabled=False)))
     assert await J.sweep_once(at, tenants=tenants, jobs=_Jobs()) == 0
+
+
+async def test_only_a_verdict_makes_activity_confirmed(fixture):
+    service = _service(InMemoryLineageRepository(), fixture)
+    await service.reconcile(T)
+    assert (await service.risk(T, S.MALICIOUS_HUMAN))["segments"]["confirmed_abusive"] is None
+
+    async def verdicts(_tenant):
+        return {"mal-1": "confirmed_malicious", "mal-2": "cleared", "unc-0": "confirmed_malicious"}
+
+    service._adjudication_loader = verdicts
+    stats = await service.reconcile(T, full=True)
+    risk = await service.risk(T, S.MALICIOUS_HUMAN)
+    assert risk["segments"]["confirmed_abusive"] == 1
+    assert risk["assessment_level"] == "confirmed_activity"
+    assert stats["fanout_signals_published"] > 0
+    claims = {r["source"]: r["claim_state"] for r in service._signal_store.rows.values()}
+    assert claims["agent_lineage_fanout.confirmed_malicious_agents"] == "verified"
+    # A verdict on an unlinked agent says nothing about any principal.
+    assert (await service.risk(T, S.LEGIT_HUMAN))["segments"]["confirmed_abusive"] is None
+
+
+async def test_calibration_reports_insufficient_labels_and_recommends_nothing(fixture):
+    service = _service(InMemoryLineageRepository(), fixture)
+
+    async def verdicts(_tenant):
+        return {"mal-1": "confirmed_malicious", "legit-1": "cleared"}
+
+    service._adjudication_loader = verdicts
+    await service.reconcile(T)
+    report = await service.calibration(T)
+    assert report["positives"] == 1 and report["negatives"] == 1
+    assert report["sufficient"] is False and report["recommended_threshold"] is None
+
+
+def test_calibration_recommends_only_with_enough_labels():
+    from intelligence.risk360.fanout_calibration import MIN_LABELS, evaluate
+
+    points = [{"signals": {"authority_failure_rate": 0.3}, "confirmed": True} for _ in range(MIN_LABELS)]
+    points += [{"signals": {"authority_failure_rate": 0.02}, "confirmed": False} for _ in range(MIN_LABELS)]
+    report = evaluate(points)
+    assert report["sufficient"] is True
+    assert report["recommended_threshold"] in (0.05, 0.1, 0.2, 0.3)
+    assert evaluate(points[:10])["recommended_threshold"] is None
+
+
+async def test_concurrent_workers_converge_and_an_erasure_stays_erased(repo, fixture):
+    import asyncio
+
+    first, second = _service(repo, fixture), _service(repo, fixture)
+    await asyncio.gather(first.reconcile(T), second.reconcile(T))
+    expected = (await first.summary(T, S.LEGIT_HUMAN))["direct_agents"]
+    assert expected == 1 and await repo.node(T, "legit-orch") is not None
+
+    fixture.authorities[:] = [a for a in fixture.authorities if a.grantor_entity_id != S.LEGIT_HUMAN]
+    await asyncio.gather(
+        first.erase_subject(T, {S.LEGIT_HUMAN}), second.reconcile(T), first.reconcile(T),
+    )
+    await second.reconcile(T)
+    assert (await second.agents(T, S.LEGIT_HUMAN, filters={"relationship": "direct"}))["items"] == []
+
+
+async def test_a_declared_link_cannot_put_a_confirmed_finding_on_someone():
+    from actions.agent_lineage.evidence import PrincipalBinding
+
+    fixture = S.Fixture(tier=1)
+    fixture.facts.append({
+        "tenant_id": T, "source_event_id": "e1", "source_event_type": "agent_task_started",
+        "agent_id": "a1", "occurred_at": "2026-11-06T10:00:00Z",
+    })
+    fixture.bindings.append(PrincipalBinding(
+        tenant_id=T, kind="agent", principal_entity_id="human:innocent", agent_entity_id="a1",
+        evidence_class="TENANT_DECLARED",
+    ))
+    service = _service(InMemoryLineageRepository(), fixture)
+
+    async def verdicts(_tenant):
+        return {"a1": "confirmed_malicious"}
+
+    service._adjudication_loader = verdicts
+    await service.reconcile(T)
+    risk = await service.risk(T, "human:innocent")
+    assert risk["segments"]["confirmed_abusive"] == 0
+    assert risk["assessment_level"] != "confirmed_activity"
+    assert not [r for r in service._signal_store.rows.values() if r["claim_state"] == "verified"]
+
+
+async def test_the_plane_honours_typed_holds_on_every_store_and_scrubs_asserters(fixture, monkeypatch):
+    from actions.agent_lineage import service as svc
+    from actions.agent_lineage.repository import AdjudicationRepository
+    from governance.consent.erasure_planes import AGENT_LINEAGE_COMPONENT, erase_agent_lineage_plane
+
+    world = await _erasure_world(fixture, monkeypatch, holds=(("agent_lineage_adjudications", "ala_held"),))
+    verdicts = AdjudicationRepository()
+    await verdicts.insert("ala_held", {
+        "id": "ala_held", "tenant_id": T, "agent_entity_id": S.LEGIT_HUMAN, "verdict": "cleared",
+    })
+    try:
+        receipts = await erase_agent_lineage_plane(_subject())
+    finally:
+        svc.set_service(None)
+    assert receipts[AGENT_LINEAGE_COMPONENT].status == "skipped_legal_hold"
+    assert await verdicts.find_by_id("ala_held") is not None
+    await verdicts.delete("ala_held")
+
+    world = await _erasure_world(fixture, monkeypatch, holds=(("x", "y"),))
+    await world["delegations"].grant("g-asserted", T, "human:other", "agent-z", {}, asserted_by_entity_id=S.LEGIT_HUMAN)
+    await world["configs"].register("cfg-asserted", "human:other", T, "m", asserted_by_entity_id=S.LEGIT_HUMAN)
+    try:
+        await erase_agent_lineage_plane(_subject())
+    finally:
+        svc.set_service(None)
+    grant = await world["delegations"].find_by_id("g-asserted")
+    config = await world["configs"].find_by_id("cfg-asserted")
+    assert grant["asserted_by_entity_id"] is None and grant["grantor_entity_id"] == "human:other"
+    assert config["asserted_by_entity_id"] is None and config["owner_entity_id"] == "human:other"
+    await world["delegations"].delete("g-asserted")
+    await world["configs"].delete("cfg-asserted")
+
+
+async def test_erasing_an_agent_removes_its_derived_copies_through_the_rebuild(monkeypatch):
+    from actions.agent_lineage import service as svc
+    from governance.consent.erasure_planes import ErasureSubject, erase_agent_lineage_plane
+    from shared.storage.lifecycle import StorageLifecycle
+
+    async def no_hold(self, tenant, store, ref):
+        return None
+
+    monkeypatch.setattr(StorageLifecycle, "active_hold", no_hold)
+    facts = [
+        {"tenant_id": T, "source_event_id": "e1", "source_event_type": "agent_subagent_spawned",
+         "agent_id": "erased", "parent_agent_ref": "erased", "child_agent_ref": "kid",
+         "occurred_at": "2026-11-06T10:00:00Z", "operator_entity_id": "human:op"},
+    ]
+    fixture = S.Fixture(tier=1, facts=facts)
+    repo = InMemoryLineageRepository()
+    service = _service(repo, fixture)
+    await service.reconcile(T)
+    assert (await repo.node(T, "kid"))["parent_agent_id"] == "erased"
+    svc.set_service(service)
+    # What the Silver plane removes before this plane runs.
+    facts.clear()
+    try:
+        await erase_agent_lineage_plane(ErasureSubject(tenant_id=T, user_id="u", entity_ids=frozenset({"erased"})))
+    finally:
+        svc.set_service(None)
+    assert await repo.node(T, "kid") is None and await repo.node(T, "erased") is None
+
+
+def test_silver_erasure_reaches_agent_reference_columns():
+    from governance.consent.erasure_planes import SILVER_SUBJECT_COLUMNS
+
+    for column in ("agent_id", "parent_agent_ref", "child_agent_ref", "delegated_to_ref", "operator_entity_id"):
+        assert column in SILVER_SUBJECT_COLUMNS
+

@@ -179,3 +179,54 @@ def test_export_goes_through_export_governance_and_needs_export_permission(popul
     assert response.status_code == 202
     assert audited[0]["export_type"] == "agent_lineage"
     assert queued[0][1]["after"] == "a1"
+
+
+def test_adjudication_needs_admin_a_named_user_and_evidence(populated):
+    path = "/v1/agent-lineage/agents/mal-1/adjudication"
+    body = {"verdict": "confirmed_malicious", "reason": "fraud confirmed", "evidence_refs": ["case-1"]}
+    assert _app(_Tenant(T, {"agent:manage"})).put(path, json=body).status_code == 403
+    key = _Tenant(T, {"agent:manage", "admin"})
+    key.user_id = None
+    assert _app(key).put(path, json=body).status_code == 400
+    admin = _app(_Tenant(T, {"agent:manage", "admin"}))
+    assert admin.put(path, json={**body, "evidence_refs": []}).status_code == 422
+    assert admin.put(path, json={**body, "verdict": "guilty"}).status_code == 422
+    response = admin.put(path, json=body)
+    assert response.status_code == 200
+    assert response.json()["data"]["adjudicated_by"] == "user-1"
+
+
+def test_registering_a_signing_key_needs_admin_a_user_and_one_key_per_agent(monkeypatch):
+    import base64
+
+    from actions.agent import deployment_routes as DR
+
+    monkeypatch.setattr(DR, "_require_registry_enabled", lambda: None)
+    rows = [{"id": "dep-held", "attestation_public_key": base64.b64encode(b"k" * 32).decode()}]
+
+    class _Repo:
+        async def list(self, tenant_id, agent_id=None, **_):
+            return rows
+
+    monkeypatch.setattr(DR, "_repo", lambda: _Repo())
+
+    class _Request:
+        def __init__(self, tenant):
+            self.state = SimpleNamespace(tenant=tenant)
+
+    import asyncio
+
+    new_key = base64.b64encode(b"n" * 32).decode()
+    with pytest.raises(ForbiddenError):
+        asyncio.run(DR._authorize_attestation_key(_Request(_Tenant(T, {"agent:manage"})), "victim", new_key))
+    keyless = _Tenant(T, {"agent:manage", "admin"})
+    keyless.user_id = None
+    from shared.common.common import BadRequestError, ConflictError
+
+    with pytest.raises(BadRequestError):
+        asyncio.run(DR._authorize_attestation_key(_Request(keyless), "victim", new_key))
+    admin = _Tenant(T, {"agent:manage", "admin"})
+    with pytest.raises(ConflictError):
+        asyncio.run(DR._authorize_attestation_key(_Request(admin), "victim", new_key))
+    asyncio.run(DR._authorize_attestation_key(_Request(admin), "victim", rows[0]["attestation_public_key"]))
+    asyncio.run(DR._authorize_attestation_key(_Request(admin), "victim", new_key, "dep-held"))

@@ -127,6 +127,8 @@ def assess_principal(
 ) -> dict[str, Any]:
     """Segment one principal's population. Scale alone never elevates anything."""
     activity = summary.get("activity") or {}
+    if confirmed_malicious_agents is None:
+        confirmed_malicious_agents = activity.get("confirmed_malicious_agents")
     agents = activity.get("agent_count")
     signals = fanout_signals(summary)
     triggered = _triggered(signals, agents)
@@ -259,5 +261,14 @@ def signals_from_assessment(
             claim_state=claim, confidence=None, evidence_refs=_refs(summary, name),
             source=f"{SOURCE}.{name}", detector_version=DETECTOR_VERSION, score=None,
             value=float(value) if value is not None else None,
+        ))
+    confirmed = assessment["segments"].get("confirmed_abusive")
+    if confirmed:
+        name = "confirmed_malicious_agents"
+        out.append(RiskSignal(
+            signal_id=_signal_id(producer=SOURCE, tenant=tenant, principal=principal, kind=name),
+            tenant_id=tenant, subject_kind=subject_kind, subject_id=principal, risk_dimension="agentic",
+            claim_state=EpistemicStatus.VERIFIED, confidence=None, evidence_refs=_refs(summary, name),
+            source=f"{SOURCE}.{name}", detector_version=DETECTOR_VERSION, score=None, value=float(confirmed),
         ))
     return out

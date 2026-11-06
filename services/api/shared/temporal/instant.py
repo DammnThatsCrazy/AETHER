@@ -97,6 +97,16 @@ def parse_instant_strict(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+#: Aware sentinels for "no time" when ordering instants.
+MIN_INSTANT = datetime.min.replace(tzinfo=timezone.utc)
+MAX_INSTANT = datetime.max.replace(tzinfo=timezone.utc)
+
+
+def assume_utc(dt: datetime) -> datetime:
+    """Stamp a wall-clock value as UTC. Callers decide when a naive value means UTC."""
+    return dt.replace(tzinfo=timezone.utc)
+
+
 def ensure_aware_utc(dt: datetime) -> datetime:
     """Require a tz-aware datetime; return it normalized to UTC."""
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:

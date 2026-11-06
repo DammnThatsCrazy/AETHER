@@ -31,6 +31,13 @@ class PrincipalBindingRepository(BaseRepository):
         super().__init__("agent_lineage_principal_bindings")
 
 
+class AdjudicationRepository(BaseRepository):
+    """A person's verdict per agent (table ``agent_lineage_adjudications``)."""
+
+    def __init__(self) -> None:
+        super().__init__("agent_lineage_adjudications")
+
+
 def validate_filters(filters: Optional[dict[str, Any]]) -> dict[str, Any]:
     clean = {key: value for key, value in (filters or {}).items() if value is not None}
     unknown = set(clean) - ROW_FILTERS

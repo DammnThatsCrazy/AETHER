@@ -21,7 +21,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError, ConflictError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient
 from shared.logger.logger import get_logger, metrics
@@ -90,6 +90,9 @@ async def grant(
         raise BadRequestError("Scope must define at least one action or resource")
 
     delegation_id = body.delegation_id or str(uuid.uuid4())
+    # Insert would replace the row, rewriting the grantor or undoing a revocation.
+    if body.delegation_id and await repo.find_by_id(delegation_id) is not None:
+        raise ConflictError("Delegation already exists")
     record = await repo.grant(
         delegation_id=delegation_id,
         tenant_id=tenant.tenant_id,

@@ -248,6 +248,37 @@ async def declare_binding(body: PrincipalBindingRequest, request: Request):
     return APIResponse(data=stored).to_dict()
 
 
+class AdjudicationRequest(BaseModel):
+    verdict: str = Field(pattern="^(confirmed_malicious|cleared)$")
+    reason: str = Field(min_length=1, max_length=2000)
+    evidence_refs: list[str] = Field(min_length=1, max_length=25)
+
+
+@router.put("/agents/{agent_id}/adjudication")
+async def adjudicate_agent(agent_id: str, body: AdjudicationRequest, request: Request):
+    """Record a person's verdict. Needs ``admin`` as well, since it sets confirmed malice."""
+    tenant_id = _tenant_id(request)
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    actor = getattr(tenant, "user_id", None)
+    if not actor:
+        # A verdict must name who made it, so an API key cannot record one.
+        raise BadRequestError("adjudication requires an authenticated user")
+    from ._common import stable_hash
+    from .repository import AdjudicationRepository
+
+    record_id = "ala_" + stable_hash(tenant_id, agent_id)
+    repo = AdjudicationRepository()
+    existing = await repo.find_by_id(record_id)
+    record = {
+        "id": record_id, "tenant_id": tenant_id, "agent_entity_id": agent_id,
+        "verdict": body.verdict, "reason": body.reason, "evidence_refs": body.evidence_refs,
+        "adjudicated_by": actor,
+    }
+    stored = await (repo.update(record_id, record) if existing else repo.insert(record_id, record))
+    return APIResponse(data=stored).to_dict()
+
+
 @router.get("/agents/{agent_id}")
 async def agent_detail(agent_id: str, request: Request):
     tenant_id = _tenant_id(request)
@@ -320,6 +351,14 @@ async def kyber_tree(
     _operator(request)
     service = await _kyber_service()
     return await _call(service.tree(tenant_id, principal_id, parent=parent, cursor=cursor, page_size=page_size))
+
+
+@kyber_router.get("/tenants/{tenant_id}/calibration")
+async def kyber_calibration(tenant_id: str, request: Request):
+    """Fan-out thresholds against adjudicated principals. Read-only; policy is changed by hand."""
+    _operator(request)
+    service = await _kyber_service()
+    return await _call(service.calibration(tenant_id))
 
 
 @kyber_router.get("/tenants/{tenant_id}/agents/{agent_id}")

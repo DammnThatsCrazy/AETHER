@@ -238,6 +238,7 @@ class LineageEngine:
         self._risk_input_seen = False
         self._risky_resources: Optional[frozenset[str]] = None
         self._risky_ancestors: set[str] = set()
+        self._adjudications: dict[str, str] = {}
         self._source_truncation: list[str] = []
         self._pass_disclosures: list[str] = []
         self._persisted_summaries: set[str] = set()
@@ -451,6 +452,10 @@ class LineageEngine:
                 self._dirty.add(agent)
         self._risk_flags = current
 
+    def set_adjudications(self, verdicts: dict[str, str]) -> None:
+        """A person's verdicts per agent. The only source of confirmed malicious."""
+        self._adjudications = dict(verdicts)
+
     def set_risky_resources(self, resources: Iterable[str]) -> None:
         """Wallets, tools and providers the risk plane flags. Input, never derived here."""
         self._risky_resources = frozenset(resources)
@@ -547,9 +552,13 @@ class LineageEngine:
             record = self._authority[key]
             if self._grantor_is_agent(record):
                 continue
+            # Only the registered owner can prove a grant over an owned agent. Otherwise
+            # any user could self-grant someone else's agent and demote its real owner.
+            owner = self._bindings.get(("agent", agent, "registry"))
+            foreign = owner is not None and owner.principal_entity_id != record.grantor_entity_id
             offer(Link(
                 principal=record.grantor_entity_id,
-                rank=_RANK_VERIFIED if record.verified else _RANK_DECLARED,
+                rank=_RANK_VERIFIED if record.verified and not foreign else _RANK_DECLARED,
                 relationship="AUTHORIZED",
                 depth=1,
                 authority_status=self._authority_status(record, node),
@@ -1354,6 +1363,22 @@ class LineageEngine:
                 sum(signatures[signature] for signature in flagged_signatures) if risk_known else None
             ),
             "largest_coordinated_group": max(coordinated.values(), default=None),
+            # No verdict on any linked agent means nobody has decided, not none found.
+            # Published as verified, so it counts proof-class links alone. A declared link
+            # must not put a confirmed finding on someone.
+            "confirmed_malicious_agents": (
+                sum(
+                    1 for row in rows
+                    if row["attribution_class"] == "verified"
+                    and self._adjudications.get(row["agent_entity_id"]) == "confirmed_malicious"
+                )
+                if any(node.agent_id in self._adjudications for node in nodes) else None
+            ),
+            "confirmed_malicious_inferred_links": sum(
+                1 for row in rows
+                if row["attribution_class"] == "inferred"
+                and self._adjudications.get(row["agent_entity_id"]) == "confirmed_malicious"
+            ),
             "shared_infra_largest_share": max(
                 (c["member_count"] for c in clusters if c["kind"] in ("infrastructure_cluster", "agent_fleet")),
                 default=0,

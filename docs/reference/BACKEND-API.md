@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:302f0ae4b1660be8472be4cf6c7963172942f3cdb7bd8f9a2f405f4c2e6ffc3d"
+  "services/api/actions/": "sha256:5d5056a7c3035cb0344665705e94f1f1b5e0f7cf507fb9692a146a4b4bfdb9d0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:c3c3578438ce7c0113a6e93fbb02885c39fadfea5842f4cbe25dd3b141e08191"
+  "services/api/governance/": "sha256:131e8a05fd8c240dd350b4c44a701e5a8d31fad2e4eeca9f0de67a6f16f76e98"
   "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:1a9b3248f06212ad116b5d3665c190fa2ed3fa139d6c8be474a76fe4ba677d43"
-  "services/api/ingestion/": "sha256:96f3a40e731d5d20a6025ad552d85ae86d45ef63f26af06af36b63a4396b0f1f"
-  "services/api/intelligence/": "sha256:782293fd8b57f8e687297f43acf40356734d9073a092b1cc66fc726f64e0da39"
-  "services/api/journeys/": "sha256:433158f452ec951c383ccc809c6ce0199e69fade890b718bff9d4c8d69b8eaa7"
+  "services/api/identity/": "sha256:6d0e30bdeedc39cf4e764f80cbb0c592732ce0beb7cf6b8a9810bc742d7e3b64"
+  "services/api/ingestion/": "sha256:5651c29d636500591ac3f80c07deb7e31557603f3b6932e8f27249f340b3c6c2"
+  "services/api/intelligence/": "sha256:2c294185922fb6778e3ce986a72cabac9b12fecb34a4793b645f58a37c047e5a"
+  "services/api/journeys/": "sha256:755ec6260dcafc3a346824500f12579b1285a58edf8cbce398fe44589fbf15bf"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:72b427f971a848bcc429c30dec93aedfe1204450cbaed259efa0fffc1eaf0e4e"
+  "services/api/value/": "sha256:cf7b9c0c9bc828dc03c3496da8cf6900ad15deee8780b7609749f43e9e0a7614"
   "services/api/workers/": "sha256:4ae415f6405dae50c4be7e9d4bdb732910789e4e11f2d409fe60554fe774e127"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -3857,6 +3857,9 @@ All routes need `agent:manage` and the deployment registry flag. Tenant scope co
 - `POST /v1/agent-lineage/principals/{id}/export` — also needs `export` or `admin`. Enqueues the extraction as a job; `GET /v1/agent-lineage/exports/{job_id}` reports it. Each part holds at most 50,000 rows of evidence fields. A part with `rows_remaining: 1` continues with `after` set to its last agent id.
 - `GET /v1/agent-lineage/agents/{id}` — Agent360 lineage block: hierarchy, principals, ancestors, counts, effects, outcomes, evidence. `/counts`, `/descendants` (cursor) and `/ancestors` read parts of it.
 - `POST /v1/agent-lineage/reconcile` — enqueues the durable `agent_lineage.reconcile` job, which folds new evidence; `full=true` rebuilds and logs restatements. The `agent_lineage_reconcile_sweep` worker runs this hourly per tenant, with a daily full rebuild for facts arriving with old timestamps.
+- Deployment `attestation_public_key` (`POST`/`PATCH /v1/agent/deployments`) — needs `admin` and an authenticated user, and one key per agent. Events signed with its private key are recorded `attested`.
+- `PUT /v1/agent-lineage/agents/{id}/adjudication` — also needs `admin` and an authenticated user. Records a verdict (`confirmed_malicious` or `cleared`) with a reason and evidence. The next reconcile applies it.
+- `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/calibration` — `admin` and the Kyber telemetry flag. Precision and recall of candidate fan-out thresholds against adjudicated principals. Read-only; no threshold is recommended below 50 labels per class.
 - `POST /v1/agent-lineage/bindings` — records a tenant's declaration of a principal link. No evidence class is accepted: declarations are stored `TENANT_DECLARED` and resolve as inferred at most.
 - `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/principals/{id}/investigation` — `admin` and the Kyber telemetry flag. The operator's first screen in bounded reads, with `/agents`, `/tree` and `/tenants/{tenant}/agents/{id}` for drilldown.
 

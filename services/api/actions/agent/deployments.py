@@ -192,6 +192,8 @@ class AgentDeployment(BaseModel):
     # Runtime identity namespace is distinct from marketplace_origin.source_namespace.
     # Legacy deployments without it remain unbound for canonical authorization.
     agent_source_namespace: Optional[str] = Field(default=None, max_length=64)
+    # Base64 Ed25519 public key. Events signed with its private key are ``attested``.
+    attestation_public_key: Optional[str] = Field(default=None, max_length=64)
     display_name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     external_platform: ExternalPlatform
@@ -258,6 +260,15 @@ class AgentDeployment(BaseModel):
                     f"Capability scopes must be 1-{_MAX_CAPABILITY_SCOPE_LENGTH} characters"
                 )
         return v
+
+    @field_validator("attestation_public_key")
+    @classmethod
+    def _validate_attestation_public_key(cls, value: Optional[str]) -> Optional[str]:
+        from actions.agent.attestation import is_valid_public_key
+
+        if value is not None and not is_valid_public_key(value):
+            raise ValueError("attestation_public_key must be a base64 Ed25519 public key")
+        return value
 
     @field_validator("agent_source_namespace")
     @classmethod
@@ -417,7 +428,7 @@ class AgentDeploymentRepository:
         return sorted(records, key=lambda r: r.get("updated_at", ""), reverse=True)
 
     # Mutable via PATCH — everything else is server-owned or lifecycle-owned.
-    MUTABLE_FIELDS: frozenset[str] = frozenset({
+    MUTABLE_FIELDS: frozenset[str] = frozenset({"attestation_public_key", 
         "display_name", "description", "metadata", "allowed_event_families",
         "required_consent_purposes", "capability_scopes", "consent_mode",
     })

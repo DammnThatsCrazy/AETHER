@@ -530,3 +530,18 @@ def test_a_ref_in_someone_elses_spawn_cannot_turn_a_principal_into_an_agent():
     engine.resolve()
     assert _row(engine, "a")["attribution_class"] == "verified"
     assert ("human:q", "a") not in engine.rows()
+
+
+def test_a_self_grant_over_an_owned_agent_is_not_proof_and_keeps_the_owner():
+    engine = LineageEngine(T)
+    engine.upsert_binding(PrincipalBinding(
+        tenant_id=T, kind="agent", principal_entity_id="human:owner", agent_entity_id="a",
+        evidence_class="DETERMINISTIC_BINDING", source="registry",
+    ))
+    engine.upsert_authority(_grant("a", principal="human:attacker"))
+    engine.upsert_authority(_grant("a", principal="human:owner"))
+    engine.ingest([_fact("a")])
+    engine.resolve()
+    assert _row(engine, "a", "human:owner")["attribution_class"] == "verified"
+    assert _row(engine, "a", "human:attacker")["attribution_class"] == "unresolved"
+

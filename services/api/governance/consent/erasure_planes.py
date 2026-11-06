@@ -1057,6 +1057,10 @@ SILVER_SUBJECT_COLUMNS: tuple[str, ...] = (
     "user_id", "anonymous_id", "actor_id", "profile_id", "entity_id",
     "canonical_entity_id", "canonical_entity_ref", "canonical_profile_id",
     "sender_entity_id", "recipient_entity_id", "subject_ref", "owner_entity_id",
+    # Agent execution facts name subjects in these too; a survivor rebuilds lineage.
+    "agent_id", "parent_agent_ref", "child_agent_ref", "root_agent_ref", "delegated_to_ref",
+    "principal_id", "reported_principal_ref", "canonical_principal_entity_id",
+    "initiator_entity_id", "executor_entity_id", "operator_entity_id", "beneficiary_entity_id",
 )
 
 # Silver tables erased by ANOTHER component (never double-owned):
@@ -1509,38 +1513,52 @@ async def _erase_fanout_signals(tenant_id: str, refs: Iterable[str]) -> int:
 async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receipt]:
     """Erase the lineage read model and the inputs that would rebuild it for this subject.
 
-    Delegations naming the subject are deleted and registered agents they own lose
-    the owner, because either would re-attribute the agent on the next rebuild. Each
-    affected row is checked for a legal hold first, on its counterparty and its own id
-    as well as the subject, and only rows that were checked are changed. A hold skips
-    the whole plane. The read-model erase runs last and bumps a generation that makes
-    any worker holding an older fold discard it and any in-flight write fail.
+    Every affected row is listed first and checked for a legal hold, on its counterparty
+    and its own id as well as the subject, and only checked rows change. A hold skips the
+    whole plane. The read-model erase bumps a generation so any worker holding an older
+    fold discards it and any in-flight write fails. A full rebuild then runs from the
+    evidence that remains, which removes every derived copy of the subject's id.
     """
-    from actions.agent_lineage.repository import PrincipalBindingRepository
+    from actions.agent_lineage.repository import AdjudicationRepository, PrincipalBindingRepository
     from actions.agent_lineage.service import get_service
     from repositories.repos import AgentConfigRepository, DelegationRepository
     from shared.storage.lifecycle import StorageLifecycle
 
     tenant = subject.tenant_id
+    refs = subject.refs
     delegations = DelegationRepository()
     configs = AgentConfigRepository()
-    grants: dict[str, dict] = {}
-    for field in ("grantor_entity_id", "grantee_entity_id"):
-        for row in await _rows_naming(delegations, tenant, field, subject.refs):
-            grants[str(row.get("id") or row.get("delegation_id"))] = row
-    owned = await _rows_naming(configs, tenant, "owner_entity_id", subject.refs)
+    bindings = PrincipalBindingRepository()
+    adjudications = AdjudicationRepository()
 
-    checks: set[tuple[str, str]] = {(AGENT_LINEAGE_COMPONENT, ref) for ref in subject.refs}
-    checks.update(("delegations", ref) for ref in subject.refs)
-    checks.update(("agent_configs", ref) for ref in subject.refs)
-    for grant_id, row in grants.items():
+    async def rows_by_id(repo: Any, *fields: str) -> dict[str, dict]:
+        found: dict[str, dict] = {}
+        for field in fields:
+            for row in await _rows_naming(repo, tenant, field, refs):
+                found[str(row.get("id") or row.get("delegation_id") or row.get("agent_id"))] = row
+        return found
+
+    grants = await rows_by_id(delegations, "grantor_entity_id", "grantee_entity_id")
+    grants_asserted = await rows_by_id(delegations, "asserted_by_entity_id", "revoked_by_entity_id")
+    agents_owned = await rows_by_id(configs, "owner_entity_id", "asserted_by_entity_id")
+    agents_subject = await rows_by_id(configs, "agent_id")
+    declared = await rows_by_id(bindings, "principal_entity_id", "agent_entity_id")
+    verdicts = await rows_by_id(adjudications, "agent_entity_id", "adjudicated_by")
+
+    checks: set[tuple[str, str]] = {
+        (store, ref) for ref in refs
+        for store in (AGENT_LINEAGE_COMPONENT, "delegations", "agent_configs", "risk_signals",
+                      "agent_lineage_principal_bindings", "agent_lineage_adjudications")
+    }
+    for grant_id, row in {**grants, **grants_asserted}.items():
         checks.add(("delegations", grant_id))
-        for field in ("grantor_entity_id", "grantee_entity_id"):
-            if row.get(field):
-                checks.add(("delegations", str(row[field])))
-    for row in owned:
-        if row.get("agent_id"):
-            checks.add(("agent_configs", str(row["agent_id"])))
+        checks.update(
+            ("delegations", str(row[field]))
+            for field in ("grantor_entity_id", "grantee_entity_id") if row.get(field)
+        )
+    checks.update(("agent_configs", config_id) for config_id in {*agents_owned, *agents_subject})
+    checks.update(("agent_lineage_principal_bindings", binding_id) for binding_id in declared)
+    checks.update(("agent_lineage_adjudications", verdict_id) for verdict_id in verdicts)
     lifecycle = StorageLifecycle()
     for store, ref in sorted(checks):
         hold = await lifecycle.active_hold(tenant, store, ref)
@@ -1554,19 +1572,32 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
             }
 
     changed = 0
-    for grant_id in grants:
-        if await delegations.delete(grant_id):
+    for repo, rows in ((delegations, grants), (configs, agents_subject), (bindings, declared), (adjudications, verdicts)):
+        for row_id in rows:
+            if await repo.delete(row_id):
+                changed += 1
+    # These survive with the subject's name removed. A grant its asserter no longer
+    # backs stops being proof, and a registered agent stays but loses its owner.
+    for grant_id, row in grants_asserted.items():
+        if grant_id not in grants:
+            scrubbed = {
+                field: None for field in ("asserted_by_entity_id", "revoked_by_entity_id")
+                if row.get(field) in refs
+            }
+            await delegations.update(grant_id, {**row, **scrubbed})
             changed += 1
-    for row in owned:
-        config_id = str(row.get("id") or row.get("agent_id"))
-        await configs.update(config_id, {**row, "owner_entity_id": None, "owner_erased": True})
-        changed += 1
-    bindings = PrincipalBindingRepository()
-    for field in ("principal_entity_id", "agent_entity_id"):
-        changed += await bindings.delete_for_tenant_where(tenant, field, subject.refs)
-    counts = await (await get_service()).erase_subject(tenant, subject.refs)
+    for config_id, row in agents_owned.items():
+        if config_id not in agents_subject:
+            cleared = {"asserted_by_entity_id": None} if row.get("asserted_by_entity_id") in refs else {}
+            if row.get("owner_entity_id") in refs:
+                cleared.update(owner_entity_id=None, owner_erased=True)
+            await configs.update(config_id, {**row, **cleared})
+            changed += 1
+    service = await get_service()
+    counts = await service.erase_subject(tenant, refs)
     # Published after the generation bump, so no in-flight reconcile can restore these.
-    changed += await _erase_fanout_signals(tenant, subject.refs)
+    changed += await _erase_fanout_signals(tenant, refs)
+    await service.reconcile(tenant, full=True)
     return {
         AGENT_LINEAGE_COMPONENT: Receipt(records_impacted=sum(counts.values()) + changed)
     }
