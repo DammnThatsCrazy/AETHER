@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:393c63e391f846dad10b493047a03d2561601e7fdba2872ee368afe64247b56f"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0ff302e95a54e7a23c2626b0bc5a873b876a126f564e5c162703e0624efe1263"
 ---
 
 # 360 System Blueprint
@@ -149,6 +149,12 @@ start/pause/resume/stop sequences with that target, excluding pauses and retaini
 sequence evidence. This is locally measured timer semantics, not an authenticated
 upstream breach. Historical applicability, source completeness, and freshness
 remain unknown.
+Support-owned required slots select isolated `support_<slot_id>` sections after
+frame policy, preserving structured bounded observations without reading denied
+sibling authorities. Lifecycle scope and case message provider identity are
+revalidated. Risk keeps its independent Risk360 binding; ticket/conversation case
+joins, upstream history completeness, and independent business outcomes remain
+unsupported.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link
 to a current exact cluster definition and consent-scoped cluster or cohort
 memberships backed by graph-ledger replay. A policy-authorized bounded graph

@@ -1501,7 +1501,7 @@ export const intelligenceProjectionDefinitions: Record<
     projectionDependencies: [],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'PageRequest', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'interactions', 'outcomes', 'state', 'summary', 'timeline'],
+    outputSections: ['evidence', 'interactions', 'outcomes', 'state', 'summary', 'support_agents', 'support_callbacks', 'support_case_summary', 'support_conversation_history', 'support_evidence_trace', 'support_journey_links', 'support_participants', 'support_resolution', 'support_sla', 'timeline'],
     supportedTemporalModes: ['window'],
     surfaceIds: ['support360'],
     capabilityKeys: ['support360.explore', 'support360.read'],
@@ -5859,7 +5859,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['support_case'],
-            sectionIds: ['evidence', 'state']
+            sectionIds: ['support_agents']
           }
         ],
         requirement: 'required'
@@ -5874,7 +5874,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['callback', 'support_case'],
-            sectionIds: ['evidence', 'state', 'timeline']
+            sectionIds: ['support_callbacks']
           }
         ],
         requirement: 'required'
@@ -5889,7 +5889,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['support_case'],
-            sectionIds: ['evidence', 'state', 'summary']
+            sectionIds: ['support_case_summary']
           }
         ],
         requirement: 'required'
@@ -5904,7 +5904,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['entity', 'support_case'],
-            sectionIds: ['interactions']
+            sectionIds: ['support_conversation_history']
           }
         ],
         requirement: 'required'
@@ -5939,7 +5939,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['entity', 'support_case'],
-            sectionIds: ['evidence', 'state', 'summary']
+            sectionIds: ['support_evidence_trace']
           }
         ],
         requirement: 'required'
@@ -5954,7 +5954,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['support_case'],
-            sectionIds: ['evidence', 'state']
+            sectionIds: ['support_journey_links']
           }
         ],
         requirement: 'required'
@@ -5983,7 +5983,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['support_case'],
-            sectionIds: ['evidence', 'interactions']
+            sectionIds: ['support_participants']
           }
         ],
         requirement: 'required'
@@ -5998,7 +5998,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['support_case'],
-            sectionIds: ['outcomes', 'state']
+            sectionIds: ['support_resolution']
           }
         ],
         requirement: 'required'
@@ -6043,7 +6043,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             projectionId: 'support360',
             role: 'primary',
             subjectKinds: ['support_case'],
-            sectionIds: ['evidence', 'state']
+            sectionIds: ['support_sla']
           }
         ],
         requirement: 'required'

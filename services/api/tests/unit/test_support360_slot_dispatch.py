@@ -169,6 +169,11 @@ def test_every_required_support_owned_slot_has_an_isolated_dispatch_section():
         and any(binding["projectionId"] == "support360" for binding in slot["projectionBindings"])
     }
     assert set(SUPPORT_SLOT_SECTIONS) == owned_required_slots
+    for slot in slots:
+        if slot["id"] in SUPPORT_SLOT_SECTIONS:
+            for binding in slot["projectionBindings"]:
+                if binding["projectionId"] == "support360":
+                    assert tuple(binding["sectionIds"]) == (SUPPORT_SLOT_SECTIONS[slot["id"]],)
     risk = next(slot for slot in slots if slot["id"] == "risk")
     assert {binding["projectionId"] for binding in risk["projectionBindings"]} == {"risk360"}
 
@@ -239,17 +244,10 @@ async def test_case_communication_provider_identity_is_rechecked(provider):
 
 
 @pytest.mark.asyncio
-async def test_rebound_frame_preserves_structured_resolution_and_denies_sibling_reads(monkeypatch):
+async def test_frame_preserves_structured_resolution_and_denies_sibling_reads():
     cases, case = await _case()
     dependencies = Dependencies()
     provider = _provider(cases, dependencies)
-    surface = deepcopy(PRODUCT_360_SURFACE_DEFINITIONS["support360"])
-    for slot in surface["domainSlots"]:
-        if slot["id"] in SUPPORT_SLOT_SECTIONS:
-            for binding in slot["projectionBindings"]:
-                binding["sectionIds"] = [SUPPORT_SLOT_SECTIONS[slot["id"]]]
-    monkeypatch.setitem(PRODUCT_360_SURFACE_DEFINITIONS, "support360", surface)
-
     class Policy:
         async def evaluate(self, request):
             return Experience360PolicyEvaluation(

@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:2c6aad548830452a36ede201c05fba0ada0fffb575847c28d0b2507600892cf1"
+  "packages/shared/": "sha256:05cbcf010d4a517d094e34c820a38123aae827d8d4340ef43aa1db820586eab1"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
@@ -100,7 +100,7 @@ source_hashes:
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
   "services/api/journeys/communication360/provider.py": "sha256:288a68882c5c9518bac3a46d66657b25d0d4585e86bb80fcf9b5a24976186e20"
-  "services/api/journeys/support360/": "sha256:53c95f3ae62972de99334412228b49ef8c7f34d60b597f39de6d7965ccee5c3a"
+  "services/api/journeys/support360/": "sha256:e598b554f6336af7e0f8829e05a52ead0797914b220fd86148b4c59b44849a81"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
@@ -986,7 +986,14 @@ calculation now compares complete explicit start/pause/resume/stop sequences
 with the registered target, excludes pauses, and retains sequence event IDs.
 This local measurement rejects future timestamps, mixed policy revisions,
 conflicting targets, ambiguous ordering, and incomplete reads; upstream
-authentication and historical applicability remain unknown. Value360 can include a
+authentication and historical applicability remain unknown.
+Support-owned required slots now select isolated `support_<slot_id>` sections
+after frame policy. Exact lifecycle scope is validated before secondary reads,
+and permitted resolution reads do not fetch denied sibling authorities. Risk
+retains its separate Risk360 binding. These observations do not supply missing
+ticket/conversation case joins or complete upstream history.
+
+Value360 can include a
 persisted run/config lineage check and a separately recorded tenant-admin
 approval or rejection bound to that exact run, configuration, and validation
 decision. Current configuration rows are mutable; the human approval record

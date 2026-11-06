@@ -2331,7 +2331,16 @@
         "timeline",
         "evidence",
         "interactions",
-        "outcomes"
+        "outcomes",
+        "support_case_summary",
+        "support_conversation_history",
+        "support_callbacks",
+        "support_participants",
+        "support_sla",
+        "support_journey_links",
+        "support_agents",
+        "support_resolution",
+        "support_evidence_trace"
       ],
       "supportedTemporalModes": [
         "window"
@@ -11268,9 +11277,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "state",
-                "evidence"
+                "support_case_summary"
               ],
               "subjectKinds": [
                 "support_case"
@@ -11294,7 +11301,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "interactions"
+                "support_conversation_history"
               ],
               "subjectKinds": [
                 "entity",
@@ -11322,9 +11329,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "timeline",
-                "evidence"
+                "support_callbacks"
               ],
               "subjectKinds": [
                 "support_case",
@@ -11348,8 +11353,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "interactions",
-                "evidence"
+                "support_participants"
               ],
               "subjectKinds": [
                 "support_case"
@@ -11372,8 +11376,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "support_sla"
               ],
               "subjectKinds": [
                 "support_case"
@@ -11397,8 +11400,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "support_journey_links"
               ],
               "subjectKinds": [
                 "support_case"
@@ -11422,8 +11424,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "support_agents"
               ],
               "subjectKinds": [
                 "support_case"
@@ -11475,8 +11476,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "outcomes",
-                "state"
+                "support_resolution"
               ],
               "subjectKinds": [
                 "support_case"
@@ -11502,9 +11502,7 @@
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "evidence",
-                "summary",
-                "state"
+                "support_evidence_trace"
               ],
               "subjectKinds": [
                 "entity",
@@ -11838,7 +11836,7 @@
   ],
   "productSurfaceBlueprintSource": {
     "document": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
-    "sha256": "fff64863b1ee593d461d5326794c77c6fdd778d508a0ffebe78ed3e8ccfe00c6",
+    "sha256": "8be1aafd64fc22c63e84c71a93e54fdf30c94c71e3750ade99582fe72446a965",
     "surfaceSectionPrefix": "11.",
     "scope": "18 product surfaces; backend contract only"
   }

@@ -2486,6 +2486,14 @@ src/modules/experience360/surfaces/commerce/__tests__/commerce.golden.spec.ts
 **Required lenses:** support, communications, journey, identity, risk, workflow, policy<br>
 **Purpose:** Provides support cases, callbacks, conversations, participants, agent handoffs, SLA, and resolution state.
 
+Support-owned required slots now have isolated `support_<slot_id>` output
+sections selected by frame policy before secondary authority reads. Exact
+tenant/case/connection lifecycle checks precede those reads, and communications
+must match the case provider. Risk remains separately dispatched to Risk360.
+Available sections describe evidence-backed bounded observations; ticket and
+conversation case joins, upstream completeness, freshness, and independent
+business outcome attribution remain unsupported.
+
 **Required slots:**
 
 - `case_summary`

@@ -73,7 +73,7 @@ source history, or historical state.
   business outcome, or contagion authority.
 - `callbacks`, `agents`, `participants`, `sla`, and `journey_links` expose only
   the exact records admitted by their respective tenant and case joins.
-  `sla` still lacks canonical measurement-contract evaluation. The optional
+  `sla` evaluates the versioned active elapsed measurement contract. The optional
   episode relation requires the episode to cite the exact case journey-link
   event; shared journey ID alone is insufficient.
 - Results must retain tenant scope, source timestamps, section state, evidence
@@ -83,8 +83,8 @@ source history, or historical state.
 ## Explicit gaps
 
 - Callback and assignment source authorship, complete history, historical
-  replay, and freshness are not established. SLA timer observations lack a
-  canonical measurement contract and breach evaluation. Episode relations
+  replay, and freshness are not established. SLA comparison is limited to the
+  registered active elapsed contract and does not prove general compliance. Episode relations
   require a producer to persist exact case event evidence; population coverage
   remains unknown.
 - Participant identity is limited to exact current provider account bindings;
@@ -99,3 +99,16 @@ source history, or historical state.
 
 Until these gaps close, affected slots stay unknown or degraded and the
 projection must not be described as a complete Support 360 implementation.
+
+## Isolated required-slot dispatch
+
+Each of the nine Support-owned required slots uses its own `support_<slot_id>`
+output section. The frame policy selects these sections before any secondary
+authority reads; a permitted resolution read cannot fetch denied SLA,
+participant, callback, or assignment data. Legacy sections remain available for
+existing direct consumers. Risk retains its independent Risk360 binding.
+Lifecycle events are revalidated against the exact tenant, case, and provider
+connection before secondary reads; communication facts must also match the case
+provider identity. Available sections mean evidence-backed bounded observations,
+not complete history or independently verified outcomes. Ticket and conversation
+subjects remain unknown until their exact canonical case joins exist.

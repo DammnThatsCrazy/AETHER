@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
   "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
   "services/api/intelligence/": "sha256:659b8ebd0a157d948c9859303811fa4cb68026e74813adda72a4bee0505640e8"
-  "services/api/journeys/": "sha256:c9156f33e6bb82a698564bc15e61af54e901813ab83608e908c4de11009377b3"
+  "services/api/journeys/": "sha256:e50b8a75933db5188e768fef7a1c7d3cc433eb596c02cc793b5c802e26908d4e"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:4241c421c34c32b4249dce7d2444eaf0c54e25c650d1b9b8239eae1c9f10ba47"
@@ -2496,6 +2496,12 @@ coverage, freshness, business outcome, and case contagion remain unknown.
 Callback, SLA timer, journey-link, and agent-assignment records have bounded
 case-scoped joins; their upstream authorship, history completeness, and
 freshness remain unknown.
+
+The nine Support-owned required frame slots select distinct `support_<slot_id>`
+sections before reads. A permitted resolution slot does not fetch denied sibling
+authorities. Lifecycle scope must match the tenant, case, and connection;
+case-linked communications must additionally match the provider identity.
+Risk remains independently policy-gated through Risk360.
 
 The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or
