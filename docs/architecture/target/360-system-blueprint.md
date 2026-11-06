@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0ff302e95a54e7a23c2626b0bc5a873b876a126f564e5c162703e0624efe1263"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ca1f90175874c885f94744d4a8ff74c3233eed345bdea57166449c9ca0a0be55"
 ---
 
 # 360 System Blueprint
@@ -29,6 +29,14 @@ observed activity from event-time authority to act, and attributed value from
 independently verified outcomes.
 
 ## Next implementation wave (2026-11-05)
+
+Communications360 now persists provider-thread observations atomically with
+qualifying Silver messages and composes bounded provider/account/thread groups.
+Exact canonical source-reference reads rejoin Silver fact and message scope
+before exposing source-subject inventory. Explicit durable reply references can
+produce observed target associations without synthetic acts. Canonical
+Conversation membership, actor authority, causal outcomes, upstream completeness
+and freshness remain unknown; this is not full projection completion.
 
 Execution360 `tool_calls` now separately exposes bounded server-owned MCP
 invocation results after exact execution, agent, principal, tool, resource,

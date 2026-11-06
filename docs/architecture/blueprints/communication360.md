@@ -61,6 +61,27 @@ unknown. This is an observed provider-reported reply association, separate from
 sender identity and authority. It proves neither causality nor complete response
 coverage, provider history or freshness. No new route or database column is added.
 
+### Durable provider-thread observations (2026-11-05)
+
+The Silver communication writer persists a `provider_thread` observation beside
+each qualifying message in the same PostgreSQL transaction. Replay uses the
+persisted first-write row, not replacement account or source fields. The
+observation binds tenant, provider, account, thread, message and Silver fact IDs,
+event time and evidence. It is a provider-reported association, not canonical
+Conversation membership or a participant roster.
+
+Communication360 groups observed messages only within that exact provider/account/
+thread scope and orders them by event time. Source-subject reads first select
+exact canonical source references, then perform a bounded Silver message rejoin
+and revalidate all observation fields. Missing, duplicate, mismatched, malformed,
+unavailable or truncated joins withhold the linked inventory. Backing outages
+remain unavailable rather than becoming available-empty reads. Durable Silver
+replies can expose exact `In-Reply-To` associations without manufacturing a
+communication act or verified author. The catalog routes source subjects to the
+thread, message, response and evidence slots. History completeness, freshness,
+canonical Conversation membership, identity, authority and causal outcomes remain
+unknown; the supported observation paths do not complete the product contract.
+
 Communication360 is Aether's **communication and information-flow projection** —
 a `sequence_360` over canonical communication truth for subjects of kind
 `campaign`, `episode`, or `source`. It answers "what information existed, who or

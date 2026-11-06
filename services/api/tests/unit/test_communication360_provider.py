@@ -1657,7 +1657,7 @@ async def test_source_subject_without_canonical_facts_is_missing_not_zero() -> N
     [
         ("episode", "episode_id", ["communications"]),
         ("journey", "journey_id", ["communications"]),
-        ("source", "source_id", []),
+        ("source", "source_id", ["evidence_trace"]),
     ],
 )
 async def test_non_message_subjects_use_exact_tenant_canonical_communication_facts(

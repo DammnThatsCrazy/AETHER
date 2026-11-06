@@ -9,6 +9,15 @@ This document replaces the prior broad 360 architecture blueprint as the impleme
 
 ## Repository implementation status (2026-11-05)
 
+Communications360 now composes bounded provider/account/thread message groups
+from durable Silver-backed observations. The writer atomically persists the
+provider-thread observation with the Silver fact, and replay retains first-write
+scope. Source-subject inventory requires an exact canonical source-reference read
+and bounded observation-to-Silver rejoin. Durable replies need no synthetic act
+to expose an explicit provider-reported reply association. These paths preserve
+unknown canonical Conversation membership, identity, authority, causal outcomes,
+upstream history completeness and freshness; they are not full product closure.
+
 Communications360 `response_events` now exposes bounded provider-reported reply
 associations for explicit `In-Reply-To` references. The canonical Silver payload
 preserves the target separately from the reply's own provider message ID. A

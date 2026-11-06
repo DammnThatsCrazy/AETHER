@@ -19,7 +19,7 @@ reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the current Support360 registry, callback authority, provider, routes, and focused tests. The callback slot contract remains as documented; later provider joins for other Support360 slots do not change callback schedule or event semantics."
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0ff302e95a54e7a23c2626b0bc5a873b876a126f564e5c162703e0624efe1263"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ca1f90175874c885f94744d4a8ff74c3233eed345bdea57166449c9ca0a0be55"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/journeys/support360/callbacks.py": "sha256:166e3f6c0092cf8e113ce7c89893290afa057f0ec89cbd48d6babb11b7debfe8"
   "services/api/journeys/support360/cases.py": "sha256:a3daf0bd6d5abbf516bcb822f72cdcc14d0897aa9589bfc91ee42c1ef8165029"

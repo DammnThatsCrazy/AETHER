@@ -71,7 +71,7 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:05cbcf010d4a517d094e34c820a38123aae827d8d4340ef43aa1db820586eab1"
+  "packages/shared/": "sha256:cb6add0de65172fde86cb331902639c81b1c5139129906cc2a86532438737ba6"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:d42c83105c90044626e1b8b12d4302f66cfcf3676debee37d2fa1475a7cfaa20"
   "services/api/actions/agent/deployment_routes.py": "sha256:052adc35fd86925e255ea0f0fd2101ebdd3a9ea1b832f2b98702ecda335adc1f"
@@ -99,7 +99,7 @@ source_hashes:
   "services/api/intelligence/risk360/provider.py": "sha256:4a6d24b8c9f765dc05801de7e93c0b83f75ef35ad220d06c884b917bd91a1601"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/provider.py": "sha256:288a68882c5c9518bac3a46d66657b25d0d4585e86bb80fcf9b5a24976186e20"
+  "services/api/journeys/communication360/provider.py": "sha256:e821aa053be704359aa8b93ed97b07b899d753a13879de019a441a40dfa84cc9"
   "services/api/journeys/support360/": "sha256:e598b554f6336af7e0f8829e05a52ead0797914b220fd86148b4c59b44849a81"
   "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
@@ -1095,6 +1095,15 @@ preserves source evidence and explicit coverage. A provider conversation ID is
 still not canonical Conversation membership, and a provider delegation
 reference is not canonical authority. These paths remain partial and do not
 complete the 18 surfaces.
+
+The Silver communication writer now atomically records exact provider-thread
+observations alongside qualifying message facts. Communication360 composes only
+observed provider/account/thread groups; exact source-reference queries and
+bounded Silver rejoins expose source-linked message inventory. Durable replies
+can resolve explicit provider-reported targets without synthetic acts. Replay
+retains persisted scope, and ambiguous or incomplete joins withhold inventory.
+Canonical Conversation membership, upstream history, freshness, identity,
+authority and causal outcomes remain separate unknowns.
 
 The Communication360 Agent authorship slot now requires an exact canonical
 Agent entity in an author participant binding, the same tenant, explicit

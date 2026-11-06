@@ -16,7 +16,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:216d195137016823c34f6878057c3ba088a56583e4cf39f5c162b8a780d8d30e"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:120f804eb01fc0a3651b2b412850c848f47862421ef495233526599da31994b2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0ff302e95a54e7a23c2626b0bc5a873b876a126f564e5c162703e0624efe1263"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ca1f90175874c885f94744d4a8ff74c3233eed345bdea57166449c9ca0a0be55"
   "packages/shared/events.ts": "sha256:11f2aa14677b8d065344040de9360951dee9045a43fe91ccec2d674aa57da146"
   "services/api/actions/agent/": "sha256:af00b0d15d21c37e260c09d4a88e1c301637479068b848a8a7d97656500ef6bb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -39,7 +39,7 @@ source_hashes:
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/": "sha256:000ac8a15d0cbeb7515100f7eb586745f0f8e51675031b0880913d1b5eed6f18"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
-  "services/api/journeys/communication360/": "sha256:cdadceeba33ca89c23392a95cc682431fb45797e367b75862752056a298e64b8"
+  "services/api/journeys/communication360/": "sha256:c096b2b49261679c652c2ed76ebbdf7c4f9282bd5a968765f1f6580a35c59668"
   "services/api/journeys/support360/": "sha256:e598b554f6336af7e0f8829e05a52ead0797914b220fd86148b4c59b44849a81"
   "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
@@ -598,6 +598,16 @@ match tenant/provider/account/thread and not postdate the reply. Invalid or
 incomplete reads remain unknown; observed provider-reported reply association
 does not establish sender identity, authority, causal outcomes, history
 completeness or freshness.
+
+Qualifying Silver facts now produce durable exact provider-thread observations
+in the same PostgreSQL transaction. Bounded source-reference reads rejoin each
+observation to its exact Silver message before projecting inventory, and
+provider/account/thread grouping exposes only observed message composition.
+Durable reply metadata supports the same explicit association without a
+synthetic communication act. Replay cannot replace stored source/account scope;
+read outages and incomplete or ambiguous joins cannot become available-empty
+inventory. Canonical Conversation membership and full source history remain
+unverified. Transaction tests use a mocked PostgreSQL connection, not a live DB.
 
 Support360 `sla` now supports a versioned local active elapsed comparison from
 complete explicit start/pause/resume/stop context events and an exact registered

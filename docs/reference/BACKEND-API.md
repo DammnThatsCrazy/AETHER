@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
   "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
   "services/api/intelligence/": "sha256:659b8ebd0a157d948c9859303811fa4cb68026e74813adda72a4bee0505640e8"
-  "services/api/journeys/": "sha256:e50b8a75933db5188e768fef7a1c7d3cc433eb596c02cc793b5c802e26908d4e"
+  "services/api/journeys/": "sha256:81370a8f859526d9bd475dd5288c463fb419a9ac2b8b563bf47ae814ba58b766"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:4241c421c34c32b4249dce7d2444eaf0c54e25c650d1b9b8239eae1c9f10ba47"
@@ -1870,6 +1870,14 @@ evidence-backed Silver target in the exact tenant/provider/account/thread scope
 and no later than the reply. Incomplete or invalid reads remain unknown. This
 adds no endpoint and establishes neither identity/authority nor causal response
 outcomes, complete message history or freshness.
+
+The Silver writer also persists an exact provider-thread observation in the same
+database transaction. Communication360 composes bounded provider/account/thread
+message groups and resolves source-subject inventories through exact canonical
+source references and Silver fact rejoins. Durable Silver replies require no
+synthetic act to expose the same bounded reply association. Incomplete or
+ambiguous inventory reads are withheld; canonical Conversation membership and
+upstream completeness remain unknown. No new endpoint or migration is added.
 
 `communication360` follows the same read-only route template (every route a GET,
 tenant-scoped from the authenticated tenant, capability-gated on

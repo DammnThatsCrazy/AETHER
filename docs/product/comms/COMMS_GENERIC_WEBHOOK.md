@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-senior, dev-junior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py]
+source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py, services/api/journeys/comms/repository.py, services/api/journeys/communication360/observations.py]
 reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the 360 PR Communication360 repository diff: bounded participant and exact-reference reads do not change webhook signature validation, endpoint ownership, or ingestion procedure."
@@ -15,10 +15,12 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
+  "services/api/journeys/comms/repository.py": "sha256:77159f4735202850df8f8c8766b3676d8eb345b3c143515d527881feefab53f2"
   "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
   "services/api/journeys/communication360/contracts.py": "sha256:f9d4b4218ed8b19f87cadea775ac6e6548beeef6c3085205d1f2418dedc70362"
+  "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
   "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/repository.py": "sha256:e04eb5071d50f46e28ea795be1ebbb8d98006fb5ce186e962e18c55682f59f89"
+  "services/api/journeys/communication360/repository.py": "sha256:a6539b4af4a1c8c4c9ad14da52081fd4fe1ad375f49c4b237619e2b19e821046"
 ---
 
 # Generic Signed Communications Webhook
@@ -175,6 +177,13 @@ scope resolve to a unique evidence-backed Silver target no later than the reply.
 The reply's own message ID remains separate from its target. Missing scope,
 invalid, ambiguous or incomplete reads remain unknown; association does not prove
 causal response, sender identity, actor authority or complete provider history.
+
+Qualifying Silver facts also produce a durable provider-thread observation in the
+same database transaction. Communication360 groups observed messages by exact
+provider/account/thread and can report explicit durable reply associations
+without creating synthetic acts. Source-linked inventory requires bounded exact
+canonical-reference and Silver rejoins. These observations do not create
+canonical Conversation membership, identity or delegation authority.
 
 ## Signed click tokens
 

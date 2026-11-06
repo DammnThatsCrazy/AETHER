@@ -143,30 +143,76 @@ class CommsFactsRepository:
         """Insert or ignore on (tenant_id, idempotency_key) conflict — replay safe."""
         row.setdefault("fact_id", str(uuid4()))
         row.setdefault("received_at", datetime.now(timezone.utc).isoformat())
+        from journeys.communication360.observations import provider_thread_observation
+        from journeys.communication360.repository import Communication360FactsRepository
+
         key = f"{row.get('tenant_id')}:{row.get('idempotency_key')}"
 
         pool = await self._pool()
         if pool is None:
             # Idempotent local write — first write wins, mirroring DO NOTHING.
-            _local_facts.setdefault(key, row)
-            return _local_facts[key]
+            stored = _local_facts.get(key, row)
+            observation = provider_thread_observation(stored)
+            if observation is not None:
+                await Communication360FactsRepository().upsert_many([observation])
+            _local_facts.setdefault(key, stored)
+            return stored
 
         cols = [c for c in _FACT_COLUMNS if c in row]
         placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
         values = [
-            json.dumps(row[c]) if c in _JSON_COLUMNS and row[c] is not None else row[c]
+            json.dumps(row[c]) if c in _JSON_COLUMNS and row[c] is not None
+            else datetime.fromisoformat(row[c].replace("Z", "+00:00"))
+            if c in {"occurred_at", "received_at"} and isinstance(row[c], str)
+            else row[c]
             for c in cols
         ]
         async with pool.acquire() as conn:
-            await conn.execute(
-                f"""
-                INSERT INTO silver_comms_facts ({", ".join(cols)})
-                VALUES ({placeholders})
-                ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
-                """,
-                *values,
+            async with conn.transaction():
+                await conn.execute(
+                    f"""
+                    INSERT INTO silver_comms_facts ({", ".join(cols)})
+                    VALUES ({placeholders})
+                    ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+                    """,
+                    *values,
+                )
+                stored = await conn.fetchrow(
+                    "SELECT * FROM silver_comms_facts WHERE tenant_id = $1 AND idempotency_key = $2",
+                    row["tenant_id"], row["idempotency_key"],
+                )
+                if stored is None:
+                    raise RuntimeError("persisted communication fact could not be read")
+                stored = dict(stored)
+                observation = provider_thread_observation(stored)
+                if observation is not None:
+                    await Communication360FactsRepository().upsert_many(
+                        [observation], connection=conn,
+                    )
+        return stored
+
+    async def messages_by_ids(
+        self, tenant_id: str, message_ids: list[str], *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        cap = min(max(limit, 1), 500)
+        if not message_ids or len(message_ids) > 500:
+            return [], not message_ids
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row for row in _local_facts.values()
+                if row.get("tenant_id") == tenant_id and row.get("message_id") in message_ids
+            ]
+            rows.sort(key=lambda row: (str(row.get("occurred_at")), str(row.get("fact_id"))))
+            return rows[:cap], len(rows) <= cap
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                """SELECT * FROM silver_comms_facts
+                   WHERE tenant_id = $1 AND message_id = ANY($2::text[])
+                   ORDER BY occurred_at ASC, fact_id ASC LIMIT $3""",
+                tenant_id, message_ids, cap + 1,
             )
-        return row
+        return [dict(record) for record in records[:cap]], len(records) <= cap
 
     async def reply_targets(
         self, tenant_id: str, provider: str, provider_account_id: str,

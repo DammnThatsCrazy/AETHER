@@ -26,8 +26,8 @@ This module defines the narrow read seam the provider depends on:
 
 Imports stay light and side-effect free: constructing a source never opens a
 connection (the repositories only touch their backing pool when a read is
-called), and every read is wrapped so a failure returns ``[]`` / ``False`` —
-the provider degrades, it never raises and never fabricates.
+called). Read failures propagate to the provider's failure-isolation boundary,
+which degrades the affected surface rather than fabricating an available zero.
 """
 
 from __future__ import annotations
@@ -67,8 +67,8 @@ class CommunicationSource:
 
     Implementations MUST be tenant-scoped and defensive. The provider trusts
     nothing and re-filters every returned row by the requesting tenant, but a
-    source that cannot reach its backing store returns ``[]`` / ``False`` —
-    never raises, never fabricates. An EMPTY result from a reachable source is a
+    source that cannot reach its backing store must raise or return an explicit
+    incomplete read, never an available empty result. An EMPTY result from a reachable source is a
     valid *available* zero; an UNAVAILABLE source is reported through
     :meth:`available`.
     """
@@ -99,6 +99,11 @@ class CommunicationSource:
     async def reply_targets(
         self, tenant_id: str, provider: str, provider_account_id: str,
         external_thread_id: str, external_message_id: str,
+    ) -> tuple[list[CommunicationMessage], bool]:
+        raise NotImplementedError
+
+    async def messages_by_ids(
+        self, tenant_id: str, message_ids: list[str], *, limit: int,
     ) -> tuple[list[CommunicationMessage], bool]:
         raise NotImplementedError
 
@@ -372,8 +377,8 @@ class SilverCommsSource:
     the same two backings the repository uses — the module in-memory store
     when the pool is ``None`` (mirroring ``services/api/journeys/comms/routes.py``) and the
     ``silver_comms_facts`` table through ``get_pool()`` when one exists. The
-    adapter never raises: a failed backing read returns ``[]`` and
-    :meth:`available` reports the store unreachable.
+    adapter propagates backing failures to the provider, while bounded joins
+    return an explicit incomplete result for malformed or truncated evidence.
     """
 
     def __init__(self, repo: Optional[CommsFactsRepository] = None) -> None:
@@ -399,15 +404,11 @@ class SilverCommsSource:
         )
         # Provider-side tenant guard is server-authoritative; a misbehaving
         # store can never leak another tenant's messages through this source.
-        rows = [r for r in rows if str(r.get("tenant_id", "")) == str(tenant_id)]
         messages = []
         for row in rows:
-            if not isinstance(row, dict):
-                continue
-            try:
-                messages.append(to_message(row))
-            except Exception:  # noqa: BLE001 - skip an un-mappable row, never crash
-                continue
+            if not isinstance(row, dict) or str(row.get("tenant_id", "")) != str(tenant_id):
+                raise ValueError("communication message read scope invalid")
+            messages.append(to_message(row))
         return messages
 
     async def facts(
@@ -435,6 +436,25 @@ class SilverCommsSource:
                 or str(r.get("message_category") or "") == kind
             ]
         return [r for r in rows if str(r.get("tenant_id", "")) == str(tenant_id)]
+
+    async def messages_by_ids(
+        self, tenant_id: str, message_ids: list[str], *, limit: int,
+    ) -> tuple[list[CommunicationMessage], bool]:
+        rows, complete = await self._repo.messages_by_ids(tenant_id, message_ids, limit=limit)
+        if complete is not True or not isinstance(rows, list):
+            return [], False
+        messages: list[CommunicationMessage] = []
+        for row in rows:
+            if (
+                not isinstance(row, dict) or row.get("tenant_id") != tenant_id
+                or row.get("message_id") not in message_ids
+            ):
+                return [], False
+            try:
+                messages.append(to_message(row))
+            except Exception:
+                return [], False
+        return messages, True
 
     async def reply_targets(
         self, tenant_id: str, provider: str, provider_account_id: str,
@@ -492,11 +512,8 @@ class SilverCommsSource:
         since: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[dict[str, Any]]:
-        """Tenant-scoped silver rows, chronological ascending. Never raises."""
-        try:
-            pool = await get_pool()
-        except Exception:  # noqa: BLE001 - backing unavailable -> []
-            return []
+        """Tenant-scoped silver rows, chronological ascending; failures propagate."""
+        pool = await get_pool()
         if pool is None:
             return self._memory_rows(
                 tenant_id,
@@ -576,11 +593,8 @@ class SilverCommsSource:
         if limit is not None:
             params.append(max(0, int(limit)))
             sql += f" LIMIT ${len(params)}"
-        try:
-            async with pool.acquire() as conn:
-                records = await conn.fetch(sql, *params)
-        except Exception:  # noqa: BLE001 - backing unavailable -> degrade
-            return []
+        async with pool.acquire() as conn:
+            records = await conn.fetch(sql, *params)
         return [dict(r) for r in records]
 
 
@@ -620,12 +634,12 @@ class CanonicalFactSource:
         since: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[dict[str, Any]]:
-        try:
-            rows = await self._repo.query(tenant_id, kind=kind, since=since, limit=limit)
-        except Exception:  # noqa: BLE001 - backing unavailable -> degrade
-            return []
-        # Tenant-scoped by the repo; re-filter defensively (trust nothing).
-        return [r for r in rows if str(r.get("tenant_id", "")) == str(tenant_id)]
+        rows = await self._repo.query(tenant_id, kind=kind, since=since, limit=limit)
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict) or row.get("tenant_id") != tenant_id for row in rows
+        ):
+            raise ValueError("canonical communication fact read scope invalid")
+        return rows
 
     async def available(self, tenant_id: str) -> bool:
         try:
@@ -633,6 +647,13 @@ class CanonicalFactSource:
             return True
         except Exception:  # noqa: BLE001 - unreachable backing -> unavailable
             return False
+
+    async def source_facts(
+        self, tenant_id: str, source_id: str, *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return await self._repo.facts_for_exact_reference(
+            tenant_id, "source", source_id, limit=limit,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

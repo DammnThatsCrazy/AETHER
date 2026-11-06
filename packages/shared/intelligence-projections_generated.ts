@@ -2958,7 +2958,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign'],
+            subjectKinds: ['agent', 'campaign', 'source'],
             sectionIds: ['evidence']
           }
         ]
@@ -2981,13 +2981,13 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       {
         id: 'message_inventory',
         requirement: 'required',
-        description: 'Bounded observed message entries with message evidence.',
+        description: 'Bounded observed messages with evidence, including exact source-linked Silver facts revalidated against durable provider-thread observations.',
         canonicalAuthorityRefs: ['communication_facts', 'evidence'],
         projectionBindings: [
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign'],
+            subjectKinds: ['agent', 'campaign', 'source'],
             sectionIds: ['evidence', 'timeline']
           }
         ]
@@ -3040,14 +3040,14 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['communication', 'communication_facts', 'evidence', 'identity'],
-        description: 'Response-like canonical communication acts joined to exact tenant-scoped messages, authenticated sender identity where available, and observed provider-reported reply associations through explicit In-Reply-To references.',
+        description: 'Response-like canonical acts and durable Silver replies with exact provider-reported In-Reply-To target associations, independent of actor identity or causal outcomes.',
         id: 'response_events',
-        partialImplementationReason: 'Bounded exact act-to-message and sender joins support observed provider-reported reply associations only for explicit In-Reply-To references with a unique evidence-backed target in the exact tenant, provider, provider account and thread, occurring no later than the reply. Missing, malformed, mismatched, ambiguous or truncated target reads remain unknown. Reply association does not establish actor identity or authority, causal response outcome, complete message history or source freshness.',
+        partialImplementationReason: 'Bounded exact act-to-message and sender joins, or durable Silver replies without synthetic acts, support observed provider-reported reply associations only for explicit In-Reply-To references with a unique evidence-backed target in the exact tenant, provider, provider account and thread, occurring no later than the reply. Exact source-linked messages require a bounded canonical observation-to-Silver rejoin. Missing, malformed, mismatched, ambiguous or truncated reads remain unknown. Reply association does not establish actor identity or authority, causal response outcome, complete message history or source freshness.',
         projectionBindings: [
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign'],
+            subjectKinds: ['agent', 'campaign', 'source'],
             sectionIds: ['interactions']
           }
         ],
@@ -3071,13 +3071,13 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       {
         id: 'thread_summary',
         requirement: 'required',
-        description: 'Partial thread counts and canonical thread facts; message-thread composition is incomplete.',
+        description: 'Bounded message-thread composition by exact provider account and thread observations; canonical Conversation membership and full history remain unknown.',
         canonicalAuthorityRefs: ['communication_facts'],
         projectionBindings: [
           {
             projectionId: 'communication360',
             role: 'primary',
-            subjectKinds: ['agent', 'campaign'],
+            subjectKinds: ['agent', 'campaign', 'source'],
             sectionIds: ['interactions', 'summary']
           }
         ]

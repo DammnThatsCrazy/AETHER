@@ -85,7 +85,9 @@ class Communication360FactsRepository:
             )
         return row
 
-    async def upsert_many(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def upsert_many(
+        self, rows: list[dict[str, Any]], *, connection: Any = None,
+    ) -> list[dict[str, Any]]:
         """Insert a related fact batch atomically with per-row replay keys.
 
         Participant rosters are validated and resolved as a whole before this
@@ -102,8 +104,8 @@ class Communication360FactsRepository:
         if not prepared:
             return []
 
-        pool = await self._pool()
-        if pool is None:
+        pool = await self._pool() if connection is None else None
+        if pool is None and connection is None:
             stored: list[dict[str, Any]] = []
             for row in prepared:
                 key = f"{row.get('tenant_id')}:{row.get('idempotency_key')}"
@@ -120,6 +122,11 @@ class Communication360FactsRepository:
             VALUES ({placeholders})
             ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
         """
+        if connection is not None:
+            for row in prepared:
+                values = [_bind_fact_column(column, row[column]) for column in columns]
+                await connection.execute(sql, *values)
+            return prepared
         async with pool.acquire() as conn:
             async with conn.transaction():
                 for row in prepared:
@@ -293,10 +300,10 @@ class Communication360FactsRepository:
         received_before: Any = None,
         limit: int = 200,
     ) -> tuple[list[dict[str, Any]], bool]:
-        """Read facts carrying one exact typed journey or episode reference.
+        """Read facts carrying one exact typed journey, episode, or source reference.
 
         The relationship is admitted only through the canonical JSONB
-        ``journey_id(s)`` / ``episode_id(s)`` fields. This does not match
+        ``journey_id(s)`` / ``episode_id(s)`` / ``source_id(s)`` fields. This does not match
         arbitrary strings or search payload text. Returned ``complete`` only
         describes this bounded exact-reference query; it is not a claim that a
         communication authority has recorded every real-world conversation.
@@ -306,6 +313,7 @@ class Communication360FactsRepository:
         field_names = {
             "episode": ("episode_id", "episode_ids"),
             "journey": ("journey_id", "journey_ids"),
+            "source": ("source_id", "source_ids"),
         }.get(reference_kind)
         if not exact_tenant or not exact_id or field_names is None:
             return [], True

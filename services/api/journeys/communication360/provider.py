@@ -96,6 +96,7 @@ from shared.intelligence_projections.registry import ProviderRegistry
 
 # Reused canonical primitives (never redefined here).
 from journeys.communication360.contracts import CommunicationMessage
+from journeys.communication360.composition import compose_threads, event_time, read_reply_target
 from journeys.communication360.delegation_join import (
     AuthorDelegationRead,
     DelegationLookup,
@@ -249,6 +250,7 @@ class _Scope:
     bindable: bool = True
     canonical_fact_bindable: bool = True
     note: Optional[str] = None
+    message_fact_ids: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -803,7 +805,7 @@ def _row_matches_scope(
         "campaign": {"campaign_id", "campaign_ids"},
         "episode": {"episode_id", "episode_ids"},
         "journey": {"journey_id", "journey_ids"},
-        "source": {"source_id", "source_namespace", "provider_id"},
+        "source": {"source_id", "source_ids", "source_namespace", "provider_id"},
     }.get(scope.kind, set())
     reference_ids = (
         scope.participant_identity_ids if scope.kind in {"agent", "entity"} else (scope.id,)
@@ -864,6 +866,8 @@ def _has_exact_entity_binding(
 
 
 def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool:
+    if scope.message_fact_ids:
+        return bool(message.fact_id and message.fact_id in scope.message_fact_ids)
     if scope.kind == "campaign":
         return str(message.campaign_id or "") == scope.id
     if scope.kind == "agent":
@@ -1106,6 +1110,9 @@ def _communication_required_slot_coverage(
         if isinstance(ref, EvidenceRef)
     ]
     thread_refs = _dedupe_refs([*conversation_refs, *thread_message_refs])
+    thread_composition = compose_threads(
+        request.tenantId, messages, truncated=silver_truncated or not silver_up
+    )
 
     participant_rows = [row for row in fact_rows if row.get("kind") == "participant_binding"]
     participant_refs = _dedupe_refs(
@@ -1204,6 +1211,7 @@ def _communication_required_slot_coverage(
         )
     else:
         thread_slot = slot("unknown", "unknown", "canonical_conversation_thread_join_unavailable")
+    thread_slot["composition"] = thread_composition
 
     if messages_complete:
         message_slot = slot(
@@ -1304,7 +1312,11 @@ def _communication_required_slot_coverage(
     )
 
     linked_response_refs = _dedupe_refs(
-        [ref for link in response_links if link.state == "linked" for ref in link.evidence]
+        [
+            ref for link in response_links
+            if link.state == "linked" or link.response_to_message_id
+            for ref in link.evidence
+        ]
     )
     if linked_response_refs:
         response_slot = slot(
@@ -1749,58 +1761,10 @@ async def _response_event_links(
         target_reason = "provider_reply_reference_missing"
         target_refs: list[EvidenceRef] = []
         if target_id:
-            if not (
-                message.reply_correlation_method == "in_reply_to"
-                and message.provider
-                and message.provider_account_id
-                and message.external_thread_id
-            ):
-                target_reason = "reply_reference_scope_or_method_invalid"
-            else:
-                try:
-                    candidates, complete = await source.reply_targets(
-                        str(message.tenant_id), message.provider,
-                        message.provider_account_id, message.external_thread_id, target_id,
-                    )
-                except Exception:  # noqa: BLE001 - unavailable target authority stays unknown
-                    candidates, complete = [], False
-                exact = [
-                    item for item in candidates
-                    if isinstance(item, CommunicationMessage)
-                    and item.tenant_id == message.tenant_id
-                    and item.provider == message.provider
-                    and item.provider_account_id == message.provider_account_id
-                    and item.external_thread_id == message.external_thread_id
-                    and item.external_message_id == target_id
-                    and item.message_id != message.message_id
-                    and item.external_message_id != message.external_message_id
-                ]
-                if not complete:
-                    target_reason = "reply_target_read_truncated"
-                elif len(exact) != len(candidates):
-                    target_reason = "reply_target_read_scope_invalid"
-                elif len(exact) > 1:
-                    target_reason = "reply_target_not_unique"
-                elif len(exact) == 1:
-                    target = exact[0]
-                    def instant(value: str) -> Optional[datetime]:
-                        try:
-                            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                        except (TypeError, ValueError):
-                            return None
-                        return parsed if parsed.tzinfo is not None else None
-                    reply_at, target_at = instant(message.occurred_at), instant(target.occurred_at)
-                    if reply_at is None or target_at is None or target_at > reply_at:
-                        target_reason = "reply_target_time_invalid_or_future"
-                    elif not target.evidence_refs:
-                        target_reason = "reply_target_evidence_missing"
-                    else:
-                        target_message = target
-                        association_state = "provider_reported_reply_association"
-                        target_reason = "exact_provider_reply_target_joined"
-                        target_refs = list(target.evidence_refs)
-                else:
-                    target_reason = "reply_target_not_found_in_exact_scope"
+            target_message, target_reason = await read_reply_target(message, source)
+            if target_message is not None:
+                association_state = "provider_reported_reply_association"
+                target_refs = list(target_message.evidence_refs)
         links.append(
             ResponseEventRead(
                 fact_ref.id,
@@ -1814,6 +1778,34 @@ async def _response_event_links(
                 association_reason=target_reason,
             )
         )
+    represented = {link.message_id for link in links}
+    observed_replies = [
+        message for message in messages
+        if message.tenant_id == request.tenantId
+        and message.reply_to_external_message_id
+        and message.message_id not in represented
+        and message.fact_id
+        and message.evidence_refs
+    ]
+    remaining = max(0, _MAX_RESPONSE_EVENT_LINKS - len(links))
+    truncated = truncated or len(observed_replies) > remaining
+    for message in observed_replies[:remaining]:
+        target, reason = await read_reply_target(message, source)
+        links.append(ResponseEventRead(
+            fact_id=message.fact_id,
+            message_id=message.message_id,
+            state="observed",
+            reason="durable_silver_provider_reply_reference_observed_actor_unverified",
+            evidence=tuple(_dedupe_refs([
+                *message.evidence_refs,
+                *(target.evidence_refs if target is not None else []),
+            ])),
+            response_to_message_id=target.message_id if target is not None else None,
+            association_state=(
+                "provider_reported_reply_association" if target is not None else "unknown"
+            ),
+            association_reason=reason,
+        ))
     return links, truncated
 
 
@@ -2272,6 +2264,22 @@ class Communication360Provider:
                 for m in messages
                 if str(m.tenant_id) == tenant_id and _message_matches_scope(m, scope)
             ]
+        elif scope.canonical_fact_bindable and canonical_up and not canonical_truncated:
+            linked_rows = [
+                row for row in in_scope_rows
+                if row.get("kind") == "provider_thread"
+                and _payload_of(row).get("producer") == "silver_comms_observation_writer.v1"
+            ]
+            if linked_rows:
+                silver_up, messages, silver_truncated = await self._read_linked_messages(
+                    tenant_id, linked_rows, limit=read_limit,
+                )
+                scope = replace(
+                    scope,
+                    bindable=True,
+                    message_fact_ids=tuple(message.fact_id for message in messages if message.fact_id),
+                    note="exact_durable_provider_thread_message_references_only_history_unknown",
+                )
 
         response_links, response_links_truncated = await _response_event_links(
             request=request,
@@ -3687,11 +3695,78 @@ class Communication360Provider:
         except Exception:  # noqa: BLE001 - backing unavailable -> degrade
             return False, [], False
 
+    async def _read_linked_messages(
+        self, tenant_id: str, rows: list[dict[str, Any]], *, limit: int,
+    ) -> tuple[bool, list[CommunicationMessage], bool]:
+        expected = set()
+        for row in rows:
+            payload = _payload_of(row)
+            references = payload.get("message_ids")
+            fact_id = payload.get("silver_fact_id")
+            if (
+                not isinstance(references, list) or len(references) != 1
+                or not isinstance(references[0], str) or not references[0]
+                or not isinstance(fact_id, str) or not fact_id
+                or (references[0], fact_id) in expected
+            ):
+                return True, [], True
+            expected.add((references[0], fact_id))
+        message_ids = list(dict.fromkeys(reference[0] for reference in sorted(expected)))
+        if not message_ids or len(expected) > limit:
+            return True, [], True
+        try:
+            messages, complete = await self._silver.messages_by_ids(
+                tenant_id, message_ids, limit=limit,
+            )
+        except Exception:
+            return False, [], False
+        if complete is not True or not isinstance(messages, list) or len(messages) > limit:
+            return True, [], True
+        selected: list[CommunicationMessage] = []
+        for message in messages:
+            if not isinstance(message, CommunicationMessage) or message.tenant_id != tenant_id:
+                return True, [], True
+            matching = []
+            for row in rows:
+                payload = _payload_of(row)
+                if (
+                    row.get("tenant_id") == tenant_id
+                    and payload.get("tenant_id") == tenant_id
+                    and payload.get("message_ids") == [message.message_id]
+                    and payload.get("silver_fact_id") == message.fact_id
+                    and payload.get("provider") == message.provider
+                    and payload.get("provider_account_id") == message.provider_account_id
+                    and payload.get("external_thread_id") == message.external_thread_id
+                    and payload.get("external_message_id") == message.external_message_id
+                    and event_time(payload.get("message_occurred_at")) is not None
+                    and event_time(payload.get("message_occurred_at")) == event_time(message.occurred_at)
+                    and event_time(str(row.get("occurred_at") or "")) == event_time(message.occurred_at)
+                    and message.evidence_refs
+                    and all((message.provider, message.provider_account_id, message.external_thread_id))
+                ):
+                    matching.append(row)
+            if len(matching) != 1:
+                return True, [], True
+            selected.append(message)
+        if {(message.message_id, message.fact_id) for message in selected} != expected or len(selected) != len(expected):
+            return True, [], True
+        return True, selected, False
+
     async def _read_canonical_rows(
         self, tenant_id: str, scope: _Scope, *, limit: int
     ) -> tuple[bool, list[dict[str, Any]], bool]:
         """Canonical fact rows for the tenant; (up, rows, truncated). Never raises."""
         try:
+            if scope.kind == "source" and callable(getattr(self._canonical, "source_facts", None)):
+                rows, complete = await self._canonical.source_facts(tenant_id, scope.id, limit=limit)
+                if complete is not True or not isinstance(rows, list) or len(rows) > limit:
+                    return True, [], True
+                if any(
+                    not isinstance(row, dict) or not _row_matches_scope(row, tenant_id, scope)
+                    for row in rows
+                ):
+                    return True, [], True
+                return True, rows, False
             rows = await self._canonical.facts(tenant_id, limit=limit + 1)
             selected = [r for r in rows if isinstance(r, dict)]
             return True, selected[:limit], len(selected) > limit

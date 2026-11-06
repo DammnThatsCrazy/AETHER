@@ -58,6 +58,15 @@ def test_communications_reply_catalog_keeps_association_and_outcome_separate() -
     assert slot["projectionBindings"][0]["projectionId"] == "communication360"
 
 
+def test_communications_durable_source_reads_reach_observational_slots() -> None:
+    surface = next(item for item in _registry()["productSurfaces"] if item["id"] == "communications360")
+    for slot in surface["domainSlots"]:
+        if slot["id"] in {"thread_summary", "message_inventory", "response_events", "evidence_trace"}:
+            assert "source" in slot["projectionBindings"][0]["subjectKinds"]
+    thread = next(item for item in surface["domainSlots"] if item["id"] == "thread_summary")
+    assert "canonical Conversation membership and full history remain unknown" in thread["description"]
+
+
 def test_generated_catalog_exposes_all_slots_direct_providers_and_gaps() -> None:
     catalog = platform_contracts.gen_product_360_surface_catalog_md(_registry())
     assert "This product catalog has 18 surface contracts" in catalog
