@@ -16,8 +16,8 @@ reviewed_source_commits:
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
   "packages/shared/graph-contract.ts": "sha256:49dee41404e17e9b43087caff7a60ba03ad33899e27d3b90681fa62e1aa276ce"
-  "services/api/actions/agent/deployment_routes.py": "sha256:e718db93a1ee73a79df03f7892218444e0e4cd1b47f93d89b4a7c293d60ea38e"
-  "services/api/actions/agent/user_agents.py": "sha256:b668d0b3dd15ca5f0f53bfc135ebf0c8a6857f8071cfd02ee9b0662b499482c4"
+  "services/api/actions/agent/deployment_routes.py": "sha256:66ca43046074af1fe520936680c0f5205eddf06f6f8c6937eca829acd3ae89c6"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"

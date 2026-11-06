@@ -40,7 +40,7 @@ reviewed_source_commits:
 source_hashes:
   "config/storage_policies.yaml": "sha256:c1bcc0a50f3a2aa7a54ab3d89cf24b78a29fefa47322b2cdc6bb25c7adde159d"
   "services/api/actions/agent/invocation_runtime.py": "sha256:7ea361c7766345c3ba5da95a252b151d3c85ddf8a12a5fb0da39b4fdb0767890"
-  "services/api/actions/agent/user_agents.py": "sha256:b668d0b3dd15ca5f0f53bfc135ebf0c8a6857f8071cfd02ee9b0662b499482c4"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
