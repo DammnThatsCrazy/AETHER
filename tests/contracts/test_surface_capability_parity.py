@@ -37,6 +37,7 @@ EXPLORATION_CONTRACT_TS = REPO_ROOT / "packages" / "shared" / "exploration-contr
 REGISTRY_PATH = REPO_ROOT / "packages" / "shared" / "contracts" / "surface-capability-registry.json"
 
 _EXPECTED_SURFACES = {
+    "support360",
     "graph",
     "profile360",
     "campaign360",

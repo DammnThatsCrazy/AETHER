@@ -502,11 +502,12 @@ class AgentExecutionProjector(BaseProjector):
             "external_effect_ref": _source_reference(
                 p.get("externalEffectRef") or p.get("external_effect_ref")
             ) or _block_ref(execution_ctx, "external_effect_ref"),
-            # Derived by Aether, never accepted from the producer: a deployment
-            # the registry validated is deployment_verified, everything else is
-            # the producer's own report.
+            # Derived by Aether, never accepted from the producer. A signature that
+            # verified at ingestion is attested, a deployment the registry validated
+            # is deployment_verified, everything else is the producer's own report.
             "execution_verification_state": (
-                "deployment_verified" if deployment else "source_reported"
+                "attested" if deployment.get("attested") is True
+                else "deployment_verified" if deployment else "source_reported"
             ),
             "parent_span_id": _source_reference(
                 correlation.get("parentSpanId") or correlation.get("parent_span_id")

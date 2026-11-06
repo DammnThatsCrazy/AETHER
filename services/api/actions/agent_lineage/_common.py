@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Optional
 
+from shared.temporal.instant import assume_utc
+
 from shared.agent_lineage import vocabulary as vocab
 
 #: Reserved principal bucket for agents and clusters with no attributable
@@ -70,15 +72,18 @@ def attribution_for(evidence_class: Optional[str]) -> str:
     return _ATTRIBUTION_BY_CLASS.get(evidence_class or "UNKNOWN", "unresolved")
 
 
+def _assume_utc(value: datetime) -> datetime:
+    """A naive instant in evidence is read as UTC, the projector's storage zone."""
+    return assume_utc(value) if value.tzinfo is None else value
+
+
 @lru_cache(maxsize=1 << 16)
 def _epoch_str(value: str) -> Optional[float]:
     try:
         parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.timestamp()
+    return _assume_utc(parsed).timestamp()
 
 
 def epoch(value: Any) -> Optional[float]:
@@ -88,9 +93,7 @@ def epoch(value: Any) -> Optional[float]:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.timestamp()
+        return _assume_utc(value).timestamp()
     if isinstance(value, str):
         return _epoch_str(value)
     return None

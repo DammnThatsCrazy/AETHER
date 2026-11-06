@@ -40,7 +40,7 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
-  "services/api/actions/agent/deployment_routes.py": "sha256:9e177294d7cff6c2b4ec9f17d48a1eb5e2a1eb5cfb6b59742ae15f9d4110cfc1"
+  "services/api/actions/agent/deployment_routes.py": "sha256:66ca43046074af1fe520936680c0f5205eddf06f6f8c6937eca829acd3ae89c6"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -55,15 +55,15 @@ source_hashes:
   "services/api/connectors/provider_runtime/": "sha256:7bc893666ac1be2acf3c02a8318ff9fdbeffac4ab46229ecdfbc28f29fbdc5e2"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b547896e3b2f2775c7bb63a75ea2376bf422be9745fd600467cb6dd60d499006"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
-  "services/api/repositories/repos.py": "sha256:94d608024f7b2484041b2556457e7feb7eb7750375a9f7507da4b55bcbd05e8e"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
-  "services/api/workers/runtime/roles.py": "sha256:583eeb2de1dc946b6f57e4fbc4498f9855a30965f669496c2ecd0db27bba171d"
-  "services/api/workers/runtime/specs.py": "sha256:52c3a3a3ccfd84bd0a22fa25d63012e6c8e902d873a0a7700ef2ea0de0894774"
+  "services/api/workers/runtime/roles.py": "sha256:50cd242da2ca6c62417b6e58192f0b40a47c9604e77787ae9717f32e13cd84c5"
+  "services/api/workers/runtime/specs.py": "sha256:440199aa711ba2c921b88bbd5df3a40659e05fafabba052149b4171acc68ac3e"
 ---
 # Operations Runbook v0.1.0-alpha.0
 

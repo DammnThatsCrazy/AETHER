@@ -31,6 +31,13 @@ class PrincipalBindingRepository(BaseRepository):
         super().__init__("agent_lineage_principal_bindings")
 
 
+class AdjudicationRepository(BaseRepository):
+    """A person's verdict per agent (table ``agent_lineage_adjudications``)."""
+
+    def __init__(self) -> None:
+        super().__init__("agent_lineage_adjudications")
+
+
 def validate_filters(filters: Optional[dict[str, Any]]) -> dict[str, Any]:
     clean = {key: value for key, value in (filters or {}).items() if value is not None}
     unknown = set(clean) - ROW_FILTERS
@@ -257,17 +264,38 @@ class InMemoryLineageRepository:
                     summaries += 1
                 clusters += len(self._clusters[tenant_id].pop(principal, []))
                 continue
-            for agent in wanted & set(store):
+            # A surviving row naming the subject as parent or root would carry that id into
+            # the rebuild's restatement log, so it goes too. The rebuild restores what remains.
+            doomed = wanted & set(store) | {
+                agent for agent, row in store.items()
+                if row.get("parent_agent_id") in wanted or row.get("root_agent_id") in wanted
+            }
+            for agent in doomed:
                 del store[agent]
                 rows += 1
                 self._sorted.pop((tenant_id, principal), None)
-        for agent in wanted & set(self._nodes[tenant_id]):
+        for agent in [
+            agent for agent, node in self._nodes[tenant_id].items()
+            if agent in wanted or node.get("parent_agent_id") in wanted or node.get("root_agent_id") in wanted
+        ]:
             del self._nodes[tenant_id][agent]
             nodes += 1
+        # Records about other subjects keep no trace of the erased one.
+        for node in self._nodes[tenant_id].values():
+            if wanted & set(node.get("principal_entity_ids") or ()):
+                node["principal_entity_ids"] = [p for p in node["principal_entity_ids"] if p not in wanted]
+        for store in self._rows[tenant_id].values():
+            for row in store.values():
+                if wanted & set(row.get("competing_principal_ids") or ()):
+                    row["competing_principal_ids"] = [p for p in row["competing_principal_ids"] if p not in wanted]
         self._sorted_nodes.pop(tenant_id, None)
         kept = []
         for entry in self._restatements[tenant_id]:
-            if entry["principal_entity_id"] in wanted or entry["agent_entity_id"] in wanted:
+            states = [entry.get("before") or {}, entry.get("after") or {}]
+            if (
+                entry["principal_entity_id"] in wanted or entry["agent_entity_id"] in wanted
+                or any(state.get(field) in wanted for state in states for field in ("parent_agent_id", "root_agent_id"))
+            ):
                 restatements += 1
             else:
                 kept.append(entry)
@@ -584,11 +612,13 @@ class PostgresLineageRepository:
                 )
                 rows = await conn.execute(
                     "DELETE FROM principal_agent_lineage WHERE tenant_id = $1 "
-                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]))",
+                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]) "
+                    "OR parent_agent_id = ANY($2::text[]) OR root_agent_id = ANY($2::text[]))",
                     tenant_id, wanted,
                 )
                 nodes = await conn.execute(
-                    "DELETE FROM agent_lineage_nodes WHERE tenant_id = $1 AND agent_entity_id = ANY($2::text[])",
+                    "DELETE FROM agent_lineage_nodes WHERE tenant_id = $1 AND (agent_entity_id = ANY($2::text[]) "
+                    "OR parent_agent_id = ANY($2::text[]) OR root_agent_id = ANY($2::text[]))",
                     tenant_id, wanted,
                 )
                 summaries = await conn.execute(
@@ -603,7 +633,34 @@ class PostgresLineageRepository:
                 )
                 restatements = await conn.execute(
                     "DELETE FROM agent_lineage_restatements WHERE tenant_id = $1 "
-                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]))",
+                    "AND (principal_entity_id = ANY($2::text[]) OR agent_entity_id = ANY($2::text[]) "
+                    "OR before_state->>'parent_agent_id' = ANY($2::text[]) "
+                    "OR before_state->>'root_agent_id' = ANY($2::text[]) "
+                    "OR after_state->>'parent_agent_id' = ANY($2::text[]) "
+                    "OR after_state->>'root_agent_id' = ANY($2::text[]))",
+                    tenant_id, wanted,
+                )
+                # Records about other subjects keep no trace of the erased one.
+                await conn.execute(
+                    """
+                    UPDATE agent_lineage_nodes SET data = jsonb_set(data, '{principal_entity_ids}', (
+                        SELECT COALESCE(jsonb_agg(item), '[]'::jsonb)
+                        FROM jsonb_array_elements_text(data->'principal_entity_ids') AS item
+                        WHERE item <> ALL($2::text[])
+                    ))
+                    WHERE tenant_id = $1 AND data->'principal_entity_ids' ?| $2::text[]
+                    """,
+                    tenant_id, wanted,
+                )
+                await conn.execute(
+                    """
+                    UPDATE principal_agent_lineage SET data = jsonb_set(data, '{competing_principal_ids}', (
+                        SELECT COALESCE(jsonb_agg(item), '[]'::jsonb)
+                        FROM jsonb_array_elements_text(data->'competing_principal_ids') AS item
+                        WHERE item <> ALL($2::text[])
+                    ))
+                    WHERE tenant_id = $1 AND data->'competing_principal_ids' ?| $2::text[]
+                    """,
                     tenant_id, wanted,
                 )
         return {

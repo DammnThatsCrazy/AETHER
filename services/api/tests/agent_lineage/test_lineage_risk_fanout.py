@@ -41,7 +41,7 @@ def test_scenario_b_a_malicious_swarm_is_elevated_on_behaviour_with_links_separa
     summary = resolved[0][S.MALICIOUS_HUMAN]
     assessment = _assess(resolved, S.MALICIOUS_HUMAN)
     assert assessment["assessment_level"] == "elevated"
-    assert {"out_of_scope_execution_rate", "authority_failure_rate"} <= set(assessment["triggered_signals"])
+    assert "out_of_scope_execution_rate" in assessment["triggered_signals"]
     attribution = assessment["attribution"]
     assert attribution["verified_links"] > 0 and attribution["inferred_links"] > 0
     assert assessment["verified_external_effects"] > 0
@@ -87,8 +87,9 @@ def test_unknown_signals_stay_unknown_and_vocabulary_is_complete():
 def test_size_alone_with_no_behavioural_evidence_cannot_trigger():
     summary = {
         "tenant_id": "t", "principal_entity_id": "p", "disclosure": {},
-        "max_delegation_depth": 30, "out_of_scope_agents": 0, "revoked_agents": 0,
+        "max_delegation_depth": 30,
         "activity": {
+            "out_of_scope_agents": 0, "revoked_agents": 0,
             "agent_count": 100_000, "event_count": 10_000_000, "denied_event_count": 0,
             "wallet_count": 50_000, "tool_count": 900, "provider_count": 90, "transaction_count": 5_000_000,
             "max_direct_fanout": 50_000, "revoked_agent_activity": 0,

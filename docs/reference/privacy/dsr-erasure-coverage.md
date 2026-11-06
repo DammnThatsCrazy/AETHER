@@ -9,10 +9,10 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "config/storage_policies.yaml": "sha256:2a7ee282ad41fe82307f876ffa099439226d0b88d62ce16ac95035a8c536f018"
+  "config/storage_policies.yaml": "sha256:c1bcc0a50f3a2aa7a54ab3d89cf24b78a29fefa47322b2cdc6bb25c7adde159d"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
   "services/api/governance/consent/erasure_jobs.py": "sha256:e7209845abf90683109a52f895142862b5c8a421f80bf427cb4a90c4143c9a96"
-  "services/api/governance/consent/erasure_planes.py": "sha256:287108973e2f458ee2453dfe902ffd90a9c4ab25abba73b61666018fd57ac7d8"
+  "services/api/governance/consent/erasure_planes.py": "sha256:de18a72f03604da63b4acb8356f7515cf9e03e7f5e6db0ad8240b3b7f75c95cc"
   "services/api/governance/dsr_propagation/models.py": "sha256:132e4816b38b5abe03ba6105b92836da2380fe728e522afdd282e05fc0f8efc5"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
@@ -96,7 +96,7 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `risk_poisoning_evidence` | `risk_poisoning_evidence` | hard delete exact tenant rows whose subject or source ID equals a subject ref; legal holds respected | rows deleted |
 | `risk_intervention_records` | `risk_intervention_records` | hard delete exact tenant rows whose subject or actor ID equals a subject ref; legal holds respected | rows deleted |
 | `social_relationship_evidence_events` | `social_relationship_evidence_events` | hard delete exact tenant assertions naming the subject as the indexed subject, source, target, a path participant, or the authenticated actor; legal holds respected | rows deleted |
-| `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings`, `delegations` | hard delete rows naming a subject ref as principal, agent, grantor or grantee; `agent_configs` rows owned by the subject keep the agent but lose the owner. Legal holds are checked on each affected row's id and counterparty, and any hold skips the plane. The erase bumps `agent_lineage_tenant_state`, so every worker discards its older fold and an in-flight write fails and rebuilds from erased evidence. The 60-second `active_for` delegation cache expires on its own | rows deleted across the tables |
+| `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings`, `agent_lineage_adjudications`, `delegations`, fan-out `risk_signals` | hard delete rows naming a subject ref as principal, agent, grantor or grantee; `agent_configs` rows owned by the subject keep the agent but lose the owner. Legal holds are checked on each affected row's id and counterparty, and any hold skips the plane. `agent_configs` rows naming the subject as the agent are deleted, and `asserted_by_entity_id` and `revoked_by_entity_id` are cleared on rows that stay. The erase bumps `agent_lineage_tenant_state`, so every worker discards its older fold and an in-flight write fails and rebuilds from erased evidence. A full rebuild then runs in the same step, removing derived copies such as parent and root references and cluster labels. The 60-second `active_for` delegation cache expires on its own | rows deleted across the tables |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a

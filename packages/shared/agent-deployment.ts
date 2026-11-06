@@ -95,6 +95,8 @@ export interface AgentDeploymentContext {
   externalWorkspaceId?: string;
   environment: AgentDeploymentEnvironment;
   consentMode: AgentDeploymentConsentMode;
+  /** Base64 Ed25519 signature over this event, verified against the registered key. */
+  attestation?: string;
 }
 
 // -----------------------------------------------------------------------------

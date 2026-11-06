@@ -6,7 +6,8 @@
 // external distribution surfaces (Discord bots, Slack apps, MCP servers, ...).
 //
 // Security invariants:
-//   - Aether observes; it never executes, resolves identity, or signs anything
+//   - Aether observes; it never executes or resolves identity, and it never holds
+//     a signing key. A host may sign events with its own key via attestation
 //   - every event carries a validated AgentDeploymentContext as
 //     context.agentDeployment
 //   - canonical_entity_id is never emitted — identity resolution is
@@ -35,12 +36,65 @@ import {
   agentDeploymentEnvironments,
   agentDeploymentConsentModes,
 } from '@aether/shared';
+import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { AetherServerSDK } from './index';
+import { scrubSensitiveFields } from './scrubber';
 import type { AetherServerConfig, ServerEvent } from './types';
 
 export interface AgentTelemetryConfig extends AetherServerConfig {
   /** Deployment context attached to every emitted event as context.agentDeployment. */
   deployment: AgentDeploymentContext;
+  /**
+   * PEM Ed25519 private key for this deployment, whose public key is registered as
+   * attestation_public_key. When set, every event is signed and recorded as attested.
+   */
+  attestationPrivateKey?: string;
+}
+
+const ATTESTATION_VERSION = 'aether.agent-attestation.v1';
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+const ATTESTED_CONTEXT_BLOCKS: readonly (readonly [string, string])[] = [
+  ['actor_context', 'actorContext'],
+  ['authority_context', 'authorityContext'],
+  ['execution_context', 'executionContext'],
+  ['protocol_context', 'protocolContext'],
+];
+
+/**
+ * Base64 Ed25519 signature over the event's identity and a hash of its properties and
+ * lineage context. Backend twin: services/api/actions/agent/attestation.py.
+ */
+export function attestAgentEvent(params: {
+  privateKey: string;
+  deploymentId: string;
+  agentId: string;
+  id: string;
+  type: string;
+  timestamp: string;
+  properties?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+}): string {
+  const material: Record<string, unknown> = { properties: params.properties ?? {} };
+  for (const [name, alias] of ATTESTED_CONTEXT_BLOCKS) {
+    const block = params.context?.[name] ?? params.context?.[alias];
+    if (block && typeof block === 'object' && Object.keys(block).length > 0) material[name] = block;
+  }
+  const digest = createHash('sha256').update(canonicalJson(material), 'utf8').digest('hex');
+  const payload = JSON.stringify([
+    ATTESTATION_VERSION, params.deploymentId, params.agentId, params.id, params.type, params.timestamp, digest,
+  ]);
+  return sign(null, Buffer.from(payload, 'utf8'), createPrivateKey(params.privateKey)).toString('base64');
 }
 
 // Identity resolution is backend-owned. SDKs must never emit these keys.
@@ -116,12 +170,14 @@ function stripIdentityKeys(obj: Record<string, unknown>): Record<string, unknown
 
 export class AgentTelemetryClient extends AetherServerSDK {
   private readonly deployment: AgentDeploymentContext;
+  private readonly attestationPrivateKey?: string;
 
   constructor(config: AgentTelemetryConfig) {
-    const { deployment, ...serverConfig } = config;
+    const { deployment, attestationPrivateKey, ...serverConfig } = config;
     validateAgentDeploymentContext(deployment);
     super(serverConfig);
     this.deployment = pickDeploymentContext(deployment);
+    this.attestationPrivateKey = attestationPrivateKey;
   }
 
   /** Get the validated deployment context attached to every event. */
@@ -135,12 +191,31 @@ export class AgentTelemetryClient extends AetherServerSDK {
    * stripped before the inherited scrub/queue/transport path runs.
    */
   track(event: ServerEvent): void {
+    const properties = event.properties ? stripIdentityKeys(event.properties) : undefined;
+    const context = event.context ? stripIdentityKeys(event.context) : undefined;
+    const id = event.id || randomUUID();
+    const timestamp = event.timestamp ?? new Date().toISOString();
+    const attestation = this.attestationPrivateKey
+      ? attestAgentEvent({
+        privateKey: this.attestationPrivateKey,
+        deploymentId: this.deployment.deploymentId,
+        agentId: this.deployment.agentId,
+        id,
+        type: event.type,
+        timestamp,
+        // Sign what is sent: the base client scrubs properties before transmission.
+        properties: properties ? scrubSensitiveFields(properties) : undefined,
+        context,
+      })
+      : undefined;
     super.track({
       ...event,
-      properties: event.properties ? stripIdentityKeys(event.properties) : undefined,
+      id,
+      timestamp,
+      properties,
       context: {
-        ...(event.context ? stripIdentityKeys(event.context) : undefined),
-        agentDeployment: { ...this.deployment },
+        ...context,
+        agentDeployment: { ...this.deployment, ...(attestation ? { attestation } : {}) },
       },
     });
   }

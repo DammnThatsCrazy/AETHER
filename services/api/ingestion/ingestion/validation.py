@@ -388,6 +388,40 @@ def format_rejection(result: EventValidationResult, sdk_event: Any) -> str:
     return code
 
 
+_ATTESTED_CONTEXT_BLOCKS: tuple[tuple[str, str], ...] = (
+    ("actor_context", "actorContext"), ("authority_context", "authorityContext"),
+    ("execution_context", "executionContext"), ("protocol_context", "protocolContext"),
+)
+
+
+def _event_is_attested(sdk_event: Any, deployment_ctx: Any, record: dict[str, Any]) -> bool:
+    from actions.agent.attestation import canonical_payload, verify_attestation
+
+    public_key = record.get("attestation_public_key")
+    if not public_key or not isinstance(deployment_ctx, dict):
+        return False
+    timestamp = sdk_event.timestamp
+    context = getattr(sdk_event, "context", None)
+    blocks = {}
+    for name, alias in _ATTESTED_CONTEXT_BLOCKS:
+        value = getattr(context, name, None) or getattr(context, alias, None)
+        if isinstance(value, dict):
+            blocks[name] = value
+    try:
+        payload = canonical_payload(
+            deployment_id=str(record.get("id")),
+            agent_id=str(record.get("agent_id")),
+            message_id=str(sdk_event.id),
+            event_type=sdk_event.type,
+            timestamp=timestamp if isinstance(timestamp, str) else None,
+            properties=sdk_event.properties or {},
+            blocks=blocks,
+        )
+    except (TypeError, ValueError):
+        return False
+    return verify_attestation(public_key, deployment_ctx.get("attestation"), payload)
+
+
 async def validate_event(
     *,
     sdk_event: Any,
@@ -648,6 +682,10 @@ async def validate_event(
                 "deployment_id": str(deployment_id),
                 "agent_id": deployment_record.get("agent_id"),
             }
+            # Added only when a signature verifies against the registered key,
+            # so a client cannot claim attestation by setting a field.
+            if _event_is_attested(sdk_event, deployment_ctx, deployment_record):
+                normalized["validated_agent_deployment"]["attested"] = True
     return EventValidationResult(
         allowed=True,
         reason_code=None,

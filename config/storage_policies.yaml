@@ -2871,6 +2871,25 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # A person's verdict on an agent (confirmed malicious or cleared). An input, not
+  # derived, and erased by the agent_lineage_projection DSR component.
+  - resource_type: agent_lineage_adjudications
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: agent_economic_identities
     authoritative_store: postgres
     metadata_store: postgres

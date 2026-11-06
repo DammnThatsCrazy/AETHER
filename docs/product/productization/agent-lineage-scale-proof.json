@@ -6,6 +6,22 @@
     "postgres": true,
     "python": "3.11.15"
   },
+  "high_volume": {
+    "agents_with_volume": 55000,
+    "attribution_class_mismatch": 0,
+    "facts_per_second": 102353,
+    "false_principal_attribution": 0,
+    "fold_seconds": 107.47,
+    "instances_at_least_generated": true,
+    "instances_generated": 1100000,
+    "peak_rss_mb": 1518.4,
+    "principal_instances": 1155000,
+    "principal_runs": 2255000,
+    "resolve_seconds": 66.83,
+    "runs_at_least_generated": true,
+    "runs_generated": 2200000,
+    "tool_observations_added": 11000000
+  },
   "tiers": [
     {
       "agents_in_fixture": 108,
@@ -45,12 +61,12 @@
       "incremental_single_event": {
         "nodes_written": 54,
         "rows_written": 1,
-        "seconds": 0.0019
+        "seconds": 0.0024
       },
       "incremental_vs_rebuild_divergence": 0,
       "lineage_fold": {
-        "facts_per_second": 201087,
-        "seconds": 0.001
+        "facts_per_second": 165435,
+        "seconds": 0.002
       },
       "malicious_principal_summary": {
         "agent_instances": 25,
@@ -66,7 +82,7 @@
         "unresolved_agents": 0,
         "verified_links": 7
       },
-      "peak_rss_mb": 109.8,
+      "peak_rss_mb": 109.0,
       "replay": {
         "divergence": 0,
         "rows_changed": 0,
@@ -79,7 +95,7 @@
           "assessment_level": "no_behavioral_indicators",
           "delegation_depth": 4,
           "segments": {
-            "attributable_agents": 56,
+            "attributable_agents": 55,
             "confirmed_abusive": null,
             "elevated_risk": 0,
             "no_indicators": 55,
@@ -92,24 +108,23 @@
           "assessment_level": "elevated",
           "delegation_depth": 5,
           "segments": {
-            "attributable_agents": 25,
+            "attributable_agents": 7,
             "confirmed_abusive": null,
-            "elevated_risk": 23,
+            "elevated_risk": 5,
             "no_indicators": 2,
             "unresolved": 0
           },
-          "spawn_velocity_per_second": 0.4,
+          "spawn_velocity_per_second": 0.1,
           "triggered_signals": [
-            "authority_failure_rate",
             "revoked_agent_activity"
           ]
         },
-        "seconds_all_principals": 0.0001
+        "seconds_all_principals": 9e-05
       },
       "rows": 109,
       "silver_projection": {
         "events": 276,
-        "events_per_second": 48949,
+        "events_per_second": 47176,
         "projected": 276
       },
       "stores": {
@@ -121,64 +136,64 @@
           },
           "query_latency": {
             "agent_detail": {
-              "max_ms": 0.017,
-              "p50_ms": 0.012,
-              "p95_ms": 0.015
+              "max_ms": 0.016,
+              "p50_ms": 0.011,
+              "p95_ms": 0.013
             },
             "agents_deep_page": {
-              "max_ms": 0.011,
+              "max_ms": 0.008,
               "p50_ms": 0.006,
-              "p95_ms": 0.006
+              "p95_ms": 0.007
             },
             "agents_filtered": {
               "max_ms": 0.01,
-              "p50_ms": 0.007,
+              "p50_ms": 0.006,
               "p95_ms": 0.007
             },
             "agents_first_page": {
-              "max_ms": 0.012,
+              "max_ms": 0.011,
               "p50_ms": 0.006,
               "p95_ms": 0.007
             },
             "ancestors": {
               "max_ms": 0.01,
               "p50_ms": 0.006,
-              "p95_ms": 0.008
+              "p95_ms": 0.01
             },
             "clusters": {
-              "max_ms": 0.047,
-              "p50_ms": 0.027,
-              "p95_ms": 0.034
+              "max_ms": 0.043,
+              "p50_ms": 0.025,
+              "p95_ms": 0.031
             },
             "descendants_page": {
-              "max_ms": 0.058,
-              "p50_ms": 0.035,
+              "max_ms": 0.057,
+              "p50_ms": 0.033,
               "p95_ms": 0.041
             },
             "investigation": {
-              "max_ms": 0.105,
-              "p50_ms": 0.075,
-              "p95_ms": 0.081
+              "max_ms": 0.114,
+              "p50_ms": 0.077,
+              "p95_ms": 0.103
             },
             "summary": {
               "max_ms": 0.004,
               "p50_ms": 0.001,
-              "p95_ms": 0.002
+              "p95_ms": 0.001
             },
             "tree_expand": {
               "max_ms": 0.011,
               "p50_ms": 0.008,
-              "p95_ms": 0.011
+              "p95_ms": 0.01
             },
             "tree_top": {
-              "max_ms": 0.481,
-              "p50_ms": 0.008,
-              "p95_ms": 0.011
+              "max_ms": 0.047,
+              "p50_ms": 0.007,
+              "p95_ms": 0.009
             }
           }
         },
         "postgres": {
-          "apply_seconds": 0.026,
+          "apply_seconds": 0.049,
           "full_walk": {
             "pages": 1,
             "rows": 25
@@ -186,59 +201,59 @@
           "lineage_table_bytes": 434176,
           "query_latency": {
             "agent_detail": {
-              "max_ms": 1.35,
-              "p50_ms": 1.103,
-              "p95_ms": 1.189
+              "max_ms": 93.143,
+              "p50_ms": 4.305,
+              "p95_ms": 15.195
             },
             "agents_deep_page": {
-              "max_ms": 1.034,
-              "p50_ms": 0.852,
-              "p95_ms": 1.015
+              "max_ms": 6.592,
+              "p50_ms": 0.951,
+              "p95_ms": 2.53
             },
             "agents_filtered": {
-              "max_ms": 0.869,
-              "p50_ms": 0.42,
-              "p95_ms": 0.63
+              "max_ms": 1.178,
+              "p50_ms": 0.517,
+              "p95_ms": 0.957
             },
             "agents_first_page": {
-              "max_ms": 1.598,
-              "p50_ms": 0.873,
-              "p95_ms": 1.006
+              "max_ms": 3.742,
+              "p50_ms": 0.941,
+              "p95_ms": 2.097
             },
             "ancestors": {
-              "max_ms": 0.523,
-              "p50_ms": 0.451,
-              "p95_ms": 0.518
+              "max_ms": 11.656,
+              "p50_ms": 0.609,
+              "p95_ms": 6.521
             },
             "clusters": {
-              "max_ms": 0.691,
-              "p50_ms": 0.44,
-              "p95_ms": 0.526
+              "max_ms": 3.007,
+              "p50_ms": 0.429,
+              "p95_ms": 1.869
             },
             "descendants_page": {
-              "max_ms": 1.557,
-              "p50_ms": 0.682,
-              "p95_ms": 0.749
+              "max_ms": 5.95,
+              "p50_ms": 0.964,
+              "p95_ms": 2.983
             },
             "investigation": {
-              "max_ms": 3.724,
-              "p50_ms": 3.379,
-              "p95_ms": 3.405
+              "max_ms": 8.207,
+              "p50_ms": 3.944,
+              "p95_ms": 4.845
             },
             "summary": {
-              "max_ms": 0.502,
-              "p50_ms": 0.247,
-              "p95_ms": 0.339
+              "max_ms": 1.966,
+              "p50_ms": 0.575,
+              "p95_ms": 1.693
             },
             "tree_expand": {
-              "max_ms": 0.969,
-              "p50_ms": 0.597,
-              "p95_ms": 0.752
+              "max_ms": 5.258,
+              "p50_ms": 1.278,
+              "p95_ms": 3.527
             },
             "tree_top": {
-              "max_ms": 1.216,
-              "p50_ms": 0.53,
-              "p95_ms": 0.738
+              "max_ms": 50.301,
+              "p50_ms": 1.864,
+              "p95_ms": 4.876
             }
           }
         }
@@ -252,7 +267,7 @@
         "restatements_logged": 188,
         "reversal_rows_rewritten": 188,
         "rows_rewritten": 188,
-        "seconds": 0.011
+        "seconds": 0.013
       },
       "correctness": {
         "agents_in_truth": 1033,
@@ -272,23 +287,23 @@
         "unknown_converted_to_known": 0
       },
       "facts": 2777,
-      "fixture_build_seconds": 0.006,
+      "fixture_build_seconds": 0.011,
       "foreign_tenant_facts": 27,
       "graph_mutation_volume": {
         "facts": 2777,
         "kind": "computed from the resolved topology; no graph store was written",
         "semantic_edges": 893
       },
-      "identity_and_lineage_resolution_seconds": 0.047,
+      "identity_and_lineage_resolution_seconds": 0.035,
       "incremental_single_event": {
         "nodes_written": 106,
         "rows_written": 1,
-        "seconds": 0.009
+        "seconds": 0.0133
       },
       "incremental_vs_rebuild_divergence": 0,
       "lineage_fold": {
-        "facts_per_second": 207058,
-        "seconds": 0.013
+        "facts_per_second": 85905,
+        "seconds": 0.032
       },
       "malicious_principal_summary": {
         "agent_instances": 250,
@@ -304,11 +319,11 @@
         "unresolved_agents": 0,
         "verified_links": 50
       },
-      "peak_rss_mb": 147.1,
+      "peak_rss_mb": 142.4,
       "replay": {
         "divergence": 0,
         "rows_changed": 0,
-        "seconds": 0.006
+        "seconds": 0.008
       },
       "replayed_events_in_fixture": 54,
       "restatement_divergence": 0,
@@ -317,7 +332,7 @@
           "assessment_level": "no_behavioral_indicators",
           "delegation_depth": 4,
           "segments": {
-            "attributable_agents": 560,
+            "attributable_agents": 550,
             "confirmed_abusive": null,
             "elevated_risk": 0,
             "no_indicators": 550,
@@ -330,25 +345,24 @@
           "assessment_level": "elevated",
           "delegation_depth": 5,
           "segments": {
-            "attributable_agents": 250,
+            "attributable_agents": 50,
             "confirmed_abusive": null,
-            "elevated_risk": 245,
+            "elevated_risk": 45,
             "no_indicators": 5,
             "unresolved": 0
           },
-          "spawn_velocity_per_second": 4.15,
+          "spawn_velocity_per_second": 0.8167,
           "triggered_signals": [
-            "authority_failure_rate",
             "out_of_scope_execution_rate",
             "revoked_agent_activity"
           ]
         },
-        "seconds_all_principals": 0.0001
+        "seconds_all_principals": 0.00016
       },
       "rows": 1038,
       "silver_projection": {
         "events": 2777,
-        "events_per_second": 52637,
+        "events_per_second": 31920,
         "projected": 2777
       },
       "stores": {
@@ -360,64 +374,64 @@
           },
           "query_latency": {
             "agent_detail": {
-              "max_ms": 0.092,
-              "p50_ms": 0.013,
-              "p95_ms": 0.048
+              "max_ms": 0.098,
+              "p50_ms": 0.015,
+              "p95_ms": 0.052
             },
             "agents_deep_page": {
-              "max_ms": 0.018,
-              "p50_ms": 0.017,
-              "p95_ms": 0.017
+              "max_ms": 0.106,
+              "p50_ms": 0.019,
+              "p95_ms": 0.041
             },
             "agents_filtered": {
-              "max_ms": 0.037,
-              "p50_ms": 0.028,
+              "max_ms": 0.08,
+              "p50_ms": 0.029,
               "p95_ms": 0.033
             },
             "agents_first_page": {
-              "max_ms": 0.037,
-              "p50_ms": 0.017,
-              "p95_ms": 0.02
+              "max_ms": 0.051,
+              "p50_ms": 0.018,
+              "p95_ms": 0.022
             },
             "ancestors": {
-              "max_ms": 0.079,
-              "p50_ms": 0.007,
-              "p95_ms": 0.043
+              "max_ms": 0.152,
+              "p50_ms": 0.009,
+              "p95_ms": 0.069
             },
             "clusters": {
-              "max_ms": 0.041,
-              "p50_ms": 0.03,
-              "p95_ms": 0.034
+              "max_ms": 0.046,
+              "p50_ms": 0.032,
+              "p95_ms": 0.033
             },
             "descendants_page": {
-              "max_ms": 0.317,
-              "p50_ms": 0.195,
-              "p95_ms": 0.224
+              "max_ms": 0.438,
+              "p50_ms": 0.258,
+              "p95_ms": 0.278
             },
             "investigation": {
-              "max_ms": 0.191,
-              "p50_ms": 0.161,
-              "p95_ms": 0.179
+              "max_ms": 0.246,
+              "p50_ms": 0.197,
+              "p95_ms": 0.207
             },
             "summary": {
-              "max_ms": 0.004,
+              "max_ms": 0.009,
               "p50_ms": 0.001,
-              "p95_ms": 0.002
+              "p95_ms": 0.001
             },
             "tree_expand": {
-              "max_ms": 0.047,
-              "p50_ms": 0.038,
-              "p95_ms": 0.043
+              "max_ms": 0.046,
+              "p50_ms": 0.04,
+              "p95_ms": 0.041
             },
             "tree_top": {
-              "max_ms": 0.076,
-              "p50_ms": 0.031,
-              "p95_ms": 0.037
+              "max_ms": 0.16,
+              "p50_ms": 0.033,
+              "p95_ms": 0.035
             }
           }
         },
         "postgres": {
-          "apply_seconds": 0.227,
+          "apply_seconds": 0.11,
           "full_walk": {
             "pages": 1,
             "rows": 250
@@ -425,59 +439,59 @@
           "lineage_table_bytes": 2924544,
           "query_latency": {
             "agent_detail": {
-              "max_ms": 1.833,
-              "p50_ms": 0.938,
-              "p95_ms": 1.203
+              "max_ms": 4.526,
+              "p50_ms": 0.963,
+              "p95_ms": 1.954
             },
             "agents_deep_page": {
-              "max_ms": 2.21,
-              "p50_ms": 1.848,
-              "p95_ms": 2.028
+              "max_ms": 11.667,
+              "p50_ms": 2.443,
+              "p95_ms": 9.12
             },
             "agents_filtered": {
-              "max_ms": 2.741,
-              "p50_ms": 1.985,
-              "p95_ms": 2.196
+              "max_ms": 47.528,
+              "p50_ms": 2.946,
+              "p95_ms": 28.174
             },
             "agents_first_page": {
-              "max_ms": 2.094,
-              "p50_ms": 1.839,
-              "p95_ms": 1.928
+              "max_ms": 6.371,
+              "p50_ms": 2.573,
+              "p95_ms": 4.655
             },
             "ancestors": {
-              "max_ms": 1.35,
-              "p50_ms": 0.416,
-              "p95_ms": 0.841
+              "max_ms": 1.394,
+              "p50_ms": 0.415,
+              "p95_ms": 1.169
             },
             "clusters": {
-              "max_ms": 0.82,
-              "p50_ms": 0.49,
-              "p95_ms": 0.603
+              "max_ms": 1.519,
+              "p50_ms": 0.569,
+              "p95_ms": 1.091
             },
             "descendants_page": {
-              "max_ms": 2.122,
-              "p50_ms": 1.416,
-              "p95_ms": 1.501
+              "max_ms": 2.263,
+              "p50_ms": 1.306,
+              "p95_ms": 1.657
             },
             "investigation": {
-              "max_ms": 3.425,
-              "p50_ms": 3.235,
-              "p95_ms": 3.346
+              "max_ms": 7.042,
+              "p50_ms": 3.652,
+              "p95_ms": 4.647
             },
             "summary": {
-              "max_ms": 0.949,
-              "p50_ms": 0.257,
-              "p95_ms": 0.42
+              "max_ms": 0.382,
+              "p50_ms": 0.271,
+              "p95_ms": 0.333
             },
             "tree_expand": {
-              "max_ms": 0.725,
-              "p50_ms": 0.601,
-              "p95_ms": 0.696
+              "max_ms": 0.793,
+              "p50_ms": 0.575,
+              "p95_ms": 0.626
             },
             "tree_top": {
-              "max_ms": 0.894,
-              "p50_ms": 0.553,
-              "p95_ms": 0.685
+              "max_ms": 2.573,
+              "p50_ms": 0.594,
+              "p95_ms": 0.928
             }
           }
         }
@@ -491,7 +505,7 @@
         "restatements_logged": 1000,
         "reversal_rows_rewritten": 2445,
         "rows_rewritten": 2445,
-        "seconds": 0.147
+        "seconds": 0.207
       },
       "correctness": {
         "agents_in_truth": 9673,
@@ -511,23 +525,23 @@
         "unknown_converted_to_known": 0
       },
       "facts": 26500,
-      "fixture_build_seconds": 0.066,
+      "fixture_build_seconds": 0.069,
       "foreign_tenant_facts": 265,
       "graph_mutation_volume": {
         "facts": 26500,
         "kind": "computed from the resolved topology; no graph store was written",
         "semantic_edges": 8243
       },
-      "identity_and_lineage_resolution_seconds": 0.459,
+      "identity_and_lineage_resolution_seconds": 0.396,
       "incremental_single_event": {
         "nodes_written": 100,
         "rows_written": 1,
-        "seconds": 0.0918
+        "seconds": 0.1913
       },
       "incremental_vs_rebuild_divergence": 0,
       "lineage_fold": {
-        "facts_per_second": 82003,
-        "seconds": 0.323
+        "facts_per_second": 145129,
+        "seconds": 0.183
       },
       "malicious_principal_summary": {
         "agent_instances": 2500,
@@ -543,11 +557,11 @@
         "unresolved_agents": 0,
         "verified_links": 498
       },
-      "peak_rss_mb": 416.7,
+      "peak_rss_mb": 412.1,
       "replay": {
         "divergence": 0,
         "rows_changed": 0,
-        "seconds": 0.095
+        "seconds": 0.25
       },
       "replayed_events_in_fixture": 519,
       "restatement_divergence": 0,
@@ -556,7 +570,7 @@
           "assessment_level": "no_behavioral_indicators",
           "delegation_depth": 4,
           "segments": {
-            "attributable_agents": 5600,
+            "attributable_agents": 5500,
             "confirmed_abusive": null,
             "elevated_risk": 0,
             "no_indicators": 5500,
@@ -569,94 +583,93 @@
           "assessment_level": "elevated",
           "delegation_depth": 5,
           "segments": {
-            "attributable_agents": 2500,
+            "attributable_agents": 498,
             "confirmed_abusive": null,
-            "elevated_risk": 2452,
+            "elevated_risk": 450,
             "no_indicators": 48,
             "unresolved": 0
           },
-          "spawn_velocity_per_second": 41.65,
+          "spawn_velocity_per_second": 8.2833,
           "triggered_signals": [
-            "authority_failure_rate",
             "out_of_scope_execution_rate",
             "revoked_agent_activity"
           ]
         },
-        "seconds_all_principals": 0.00016
+        "seconds_all_principals": 0.00035
       },
       "rows": 9723,
       "silver_projection": {
         "events": 20000,
-        "events_per_second": 47774,
+        "events_per_second": 42219,
         "projected": 20000
       },
       "stores": {
         "memory": {
-          "apply_seconds": 0.013,
+          "apply_seconds": 0.14,
           "full_walk": {
             "pages": 5,
             "rows": 2500
           },
           "query_latency": {
             "agent_detail": {
-              "max_ms": 0.027,
+              "max_ms": 0.038,
               "p50_ms": 0.013,
-              "p95_ms": 0.016
+              "p95_ms": 0.018
             },
             "agents_deep_page": {
-              "max_ms": 0.034,
-              "p50_ms": 0.024,
-              "p95_ms": 0.027
+              "max_ms": 0.109,
+              "p50_ms": 0.025,
+              "p95_ms": 0.048
             },
             "agents_filtered": {
-              "max_ms": 0.033,
-              "p50_ms": 0.023,
-              "p95_ms": 0.026
+              "max_ms": 0.116,
+              "p50_ms": 0.033,
+              "p95_ms": 0.078
             },
             "agents_first_page": {
-              "max_ms": 0.026,
-              "p50_ms": 0.017,
-              "p95_ms": 0.019
+              "max_ms": 0.092,
+              "p50_ms": 0.019,
+              "p95_ms": 0.064
             },
             "ancestors": {
-              "max_ms": 0.019,
-              "p50_ms": 0.007,
-              "p95_ms": 0.009
+              "max_ms": 0.04,
+              "p50_ms": 0.01,
+              "p95_ms": 0.021
             },
             "clusters": {
-              "max_ms": 0.948,
-              "p50_ms": 0.035,
-              "p95_ms": 0.043
+              "max_ms": 0.207,
+              "p50_ms": 0.039,
+              "p95_ms": 0.128
             },
             "descendants_page": {
-              "max_ms": 2.182,
-              "p50_ms": 1.068,
-              "p95_ms": 1.116
+              "max_ms": 23.368,
+              "p50_ms": 2.12,
+              "p95_ms": 7.234
             },
             "investigation": {
-              "max_ms": 1.155,
-              "p50_ms": 1.011,
-              "p95_ms": 1.139
+              "max_ms": 70.136,
+              "p50_ms": 5.905,
+              "p95_ms": 13.285
             },
             "summary": {
-              "max_ms": 0.103,
+              "max_ms": 0.152,
               "p50_ms": 0.001,
               "p95_ms": 0.002
             },
             "tree_expand": {
-              "max_ms": 0.417,
-              "p50_ms": 0.377,
-              "p95_ms": 0.399
+              "max_ms": 1.528,
+              "p50_ms": 0.462,
+              "p95_ms": 1.054
             },
             "tree_top": {
-              "max_ms": 0.453,
-              "p50_ms": 0.296,
-              "p95_ms": 0.311
+              "max_ms": 1.819,
+              "p50_ms": 0.356,
+              "p95_ms": 1.013
             }
           }
         },
         "postgres": {
-          "apply_seconds": 1.802,
+          "apply_seconds": 1.758,
           "full_walk": {
             "pages": 5,
             "rows": 2500
@@ -664,59 +677,59 @@
           "lineage_table_bytes": 25763840,
           "query_latency": {
             "agent_detail": {
-              "max_ms": 8.286,
-              "p50_ms": 0.952,
-              "p95_ms": 1.023
+              "max_ms": 1.432,
+              "p50_ms": 1.101,
+              "p95_ms": 1.217
             },
             "agents_deep_page": {
-              "max_ms": 2.226,
-              "p50_ms": 1.973,
-              "p95_ms": 2.203
+              "max_ms": 2.156,
+              "p50_ms": 1.988,
+              "p95_ms": 2.085
             },
             "agents_filtered": {
-              "max_ms": 2.298,
-              "p50_ms": 1.958,
-              "p95_ms": 2.261
+              "max_ms": 2.29,
+              "p50_ms": 1.974,
+              "p95_ms": 2.114
             },
             "agents_first_page": {
-              "max_ms": 8.623,
-              "p50_ms": 2.173,
-              "p95_ms": 5.227
+              "max_ms": 2.131,
+              "p50_ms": 1.95,
+              "p95_ms": 2.08
             },
             "ancestors": {
-              "max_ms": 0.464,
-              "p50_ms": 0.404,
-              "p95_ms": 0.446
+              "max_ms": 0.743,
+              "p50_ms": 0.612,
+              "p95_ms": 0.725
             },
             "clusters": {
-              "max_ms": 0.934,
-              "p50_ms": 0.505,
-              "p95_ms": 0.678
+              "max_ms": 0.908,
+              "p50_ms": 0.546,
+              "p95_ms": 0.669
             },
             "descendants_page": {
-              "max_ms": 2.012,
-              "p50_ms": 1.457,
-              "p95_ms": 1.842
+              "max_ms": 463.732,
+              "p50_ms": 1.685,
+              "p95_ms": 2.03
             },
             "investigation": {
-              "max_ms": 3.767,
-              "p50_ms": 3.389,
-              "p95_ms": 3.536
+              "max_ms": 4.43,
+              "p50_ms": 3.849,
+              "p95_ms": 3.965
             },
             "summary": {
-              "max_ms": 0.316,
-              "p50_ms": 0.247,
-              "p95_ms": 0.294
+              "max_ms": 0.364,
+              "p50_ms": 0.235,
+              "p95_ms": 0.269
             },
             "tree_expand": {
-              "max_ms": 0.807,
-              "p50_ms": 0.687,
-              "p95_ms": 0.743
+              "max_ms": 0.989,
+              "p50_ms": 0.603,
+              "p95_ms": 0.675
             },
             "tree_top": {
-              "max_ms": 0.86,
-              "p50_ms": 0.568,
-              "p95_ms": 0.642
+              "max_ms": 1.015,
+              "p50_ms": 0.523,
+              "p95_ms": 0.592
             }
           }
         }
@@ -730,7 +743,7 @@
         "restatements_logged": 1000,
         "reversal_rows_rewritten": 24945,
         "rows_rewritten": 24945,
-        "seconds": 7.523
+        "seconds": 6.832
       },
       "correctness": {
         "agents_in_truth": 96073,
@@ -750,23 +763,23 @@
         "unknown_converted_to_known": 0
       },
       "facts": 263733,
-      "fixture_build_seconds": 0.858,
+      "fixture_build_seconds": 0.928,
       "foreign_tenant_facts": 2637,
       "graph_mutation_volume": {
         "facts": 263733,
         "kind": "computed from the resolved topology; no graph store was written",
         "semantic_edges": 81743
       },
-      "identity_and_lineage_resolution_seconds": 9.269,
+      "identity_and_lineage_resolution_seconds": 6.059,
       "incremental_single_event": {
         "nodes_written": 100,
         "rows_written": 1,
-        "seconds": 1.8795
+        "seconds": 4.1713
       },
       "incremental_vs_rebuild_divergence": 0,
       "lineage_fold": {
-        "facts_per_second": 62403,
-        "seconds": 4.226
+        "facts_per_second": 125688,
+        "seconds": 2.098
       },
       "malicious_principal_summary": {
         "agent_instances": 25000,
@@ -782,11 +795,11 @@
         "unresolved_agents": 0,
         "verified_links": 4998
       },
-      "peak_rss_mb": 1519.7,
+      "peak_rss_mb": 1501.6,
       "replay": {
         "divergence": 0,
         "rows_changed": 0,
-        "seconds": 3.156
+        "seconds": 1.959
       },
       "replayed_events_in_fixture": 5171,
       "restatement_divergence": 0,
@@ -795,7 +808,7 @@
           "assessment_level": "no_behavioral_indicators",
           "delegation_depth": 4,
           "segments": {
-            "attributable_agents": 56000,
+            "attributable_agents": 55000,
             "confirmed_abusive": null,
             "elevated_risk": 0,
             "no_indicators": 55000,
@@ -808,94 +821,93 @@
           "assessment_level": "elevated",
           "delegation_depth": 5,
           "segments": {
-            "attributable_agents": 25000,
+            "attributable_agents": 4998,
             "confirmed_abusive": null,
-            "elevated_risk": 24502,
+            "elevated_risk": 4500,
             "no_indicators": 498,
             "unresolved": 0
           },
-          "spawn_velocity_per_second": 416.65,
+          "spawn_velocity_per_second": 83.2833,
           "triggered_signals": [
-            "authority_failure_rate",
             "out_of_scope_execution_rate",
             "revoked_agent_activity"
           ]
         },
-        "seconds_all_principals": 0.00071
+        "seconds_all_principals": 0.03151
       },
       "rows": 96573,
       "silver_projection": {
         "events": 20000,
-        "events_per_second": 47453,
+        "events_per_second": 42452,
         "projected": 20000
       },
       "stores": {
         "memory": {
-          "apply_seconds": 0.338,
+          "apply_seconds": 14.606,
           "full_walk": {
             "pages": 50,
             "rows": 25000
           },
           "query_latency": {
             "agent_detail": {
-              "max_ms": 0.072,
-              "p50_ms": 0.015,
-              "p95_ms": 0.02
+              "max_ms": 3.009,
+              "p50_ms": 0.027,
+              "p95_ms": 0.093
             },
             "agents_deep_page": {
-              "max_ms": 0.058,
+              "max_ms": 0.054,
               "p50_ms": 0.023,
               "p95_ms": 0.024
             },
             "agents_filtered": {
-              "max_ms": 0.045,
-              "p50_ms": 0.024,
-              "p95_ms": 0.025
+              "max_ms": 0.052,
+              "p50_ms": 0.025,
+              "p95_ms": 0.036
             },
             "agents_first_page": {
-              "max_ms": 0.08,
-              "p50_ms": 0.017,
-              "p95_ms": 0.024
+              "max_ms": 0.064,
+              "p50_ms": 0.018,
+              "p95_ms": 0.02
             },
             "ancestors": {
-              "max_ms": 0.041,
-              "p50_ms": 0.012,
-              "p95_ms": 0.023
+              "max_ms": 0.42,
+              "p50_ms": 0.01,
+              "p95_ms": 0.014
             },
             "clusters": {
-              "max_ms": 0.654,
+              "max_ms": 0.414,
               "p50_ms": 0.042,
-              "p95_ms": 0.045
+              "p95_ms": 0.049
             },
             "descendants_page": {
-              "max_ms": 33.364,
-              "p50_ms": 22.795,
-              "p95_ms": 24.085
+              "max_ms": 54.523,
+              "p50_ms": 35.711,
+              "p95_ms": 38.668
             },
             "investigation": {
-              "max_ms": 22.968,
-              "p50_ms": 13.909,
-              "p95_ms": 19.525
+              "max_ms": 22.054,
+              "p50_ms": 12.02,
+              "p95_ms": 14.301
             },
             "summary": {
-              "max_ms": 0.017,
+              "max_ms": 0.01,
               "p50_ms": 0.001,
               "p95_ms": 0.001
             },
             "tree_expand": {
-              "max_ms": 7.511,
-              "p50_ms": 6.05,
-              "p95_ms": 7.145
+              "max_ms": 8.672,
+              "p50_ms": 5.221,
+              "p95_ms": 6.349
             },
             "tree_top": {
-              "max_ms": 16.787,
-              "p50_ms": 3.519,
-              "p95_ms": 4.409
+              "max_ms": 17.687,
+              "p50_ms": 4.064,
+              "p95_ms": 6.046
             }
           }
         },
         "postgres": {
-          "apply_seconds": 13.602,
+          "apply_seconds": 14.842,
           "full_walk": {
             "pages": 50,
             "rows": 25000
@@ -903,59 +915,59 @@
           "lineage_table_bytes": 245579776,
           "query_latency": {
             "agent_detail": {
-              "max_ms": 1.769,
-              "p50_ms": 0.974,
-              "p95_ms": 1.376
+              "max_ms": 2.576,
+              "p50_ms": 1.441,
+              "p95_ms": 1.814
             },
             "agents_deep_page": {
-              "max_ms": 2.343,
-              "p50_ms": 1.992,
-              "p95_ms": 2.112
+              "max_ms": 2.118,
+              "p50_ms": 1.983,
+              "p95_ms": 2.081
             },
             "agents_filtered": {
-              "max_ms": 2.865,
-              "p50_ms": 1.895,
-              "p95_ms": 2.061
+              "max_ms": 2.349,
+              "p50_ms": 1.874,
+              "p95_ms": 2.002
             },
             "agents_first_page": {
-              "max_ms": 2.508,
-              "p50_ms": 2.011,
-              "p95_ms": 2.123
+              "max_ms": 2.584,
+              "p50_ms": 1.995,
+              "p95_ms": 2.372
             },
             "ancestors": {
-              "max_ms": 1.261,
-              "p50_ms": 0.363,
-              "p95_ms": 0.626
+              "max_ms": 1.738,
+              "p50_ms": 0.54,
+              "p95_ms": 1.121
             },
             "clusters": {
-              "max_ms": 0.751,
-              "p50_ms": 0.432,
-              "p95_ms": 0.535
+              "max_ms": 0.902,
+              "p50_ms": 0.554,
+              "p95_ms": 0.697
             },
             "descendants_page": {
-              "max_ms": 15.336,
-              "p50_ms": 1.559,
-              "p95_ms": 9.934
+              "max_ms": 32.131,
+              "p50_ms": 1.551,
+              "p95_ms": 8.302
             },
             "investigation": {
-              "max_ms": 4.354,
-              "p50_ms": 3.084,
-              "p95_ms": 3.765
+              "max_ms": 7.602,
+              "p50_ms": 4.09,
+              "p95_ms": 4.363
             },
             "summary": {
-              "max_ms": 1.087,
-              "p50_ms": 0.485,
-              "p95_ms": 0.922
+              "max_ms": 0.479,
+              "p50_ms": 0.272,
+              "p95_ms": 0.297
             },
             "tree_expand": {
-              "max_ms": 4.374,
-              "p50_ms": 1.964,
-              "p95_ms": 2.975
+              "max_ms": 5.033,
+              "p50_ms": 1.992,
+              "p95_ms": 2.1
             },
             "tree_top": {
-              "max_ms": 7.322,
-              "p50_ms": 0.523,
-              "p95_ms": 0.613
+              "max_ms": 5.059,
+              "p50_ms": 0.551,
+              "p95_ms": 0.599
             }
           }
         }
