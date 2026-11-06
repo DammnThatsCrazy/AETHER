@@ -15,8 +15,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from decimal import Decimal
-import math
 from typing import Any, Optional, Protocol
 from urllib.parse import quote
 from uuid import UUID
@@ -115,20 +113,6 @@ def _as_utc_text(value: Any) -> Optional[str]:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         return None
     return parsed.astimezone(timezone.utc).isoformat()
-
-
-def _safe_amount(value: Any) -> Optional[str | int | float]:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, Decimal):
-        return format(value, "f") if value.is_finite() else None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-    if isinstance(value, str):
-        return value[:128]
-    return None
 
 
 def _source_event_ref(event_id: str, observed_at: Optional[str]) -> EvidenceRef:
@@ -678,8 +662,6 @@ class RepositoryGeographicRelatedAuthorityReader:
                 {
                     "source": row.get("_source"),
                     "metric": row.get("_metric_name"),
-                    "amount": _safe_amount(row.get("amount")),
-                    "currency": row.get("currency"),
                     "evidenceId": event_id,
                     "observedAt": ref.observedAt,
                 }
@@ -707,7 +689,8 @@ class RepositoryGeographicRelatedAuthorityReader:
                 "subject": {"kind": subject_kind, "id": subject_id},
                 "matchedEventId": event_id,
                 "records": linked,
-                "amountsRemainInSourceCurrency": True,
+                # This plane is money-free: values are read from Economic 360 by evidence id.
+                "valuesOwnedBy": "economic360",
                 "completeness": "partial" if incomplete_reasons or source_truncated else "unknown",
                 "sourceIncompleteReasons": sorted(set(incomplete_reasons)),
                 "truncated": source_truncated,

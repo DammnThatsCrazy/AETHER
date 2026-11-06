@@ -428,7 +428,7 @@ class AgentDeploymentRepository:
         return sorted(records, key=lambda r: r.get("updated_at", ""), reverse=True)
 
     # Mutable via PATCH — everything else is server-owned or lifecycle-owned.
-    MUTABLE_FIELDS: frozenset[str] = frozenset({"attestation_public_key", 
+    MUTABLE_FIELDS: frozenset[str] = frozenset({"attestation_public_key",
         "display_name", "description", "metadata", "allowed_event_families",
         "required_consent_purposes", "capability_scopes", "consent_mode",
     })

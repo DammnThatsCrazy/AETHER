@@ -12,7 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from actions.agentic_observability.foundation import require_permission as _require_perm
+from governance.security.request_context import require_kyber_operator
 from config.settings import settings
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger
@@ -41,7 +41,9 @@ def _tenant_id(request: Request) -> str:
 def _operator(request: Request) -> None:
     if not settings.external_agent_telemetry.kyber_enabled:
         raise NotFoundError("Kyber agent lineage is not enabled")
-    _require_perm(request, "admin")
+    # Tenant ids come from the path here. A tenant admin must never pass this gate,
+    # even where route-policy enforcement is off.
+    require_kyber_operator(request)
 
 
 async def _call(coroutine: Any) -> dict[str, Any]:

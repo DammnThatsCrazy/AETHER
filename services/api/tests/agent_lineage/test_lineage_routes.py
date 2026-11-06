@@ -114,14 +114,16 @@ def test_bad_input_is_a_client_error(populated):
     assert client.get(f"{base}?page_size=100000").status_code == 422
 
 
-def test_kyber_needs_admin_and_its_flag(populated, flags):
+def test_kyber_needs_an_operator_and_its_flag(populated, flags, monkeypatch):
     path = f"/v1/admin/kyber/agent-lineage/tenants/{T}/principals/{S.MALICIOUS_HUMAN}/investigation"
-    assert _app(_Tenant(T, {"agent:manage"})).get(path).status_code in (401, 403)
-    admin = _app(_Tenant("operator", {"admin"}))
-    body = admin.get(path).json()["data"]
+    # A tenant admin is refused: the real gate, not the fake below.
+    assert _app(_Tenant(T, {"agent:manage", "admin"})).get(path).status_code in (401, 403)
+    monkeypatch.setattr(R, "require_kyber_operator", lambda request: None)
+    operator = _app(_Tenant("operator", set()))
+    body = operator.get(path).json()["data"]
     assert body["linkage"]["verified_links"] >= 1
     flags.external_agent_telemetry.kyber_enabled = False
-    assert admin.get(path).status_code == 404
+    assert operator.get(path).status_code == 404
 
 
 def test_a_declaration_cannot_certify_itself_as_proof(populated):
