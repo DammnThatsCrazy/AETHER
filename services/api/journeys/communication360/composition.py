@@ -9,6 +9,8 @@ from journeys.communication360.contracts import CommunicationMessage
 
 
 def event_time(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None and value.utcoffset() is not None else None
     if not isinstance(value, str):
         return None
     try:

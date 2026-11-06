@@ -537,6 +537,47 @@ class ParticipantBindingAssertion(CommunicationContract):
         return self
 
 
+class CommunicationContextAssertion(CommunicationContract):
+    """Source-authenticated, typed context references with independent read validation."""
+
+    campaign_id: Optional[str] = None
+    source_id: Optional[str] = None
+    profile_ids: list[str] = Field(default_factory=list, max_length=50)
+    journey_ids: list[str] = Field(default_factory=list, max_length=50)
+    episode_ids: list[str] = Field(default_factory=list, max_length=50)
+    evidence_refs: list[EvidenceRef] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def exact_context_references(self) -> "CommunicationContextAssertion":
+        references = [*self.profile_ids, *self.journey_ids, *self.episode_ids]
+        references.extend(value for value in (self.campaign_id, self.source_id) if value is not None)
+        if not references or any(
+            not value or value != value.strip() or "@" in value
+            or any(char.isspace() for char in value) for value in references
+        ):
+            raise ValueError("context links require exact typed opaque references")
+        if any(len(values) != len(set(values)) for values in (
+            self.profile_ids, self.journey_ids, self.episode_ids,
+        )):
+            raise ValueError("context links must not duplicate references")
+        return self
+
+
+class ConversationMembershipAssertion(CommunicationContract):
+    """Explicit source assertion, never derived from a provider thread ID."""
+
+    conversation_id: str = Field(min_length=1, max_length=256)
+    external_thread_id: str = Field(min_length=1, max_length=256)
+    evidence_refs: list[EvidenceRef] = Field(min_length=1, max_length=20)
+
+    @field_validator("conversation_id", "external_thread_id")
+    @classmethod
+    def exact_membership_identifiers(cls, value: str) -> str:
+        if value != value.strip() or any(char.isspace() for char in value) or "@" in value:
+            raise ValueError("conversation membership requires exact opaque identifiers")
+        return value
+
+
 class ParticipantRosterAssertion(CommunicationContract):
     """One provider-authenticated, conversation-scoped participant roster."""
 
@@ -546,17 +587,20 @@ class ParticipantRosterAssertion(CommunicationContract):
     expected_binding_count: Optional[int] = Field(default=None, ge=1, le=500)
     completeness_evidence_refs: list[EvidenceRef] = Field(default_factory=list, max_length=20)
     bindings: list[ParticipantBindingAssertion] = Field(min_length=1, max_length=500)
+    membership: Optional[ConversationMembershipAssertion] = None
+    context_links: Optional[CommunicationContextAssertion] = None
 
     @field_validator("conversation_id", "provider_account_id")
     @classmethod
     def scope_ids_are_opaque(cls, value: str) -> str:
-        value = value.strip()
-        if not value or any(ch.isspace() for ch in value) or "@" in value:
+        if not value or value != value.strip() or any(ch.isspace() for ch in value) or "@" in value:
             raise ValueError("participant roster scope identifiers must be opaque IDs")
         return value
 
     @model_validator(mode="after")
     def roster_completeness_is_explicit_and_evidenced(self) -> "ParticipantRosterAssertion":
+        if self.membership is not None and self.membership.external_thread_id != self.conversation_id:
+            raise ValueError("membership must name the exact provider roster thread")
         binding_ids = [binding.binding_id for binding in self.bindings]
         if len(binding_ids) != len(set(binding_ids)):
             raise ValueError("participant roster binding_id values must be unique")

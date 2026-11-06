@@ -655,6 +655,18 @@ class CanonicalFactSource:
             tenant_id, "source", source_id, limit=limit,
         )
 
+    async def subject_facts(
+        self, tenant_id: str, subject_kind: str, subject_id: str, *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return await self._repo.facts_for_exact_reference(
+            tenant_id, subject_kind, subject_id, limit=limit,
+        )
+
+    async def conversation_context(
+        self, tenant_id: str, scopes: list[tuple[str, str, str]], *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return await self._repo.conversation_context(tenant_id, scopes, limit=limit)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Factory
