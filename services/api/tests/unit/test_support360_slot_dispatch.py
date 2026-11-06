@@ -284,3 +284,48 @@ async def test_frame_preserves_structured_resolution_and_denies_sibling_reads():
     assert slots["sla"].content is None
     assert slots["participants"].content is None
     assert dependencies.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("selected", "reads"), [
+    ("case_summary", []), ("resolution", []), ("evidence_trace", []),
+    ("conversation_history", ["conversation_history"]), ("callbacks", ["callbacks"]),
+    ("agents", ["agents"]), ("sla", ["sla", "sla_contract"]),
+    ("journey_links", ["journey_links"]), ("participants", ["participants"]),
+])
+async def test_real_registry_dispatches_only_policy_allowed_required_slot(selected, reads):
+    cases, case = await _case()
+    dependencies = Dependencies()
+    support = _provider(cases, dependencies)
+    dispatched = []
+
+    class Policy:
+        async def evaluate(self, request):
+            return Experience360PolicyEvaluation(
+                surfaceId="support360", tenantId=TENANT, evaluatedAt=OBSERVED.isoformat(),
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    slot: Experience360PolicyDisposition(
+                        state="allowed" if slot == selected else "denied",
+                    ) for slot in [*SUPPORT_SLOT_SECTIONS, "risk"]
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, request, **kwargs):
+            dispatched.append(request.includeSections)
+            assert request.projectionId == "support360"
+            return await support.project(request, _context())
+
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="support360", tenantId=TENANT,
+            subject=ProjectionSubject(kind="support_case", id=case["case_id"]),
+            requestedSlotIds=[*SUPPORT_SLOT_SECTIONS, "risk"], includeEvidence=True,
+        ), policy_evaluator=Policy(), projection_runtime=Runtime(),
+    )
+    assert dispatched == [[SUPPORT_SLOT_SECTIONS[selected]]]
+    assert dependencies.calls == reads
+    for slot in frame.slots:
+        if slot.id != selected:
+            assert slot.content is None and not slot.claims and not slot.evidenceRefs

@@ -45,6 +45,11 @@ from shared.intelligence_projections.generated_registry import (
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
 from journeys.support360.cases import SupportCaseAuthorityRead, SupportCaseRepository
+from journeys.support360.subjects import (
+    SupportSubjectRead,
+    SupportSubjectRepository,
+    valid_subject_record,
+)
 from journeys.support360.callbacks import (
     SupportCallbackRead,
     SupportCallbackRepository,
@@ -939,6 +944,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         *,
         agent_identity_reader: Optional[SupportAgentIdentityReader] = None,
         case_repository: Optional[SupportCaseRepository] = None,
+        subject_repository: Optional[SupportSubjectRepository] = None,
         callback_repository: Optional[SupportCallbackRepository] = None,
         agent_assignment_repository: Optional[SupportAgentAssignmentRepository] = None,
         canonical_agent_entity_repository: Any = None,
@@ -956,6 +962,10 @@ class Support360Provider(IntelligenceProjectionProvider):
         )
         self._case_repository = (
             case_repository if case_repository is not None else SupportCaseRepository()
+        )
+        self._subject_repository = (
+            subject_repository if subject_repository is not None
+            else SupportSubjectRepository(cases=self._case_repository)
         )
         self._callback_repository = (
             callback_repository
@@ -1118,6 +1128,8 @@ class Support360Provider(IntelligenceProjectionProvider):
                 reasons.append(slot["reasonCode"])
             available = bool(refs) and slot.get("state") not in {"unknown", "suppressed"}
             authorities = list(_SLOT_AUTHORITIES[slot_id])
+            if slot.get("subjectCaseJoin"):
+                authorities.append("support_case_subjects")
             if slot_id == "journey_links" and not (slot.get("episodeFacts") or {}).get("relations"):
                 authorities.remove("episode_facts")
             if slot_id == "sla" and not (slot.get("measurementContractJoin") or {}).get("boundTimerCount"):
@@ -1158,6 +1170,8 @@ class Support360Provider(IntelligenceProjectionProvider):
             "source",
             "support_case",
             "callback",
+            "ticket",
+            "conversation",
         }:
             # Remaining valid SSOT subject identifiers do not all have a
             # canonical authority. Preserve them as typed unknowns instead of
@@ -1207,6 +1221,10 @@ class Support360Provider(IntelligenceProjectionProvider):
             max(request.page.limit if request.page is not None else _DEFAULT_LIMIT, 1),
             _MAX_LIMIT,
         )
+        if request.subject.kind in {"ticket", "conversation"}:
+            return await self._project_bound_subject(
+                request, context, limit=limit, after=after, before=before,
+            )
         if request.subject.kind == "callback":
             return await self._project_callback(request, context, limit=limit)
         if request.subject.kind == "support_case":
@@ -1523,6 +1541,71 @@ class Support360Provider(IntelligenceProjectionProvider):
             ),
         )
 
+    async def _project_bound_subject(
+        self, request: ProjectionRequest, context: ProjectionContext,
+        *, limit: int, after: Optional[str], before: Optional[str],
+    ) -> ProjectionResult:
+        try:
+            binding_read = await self._subject_repository.read(
+                request.tenantId, request.subject.kind, request.subject.id,
+            )
+        except Exception:  # noqa: BLE001
+            return self._unknown_result(request, context, "support_subject_binding_unavailable")
+        if not isinstance(binding_read, SupportSubjectRead) or not binding_read.available:
+            return self._unknown_result(request, context, "support_subject_binding_unavailable")
+        if not binding_read.complete:
+            return self._unknown_result(request, context, "support_subject_binding_ambiguous")
+        binding = binding_read.record
+        if binding is None:
+            return self._unknown_result(
+                request, context, _CANONICAL_SUBJECT_AUTHORITY_REASONS[request.subject.kind],
+            )
+        if not valid_subject_record(binding, request.tenantId, request.subject.kind, request.subject.id):
+            return self._unknown_result(request, context, "support_subject_binding_scope_mismatch")
+        canonical_request = request.model_copy(update={
+            "subject": ProjectionSubject(kind="support_case", id=binding["case_id"]),
+        })
+        result = await self._project_case(
+            canonical_request, context, limit=limit, after=after, before=before,
+            subject_binding=binding,
+        )
+        reference = EvidenceRef(
+            id=binding["subject_id"], type="event", source="support_case_subjects",
+            observedAt=binding["received_at"],
+            uri=f"store://support_case_subjects/{quote(request.tenantId, safe='')}/{binding['subject_id']}",
+        )
+        join_refs = [reference, *_case_event_evidence_refs(binding, binding)]
+        join = {
+            "subjectKind": request.subject.kind, "canonicalSubjectId": request.subject.id,
+            "canonicalCaseId": binding["case_id"],
+            "sourceProvider": binding["source_provider_identity"],
+            "sourceConnectionId": binding["source_connection_id"],
+            "sourceAccountId": binding["source_account_id"],
+            "sourceSubjectId": binding["source_subject_id"],
+            "sourceCaseId": binding["source_case_id"],
+            "sourceEventId": binding["source_event_id"],
+            "sourceOccurredAt": binding["source_occurred_at"],
+            "scope": "explicitly_mapped_case_context", "claimState": "observed",
+            "persistedBindingReadComplete": True,
+            "sourceAuthenticity": "unverified", "sourceHistoryComplete": False,
+            "freshnessState": "unknown", "businessOutcomeState": "unknown",
+            "evidenceRefs": join_refs,
+        }
+        for section in result.sections:
+            if section.id == "state" and isinstance(section.content, dict):
+                for slot in section.content.get("requiredSlots", {}).values():
+                    if slot.get("evidenceRefs") and slot.get("state") not in {"unknown", "suppressed"}:
+                        slot["subjectCaseJoin"] = join
+                        slot["evidenceRefs"] = _dedupe_evidence_refs(slot["evidenceRefs"] + join_refs)
+        result.claims = [
+            claim.model_copy(update={
+                "subject": request.subject,
+                "evidenceRefs": _dedupe_evidence_refs(claim.evidenceRefs + join_refs),
+            }) if claim.subject == canonical_request.subject else claim
+            for claim in result.claims
+        ]
+        return result
+
     async def _project_case(
         self,
         request: ProjectionRequest,
@@ -1531,6 +1614,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         limit: int,
         after: Optional[str] = None,
         before: Optional[str] = None,
+        subject_binding: Optional[dict[str, Any]] = None,
     ) -> ProjectionResult:
         """Read exact tenant/canonical case state without guessing related slots."""
         try:
@@ -1550,6 +1634,11 @@ class Support360Provider(IntelligenceProjectionProvider):
             return self._unknown_result(request, context, _REASON_CASE_NOT_FOUND)
         if record.get("tenant_id") != request.tenantId or record.get("case_id") != request.subject.id:
             return self._unknown_result(request, context, "support_case_tenant_scope_mismatch")
+        if subject_binding is not None and any(
+            record.get(key) != subject_binding.get(key)
+            for key in ("tenant_id", "case_id", "source_connection_id", "source_provider_identity", "source_case_id")
+        ):
+            return self._unknown_result(request, context, "support_subject_binding_case_scope_mismatch")
         if not isinstance(read.events, list) or any(
             not isinstance(event, dict)
             or event.get("tenant_id") != request.tenantId
@@ -3870,6 +3959,8 @@ async def _validated_case_journey_episodes(
         reasons.append(_REASON_JOURNEY_EPISODE_RELATION_MISSING)
     if page.truncated or page.next_cursor or page.invalid_records:
         reasons.append(_REASON_JOURNEY_EPISODE_READ_TRUNCATED)
+        relations = []
+        refs = []
     return (
         {
             "state": "degraded" if relations else "unknown",

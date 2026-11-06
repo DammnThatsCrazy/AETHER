@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Optional
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -797,6 +797,8 @@ def _row_dict(row: Any) -> dict[str, Any]:
     for key, value in result.items():
         if isinstance(value, datetime):
             result[key] = coerce_utc_lenient(value).astimezone(timezone.utc).isoformat()
+        elif isinstance(value, UUID):
+            result[key] = str(value)
         elif key == "evidence_refs" and isinstance(value, str):
             try:
                 result[key] = json.loads(value)
