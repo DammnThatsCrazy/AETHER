@@ -90,7 +90,9 @@ async def test_active_agents_lists_only_active_registered_deployments():
     live, paused = await mk("live", T), await mk("paused", T)
     await mk("other", "tenant-b")
     await repo.transition(T, paused["id"], "paused", actor="t", request_id="r")
-    assert await scheduler.active_agents() == [("tenant-b", "other"), (T, "live")]
+    # the in-memory repository is process-shared, so ignore other tests' tenants
+    mine = [p for p in await scheduler.active_agents() if p[0] in {T, "tenant-b"}]
+    assert mine == [("tenant-b", "other"), (T, "live")]
     assert live["id"]
 
 
