@@ -689,7 +689,7 @@ class RepositoryGeographicRelatedAuthorityReader:
                 "subject": {"kind": subject_kind, "id": subject_id},
                 "matchedEventId": event_id,
                 "records": linked,
-                # This plane is money-free: values are read from Economic 360 by evidence id.
+                # Values stay with economic360, reached by evidence id, per the context-360 rule.
                 "valuesOwnedBy": "economic360",
                 "completeness": "partial" if incomplete_reasons or source_truncated else "unknown",
                 "sourceIncompleteReasons": sorted(set(incomplete_reasons)),

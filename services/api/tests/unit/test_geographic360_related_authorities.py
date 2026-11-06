@@ -239,7 +239,7 @@ async def test_risk_and_value_require_exact_source_event_evidence(monkeypatch):
     value = slots["value"]
     assert value["state"] == "degraded"
     assert [row["evidenceId"] for row in value["content"]["records"]] == [EVENT]
-    # This plane is money-free: the value stays with Economic 360, reached by evidence id.
+    # This plane is money-free: the value stays with economic360, reached by evidence id.
     assert "amount" not in value["content"]["records"][0]
     assert value["content"]["valuesOwnedBy"] == "economic360"
 
