@@ -521,6 +521,18 @@ kyber_routes:
     capability: kyber.reconciled_control.read
     disclosure: D4
     action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/authority"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/activation"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/activation/transitions"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
 
   # ── Incidents, postmortems & runbooks ─────────────────────────────────────
   - route: "GET /v1/admin/kyber/incidents"

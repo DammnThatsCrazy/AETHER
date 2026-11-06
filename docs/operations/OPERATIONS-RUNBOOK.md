@@ -929,9 +929,26 @@ AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED=true    → scheduler kill-switch; t
 
 Both default OFF. Pass-to-pass sleep is
 `AETHER_RECONCILED_CONTROL_SCHEDULER_INTERVAL_SECONDS` (default 300s, mirrors
-the §32 freshness window). Architecture + flag semantics:
-`docs/architecture/RECONCILED_CONTROL_PLANE.md`; production activation sits
-behind the §41+ blueprint review — no deploy flips these today.
+the §32 freshness window). Each pass also resolves the durable activation
+decision for the integration's tenant/environment scope: `shadow` observes
+only, `detect` reconciles, `plan` may persist a ChangeSet, `r0` and above may
+execute, and `disabled`/`emergency_frozen` stop the runtime loop. A tenant row
+may narrow the global activation but never exceed it. The scheduler reports
+`skipped_inactive` rows rather than inventing work. Architecture + flag
+semantics: `docs/architecture/RECONCILED_CONTROL_PLANE.md`; production
+activation sits behind the §41+ blueprint review — no deploy flips these today.
+
+### SDK manifest requests while the control plane is enabled
+
+When `AETHER_RECONCILED_CONTROL_PLANE_ENABLED=true`, the legacy synchronous
+`PUT /v1/config/sdk/manifest` refuses with a conflict. An admin requests the
+change through `POST /v1/config/sdk/manifest/requests` (optional
+`Idempotency-Key`); the response is `202` with the ChangeSet/rollout ids and
+`manifest_published: false`. `GET /v1/config/sdk/manifest/requests/{id}` reads
+the tenant-scoped request state. The request needs the effective `plan`
+capability; `shadow`/`detect`/`disabled` refuse it. It records a stage-zero
+rollout and does **not** publish or advance a manifest — request execution and
+rollout projection remain Program C work.
 
 **Scheduler role:** `reconciled_control_scheduler` rides the existing
 **`maintenance`** role (exact precedent: the UPR/provider loops above — a

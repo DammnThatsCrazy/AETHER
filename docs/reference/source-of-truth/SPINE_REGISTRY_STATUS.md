@@ -33,7 +33,7 @@ external dependency.
 **Honesty rule.** Every row below is tracked against the canonical,
 machine-readable `spine-registry`
 (`packages/shared/contracts/spine-registry.json`), which Phase 2 shipped with
-**34 governed rows** (25 `implemented`, 7 `in_flight`, 2 declared `pending`).
+**34 governed rows** (25 `implemented`, 8 `in_flight`, 1 declared `pending`).
 Phase 2 shipped **33 governed rows** (21 `implemented`) on the main-based lane;
 the re-cut onto the 360-foundation base (`fced2960`) extended it to **34
 governed rows** (22 `implemented`) by formalizing `infrastructure_model` —
@@ -51,8 +51,10 @@ and the projection plane now derives its resolved-spine index from it (Phase 4).
 A code authority existing under its current name is **not** enough for
 `PARTIAL` — the governed registry row must exist too (it does for every
 authority below). **No row is `CANONICAL`**: each non-program row carries its
-14 conformance checks in-registry, all currently `open` (declared, not yet
-verified with evidence). Rows move LEGACY → PARTIAL → CANONICAL as capabilities
+14 conformance checks in-registry; `reconciled_control_plane` now verifies the
+authority/non-ownership check, while every other check and row remains `open`
+(declared, not yet verified with evidence). Rows move LEGACY → PARTIAL →
+CANONICAL as capabilities
 land; `CANONICAL` is claimed only when a row's conformance is actually
 verifiable end to end, which no row meets in this pass. The registry-row,
 envelope, join, and conformance columns are filled only where the corresponding
@@ -79,7 +81,7 @@ capability has actually landed for that row.
 | Measurement / Metrics / Algebra | `measurement_outcome_contract` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Attribution architecture | `attribution_architecture` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Lens / Projection Algebra + Exploration Fabric | `exploration_fabric` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
-| 360 projections | `projection_plane` (`in_flight`, 19 projections) | — (shared D1) | 14 `open` in-registry | PARTIAL |
+| 360 projections | `projection_plane` (`in_flight`, 24 projections) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | ML / model contracts | `model_governance` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Universal Provider Runtime | `upr` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Connector Normalization + SDK & Universal Alignment | `connector_normalization` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
@@ -95,7 +97,7 @@ capability has actually landed for that row.
 | Context Capsule Semantics (capsule → canonical-geographic reading rules, read by geographic360) | `context_capsule_semantics` (`implemented`; authority = `services/api/graph/geographic360` capsule_semantics — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Grouping Membership (governed population membership + append-only definition versions, read by population360) | `grouping_membership` (`implemented`; authority = `services/api/identity/population` membership governor — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | journey_continuity (pending projection spine) | declared `pending` row (`unresolvedRefs`: reason + resolving milestone) | — | 14 `open` in-registry | LEGACY |
-| reconciled_control_plane (pending projection spine) | declared `pending` row (`unresolvedRefs`: reason + resolving milestone) | — | 14 `open` in-registry | LEGACY |
+| reconciled_control_plane (in-flight runtime authority) | `in_flight` row; Program A+B landed the authority map, durable readiness-gated activation and read-only operator surface | — (shared D1) | authority/non-ownership `verified`; 13 `open` in-registry | PARTIAL |
 
 ## Notes
 
@@ -114,8 +116,9 @@ capability has actually landed for that row.
 - **`CANONICAL` candidates.** The Phase-7 exit names the strongest authorities
   — the contract-spine kernel, identity resolution, temporal kernel, and
   evidence/provenance — as the first rows that may move to `CANONICAL` once
-  their 14 conformance checks carry verified evidence. None do yet; all remain
-  `open` in-registry, so no row is declared `CANONICAL` in this pass.
+  their 14 conformance checks carry verified evidence. None of these
+  candidates do yet; their checks remain `open` in-registry, so no row is
+  declared `CANONICAL` in this pass.
 - **Rights Authority blueprint.** The `rights_irrl` and `irrl_naming_overlay`
   rows are governed by
   [RIGHTS_AUTHORITY_BLUEPRINT.md](./RIGHTS_AUTHORITY_BLUEPRINT.md), which

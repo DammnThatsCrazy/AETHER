@@ -29,6 +29,10 @@ from typing import Optional
 import pytest
 
 from connectors.managed_integrations import scheduler as scheduler_module
+from connectors.managed_integrations.activation import (
+    RuntimeActivationDecision,
+    runtime_capabilities,
+)
 from connectors.managed_integrations.actuators import (
     ActuatorApplyResult,
     ActuatorVerifyResult,
@@ -54,6 +58,25 @@ TENANT = "tenant-rcp-sched"
 OTHER_TENANT = "tenant-rcp-sched-other"
 ENV = "env-prod-1"
 ACTOR = "reconcile-scheduler"
+
+
+class _StaticActivation:
+    """Test resolver pinning one already-resolved runtime decision."""
+
+    def __init__(self, state: str = "fully_managed") -> None:
+        self.state = state
+
+    async def resolve(self, *, tenant_id: str, environment_id: str):
+        return RuntimeActivationDecision(
+            state=self.state,
+            capabilities=runtime_capabilities(self.state),
+            blockers=(),
+            global_state=self.state,
+        )
+
+
+def _active() -> _StaticActivation:
+    return _StaticActivation()
 
 
 @pytest.fixture(autouse=True)
@@ -227,10 +250,13 @@ async def test_fresh_integrations_are_skipped_and_tenant_filter_scopes_sweep() -
         last_reconcile_at=None,
     )
 
-    summary = await scheduler_module.run_scheduler_pass(now=NOW, tenant_filter=TENANT)
+    summary = await scheduler_module.run_scheduler_pass(
+        now=NOW, tenant_filter=TENANT, activation_resolver=_active()
+    )
 
     assert summary == {
         "integrations_scanned": 1,
+        "skipped_inactive": 0,
         "skipped_fresh": 1,
         "reconcile_results": {},
         "plans_created": [],
@@ -278,7 +304,7 @@ async def test_match_and_acceptable_drift_reconcile_without_plans() -> None:
     )
 
     summary = await scheduler_module.run_scheduler_pass(
-        now=NOW, evidence_loader=loader
+        now=NOW, evidence_loader=loader, activation_resolver=_active()
     )
 
     assert summary["integrations_scanned"] == 2
@@ -331,7 +357,9 @@ async def test_actionable_drift_plan_persisted_but_default_registry_fails_closed
         }
     )
 
-    summary = await scheduler_module.run_scheduler_pass(now=NOW, evidence_loader=loader)
+    summary = await scheduler_module.run_scheduler_pass(
+        now=NOW, evidence_loader=loader, activation_resolver=_active()
+    )
 
     # ── summary ───────────────────────────────────────────────────────────
     assert summary["integrations_scanned"] == 1
@@ -385,6 +413,152 @@ async def test_actionable_drift_plan_persisted_but_default_registry_fails_closed
     } == {k: v for k, v in before.items() if k not in stamped}
     assert after.get("last_reconcile_result") == "actionable_drift"
     assert after.get("observed_state_ref") == "rcobs_mi-sdk-1"
+
+
+async def test_shadow_activation_skips_reconcile_entirely() -> None:
+    """Program C: ``shadow`` observes only; the scheduler writes nothing."""
+    mi = "mi-sdk-shadow"
+    await _register_row(mi)
+
+    summary = await scheduler_module.run_scheduler_pass(
+        now=NOW, activation_resolver=_StaticActivation("shadow")
+    )
+
+    assert summary["integrations_scanned"] == 1
+    assert summary["skipped_inactive"] == 1
+    assert summary["skipped_fresh"] == 0
+    assert summary["reconcile_results"] == {}
+    assert summary["plans_created"] == []
+    assert summary["execution_outcomes"] == []
+    assert (
+        await get_reconcile_run_repository().list_for_integration(
+            tenant_id=TENANT, environment_id=ENV, managed_integration_id=mi
+        )
+        == []
+    )
+    assert (
+        await get_change_set_repository().list(tenant_id=TENANT, environment_id=ENV)
+        == []
+    )
+
+
+async def test_default_flags_off_resolver_skips_without_touching_stores(
+    rcp_flags,
+) -> None:
+    """Default production seam: flags OFF => effective disabled, no writes."""
+    rcp_flags()
+    mi = "mi-sdk-default-off"
+    await _register_row(mi)
+
+    summary = await scheduler_module.run_scheduler_pass(now=NOW)
+
+    assert summary["integrations_scanned"] == 1
+    assert summary["skipped_inactive"] == 1
+    assert summary["errors"] == []
+    assert summary["reconcile_results"] == {}
+    assert summary["plans_created"] == []
+    assert summary["execution_outcomes"] == []
+    assert (
+        await get_reconcile_run_repository().list_for_integration(
+            tenant_id=TENANT, environment_id=ENV, managed_integration_id=mi
+        )
+        == []
+    )
+
+
+async def test_activation_resolution_failure_fails_closed() -> None:
+    """A resolver failure is recorded and the row is never reconciled."""
+    mi = "mi-sdk-resolver-error"
+    await _register_row(mi)
+
+    class _BrokenActivation:
+        async def resolve(self, *, tenant_id: str, environment_id: str):
+            raise RuntimeError("activation store unavailable")
+
+    summary = await scheduler_module.run_scheduler_pass(
+        now=NOW, activation_resolver=_BrokenActivation()
+    )
+
+    assert summary["skipped_inactive"] == 0
+    assert summary["reconcile_results"] == {}
+    assert summary["plans_created"] == []
+    assert len(summary["errors"]) == 1
+    assert "activation resolution failed" in summary["errors"][0]
+    assert (
+        await get_reconcile_run_repository().list_for_integration(
+            tenant_id=TENANT, environment_id=ENV, managed_integration_id=mi
+        )
+        == []
+    )
+
+
+async def test_detect_activation_reconciles_but_does_not_plan() -> None:
+    """Program C: ``detect`` may classify drift but creates no ChangeSet."""
+    mi = "mi-sdk-detect"
+    await _register_row(
+        mi,
+        desired_state_ref="rcds_mi-sdk-detect",
+        observed_state_ref="rcobs_mi-sdk-detect",
+    )
+    loader = _evidence_loader(
+        {mi: (_desired(mi), _observed(mi, health_status="degraded"))}
+    )
+
+    summary = await scheduler_module.run_scheduler_pass(
+        now=NOW,
+        evidence_loader=loader,
+        activation_resolver=_StaticActivation("detect"),
+    )
+
+    assert summary["errors"] == []
+    assert summary["reconcile_results"][mi]["result"] == "actionable_drift"
+    assert summary["plans_created"] == []
+    assert summary["execution_outcomes"] == []
+    assert (
+        await get_reconcile_run_repository().latest_for_integration(
+            tenant_id=TENANT, environment_id=ENV, managed_integration_id=mi
+        )
+    ) is not None
+    assert (
+        await get_change_set_repository().list(tenant_id=TENANT, environment_id=ENV)
+        == []
+    )
+
+
+async def test_plan_activation_persists_changeset_but_never_executes() -> None:
+    """Program C: ``plan`` stops at a persisted candidate, even for R0."""
+    mi = "mi-sdk-plan"
+    await _register_row(
+        mi,
+        desired_state_ref="rcds_mi-sdk-plan",
+        observed_state_ref="rcobs_mi-sdk-plan",
+    )
+    loader = _evidence_loader(
+        {mi: (_desired(mi), _observed(mi, health_status="degraded"))}
+    )
+    authority = RecordingAuthority()
+    registry = registry_with_authorities({"notification_action": authority})
+
+    summary = await scheduler_module.run_scheduler_pass(
+        now=NOW,
+        evidence_loader=loader,
+        registry=registry,
+        activation_resolver=_StaticActivation("plan"),
+    )
+
+    assert summary["errors"] == []
+    assert summary["reconcile_results"][mi]["result"] == "actionable_drift"
+    assert len(summary["plans_created"]) == 1
+    assert summary["execution_outcomes"] == []
+    assert authority.calls == []
+    plan_row = await get_change_set_repository().get(
+        TENANT, ENV, summary["plans_created"][0]
+    )
+    assert plan_row is not None and plan_row.get("status") == "planned"
+    assert (
+        await get_last_known_good_repository().get_for_integration(TENANT, ENV, mi)
+        is None
+    )
 
 
 async def test_loop_self_stops_when_flags_off_and_leaves_stores_untouched(
@@ -449,7 +623,10 @@ async def test_admitted_authority_auto_commits_and_establishes_lkg() -> None:
     registry = registry_with_authorities({"notification_action": authority})
 
     summary = await scheduler_module.run_scheduler_pass(
-        now=NOW, evidence_loader=loader, registry=registry
+        now=NOW,
+        evidence_loader=loader,
+        registry=registry,
+        activation_resolver=_active(),
     )
 
     assert summary["errors"] == []
@@ -542,7 +719,10 @@ async def test_r1_plan_defers_to_waiting_approval_even_with_admitted_authority()
     registry = registry_with_authorities({"repository_upgrade": authority})
 
     summary = await scheduler_module.run_scheduler_pass(
-        now=NOW, evidence_loader=loader, registry=registry
+        now=NOW,
+        evidence_loader=loader,
+        registry=registry,
+        activation_resolver=_active(),
     )
 
     assert summary["errors"] == []
@@ -590,7 +770,9 @@ async def test_no_evidence_loader_reconciles_unknown_and_never_plans() -> None:
     mi = "mi-sdk-no-evidence"
     before = await _register_row(mi)
 
-    summary = await scheduler_module.run_scheduler_pass(now=NOW)
+    summary = await scheduler_module.run_scheduler_pass(
+        now=NOW, activation_resolver=_active()
+    )
 
     assert summary["errors"] == []
     assert summary["integrations_scanned"] == 1

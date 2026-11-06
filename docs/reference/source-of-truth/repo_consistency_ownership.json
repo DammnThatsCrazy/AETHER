@@ -346,17 +346,22 @@
       "id": "reconciled_control_plane",
       "name": "reconciled control plane changed",
       "source_globs": [
-        "services/api/**/services/managed_integrations/**",
-        "services/api/**/alembic/versions/20260906_rcp_managed_integrations.py",
+        "services/api/connectors/managed_integrations/**",
+        "services/api/alembic/versions/*rcp*.py",
         "packages/shared/managed-integrations.ts",
-        "services/api/**/services/security/contracts.py",
-        "services/api/**/services/security/access_control.py",
-        "packages/shared/security-governance.ts"
+        "services/api/governance/kyber/access/contracts.py",
+        "services/api/governance/kyber/access/access_control.py",
+        "packages/shared/security-governance.ts",
+        "config/readiness/features/reconciled-control-plane.yaml"
       ],
       "required_changed_globs": [
         "packages/shared/managed-integrations.ts",
         "packages/shared/security-governance.ts",
-        "services/api/**/services/managed_integrations/**",
+        "services/api/connectors/managed_integrations/**",
+        "config/route_registry.yaml",
+        "config/storage_policies.yaml",
+        "config/readiness/features/reconciled-control-plane.yaml",
+        "config/readiness/scope_locks.yaml",
         "docs/architecture/RECONCILED_CONTROL_PLANE.md",
         "docs/architecture/plans/RECONCILED_CONTROL_PHASES.md",
         "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",

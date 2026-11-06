@@ -15,11 +15,23 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError
+from connectors.managed_integrations import flags as rcp_flags
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+)
 from shared.logger.logger import get_logger
 from shared.observability import trace_request, emit_latency
 
 from ingestion.ingestion.sdk_version_tiers import tiers_payload
+from ingestion.sdk_config.rcp_requests import (
+    SDKManifestRequestNotFound,
+    SDKManifestRequestRefused,
+    get_sdk_manifest_request_service,
+)
 from ingestion.sdk_config.service import get_sdk_config_service
 
 logger = get_logger("aether.service.sdk_config.routes")
@@ -36,6 +48,17 @@ class PublishManifestRequest(BaseModel):
     features: dict[str, bool] = Field(default_factory=dict)
     endpoints: dict[str, str] = Field(default_factory=dict)
     flags: dict[str, Any] = Field(default_factory=dict)
+
+
+class RequestManifestPublishRequest(BaseModel):
+    """A requested manifest change; the RCP rollout owns delivery, not this body."""
+
+    min_sdk_version: str = Field(default="6.0.0", min_length=1, max_length=32)
+    schema_version: str = Field(default="7.0.0", min_length=1, max_length=32)
+    features: dict[str, bool] = Field(default_factory=dict)
+    endpoints: dict[str, str] = Field(default_factory=dict)
+    flags: dict[str, Any] = Field(default_factory=dict)
+    reason: Optional[str] = Field(default=None, max_length=500)
 
 
 @router.get("/manifest")
@@ -134,10 +157,23 @@ async def get_sdk_version_tiers(request: Request):
 
 @router.put("/manifest")
 async def publish_manifest(body: PublishManifestRequest, request: Request):
-    """Admin: publish a new signed manifest version with optional staged rollout."""
+    """Admin: publish a new signed manifest version with optional staged rollout.
+
+    Legacy synchronous path. When the Reconciled Control Plane is enabled this
+    route refuses; tenants request the change through
+    ``POST /v1/config/sdk/manifest/requests`` so the ChangeSet + rollout records
+    are the authority instead of this handler's ``rollout_percentage``.
+    """
     ctx = trace_request(request, service="sdk_config")
     caller = request.state.tenant
     caller.require_permission("admin")
+
+    if rcp_flags.enabled():
+        raise ConflictError(
+            "Direct SDK manifest publish is disabled while the Reconciled "
+            "Control Plane is enabled; use "
+            "POST /v1/config/sdk/manifest/requests."
+        )
 
     svc = get_sdk_config_service()
     manifest = await svc.publish_manifest(
@@ -157,6 +193,70 @@ async def publish_manifest(body: PublishManifestRequest, request: Request):
         "signature": manifest.signature[:16] + "...",  # truncated for safety
         "published_at": manifest.published_at,
     }).to_dict()
+
+
+@router.post("/manifest/requests", status_code=202)
+async def request_manifest_publish(
+    body: RequestManifestPublishRequest, request: Request
+):
+    """Admin: request an SDK manifest change through the Reconciled Control Plane.
+
+    The request records a planned ChangeSet and a stage-zero rollout. It does
+    not publish a manifest; the SDK-facing active manifest is unchanged until a
+    later governed rollout/execution slice applies it.
+    """
+    ctx = trace_request(request, service="sdk_config")
+    caller = request.state.tenant
+    caller.require_permission("admin")
+
+    if not rcp_flags.enabled():
+        raise ServiceUnavailableError("Reconciled Control Plane")
+
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if idempotency_key is not None and len(idempotency_key) > 200:
+        raise BadRequestError("Idempotency-Key must be 200 characters or fewer")
+
+    try:
+        result = await get_sdk_manifest_request_service().request_manifest_change(
+            tenant_id=caller.tenant_id,
+            initiator=caller.user_id or f"tenant:{caller.tenant_id}",
+            min_sdk_version=body.min_sdk_version,
+            schema_version=body.schema_version,
+            features=body.features,
+            endpoints=body.endpoints,
+            flags=body.flags,
+            reason=body.reason,
+            idempotency_key=idempotency_key,
+        )
+    except SDKManifestRequestRefused as exc:
+        raise ConflictError(
+            f"SDK manifest request refused: {exc}"
+        ) from exc
+
+    emit_latency("sdk_manifest_request", ctx.elapsed_ms())
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/manifest/requests/{request_id}")
+async def get_manifest_request(request_id: str, request: Request):
+    """Admin: read the durable ChangeSet + rollout state for one request."""
+    ctx = trace_request(request, service="sdk_config")
+    caller = request.state.tenant
+    caller.require_permission("admin")
+
+    if not rcp_flags.enabled():
+        raise ServiceUnavailableError("Reconciled Control Plane")
+
+    try:
+        result = await get_sdk_manifest_request_service().get_request(
+            tenant_id=caller.tenant_id,
+            request_id=request_id,
+        )
+    except SDKManifestRequestNotFound as exc:
+        raise NotFoundError("SDK manifest request") from exc
+
+    emit_latency("sdk_manifest_request_read", ctx.elapsed_ms())
+    return APIResponse(data=result).to_dict()
 
 
 @router.get("/rollout")

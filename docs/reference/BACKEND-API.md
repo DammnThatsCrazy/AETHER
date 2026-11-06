@@ -28,11 +28,11 @@ source_hashes:
   "services/api/actions/": "sha256:61a66ab64af85c5f447768a0d4f4d976db352e835f5b3942623828896e7429a3"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
-  "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
+  "services/api/connectors/": "sha256:92cd576e82e3aa025d19ebd850e5453c5cbbe7afa400efe4ff75421de95ce489"
   "services/api/governance/": "sha256:a23377af8a3d6cad47426e39e1547a360435a323aaffb37c685af5d136ff376f"
   "services/api/graph/": "sha256:a6731cc3742863724966de3087f5217827ce5105853a193201a4a4f03828f4aa"
   "services/api/identity/": "sha256:cbb27b5635537a2aea0370aaa468032d138c56efdca39c29523d604910aa4318"
-  "services/api/ingestion/": "sha256:7750b87f01c98da6623b7bc7779d21146f34ca3e542bf342e37af748df093453"
+  "services/api/ingestion/": "sha256:acc2a81bc82a73089640beb0eea104ae801679341f77e5873c6fed15b5d1d0f9"
   "services/api/intelligence/": "sha256:37a7160b9be14a060e67494196222915bcc4e5a0287ea048ec4278ed0f6e4c0a"
   "services/api/journeys/": "sha256:9e1f8da265ef3387e5998162b59bdbf3001f6ce94f3a3330f2f91a4913130515"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -5015,7 +5015,12 @@ healthy, supportable desired state — *install once, continuously reconcile*.
 This section documents the operator **read surface**; the engines behind it
 (reconcile classification, ChangeSet planning/execution, admission +
 simulation, §40 rollout + §29 fleet controller) are flag-gated OFF and
-exercised by tests only. Full architecture + boundaries:
+exercised by tests only. Production activation is a durable, readiness-gated
+authority (`shadow→detect→plan→r0→r1→r2→fully_managed`, plus
+`emergency_frozen`): environment flags are hard kill switches that can only
+lower the effective state, and the read surface exposes both the durable state
+and the derived effective state. There is no activation write route in this
+slice; transitions are driven through the governed service. Full architecture + boundaries:
 `docs/architecture/RECONCILED_CONTROL_PLANE.md`; close-out evidence in
 `docs/product/productization/reconciled-control-plane/EXECUTION_STATE.md`.
 
@@ -5044,6 +5049,9 @@ enforcement is on.
 | GET | `/v1/admin/kyber/managed-integrations/change-sets/{changeset_id}` | One ChangeSet detail | Status history, risk, approvals evidence |
 | GET | `/v1/admin/kyber/managed-integrations/approvals` | Approval records | §21 role-gated review queue |
 | GET | `/v1/admin/kyber/managed-integrations/action-required` | ActionRequired items | §12.14 exceptions awaiting an operator decision |
+| GET | `/v1/admin/kyber/managed-integrations/authority` | RCP authority map | Owner + permitted interface per area; forbidden/no-interface areas explicit |
+| GET | `/v1/admin/kyber/managed-integrations/activation` | Durable activation states | Filters: scope kind, tenant/environment/region; includes derived `effective_state` + blockers |
+| GET | `/v1/admin/kyber/managed-integrations/activation/transitions` | Activation transition evidence | One scope required; append-only advance/freeze/resume rows with readiness ref + actor |
 
 ## Prediction-market observation
 

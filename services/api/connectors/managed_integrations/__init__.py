@@ -13,6 +13,10 @@ Submodules:
 * ``reconciler`` — desired-vs-observed classification (steps 1-11 of blueprint
   §32); produces DRAFT change summaries, never applies them.
 * ``repository`` — durable ``managed_integrations`` + ``reconcile_runs`` stores.
+* ``authority``  — canonical Program-A ownership map (the RCP never becomes a
+  second credentials/rights/schema/SDK/graph/readiness authority).
+* ``activation`` — durable readiness-gated production activation (Program B);
+  environment flags are kill switches, never grants.
 * ``routes``     — read-only operator surface (``/v1/admin/kyber/managed-integrations``).
 """
 

@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:0c6e4302135fbebf875592215087bac0a38d323c7aed8274907c7be62c85b06a"
+  "packages/shared/": "sha256:23d038c41c852fcd43c774bea6e02963b2946ffee9fb45d4ee2c1e02d1ce48b1"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -1258,10 +1258,16 @@ last-known-good-after-verify, §16 admission + discovery/schema-mapping/
 source-authority + §37 simulation/shadow, a flag-gated §32/§35 scheduler, and
 **§40 progressive rings** driven by the §12.9 health-gated rollout engine + §29
 fleet controller. The plane is **operator-only**: a read-only GET surface
-under `/v1/admin/kyber/managed-integrations` (`/change-sets`, `/approvals`,
-`/action-required`) gated by `require_kyber_operator`, surfaced in the Kyber
-console vocabulary via the `kyber.reconciled_control.read` capability (D4
-evidence) + `kyber_routes` declarations. Everything is **flag-gated OFF**
+under `/v1/admin/kyber/managed-integrations` (`/authority`, `/change-sets`,
+`/approvals`, `/action-required`, `/activation`, `/activation/transitions`)
+gated by
+`require_kyber_operator`, surfaced in the Kyber console vocabulary via the
+`kyber.reconciled_control.read` capability (D4 evidence) + `kyber_routes`
+declarations. Production activation is a **durable authority**, not a flag
+flip: ordered states (`shadow→detect→plan→r0→r1→r2→fully_managed`, plus
+`emergency_frozen`), readiness-gated advance/resume, and environment flags
+that can only lower the effective state (master off = `disabled`). Everything
+is **flag-gated OFF**
 (`AETHER_RECONCILED_CONTROL_*`): engines are exercised by tests only, the
 scheduler is idle until its master switch + kill-switch flip, and day-1
 production activation sits behind the §41+ blueprint review. No tenant grant,

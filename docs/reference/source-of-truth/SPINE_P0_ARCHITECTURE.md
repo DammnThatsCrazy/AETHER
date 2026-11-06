@@ -59,7 +59,7 @@ it is the glossary that later docs must reuse, never fork.
 | Doc term (Spine P0) | Repo component / registry | Status |
 | --- | --- | --- |
 | Contract Spine | Truth Kernel canonical-schema layer: `packages/shared/*.ts` contracts, `packages/shared/contracts/*.json` registries, Pydantic mirrors, unbypassable generation/validation gates (`scripts/generate_contracts.py`, `scripts/generate_platform_contracts.py`, `scripts/validate_contracts.py`, `scripts/repo_doctor.py --ci`) | EXISTS |
-| Spine Composition Registry / spine-registry | Canonical machine-readable registry: `packages/shared/contracts/spine-registry.json` (34 governed rows — 25 `implemented`, 7 `in_flight`, 2 declared `pending`), validated by `scripts/validate_spine_registry.py` on every `make ci-check`; the projection plane now derives its `SPINE_INDEX` (32 resolved) / `PENDING_SPINE_INDEX` (2) from it | EXISTS (Phase 2; the kernel) |
+| Spine Composition Registry / spine-registry | Canonical machine-readable registry: `packages/shared/contracts/spine-registry.json` (34 governed rows — 25 `implemented`, 8 `in_flight`, 1 declared `pending`), validated by `scripts/validate_spine_registry.py` on every `make ci-check`; the projection plane now derives its `SPINE_INDEX` (33 resolved) / `PENDING_SPINE_INDEX` (1) from it | EXISTS (Phase 2; the kernel) |
 | Spine Composition Kernel (envelope · adapters · lifecycle · conformance · mutation policy · evidence · temporal · readiness) | Registry + common envelope + lifecycle/mutation-policy/conformance vocabulary composed inside the contract spine: `spine-registry.json`, `validate_spine_registry.py`, `spine-envelope.ts` + mirror, generated TS/PY/MD twins | PARTIAL — kernel machinery shipped (Phases 2–6); per-spine conformance not yet verified |
 | Common spine envelope | `packages/shared/spine-envelope.ts` + backend mirror (`shared/spine/spine_envelope.py`) composing canonical primitives; `identity_watermark` declared `@unpopulated` (no producer yet); `rights_decision_ref` left that set on 2026-09-14 when the rights-propagation producer shipped | PARTIAL (Phase 3) |
 | IRRL / Rights Runtime (`DataRightsEnvelope`, `UseAuthority`, `DerivationClass`, `RetentionPolicy`, `Generalization Gateway`, `RightsDecision`) | Rights machinery under existing non-IRRL names: `services/api/connectors/integrations/data_rights` (`DataRightsGrant`, `model_training_allowed`), `services/api/governance/policy` (`ConsentPolicyDecision`), `services/api/governance/dsr_propagation`, `services/api/ingestion/storage_lifecycle`, source-of-truth ledger `DATA_RIGHTS_LEDGER.md` — mapped onto IRRL terms by the naming overlay (`docs/reference/source-of-truth/IRRL_NAMING_OVERLAY.md`); `rights_irrl` + `irrl_naming_overlay` governed rows reference, never fork, these registries | PARTIAL — machinery + naming overlay shipped (Phase 5); envelope `rights_decision_ref` produced since 2026-09-14, `identity_watermark` still `@unpopulated` |
@@ -72,12 +72,12 @@ it is the glossary that later docs must reuse, never fork.
 | Relational Intelligence / Relationship Fidelity | Relationship-fidelity layer(s) — observed / inferred / trust / risk / causal association semantics | EXISTS |
 | Measurement / Metrics / Algebra | `metric-registry.json` + measurement/outcome contracts | EXISTS |
 | Lens / Projection Algebra; Exploration Fabric | Intelligence Projection Plane (ADR-010) + exploration fabric | EXISTS |
-| 360 projections | Nineteen 360 projections in `intelligence-projection-registry.json` (three `implemented` on the 360-foundation base — `outcome360`/`economic360`/`infrastructure360`; the rest `in_flight`/pending) | EXISTS |
+| 360 projections | Twenty-four 360 projections in `intelligence-projection-registry.json` (nine `implemented`; the rest `in_flight`/pending) | EXISTS |
 | Consent / Privacy / Deletion | `consent-registry.json`, `services/api/governance/policy` (`ConsentPolicyDecision`), DSR propagation / deletion | EXISTS |
 | Kyber | Kyber operator control surface (desired state, observed state, remediation, control workflows) | EXISTS |
 | Noesis | Noesis product surface (Interaction and Product plane) | EXISTS |
 | Graph-of-Graphs rights filtering | Data-use doctrine only (`GRAPH_OF_GRAPHS_DATA_USE.md`); no rights-filtered intelligence-layer enforcement yet | PARTIAL |
-| 14-item conformance contract | In-registry conformance contract: every non-program spine row carries its 14 checks (all `open`), structurally enforced by `validate_spine_registry.py`; `SPINE_P0_CONFORMANCE_CHECKLIST.md` maps the 14 items to evidence | PARTIAL — contract + gate shipped (Phase 6); no row verified |
+| 14-item conformance contract | In-registry conformance contract: every non-program spine row carries its 14 checks (one row, `reconciled_control_plane`, verifies authority/non-ownership; the rest remain `open`), structurally enforced by `validate_spine_registry.py`; `SPINE_P0_CONFORMANCE_CHECKLIST.md` maps the 14 items to evidence | PARTIAL — contract + gate shipped (Phase 6); no row fully verified |
 | Tenant Activation & Readiness | Readiness vocabulary (presentation-only join, never emits certification/`production_ready`), activation machinery, capability manifest | EXISTS |
 
 ## Honesty — what does and does not exist yet
@@ -112,17 +112,18 @@ Still **do not exist** (each is an honest `open` conformance item or a declared
 `pending` row in the registry — no `CANONICAL` or `production_ready` claim is
 made anywhere):
 
-- verified per-row conformance evidence (every non-program row's 14 checks are
-  `open`);
+- verified per-row conformance evidence (all non-program rows remain mostly
+  `open`; `reconciled_control_plane` verifies only authority/non-ownership);
 - an envelope producer for `identity_watermark` (`@unpopulated`) — the other
   no-producer field, `rights_decision_ref`, gained one on 2026-09-14
   (`services/api/tenancy/rights_authority/propagation.py`);
-- the two spines the registry marks `pending` (`journey_continuity`,
-  `reconciled_control_plane`) as implemented capabilities — and, for the three
-  projection spines re-formalized `pending` → `implemented` on the 2026-09-05
-  re-cut (`graph_history_replay`, `context_capsule_semantics`,
-  `grouping_membership`), the verified per-row conformance evidence (each row's
-  14 checks remain `open`);
+- the one spine the registry still marks `pending` (`journey_continuity`) as
+  an implemented capability; `reconciled_control_plane` moved to `in_flight`
+  in the 2026-10-29 Post-734 Program A+B slice (authority/non-ownership
+  verified, 13 checks open). The three projection spines re-formalized
+  `pending` → `implemented` on the 2026-09-05 re-cut (`graph_history_replay`,
+  `context_capsule_semantics`, `grouping_membership`) still lack verified
+  per-row conformance evidence (their 14 checks remain `open`);
 - rights-filtered **intelligence-layer enforcement** across the
   Graph-of-Graphs boundary.
 

@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:5f1596569c3412a17f2ad09477153ba524832e4d8bb08e46d90ea2aec36fe1c9"
+  "CHANGELOG.md": "sha256:5adbdebb8c891237e7b893d8df1c57bd8c98f7904d941453addf81d27da1369d"
 ---
 # Changelog
 
@@ -41,6 +41,9 @@ source_hashes:
 - `loader_version` is the version the control plane reconciles against, the same field the distribution layer derives `drift_status` from.
 - The first external SDK release target is `0.1.0-alpha.0` (publish workflow hint, staging and production release flags, SDK readiness docs), matching the single pre-1.0 platform version.
 - The `economic360` projection now displays as `Value 360` in the projection registry, generated artifacts and both web apps; its id is unchanged.
+- Reconciled Control Plane Program A+B: an explicit authority map (external/observed/no-interface/owned/forbidden areas, fail-closed integrity assertion) and a durable readiness-gated activation authority (`shadow→detect→plan→r0→r1→r2→fully_managed` + `emergency_frozen`, CAS + atomic evidence) land behind read-only `/authority`, `/activation` and `/activation/transitions` operator reads. All control-plane flags remain default OFF and no production activation is claimed.
+- Reconciled Control Plane Program C (first slices): the scheduler now derives runtime capabilities from the effective activation decision (`shadow` observes, `detect` reconciles, `plan` may persist a ChangeSet, `r0+` may execute, `disabled`/`emergency_frozen` stop the loop), inherits the global state for tenant scopes without a row, and never lets a tenant exceed global. While the plane is enabled, direct SDK manifest publishing is refused and admins instead request the change through `POST /v1/config/sdk/manifest/requests`, which records a planned ChangeSet plus a stage-zero rollout; a tenant-scoped GET reads the request. The request does not publish a manifest yet. SDK request execution/rollout projection and Provider Runtime convergence remain open Program C work.
+- The `reconciled_control_plane` spine moves `pending` → `in_flight` (authority/non-ownership verified; remaining checks open), and `connection360`'s stale pending-authority declaration is removed.
 
 ### Fixed
 
@@ -54,7 +57,7 @@ source_hashes:
 - The ingestion worker `*_total` counters are in the canonical meter list, so `validate_meter_names.py` passes.
 - `bump_version.py` validated SDK/native version constants it never rewrote, so a platform bump failed the check and named a command that could not fix it. The remediation now names the SDK release script for those surfaces, and `bump-sdk-version.sh` plus the release workflow carry the loader and backend constants.
 
-Note: the Reconciled Control Plane spine remains `pending` with all 14 conformance items open; nothing in this entry moves it, and every control-plane capability stays flag-gated off (`AETHER_RECONCILED_CONTROL_*`).
+Note: the earlier `pending` note for the Reconciled Control Plane is superseded by the Program A+B entry above: the spine is now `in_flight` with the authority/non-ownership check verified, and every control-plane capability remains flag-gated off (`AETHER_RECONCILED_CONTROL_*`).
 
 ## [0.1.0-alpha.0] - 2026-09-09
 
