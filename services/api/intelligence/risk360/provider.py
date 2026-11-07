@@ -97,6 +97,11 @@ from intelligence.risk360.store import (
     RiskSignalRepository,
 )
 from journeys.support360.cases import SupportCaseAuthorityRead, SupportCaseRepository
+from journeys.support360.subjects import (
+    SupportSubjectRead,
+    SupportSubjectRepository,
+    valid_subject_record,
+)
 
 PROJECTION_ID = "risk360"
 
@@ -1272,6 +1277,8 @@ class Risk360Provider:
         sources: Optional[RiskSourceReader] = None,
         *,
         support_case_repository: Optional[SupportCaseRepository] = None,
+        support_subject_repository: Optional[SupportSubjectRepository] = None,
+        support_connection_repository: Optional[Any] = None,
         social_graph_path_reader: Optional[Any] = None,
         social_evidence_authority: Optional[Any] = None,
         consent_reader: Optional[Any] = None,
@@ -1286,6 +1293,12 @@ class Risk360Provider:
             if support_case_repository is not None
             else SupportCaseRepository()
         )
+        self._support_subject_repository = (
+            support_subject_repository
+            if support_subject_repository is not None
+            else SupportSubjectRepository(cases=self._support_case_repository)
+        )
+        self._support_connection_repository = support_connection_repository
         # Keep the social graph seam lazy. Its default adapter reads canonical
         # graph + relationship-fact authorities and does not become a second
         # risk or contagion store.
@@ -1303,11 +1316,23 @@ class Risk360Provider:
         """Run one read-only Risk360 projection over the tenant's risk records."""
         tenant_id = request.tenantId
         dep_state = context.dependencyState
+        requested_subject = request.subject
 
         support_case_scope: Optional[dict[str, Any]] = None
         support_case_evidence: list[EvidenceRef] = []
         support_case_scope_verified = True
-        if request.subject.kind == "support_case":
+        if request.subject.kind in {"ticket", "conversation"}:
+            support_case_scope, support_case_evidence = await self._safe_support_subject_scope(
+                request, context,
+            )
+            support_case_scope_verified = support_case_scope["state"] == "available"
+            if support_case_scope_verified:
+                request = request.model_copy(update={
+                    "subject": ProjectionSubject(
+                        kind="support_case", id=support_case_scope["supportCaseId"],
+                    ),
+                })
+        elif request.subject.kind == "support_case":
             if context.tenantId != tenant_id:
                 support_case_scope = self._unknown_support_case_scope(
                     tenant_id,
@@ -1376,6 +1401,12 @@ class Risk360Provider:
             source_provenance, source_provenance_degraded = await self._safe_source_provenance(
                 tenant_id, request.subject
             )
+
+        if requested_subject.kind in {"ticket", "conversation"} and (
+            signals_degraded
+            or len({signal.signal_id for signal in signals}) != len(signals)
+        ):
+            signals, signals_degraded = [], True
 
         if not support_case_scope_verified:
             anomaly_events, anomaly_events_degraded = [], False
@@ -1740,6 +1771,20 @@ class Risk360Provider:
             if not support_case_scope_verified:
                 claims = []
 
+        if requested_subject.kind in {"ticket", "conversation"}:
+            claims = [
+                claim.model_copy(update={
+                    "subject": requested_subject,
+                    "evidenceRefs": _dedupe_evidence([
+                        *claim.evidenceRefs, *support_case_evidence,
+                    ]),
+                })
+                for claim in claims if claim.subject == request.subject
+            ]
+            for section in sections:
+                if isinstance(section.content, dict):
+                    section.content["subject"] = requested_subject.model_dump(mode="json")
+
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=tenant_id,
@@ -1751,10 +1796,115 @@ class Risk360Provider:
             degradedReasons=[],
         )
 
+    async def _safe_support_subject_scope(
+        self, request: ProjectionRequest, context: ProjectionContext,
+    ) -> tuple[dict[str, Any], list[EvidenceRef]]:
+        """Resolve a persisted alias without inferring identity from shared IDs."""
+        def unknown(reason: str) -> tuple[dict[str, Any], list[EvidenceRef]]:
+            return ({
+                **self._unknown_support_case_scope(request.tenantId, "", reason),
+                "subjectKind": request.subject.kind,
+                "canonicalSubjectId": request.subject.id,
+                "subjectBinding": "exact_persisted_support_case_subject_required",
+            }, [])
+
+        if context.tenantId != request.tenantId:
+            return unknown("support_subject_tenant_context_mismatch")
+        if not _is_current_subject_read(request, context):
+            return unknown("support_subject_bitemporal_history_unavailable")
+        try:
+            read = await self._support_subject_repository.read(
+                request.tenantId, request.subject.kind, request.subject.id,
+            )
+            if not isinstance(read, SupportSubjectRead) or read.available is not True:
+                return unknown("support_subject_binding_unavailable")
+            if read.complete is not True:
+                return unknown("support_subject_binding_ambiguous")
+            binding = read.record
+            if binding is None:
+                return unknown("support_subject_binding_missing")
+            if not valid_subject_record(
+                binding, request.tenantId, request.subject.kind, request.subject.id,
+            ):
+                return unknown("support_subject_binding_scope_mismatch")
+            connections = self._support_connection_repository
+            if connections is None:
+                from connectors.provider_runtime.connection import ProviderConnectionRepository
+
+                connections = ProviderConnectionRepository()
+            connection = await connections.find(binding["source_connection_id"])
+            verified_at = _aware_datetime(getattr(connection, "last_verified_at", None))
+            binding_verified_at = _aware_datetime(binding["connection_verified_at"])
+            accounts = getattr(connection, "selected_accounts", None)
+            if (
+                connection is None
+                or connection.tenant_id != request.tenantId
+                or connection.connection_id != binding["source_connection_id"]
+                or connection.provider_identity != binding["source_provider_identity"]
+                or connection.state not in {"verified", "connected"}
+                or not isinstance(accounts, list)
+                or binding["source_account_id"] not in accounts
+                or verified_at is None
+                or verified_at > datetime.now(timezone.utc)
+                or verified_at < binding_verified_at
+            ):
+                return unknown("support_subject_connection_account_scope_mismatch")
+            scope, case_refs = await self._safe_support_case_scope(
+                request.tenantId,
+                ProjectionSubject(kind="support_case", id=binding["case_id"]),
+                subject_binding=binding,
+            )
+            if scope["state"] != "available":
+                return unknown(scope["reason"])
+            reference = EvidenceRef(
+                id=binding["subject_id"], type="event", source="support_case_subjects",
+                observedAt=binding["received_at"],
+                uri=(f"store://support_case_subjects/{quote(request.tenantId, safe='')}/"
+                     f"{binding['subject_id']}"),
+            )
+            join_refs = [reference, *[
+                EvidenceRef.model_validate(value) for value in binding["evidence_refs"]
+            ]]
+            current_connection_ref = EvidenceRef(
+                id=connection.connection_id, type="entity", source="provider_connections",
+                observedAt=verified_at.isoformat(),
+                uri=f"store://provider_connections/{quote(connection.connection_id, safe='')}",
+            )
+            join_refs = _dedupe_evidence([reference, current_connection_ref, *join_refs])
+        except Exception:  # noqa: BLE001 - malformed or unavailable authority fails closed
+            return unknown("support_subject_authority_unavailable")
+        scope["subjectCaseJoin"] = {
+            "subjectKind": request.subject.kind,
+            "canonicalSubjectId": request.subject.id,
+            "canonicalCaseId": binding["case_id"],
+            "sourceProvider": binding["source_provider_identity"],
+            "sourceConnectionId": binding["source_connection_id"],
+            "sourceAccountId": binding["source_account_id"],
+            "sourceSubjectId": binding["source_subject_id"],
+            "sourceCaseId": binding["source_case_id"],
+            "sourceEventId": binding["source_event_id"],
+            "sourceOccurredAt": binding["source_occurred_at"],
+            "bindingReceivedAt": binding["received_at"],
+            "bindingConnectionVerifiedAt": binding["connection_verified_at"],
+            "scope": "explicitly_mapped_case_risk_context",
+            "claimState": "observed",
+            "persistedBindingReadComplete": True,
+            "connectionAccountScope": "currently_verified_selected_account",
+            "connectionVerifiedAt": verified_at.isoformat(),
+            "sourceAuthenticity": "unverified",
+            "sourceHistoryComplete": False,
+            "freshnessState": "unknown",
+            "businessOutcomeState": "unknown",
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in join_refs],
+        }
+        return scope, _dedupe_evidence([*case_refs, *join_refs])
+
     async def _safe_support_case_scope(
         self,
         tenant_id: str,
         subject: ProjectionSubject,
+        *,
+        subject_binding: Optional[dict[str, Any]] = None,
     ) -> tuple[dict[str, Any], list[EvidenceRef]]:
         """Prove an exact canonical case before allowing a case-keyed risk read."""
         try:
@@ -1804,6 +1954,29 @@ class Risk360Provider:
                     "support_case_tenant_scope_mismatch",
                 ),
                 [],
+            )
+
+        if subject_binding is not None and (
+            read.complete is not True
+            or read.available is not True
+            or read.expired is not False
+            or not isinstance(read.events, list)
+            or any(
+                not isinstance(event, dict)
+                or event.get("tenant_id") != tenant_id
+                or event.get("case_id") != subject.id
+                or event.get("source_connection_id") != subject_binding["source_connection_id"]
+                for event in read.events
+            )
+            or any(record.get(key) != subject_binding[key] for key in (
+                "tenant_id", "case_id", "source_connection_id",
+                "source_provider_identity", "source_case_id",
+            ))
+        ):
+            return (
+                self._unknown_support_case_scope(
+                    tenant_id, subject.id, "support_subject_binding_case_scope_mismatch",
+                ), [],
             )
 
         observed_at = _aware_datetime(record.get("last_observed_at"))
@@ -5527,7 +5700,8 @@ class Risk360Provider:
         # Tenant scope is server-authoritative: never project another tenant's
         # assessment/sections/evidence.
         if (
-            str(raw.get("tenant_id", "")) != tenant_id
+            not isinstance(raw, dict)
+            or str(raw.get("tenant_id", "")) != tenant_id
             or str(raw.get("subject_kind", "")) != subject.kind
             or str(raw.get("subject_id", "")) != subject.id
         ):
@@ -5550,13 +5724,14 @@ class Risk360Provider:
         except Exception:  # noqa: BLE001 - backing source unavailable -> degrade
             return [], True
         signals: list[RiskSignal] = []
-        if len(raw_rows) > _MAX_SIGNAL_SCAN:
+        if not isinstance(raw_rows, list) or len(raw_rows) > _MAX_SIGNAL_SCAN:
             return [], True
         for raw in raw_rows:
             # Server-authoritative tenant filter; a leaky row is dropped, not
             # surfaced (and never mistaken for a degraded read of this tenant).
             if (
-                str(raw.get("tenant_id", "")) != tenant_id
+                not isinstance(raw, dict)
+                or str(raw.get("tenant_id", "")) != tenant_id
                 or str(raw.get("subject_kind", "")) != subject.kind
                 or str(raw.get("subject_id", "")) != subject.id
             ):

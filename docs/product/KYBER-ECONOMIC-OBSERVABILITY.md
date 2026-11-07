@@ -11,7 +11,7 @@ related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
   "services/api/identity/profile/routes.py": "sha256:8b085907602875b4bdad089fdbc084f1d5308c4559fb5678d2a836eb8134c589"
-  "services/api/value/economic/routes.py": "sha256:ceff2b0583bf08e2603f6693b19d70979a435eaa4afd7567a77a074413a97167"
+  "services/api/value/economic/routes.py": "sha256:06f9a6abcc075c506423253e071386eedcc3a7cb88589752e4bfd3cf60235ec7"
 ---
 
 # Aether — Kyber Economic Observability
@@ -80,7 +80,11 @@ run/config lineage but does not itself approve or calibrate the model. A
 separate `POST /v1/economic/attribution-runs/{run_id}/model-approval` requires
 tenant-admin permission and records an approval or rejection bound to the exact
 validated run and configuration. This is an approval record, not calibration
-evidence. `/economic/agentic`, `/economic/campaigns`
+evidence. `POST /v1/economic/attribution-runs/{run_id}/confidence-evaluation`
+requires an authenticated principal and `write` permission. It evaluates only
+canonical credit touchpoint temporal eligibility, with bounded samples, an
+exact manifest and source rejoins. Its score does not calibrate model confidence
+or verify causal attribution. `/economic/agentic`, `/economic/campaigns`
 and the two `/v1/economic` routes are served by `services/api/value/economic/routes.py`; the
 other four profile routes are served by `services/api/identity/profile/routes.py`. Each URL has
 exactly one handler (`tests/unit/test_route_conflicts.py`).

@@ -3251,6 +3251,23 @@ policies:
     requires_consent_invalidation: true
     requires_permission_hash: false
 
+  - resource_type: value_confidence_evaluations
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
   - resource_type: attribution_policies
     authoritative_store: postgres
     metadata_store: postgres
@@ -7684,6 +7701,23 @@ policies:
   # lifecycle metadata only. No message body or arbitrary provider payload is
   # stored; lifecycle evidence follows the same one-year confidential policy.
   - resource_type: support_cases
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
+  - resource_type: support_case_subjects
     authoritative_store: postgres
     metadata_store: postgres
     projection_stores: []

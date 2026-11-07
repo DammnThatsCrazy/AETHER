@@ -127,6 +127,7 @@ AUTHORITY_DOMAIN_BY_REF: dict[str, str] = {
     "support_case_agent_assignment_events": "customer_success",
     "support_case_context_events": "customer_success",
     "support_case_events": "customer_success",
+    "support_case_subjects": "customer_success",
     "support_cases": "customer_success",
     "temporal": "graph",
     "temporal_kernel": "graph",

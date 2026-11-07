@@ -41,6 +41,7 @@ class SupportSLAEventType(str, Enum):
     TIMER_STARTED = "support_sla_timer_started"
     TIMER_PAUSED = "support_sla_timer_paused"
     TIMER_RESUMED = "support_sla_timer_resumed"
+    TIMER_STOPPED = "support_sla_timer_stopped"
     TIMER_MET = "support_sla_timer_met"
     TIMER_BREACHED = "support_sla_timer_breached"
     TIMER_CANCELLED = "support_sla_timer_cancelled"
@@ -68,7 +69,7 @@ class SupportSLAEventInput(BaseModel):
     source_policy_id: str = Field(min_length=1, max_length=256)
     source_policy_version: str = Field(min_length=1, max_length=128)
     source_timer_state: Optional[str] = Field(
-        default=None, pattern="^(not_started|running|paused|met|breached|cancelled|unknown)$"
+        default=None, pattern="^(not_started|running|paused|stopped|met|breached|cancelled|unknown)$"
     )
     target_duration_seconds: Optional[int] = Field(default=None, ge=0, le=315360000)
     due_at: Optional[datetime] = None
@@ -130,6 +131,7 @@ class SupportSLAEventInput(BaseModel):
             SupportSLAEventType.TIMER_STARTED: "running",
             SupportSLAEventType.TIMER_PAUSED: "paused",
             SupportSLAEventType.TIMER_RESUMED: "running",
+            SupportSLAEventType.TIMER_STOPPED: "stopped",
             SupportSLAEventType.TIMER_MET: "met",
             SupportSLAEventType.TIMER_BREACHED: "breached",
             SupportSLAEventType.TIMER_CANCELLED: "cancelled",
@@ -220,6 +222,8 @@ def _row_dict(row: Any) -> dict[str, Any]:
     for key, item in value.items():
         if isinstance(item, datetime):
             value[key] = coerce_utc_lenient(item).astimezone(timezone.utc).isoformat()
+        elif isinstance(item, UUID):
+            value[key] = str(item)
         elif key in {"payload", "evidence_refs"} and isinstance(item, str):
             try:
                 value[key] = json.loads(item)
@@ -664,6 +668,18 @@ class SupportCaseContextIngestionService:
         ):
             raise SupportCaseContextNotFound("exact tenant-owned support case is unavailable")
         if kind == "journey_links":
+            verified_time = _iso(verified_at)
+            now = datetime.now(timezone.utc)
+            if (
+                _connection_value(connection, "connection_id") != connection_id
+                or verified_time is None
+                or datetime.fromisoformat(verified_time) > now
+                or event.source_observed_at > now
+                or event.effective_at > now
+            ):
+                raise SupportCaseContextAuthorityError(
+                    "exact verified connection and nonfuture journey observation are required"
+                )
             if self._journeys is None:
                 from journeys.measurement.repositories.journey_repo import JourneyRepository
 
@@ -684,7 +700,7 @@ class SupportCaseContextIngestionService:
                 raise SupportCaseContextAuthorityError(
                     "journey link requires an exact current tenant-owned journey"
                 )
-        return await self._repository.append(
+        record = await self._repository.append(
             kind=kind,
             tenant_id=tenant_id,
             case_record=case_record,
@@ -695,6 +711,14 @@ class SupportCaseContextIngestionService:
             actor_id=actor_id,
             actor_type=actor_type,
         )
+        if kind == "journey_links":
+            from shared.backend_interpretation.flags import episode_engine_enabled
+
+            if episode_engine_enabled():
+                from journeys.support360.episodes import publish_journey_link_episode
+
+                await publish_journey_link_episode(record)
+        return record
 
 
 def _connection_value(connection: Any, field: str) -> Optional[str]:

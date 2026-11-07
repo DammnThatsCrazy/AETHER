@@ -26,6 +26,8 @@ _TABLE = "support_sla_measurement_contracts"
 _LOCAL_ENVIRONMENTS = frozenset({"local", "dev", "test"})
 _LOCAL_CONTRACTS: dict[str, dict[str, Any]] = {}
 _MAX_CASE_CONTRACTS = 200
+ACTIVE_ELAPSED_V1 = "active_elapsed_v1"
+SOURCE_REPORTED_ONLY_V0 = "source_reported_only_v0"
 
 
 def _payload_mapping(value: Any) -> dict[str, Any]:
@@ -55,6 +57,9 @@ class SupportSLAMeasurementContract(BaseModel):
     timer_kind: str = Field(pattern="^(first_response|resolution|custom)$")
     custom_timer_name: Optional[str] = Field(default=None, max_length=128)
     target_duration_seconds: int = Field(ge=1, le=315360000)
+    measurement_method_version: str = Field(
+        default=ACTIVE_ELAPSED_V1, pattern="^(active_elapsed_v1|source_reported_only_v0)$"
+    )
     registered_by: str = Field(min_length=1, max_length=256)
     registered_at: datetime
 
@@ -94,6 +99,122 @@ class SupportSLAMeasurementContract(BaseModel):
             self.timer_kind, self.custom_timer_name or "",
         ))
         return "support_sla_" + hashlib.sha256(key.encode()).hexdigest()[:32]
+
+
+def evaluate_active_elapsed_v1(
+    contract: SupportSLAMeasurementContract,
+    events: list[dict[str, Any]],
+    *,
+    complete: bool,
+) -> dict[str, Any]:
+    """Measure elapsed active time only across an explicit source event sequence."""
+    unknown = {"state": "unknown", "reasonCode": "support_sla_timer_sequence_not_reproducible"}
+    if not complete or contract.measurement_method_version != ACTIVE_ELAPSED_V1:
+        return {**unknown, "reasonCode": "support_sla_timer_history_incomplete_or_unsupported"}
+
+    matching = []
+    now = datetime.now(timezone.utc)
+    if contract.registered_at > now:
+        return {**unknown, "reasonCode": "support_sla_timer_timestamp_anchor_invalid"}
+    expected_timer = contract.timer_kind
+    for event in events:
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if (
+            payload.get("source_sla_id") != contract.source_sla_id
+            or payload.get("timer_kind") != expected_timer
+            or payload.get("custom_timer_name") != contract.custom_timer_name
+        ):
+            continue
+        if (
+            payload.get("source_policy_id") != contract.source_policy_id
+            or payload.get("source_policy_version") != contract.source_policy_version
+        ):
+            return {**unknown, "reasonCode": "support_sla_timer_policy_revision_ambiguous"}
+        target = payload.get("target_duration_seconds")
+        if target is not None and target != contract.target_duration_seconds:
+            return {**unknown, "reasonCode": "support_sla_source_target_conflicts_with_registered_contract"}
+        matching.append(event)
+    if not matching:
+        return {**unknown, "reasonCode": "support_sla_explicit_timer_events_not_observed"}
+
+    def timestamp(value: Any) -> Optional[datetime]:
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo and parsed.utcoffset() is not None else None
+
+    anchored = []
+    for event in matching:
+        effective = timestamp(event.get("effectiveAt"))
+        observed = timestamp(event.get("sourceObservedAt"))
+        received = timestamp(event.get("receivedAt"))
+        payload_effective = timestamp(event["payload"].get("effective_at"))
+        if (
+            effective is None or observed is None or received is None or payload_effective is None
+            or effective != payload_effective or observed < effective or received < observed
+            or received > now
+        ):
+            return {**unknown, "reasonCode": "support_sla_timer_timestamp_anchor_invalid"}
+        anchored.append((effective, event))
+    anchored.sort(key=lambda item: item[0])
+    if any(anchored[index - 1][0] == anchored[index][0] for index in range(1, len(anchored))):
+        return {**unknown, "reasonCode": "support_sla_timer_event_order_ambiguous"}
+
+    state = "not_started"
+    anchor: Optional[datetime] = None
+    elapsed_microseconds = 0
+    for index, (effective, event) in enumerate(anchored):
+        event_type = event.get("eventType")
+        if event_type == "support_sla_timer_started" and state == "not_started":
+            state, anchor = "running", effective
+        elif event_type == "support_sla_timer_paused" and state == "running" and anchor is not None:
+            delta = effective - anchor
+            elapsed_microseconds += (
+                (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
+            )
+            state, anchor = "paused", None
+        elif event_type == "support_sla_timer_resumed" and state == "paused":
+            state, anchor = "running", effective
+        elif event_type == "support_sla_timer_stopped" and state == "running" and anchor is not None:
+            delta = effective - anchor
+            elapsed_microseconds += (
+                (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
+            )
+            state = "stopped"
+            if index != len(anchored) - 1:
+                return {**unknown, "reasonCode": "support_sla_timer_transition_ambiguous_or_unsupported"}
+            if effective < anchor or elapsed_microseconds < 0:
+                return {**unknown, "reasonCode": "support_sla_timer_event_order_invalid"}
+            seconds = elapsed_microseconds / 1_000_000
+            return {
+                "state": "measured",
+                "methodVersion": ACTIVE_ELAPSED_V1,
+                "activeDurationSeconds": seconds,
+                "targetDurationSeconds": contract.target_duration_seconds,
+                "comparison": (
+                    "within_target"
+                    if elapsed_microseconds <= contract.target_duration_seconds * 1_000_000
+                    else "over_target"
+                ),
+                "stoppedAt": effective.isoformat(),
+                "sequenceEventIds": [item[1]["contextEventId"] for item in anchored],
+                "startAndStopEvents": [
+                    item[1]["contextEventId"] for item in anchored
+                    if item[1].get("eventType") in {
+                        "support_sla_timer_started", "support_sla_timer_stopped"
+                    }
+                ],
+                "pausedDurationExcluded": True,
+                "outcomeAuthority": "locally_measured_explicit_timer_semantics",
+            }
+        else:
+            return {**unknown, "reasonCode": "support_sla_timer_transition_ambiguous_or_unsupported"}
+    return {**unknown, "reasonCode": "support_sla_timer_has_no_explicit_stop"}
 
 
 @dataclass(frozen=True)

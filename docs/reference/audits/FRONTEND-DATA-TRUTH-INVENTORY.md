@@ -20,7 +20,7 @@ reviewed_source_commits:
 source_hashes:
   "apps/aether-web/": "sha256:6e4f2bd1ef57d7ff4aefd6672045ffc8cf782ec4b683a045594273be678f2848"
   "apps/demo/": "sha256:68e3f82d5ac29330519e833dc50bca0023c83e9d6e5b448f09129917617d1b7c"
-  "apps/kyber-web/": "sha256:0fd269c2f4350230bd5e0209352a6c76958a86fc2e9d74700b2ae7fcda90d7ae"
+  "apps/kyber-web/": "sha256:2fb7fed5808927c6c29a66dde7803af994122efce515317e18c444818ab25b8c"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
   "scripts/validate_frontend_data_truth.py": "sha256:25de73c82ac07cdc52b7a9be8d7f8ef69ff50ca7ba735c1e8d51652dcf92636c"
 ---

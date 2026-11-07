@@ -483,6 +483,16 @@ def _value_model_approval_ref(decision_id: str, created_at: Optional[str]) -> Ev
     )
 
 
+def _value_confidence_evaluation_ref(evaluation_id: str, created_at: Optional[str]) -> EvidenceRef:
+    return EvidenceRef(
+        id=evaluation_id,
+        type="model_output",
+        source="value_confidence_evaluations",
+        observedAt=created_at,
+        uri=f"store://value_confidence_evaluations/{quote(evaluation_id, safe='')}",
+    )
+
+
 def _campaign_touchpoint_ref(
     touchpoint_id: str,
     received_at: Optional[str],
@@ -652,9 +662,20 @@ class RepositoryAttributionCreditReader:
                                 and approval.get("validation_decision_id") == decision.get("decision_id")
                                 and approval.get("decision") in {"approved", "rejected"}
                                 and isinstance(approval.get("actor_id"), str)
-                                and bool(approval.get("actor_id"))
+                                and bool(approval.get("actor_id").strip())
                                 and isinstance(approval.get("reason"), str)
-                                and bool(approval.get("reason"))
+                                and bool(approval.get("reason").strip())
+                                and approval.get("authorization_action") == "value.model_approval"
+                                and approval.get("authorization_permission") == "admin"
+                                and approval.get("authorization_decision") == "allow"
+                                and approval.get("authorization_actor_id") == approval.get("actor_id")
+                                and approval.get("authorization_evaluated_at") is not None
+                                and _attribution_timestamp(approval.get("authorization_evaluated_at")) is not None
+                                and _attribution_timestamp(approval.get("created_at")) is not None
+                                and _attribution_timestamp(approval.get("authorization_evaluated_at"))
+                                    <= _attribution_timestamp(approval.get("created_at"))
+                                and _attribution_timestamp(approval.get("created_at"))
+                                    >= _attribution_timestamp(run.get("completed_at"))
                             ):
                                 approval_ref = _value_model_approval_ref(
                                     approval["decision_id"],
@@ -866,6 +887,8 @@ class RepositoryAttributionCreditReader:
                                 run_ref.model_dump(mode="json"),
                                 credit_ref.model_dump(mode="json"),
                                 *([governance["evidenceRef"]] if governance.get("state") == "validated" else []),
+                                *([governance["evaluationEvidence"]["evidenceRef"]]
+                                  if governance.get("evaluationEvidence", {}).get("state") == "computed" else []),
                                 *(
                                     [touchpoint_ref.model_dump(mode="json")]
                                     if touchpoint_ref is not None
@@ -1300,6 +1323,8 @@ def _attribution_evidence_refs(value: Any) -> list[EvidenceRef]:
         "attribution_runs": "model_output",
         "attribution_credits": "model_output",
         "attribution_model_validation_decisions": "model_output",
+        "value_model_approval_decisions": "annotation",
+        "value_confidence_evaluations": "model_output",
         (
             "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
             "silver_campaign_touchpoint_facts"
@@ -4359,12 +4384,27 @@ class Economic360Provider:
                 confidence = _attribution_confidence(record.get("modelConfidence"))
                 model_lineage_reported = bool(model_type and model_version)
                 governance = record.get("modelGovernance") or {}
-                governance_note = (
-                    "; exact tenant run/model-config snapshot lineage validated by append-only decision "
-                    f"{governance.get('decisionId')}; model approval and calibration remain unvalidated"
-                    if governance.get("state") == "validated"
-                    else "; model governance validation is unavailable"
-                )
+                approval_state = governance.get("approvalState")
+                if governance.get("state") != "validated":
+                    governance_note = "; model governance validation is unavailable"
+                elif approval_state == "approved":
+                    governance_note = (
+                        "; exact tenant run/model-config snapshot lineage validated by append-only decision "
+                        f"{governance.get('decisionId')}; durable model approval approved by "
+                        f"{governance.get('approvalActorId')}; confidence calibration remains unvalidated"
+                    )
+                elif approval_state == "rejected":
+                    governance_note = (
+                        "; exact tenant run/model-config snapshot lineage validated by append-only decision "
+                        f"{governance.get('decisionId')}; durable model approval rejected; "
+                        "confidence calibration remains unvalidated"
+                    )
+                else:
+                    governance_note = (
+                        "; exact tenant run/model-config snapshot lineage validated by append-only decision "
+                        f"{governance.get('decisionId')}; model approval is unknown and "
+                        "confidence calibration remains unvalidated"
+                    )
                 confidence_note = (
                     f"; model-reported attribution confidence {confidence:.3f} "
                     "(calibration and applicability to realized value are not independently validated)"
@@ -4372,6 +4412,17 @@ class Economic360Provider:
                     if confidence is not None and model_lineage_reported
                     else ""
                 )
+                evaluation_evidence = governance.get("evaluationEvidence") if isinstance(governance, dict) else None
+                if (isinstance(evaluation_evidence, dict)
+                        and evaluation_evidence.get("state") == "computed"
+                        and isinstance(evaluation_evidence.get("value"), (int, float))
+                        and isinstance(evaluation_evidence.get("sampleCount"), int)):
+                    confidence_note += (
+                        f"; bounded temporal eligibility evaluation is {evaluation_evidence['value']:.3f} "
+                        f"over {evaluation_evidence['sampleCount']} exact canonical credit samples "
+                        f"({evaluation_evidence.get('contractVersion')}); causal contribution and "
+                        "confidence calibration remain unknown"
+                    )
                 domain_slot_ids = [
                     VALUE_ATTRIBUTION_CREDITS_SLOT_ID,
                     VALUE_EVIDENCE_TRACE_SLOT_ID,
@@ -4794,6 +4845,13 @@ class Economic360Provider:
                             and durable_approval.get("actor_id") == raw_governance.get("approvalActorId")
                             and durable_approval.get("reason") == raw_governance.get("approvalReason")
                             and _attribution_timestamp(durable_approval.get("created_at")) == raw_approval_ref.get("observedAt")
+                            and durable_approval.get("authorization_action") == "value.model_approval"
+                            and durable_approval.get("authorization_permission") == "admin"
+                            and durable_approval.get("authorization_decision") == "allow"
+                            and durable_approval.get("authorization_actor_id") == durable_approval.get("actor_id")
+                            and durable_approval.get("authorization_evaluated_at") is not None
+                            and _attribution_timestamp(durable_approval.get("authorization_evaluated_at"))
+                                <= _attribution_timestamp(durable_approval.get("created_at"))
                         ):
                             governance.update({
                                 "approvalState": approval_state,
@@ -4801,6 +4859,60 @@ class Economic360Provider:
                                 "approvalReason": raw_governance["approvalReason"],
                                 "approvalEvidenceRef": expected_approval_ref.model_dump(mode="json"),
                             })
+                    try:
+                        from value.economic.value_confidence_evaluation import (
+                            ValueConfidenceEvaluationRepository, verify_evaluation_sources,
+                        )
+                        evaluation = await ValueConfidenceEvaluationRepository().latest_for_run(
+                            request.tenantId, run_id,
+                        )
+                        if (
+                            await verify_evaluation_sources(request.tenantId, evaluation)
+                            and evaluation.get("tenant_id") == request.tenantId
+                            and evaluation.get("attribution_run_id") == run_id
+                            and evaluation.get("model_config_id") == config_id
+                            and evaluation.get("validation_decision_id") == decision_id
+                            and evaluation.get("actor_id")
+                            and evaluation.get("authorization_actor_id") == evaluation.get("actor_id")
+                            and evaluation.get("authorization_action") == "value.model_evaluation"
+                            and evaluation.get("authorization_permission") == "write"
+                            and evaluation.get("authorization_decision") == "allow"
+                            and _attribution_timestamp(evaluation.get("authorization_evaluated_at")) is not None
+                            and _attribution_timestamp(evaluation.get("created_at")) is not None
+                            and _attribution_timestamp(evaluation.get("authorization_evaluated_at"))
+                                <= _attribution_timestamp(evaluation.get("created_at"))
+                            and type(evaluation.get("sample_count")) is int
+                            and evaluation.get("sample_count") > 0
+                            and type(evaluation.get("eligible_count")) is int
+                            and 0 <= evaluation.get("eligible_count") <= evaluation.get("sample_count")
+                        ):
+                            governance["evaluationEvidence"] = {
+                                "state": "computed",
+                                "contractVersion": evaluation["contract_version"],
+                                "evaluationId": evaluation["evaluation_id"],
+                                "datasetManifestSha256": evaluation["dataset_manifest_sha256"],
+                                "sampleCount": evaluation["sample_count"],
+                                "metric": "temporal_eligibility_accuracy",
+                                "value": evaluation["eligible_count"] / evaluation["sample_count"],
+                                "actorId": evaluation["actor_id"],
+                                "authorization": {
+                                    "action": evaluation["authorization_action"],
+                                    "permission": evaluation["authorization_permission"],
+                                    "decision": evaluation["authorization_decision"],
+                                    "actorId": evaluation["authorization_actor_id"],
+                                    "evaluatedAt": _attribution_timestamp(
+                                        evaluation.get("authorization_evaluated_at")
+                                    ),
+                                },
+                                "calibrationState": "unvalidated",
+                                "causalAttributionState": "unknown",
+                                "evidenceRef": _value_confidence_evaluation_ref(
+                                    evaluation["evaluation_id"],
+                                    _attribution_timestamp(evaluation.get("created_at")),
+                                ).model_dump(mode="json"),
+                            }
+                    except Exception:  # noqa: BLE001 - absent evaluation remains unknown
+                        pass
             key = (conversion_id, run_id)
             runs_by_key[key] = {
                 "tenantId": request.tenantId,
@@ -4942,6 +5054,39 @@ class Economic360Provider:
                 governance_ref = EvidenceRef.model_validate(governance["evidenceRef"])
                 row_refs.append(governance_ref)
                 evidence_refs.append(governance_ref)
+                approval_state = governance.get("approvalState")
+                approval_ref_data = governance.get("approvalEvidenceRef")
+                if approval_state in {"approved", "rejected"}:
+                    expected_approval_ref = _value_model_approval_ref(
+                        governance.get("approvalEvidenceRef", {}).get("id", ""),
+                        _attribution_timestamp(
+                            governance.get("approvalEvidenceRef", {}).get("observedAt")
+                        ),
+                    ) if isinstance(approval_ref_data, dict) else None
+                    try:
+                        approval_ref = EvidenceRef.model_validate(approval_ref_data)
+                    except Exception:  # noqa: BLE001 - malformed approval evidence fails closed
+                        approval_ref = None
+                    if (expected_approval_ref is None or approval_ref is None
+                            or approval_ref.model_dump(mode="json") != expected_approval_ref.model_dump(mode="json")
+                            or not governance.get("approvalActorId")):
+                        invalid_rows += 1
+                        continue
+                    row_refs.append(approval_ref)
+                    evidence_refs.append(approval_ref)
+                evaluation_evidence = governance.get("evaluationEvidence")
+                if isinstance(evaluation_evidence, dict) and evaluation_evidence.get("state") == "computed":
+                    evaluation_ref = EvidenceRef.model_validate(evaluation_evidence.get("evidenceRef"))
+                    if (evaluation_ref.source != "value_confidence_evaluations"
+                            or evaluation_ref.id != evaluation_evidence.get("evaluationId")
+                            or evaluation_ref.uri != (
+                                f"store://value_confidence_evaluations/"
+                                f"{quote(evaluation_evidence.get('evaluationId', ''), safe='')}"
+                            )):
+                        invalid_rows += 1
+                        continue
+                    row_refs.append(evaluation_ref)
+                    evidence_refs.append(evaluation_ref)
             credit_confidence = _attribution_confidence(raw_record.get("modelConfidence"))
             output_records.append(
                 {

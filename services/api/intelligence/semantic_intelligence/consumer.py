@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from graph.operational_intelligence.models import EntityRef
 from shared.events.events import Event, Topic
 from shared.logger.logger import get_logger
 from ingestion.ingestion.spine import normalization_spine_enabled, to_observation_view
@@ -27,6 +28,9 @@ _CANONICAL_CAMPAIGN_RE = re.compile(
 )
 _NAMESPACE_STAMPED_SOURCES = frozenset(
     {"ingestion.batch", "ingestion.outbox_relay", "ingestion.replay", "semantic.replay"}
+)
+_EPISODE_SUBJECT_KINDS = frozenset(
+    {"agent", "wallet", "service", "campaign", "user", "org", "token", "contract", "protocol"}
 )
 
 # SDK event properties that commonly carry the semantic subject, in precedence
@@ -161,6 +165,38 @@ class SemanticEventConsumer:
         except Exception:
             logger.exception("semantic event emit failed topic=%s", topic.value)
 
+    async def _produce_episode_observation(self, tenant_id: str, observation: Any) -> None:
+        from shared.backend_interpretation.flags import episode_engine_enabled
+
+        if (
+            not episode_engine_enabled()
+            or observation.tenant_id != tenant_id
+            or observation.status.value != "classified"
+            or observation.primary_subject_ref in {"", "unknown_subject"}
+            or observation.target_type is None
+            or observation.target_type.value not in _EPISODE_SUBJECT_KINDS
+            or not observation.source_namespace
+            or not observation.source_type
+            or not observation.source_event_id
+            or observation.occurred_at.tzinfo is None
+            or not observation.evidence_refs
+        ):
+            return
+        from journeys.measurement.episodes.engine import EpisodeEngine
+
+        await EpisodeEngine().ingest_observation(
+            tenant_id=tenant_id,
+            subject=EntityRef(
+                kind=observation.target_type.value,
+                id=observation.primary_subject_ref,
+            ),
+            kind="semantic_observation_stream",
+            observation_id=observation.observation_id,
+            observation_authority="semantic_intelligence.silver_semantic_observations",
+            event_time=observation.occurred_at.isoformat(),
+            source_event_id=observation.source_event_id,
+        )
+
     async def on_validated_event(self, event: Event) -> None:
         payload = event.payload or {}
         tenant_id = event.tenant_id or payload.get("tenant_id", "")
@@ -181,6 +217,7 @@ class SemanticEventConsumer:
             subject = await self._subject_resolver.resolve(payload, tenant_id)
             actor = await self._actor_resolver.resolve(payload, tenant_id)
             sem_payload["primary_subject_ref"] = subject.ref
+            sem_payload["target_type"] = subject.type.value
             sem_payload["actor_ref"] = actor.ref
             sem_payload["subject_resolution_confidence"] = subject.confidence
 
@@ -213,6 +250,7 @@ class SemanticEventConsumer:
             obs, sentiments = await service.classify_and_persist(
                 sem_payload, tenant_id, eligibility=eligibility
             )
+            await self._produce_episode_observation(tenant_id, obs)
 
             # An observation was persisted (classified / abstained / quarantined /
             # consent-restricted — all terminal states carry a status, never raw

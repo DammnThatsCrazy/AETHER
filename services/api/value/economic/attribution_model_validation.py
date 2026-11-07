@@ -51,7 +51,8 @@ class ValueModelApprovalRepository(TypedTableRepository):
     table_name = "value_model_approval_decisions"
     columns = ("decision_id", "tenant_id", "attribution_run_id", "model_config_id",
                "model_type", "model_version", "validation_decision_id", "decision",
-               "actor_id", "reason", "created_at")
+               "actor_id", "reason", "authorization_action", "authorization_permission",
+               "authorization_decision", "authorization_actor_id", "authorization_evaluated_at", "created_at")
     conflict_key = ("decision_id",)
 
     async def latest(self, tenant_id: str, run_id: str) -> Optional[dict[str, Any]]:
@@ -69,12 +70,23 @@ class ValueModelApprovalRepository(TypedTableRepository):
 
 async def decide_value_model_approval(
     tenant_id: str, run_id: str, decision: str, *, actor_id: str, reason: str,
+    authorization_evidence: dict[str, Any],
     runs: Any = None, decisions: Optional[AttributionModelValidationRepository] = None,
     approvals: Optional[ValueModelApprovalRepository] = None,
 ) -> dict[str, Any]:
     """Append a tenant admin decision bound to an exactly validated completed run."""
     if decision not in {"approved", "rejected"} or not actor_id.strip() or not reason.strip():
         raise ValueError("authenticated actor, decision, and reason are required")
+    evaluated_at = _utc(authorization_evidence.get("evaluated_at")) if isinstance(authorization_evidence, dict) else None
+    if (
+        not isinstance(authorization_evidence, dict)
+        or authorization_evidence.get("action") != "value.model_approval"
+        or authorization_evidence.get("permission") != "admin"
+        or authorization_evidence.get("decision") != "allow"
+        or authorization_evidence.get("actor_id") != actor_id
+        or evaluated_at is None
+    ):
+        raise ValueError("exact admin authorization evidence is required")
     validation = await validate_attribution_run_model(tenant_id, run_id, runs=runs, decisions=decisions)
     row = {
         "decision_id": "vma_" + uuid4().hex,
@@ -87,6 +99,11 @@ async def decide_value_model_approval(
         "decision": decision,
         "actor_id": actor_id,
         "reason": reason.strip(),
+        "authorization_action": authorization_evidence["action"],
+        "authorization_permission": authorization_evidence["permission"],
+        "authorization_decision": authorization_evidence["decision"],
+        "authorization_actor_id": authorization_evidence["actor_id"],
+        "authorization_evaluated_at": evaluated_at,
         "created_at": datetime.now(timezone.utc),
     }
     await (approvals or ValueModelApprovalRepository()).insert(row)

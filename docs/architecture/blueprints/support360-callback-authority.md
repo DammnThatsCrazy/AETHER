@@ -19,14 +19,14 @@ reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the current Support360 registry, callback authority, provider, routes, and focused tests. The callback slot contract remains as documented; later provider joins for other Support360 slots do not change callback schedule or event semantics."
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:151448e946e0a220ce5e235c6f8673bc73189229ae6a42224cd735ad7a7c3f49"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:5ba2d5d39c56b0deaadedae28449db78644b365b0504ecc3fed01b673b414b81"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/journeys/support360/callbacks.py": "sha256:839b7619b305ae54cf0b8f384adeab91ab7ffd28d1d1976e4d40fadd068b173b"
-  "services/api/journeys/support360/cases.py": "sha256:7ba654bcec070de5f707fc1c566cf07ec147ce2dab6b5771fec4edc555629c79"
-  "services/api/journeys/support360/provider.py": "sha256:8493861c106c9562f9bd750171e21e012df4a993487a33304762e8cf51cc04b9"
-  "services/api/journeys/support360/routes.py": "sha256:087ed716370a181aa912d73414ac0f432609d025c5e4e37830b0e12f07c01294"
-  "services/api/tests/unit/test_support360_provider.py": "sha256:83215235bc753ec8bff941168648395bf7ccc1694aed22f2f493312817bd8374"
-  "services/api/tests/unit/test_support_callback_authority.py": "sha256:01fd2b33c2a736aff0ae359dbb739ccd068e5afb00aaac12d6e2c23bbe0cf3d1"
+  "services/api/journeys/support360/cases.py": "sha256:34c94f68a108fe323e0bb8b6aa34e68dc8b988f003ca9e9191e3fcde7c5caa60"
+  "services/api/journeys/support360/provider.py": "sha256:c51e869f5380bd97358a30e078b2a5ee9d4878d7662a9ac90f20e61c686feb8e"
+  "services/api/journeys/support360/routes.py": "sha256:6bcb20f4673743ca13b34dc1b1545a12124df38abcca0fdd8318073efd97874e"
+  "services/api/tests/unit/test_support360_provider.py": "sha256:1767f01e79c1ded3182f389ee22fef0042713d1f9b4437a91f8deed52c2d5b04"
+  "services/api/tests/unit/test_support_callback_authority.py": "sha256:6066dbac7eacee75b202c869ad1cd2554f46d3f0d663bde6f9ccdc27804f4591"
 canonical_owner: support@aether
 estimated_read_minutes: 8
 toc_depth: 3
@@ -39,6 +39,18 @@ authority used by the Support360 `callbacks` slot. The callback authority is
 not a caller for the customer, an agent execution ledger, or a business outcome
 authority. It records source-asserted schedule and lifecycle events linked to
 one exact canonical support case.
+
+The product callback slot selects only `support_callbacks`. Frame policy gates
+this isolated section before callback reads, and lifecycle events are checked
+against the exact tenant, case, and provider connection before secondary reads.
+This isolation does not strengthen the upstream authorship or completeness of
+recorded callback events.
+
+Ticket and conversation frame subjects may reach this same isolated callback
+section only through an authenticated persisted `support_case_subjects` mapping.
+The reader rechecks its tenant, provider, account, connection, source subject,
+and canonical case before reading callbacks. This adds case-context access, not
+conversation membership or independent callback execution verification.
 
 ## Ownership and write path
 

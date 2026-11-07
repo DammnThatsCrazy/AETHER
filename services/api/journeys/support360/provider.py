@@ -45,6 +45,11 @@ from shared.intelligence_projections.generated_registry import (
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
 from journeys.support360.cases import SupportCaseAuthorityRead, SupportCaseRepository
+from journeys.support360.subjects import (
+    SupportSubjectRead,
+    SupportSubjectRepository,
+    valid_subject_record,
+)
 from journeys.support360.callbacks import (
     SupportCallbackRead,
     SupportCallbackRepository,
@@ -63,6 +68,7 @@ from journeys.support360.sla_measurement import (
     SupportSLAMeasurementContractRead,
     SupportSLAMeasurementContractRepository,
     contract_evidence,
+    evaluate_active_elapsed_v1,
 )
 from repositories.repos import EntityRepository
 
@@ -179,6 +185,33 @@ _CANONICAL_SUBJECT_AUTHORITY_REASONS = {
     "conversation": _REASON_CONVERSATION_AUTHORITY_MISSING,
     "ticket": _REASON_TICKET_CASE_JOIN_MISSING,
 }
+
+SUPPORT_SLOT_SECTIONS = {
+    slot_id: f"support_{slot_id}"
+    for slot_id in _REQUIRED_SUPPORT_SLOT_IDS
+    if slot_id != "risk"
+}
+
+_SLOT_AUTHORITIES = {
+    "case_summary": ["support_cases", "support_case_events", "provider_connections", "evidence"],
+    "conversation_history": ["communication_facts", "evidence", "provider_connections", "support_cases", "support_case_events"],
+    "callbacks": ["support_callbacks", "support_callback_events", "support_cases", "support_case_events", "provider_connections", "evidence"],
+    "participants": ["communication_facts", "identity", "provider_connections", "support_cases"],
+    "sla": ["measurement_contract", "support_case_context_events", "support_cases"],
+    "journey_links": ["episode_facts", "journeys", "support_case_context_events", "support_cases"],
+    "agents": ["agent_entities", "communication_facts", "support_case_agent_assignment_events", "support_cases"],
+    "resolution": ["support_cases", "support_case_events"],
+    "evidence_trace": ["communication_facts", "evidence", "provider_connections", "support_cases", "support_case_events"],
+}
+
+
+def _slot_requested(request: ProjectionRequest, slot_id: str, *legacy_sections: str) -> bool:
+    sections = request.includeSections
+    if sections is None:
+        return True
+    if set(sections).intersection(SUPPORT_SLOT_SECTIONS.values()):
+        return SUPPORT_SLOT_SECTIONS.get(slot_id) in sections
+    return bool(set(sections).intersection(legacy_sections))
 
 
 def _safe_read_reason(reason: Optional[str]) -> str:
@@ -911,6 +944,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         *,
         agent_identity_reader: Optional[SupportAgentIdentityReader] = None,
         case_repository: Optional[SupportCaseRepository] = None,
+        subject_repository: Optional[SupportSubjectRepository] = None,
         callback_repository: Optional[SupportCallbackRepository] = None,
         agent_assignment_repository: Optional[SupportAgentAssignmentRepository] = None,
         canonical_agent_entity_repository: Any = None,
@@ -928,6 +962,10 @@ class Support360Provider(IntelligenceProjectionProvider):
         )
         self._case_repository = (
             case_repository if case_repository is not None else SupportCaseRepository()
+        )
+        self._subject_repository = (
+            subject_repository if subject_repository is not None
+            else SupportSubjectRepository(cases=self._case_repository)
         )
         self._callback_repository = (
             callback_repository
@@ -1068,6 +1106,57 @@ class Support360Provider(IntelligenceProjectionProvider):
         request: ProjectionRequest,
         context: ProjectionContext,
     ) -> ProjectionResult:
+        selected = {
+            slot_id: section_id
+            for slot_id, section_id in SUPPORT_SLOT_SECTIONS.items()
+            if section_id in (request.includeSections or [])
+        }
+        execution_request = request
+        if selected and request.temporalMode == "window" and request.timeRange is None:
+            execution_request = request.model_copy(update={"temporalMode": "live"})
+        result = await self._project(execution_request, context)
+        if not selected:
+            return result
+        state = next((section for section in result.sections if section.id == "state"), None)
+        slots = (state.content or {}).get("requiredSlots", {}) if state else {}
+        sections: list[ProjectionSection] = []
+        for slot_id, section_id in selected.items():
+            slot = slots.get(slot_id, {"state": "unknown"})
+            refs = slot.get("evidenceRefs") or []
+            reasons = list(slot.get("reasonCodes") or [])
+            if slot.get("reasonCode"):
+                reasons.append(slot["reasonCode"])
+            available = bool(refs) and slot.get("state") not in {"unknown", "suppressed"}
+            authorities = list(_SLOT_AUTHORITIES[slot_id])
+            if slot.get("subjectCaseJoin"):
+                authorities.append("support_case_subjects")
+            if slot_id == "journey_links" and not (slot.get("episodeFacts") or {}).get("relations"):
+                authorities.remove("episode_facts")
+            if slot_id == "sla" and not (slot.get("measurementContractJoin") or {}).get("boundTimerCount"):
+                authorities.remove("measurement_contract")
+            sections.append(ProjectionSection(
+                id=section_id,
+                state="available" if available else "empty" if slot.get("state") == "empty" else "unknown",
+                content={"scope": "bounded_current_store_observations", **slot} if available else None,
+                warnings=sorted(set(reasons or result.degradedReasons)),
+                canonicalAuthorityRefs=authorities,
+            ))
+        return result.model_copy(update={
+            "sections": sections,
+            "claims": [
+                claim for claim in result.claims
+                if set(claim.domainSlotIds or []).intersection(selected)
+                and any(section.state == "available" and section.id in {
+                    selected[slot_id] for slot_id in claim.domainSlotIds or [] if slot_id in selected
+                } for section in sections)
+            ],
+        })
+
+    async def _project(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> ProjectionResult:
         if request.projectionId != self.projection_id:
             raise ProjectionError(
                 "Support360 provider received a different projection id",
@@ -1081,6 +1170,8 @@ class Support360Provider(IntelligenceProjectionProvider):
             "source",
             "support_case",
             "callback",
+            "ticket",
+            "conversation",
         }:
             # Remaining valid SSOT subject identifiers do not all have a
             # canonical authority. Preserve them as typed unknowns instead of
@@ -1113,11 +1204,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 "support_temporal_mode_unavailable",
             )
         if request.temporalMode == "window" and request.timeRange is None:
-            return self._unknown_result(
-                request,
-                context,
-                "support_window_bounds_required",
-            )
+            return self._unknown_result(request, context, "support_window_bounds_required")
 
         window, window_error = _window_bounds(request.timeRange)
         if window_error is not None:
@@ -1134,6 +1221,10 @@ class Support360Provider(IntelligenceProjectionProvider):
             max(request.page.limit if request.page is not None else _DEFAULT_LIMIT, 1),
             _MAX_LIMIT,
         )
+        if request.subject.kind in {"ticket", "conversation"}:
+            return await self._project_bound_subject(
+                request, context, limit=limit, after=after, before=before,
+            )
         if request.subject.kind == "callback":
             return await self._project_callback(request, context, limit=limit)
         if request.subject.kind == "support_case":
@@ -1450,6 +1541,71 @@ class Support360Provider(IntelligenceProjectionProvider):
             ),
         )
 
+    async def _project_bound_subject(
+        self, request: ProjectionRequest, context: ProjectionContext,
+        *, limit: int, after: Optional[str], before: Optional[str],
+    ) -> ProjectionResult:
+        try:
+            binding_read = await self._subject_repository.read(
+                request.tenantId, request.subject.kind, request.subject.id,
+            )
+        except Exception:  # noqa: BLE001
+            return self._unknown_result(request, context, "support_subject_binding_unavailable")
+        if not isinstance(binding_read, SupportSubjectRead) or not binding_read.available:
+            return self._unknown_result(request, context, "support_subject_binding_unavailable")
+        if not binding_read.complete:
+            return self._unknown_result(request, context, "support_subject_binding_ambiguous")
+        binding = binding_read.record
+        if binding is None:
+            return self._unknown_result(
+                request, context, _CANONICAL_SUBJECT_AUTHORITY_REASONS[request.subject.kind],
+            )
+        if not valid_subject_record(binding, request.tenantId, request.subject.kind, request.subject.id):
+            return self._unknown_result(request, context, "support_subject_binding_scope_mismatch")
+        canonical_request = request.model_copy(update={
+            "subject": ProjectionSubject(kind="support_case", id=binding["case_id"]),
+        })
+        result = await self._project_case(
+            canonical_request, context, limit=limit, after=after, before=before,
+            subject_binding=binding,
+        )
+        reference = EvidenceRef(
+            id=binding["subject_id"], type="event", source="support_case_subjects",
+            observedAt=binding["received_at"],
+            uri=f"store://support_case_subjects/{quote(request.tenantId, safe='')}/{binding['subject_id']}",
+        )
+        join_refs = [reference, *_case_event_evidence_refs(binding, binding)]
+        join = {
+            "subjectKind": request.subject.kind, "canonicalSubjectId": request.subject.id,
+            "canonicalCaseId": binding["case_id"],
+            "sourceProvider": binding["source_provider_identity"],
+            "sourceConnectionId": binding["source_connection_id"],
+            "sourceAccountId": binding["source_account_id"],
+            "sourceSubjectId": binding["source_subject_id"],
+            "sourceCaseId": binding["source_case_id"],
+            "sourceEventId": binding["source_event_id"],
+            "sourceOccurredAt": binding["source_occurred_at"],
+            "scope": "explicitly_mapped_case_context", "claimState": "observed",
+            "persistedBindingReadComplete": True,
+            "sourceAuthenticity": "unverified", "sourceHistoryComplete": False,
+            "freshnessState": "unknown", "businessOutcomeState": "unknown",
+            "evidenceRefs": join_refs,
+        }
+        for section in result.sections:
+            if section.id == "state" and isinstance(section.content, dict):
+                for slot in section.content.get("requiredSlots", {}).values():
+                    if slot.get("evidenceRefs") and slot.get("state") not in {"unknown", "suppressed"}:
+                        slot["subjectCaseJoin"] = join
+                        slot["evidenceRefs"] = _dedupe_evidence_refs(slot["evidenceRefs"] + join_refs)
+        result.claims = [
+            claim.model_copy(update={
+                "subject": request.subject,
+                "evidenceRefs": _dedupe_evidence_refs(claim.evidenceRefs + join_refs),
+            }) if claim.subject == canonical_request.subject else claim
+            for claim in result.claims
+        ]
+        return result
+
     async def _project_case(
         self,
         request: ProjectionRequest,
@@ -1458,6 +1614,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         limit: int,
         after: Optional[str] = None,
         before: Optional[str] = None,
+        subject_binding: Optional[dict[str, Any]] = None,
     ) -> ProjectionResult:
         """Read exact tenant/canonical case state without guessing related slots."""
         try:
@@ -1477,15 +1634,31 @@ class Support360Provider(IntelligenceProjectionProvider):
             return self._unknown_result(request, context, _REASON_CASE_NOT_FOUND)
         if record.get("tenant_id") != request.tenantId or record.get("case_id") != request.subject.id:
             return self._unknown_result(request, context, "support_case_tenant_scope_mismatch")
+        if subject_binding is not None and any(
+            record.get(key) != subject_binding.get(key)
+            for key in ("tenant_id", "case_id", "source_connection_id", "source_provider_identity", "source_case_id")
+        ):
+            return self._unknown_result(request, context, "support_subject_binding_case_scope_mismatch")
+        if not isinstance(read.events, list) or any(
+            not isinstance(event, dict)
+            or event.get("tenant_id") != request.tenantId
+            or event.get("case_id") != request.subject.id
+            or event.get("source_connection_id") != record.get("source_connection_id")
+            for event in read.events
+        ):
+            return self._unknown_result(request, context, "support_case_event_scope_mismatch")
 
         try:
-            callback_read = await self._callback_repository.list_for_case(
-                request.tenantId,
-                request.subject.id,
-                limit=limit,
-                after=after,
-                before=before,
-            )
+            if _slot_requested(request, "callbacks", "state", "timeline", "evidence"):
+                callback_read = await self._callback_repository.list_for_case(
+                    request.tenantId,
+                    request.subject.id,
+                    limit=limit,
+                    after=after,
+                    before=before,
+                )
+            else:
+                callback_read = SupportCallbacksRead([], False, False)
         except Exception:  # noqa: BLE001 - callback authority failure is a typed unknown slot
             callback_read = SupportCallbacksRead([], False, False, reason=_REASON_CALLBACK_AUTHORITY_UNAVAILABLE)
         callback_slot, callback_evidence_refs, callback_reasons = _validated_callback_slot(
@@ -1497,9 +1670,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         # The `agents` product slot is policy-filtered by the frame runtime.
         # Avoid reading it unless its bound state section is in the post-policy
         # include set (or the caller requested the full frame).
-        if request.includeSections is None or {"state", "evidence"}.intersection(
-            request.includeSections
-        ):
+        if _slot_requested(request, "agents", "state", "evidence"):
             try:
                 assignment_read = await self._agent_assignment_repository.list_for_case(
                     request.tenantId,
@@ -1533,12 +1704,18 @@ class Support360Provider(IntelligenceProjectionProvider):
             agent_assignment_evidence_refs = []
             agent_assignment_reasons = []
 
-        context_slots_requested = request.includeSections is None or bool(
-            {"state", "evidence"}.intersection(request.includeSections)
+        context_slots_requested = any(
+            _slot_requested(request, slot_id, "state", "evidence", *extra_sections)
+            for slot_id, extra_sections in (
+                ("sla", ()), ("journey_links", ()), ("participants", ("interactions",))
+            )
         )
         if context_slots_requested:
             context_reads: dict[str, SupportCaseContextRead] = {}
             for kind in ("sla", "journey_links"):
+                if not _slot_requested(request, kind, "state", "evidence"):
+                    context_reads[kind] = SupportCaseContextRead([], False, False)
+                    continue
                 try:
                     context_reads[kind] = await self._case_context_repository.list_for_case(
                         request.tenantId,
@@ -1551,10 +1728,14 @@ class Support360Provider(IntelligenceProjectionProvider):
                     context_reads[kind] = SupportCaseContextRead(
                         [], False, False, reason="support_case_context_read_unavailable"
                     )
-            participant_read = await self._case_participant_read(
-                request.tenantId,
-                record,
-                limit=min(limit, 500),
+            participant_read = (
+                await self._case_participant_read(
+                    request.tenantId,
+                    record,
+                    limit=min(limit, 500),
+                )
+                if _slot_requested(request, "participants", "state", "evidence", "interactions")
+                else SupportFactsRead([], False)
             )
             (
                 participants_slot,
@@ -1567,10 +1748,14 @@ class Support360Provider(IntelligenceProjectionProvider):
                 entity_repository=self._canonical_agent_entities,
             )
             try:
-                sla_contract_read = await self._sla_measurement_repository.read_for_case(
-                    request.tenantId,
-                    request.subject.id,
-                    str(record.get("source_connection_id") or ""),
+                sla_contract_read = (
+                    await self._sla_measurement_repository.read_for_case(
+                        request.tenantId,
+                        request.subject.id,
+                        str(record.get("source_connection_id") or ""),
+                    )
+                    if _slot_requested(request, "sla", "state", "evidence")
+                    else SupportSLAMeasurementContractRead((), False, False)
                 )
             except Exception:  # noqa: BLE001 - contract outage is slot-local
                 sla_contract_read = SupportSLAMeasurementContractRead(
@@ -1635,7 +1820,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             journey_link_evidence_refs = []
             journey_link_reasons = []
 
-        if context_slots_requested:
+        if _slot_requested(request, "risk", "state", "evidence"):
             risk_slot, risk_evidence_refs, risk_reasons = await self._support_case_risk_slot(
                 request, context, record
             )
@@ -1755,9 +1940,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             "count": len(evidence_refs),
             "evidenceRefs": evidence_refs,
         }
-        communication_slot_readable = (
-            request.includeSections is None or "interactions" in request.includeSections
-        )
+        communication_slot_readable = _slot_requested(request, "conversation_history", "interactions")
         if communication_slot_readable:
             communication_read = await self._case_communication_read(
                 request,
@@ -2016,7 +2199,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 claimState=EpistemicStatus.OBSERVED,
                 domainSlotIds=["agents", "evidence_trace"],
             )
-            for event in agent_assignment_slot.get("assignmentEvents", [])
+            for event in (agent_assignment_slot.get("assignmentEvents") or [])
             if isinstance(event, dict) and event.get("evidenceRefs")
         )
         claims.extend(
@@ -2035,7 +2218,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 ("SLA", "sla", sla_slot),
                 ("journey_link", "journey_links", journey_links_slot),
             )
-            for event in slot.get("events", [])
+            for event in (slot.get("events") or [])
             if isinstance(event, dict) and event.get("evidenceRefs")
         )
         claims.extend(
@@ -2643,10 +2826,11 @@ class Support360Provider(IntelligenceProjectionProvider):
         connection_id = _safe_reference(_text(record.get("source_connection_id")))
         source_case_id = _safe_reference(_text(record.get("source_case_id")))
         raw_rows = [row for row in read.rows if isinstance(row, dict)]
-        mismatch = any(
+        mismatch = len(raw_rows) != len(read.rows) or any(
             row.get("tenant_id") != tenant_id
             or _safe_reference(row.get("source_connector_id")) != connection_id
             or _safe_reference(row.get("support_case_id")) != source_case_id
+            or _text(row.get("provider")) != _text(record.get("source_provider_identity"))
             or _text(row.get("message_category")) != "support"
             for row in raw_rows
         )
@@ -3488,7 +3672,12 @@ def _validated_support_sla_slot(
         for raw in contract_read.rows:
             try:
                 contract = SupportSLAMeasurementContract.model_validate(
-                    {key: value for key, value in raw.items() if key != "contract_id"}
+                    {
+                        **{key: value for key, value in raw.items() if key != "contract_id"},
+                        "measurement_method_version": raw.get(
+                            "measurement_method_version", "source_reported_only_v0"
+                        ),
+                    }
                 )
             except Exception:  # noqa: BLE001 - malformed authority remains unbound
                 valid_contracts = False
@@ -3515,7 +3704,10 @@ def _validated_support_sla_slot(
                 if len(matches) != 1:
                     continue
                 contract = matches[0]
-                if timer["targetDurationSeconds"] != contract.target_duration_seconds:
+                if (
+                    timer["targetDurationSeconds"] is not None
+                    and timer["targetDurationSeconds"] != contract.target_duration_seconds
+                ):
                     contract_reason = "support_sla_source_target_conflicts_with_registered_contract"
                     continue
                 evidence = contract_evidence(contract)
@@ -3524,10 +3716,14 @@ def _validated_support_sla_slot(
                     "state": "bound",
                     "contractId": contract.contract_id,
                     "targetDurationSeconds": contract.target_duration_seconds,
+                    "measurementMethodVersion": contract.measurement_method_version,
                     "registeredAt": contract.registered_at.isoformat(),
                     "historicalApplicabilityState": "unknown",
                     "evidenceRefs": [evidence.model_dump(mode="json", by_alias=True)],
                 }
+                timer["measurementEvaluation"] = evaluate_active_elapsed_v1(
+                    contract, rows, complete=read.complete and not read.truncated
+                )
                 timer["evidenceRefs"] = [*timer["evidenceRefs"], evidence.model_dump(mode="json", by_alias=True)]
                 joined_contracts += 1
             if joined_contracts:
@@ -3571,7 +3767,14 @@ def _validated_support_sla_slot(
             "sourceAuthenticationState": "tenant_authorized_principal_only",
             "sourceHistoryComplete": False,
             "freshness": {"state": "unknown", "reasonCode": "support_case_sla_freshness_sla_unavailable"},
-            "breachEvaluation": "source_reported_only_no_local_timer_inference",
+            "breachEvaluation": (
+                "measured_explicit_active_elapsed_v1"
+                if any(
+                    timer.get("measurementEvaluation", {}).get("state") == "measured"
+                    for timer in timers
+                )
+                else "source_reported_only_no_local_timer_inference"
+            ),
             "evidenceRefs": refs,
         },
         refs,
@@ -3756,6 +3959,8 @@ async def _validated_case_journey_episodes(
         reasons.append(_REASON_JOURNEY_EPISODE_RELATION_MISSING)
     if page.truncated or page.next_cursor or page.invalid_records:
         reasons.append(_REASON_JOURNEY_EPISODE_READ_TRUNCATED)
+        relations = []
+        refs = []
     return (
         {
             "state": "degraded" if relations else "unknown",
@@ -4556,6 +4761,7 @@ def _newest_timestamp(rows: list[dict[str, Any]]) -> Optional[str]:
 
 __all__ = [
     "OUTPUT_SECTIONS",
+    "SUPPORT_SLOT_SECTIONS",
     "PROJECTION_ID",
     "RepositorySupport360Source",
     "Support360Provider",
