@@ -71,9 +71,13 @@ Shared contract `packages/shared/payment-rails.ts`, Pydantic mirrors in
   `sdk_only → stale` transition is produced only by the periodic sync worker
   (below) — provider-driven reconciliation always has a provider view and can
   never yield it, so without the worker an unconfirmed session would never age.
-- **PaymentRailHealth** — per-provider configured/enabled state, webhook
+- **PaymentRailHealth** — per-provider configured/enabled state,
+  `observation_status` (`observed|never_observed|not_configured`), webhook
   verified/rejected 24h, session counts, reconciliation matched rate,
-  conflicts, `healthy|degraded|not_configured|error`.
+  conflicts, `healthy|degraded|not_configured|error|unknown`. A configured
+  provider with no observed webhook, session, reconciliation, or successful
+  poll is `never_observed` and `unknown` — never `healthy` with fabricated
+  zero counts. A rejected webhook without any accepted signal is `error`.
 
 ## Canonical events
 
@@ -185,13 +189,22 @@ totals; mixed currencies are never summed into one scalar).
 
 ## Frontend
 
-- Aether `/payment-rails`: provider health cards, funding sessions table with
-  provider/status/reconciliation filters, session detail drawer with
-  attribution + reconciliation discrepancies, sync action, not-configured/
-  empty/error/flag-off states, and the copy "Aether observes payment rails —
+- Aether `/payment-rails`: provider health cards with observed/never-observed/
+  not-configured truth, funding sessions table with provider/status/
+  reconciliation filters, session detail drawer with attribution +
+  reconciliation discrepancies, sync action, not-configured/empty/error/
+  flag-off states, and the copy "Aether observes payment rails —
   it does not execute or settle payments, or custody funds."
 - Kyber `/payment-rails` (flag `enablePaymentRails`): fleet health per
-  provider, tenant drill-down diagnostics.
+  provider and per tenant, tenant drill-down diagnostics. The fleet tables
+  distinguish **configured** tenants (every required credential slot active in
+  at least one environment) from **observed** tenants (durable webhook/session/
+  reconciliation/poll evidence). A configured tenant with no observation
+  evidence is `never_observed` with health `unknown`, never a healthy zero;
+  `not_configured` means no active credential coverage. When the cross-tenant
+  credential inventory cannot be read (`configuration_inventory_available:
+  false`), `configured_tenants` and `never_observed_tenants` are `null` and
+  surface as unknown, never `0`. Fleet contract version is `1.2.0`.
 
 ## Feature flags (default OFF)
 

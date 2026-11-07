@@ -33,6 +33,8 @@ class AdapterCertificationDescriptor(BaseModel):
 
     supported_operations: list[str] = Field(default_factory=list)
     unsupported_operations: list[str] = Field(default_factory=list)
+    supported_event_types: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
 
     required_credentials: list[str] = Field(default_factory=list)
     required_endpoints: list[str] = Field(default_factory=list)
@@ -59,6 +61,8 @@ class AdapterCertificationDescriptor(BaseModel):
     environments: list[str] = Field(default_factory=list)   # sandbox | live | local
     evidence_requirements: list[str] = Field(default_factory=list)
     custody_boundary: str = "no_custody"        # no_custody | custodial | execution_capable
+    required_data_rights: list[str] = Field(default_factory=list)
+    deployment_profiles: list[str] = Field(default_factory=list)  # staging | production
 
 
 __all__ = ["AdapterCertificationDescriptor"]

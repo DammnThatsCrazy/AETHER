@@ -45,6 +45,15 @@ from connectors.integrations.providers.payment_rails.models import (
 
 logger = get_logger("aether.payment_rails.base")
 
+# Canonical payment_* events implied by a funding-session observation. This is
+# the domain vocabulary certification records may advertise; the service layer
+# owns at-most-once emission.
+PAYMENT_CANONICAL_EVENT_TYPES: tuple[str, ...] = (
+    "payment_initiated",
+    "payment_completed",
+    "payment_failed",
+)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Sensitive-field reject/redact list
 # ─────────────────────────────────────────────────────────────────────────────

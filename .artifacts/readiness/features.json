@@ -24,19 +24,17 @@
       },
       "repository_ceiling": {
         "type": "VERIFIED",
-        "achieved": false,
+        "achieved": true,
         "remaining_after_ceiling": [
-          "Wire the x402 and agent lifecycle mappers to an event consumer (a graph-writer ConsumerSpec on the validated SDK event topic) and decide its overlap with the AgentExecutionProjector Silver path."
+          "Exercise the wired consumers in a running deployment and record which mapper-owned tables populate."
         ],
-        "remaining_is_repository_controlled": true
+        "remaining_is_repository_controlled": false
       },
       "implementation": {
-        "state": "IMPLEMENTED",
-        "completion_percent": 80.0,
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
         "denominator": "in-scope repository controls (migration-derived)",
-        "remaining_work": [
-          "wire the x402 and agent lifecycle mappers to an event consumer"
-        ]
+        "remaining_work": []
       },
       "productionization": {
         "completion_percent": 100.0,
@@ -44,8 +42,25 @@
         "remaining_work": []
       },
       "activation": {
-        "state": "NO_EXTERNAL_BLOCKER",
-        "blockers": []
+        "state": "ENVIRONMENT_VALIDATION_PENDING",
+        "blockers": [
+          {
+            "type": "ENVIRONMENT_VALIDATION_PENDING",
+            "description": "The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified.",
+            "owner": "platform-ops",
+            "required_action": "Run x402 and agent flows in staging, record which mapper-owned tables populate, and decide overlap with the AgentExecutionProjector Silver path.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "pilot"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "staging consumer run trace and populated-table inventory"
+          }
+        ]
       },
       "dependencies": {
         "hard": [],
@@ -96,7 +111,8 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: packages/shared/events.ts"
+          "repository evidence: packages/shared/events.ts",
+          "consumer registration and source-authority rules covered by 8 passing lifecycle consumer tests"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -105,32 +121,26 @@
       "release_profiles": {
         "local": {
           "participation": "required",
-          "disposition": "BLOCKED_BY_CODE",
-          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "local",
           "environment_state": "VERIFIED",
-          "hard_blockers": [
-            "implementation state IMPLEMENTED is below the VERIFIED floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: wire the x402 and agent lifecycle mappers to an event consumer"
-          ],
+          "hard_blockers": [],
           "external_blockers": [],
           "warnings": []
         },
         "staging": {
           "participation": "experimental",
-          "disposition": "BLOCKED_BY_CODE",
-          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "staging",
           "environment_state": "NOT_ATTEMPTED",
-          "hard_blockers": [
-            "implementation state IMPLEMENTED is below the VERIFIED floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: wire the x402 and agent lifecycle mappers to an event consumer"
+          "hard_blockers": [],
+          "external_blockers": [
+            "ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)"
           ],
-          "external_blockers": [],
           "warnings": []
         },
         "pilot": {
@@ -141,11 +151,11 @@
           "environment_gate": "pilot",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state IMPLEMENTED is below the TURNKEY floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: wire the x402 and agent lifecycle mappers to an event consumer"
+            "implementation state VERIFIED is below the TURNKEY floor"
           ],
-          "external_blockers": [],
+          "external_blockers": [
+            "ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)"
+          ],
           "warnings": []
         },
         "production": {
@@ -563,9 +573,9 @@
       },
       "repository_ceiling": {
         "type": "CODE_COMPLETE",
-        "achieved": true,
+        "achieved": false,
         "remaining_after_ceiling": [
-          "Insert provider credentials into the credential platform; run credentials-preflight."
+          "Add a distinct card-linked service-catalog entry, plan entitlement resolver and durable usage meter (Section 6 W3)."
         ],
         "remaining_is_repository_controlled": true
       },
@@ -574,8 +584,8 @@
         "completion_percent": 60.0,
         "denominator": "in-scope repository controls (migration-derived)",
         "remaining_work": [
-          "complete runtime integration",
-          "complete repository-controlled verification"
+          "wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3)",
+          "reconcile readiness controls with implemented persistence and tenant-isolation tests"
         ]
       },
       "productionization": {
@@ -674,7 +684,7 @@
           "hard_blockers": [
             "implementation state IMPLEMENTED is below the VERIFIED floor",
             "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
+            "open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests"
           ],
           "external_blockers": [],
           "warnings": []
@@ -689,7 +699,7 @@
           "hard_blockers": [
             "implementation state IMPLEMENTED is below the VERIFIED floor",
             "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
+            "open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests"
           ],
           "external_blockers": [
             "CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)"
@@ -706,7 +716,7 @@
           "hard_blockers": [
             "implementation state IMPLEMENTED is below the TURNKEY floor",
             "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
+            "open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests"
           ],
           "external_blockers": [
             "CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)"

@@ -45,8 +45,8 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:87842f57556958270797f201f0a41e9b9090b89c37692bb6c65783393e8eccbd"
-  "apps/kyber-web/src/": "sha256:855adc3dbeaf666c5a31d23f8bac0e2f60d26cd1802f2d2783de4df37e43f295"
+  "apps/aether-web/src/": "sha256:014962a1f2a020041ae883f64c4bac37c2fc7cb92f2ffead37269e16644f9048"
+  "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
 
@@ -558,6 +558,15 @@ Kyber additionally exposes `/agent-telemetry` (external agent telemetry fleet
 diagnostics; gated by the `enableExternalAgentTelemetry` feature flag),
 `/payment-rails` (payment rail fleet health; gated by `enablePaymentRails`),
 and `/ai-efficiency` (AI efficiency fleet health; gated by `enableAiEfficiency`), and `/targeting` (targeting fleet health, leakage queue, recompute controls; gated by `enableTargetingIntelligence`).
+
+The Kyber `/payment-rails` tables separate **configured** from **observed**
+coverage. A tenant is configured for a provider only when every required
+credential slot is active; configured tenants with no webhook, session,
+reconciliation, or successful-poll evidence render as `never_observed` and
+`unknown`, never as a healthy zero. When the cross-tenant credential inventory
+is unavailable the contract reports `configured_tenants: null` and
+`configuration_inventory_available: false`, and the UI shows "unknown", never
+`0`.
 
 Kyber's `/payment-rails` page also hosts a **Card-linked Payment Rails**
 diagnostics section (`pages/payment-rails/card-linked-diagnostics-section.tsx`;

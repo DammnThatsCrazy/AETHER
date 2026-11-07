@@ -6,10 +6,10 @@ Each feature is measured across independent dimensions. Implementation completio
 
 | Feature | Scope | Impl % | Prod % | Ceiling | Achieved | Activation | Confidence |
 |---|---|--:|--:|---|:--:|---|---|
-| Agentic x402 | agentic-x402-v1 v1 | 80% | 100% | VERIFIED | — | NO_EXTERNAL_BLOCKER | MODERATE |
+| Agentic x402 | agentic-x402-v1 v1 | 100% | 100% | VERIFIED | ✅ | ENVIRONMENT_VALIDATION_PENDING | MODERATE |
 | Backend API | backend-api-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Campaign Intelligence | campaign-intelligence-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
-| Card-Linked Payment Rails | card-linked-payments-v1 v1 | 60% | 25% | CODE_COMPLETE | ✅ | CREDENTIAL_WAITING | LOW |
+| Card-Linked Payment Rails | card-linked-payments-v1 v1 | 60% | 25% | CODE_COMPLETE | — | CREDENTIAL_WAITING | LOW |
 | CI & Test Gates | ci-tests-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | BYOK Connectors | connectors-byok-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | CREDENTIAL_WAITING | MODERATE |
 | Customer Frontend | customer-frontend-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
@@ -44,14 +44,14 @@ Each feature is measured across independent dimensions. Implementation completio
 ## Agentic x402 (`agentic-x402`)
 
 - **Scope:** agentic-x402-v1 v1 — observation-pilot
-- **Implementation:** IMPLEMENTED · 80% of in-scope repository controls (migration-derived)
+- **Implementation:** VERIFIED · 100% of in-scope repository controls (migration-derived)
 - **Productionization:** 100% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** VERIFIED (achieved: no)
-- **Activation:** NO_EXTERNAL_BLOCKER
-- **Remaining repository work:** wire the x402 and agent lifecycle mappers to an event consumer
+- **Repository ceiling:** VERIFIED (achieved: yes)
+- **Activation:** ENVIRONMENT_VALIDATION_PENDING
+- **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Backend API (`backend-api`)
 
@@ -82,9 +82,9 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Scope:** card-linked-payments-v1 v1 — observation-pilot
 - **Implementation:** IMPLEMENTED · 60% of in-scope repository controls (migration-derived)
 - **Productionization:** 25% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** CODE_COMPLETE (achieved: yes)
+- **Repository ceiling:** CODE_COMPLETE (achieved: no)
 - **Activation:** CREDENTIAL_WAITING
-- **Remaining repository work:** complete runtime integration; complete repository-controlled verification
+- **Remaining repository work:** wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
 - **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE

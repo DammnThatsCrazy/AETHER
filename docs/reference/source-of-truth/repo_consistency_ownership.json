@@ -860,6 +860,30 @@
       "remediation": "Update the ledger's unit test or the technical-debt retirement page with the change, then run python scripts/validate_debt_retirement_ledger.py."
     },
     {
+      "id": "financial_capability_registry",
+      "name": "financial capability records, event vocabularies, or their generator/validator changed",
+      "source_globs": [
+        "services/api/shared/certification/capability_records.py",
+        "services/api/shared/certification/descriptor.py",
+        "services/api/shared/certification/registry.py",
+        "services/api/connectors/integrations/providers/payment_rails/base.py",
+        "scripts/validate_financial_capability_registry.py",
+        "scripts/docs_extract/extract_financial_capability.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/reference/source-of-truth/**",
+        "docs/operations/readiness/**",
+        "tests/unit/test_financial_capability_registry.py"
+      ],
+      "required_commands": [
+        "python scripts/validate_financial_capability_registry.py",
+        "python scripts/docs_extract/run_all.py",
+        "python -m pytest tests/unit/test_financial_capability_registry.py -q"
+      ],
+      "remediation": "Regenerate the financial capability matrix, review the readiness narrative and source-linked docs, and keep every record bound to a real release domain, route surface, event vocabulary, data right, and deployment profile."
+    },
+    {
       "id": "environment_capability_registry",
       "name": "canonical environment mapping or capability overlay registry changed",
       "source_globs": [

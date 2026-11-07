@@ -23,15 +23,19 @@ vi.mock('@kyber/lib/api', () => ({
 }));
 
 // Field names mirror the typed backend contract
-// (services/api/connectors/integrations/providers/payment_rails/kyber_contract.py, v1.0.0).
+// (services/api/connectors/integrations/providers/payment_rails/kyber_contract.py, v1.2.0).
 // The five providers cover the distinct rendered states: healthy, degraded,
 // not_configured (credential-waiting), disabled, and unknown (null operational
 // fields). null reconciliation_matched_rate must render as "—", never 0.
+// Configured-vs-observed fleet truth is rendered from the credential inventory;
+// configured_tenants/never_observed_tenants are nullable when it is unavailable.
 const FLEET_FIXTURE = {
-  contract_version: '1.0.0',
+  contract_version: '1.2.0',
   tenants_observed: 3,
   totals: {
     configured_tenants: 3,
+    observed_tenants: 2,
+    configuration_inventory_available: true,
     enabled_tenants: 2,
     providers_degraded: 1,
     sessions_observed_24h: 877,
@@ -57,8 +61,11 @@ const FLEET_FIXTURE = {
     {
       provider: 'privy',
       status: 'healthy',
+      observation_status: 'observed',
       enabled: true,
       configured_tenants: 2,
+      observed_tenants: 2,
+      never_observed_tenants: 0,
       webhook_verified_24h: 640,
       webhook_rejected_24h: 2,
       signature_failures_24h: 0,
@@ -76,8 +83,11 @@ const FLEET_FIXTURE = {
     {
       provider: 'coinbase',
       status: 'degraded',
+      observation_status: 'observed',
       enabled: true,
       configured_tenants: 1,
+      observed_tenants: 1,
+      never_observed_tenants: 0,
       webhook_verified_24h: 188,
       webhook_rejected_24h: 41,
       signature_failures_24h: 2,
@@ -96,8 +106,11 @@ const FLEET_FIXTURE = {
       // Credential-waiting: configured for nobody, matched rate unknown (null).
       provider: 'moonpay',
       status: 'not_configured',
+      observation_status: 'not_configured',
       enabled: false,
       configured_tenants: 0,
+      observed_tenants: 0,
+      never_observed_tenants: 0,
       webhook_verified_24h: 0,
       webhook_rejected_24h: 0,
       signature_failures_24h: 0,
@@ -115,8 +128,11 @@ const FLEET_FIXTURE = {
     {
       provider: 'stripe',
       status: 'disabled',
+      observation_status: 'never_observed',
       enabled: false,
       configured_tenants: 1,
+      observed_tenants: 0,
+      never_observed_tenants: 1,
       webhook_verified_24h: 0,
       webhook_rejected_24h: 0,
       signature_failures_24h: 0,
@@ -135,8 +151,11 @@ const FLEET_FIXTURE = {
       // Unknown: every operational depth field is null and must not crash.
       provider: 'bridge',
       status: 'unknown',
+      observation_status: 'never_observed',
       enabled: true,
       configured_tenants: 1,
+      observed_tenants: 0,
+      never_observed_tenants: 1,
       webhook_verified_24h: 0,
       webhook_rejected_24h: 0,
       signature_failures_24h: 0,
@@ -156,7 +175,10 @@ const FLEET_FIXTURE = {
     {
       tenant_id: 'tenant_001',
       status: 'healthy',
+      observation_status: 'observed',
       providers_configured: 2,
+      providers_observed: 2,
+      providers_never_observed: 0,
       providers_degraded: 0,
       sessions_observed_24h: 733,
       sessions_unresolved: 4,
@@ -165,7 +187,10 @@ const FLEET_FIXTURE = {
     {
       tenant_id: 'tenant_002',
       status: 'degraded',
+      observation_status: 'partially_observed',
       providers_configured: 1,
+      providers_observed: 0,
+      providers_never_observed: 1,
       providers_degraded: 1,
       sessions_observed_24h: 144,
       sessions_unresolved: 5,
@@ -175,7 +200,7 @@ const FLEET_FIXTURE = {
 };
 
 const TENANT_FIXTURE = {
-  contract_version: '1.0.0',
+  contract_version: '1.2.0',
   tenant_id: 'tenant_001',
   providers: [
     {
@@ -192,6 +217,7 @@ const TENANT_FIXTURE = {
       },
       health: {
         status: 'healthy',
+        observation_status: 'observed',
         sessions_observed_24h: 256,
         sessions_completed_24h: 244,
         sessions_failed_24h: 4,
@@ -226,7 +252,7 @@ const TENANT_FIXTURE = {
 // reconciliation_matched_rate and last_event_at are all null and must render
 // as "—" in the drawer rather than crashing or showing a confident 0.
 const TENANT_WAITING_FIXTURE = {
-  contract_version: '1.0.0',
+  contract_version: '1.2.0',
   tenant_id: 'tenant_002',
   providers: [
     {
@@ -243,6 +269,7 @@ const TENANT_WAITING_FIXTURE = {
       },
       health: {
         status: 'not_configured',
+        observation_status: 'not_configured',
         sessions_observed_24h: 0,
         sessions_completed_24h: 0,
         sessions_failed_24h: 0,
@@ -307,9 +334,9 @@ describe('Kyber Payment Rails page', () => {
     // healthy + degraded appear on both a provider row and a tenant row.
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0);
     expect(screen.getAllByText('degraded').length).toBeGreaterThan(0);
-    expect(screen.getByText('not configured')).toBeInTheDocument();
-    expect(screen.getByText('disabled')).toBeInTheDocument();
-    expect(screen.getByText('unknown')).toBeInTheDocument();
+    expect(screen.getAllByText('not configured').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('disabled').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('unknown').length).toBeGreaterThan(0);
   });
 
   it('renders a null reconciliation rate as "—" and never as 0 in the provider table', async () => {
@@ -357,11 +384,56 @@ describe('Kyber Payment Rails page', () => {
     expect(within(lastEventRow as HTMLElement).getByText('—')).toBeInTheDocument();
   });
 
+  it('marks configured-but-never-observed without zero activity counts', async () => {
+    const baseProvider = TENANT_FIXTURE.providers[0]!;
+    mocks.paymentRailsTenant.mockResolvedValue({
+      ...TENANT_FIXTURE,
+      providers: [
+        {
+          ...baseProvider,
+          health: {
+            ...baseProvider.health,
+            status: 'unknown',
+            observation_status: 'never_observed',
+            sessions_observed_24h: 0,
+            sessions_completed_24h: 0,
+            sessions_failed_24h: 0,
+            sessions_unresolved: 0,
+            webhook_verified_24h: 0,
+            webhook_rejected_24h: 0,
+            reconciliation_matched_rate: null,
+            last_event_at: null,
+          },
+        },
+      ],
+    });
+    render(<MemoryRouter><PaymentRailsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('tenant_001')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('tenant_001'));
+    await waitFor(() => expect(screen.getByText('Tenant payment rail diagnostics')).toBeInTheDocument());
+
+    expect(screen.getAllByText('never observed').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText('No provider signal observed yet; local activity counts are not meaningful.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Sessions 24h')).toBeNull();
+    expect(screen.queryByText('Matched rate')).toBeNull();
+  });
+
   it('shows the empty states when no providers or tenants exist', async () => {
     mocks.paymentRailsHealth.mockResolvedValue({
-      contract_version: '1.0.0',
+      contract_version: '1.2.0',
       tenants_observed: 0,
-      totals: { configured_tenants: 0, sessions_observed_24h: 0, sessions_unresolved: 0, reconciliation_conflicts: 0 },
+      totals: {
+        configured_tenants: 0,
+        observed_tenants: 0,
+        configuration_inventory_available: true,
+        enabled_tenants: 0,
+        providers_degraded: 0,
+        sessions_observed_24h: 0,
+        sessions_unresolved: 0,
+        reconciliation_conflicts: 0,
+      },
       providers: [],
       tenants: [],
     });

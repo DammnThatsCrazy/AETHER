@@ -13,11 +13,12 @@ the routers that call them (:mod:`connectors.providers.credentials.routes`,
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
 
 from connectors.providers.credentials.authority import CredentialAuthority
 from connectors.providers.credentials.repository import CredentialVersionRepo
 from connectors.providers.credentials.schema import CredentialState
+from connectors.providers.credentials.slot_registry import slots_for
 
 
 def safe_credential_view(row: dict[str, Any]) -> dict[str, Any]:
@@ -75,6 +76,57 @@ async def collect_credential_slot_states(limit: int = 1000) -> dict[str, Any]:
     }
 
 
+async def collect_payment_rail_configured_tenants(
+    providers: Iterable[str], *, page_size: int = 1000
+) -> dict[str, set[str]]:
+    """Authoritative cross-tenant payment-rail credential coverage.
+
+    A tenant is configured for a provider when every required credential slot is
+    ``active`` for at least one credential environment (sandbox or live). This is
+    the same required-slot rule the adapters use for ``is_configured``; it never
+    treats a pending, previous-only, revoked, or failed version as configured.
+
+    Reads only :func:`safe_credential_view` rows, never decrypting a secret. Pages
+    the durable credential-version table so a large fleet cannot silently truncate
+    configured tenants at the default query limit.
+    """
+    provider_set = {p for p in providers}
+    required = {
+        provider: {slot.slot_name for slot in slots_for(provider) if slot.required}
+        for provider in provider_set
+    }
+    slots_by_scope: dict[tuple[str, str, str], set[str]] = {}
+    repo = CredentialVersionRepo()
+    offset = 0
+    while True:
+        rows = await repo.find_many(limit=page_size, offset=offset)
+        for row in rows:
+            tenant_id = row.get("tenant_id")
+            view = safe_credential_view(row)
+            provider = view.get("provider")
+            environment = view.get("environment")
+            slot_name = view.get("slot_name")
+            if (
+                provider not in provider_set
+                or not tenant_id
+                or not environment
+                or not slot_name
+                or view.get("state") != CredentialState.ACTIVE
+            ):
+                continue
+            key = (provider, tenant_id, environment)
+            slots_by_scope.setdefault(key, set()).add(slot_name)
+        if len(rows) < page_size:
+            break
+        offset += len(rows)
+
+    configured: dict[str, set[str]] = {provider: set() for provider in provider_set}
+    for (provider, tenant_id, _environment), active_slots in slots_by_scope.items():
+        if required[provider] <= active_slots:
+            configured[provider].add(tenant_id)
+    return configured
+
+
 async def tenant_credential_slot_states(tenant_id: str) -> dict[str, Any]:
     """One tenant's credential slot states (safe views only, deterministic).
 
@@ -102,5 +154,6 @@ async def tenant_credential_slot_states(tenant_id: str) -> dict[str, Any]:
 __all__ = [
     "safe_credential_view",
     "collect_credential_slot_states",
+    "collect_payment_rail_configured_tenants",
     "tenant_credential_slot_states",
 ]
