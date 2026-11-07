@@ -6,7 +6,25 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/payment-rails.ts, services/api/connectors/integrations/providers/payment_rails/models.py, services/api/connectors/integrations/providers/payment_rails/base.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/connectors/integrations/providers/payment_rails/repository.py, services/api/connectors/integrations/providers/payment_rails/reconciliation.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/routes.py, services/api/connectors/integrations/providers/payment_rails/sync_worker.py]
+source_files:
+  - packages/shared/payment-rails.ts
+  - services/api/connectors/integrations/providers/payment_rails/models.py
+  - services/api/connectors/integrations/providers/payment_rails/base.py
+  - services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py
+  - services/api/connectors/integrations/providers/payment_rails/repository.py
+  - services/api/connectors/integrations/providers/payment_rails/reconciliation.py
+  - services/api/connectors/integrations/providers/payment_rails/service.py
+  - services/api/connectors/integrations/providers/payment_rails/routes.py
+  - services/api/connectors/integrations/providers/payment_rails/sync_worker.py
+  - services/api/connectors/integrations/providers/payment_rails/kyber_contract.py
+  - services/api/connectors/integrations/providers/payment_rails/kyber_aggregate.py
+  - services/api/connectors/providers/credentials/operator_view.py
+  - services/api/tests/payment_rails/test_kyber_contract.py
+  - apps/kyber-web/src/types/payment-rails.ts
+  - apps/kyber-web/src/pages/payment-rails/payment-rails-page.tsx
+  - apps/aether-web/src/features/payment-rails/api.ts
+  - apps/aether-web/src/pages/payment-rails/payment-rails-page.tsx
+  - apps/aether-web/src/pages/payment-rails/payment-rails-shared.tsx
 last_synced_commit: HEAD
 ---
 
@@ -215,15 +233,18 @@ totals; mixed currencies are never summed into one scalar).
 
 ## Testing
 
-`BE/tests/payment_rails/` — 41 tests: adapter registry (exactly five; unknown
-→ 404), status-map canonicality, HMAC verification, PII redaction, Privy
+`BE/tests/payment_rails/` covers adapter registry (exactly five; unknown →
+404), status-map canonicality, HMAC verification, PII redaction, Privy
 processor detail + deposit addresses, Coinbase partnerUserRef polling,
 MoonPay AML rejection + buy/sell + fee summation, Bridge masked virtual
 accounts + activity, canonical event implication + at-most-once emission,
 duplicate delivery, final-state non-regression, reconciliation states,
-tenant isolation, flag gating, Kyber operator permission, secret safety.
-Frontend: aether payment-rails tests (93-suite green), kyber component tests
-(115-suite green).
+tenant isolation, flag gating, Kyber operator permission, secret safety,
+configured-vs-observed coverage, required-slot and environment grouping,
+inactive credential states, inventory-unavailable unknowns, and inventory
+pagination. Frontend: Aether payment-rails unit tests and Kyber payment-rails
+component tests cover observed, never-observed, not-configured, and unknown
+states without fabricating zeros.
 
 ## Known limitations / non-goals
 

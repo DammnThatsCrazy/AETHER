@@ -211,6 +211,8 @@ def _emit_fleet_gauges(
     fabricated 0. ``kyber_fleet_worker_heartbeat`` / ``..._cycle_seconds`` are
     simply not emitted when no supervisor was observed; the backlog/cursor
     gauges are real zeros (the ledgers are always readable) and always emitted.
+    Configured-tenant coverage follows the same rule: it is absent when the
+    credential inventory is unreadable, while observed coverage is a real count.
     """
     if worker_heartbeat is not None:
         metrics.gauge("kyber_fleet_worker_heartbeat", 1.0 if worker_heartbeat else 0.0)
@@ -222,6 +224,14 @@ def _emit_fleet_gauges(
     metrics.gauge("kyber_fleet_canonical_backlog", float(totals.canonical_backlog))
     metrics.gauge("kyber_fleet_dead_lettered", float(totals.dead_lettered))
     metrics.gauge("kyber_fleet_providers_degraded", float(totals.providers_degraded))
+    metrics.gauge("kyber_fleet_observed_tenants", float(totals.observed_tenants))
+    metrics.gauge(
+        "kyber_fleet_configuration_inventory_available",
+        1.0 if totals.configuration_inventory_available else 0.0,
+    )
+    # Configured coverage is absent (not zero) when the inventory is unreadable.
+    if totals.configured_tenants is not None:
+        metrics.gauge("kyber_fleet_configured_tenants", float(totals.configured_tenants))
     if totals.oldest_incomplete_receipt_age_seconds is not None:
         metrics.gauge(
             "kyber_fleet_oldest_incomplete_receipt_seconds",
