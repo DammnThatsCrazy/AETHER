@@ -19,6 +19,7 @@ from shared.logger.logger import get_logger
 
 from .models import (
     SuggestionActionRequest,
+    SuggestionCompensationRequest,
     SuggestionCreate,
     SuggestionFeedbackRequest,
     SuggestionOutcomeRequest,
@@ -224,6 +225,20 @@ async def deliver_suggestion(suggestion_id: str, request: Request):
     tenant.require_permission("write")
     svc = _get_service()
     record = await svc.deliver_suggestion(suggestion_id, tenant)
+    return APIResponse(data=record).to_dict()
+
+
+@router.post("/{suggestion_id}/compensate")
+async def request_compensation(
+    suggestion_id: str,
+    request: Request,
+    body: SuggestionCompensationRequest,
+):
+    """Record a request to reverse an acted-on suggestion; does not itself undo anything."""
+    tenant = _tenant(request)
+    tenant.require_permission("admin")
+    svc = _get_service()
+    record = await svc.request_compensation(suggestion_id, body, tenant)
     return APIResponse(data=record).to_dict()
 
 

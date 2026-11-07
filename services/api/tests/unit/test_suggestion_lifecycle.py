@@ -44,7 +44,8 @@ def _make_repo(record: dict) -> MagicMock:
     repo = MagicMock()
     repo.get_or_fail = AsyncMock(return_value=record)
 
-    async def _transition(suggestion_id, tenant_id, from_status, to_status, audit_event):
+    async def _transition(suggestion_id, tenant_id, from_status, to_status, audit_event, patch=None):
+        record.update(patch or {})
         record["status"] = to_status
         record.setdefault("audit_trail", []).append(audit_event)
         return record
@@ -185,7 +186,8 @@ def test_apply_transition_sets_reviewed_at_on_approved():
     repo = _make_repo(record)
 
     # Patch the repo.transition to also set reviewed_at
-    async def _transition(suggestion_id, tenant_id, from_status, to_status, audit_event):
+    async def _transition(suggestion_id, tenant_id, from_status, to_status, audit_event, patch=None):
+        record.update(patch or {})
         record["status"] = to_status
         record.setdefault("audit_trail", []).append(audit_event)
         return record
@@ -200,6 +202,10 @@ def test_apply_transition_sets_reviewed_at_on_approved():
         actor_id="reviewer_1",
     ))
     assert updated["status"] == SuggestionStatus.APPROVED.value
+    # The review fields built by apply_transition reach the repository.
+    assert updated["reviewed_by"] == "reviewer_1"
+    assert updated["reviewed_at"]
+    assert updated["ooda_phase"] == "review"
 
 
 def test_apply_transition_appends_audit_event():
@@ -225,7 +231,8 @@ def test_apply_transition_closed_sets_closed_at_in_patch():
     async def _get_or_fail(suggestion_id, tenant_id):
         return record
 
-    async def _transition(suggestion_id, tenant_id, from_status, to_status, audit_event):
+    async def _transition(suggestion_id, tenant_id, from_status, to_status, audit_event, patch=None):
+        record.update(patch or {})
         record["status"] = to_status
         record.setdefault("audit_trail", []).append(audit_event)
         return record
@@ -241,3 +248,4 @@ def test_apply_transition_closed_sets_closed_at_in_patch():
         to_status=SuggestionStatus.CLOSED,
     ))
     assert updated["status"] == SuggestionStatus.CLOSED.value
+    assert updated["closed_at"]

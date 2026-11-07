@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from typing import Any, Optional
 
 from shared.auth.auth import TenantContext
 from shared.cache.cache import CacheClient
-from shared.common.common import BadRequestError, ForbiddenError, NotFoundError, utc_now
+from shared.common.common import (
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    utc_now,
+)
 from shared.events.events import EventProducer
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger
 
+from .consent import delivery_consent_verdict
 from .dispatcher import dispatch, resolve_dispatch_mode
 from .events import emit_suggestion_event
 from .lifecycle import apply_transition, build_audit_event
@@ -19,6 +28,7 @@ from .models import (
     OodaPhase,
     Suggestion,
     SuggestionActionRequest,
+    SuggestionCompensationRequest,
     SuggestionCreate,
     SuggestionFeedbackRequest,
     SuggestionOutcomeRequest,
@@ -27,6 +37,7 @@ from .models import (
     SuggestionStatus,
     SuggestionSuppressRequest,
     SuggestionSummary,
+    parse_timestamp,
 )
 from .outcome import record_and_close
 from .policy import evaluate_suggestion_policy, redact_for_tenant, requires_approval
@@ -34,6 +45,31 @@ from .repository import SuggestionRepository
 from .scorer import compute_scores
 
 logger = get_logger("aether.suggestions.service")
+
+
+_IDEMPOTENCY_NAMESPACE = uuid.UUID("5d0f4c2e-6a1b-4c57-9a43-2e8f1b7c9d10")
+
+# Content that defines "the same request" for a replayed create.
+_FINGERPRINT_FIELDS = (
+    "org_id", "subject", "source", "source_ref", "suggestion_class", "title",
+    "summary", "what", "why", "impact", "recommended_action", "expected_outcome",
+    "confidence_score", "risk_score", "reversible", "expires_at",
+    "audience", "consent_subject_id",
+)
+
+
+def _request_fingerprint(create: SuggestionCreate, tenant_id: str, principal: Optional[str]) -> str:
+    body = json.loads(create.model_dump_json(include=set(_FINGERPRINT_FIELDS)))
+    canonical = json.dumps(
+        {"tenant": tenant_id, "principal": principal, "body": body},
+        sort_keys=True, separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _is_expired(record: dict) -> bool:
+    expires_at = parse_timestamp(record.get("expires_at"))
+    return expires_at is not None and expires_at <= parse_timestamp(utc_now().isoformat())
 
 
 class SuggestionService:
@@ -79,7 +115,17 @@ class SuggestionService:
         )
 
         now = utc_now().isoformat()
-        suggestion_id = str(uuid.uuid4())
+        principal = tenant_context.user_id
+        fingerprint = _request_fingerprint(create, create.tenant_id, principal)
+        if create.idempotency_key:
+            # Deterministic id per tenant, principal, and key, so concurrent and
+            # retried creates collide on the same row instead of duplicating.
+            suggestion_id = str(uuid.uuid5(
+                _IDEMPOTENCY_NAMESPACE,
+                f"{create.tenant_id}\x1f{principal or ''}\x1f{create.idempotency_key}",
+            ))
+        else:
+            suggestion_id = str(uuid.uuid4())
 
         audit_event = build_audit_event(
             action="created",
@@ -124,11 +170,24 @@ class SuggestionService:
             policy_decision=policy_decision,
             audit_trail=[audit_event],
             expires_at=create.expires_at,
+            audience=create.audience,
+            consent_subject_id=create.consent_subject_id,
+            idempotency_key=create.idempotency_key,
+            request_fingerprint=fingerprint,
+            created_by=principal,
             created_at=now,
             updated_at=now,
         )
 
-        record = await self._repo.create(suggestion)
+        if create.idempotency_key:
+            if not await self._repo.create_if_absent(suggestion):
+                existing = await self._repo.get(suggestion_id, create.tenant_id)
+                if existing is not None and existing.get("request_fingerprint") == fingerprint:
+                    return existing  # replay: same key, same content, no new event
+                raise ConflictError("idempotency_key was already used with different content")
+            record = await self._repo.get_or_fail(suggestion_id, create.tenant_id)
+        else:
+            record = await self._repo.create(suggestion)
         await emit_suggestion_event(self._producer, "suggestion.created", record)
         logger.info(f"Created suggestion {suggestion_id!r} class={create.suggestion_class.value!r} priority={scores['priority'].value!r}")
         return record
@@ -173,6 +232,29 @@ class SuggestionService:
     # Lifecycle actions
     # ------------------------------------------------------------------
 
+    async def _expire_if_due(self, record: dict, tenant_context: TenantContext) -> None:
+        """Move a past-due suggestion to EXPIRED and refuse the action.
+
+        The reviewer and executor are always the authenticated principal; a
+        client-supplied ``actor_id`` is never trusted.
+        """
+        if not _is_expired(record):
+            return
+        status = SuggestionStatus(record["status"])
+        if status in (SuggestionStatus.SUGGESTED, SuggestionStatus.REVIEW_REQUIRED,
+                      SuggestionStatus.APPROVED, SuggestionStatus.DETECTED,
+                      SuggestionStatus.ORIENTED):
+            expired = await apply_transition(
+                repo=self._repo,
+                suggestion_id=record["id"],
+                tenant_id=tenant_context.tenant_id,
+                to_status=SuggestionStatus.EXPIRED,
+                actor_kind="system",
+                notes="expires_at passed before the action",
+            )
+            await emit_suggestion_event(self._producer, "suggestion.expired", expired)
+        raise BadRequestError("This suggestion has expired.")
+
     async def approve_suggestion(
         self,
         suggestion_id: str,
@@ -186,12 +268,13 @@ class SuggestionService:
                 f"Cannot approve a suggestion with status {current.value!r}. "
                 "Only review_required or suggested suggestions can be approved."
             )
+        await self._expire_if_due(record, tenant_context)
         updated = await apply_transition(
             repo=self._repo,
             suggestion_id=suggestion_id,
             tenant_id=tenant_context.tenant_id,
             to_status=SuggestionStatus.APPROVED,
-            actor_id=body.actor_id or tenant_context.user_id,
+            actor_id=tenant_context.user_id,
             actor_kind="tenant_user" if tenant_context.user_id else "operator",
             notes=body.notes,
         )
@@ -203,6 +286,15 @@ class SuggestionService:
             # A delivery problem never undoes the approval.
             try:
                 updated = await dispatch(updated, tenant_context, self, execution_enabled=False)
+                if (
+                    updated.get("status") == SuggestionStatus.APPROVED.value
+                    and updated.get("effect_state", "none") == "none"
+                ):
+                    # Handed off; nothing is confirmed until a provider receipt arrives.
+                    updated = await self._repo.patch(
+                        suggestion_id, tenant_context.tenant_id,
+                        {"effect_state": "pending_receipt"},
+                    )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"Delivery hand-off failed for suggestion {suggestion_id!r}: {exc}")
         return updated
@@ -219,7 +311,7 @@ class SuggestionService:
             suggestion_id=suggestion_id,
             tenant_id=tenant_context.tenant_id,
             to_status=SuggestionStatus.REJECTED,
-            actor_id=body.actor_id or tenant_context.user_id,
+            actor_id=tenant_context.user_id,
             actor_kind="tenant_user" if tenant_context.user_id else "operator",
             notes=body.reason,
         )
@@ -238,7 +330,7 @@ class SuggestionService:
             suggestion_id=suggestion_id,
             tenant_id=tenant_context.tenant_id,
             to_status=SuggestionStatus.SUPPRESSED,
-            actor_id=body.actor_id or tenant_context.user_id,
+            actor_id=tenant_context.user_id,
             actor_kind="tenant_user" if tenant_context.user_id else "operator",
             notes=body.reason,
         )
@@ -263,6 +355,7 @@ class SuggestionService:
                 "Automated execution is disabled. "
                 "Enable AETHER_SUGGESTIONS_EXECUTION_ENABLED to allow it."
             )
+        await self._expire_if_due(record, tenant_context)
 
         if resolve_dispatch_mode(record) == "legacy_recommendation_execute":
             # The dispatcher runs the recommendation path and moves the
@@ -274,11 +367,60 @@ class SuggestionService:
             suggestion_id=suggestion_id,
             tenant_id=tenant_context.tenant_id,
             to_status=SuggestionStatus.EXECUTING,
-            actor_id=body.actor_id or tenant_context.user_id,
+            actor_id=tenant_context.user_id,
             actor_kind="operator",
             notes=body.notes,
         )
         await emit_suggestion_event(self._producer, "suggestion.executing", updated)
+        return updated
+
+    async def _record_consent_block(self, record: dict, reason: str) -> None:
+        """Audit a consent denial and mark the effect as blocked; status is unchanged."""
+        await self._repo.append_audit(
+            record["id"], record["tenant_id"],
+            build_audit_event(
+                action="delivery_blocked_consent", from_status=record.get("status"),
+                to_status=record.get("status"), actor_kind="system",
+                metadata={"reason": reason},
+            ),
+        )
+        await self._repo.patch(record["id"], record["tenant_id"], {"effect_state": "blocked_consent"})
+
+    async def request_compensation(
+        self,
+        suggestion_id: str,
+        body: SuggestionCompensationRequest,
+        tenant_context: TenantContext,
+    ) -> dict:
+        """Record a request to reverse an acted-on suggestion.
+
+        This does not undo anything. It marks the effect, audits who asked and why,
+        and emits ``suggestion.compensation_requested`` so the owner of the
+        affected system can act through its own authority.
+        """
+        record = await self._repo.get_or_fail(suggestion_id, tenant_context.tenant_id)
+        if record.get("status") not in (
+            SuggestionStatus.EXECUTED.value, SuggestionStatus.DELIVERED.value,
+            SuggestionStatus.FAILED.value,
+        ):
+            raise BadRequestError(
+                "Compensation can only be requested for an executed, delivered, or failed suggestion."
+            )
+        if record.get("effect_state") == "compensation_requested":
+            return record  # replay
+        await self._repo.append_audit(
+            suggestion_id, tenant_context.tenant_id,
+            build_audit_event(
+                action="compensation_requested", from_status=record["status"],
+                to_status=record["status"], actor_id=tenant_context.user_id,
+                actor_kind="tenant_user" if tenant_context.user_id else "operator",
+                metadata={"reason": body.reason},
+            ),
+        )
+        updated = await self._repo.patch(
+            suggestion_id, tenant_context.tenant_id, {"effect_state": "compensation_requested"},
+        )
+        await emit_suggestion_event(self._producer, "suggestion.compensation_requested", updated)
         return updated
 
     async def deliver_suggestion(
@@ -289,6 +431,11 @@ class SuggestionService:
         record = await self._repo.get_or_fail(suggestion_id, tenant_context.tenant_id)
         if not record.get("delivery_eligible", True):
             raise BadRequestError("This suggestion is not eligible for delivery.")
+        await self._expire_if_due(record, tenant_context)
+        verdict = await delivery_consent_verdict(record)
+        if not verdict.allowed:
+            await self._record_consent_block(record, verdict.reason)
+            raise ForbiddenError(f"Delivery blocked: {verdict.reason}")
 
         updated = await apply_transition(
             repo=self._repo,
@@ -296,6 +443,7 @@ class SuggestionService:
             tenant_id=tenant_context.tenant_id,
             to_status=SuggestionStatus.DELIVERED,
             actor_kind="system",
+            extra_patch={"effect_state": "confirmed"},
         )
         await emit_suggestion_event(self._producer, "suggestion.delivered", updated)
         return updated

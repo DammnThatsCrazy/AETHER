@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+def parse_timestamp(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO 8601 timestamp to an aware UTC datetime, or None if invalid."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +204,15 @@ class Suggestion(BaseModel):
     outcome: Optional[SuggestionOutcome] = None
 
     expires_at: Optional[str] = None
+    audience: Literal["tenant_staff", "end_user"] = "tenant_staff"
+    consent_subject_id: Optional[str] = None
+    effect_state: Literal[
+        "none", "pending_receipt", "confirmed", "unverified",
+        "blocked_consent", "failed", "compensation_requested",
+    ] = "none"
+    idempotency_key: Optional[str] = None
+    request_fingerprint: Optional[str] = None
+    created_by: Optional[str] = None
     created_at: str
     updated_at: str
     reviewed_at: Optional[str] = None
@@ -226,6 +246,27 @@ class SuggestionCreate(BaseModel):
     evidence: list[dict[str, Any]] = Field(default_factory=list)
     lineage_event_ids: list[str] = Field(default_factory=list)
     expires_at: Optional[str] = None
+    # Optional replay key, scoped to tenant and authenticated principal. The same
+    # key with the same content returns the original suggestion; the same key
+    # with different content is a conflict.
+    idempotency_key: Optional[str] = Field(None, min_length=1, max_length=128)
+    # Who the suggestion is delivered to. End-user delivery needs a consent
+    # subject and is gated on the consent owner at delivery time.
+    audience: Literal["tenant_staff", "end_user"] = "tenant_staff"
+    consent_subject_id: Optional[str] = Field(None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def _end_user_audience_needs_a_consent_subject(self) -> "SuggestionCreate":
+        if self.audience == "end_user" and not self.consent_subject_id:
+            raise ValueError("consent_subject_id is required when audience is end_user")
+        return self
+
+    @field_validator("expires_at")
+    @classmethod
+    def _expires_at_is_a_timestamp(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and parse_timestamp(value) is None:
+            raise ValueError("expires_at must be an ISO 8601 timestamp")
+        return value
 
 
 class SuggestionQuery(BaseModel):
@@ -244,6 +285,10 @@ class SuggestionQuery(BaseModel):
 class SuggestionActionRequest(BaseModel):
     actor_id: Optional[str] = None
     notes: Optional[str] = None
+
+
+class SuggestionCompensationRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class SuggestionRejectRequest(SuggestionActionRequest):

@@ -45,7 +45,7 @@ test('operation table keeps read as the default and declares agent:manage only f
   assert.deepEqual(accessOperationIds, [
     'account.context', 'entities.list', 'entities.get', 'entities.neighborhood',
     'agent_access.observed.list', 'agent_access.observed.overview', 'agent_access.observed.get',
-    'agents.behavior', 'agents.decision', 'usage.summary',
+    'agents.behavior', 'agents.decision', 'experience360.frame.get', 'usage.summary',
   ]);
   const permissions = Object.fromEntries(listAccessOperations()
     .map(({ id, required_server_permission }) => [id, required_server_permission]));

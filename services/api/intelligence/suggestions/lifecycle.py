@@ -76,6 +76,7 @@ LEGAL_TRANSITIONS: dict[SuggestionStatus, frozenset[SuggestionStatus]] = {
     SuggestionStatus.APPROVED: frozenset({
         SuggestionStatus.EXECUTING,
         SuggestionStatus.DELIVERED,
+        SuggestionStatus.EXPIRED,
         SuggestionStatus.CLOSED,
     }),
     SuggestionStatus.EXECUTING: frozenset({
@@ -167,6 +168,7 @@ async def apply_transition(
     actor_id: Optional[str] = None,
     actor_kind: str = "system",
     notes: Optional[str] = None,
+    extra_patch: Optional[dict] = None,
 ) -> dict:
     """Atomically transition a suggestion to `to_status`.
 
@@ -196,6 +198,9 @@ async def apply_transition(
     if to_status == SuggestionStatus.CLOSED:
         patch["closed_at"] = now
 
+    if extra_patch:
+        patch.update(extra_patch)
+
     audit = build_audit_event(
         action=f"transition_to_{to_status.value}",
         from_status=from_status_str,
@@ -211,6 +216,7 @@ async def apply_transition(
         from_status=from_status_str,
         to_status=to_status.value,
         audit_event=audit,
+        patch=patch,
     )
 
 

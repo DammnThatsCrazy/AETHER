@@ -22,7 +22,7 @@ import json
 import threading
 import time
 import uuid
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -63,7 +63,16 @@ _ACCESS_KIT_CAPABILITIES = {
     ("GET", "/v1/billing/usage/summary"): "billing.usage.summary.read",
     ("POST", "/v1/continuations"): "continuations.create",
     ("GET", "/v1/continuations/{continuation_id}"): "continuations.get",
+    ("POST", "/v1/experience360/frames"): "experience360.frame.read",
 }
+# POST routes that carry a read body but have no write effect. They are checked
+# against the ``read`` permission, attributed as reads, and (for delegated MCP
+# tokens) eligible for the read-route allowlist. Keep this set exact: a route
+# belongs here only if its handler performs no mutation.
+_READ_SEMANTIC_POST_ROUTES = frozenset({
+    ("POST", "/v1/experience360/frames"),
+})
+_UNMETERED_ACCESS_CAPABILITIES = frozenset({"billing.usage.summary.read"})
 _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # A delegated MCP token is accepted only for these named read routes. The
 # request header selects this path only when a per-request assertion from the
@@ -71,8 +80,51 @@ _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # scope, user, membership, and tenant status.
 _MCP_OAUTH_READ_ROUTES = frozenset(
     path for (method, path), capability in _ACCESS_KIT_CAPABILITIES.items()
-    if method == "GET" and capability not in {"auth.sessions.list", "continuations.get"}
+    if (method == "GET" and capability not in {"auth.sessions.list", "continuations.get"})
+    or (method, path) in _READ_SEMANTIC_POST_ROUTES
 )
+
+
+class _SkipMetering(Exception):
+    """Internal control flow: this capability is audited but never metered."""
+
+
+async def _access_credential_denial(request: Request, context: Any, registry: Any):
+    """Return a denied RateLimitResult when this credential exceeds its operation cap.
+
+    Uses the existing burst limiter (``registry.rate_limiter.check_scoped``) so the
+    cap shares its Redis/in-memory machinery. It follows the authenticated route,
+    not a client-supplied label: any call to a named Access Kit route is counted,
+    whatever surface header it sends. The bucket is keyed on the credential the
+    authenticator actually validated (``request.state.validated_credential``),
+    never on raw request headers; if that is unavailable it falls back to the
+    authenticated principal, never to client input.
+    """
+    capability_id = _ACCESS_KIT_CAPABILITIES.get(
+        (request.method.upper(), getattr(request.state, "access_route_template", None))
+    )
+    limiter = getattr(registry, "rate_limiter", None)
+    if not capability_id or limiter is None or not hasattr(limiter, "check_scoped"):
+        return None
+    limit = settings.rate_limit.access_kit_credential_rpm
+    principal = "|".join((
+        str(getattr(context, "user_id", "") or ""),
+        str(getattr(context, "credential_class", "") or ""),
+    ))
+    try:
+        result = await limiter.check_scoped(
+            limiter.credential_scope(
+                context.tenant_id,
+                getattr(request.state, "validated_credential", "") or "",
+                principal,
+                capability_id,
+            ),
+            limit,
+        )
+    except Exception as exc:  # noqa: BLE001 - the cap must never take reads down
+        logger.warning(f"Access credential limiter error: {exc}")
+        return None
+    return None if result.allowed else result
 
 
 class McpReadScopeDeniedError(ForbiddenError):
@@ -112,15 +164,24 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         outcome = "failed"
     else:
         outcome = "allowed"
+    # Reading the interaction count must not change the count it reports, so a
+    # successful read is not recorded. A denied or failed read still gets its
+    # audit row and event; only the metering write is skipped for these reads.
+    unmetered = capability_id in _UNMETERED_ACCESS_CAPABILITIES
+    if unmetered and outcome == "allowed":
+        return {}
     event_type = {
         "allowed": "access.interaction.completed",
         "blocked": "access.interaction.blocked",
         "failed": "access.interaction.failed",
     }[outcome]
-    operation = {
-        "DELETE": "revoke",
-        "POST": "write",
-    }.get(request.method.upper(), "read")
+    if (request.method.upper(), route_template) in _READ_SEMANTIC_POST_ROUTES:
+        operation = "read"
+    else:
+        operation = {
+            "DELETE": "revoke",
+            "POST": "write",
+        }.get(request.method.upper(), "read")
     metadata = {
         "surface": surface,
         "capability_id": capability_id,
@@ -152,6 +213,8 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         logger.warning("access interaction audit write failed (%s)", type(exc).__name__)
 
     try:
+        if unmetered:
+            raise _SkipMetering
         from billing.billing.revops import MeteringService, UsageMeteringEvent
 
         metering_event = UsageMeteringEvent(
@@ -166,6 +229,8 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         saved_event = await MeteringService().record_event(metering_event)
         if saved_event and saved_event.get("metering_event_id"):
             references["X-Aether-Usage-Event-ID"] = str(saved_event["metering_event_id"])
+    except _SkipMetering:
+        pass
     except Exception as exc:  # telemetry must not change an authorized result
         logger.warning("access interaction metering write failed (%s)", type(exc).__name__)
 
@@ -693,6 +758,22 @@ def register_middleware(app: FastAPI) -> None:
                             "Retry-After": str(retry_after),
                             "X-RateLimit-Remaining": "0",
                         },
+                    ))
+
+            # --- Per-credential Access Kit cap (under the tenant burst pool) ---
+            if not platform_operator:
+                cap_denial = await _access_credential_denial(request, context, registry)
+                if cap_denial is not None:
+                    metrics.increment("access_credential_rate_limited")
+                    return await _finalize_access_response(request, problem_response(
+                        429,
+                        "Rate Limit Exceeded",
+                        f"This credential reached its limit of {cap_denial.limit} requests per minute for this operation.",
+                        code="ACCESS_CREDENTIAL_RATE_LIMIT_EXCEEDED",
+                        retryable=True,
+                        request_id=request_id,
+                        extensions={"retry_after_seconds": cap_denial.retry_after},
+                        headers={**rate_headers, "Retry-After": str(cap_denial.retry_after)},
                     ))
 
             # --- Feature Gate (per-plan service access control) ---
@@ -1316,7 +1397,12 @@ def _evaluate_route_policy(
 
         method = getattr(request, "method", "GET").upper()
         if method in {"POST", "PUT", "PATCH", "DELETE"}:
-            permission = "ingest" if path in ("/v1/batch", "/v1/track") or path.startswith("/v1/ingest") else "write"
+            if (method, path) in _READ_SEMANTIC_POST_ROUTES:
+                permission = "read"
+            elif path in ("/v1/batch", "/v1/track") or path.startswith("/v1/ingest"):
+                permission = "ingest"
+            else:
+                permission = "write"
             if not context.has_permission(permission):
                 return ForbiddenError("ROUTE_POLICY_PERMISSION_REQUIRED")
         elif pol.tenant_scoped and credential_class != "legacy" and not context.has_permission("read"):
@@ -1422,6 +1508,13 @@ def _matched_route_template(app: FastAPI, scope: dict) -> Optional[str]:
     return None
 
 
+def _remember_credential(request: Any, credential: str) -> None:
+    """Note which credential the authenticator validated, for per-credential caps."""
+    state = getattr(request, "state", None)
+    if state is not None:
+        state.validated_credential = credential
+
+
 async def _authenticate_async(
     request: Request,
     jwt_handler: JWTHandler,
@@ -1436,9 +1529,12 @@ async def _authenticate_async(
     """
     api_key = request.headers.get("X-API-Key")
     if api_key:
-        return await api_key_validator.validate_async(api_key)
+        ctx = await api_key_validator.validate_async(api_key)
+        _remember_credential(request, api_key)
+        return ctx
 
     # Additive: trust-plane credential classes (sessions / ingest / service).
+    # ``_resolve_trust_plane_context`` records the credential it validated.
     trust_ctx = await _resolve_trust_plane_context(request)
     if trust_ctx is not None:
         return trust_ctx
@@ -1452,22 +1548,34 @@ async def _authenticate_async(
             if not verify_mcp_service_assertion(request, token):
                 raise UnauthorizedError("MCP service assertion is invalid")
             route = getattr(request.state, "access_route_template", request.url.path)
-            if request.method.upper() not in {"GET"} or route not in _MCP_OAUTH_READ_ROUTES:
+            method = request.method.upper()
+            if (
+                method not in {"GET", "POST"}
+                or route not in _MCP_OAUTH_READ_ROUTES
+                or (method == "POST" and (method, route) not in _READ_SEMANTIC_POST_ROUTES)
+            ):
                 raise UnauthorizedError("MCP OAuth token is not valid for this route")
-            return await _resolve_mcp_oauth_token(token)
+            ctx = await _resolve_mcp_oauth_token(token)
+            _remember_credential(request, token)
+            return ctx
         if _token_declares_mcp_audience(token):
             raise UnauthorizedError("MCP OAuth token requires the hosted MCP service")
         # Try API key first (SDK pattern); fall back to JWT (SSO/user pattern)
         try:
-            return await api_key_validator.validate_async(token)
+            ctx = await api_key_validator.validate_async(token)
+            _remember_credential(request, token)
+            return ctx
         except Exception:
             pass
         # A session token may also arrive via Bearer.
         sess_ctx = await _resolve_session_token(token)
         if sess_ctx is not None:
+            _remember_credential(request, token)
             return sess_ctx
         payload = jwt_handler.decode(token)
-        return jwt_handler.extract_context(payload)
+        ctx = jwt_handler.extract_context(payload)
+        _remember_credential(request, token)
+        return ctx
 
     raise UnauthorizedError("Missing API key or Bearer token")
 
@@ -1536,6 +1644,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if token:
             ctx = await _resolve_session_token(token)
             if ctx is not None:
+                _remember_credential(request, token)
                 return ctx
 
     if getattr(tp, "public_ingest_identifier_enabled", False):
@@ -1543,6 +1652,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if ident:
             ctx = await _resolve_public_ingest(ident)
             if ctx is not None:
+                _remember_credential(request, ident)
                 return ctx
 
     if getattr(tp, "service_credentials_enabled", False):
@@ -1550,6 +1660,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if cred:
             ctx = await _resolve_service_credential(cred)
             if ctx is not None:
+                _remember_credential(request, cred)
                 return ctx
 
     return None

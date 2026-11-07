@@ -17,6 +17,7 @@ from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, utc_now
 from shared.logger.logger import get_logger
 
+from .consent import delivery_consent_verdict
 from .events import emit_suggestion_event
 from .lifecycle import apply_transition
 from .models import SuggestionSource, SuggestionStatus
@@ -84,6 +85,12 @@ async def dispatch(
             f"Dispatch requires APPROVED status, got {current_status!r}"
         )
 
+    verdict = await delivery_consent_verdict(suggestion)
+    if not verdict.allowed:
+        logger.warning(f"Dispatch blocked for {suggestion_id!r}: {verdict.reason}")
+        await service._record_consent_block(suggestion, verdict.reason)
+        return await service._repo.get_or_fail(suggestion_id, tenant_id)
+
     mode = resolve_dispatch_mode(suggestion)
     logger.info(f"Dispatching suggestion {suggestion_id!r} mode={mode!r}")
 
@@ -98,6 +105,11 @@ async def dispatch(
                 execute_recommendation_via_suggestion,
             )
             updated = await execute_recommendation_via_suggestion(suggestion, service)
+            if updated.get("status") == SuggestionStatus.EXECUTED.value:
+                # The executor reported success; nothing has read the effect back.
+                updated = await service._repo.patch(
+                    suggestion_id, tenant_id, {"effect_state": "unverified"},
+                )
 
         elif mode == "notify_only":
             # Deliver via notification adapter
@@ -122,6 +134,7 @@ async def dispatch(
                 to_status=SuggestionStatus.FAILED,
                 actor_kind="system",
                 notes=f"Dispatch error: {exc}",
+                extra_patch={"effect_state": "failed"},
             )
             await emit_suggestion_event(service._producer, "suggestion.failed", updated)
         except Exception as inner:

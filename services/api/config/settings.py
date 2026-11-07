@@ -135,6 +135,10 @@ class RateLimitConfig:
     """
     pricing_option: str = _env("PRICING_OPTION", "B")
     quota_flush_interval_s: int = _env_int("QUOTA_FLUSH_INTERVAL_S", 60)
+    # Requests per minute one credential may make to one Access Kit operation,
+    # under the tenant burst pool. 0 disables the cap. Proposal pending
+    # billing-owner approval (docs/architecture/target/access-kit-w4-limits-contract.md).
+    access_kit_credential_rpm: int = _env_int("ACCESS_KIT_CREDENTIAL_RPM", 120)
     # Deprecated: legacy 3-tier RPM limits. Removed in step 03.
     free_rpm: int = 60
     pro_rpm: int = 600

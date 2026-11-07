@@ -25,6 +25,7 @@ import {
 } from '@aether/ui/exploration';
 import { campaignExplorationContext } from '@aether-app/features/campaigns/use-campaign-exploration';
 import { ProjectionSurfacePanel } from '@aether-app/features/projection-360';
+import { ExperienceFramePanel } from '@aether-app/features/experience-frame';
 import { GlassPage } from '@aether-app/components/app-shell';
 import { BrandMark } from '@aether-app/components/brand-mark';
 import { Bar, Eyebrow, InlineNotice, LinkButton, TonePill, type Tone } from '@aether-app/components/ae-ui';
@@ -1148,6 +1149,7 @@ const TABS: readonly { value: string; label: string }[] = [
   { value: 'targeting', label: 'Targeting' },
   { value: 'card-linked', label: 'Card-linked' },
   { value: 'sources', label: 'Sources' },
+  { value: 'frame', label: 'Frame' },
 ];
 
 /**
@@ -1298,6 +1300,11 @@ export function Campaign360Page() {
               {tab === 'outcome360' && <div className="ae-legacy"><ProjectionSurfacePanel surface="outcome360" focus={{ kind: 'campaign', id: campaignId }} /></div>}
               {tab === 'economic360' && <div className="ae-legacy"><ProjectionSurfacePanel surface="economic360" focus={{ kind: 'campaign', id: campaignId }} /></div>}
               {tab === 'sources' && <SourcesTab campaignId={campaignId} />}
+              {tab === 'frame' && (
+                <div className="ae-legacy">
+                  <ExperienceFramePanel request={{ surfaceId: 'campaign360', subject: { kind: 'campaign', id: campaignId } }} />
+                </div>
+              )}
             </div>
           </>
         )}

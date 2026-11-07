@@ -11,10 +11,10 @@ or unclassified catalog authorities fail closed before any provider reads.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from graph.operational_intelligence.models import PageRequest, TimeRangeFilter
 from shared.intelligence_projections.contracts import (
@@ -38,6 +38,11 @@ from shared.intelligence_projections.registry import projection_registry
 router = APIRouter(prefix="/v1/experience360", tags=["Experience 360"])
 
 
+_MAX_REQUESTED_SLOTS = 64
+_MAX_LENS_IDS = 16
+_MAX_SUBJECT_ID_LENGTH = 256
+
+
 class Experience360FrameBody(BaseModel):
     """Caller-controlled request fields; tenant identity is auth-derived."""
 
@@ -45,14 +50,27 @@ class Experience360FrameBody(BaseModel):
 
     surfaceId: Experience360SurfaceId
     subject: ProjectionSubject
-    requestedSlotIds: Optional[list[str]] = None
-    asOf: Optional[str] = None
+    # Bounds are enforced before any provider read so an oversized request is
+    # rejected as a 422 without touching a slot, policy decision, or provider.
+    requestedSlotIds: Optional[list[Annotated[str, Field(min_length=1, max_length=128)]]] = Field(
+        default=None, max_length=_MAX_REQUESTED_SLOTS
+    )
+    asOf: Optional[str] = Field(default=None, max_length=64)
     timeRange: Optional[TimeRangeFilter] = None
     includeEvidence: bool = True
-    lensIds: Optional[list[str]] = None
+    lensIds: Optional[list[Annotated[str, Field(min_length=1, max_length=128)]]] = Field(
+        default=None, max_length=_MAX_LENS_IDS
+    )
     page: Optional[PageRequest] = None
-    purpose: Optional[str] = None
-    authorizationContextRef: Optional[str] = None
+    purpose: Optional[str] = Field(default=None, max_length=256)
+    authorizationContextRef: Optional[str] = Field(default=None, max_length=256)
+
+    @field_validator("subject")
+    @classmethod
+    def _bound_subject_id(cls, value: ProjectionSubject) -> ProjectionSubject:
+        if not value.id or len(value.id) > _MAX_SUBJECT_ID_LENGTH:
+            raise ValueError("subject id must be 1 to 256 characters")
+        return value
 
 
 class _UnavailablePolicyEvaluator:

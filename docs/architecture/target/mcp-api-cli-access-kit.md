@@ -81,6 +81,8 @@ not a new service route or data authority.
 | CLI | `aether entities neighborhood ENTITY_ID [--limit N] [--json]` | One-hop graph projection, max 50 neighbors and 100 edges | Query, `read` |
 | CLI | `aether agents behavior show AGENT_REF [--json]` | Agent behavior read model (`agents.behavior`) | Query, `agent:manage` |
 | CLI | `aether agents decisions show AGENT_REF DECISION_ID [--json]` | One reconstructed decision (`agents.decision`) | Query, `agent:manage` |
+| CLI | `aether experience360 frame get --surface S --subject-kind K --subject-id ID [--slots a,b] [--as-of T] [--no-evidence] [--json]` | `POST /v1/experience360/frames` (`experience360.frame.get`) | Query, `read`; one governed 360 frame |
+| MCP / Node | `access_invoke_read` with `experience360.frame.get`; `createAccessClient().experience360.frame(input)` | Same route | Query, `read`; no dedicated MCP tool |
 | CLI | `aether access operations list/show` and `aether access invoke` | Closed adapter read declaration and delegated API call | Discovery is local; invoke is query with the operation's declared `required_server_permission` (`read` unless stated) |
 | CLI | `aether account context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth context [--json]` | `/v1/me` safe projection | Query, `read` |
@@ -200,6 +202,49 @@ insufficient-evidence states. Combining these into a customer verdict would
 create a new readiness authority and could imply conclusions none of those
 endpoints own. Expose them later only as distinct named reads, or after an
 owning diagnostic/readiness contract exists.
+
+## Governed 360 frame read (`experience360.frame.get`)
+
+One bounded, read-only operation returns a governed 360 frame for a subject. It
+is a transport over `POST /v1/experience360/frames`. The 360 runtime owns slot
+authorization, joins, evidence, freshness, and partial or unknown results; the
+Access Kit returns the frame unmodified and never promotes a slot state.
+
+- **Authority.** Tenant and actor come from the credential. The body accepts no
+  tenant, actor, policy, or graph-query field, and the client rejects them before
+  any request. `read` suffices: the route is a read-semantic POST, so route
+  policy checks `read` instead of `write`.
+- **Bounds.** The client bounds the subject ID (1 to 256 characters), the slot
+  list (at most 32 from the chosen surface), and `as_of`, and never sends lens
+  IDs, `purpose`, paging, or `authorizationContextRef`. The server bounds those
+  fields too (at most 64 slots, 16 lens IDs, 256-character `purpose` and
+  `authorizationContextRef`), so a direct REST caller gets a 422 before any
+  provider read.
+- **Reading a frame.** Per-slot denial is HTTP 200 with a `suppressed` slot and no
+  `content`. `partial`, `unknown`, `degraded`, `stale`, and `conflicted` mean the
+  conclusion is not established. A catalog entry or an existing frame does not
+  mean its surface is complete.
+- **Errors.** 401, 403, 404, 409, 422, 429, and 5xx map to typed categories
+  without echoing server `detail`. For 429, `Retry-After` is surfaced. The
+  adapter makes one attempt and does not retry.
+- **Accounting.** The call is attributed as `experience360.frame.read` with audit
+  and usage IDs when the surface header is sent. It stays non-billable and has no
+  plan or ACU gate; only the per-tenant burst limit applies. No receipt ID is
+  created beyond those the API returns.
+- **Hosted MCP.** The route is on the delegated-token read allowlist. A live
+  hosted-MCP login has not been run.
+
+### Operator runbook
+
+| Symptom | First checks |
+|---|---|
+| 401 on hosted MCP | Service assertion binds method and target; confirm the call is `POST /v1/experience360/frames` and the token audience. |
+| 403 | Credential lacks `read`, or the tenant, membership, or credential is not active. |
+| Slots `suppressed` | Central policy denied the slot's authority domain for this role; not an outage. |
+| Frame `partial` or `degraded` | Read `reasonCodes`, `limitations`, and `degradation`; check the slot's provenance and freshness. |
+| 429 | Per-tenant burst limit; honor `Retry-After`. |
+| 422 | Input outside the bounds above, or an unknown surface, subject kind, or slot. |
+| 503 `360 frame unavailable` | Catalog or registry drift; run the projection contract validator. |
 
 ## Authentication and transport
 

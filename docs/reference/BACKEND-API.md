@@ -27,13 +27,13 @@ reviewed_source_commits:
 source_hashes:
   "services/api/actions/": "sha256:adafaf5797f3a85e109c5cb3492441cba040f98c334318a63a28b432d71072a7"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
+  "services/api/billing/": "sha256:795ae9152aab257f4f54a096c261f9cc5cb79e3b177876ba5a5095062d42f8a8"
   "services/api/connectors/": "sha256:2ac8c75b183daa4a3db734aadc7331a36072feb002134ad87cb88f3fd17c258b"
   "services/api/governance/": "sha256:b287f008d8982cb66b93e37f5654a5cbcd808c6fcee3d811ed81bb1e9bcab7ca"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
   "services/api/identity/": "sha256:a7f1dce493471a067cf90946257aeeffc9e62627cb505302086849b9d2bd0673"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
-  "services/api/intelligence/": "sha256:ff7f6c135d00cee1deae781cfff9d374914f8107117e7264f0177b7b1a1f5196"
+  "services/api/intelligence/": "sha256:d2b2ec031cd365fc60a4015b76f635fc1cde1e0a22bd0d6ce2bb4f246e9fc79f"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -364,6 +364,7 @@ are returned in customer or operator responses.
 | `/v1/billing/entitlements` | GET | API key | Caller-safe tenant entitlements |
 | `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
 | `/v1/billing/usage/summary` | GET | API key | Caller tenant usage dimensions, including non-billable visibility meters |
+| `/v1/billing/usage/access-reconciliation` | GET | API key (`admin`) | Read-only comparison of the caller tenant's Access Kit audit rows against its non-billable usage events for a requested or current billing window; reports unmatched request IDs, billable events seen, and truncation |
 | `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
 | `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review; optional `start`/`end` window, `truncated` flags a bounded read |
 | `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
@@ -3815,6 +3816,16 @@ Proactive AI-driven suggestions for operators and tenants — surfaces actionabl
 | POST | `/v1/suggestions/{suggestion_id}/execute` | Execute the suggested action directly |
 | POST | `/v1/suggestions/{suggestion_id}/deliver` | Deliver via notification channel |
 | POST | `/v1/suggestions/{suggestion_id}/outcome` | Record observed outcome after execution |
+| POST | `/v1/suggestions/{suggestion_id}/compensate` | Record a request to reverse an executed, delivered, or failed suggestion (requires `admin`); marks `effect_state` and emits an event, it does not undo anything itself |
+
+Lifecycle guarantees on these routes:
+
+- The reviewer recorded on approve, reject, suppress, and execute is the authenticated principal. A client-supplied `actor_id` is ignored.
+- `expires_at` must be an ISO 8601 timestamp. Approve, execute, and deliver on a past-due suggestion move it to `expired` and return 400.
+- `POST /v1/suggestions` accepts an optional `idempotency_key` (1-128 characters). The same key from the same principal with the same content returns the original suggestion; the same key with different content returns 409. Without a key every call creates a new suggestion.
+- `audience` is `tenant_staff` (default) or `end_user`. End-user suggestions require `consent_subject_id` and are delivered only when the consent owner reports a grant for the purpose; otherwise delivery is held, audited, and `effect_state` is `blocked_consent`.
+- `effect_state` reports what is known about the effect: `none`, `pending_receipt`, `confirmed`, `unverified`, `blocked_consent`, `failed`, or `compensation_requested`.
+- State transitions are compare-and-set on status. Of two concurrent approvals, one succeeds and the other gets 409 or 400.
 
 ### Kyber Admin Routes (`/v1/admin/kyber/suggestions`)
 

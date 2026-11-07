@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:014962a1f2a020041ae883f64c4bac37c2fc7cb92f2ffead37269e16644f9048"
+  "apps/aether-web/src/": "sha256:781f496ff51d8654ec92af812c4237d8b8e66c0a2057401d42bfca25484ab8e8"
   "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -147,6 +147,7 @@ the root.
   page shows the non-billable Access Kit interaction count without an included
   quota or price bar.
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
+- **Governed 360 frame slots** — `ExperienceFramePanel` reads one frame from `POST /v1/experience360/frames` through `restClient` and renders each slot's state, requirement, reason codes, limitations, evidence-reference count, and policy disposition exactly as the server sent them. Unknown state words are shown verbatim, and slot `content` is never rendered (`features/experience-frame/`). It is mounted as the Campaign 360 "Frame" tab (surface `campaign360`, subject kind `campaign`). There is no Kyber twin: the route is bound to the authenticated tenant.
 - **Continue-on-phone** — continuation creation, recent mobile activity, and resume surfaces backed by the `/v1/continuations` and `/v1/client-sync` planes (`features/continuation/`)
 
 **Kyber (internal operator console) contains:**
