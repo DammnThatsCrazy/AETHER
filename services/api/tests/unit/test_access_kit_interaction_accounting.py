@@ -116,3 +116,30 @@ async def test_usage_summary_itself_is_not_metered(monkeypatch):
     )
     request = _request(route="/v1/billing/usage/summary")
     assert await _record_access_interaction(request, Response(status_code=200)) == {}
+
+
+async def test_denied_usage_summary_read_is_audited_but_not_metered(monkeypatch):
+    audited = {}
+
+    class Ledger:
+        async def record(self, **kwargs):
+            audited.update(kwargs)
+            return SimpleNamespace(audit_event_id="audit-9")
+
+    class NoMeter:
+        def __init__(self, **kwargs):
+            raise AssertionError("usage summary must never be metered")
+
+    async def queue(tenant_id, event):
+        return None
+
+    monkeypatch.setattr(audit_ledger, "AuditLedger", Ledger)
+    monkeypatch.setattr(revops, "UsageMeteringEvent", NoMeter)
+    monkeypatch.setattr(delivery_outbox, "queue_access_interaction_event", queue)
+
+    request = _request(route="/v1/billing/usage/summary")
+    refs = await _record_access_interaction(request, Response(status_code=403))
+
+    assert refs == {"X-Aether-Audit-Event-ID": "audit-9"}
+    assert audited["outcome"] == "blocked"
+    assert audited["resource_id"] == "billing.usage.summary.read"

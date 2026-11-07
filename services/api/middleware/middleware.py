@@ -85,6 +85,10 @@ _MCP_OAUTH_READ_ROUTES = frozenset(
 )
 
 
+class _SkipMetering(Exception):
+    """Internal control flow: this capability is audited but never metered."""
+
+
 class McpReadScopeDeniedError(ForbiddenError):
     """Machine-readable missing-scope denial for the MCP OAuth challenge."""
 
@@ -111,9 +115,6 @@ async def _record_access_interaction(request: Request, response: Response) -> di
     tenant = getattr(request.state, "tenant", None)
     if surface not in _ACCESS_KIT_SURFACES or not capability_id or tenant is None:
         return {}
-    # Reading the interaction count must not change the count it reports.
-    if capability_id in _UNMETERED_ACCESS_CAPABILITIES:
-        return {}
 
     request_id = getattr(request.state, "request_id", "")
     if not isinstance(request_id, str) or not request_id:
@@ -125,6 +126,12 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         outcome = "failed"
     else:
         outcome = "allowed"
+    # Reading the interaction count must not change the count it reports, so a
+    # successful read is not recorded. A denied or failed read still gets its
+    # audit row and event; only the metering write is skipped for these reads.
+    unmetered = capability_id in _UNMETERED_ACCESS_CAPABILITIES
+    if unmetered and outcome == "allowed":
+        return {}
     event_type = {
         "allowed": "access.interaction.completed",
         "blocked": "access.interaction.blocked",
@@ -168,6 +175,8 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         logger.warning("access interaction audit write failed (%s)", type(exc).__name__)
 
     try:
+        if unmetered:
+            raise _SkipMetering
         from billing.billing.revops import MeteringService, UsageMeteringEvent
 
         metering_event = UsageMeteringEvent(
@@ -182,6 +191,8 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         saved_event = await MeteringService().record_event(metering_event)
         if saved_event and saved_event.get("metering_event_id"):
             references["X-Aether-Usage-Event-ID"] = str(saved_event["metering_event_id"])
+    except _SkipMetering:
+        pass
     except Exception as exc:  # telemetry must not change an authorized result
         logger.warning("access interaction metering write failed (%s)", type(exc).__name__)
 
