@@ -37,6 +37,9 @@ from connectors.integrations.providers.payment_rails.service import (  # noqa: E
     PaymentRailsService,
 )
 from connectors.providers.credentials.authority import credential_authority  # noqa: E402
+from connectors.providers.credentials.operator_view import (  # noqa: E402
+    collect_payment_rail_configured_tenants,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -195,3 +198,58 @@ async def test_disabled_provider_status_is_distinct():
     # NOT a fake "healthy" and NOT an empty string.
     for p in response.providers:
         assert p.status in ("disabled", "not_configured")
+
+
+async def test_configured_inventory_requires_every_required_slot(monkeypatch):
+    reset_in_memory_stores()
+    _patch_payment_rails(monkeypatch, credential_authority_enabled=True)
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    await _activate(tenant, "moonpay", "sandbox", "webhook_signing_secret", "whsec")
+
+    configured = await collect_payment_rail_configured_tenants(ADAPTERS)
+    assert tenant not in configured["moonpay"]
+
+    await _activate(tenant, "moonpay", "sandbox", "server_api_key", "server_key")
+    configured = await collect_payment_rail_configured_tenants(ADAPTERS)
+    assert tenant in configured["moonpay"]
+
+
+async def test_configured_inventory_requires_slots_in_one_environment(monkeypatch):
+    reset_in_memory_stores()
+    _patch_payment_rails(monkeypatch, credential_authority_enabled=True)
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    # Every required slot is active, but split across sandbox and live. A tenant
+    # is configured only when one environment has the complete required set.
+    await _activate(tenant, "moonpay", "sandbox", "webhook_signing_secret", "whsec")
+    await _activate(tenant, "moonpay", "live", "server_api_key", "server_key")
+
+    configured = await collect_payment_rail_configured_tenants(ADAPTERS)
+    assert tenant not in configured["moonpay"]
+
+
+async def test_configured_inventory_ignores_pending_credentials(monkeypatch):
+    reset_in_memory_stores()
+    _patch_payment_rails(monkeypatch, credential_authority_enabled=True)
+    tenant = f"t-{uuid.uuid4().hex[:8]}"
+    for slot, secret in (
+        ("webhook_signing_secret", "whsec"),
+        ("server_api_key", "server_key"),
+    ):
+        await credential_authority.create_pending(
+            tenant, "moonpay", "sandbox", slot, secret, created_by="admin"
+        )
+
+    configured = await collect_payment_rail_configured_tenants(ADAPTERS)
+    assert tenant not in configured["moonpay"]
+
+
+async def test_configured_inventory_paginates_without_truncation(monkeypatch):
+    reset_in_memory_stores()
+    _patch_payment_rails(monkeypatch, credential_authority_enabled=True)
+    tenants = [f"t-{uuid.uuid4().hex[:8]}" for _ in range(3)]
+    for tenant in tenants:
+        await _activate(tenant, "moonpay", "sandbox", "webhook_signing_secret", "whsec")
+        await _activate(tenant, "moonpay", "sandbox", "server_api_key", "server_key")
+
+    configured = await collect_payment_rail_configured_tenants(ADAPTERS, page_size=2)
+    assert set(tenants) <= configured["moonpay"]
