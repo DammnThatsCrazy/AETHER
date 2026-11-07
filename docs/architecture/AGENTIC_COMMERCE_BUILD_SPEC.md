@@ -15,8 +15,8 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:151448e946e0a220ce5e235c6f8673bc73189229ae6a42224cd735ad7a7c3f49"
-  "services/api/actions/agent/deployment_routes.py": "sha256:66ca43046074af1fe520936680c0f5205eddf06f6f8c6937eca829acd3ae89c6"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:5ba2d5d39c56b0deaadedae28449db78644b365b0504ecc3fed01b673b414b81"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -34,7 +34,7 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:ca72986e5834afba378916aff58e180cc08484d900acf1ebbd496b8cfed801d8"
+  "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
@@ -113,6 +113,14 @@ decision; the projection exposes the decision and evidence reference when the
 binding is valid. Approval is human governance evidence, not model performance
 or calibration validation. This attribution governance does not change the
 commerce operation links described above.
+
+The confidence slot's governance authority binds these exact provenance and
+approval records, not calibrated confidence. Its separate authenticated
+`confidence-evaluation` route computes bounded canonical credit touchpoint
+temporal eligibility under `value-credit-temporal-eligibility.v1`. Economic360
+rejoins the exact source samples and manifest before projecting the evaluation
+and its actor/authorization evidence. Temporal eligibility neither validates
+causal contribution or credit weights nor calibrates the reported score.
 
 ---
 

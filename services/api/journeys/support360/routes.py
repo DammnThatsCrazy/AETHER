@@ -46,8 +46,37 @@ from journeys.support360.sla_measurement import (
     SupportSLAMeasurementContractError,
     SupportSLAMeasurementContractService,
 )
+from journeys.support360.subjects import SupportSubjectIngestionService, SupportSubjectInput
 
 router = APIRouter(prefix="/v1/support/cases", tags=["Support Cases"])
+
+
+class SupportSubjectIngestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    connection_id: str = Field(min_length=1, max_length=256)
+    binding: SupportSubjectInput
+
+
+@router.post("/subjects/ingest")
+async def ingest_support_subject(request: Request, body: SupportSubjectIngestBody) -> dict[str, Any]:
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    actor = tenant_actor(request)
+    if actor.tenant_id != tenant.tenant_id or not actor.actor_id:
+        raise HTTPException(status_code=403, detail="authenticated tenant actor is required")
+    try:
+        record = await SupportSubjectIngestionService().ingest(
+            tenant.tenant_id, body.connection_id, body.binding,
+            actor_id=actor.actor_id, actor_type=str(actor.actor_type),
+        )
+    except SupportCaseAuthorityError as exc:
+        raise HTTPException(status_code=409, detail="support subject binding unavailable or conflicting") from exc
+    return APIResponse(data={
+        "accepted": True, "subject_id": record["subject_id"],
+        "subject_kind": record["subject_kind"], "case_id": record["case_id"],
+        "claim_state": "observed",
+    }).to_dict()
 
 
 class SupportSLAMeasurementContractBody(BaseModel):
@@ -113,6 +142,7 @@ async def register_support_sla_measurement_contract(
             timer_kind=body.timer_kind,
             custom_timer_name=body.custom_timer_name,
             target_duration_seconds=body.target_duration_seconds,
+            measurement_method_version="active_elapsed_v1",
             registered_by=actor.actor_id,
             registered_at=datetime.now(timezone.utc),
         )
@@ -129,6 +159,7 @@ async def register_support_sla_measurement_contract(
         "source_policy_version": stored.source_policy_version,
         "timer_kind": stored.timer_kind,
         "target_duration_seconds": stored.target_duration_seconds,
+        "measurement_method_version": stored.measurement_method_version,
         "registered_at": stored.registered_at.isoformat(),
     }).to_dict()
 

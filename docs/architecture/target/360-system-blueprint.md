@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:151448e946e0a220ce5e235c6f8673bc73189229ae6a42224cd735ad7a7c3f49"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:5ba2d5d39c56b0deaadedae28449db78644b365b0504ecc3fed01b673b414b81"
 ---
 
 # 360 System Blueprint
@@ -28,7 +28,47 @@ truth store or mutate graph state. Agent and execution views must distinguish
 observed activity from event-time authority to act, and attributed value from
 independently verified outcomes.
 
+## Next implementation wave (2026-11-05)
+
+Communications360 now persists provider-thread observations atomically with
+qualifying Silver messages and composes bounded provider/account/thread groups.
+Exact canonical source-reference reads rejoin Silver fact and message scope
+before exposing source-subject inventory. Explicit durable reply references can
+produce observed target associations without synthetic acts. Canonical
+Conversation membership requires a separate explicit authenticated roster join;
+the writer now persists that join atomically with participant roles. Product
+slots use eleven isolated namesake sections, including exact canonical message,
+thread and profile routing and explicit episode/journey context. Risk remains
+restricted to exact agent/source/profile paths. Historical membership, current
+actor authority, causal outcomes, upstream completeness and freshness remain
+unknown; bounded observations do not establish universal projection completeness.
+
+Execution360 `tool_calls` now separately exposes bounded server-owned MCP
+invocation results after exact execution, agent, principal, tool, resource,
+grant, operation-time policy and time validation. The receipt path does not
+depend on a `CALLED_TOOL` lifecycle edge. Both claim and evidence output retain
+the canonical receipt reference; general external effects, mutations, freshness,
+historical policy replay and producer coverage remain unknown. The slot and
+projection remain partial.
+
+Episode360 `timeline` now has a live validated-event semantic producer. Qualifying
+classified observations with supported resolved subject types, authenticated
+source namespaces, aware occurrence times, and evidence reach tenant/subject-scoped
+`semantic_observation_stream` episodes through exact canonical typed links.
+Unclassified, untyped, or unsupported observations remain unlinked. Complete
+activity/session coverage, policy, freshness, historical completeness, and
+continuity remain unknown; the slot and projection remain partial.
+
 ## Full product catalog and current partial slots
+
+Support360 now routes ticket and conversation subjects through authenticated,
+immutable canonical case mappings for all nine isolated Support-owned required
+slots. Producer-to-real-registry frame tests preserve slot policy isolation.
+Journey context ingestion can produce the exact episode/event relation under
+the episode-engine flag. This closes those mapping and producer paths, not
+mapped-subject Risk routing or full Support360 completion; upstream history,
+freshness, conversation-exclusive membership, and business outcomes remain
+unverified.
 
 The count below is from required slots with `partialImplementationReason` in
 the registry on this branch. The other 69 required slots have no partial flag;
@@ -57,16 +97,34 @@ full backend contract today.
 | Commerce360 | 11 | 7 | product_offer_summary, catalog_links, exposures, intent, cart_checkout, availability_price, risk |
 | Support360 | 10 | 10 | case_summary, conversation_history, callbacks, participants, sla, journey_links, agents, risk, resolution, evidence_trace |
 
-Four slots declare five unbound canonical authority references after the exact
-bindings in this slice. Journey360 and Risk360 now bind the actions authority
+Communications360 response events also expose explicit `In-Reply-To` associations
+through bounded exact tenant/provider/account/thread Silver target reads. Only
+unique evidence-backed targets no later than the reply are admitted; malformed,
+mixed-scope, self-referencing, ambiguous or truncated reads remain unknown. This
+provider-reported association does not establish identity, authority, causal
+response outcomes, complete history or freshness.
+
+No slots declare unbound canonical authority references after the exact
+Profile360 adjudication/evaluation, MCP resource-read and scoped Value governance
+bindings. This is authority-path coverage, not complete product implementation
+or proof of every claim an authority could support. Profile360 `likely_next_states`
+binds `outcome_facts` through policy-authorized v1 churn/retention adjudications
+and `model_governance` through exact-artifact evaluations whose sample manifests
+and metrics are validated and recomputed by the reader. Universal calibration,
+model applicability, current consent and complete coverage remain unproven;
+`modelCalibrationVerified` remains false. Journey360 and Risk360 bind the actions authority
 through persisted dispatch authorization and credential-bound Jira resource
 read-back. The supported verification checks the provider site, requested payload,
 tenant, subject, intent, job, receipt and policy decision. Other providers remain
 unverified; neither slot is complete, and business outcomes, producer coverage,
 historical replay and freshness are not established by resource existence.
-Value360 can expose a recorded check of attribution run
-configuration lineage against the current config, while model governance and
-calibration remain unbound. Campaign360
+Value360 can expose a recorded check of attribution run configuration lineage,
+an authenticated run-bound model approval, and a reproducible bounded evaluation
+of credit touchpoint temporal eligibility. Temporal eligibility does not
+calibrate model-reported confidence or establish causal attribution or correct
+credit weights. Its governance reference binds provenance and governed model use
+through exact approval and validation evidence, not confidence calibration.
+Calibration remains unvalidated. Campaign360
 `signal_sources` now binds exact gateway-admitted SDK Bronze observations and
 current touchpoint classification revisions to touchpoint-linked canonical
 events; broader source-fact producer coverage remains unknown. Agent360 `risk_summary` exposes its exact canonical Agent identity
@@ -89,7 +147,13 @@ performs the actual tools/call. Durable claims prevent duplicate execution, and
 immutable completion receipts bind the principal, tenant, agent, execution, tool,
 workflow, policy, grant interval and provider result. Handshake failures do not
 prove invocation. Readers reject ambiguous, cross-scope, out-of-window and
-out-of-grant evidence. Resource operations remain unbound. Agent360 `capabilities` resolves
+out-of-grant evidence. Dedicated resource-read grants and operation-time policy
+checks also bind the resources authority through bounded, paginated MCP
+`resources/list` and `resources/read` operations and exact immutable receipts.
+Agent360 joins these receipts to executions; Workflow360 requires an authorized
+run-linked read. Successful content must match its exact URI and digest.
+Resource mutation, independent effects, historical replay, freshness and complete
+producer coverage remain unknown. Agent360 `capabilities` resolves
 observed MCP catalog tool identity only for an exact tenant/provider/server/tool
 tuple. For a complete canonical grant read, it also exposes the exact recorded
 invoke action and capability or server resource with delegation evidence;
@@ -102,8 +166,17 @@ resource operation or independent external effect. Credentialed/private MCP
 endpoints, standing authorization, freshness and full producer coverage remain
 unsupported or unknown. The slot
 remains partial. Support360 `sla` now joins an operator-registered source policy revision
-to an exact case timer and target. Breach evaluation, historical applicability,
-source completeness, and freshness remain partial.
+to an exact case timer and target. `active_elapsed_v1` compares explicit complete
+start/pause/resume/stop sequences with that target, excluding pauses and retaining
+sequence evidence. This is locally measured timer semantics, not an authenticated
+upstream breach. Historical applicability, source completeness, and freshness
+remain unknown.
+Support-owned required slots select isolated `support_<slot_id>` sections after
+frame policy, preserving structured bounded observations without reading denied
+sibling authorities. Lifecycle scope and case message provider identity are
+revalidated. Risk keeps its independent Risk360 binding; ticket/conversation case
+joins, upstream history completeness, and independent business outcomes remain
+unsupported.
 Campaign360 `cohorts_syndicates` can join an explicit campaign population link
 to a current exact cluster definition and consent-scoped cluster or cohort
 memberships backed by graph-ledger replay. A policy-authorized bounded graph

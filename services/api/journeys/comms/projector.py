@@ -277,6 +277,7 @@ class CommsProjector(BaseProjector):
             "external_flow_id": _p(props, "external_flow_id"),
             "external_message_id": _p(props, "external_message_id"),
             "external_thread_id": _p(props, "external_thread_id"),
+            "reply_to_external_message_id": _p(props, "reply_to_external_message_id"),
             "external_template_id": _p(props, "external_template_id"),
             "sequence_step": _int(_p(props, "sequence_step")),
             "variant_id": _p(props, "variant_id"),

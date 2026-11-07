@@ -96,6 +96,8 @@ from shared.intelligence_projections.registry import ProviderRegistry
 
 # Reused canonical primitives (never redefined here).
 from journeys.communication360.contracts import CommunicationMessage
+from journeys.communication360.composition import compose_threads, event_time, read_reply_target
+from journeys.communication360.membership import compose_memberships, membership_scope, valid_membership
 from journeys.communication360.delegation_join import (
     AuthorDelegationRead,
     DelegationLookup,
@@ -126,8 +128,19 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 )
 
 # Subject kinds communication360 serves (registry subjectKinds).
+DOMAIN_SECTIONS = frozenset({
+    "thread_summary", "message_inventory", "participants", "campaign_links",
+    "profile_links", "journey_links", "response_events", "agent_authorship",
+    "policy_state", "risk_flags", "evidence_trace",
+})
+
+
+def _section_read_allowed(request: ProjectionRequest, section: str) -> bool:
+    return request.includeSections is None or section in request.includeSections
+
+
 _SCOPED_SUBJECT_KINDS: frozenset[str] = frozenset(
-    {"agent", "campaign", "entity", "episode", "journey", "source"}
+    {"agent", "campaign", "entity", "episode", "journey", "source", "message", "thread", "profile"}
 )
 
 # Typed degraded-reason codes surfaced on ``result.degradedReasons`` (short
@@ -189,6 +202,7 @@ _KINDS_INTERACTIONS = frozenset(
         "communication_act",
         "participant_binding",
         "conversation",
+        "conversation_membership",
         "provider_thread",
         "matter",
         "request",
@@ -249,6 +263,7 @@ class _Scope:
     bindable: bool = True
     canonical_fact_bindable: bool = True
     note: Optional[str] = None
+    message_fact_ids: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -283,6 +298,9 @@ class ResponseEventRead:
     state: str
     reason: str
     evidence: tuple[EvidenceRef, ...] = ()
+    response_to_message_id: Optional[str] = None
+    association_state: str = "unknown"
+    association_reason: str = "provider_reply_reference_missing"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -290,7 +308,9 @@ class ResponseEventRead:
             "messageId": self.message_id,
             "state": self.state,
             "reason": self.reason,
-            "responseToMessageId": None,
+            "responseToMessageId": self.response_to_message_id,
+            "replyAssociationState": self.association_state,
+            "replyAssociationReason": self.association_reason,
             "causalStatus": "unverified",
             "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True) for ref in self.evidence],
         }
@@ -728,12 +748,12 @@ def _resolve_scope(request: ProjectionRequest) -> _Scope:
             participant_entity_id=request.subject.id,
             participant_identity_ids=(request.subject.id,),
         )
-    if kind in {"episode", "journey", "source"}:
+    if kind in {"episode", "journey", "source", "message", "thread"}:
         return _Scope(
             kind=kind,
             id=request.subject.id,
             bindable=False,
-            note=_SCOPE_NOTES[kind],
+            note=_SCOPE_NOTES.get(kind, "exact_canonical_communication_reference_required"),
         )
     # source (and any future unbound kind) — honest, no Phase-4 binding.
     note = _SCOPE_NOTES.get(kind)
@@ -798,7 +818,9 @@ def _row_matches_scope(
         "campaign": {"campaign_id", "campaign_ids"},
         "episode": {"episode_id", "episode_ids"},
         "journey": {"journey_id", "journey_ids"},
-        "source": {"source_id", "source_namespace", "provider_id"},
+        "source": {"source_id", "source_ids", "source_namespace", "provider_id"},
+        "message": {"message_id", "message_ids"},
+        "thread": {"conversation_id", "conversation_ids", "canonical_conversation_id"},
     }.get(scope.kind, set())
     reference_ids = (
         scope.participant_identity_ids if scope.kind in {"agent", "entity"} else (scope.id,)
@@ -859,6 +881,8 @@ def _has_exact_entity_binding(
 
 
 def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool:
+    if scope.message_fact_ids:
+        return bool(message.fact_id and message.fact_id in scope.message_fact_ids)
     if scope.kind == "campaign":
         return str(message.campaign_id or "") == scope.id
     if scope.kind == "agent":
@@ -888,7 +912,7 @@ def _projection_requests_noncurrent_scope(request: ProjectionRequest) -> bool:
     return bool(
         request.asOf is not None
         or request.timeRange is not None
-        or request.temporalMode in {"window", "as_of", "compare", "relative"}
+        or request.temporalMode in {"as_of", "compare", "relative"}
     )
 
 
@@ -921,7 +945,7 @@ def _communication_slot_ids(
                     continue
                 if subject_kind not in binding.get("subjectKinds", []):
                     continue
-                if not set(binding.get("sectionIds", [])).intersection(section_ids):
+                if not set(binding.get("sectionIds", [])).intersection(section_ids | {slot_id}):
                     continue
                 result.add(slot_id)
     return sorted(result)
@@ -1101,6 +1125,11 @@ def _communication_required_slot_coverage(
         if isinstance(ref, EvidenceRef)
     ]
     thread_refs = _dedupe_refs([*conversation_refs, *thread_message_refs])
+    thread_composition = compose_memberships(
+        request.tenantId, compose_threads(
+            request.tenantId, messages, truncated=silver_truncated or not silver_up or canonical_truncated
+        ), [] if _projection_requests_noncurrent_scope(request) else fact_rows,
+    )
 
     participant_rows = [row for row in fact_rows if row.get("kind") == "participant_binding"]
     participant_refs = _dedupe_refs(
@@ -1183,7 +1212,12 @@ def _communication_required_slot_coverage(
         ]
         author_refs = _dedupe_refs([*author_refs, *agent_message_refs])
 
-    if conversation_refs:
+    if thread_composition["membershipCoverage"] == "bounded_complete":
+        thread_slot = slot(
+            "available", "complete", "bounded_messages_joined_to_explicit_canonical_conversation_memberships",
+            thread_refs,
+        )
+    elif conversation_refs:
         thread_slot = slot(
             "degraded",
             "partial",
@@ -1199,6 +1233,7 @@ def _communication_required_slot_coverage(
         )
     else:
         thread_slot = slot("unknown", "unknown", "canonical_conversation_thread_join_unavailable")
+    thread_slot["composition"] = thread_composition
 
     if messages_complete:
         message_slot = slot(
@@ -1248,7 +1283,34 @@ def _communication_required_slot_coverage(
         or _payload_of(row).get("roster_expected_binding_count")
         != _payload_of(row).get("roster_binding_count")
     ]
-    if participant_evidence and source_complete_rosters:
+    bound_scopes = {
+        membership_scope(row): row for row in fact_rows
+        if valid_membership(row, request.tenantId)
+    }
+    roster_groups: dict[tuple[str, str, str], dict[str, list[dict[str, Any]]]] = {}
+    for row in trusted_roster_rows:
+        payload = _payload_of(row)
+        provider_scope = (payload.get("provider"), payload.get("provider_account_id"), payload.get("provider_conversation_id"))
+        membership = bound_scopes.get(provider_scope)
+        if membership and payload.get("membership_fact_id") == membership.get("fact_id") and (
+            payload.get("canonical_conversation_id") == _payload_of(membership).get("conversation_id")
+        ):
+            roster_groups.setdefault(provider_scope, {}).setdefault(payload["roster_id"], []).append(row)
+    from journeys.communication360.membership import complete_latest_roster
+
+    roster_complete = (
+        bool(bound_scopes) and canonical_complete
+        and len(trusted_roster_rows) == len(participant_rows)
+    ) and all(
+        complete_latest_roster(roster_groups.get(provider_scope, {}))
+        for provider_scope in bound_scopes
+    )
+    if roster_complete and thread_composition["membershipCoverage"] == "bounded_complete":
+        participant_slot = slot(
+            "available", "complete", "explicit_complete_rosters_joined_to_canonical_conversations_within_bounded_read",
+            participant_refs,
+        )
+    elif participant_evidence and source_complete_rosters:
         participant_slot = slot(
             "degraded",
             "partial",
@@ -1297,15 +1359,48 @@ def _communication_required_slot_coverage(
         journey_links.reason,
         list(journey_links.evidence_refs),
     )
+    journey_slot["links"] = [
+        {
+            "journeyId": journey_id,
+            "communicationEvidenceRef": fact_ref.model_dump(mode="json", exclude_none=True),
+            "currentVersionEvidenceRef": version_ref.model_dump(mode="json", exclude_none=True),
+            "relationshipState": "explicit_reference_resolved",
+        }
+        for journey_id, fact_ref, version_ref in journey_links.links
+    ]
+    campaign_slot["links"] = [
+        {
+            "campaignId": campaign_id,
+            "communicationFactId": row.get("fact_id"),
+            "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True)],
+            "relationshipState": "explicit_reference_observed",
+        }
+        for row in campaign_rows
+        if (ref := _row_evidence(row)) is not None
+        for campaign_id in _row_reference_values(row, "campaign_id", "campaign_ids")
+    ] + [
+        {
+            "campaignId": message.campaign_id,
+            "messageId": message.message_id,
+            "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True)
+                             for ref in message.evidence_refs],
+            "relationshipState": "explicit_reference_observed",
+        }
+        for message in messages if message.campaign_id
+    ]
 
     linked_response_refs = _dedupe_refs(
-        [ref for link in response_links if link.state == "linked" for ref in link.evidence]
+        [
+            ref for link in response_links
+            if link.state == "linked" or link.response_to_message_id
+            for ref in link.evidence
+        ]
     )
     if linked_response_refs:
         response_slot = slot(
             "degraded",
             "partial",
-            "response_acts_join_exact_messages_and_senders_but_reply_targets_and_inventory_are_unknown",
+            "bounded_response_message_sender_and_explicit_reply_associations_observed_inventory_unknown",
             linked_response_refs,
         )
     elif response_refs:
@@ -1677,12 +1772,13 @@ def _row_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
     )
 
 
-def _response_event_links(
+async def _response_event_links(
     *,
     request: ProjectionRequest,
     scope: _Scope,
     messages: list[CommunicationMessage],
     rows: list[dict[str, Any]],
+    source: CommunicationSource,
 ) -> tuple[list[ResponseEventRead], bool]:
     """Join a response-like act only to its exact identity-bound message."""
     response_rows = [
@@ -1737,6 +1833,16 @@ def _response_event_links(
                 if message.sender_identity_evidence_ref is not None else []
             ),
         ])
+        target_id = message.reply_to_external_message_id
+        target_message: Optional[CommunicationMessage] = None
+        association_state = "unknown"
+        target_reason = "provider_reply_reference_missing"
+        target_refs: list[EvidenceRef] = []
+        if target_id:
+            target_message, target_reason = await read_reply_target(message, source)
+            if target_message is not None:
+                association_state = "provider_reported_reply_association"
+                target_refs = list(target_message.evidence_refs)
         links.append(
             ResponseEventRead(
                 fact_ref.id,
@@ -1744,9 +1850,40 @@ def _response_event_links(
                 "linked" if actor_bound else "unknown",
                 "response_act_exact_message_and_sender_identity_joined"
                 if actor_bound else "response_actor_or_sender_identity_unverified",
-                tuple(refs),
+                tuple(_dedupe_refs([*refs, *target_refs])),
+                response_to_message_id=target_message.message_id if target_message else None,
+                association_state=association_state,
+                association_reason=target_reason,
             )
         )
+    represented = {link.message_id for link in links}
+    observed_replies = [
+        message for message in messages
+        if message.tenant_id == request.tenantId
+        and message.reply_to_external_message_id
+        and message.message_id not in represented
+        and message.fact_id
+        and message.evidence_refs
+    ]
+    remaining = max(0, _MAX_RESPONSE_EVENT_LINKS - len(links))
+    truncated = truncated or len(observed_replies) > remaining
+    for message in observed_replies[:remaining]:
+        target, reason = await read_reply_target(message, source)
+        links.append(ResponseEventRead(
+            fact_id=message.fact_id,
+            message_id=message.message_id,
+            state="observed",
+            reason="durable_silver_provider_reply_reference_observed_actor_unverified",
+            evidence=tuple(_dedupe_refs([
+                *message.evidence_refs,
+                *(target.evidence_refs if target is not None else []),
+            ])),
+            response_to_message_id=target.message_id if target is not None else None,
+            association_state=(
+                "provider_reported_reply_association" if target is not None else "unknown"
+            ),
+            association_reason=reason,
+        ))
     return links, truncated
 
 
@@ -2166,9 +2303,36 @@ class Communication360Provider:
                     note=identity.reason or "entity_identity_unresolved",
                 )
 
+        if request.subject.kind == "profile":
+            try:
+                profile = (
+                    await self._profile_links.resolve(tenant_id, request.subject.id)
+                    if not _projection_requests_noncurrent_scope(request) else None
+                )
+                resolved = (
+                    not _projection_requests_noncurrent_scope(request)
+                    and profile is not None
+                    and profile.state == "resolved" and profile.profile_id == request.subject.id
+                    and profile.canonical_entity_id == request.subject.id
+                    and any(ref.id == request.subject.id and ref.source == "entity_registry"
+                            for ref in profile.evidence)
+                )
+            except Exception:
+                resolved = False
+                profile = None
+            scope = _Scope(
+                kind="entity", id=request.subject.id,
+                participant_entity_id=request.subject.id if resolved else None,
+                participant_identity_ids=(request.subject.id,) if resolved else (),
+                identity_resolution_state="resolved" if resolved else "unknown",
+                identity_evidence=profile.evidence if resolved else (),
+                bindable=resolved, canonical_fact_bindable=resolved,
+                note=None if resolved else "profile_canonical_identity_not_resolved_for_requested_time",
+            )
+
         # Read the canonical fact store once (scope-matched below by family).
         identity_readable = (
-            request.subject.kind not in {"agent", "entity"}
+            request.subject.kind not in {"agent", "entity", "profile"}
             or scope.identity_resolution_state == "resolved"
         )
         canonical_up, canonical_rows, canonical_truncated = (
@@ -2177,21 +2341,14 @@ class Communication360Provider:
             else (True, [], False)
         )
         in_scope_rows = [r for r in canonical_rows if _row_matches_scope(r, tenant_id, scope)]
-        journey_links = await self._read_journey_links(
-            tenant_id,
-            in_scope_rows,
-            noncurrent_scope=_projection_requests_noncurrent_scope(request),
-            canonical_up=canonical_up,
-            canonical_truncated=canonical_truncated,
-        )
-        profile_links = await self._read_profile_links(
-            tenant_id,
-            in_scope_rows,
-            noncurrent_scope=_projection_requests_noncurrent_scope(request),
-            canonical_up=canonical_up,
-            canonical_truncated=canonical_truncated,
-        )
-
+        if scope.canonical_fact_bindable and canonical_up and not canonical_truncated:
+            context_up, context_rows, context_truncated = await self._read_conversation_context(
+                tenant_id, [], in_scope_rows, limit=_MAX_READ_LIMIT,
+            )
+            canonical_up = canonical_up and context_up
+            canonical_truncated = canonical_truncated or context_truncated
+            if context_up and not context_truncated:
+                in_scope_rows = context_rows
         # Read the message spine only when the subject binds to it.
         messages: list[CommunicationMessage] = []
         silver_up = True
@@ -2205,13 +2362,58 @@ class Communication360Provider:
                 for m in messages
                 if str(m.tenant_id) == tenant_id and _message_matches_scope(m, scope)
             ]
+        if not messages and scope.canonical_fact_bindable and canonical_up and not canonical_truncated:
+            linked_rows = [
+                row for row in in_scope_rows
+                if row.get("kind") == "provider_thread"
+                and _payload_of(row).get("producer") == "silver_comms_observation_writer.v1"
+            ]
+            if linked_rows:
+                silver_up, messages, silver_truncated = await self._read_linked_messages(
+                    tenant_id, linked_rows, limit=read_limit,
+                )
+                scope = replace(
+                    scope,
+                    bindable=True,
+                    message_fact_ids=tuple(message.fact_id for message in messages if message.fact_id),
+                    note="exact_durable_provider_thread_message_references_only_history_unknown",
+                )
 
-        response_links, response_links_truncated = _response_event_links(
+        if messages and canonical_up and not canonical_truncated:
+            context_up, context_rows, context_truncated = await self._read_conversation_context(
+                tenant_id, messages, in_scope_rows, limit=_MAX_READ_LIMIT,
+            )
+            if context_up and not context_truncated:
+                in_scope_rows = context_rows
+            else:
+                canonical_up = context_up
+                canonical_truncated = context_truncated
+                in_scope_rows = [row for row in in_scope_rows if row.get("kind") not in {
+                    "conversation", "conversation_membership", "participant_binding",
+                }]
+
+        journey_links = await self._read_journey_links(
+            tenant_id, in_scope_rows,
+            noncurrent_scope=_projection_requests_noncurrent_scope(request),
+            canonical_up=canonical_up, canonical_truncated=canonical_truncated,
+        ) if _section_read_allowed(request, "journey_links") else JourneyLinkRead(
+            "unknown", "slot_not_authorized_for_read",
+        )
+        profile_links = await self._read_profile_links(
+            tenant_id, in_scope_rows,
+            noncurrent_scope=_projection_requests_noncurrent_scope(request),
+            canonical_up=canonical_up, canonical_truncated=canonical_truncated,
+        ) if _section_read_allowed(request, "profile_links") else ProfileLinksRead(
+            "unknown", "slot_not_authorized_for_read",
+        )
+
+        response_links, response_links_truncated = await _response_event_links(
             request=request,
             scope=scope,
             messages=messages,
             rows=in_scope_rows,
-        )
+            source=self._silver,
+        ) if _section_read_allowed(request, "response_events") else ([], False)
 
         policy_state = await self._read_policy_state(
             request,
@@ -2219,6 +2421,8 @@ class Communication360Provider:
             scope=scope,
             silver_up=silver_up,
             silver_truncated=silver_truncated,
+        ) if _section_read_allowed(request, "policy_state") else ConsentPolicyRead(
+            "unknown", {"state": "unknown", "reason": "slot_not_authorized_for_read", "evidenceRefs": []},
         )
         risk_flags = await self._read_risk_flags(
             request,
@@ -2226,28 +2430,30 @@ class Communication360Provider:
             messages=messages,
             silver_up=silver_up,
             silver_truncated=silver_truncated,
+        ) if _section_read_allowed(request, "risk_flags") else RiskFlagRead(
+            "unknown", "slot_not_authorized_for_read",
         )
         author_delegations: list[AuthorDelegationRead] = []
         author_delegations_truncated = False
         if (
-            not _projection_requests_noncurrent_scope(request)
-            and request.subject.kind == "agent"
-            and scope.identity_resolution_state == "resolved"
-            and scope.participant_entity_id
+            _section_read_allowed(request, "agent_authorship")
+            and not _projection_requests_noncurrent_scope(request)
             and canonical_up
+            and not canonical_truncated
         ):
-            author_delegations, author_delegations_truncated = await read_author_delegations(
-                tenant_id=tenant_id,
-                agent_entity_id=scope.participant_entity_id,
-                rows=[
-                    row
-                    for row in in_scope_rows
-                    if _agent_author_binding_evidence(
-                        row, canonical_agent_id=scope.participant_entity_id
+            author_rows = [row for row in in_scope_rows if _agent_author_binding_evidence(
+                row, canonical_agent_id=scope.participant_entity_id if scope.kind == "agent" else None,
+            )]
+            if len(author_rows) > 50:
+                author_delegations_truncated = True
+            else:
+                for agent_id in sorted({_payload_of(row)["entity_id"] for row in author_rows}):
+                    reads, truncated = await read_author_delegations(
+                        tenant_id=tenant_id, agent_entity_id=agent_id,
+                        rows=author_rows, repository=self._delegations,
                     )
-                ],
-                repository=self._delegations,
-            )
+                    author_delegations.extend(reads)
+                    author_delegations_truncated = author_delegations_truncated or truncated
 
         degraded_reasons: list[str] = []
         if not silver_up:
@@ -2332,6 +2538,35 @@ class Communication360Provider:
         claims.extend(self._risk_flag_claims(request, risk_flags))
         claims.extend(self._author_delegation_claims(request, scope, in_scope_rows, author_delegations))
         claims.extend(self._response_event_claims(request, response_links))
+        requested_domains = set(request.includeSections or []) & DOMAIN_SECTIONS
+        if requested_domains:
+            coverage = sections[0].content["requiredSlotCoverage"]
+            domain_sections = []
+            for section_id in sorted(requested_domains):
+                content = dict(coverage[section_id])
+                if section_id == "message_inventory":
+                    content["messages"] = [self._message_entry(message) for message in messages]
+                elif section_id == "participants":
+                    content["participants"] = [
+                        self._interaction_row(row) for row in in_scope_rows
+                        if row.get("kind") == "participant_binding"
+                        and _trusted_participant_source_evidence(row)
+                    ]
+                observed = bool(content.get("evidenceRefs")) and content["state"] not in {
+                    "unknown", "suppressed",
+                }
+                domain_sections.append(ProjectionSection(
+                    id=section_id,
+                    state="available" if observed else content["state"],
+                    content={"scope": "bounded_current_store_observations", **content},
+                    warnings=[content["reason"]] if content.get("reason") else [],
+                ))
+            sections = [section for section in sections if section.id in request.includeSections]
+            sections.extend(domain_sections)
+            claims = [claim for claim in claims if set(claim.domainSlotIds or []) & requested_domains]
+            claims = [claim.model_copy(update={
+                "domainSlotIds": sorted(set(claim.domainSlotIds or []) & requested_domains),
+            }) for claim in claims]
         if (
             request.subject.kind in {"agent", "entity"}
             and scope.identity_resolution_state != "resolved"
@@ -2811,7 +3046,7 @@ class Communication360Provider:
                 ]
             )
         elif (
-            subject.kind == "entity"
+            subject.kind in {"entity", "profile"}
             and scope.identity_resolution_state == "resolved"
             and scope.participant_entity_id == subject.id
         ):
@@ -3619,16 +3854,169 @@ class Communication360Provider:
         except Exception:  # noqa: BLE001 - backing unavailable -> degrade
             return False, [], False
 
+    async def _read_linked_messages(
+        self, tenant_id: str, rows: list[dict[str, Any]], *, limit: int,
+    ) -> tuple[bool, list[CommunicationMessage], bool]:
+        expected = set()
+        for row in rows:
+            payload = _payload_of(row)
+            references = payload.get("message_ids")
+            fact_id = payload.get("silver_fact_id")
+            if (
+                not isinstance(references, list) or len(references) != 1
+                or not isinstance(references[0], str) or not references[0]
+                or not isinstance(fact_id, str) or not fact_id
+                or (references[0], fact_id) in expected
+            ):
+                return True, [], True
+            expected.add((references[0], fact_id))
+        message_ids = list(dict.fromkeys(reference[0] for reference in sorted(expected)))
+        if not message_ids or len(expected) > limit:
+            return True, [], True
+        try:
+            messages, complete = await self._silver.messages_by_ids(
+                tenant_id, message_ids, limit=limit,
+            )
+        except Exception:
+            return False, [], False
+        if complete is not True or not isinstance(messages, list) or len(messages) > limit:
+            return True, [], True
+        selected: list[CommunicationMessage] = []
+        for message in messages:
+            if not isinstance(message, CommunicationMessage) or message.tenant_id != tenant_id:
+                return True, [], True
+            matching = []
+            for row in rows:
+                payload = _payload_of(row)
+                if (
+                    row.get("tenant_id") == tenant_id
+                    and payload.get("tenant_id") == tenant_id
+                    and payload.get("message_ids") == [message.message_id]
+                    and payload.get("silver_fact_id") == message.fact_id
+                    and payload.get("provider") == message.provider
+                    and payload.get("provider_account_id") == message.provider_account_id
+                    and payload.get("external_thread_id") == message.external_thread_id
+                    and payload.get("external_message_id") == message.external_message_id
+                    and event_time(payload.get("message_occurred_at")) is not None
+                    and event_time(payload.get("message_occurred_at")) == event_time(message.occurred_at)
+                    and event_time(str(row.get("occurred_at") or "")) == event_time(message.occurred_at)
+                    and message.evidence_refs
+                    and all((message.provider, message.provider_account_id, message.external_thread_id))
+                ):
+                    matching.append(row)
+            if len(matching) != 1:
+                return True, [], True
+            selected.append(message)
+        if {(message.message_id, message.fact_id) for message in selected} != expected or len(selected) != len(expected):
+            return True, [], True
+        return True, selected, False
+
     async def _read_canonical_rows(
         self, tenant_id: str, scope: _Scope, *, limit: int
     ) -> tuple[bool, list[dict[str, Any]], bool]:
         """Canonical fact rows for the tenant; (up, rows, truncated). Never raises."""
         try:
+            if callable(getattr(self._canonical, "subject_facts", None)) and scope.kind in {
+                "agent", "entity", "campaign", "episode", "journey", "source", "message", "thread",
+            }:
+                rows, complete = await self._canonical.subject_facts(
+                    tenant_id, scope.kind, scope.id, limit=limit,
+                )
+                if complete is not True or not isinstance(rows, list) or len(rows) > limit:
+                    return True, [], True
+                if any(not isinstance(row, dict) or not _row_matches_scope(row, tenant_id, scope)
+                       for row in rows):
+                    return True, [], True
+                return True, rows, False
+            if scope.kind == "source" and callable(getattr(self._canonical, "source_facts", None)):
+                rows, complete = await self._canonical.source_facts(tenant_id, scope.id, limit=limit)
+                if complete is not True or not isinstance(rows, list) or len(rows) > limit:
+                    return True, [], True
+                if any(
+                    not isinstance(row, dict) or not _row_matches_scope(row, tenant_id, scope)
+                    for row in rows
+                ):
+                    return True, [], True
+                return True, rows, False
             rows = await self._canonical.facts(tenant_id, limit=limit + 1)
             selected = [r for r in rows if isinstance(r, dict)]
             return True, selected[:limit], len(selected) > limit
         except Exception:  # noqa: BLE001 - backing unavailable -> degrade
             return False, [], False
+
+    async def _read_conversation_context(
+        self, tenant_id: str, messages: list[CommunicationMessage],
+        rows: list[dict[str, Any]], *, limit: int,
+    ) -> tuple[bool, list[dict[str, Any]], bool]:
+        reader = getattr(self._canonical, "conversation_context", None)
+        if not callable(reader):
+            return True, rows, False
+        scopes = {
+            (message.provider, message.provider_account_id, message.external_thread_id)
+            for message in messages
+            if message.tenant_id == tenant_id and all((
+                message.provider, message.provider_account_id, message.external_thread_id,
+            ))
+        }
+        scopes.update(membership_scope(row) for row in rows if valid_membership(row, tenant_id))
+        scopes.update(
+            (_payload_of(row)["provider"], _payload_of(row)["provider_account_id"],
+             _payload_of(row)["provider_conversation_id"])
+            for row in rows if row.get("kind") == "participant_binding"
+            and _trusted_participant_source_evidence(row)
+            and _payload_of(row).get("membership_fact_id")
+        )
+        if not scopes:
+            return True, rows, False
+        if len(scopes) > 50:
+            return True, [], True
+        try:
+            linked, complete = await reader(tenant_id, sorted(scopes), limit=limit)
+        except Exception:
+            return False, [], False
+        if complete is not True or not isinstance(linked, list) or len(linked) > limit:
+            return True, [], True
+        if any(not isinstance(row, dict) or not isinstance(row.get("fact_id"), str)
+               or not row["fact_id"] for row in linked) or len({
+                   row["fact_id"] for row in linked
+               }) != len(linked):
+            return True, [], True
+        memberships = []
+        conversation_ids = set()
+        for row in linked:
+            if not isinstance(row, dict) or row.get("tenant_id") != tenant_id:
+                return True, [], True
+            payload = _payload_of(row)
+            kind = row.get("kind")
+            if kind == "conversation_membership":
+                if not valid_membership(row, tenant_id) or membership_scope(row) not in scopes:
+                    return True, [], True
+                memberships.append(row)
+                conversation_ids.add(payload["conversation_id"])
+            elif kind in {"provider_thread", "participant_binding"}:
+                provider_scope = (payload.get("provider"), payload.get("provider_account_id"),
+                                  payload.get("provider_conversation_id") if kind == "participant_binding"
+                                  else payload.get("external_thread_id"))
+                if provider_scope not in scopes:
+                    return True, [], True
+            elif kind != "conversation":
+                return True, [], True
+        if len({membership_scope(row) for row in memberships}) != len(memberships):
+            return True, [], True
+        from journeys.communication360.membership import valid_conversation
+
+        conversations = [row for row in linked if row.get("kind") == "conversation"]
+        if (len(conversations) != len(conversation_ids) or {
+            _payload_of(row).get("conversation_id") for row in conversations
+        } != conversation_ids) or any(
+            not valid_conversation(row, tenant_id) for row in conversations
+        ):
+            return True, [], True
+        selected = {row.get("fact_id"): row for row in rows}
+        for row in linked:
+            if row.get("kind") != "provider_thread" or not messages:
+                selected[row.get("fact_id")] = row
+        return True, list(selected.values()), False
 
     # ── Section builders ───────────────────────────────────────────────────
 
@@ -4460,7 +4848,7 @@ class Communication360Provider:
         links: list[ResponseEventRead],
     ) -> list[ClaimEnvelope]:
         subject = ProjectionSubject(kind=request.subject.kind, id=request.subject.id)
-        return [
+        claims = [
             ClaimEnvelope(
                 id=f"communication_response_link.{link.fact_id}",
                 kind="communication_response_message_observation",
@@ -4468,7 +4856,13 @@ class Communication360Provider:
                 evidenceRefs=list(link.evidence),
                 claims=[
                     f"response-like communication act {link.fact_id} references exact message {link.message_id}",
-                    "the message replied to and causal response outcome are not established",
+                    (
+                        f"provider explicitly associated the reply with target message "
+                        f"{link.response_to_message_id}"
+                        if link.response_to_message_id
+                        else "no exact provider reply target was verified"
+                    ),
+                    "causal response outcome, completeness, identity, and authority are not established",
                 ],
                 confidence=1.0,
                 claimState=EpistemicStatus.OBSERVED,
@@ -4477,6 +4871,25 @@ class Communication360Provider:
             for link in links
             if link.state == "linked" and link.message_id and link.evidence
         ]
+        claims.extend(
+            ClaimEnvelope(
+                id=f"communication_reply_target.{link.fact_id}",
+                kind="provider_reported_reply_association",
+                subject=subject,
+                evidenceRefs=list(link.evidence),
+                claims=[
+                    f"provider-reported reply reference associates message {link.message_id} "
+                    f"with exact target message {link.response_to_message_id}",
+                    "this association does not establish causal response outcome, completeness, identity, or authority",
+                ],
+                confidence=1.0,
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["response_events"],
+            )
+            for link in links
+            if link.response_to_message_id and link.message_id and link.evidence
+        )
+        return claims
 
     def _author_delegation_claims(
         self,

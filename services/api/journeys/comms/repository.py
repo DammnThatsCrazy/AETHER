@@ -131,6 +131,31 @@ _FACT_COLUMNS: tuple[str, ...] = (
 _JSON_COLUMNS = {"payload", "provenance"}
 
 
+_REPLY_TARGET_FACT_BOUND = 100
+_REPLY_TARGET_ORIGIN_STATES = frozenset({"sent", "received", "replied"})
+
+
+def _distinct_reply_targets(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Time-ordered facts -> one row per message claim; a repeated origin is its own claim."""
+    targets: list[dict[str, Any]] = []
+    seen_claims: set[tuple[Any, ...]] = set()
+    seen_origins: set[tuple[Any, ...]] = set()
+    for row in rows:
+        claim = (
+            row.get("message_id") or row.get("canonical_activity_key") or row.get("fact_id"),
+            row.get("direction"),
+            row.get("sender_identity_binding_id"),
+            row.get("sender_entity_id"),
+        )
+        origin = row.get("communication_state") in _REPLY_TARGET_ORIGIN_STATES
+        if claim not in seen_claims or (origin and claim in seen_origins):
+            targets.append(row)
+        seen_claims.add(claim)
+        if origin:
+            seen_origins.add(claim)
+    return targets
+
+
 class CommsFactsRepository:
     """Durable storage over silver_comms_facts."""
 
@@ -143,30 +168,118 @@ class CommsFactsRepository:
         """Insert or ignore on (tenant_id, idempotency_key) conflict — replay safe."""
         row.setdefault("fact_id", str(uuid4()))
         row.setdefault("received_at", datetime.now(timezone.utc).isoformat())
+        from journeys.communication360.observations import provider_thread_observation
+        from journeys.communication360.repository import Communication360FactsRepository
+
         key = f"{row.get('tenant_id')}:{row.get('idempotency_key')}"
 
         pool = await self._pool()
         if pool is None:
             # Idempotent local write — first write wins, mirroring DO NOTHING.
-            _local_facts.setdefault(key, row)
-            return _local_facts[key]
+            stored = _local_facts.get(key, row)
+            observation = provider_thread_observation(stored)
+            if observation is not None:
+                await Communication360FactsRepository().upsert_many([observation])
+            _local_facts.setdefault(key, stored)
+            return stored
 
         cols = [c for c in _FACT_COLUMNS if c in row]
         placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
         values = [
-            json.dumps(row[c]) if c in _JSON_COLUMNS and row[c] is not None else row[c]
+            json.dumps(row[c]) if c in _JSON_COLUMNS and row[c] is not None
+            else datetime.fromisoformat(row[c].replace("Z", "+00:00"))
+            if c in {"occurred_at", "received_at"} and isinstance(row[c], str)
+            else row[c]
             for c in cols
         ]
         async with pool.acquire() as conn:
-            await conn.execute(
-                f"""
-                INSERT INTO silver_comms_facts ({", ".join(cols)})
-                VALUES ({placeholders})
-                ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
-                """,
-                *values,
+            async with conn.transaction():
+                await conn.execute(
+                    f"""
+                    INSERT INTO silver_comms_facts ({", ".join(cols)})
+                    VALUES ({placeholders})
+                    ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+                    """,
+                    *values,
+                )
+                stored = await conn.fetchrow(
+                    "SELECT * FROM silver_comms_facts WHERE tenant_id = $1 AND idempotency_key = $2",
+                    row["tenant_id"], row["idempotency_key"],
+                )
+                if stored is None:
+                    raise RuntimeError("persisted communication fact could not be read")
+                stored = dict(stored)
+                observation = provider_thread_observation(stored)
+                if observation is not None:
+                    await Communication360FactsRepository().upsert_many(
+                        [observation], connection=conn,
+                    )
+        return stored
+
+    async def messages_by_ids(
+        self, tenant_id: str, message_ids: list[str], *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        cap = min(max(limit, 1), 500)
+        if not message_ids or len(message_ids) > 500:
+            return [], not message_ids
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row for row in _local_facts.values()
+                if row.get("tenant_id") == tenant_id and row.get("message_id") in message_ids
+            ]
+            rows.sort(key=lambda row: (str(row.get("occurred_at")), str(row.get("fact_id"))))
+            return rows[:cap], len(rows) <= cap
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                """SELECT * FROM silver_comms_facts
+                   WHERE tenant_id = $1 AND message_id = ANY($2::text[])
+                   ORDER BY occurred_at ASC, fact_id ASC LIMIT $3""",
+                tenant_id, message_ids, cap + 1,
             )
-        return row
+        return [dict(record) for record in records[:cap]], len(records) <= cap
+
+    async def reply_targets(
+        self, tenant_id: str, provider: str, provider_account_id: str,
+        external_thread_id: str, external_message_id: str, *, limit: int = 2,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Read exact provider reply targets, one earliest observation per message.
+
+        Consistent lifecycle facts of one message are not separate targets. Facts
+        conflicting on direction or sender, or repeating an origin state, stay
+        separate so the caller fails closed. A read over the fact bound is incomplete."""
+        if not all((tenant_id, provider, provider_account_id, external_thread_id, external_message_id)):
+            return [], True
+        cap = min(max(int(limit), 1), 2)
+
+        def matches(row: dict[str, Any]) -> bool:
+            return (
+                row.get("tenant_id") == tenant_id
+                and row.get("provider") == provider
+                and row.get("provider_account_id") == provider_account_id
+                and row.get("external_thread_id") == external_thread_id
+                and row.get("external_message_id") == external_message_id
+            )
+
+        pool = await self._pool()
+        if pool is None:
+            fetched = sorted(
+                (row for row in _local_facts.values() if matches(row)),
+                key=lambda row: (str(row.get("occurred_at")), str(row.get("fact_id"))),
+            )[:_REPLY_TARGET_FACT_BOUND + 1]
+        else:
+            async with pool.acquire() as conn:
+                records = await conn.fetch(
+                    """SELECT * FROM silver_comms_facts
+                       WHERE tenant_id = $1 AND provider = $2 AND provider_account_id = $3
+                         AND external_thread_id = $4 AND external_message_id = $5
+                       ORDER BY occurred_at ASC, fact_id ASC LIMIT $6""",
+                    tenant_id, provider, provider_account_id, external_thread_id,
+                    external_message_id, _REPLY_TARGET_FACT_BOUND + 1,
+                )
+            fetched = [dict(row) for row in records]
+        targets = _distinct_reply_targets(fetched[:_REPLY_TARGET_FACT_BOUND])
+        return targets[:cap], len(targets) <= cap and len(fetched) <= _REPLY_TARGET_FACT_BOUND
 
     # ── Read: Profile360 ─────────────────────────────────────────────────────
 

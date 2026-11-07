@@ -9670,6 +9670,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/reference/api/value360-model-evaluation.md",
+      "title": "Value360 Attribution Confidence Evaluation",
+      "slug": "api/value360-model-evaluation",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/reference/api/webhooks.md",
       "title": "Webhooks",
       "slug": "api/webhooks",

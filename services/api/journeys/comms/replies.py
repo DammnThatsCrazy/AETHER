@@ -130,6 +130,7 @@ def normalize_inbound_reply(
 
     properties: dict[str, Any] = {
         "provider": provider,
+        "provider_account_id": payload.get("provider_account_id"),
         "provider_event_id": provider_event_id,
         "channel": "email",
         "direction": "inbound",
@@ -137,10 +138,17 @@ def normalize_inbound_reply(
         "recipient_alias_id": alias.alias_hash,     # reply sender becomes the correlated party
         "recipient_display": alias.display,
         "recipient_is_shared_mailbox": alias.is_shared_mailbox,
-        "external_message_id": correlation.get("external_message_id"),
+        "external_message_id": _clean_message_id(
+            payload.get("message_id") or headers.get("Message-ID")
+        ),
+        "reply_to_external_message_id": (
+            correlation.get("external_message_id")
+            if correlation.get("method") == "in_reply_to"
+            else None
+        ),
+        "reply_correlation_method": correlation["method"],
         "external_thread_id": correlation.get("external_thread_id"),
         "automated_response_kind": automated_kind,
-        "reply_correlation_method": correlation["method"],
         "raw_evidence_ref": payload.get("raw_evidence_ref"),
     }
     return {

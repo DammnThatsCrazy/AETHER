@@ -94,3 +94,13 @@ async def drift_over_stored_windows(
                 "note": "drift needs at least two stored windows"}
     baseline, recent = rows[-2]["snapshot"], rows[-1]["snapshot"]
     return detect_drift(baseline, recent, config_changes)
+
+
+async def calibration_over_stored_windows(
+    repo: BehaviorSnapshotRepository, tenant_id: str, agent_ref: str,
+) -> dict[str, Any]:
+    """Forward-coverage diagnostic over this agent's stored windows (never calibration)."""
+    from intelligence.agent_behavior.calibration import forward_coverage
+
+    rows = await repo.windows(tenant_id, agent_ref)
+    return forward_coverage([[r["snapshot"] for r in rows]])

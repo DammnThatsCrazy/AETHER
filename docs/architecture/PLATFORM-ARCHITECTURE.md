@@ -71,11 +71,11 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:58c8f03edf57b75fd04844c38b490ad7ca43cbef91c859e1b40c9c54e1ac7215"
+  "packages/shared/": "sha256:08b3400bbce6779b9d6f8e66b444f6fb44c373954162079e04eda3c18c2bebf7"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
-  "services/api/actions/agent/agent360_provider.py": "sha256:951e8928e5f352e55612edad6b7c79c2faae10dacffa6b5ab1c5f2c048c0d0ff"
-  "services/api/actions/agent/deployment_routes.py": "sha256:66ca43046074af1fe520936680c0f5205eddf06f6f8c6937eca829acd3ae89c6"
-  "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
+  "services/api/actions/agent/agent360_provider.py": "sha256:3438710d537a48fe068478cfe3170255a9decfec1d81adecabeabd03b3766ec7"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
+  "services/api/actions/agent/execution360_provider.py": "sha256:c224bc3be2745382c4952d6fd43e2494302c027cb9829d454e73c34633aba000"
   "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
@@ -96,11 +96,11 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/provider.py": "sha256:4a6d24b8c9f765dc05801de7e93c0b83f75ef35ad220d06c884b917bd91a1601"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1a13db2aa5c5dea9cfbd9a27bc12e1d43198e49e8382c0fac127433303e814b0"
-  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/provider.py": "sha256:bedc278463eae8cb3d5c40078a659324dd50b8709f76887b95ad4e131c22b44d"
-  "services/api/journeys/support360/": "sha256:6b5da972c20e1b08f255ad5fa121385583326d0bb6cc4bab096bc9578b55333c"
+  "services/api/intelligence/risk360/provider.py": "sha256:aee0b1bff1e5640f03c052ef1755653f62ddd14324d618f7cf43b1fc6baa8fe0"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
+  "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
+  "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
@@ -111,7 +111,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
   "services/api/value/commerce/routes.py": "sha256:9b68c0d975d7b81b530ff8eb91e95ee6c37e10034498dbf248f1889f026c5897"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:ca72986e5834afba378916aff58e180cc08484d900acf1ebbd496b8cfed801d8"
+  "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/workers/runtime/specs.py": "sha256:440199aa711ba2c921b88bbd5df3a40659e05fafabba052149b4171acc68ac3e"
 ---
@@ -648,6 +648,13 @@ marked `source_aligned` for contract metadata and slot IDs. This is contract
 alignment only: it does not prove a complete provider path, evidence coverage,
 policy behavior, freshness, API reachability, or surface-level verification.
 
+Communications360 response events now preserve explicit `In-Reply-To` references
+and join a unique evidence-backed Silver target through bounded exact tenant,
+provider, account and thread reads. The target must not postdate the reply;
+invalid, self-referencing, mixed-scope, ambiguous or incomplete reads remain
+unknown. Provider-reported reply association is separate from sender identity,
+authority, causal outcome, complete history and freshness.
+
 Recent backend slices bind Account360 profiles through exact tenant membership
 and policy-scoped Profile360 reads, Campaign360 targeting-leakage findings,
 Journey360 explicit role markers, and Location360 source/evidence lineage.
@@ -696,7 +703,10 @@ independent outcomes-domain read authorization and exact prediction-ID and
 validity-window checks. Under the explicit `profile-state-adjudication.v1`
 contract, persisted predictions with exact adjudicated outcomes can also feed
 artifact-scoped evaluation and expose a bounded sample manifest and computed
-metrics. This does not establish universal accuracy, approved model
+metrics. The reader recomputes accuracy, Brier score, calibration error and
+reliability bins and rejects mismatched metrics, unsupported sample contracts
+or missing evaluator provenance. These supported paths bind `outcome_facts`
+and `model_governance` in the Profile slot. This does not establish universal accuracy, approved model
 applicability, or `modelCalibrationVerified`; that flag remains false. Current
 consent, historical identity, and complete outcome coverage remain unresolved.
 Account360's required `communications` slot now reads Communication360
@@ -712,6 +722,10 @@ application to realized value or ROI are unvalidated. Exact run/config
 lineage validation and a separately recorded tenant-admin approval or rejection
 may be exposed as governance evidence; neither establishes calibration or
 application to realized value or ROI.
+These exact approval and lineage joins bind the scoped model-governance
+reference. A separate bounded temporal credit eligibility evaluation rejoins
+canonical credit, conversion and touchpoint rows and preserves its manifest,
+actor and permission provenance. This metric is not confidence calibration.
 Value360's `financial_risk` slot now requires separate Economic360 and Risk360
 claims for the same tenant and exact subject. Economic evidence must be a
 direct subject-scoped fact, and Risk360 must provide an assessed economic,
@@ -836,6 +850,10 @@ malformed or padded grant and policy-decision identifiers. Its dedicated MCP
 resource-read route now records invocation-bound read receipts under an exact
 read grant; this establishes the bounded read attempt and result digest, while
 mutation authority and external effects remain unknown.
+Agent360 and Workflow360 bind the resources registry reference for this
+observed read path only. Resource inventory pagination is bounded; looping
+cursors, duplicate requested URIs and malformed or overflowing pages fail
+closed. Validated receipt scope and operation-time policy remain required.
 Workflow definition-to-run linkage, complete actor and step coverage, workflow-wide approval authority,
 policy, and freshness remain unknown. Account360 adds bounded member Risk360 frames from
 exact tenant-owned `MEMBER_OF` edges after account-slot and per-member policy
@@ -963,11 +981,39 @@ connection, and source case key. Message bodies and participant IDs stay
 suppressed, and source-history completeness and freshness remain unknown.
 Support360 can also join an operator-registered source SLA policy revision to
 an exact case timer with matching target, retaining contract evidence without
-inferring a breach or historical applicability. Value360 can include a
+inferring a breach or historical applicability. A versioned `active_elapsed_v1`
+calculation now compares complete explicit start/pause/resume/stop sequences
+with the registered target, excludes pauses, and retains sequence event IDs.
+This local measurement rejects future timestamps, mixed policy revisions,
+conflicting targets, ambiguous ordering, and incomplete reads; upstream
+authentication and historical applicability remain unknown.
+Support-owned required slots now select isolated `support_<slot_id>` sections
+after frame policy. Exact lifecycle scope is validated before secondary reads,
+and permitted resolution reads do not fetch denied sibling authorities. Risk
+retains its separate Risk360 binding. Ticket and conversation subjects now use
+authenticated immutable `support_case_subjects` mappings to the exact tenant,
+case, connection, provider account, and source subject before these nine slots
+can read case context. Journey-link ingestion produces an EpisodeRecord citing
+the exact persisted context event when episode production is enabled. Mapped
+Risk subjects now resolve in Risk360 through the persisted mapping, verified
+current connection, selected account and exact case before any Risk read, while
+retaining requested-subject claims and separate slot policy. Invalid mappings
+and incomplete signal reads withhold partial evidence. These paths do not prove upstream history,
+conversation-exclusive membership, freshness, or business outcomes.
+
+Value360 can include a
 persisted run/config lineage check and a separately recorded tenant-admin
 approval or rejection bound to that exact run, configuration, and validation
 decision. Current configuration rows are mutable; the human approval record
 does not establish model calibration.
+
+Execution360 `tool_calls` separately consumes bounded server-owned MCP invocation
+receipts for admitted executions, even when no `CALLED_TOOL` edge exists. The
+reader validates execution, agent, initiating principal, tool, resource, grant,
+operation-time policy and timestamps before exposing result status and canonical
+receipt evidence. Lifecycle edges remain observations; receipts do not establish
+external effects, mutations, historical policy replay, freshness or full producer
+coverage.
 
 Execution360 can also resolve an admitted external telemetry event to a unique
 same-tenant Bronze event and its recorded observation envelope. The join checks
@@ -1058,14 +1104,28 @@ still not canonical Conversation membership, and a provider delegation
 reference is not canonical authority. These paths remain partial and do not
 complete the 18 surfaces.
 
+The Silver communication writer now atomically records exact provider-thread
+observations alongside qualifying message facts. Communication360 composes only
+observed provider/account/thread groups; exact source-reference queries and
+bounded Silver rejoins expose source-linked message inventory. Durable replies
+can resolve explicit provider-reported targets without synthetic acts. Replay
+retains persisted scope, and ambiguous or incomplete joins withhold inventory.
+Explicit authenticated webhook membership now atomically persists canonical
+Conversation, provider/account/thread and participant-role joins. External thread
+IDs are not Conversation aliases. Eleven isolated product sections route exact
+message/thread/profile and explicit episode/journey reads without denied sibling
+reads; Risk remains limited to exact agent/source/profile subjects. Historical
+membership, upstream history, freshness, current authority and causal outcomes
+remain separate unknowns.
+
 The Communication360 Agent authorship slot now requires an exact canonical
 Agent entity in an author participant binding, the same tenant, explicit
 provider account and conversation IDs, a valid role window at the recorded
 event time, and both fact and trusted source-role evidence. A loose `agent_id`,
 principal reference, or event actor cannot establish the author. Noncurrent
 frames leave authorship unknown because participant-role history cannot be
-replayed yet. The signed roster remains a source assertion; canonical
-Conversation membership and complete author coverage are still missing.
+replayed yet. The signed roster remains a source assertion; explicit canonical
+Conversation membership is separate from complete author coverage.
 
 The next backend authority slice adds append-only, tenant-owned Workflow360
 definition revisions at `/v1/workflows/definitions`. Registration stamps the
@@ -1122,9 +1182,12 @@ remain partial projection paths.
 EpisodeEngine can persist a typed episode-to-semantic observation reference
 when its caller supplies both an exact observation ID and the semantic Silver
 authority marker. The link writer verifies tenant, namespace, status, time,
-and event evidence. The live semantic pipeline does not yet supply the
-episode association, so this producer seam does not establish complete
-Episode360 timelines or source coverage.
+and event evidence. The validated-event semantic consumer now forwards qualifying
+classified observations with a supported resolved subject type, authenticated
+source namespace, aware occurrence time, and evidence into tenant/subject-scoped
+`semantic_observation_stream` episodes. Unsupported or untyped observations are
+not linked. This live producer does not establish complete Episode360 timelines,
+source coverage, policy applicability, freshness, historical completeness, or continuity.
 
 Exploration surfaces compose over the engine through projection-backed surface adapters
 

@@ -500,6 +500,17 @@ async def test_support_case_and_callback_subjects_project_exact_schedule_executi
     assert callback_result.claims[0].subject.kind == "callback"
     assert "support_callback_source_history_coverage_unverified" in callback_result.degradedReasons
 
+    for scoped_request in (case_request, callback_request):
+        scoped_result = await provider.project(
+            scoped_request.model_copy(update={"includeSections": ["support_callbacks"]}),
+            _context(scoped_request),
+        )
+        assert [section.id for section in scoped_result.sections] == ["support_callbacks"]
+        assert scoped_result.sections[0].state == "available"
+        assert scoped_result.sections[0].content["callbacks"][0]["callbackId"] == callback["callback_id"]
+        assert scoped_result.sections[0].content["sourceHistoryComplete"] is False
+        assert scoped_result.claims
+
 
 @pytest.mark.asyncio
 async def test_callback_provider_scope_mismatch_returns_unknown_without_callback_values() -> None:

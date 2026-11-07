@@ -352,7 +352,10 @@ async def test_economic_campaign_claims_compose_into_campaign_performance_slot(
     assert {ref.id for ref in performance_slot.evidenceRefs} >= {"a_spend", "a_gross"}
 
 
-async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evidence() -> None:
+@pytest.mark.parametrize("evaluation_sources_valid", [True, False])
+async def test_value_attribution_credit_projects_only_rejoined_evaluation_evidence(
+    monkeypatch, evaluation_sources_valid: bool,
+) -> None:
     conversion_id = "00000000-0000-4000-8000-000000000101"
     run_id = "00000000-0000-4000-8000-000000000102"
     credit_id = "00000000-0000-4000-8000-000000000103"
@@ -381,6 +384,68 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
             ).model_dump(mode="json")
         ],
     )
+    from value.economic.attribution_model_validation import _decision_id_for_scope
+    from value.economic.attribution_model_validation import ValueModelApprovalRepository
+    from value.economic.value_confidence_evaluation import ValueConfidenceEvaluationRepository
+
+    config_id = "00000000-0000-4000-8000-000000000105"
+    config_hash = "a" * 64
+    decision_id = _decision_id_for_scope("tenant-a", run_id, config_id, config_hash)
+    validation_ref = {
+        "id": decision_id, "type": "model_output",
+        "source": "attribution_model_validation_decisions", "observedAt": None,
+        "confidence": None,
+        "uri": f"store://attribution_model_validation_decisions/{decision_id}",
+    }
+    evaluation_id = "vce_" + "e" * 32
+    evaluation_time = "2026-10-19T10:03:00+00:00"
+    evaluation_ref = {
+        "id": evaluation_id, "type": "model_output",
+        "source": "value_confidence_evaluations", "observedAt": evaluation_time,
+        "confidence": None, "uri": f"store://value_confidence_evaluations/{evaluation_id}",
+    }
+    approval_id = "vma_" + "f" * 32
+    approval_time = "2026-10-19T10:02:30+00:00"
+    approval_reason = "Reviewed the exact run and model configuration."
+    approval_ref = {
+        "id": approval_id, "type": "annotation", "source": "value_model_approval_decisions",
+        "observedAt": approval_time, "confidence": None,
+        "uri": f"store://value_model_approval_decisions/{approval_id}",
+    }
+
+    async def latest_for_run(_self, _tenant, _run):
+        return {
+            "tenant_id": "tenant-a", "attribution_run_id": run_id,
+            "model_config_id": config_id, "validation_decision_id": decision_id,
+            "evaluation_id": evaluation_id, "created_at": evaluation_time,
+            "contract_version": "value-credit-temporal-eligibility.v1",
+            "dataset_manifest_sha256": "b" * 64, "sample_count": 1, "eligible_count": 1,
+            "actor_id": "writer-1", "authorization_actor_id": "writer-1",
+            "authorization_action": "value.model_evaluation",
+            "authorization_permission": "write", "authorization_decision": "allow",
+            "authorization_evaluated_at": "2026-10-19T10:02:30+00:00",
+        }
+
+    async def source_join(_tenant, _row):
+        return evaluation_sources_valid
+
+    async def latest_approval(_self, _tenant, _run):
+        return {
+            "decision_id": approval_id, "tenant_id": "tenant-a", "attribution_run_id": run_id,
+            "model_config_id": config_id, "model_type": "last_touch", "model_version": "v3",
+            "validation_decision_id": decision_id, "decision": "approved",
+            "actor_id": "approver-1", "reason": approval_reason,
+            "authorization_action": "value.model_approval", "authorization_permission": "admin",
+            "authorization_decision": "allow", "authorization_actor_id": "approver-1",
+            "authorization_evaluated_at": "2026-10-19T10:02:29+00:00",
+            "created_at": approval_time,
+        }
+
+    monkeypatch.setattr(ValueConfidenceEvaluationRepository, "latest_for_run", latest_for_run)
+    monkeypatch.setattr(ValueModelApprovalRepository, "latest", latest_approval)
+    monkeypatch.setattr(
+        "value.economic.value_confidence_evaluation.verify_evaluation_sources", source_join
+    )
     attribution_reader = FakeAttributionCredits(
         {
             "tenantId": "tenant-a",
@@ -398,6 +463,15 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
                     "status": "complete",
                     "completedAt": "2026-10-19T10:02:00Z",
                     "modelConfidence": 0.91,
+                    "modelGovernance": {
+                        "state": "validated",
+                        "validationState": "exact_config_lineage_validated",
+                        "calibrationState": "unvalidated", "modelConfigId": config_id,
+                        "decisionId": decision_id, "configSnapshotSha256": config_hash,
+                        "evidenceRef": validation_ref,
+                        "approvalState": "approved", "approvalActorId": "approver-1",
+                        "approvalReason": approval_reason, "approvalEvidenceRef": approval_ref,
+                    },
                 }
             ],
             "records": [
@@ -460,20 +534,40 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
     assert attribution["records"][0]["touchpointJoin"]["state"] == "resolved"
     assert attribution["records"][0]["canonicalTouchpoint"]["touchpointId"] == touchpoint_id
     assert "attributedGrossRevenue" not in attribution["records"][0]
+    if evaluation_sources_valid:
+        assert attribution["runs"][0]["modelGovernance"].get("evaluationEvidence") is not None, attribution["runs"][0]["modelGovernance"]
+        projected_evaluation = attribution["runs"][0]["modelGovernance"]["evaluationEvidence"]
+        assert projected_evaluation["actorId"] == "writer-1"
+        assert projected_evaluation["authorization"] == {
+            "action": "value.model_evaluation", "permission": "write",
+            "decision": "allow", "actorId": "writer-1",
+            "evaluatedAt": "2026-10-19T10:02:30+00:00",
+        }
 
     claim = next(claim for claim in result.claims if claim.kind == "canonical_attribution_credit")
     assert claim.domainSlotIds == ["attribution_credits", "evidence_trace", "confidence"]
     assert claim.confidence == 0.91
-    assert {ref.source for ref in claim.evidenceRefs} == {
+    assert {
         "attribution_runs",
         "attribution_credits",
+        "attribution_model_validation_decisions",
         "canonical_conversions",
         touchpoint_source,
-    }
+    } <= {ref.source for ref in claim.evidenceRefs}
     assert "model-reported attribution confidence 0.910" in claim.claims[0]
     assert "calibration and applicability to realized value are not independently validated" in claim.claims[0]
     assert "attribution-model output" in claim.claims[0]
     assert "not independently measured realized value or agent ROI" in claim.claims[0]
+    assert "durable model approval approved by approver-1" in claim.claims[0]
+    assert "confidence calibration remains unvalidated" in claim.claims[0]
+    assert any(ref.source == "value_model_approval_decisions" for ref in claim.evidenceRefs)
+    evaluation_refs = [ref for ref in claim.evidenceRefs if ref.source == "value_confidence_evaluations"]
+    if evaluation_sources_valid:
+        assert [ref.model_dump(mode="json") for ref in evaluation_refs] == [evaluation_ref]
+        assert "bounded temporal eligibility evaluation" in claim.claims[0]
+    else:
+        assert evaluation_refs == []
+        assert "bounded temporal eligibility evaluation" not in claim.claims[0]
 
 
 @pytest.mark.parametrize(
@@ -727,6 +821,10 @@ async def test_value_confidence_reader_rejoins_exact_durable_approval(
             "model_type": "last_touch", "model_version": "v2",
             "validation_decision_id": validation_id, "decision": "approved",
             "actor_id": "admin-1", "reason": "Reviewed exact run evidence.",
+            "authorization_action": "value.model_approval",
+            "authorization_permission": "admin", "authorization_decision": "allow",
+            "authorization_actor_id": "admin-1",
+            "authorization_evaluated_at": "2026-10-29T09:59:59+00:00",
             "created_at": approval_time,
         }
 

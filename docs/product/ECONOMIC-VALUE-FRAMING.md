@@ -15,7 +15,7 @@ related:
   - concepts/kyber-economic-observability
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
-  "services/api/value/economic/routes.py": "sha256:ceff2b0583bf08e2603f6693b19d70979a435eaa4afd7567a77a074413a97167"
+  "services/api/value/economic/routes.py": "sha256:06f9a6abcc075c506423253e071386eedcc3a7cb88589752e4bfd3cf60235ec7"
 ---
 
 # Aether — Economic Value Framing

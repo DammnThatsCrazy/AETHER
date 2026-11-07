@@ -13,7 +13,7 @@ reviewed_source_commits:
 source_hashes:
   "services/api/ingestion/silver/dispatcher.py": "sha256:2d6b6441ecd52e2313d377bfed557ea955be035d1e4cede37e80200a80e1939c"
   "services/api/journeys/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
-  "services/api/journeys/comms/projector.py": "sha256:dca2f1d942cceba08f88a978da1d68cd914e65fbf8b93f99baef25567b69b4a0"
+  "services/api/journeys/comms/projector.py": "sha256:e6ebefb5b7e4926236a9b24bf032ae28a4144a895b319e527683757b45b2aef5"
 ---
 
 # Architecture Decision Records — Communications Intelligence
@@ -62,6 +62,13 @@ asserts no send-capable surface exists in `services/api/journeys/comms/`.
 
 **Canonical source of truth** remains `packages/shared/contracts/event-registry.json`;
 generated TS/Python artifacts are regenerated via `scripts/generate_contracts.py`.
+
+Explicit reply normalization keeps the reply's own provider message ID separate
+from its `In-Reply-To` target and persists target/method metadata in the Silver
+payload. Communication360 resolves only unique evidence-backed targets in the
+exact tenant/provider/account/thread scope, no later than the reply. This is a
+provider-reported association, not identity, authority, causal outcome or complete
+response history.
 
 **Enforcement.** `tests/unit/comms/test_comms_contracts.py` +
 `scripts/generate_contracts.py --check` in CI.

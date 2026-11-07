@@ -133,6 +133,8 @@
         "consent_policy_decisions",
         "identity_source_identities",
         "model_artifact_registry",
+        "model_governance",
+        "outcome_facts",
         "profile_prediction_outputs",
         "relationship_facts"
       ],
@@ -255,6 +257,7 @@
         "identity",
         "observations",
         "outcome_facts",
+        "resources",
         "social_observations",
         "source_provenance",
         "tools"
@@ -761,7 +764,10 @@
         "entity",
         "episode",
         "journey",
-        "source"
+        "message",
+        "profile",
+        "source",
+        "thread"
       ],
       "canonicalAuthorities": [
         "campaign_touchpoints",
@@ -804,7 +810,18 @@
         "timeline",
         "evidence",
         "interactions",
-        "outcomes"
+        "outcomes",
+        "thread_summary",
+        "message_inventory",
+        "participants",
+        "campaign_links",
+        "profile_links",
+        "journey_links",
+        "response_events",
+        "agent_authorship",
+        "policy_state",
+        "risk_flags",
+        "evidence_trace"
       ],
       "supportedTemporalModes": [
         "window",
@@ -1579,6 +1596,7 @@
         "graph",
         "identity_clusters_v2",
         "journey_steps",
+        "model_governance",
         "outcome_facts",
         "payments",
         "revenue_adjustments"
@@ -1834,11 +1852,13 @@
         "agent",
         "cluster",
         "contagion_path",
+        "conversation",
         "entity",
         "population",
         "relationship",
         "source",
-        "support_case"
+        "support_case",
+        "ticket"
       ],
       "canonicalAuthorities": [
         "actions",
@@ -1854,6 +1874,7 @@
         "graph",
         "model_governance",
         "observations",
+        "provider_connections",
         "relationship_facts",
         "risk_assessments",
         "risk_intervention_records",
@@ -1861,6 +1882,7 @@
         "risk_signals",
         "social_relationship_evidence_events",
         "source_provenance",
+        "support_case_subjects",
         "support_cases",
         "transfers"
       ],
@@ -2292,7 +2314,12 @@
       "subjectKinds": [
         "entity",
         "support_case",
-        "callback"
+        "callback",
+        "ticket",
+        "conversation",
+        "agent",
+        "episode",
+        "source"
       ],
       "canonicalAuthorities": [
         "agent_entities",
@@ -2308,7 +2335,8 @@
         "support_case_agent_assignment_events",
         "support_case_context_events",
         "support_case_events",
-        "support_cases"
+        "support_cases",
+        "support_case_subjects"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -2328,7 +2356,16 @@
         "timeline",
         "evidence",
         "interactions",
-        "outcomes"
+        "outcomes",
+        "support_case_summary",
+        "support_conversation_history",
+        "support_callbacks",
+        "support_participants",
+        "support_sla",
+        "support_journey_links",
+        "support_agents",
+        "support_resolution",
+        "support_evidence_trace"
       ],
       "supportedTemporalModes": [
         "window"
@@ -2839,6 +2876,7 @@
         "graph_edges",
         "identity",
         "outcome_facts",
+        "resources",
         "risk_assessments",
         "tools",
         "workflow_definition_revisions"
@@ -3072,7 +3110,7 @@
         {
           "id": "capabilities",
           "requirement": "required",
-          "description": "Observed capability reach and bounded server-owned MCP invocation results joined to exact invoke grants and invocation-time policy decisions; standing authorization and resource operations remain unknown.",
+          "description": "Observed capability reach, bounded server-owned MCP tools/call results, and receipt-backed observed reads of exact public HTTPS MCP resources; returned content is established only when complete. Mutation, external effects, standing authorization, historical replay, freshness, and producer coverage remain unknown.",
           "canonicalAuthorityRefs": [
             "actions",
             "resources",
@@ -3096,11 +3134,7 @@
           "implementationCrosswalk": [
             "actions_tools_resources"
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "resources"
-          ],
-          "authorityGapReason": "resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer",
-          "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown."
+          "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant, and invocation-time policy decision. Separate server-owned MCP resources/read receipts bind exact tenant, agent, execution, resource ID and URI, authenticated initiating principal, dedicated resource-read grant, invocation-time policy decision, and timestamps; returned content is observed only when complete and digest-validated. Initialization failures, caller observations, worker callbacks, and ambiguous or mismatched evidence cannot establish a read. Credentialed or private MCP endpoints are unsupported. Mutation, external effects, standing authorization, historical replay, freshness, and complete producer coverage remain unknown."
         },
         {
           "id": "execution_history",
@@ -3694,7 +3728,7 @@
         {
           "id": "tool_calls",
           "requirement": "required",
-          "description": "Tenant-scoped CALLED_TOOL lifecycle edges joined to admitted executions and canonical agent identity; source completeness and external receipt remain unknown.",
+          "description": "Tenant-scoped CALLED_TOOL lifecycle observations and separately validated server-owned MCP invocation receipts joined to admitted executions and canonical agent identity; general external effects and producer coverage remain unknown.",
           "canonicalAuthorityRefs": [
             "actions",
             "resources",
@@ -3719,7 +3753,7 @@
           "implementationCrosswalk": [
             "action_tool_resource_trace"
           ],
-          "partialImplementationReason": "Exact lifecycle edges are exposed, but source completeness, authorization outcome, and external execution receipt remain unknown."
+          "partialImplementationReason": "Exact lifecycle edges remain observations. Bounded server-owned MCP invocation receipts expose tool results with exact execution, agent, principal, tool, resource, grant, policy and time bindings, without requiring a lifecycle edge. General external effects, mutations, historical policy replay, freshness and complete producer coverage remain unknown."
         },
         {
           "id": "approval_chain",
@@ -4127,7 +4161,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Only explicitly authored typed observation references are resolved against exact semantic Silver event, namespace, timestamp, and evidence fields. EpisodeEngine can produce the exact typed link when its caller supplies a semantic observation authority marker, but no live semantic-to-episode association caller is connected. Legacy Silver rows without authenticated source namespace remain unknown; broader activity/session completeness, source freshness, and policy remain unverified."
+          "partialImplementationReason": "The live validated-event semantic consumer routes qualifying classified observations with a supported resolved subject type, authenticated source namespace, timezone-aware occurrence time, and evidence through EpisodeEngine into tenant/subject-scoped semantic observation streams. Exact typed links are revalidated against canonical semantic Silver event, namespace, timestamp, and evidence fields. Legacy or unsupported observations remain unlinked; broader activity/session completeness, source freshness, policy, historical completeness, and continuity remain unverified."
         },
         {
           "id": "participants",
@@ -4837,12 +4871,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "The read rechecks the exact recorded inference policy decision and, for session models, the current session-to-entity evidence, alongside the future-state schema, current production artifact, validity interval, and freshness. An artifact-reported calibration metric may be exposed with unknown evaluation scope. Current serving outputs omit required fields; historical identity, current consent, revocation history, outcome verification, and independently validated model calibration remain unknown.",
-          "unboundCanonicalAuthorityRefs": [
-            "model_governance",
-            "outcome_facts"
-          ],
-          "authorityGapReason": "Model calibration and independent outcome verification are not joined to prediction outputs."
+          "partialImplementationReason": "Exact prediction-linked canonical OutcomeTruthStore adjudications bind outcome_facts for profile-state-adjudication.v1 churn_observed and retention_observed labels, with policy, final-state, source-event, subject and validity-window checks. Artifact-scoped append-only model evaluations bind model_governance through exact tenant, artifact checksum, evaluator, versioned sample manifest and recomputed accuracy, Brier score and calibration-error metrics. Missing, conflicting, future or truncated evidence remains unknown. These bounded joins do not certify universal model calibration or applicability, historical identity, current consent, revocation history or complete producer coverage; modelCalibrationVerified remains false."
         },
         {
           "id": "evidence_trace",
@@ -6060,7 +6089,7 @@
         {
           "id": "thread_summary",
           "requirement": "required",
-          "description": "Partial thread counts and canonical thread facts; message-thread composition is incomplete.",
+          "description": "Bounded provider/account/thread message composition with explicit authenticated canonical Conversation membership; full upstream history remains unknown.",
           "canonicalAuthorityRefs": [
             "communication_facts"
           ],
@@ -6069,20 +6098,26 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "interactions"
+                "thread_summary"
               ],
               "subjectKinds": [
                 "agent",
-                "campaign"
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
-          ]
+          ],
+          "partialImplementationReason": "Exact persisted authenticated membership joins canonical Conversation IDs to provider account and external thread scope. Message IDs, canonical Conversation IDs, resolved profiles and explicit episode/journey references are never inferred aliases. Historical membership replay, upstream history completeness, freshness, identity and authority remain unproven."
         },
         {
           "id": "message_inventory",
           "requirement": "required",
-          "description": "Bounded observed message entries with message evidence.",
+          "description": "Bounded observed messages with evidence, including exact source-linked Silver facts revalidated against durable provider-thread observations.",
           "canonicalAuthorityRefs": [
             "communication_facts",
             "evidence"
@@ -6092,12 +6127,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "timeline",
-                "evidence"
+                "message_inventory"
               ],
               "subjectKinds": [
                 "agent",
-                "campaign"
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ]
@@ -6105,7 +6145,7 @@
         {
           "id": "participants",
           "requirement": "required",
-          "description": "Typed, source-authenticated participant role bindings joined through exact tenant-owned provider identity mappings; canonical conversation membership remains unresolved.",
+          "description": "Bounded latest authenticated participant rosters joined to explicit canonical Conversation membership and exact tenant-owned identity evidence.",
           "canonicalAuthorityRefs": [
             "communication_facts",
             "entities",
@@ -6117,15 +6157,21 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "interactions"
+                "participants"
               ],
               "subjectKinds": [
                 "agent",
-                "campaign"
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
-          "partialImplementationReason": "participant_roles_are_observed_from_signed_provider_rosters_and_exact_tenant_identity_mappings_but_canonical_conversation_membership_and_full_message_coverage_are_unresolved; provider_delegation_refs_are_not_canonical_grants"
+          "partialImplementationReason": "Complete means bounded roster evidence with exact Conversation membership, provider/account/thread, actor, event, timestamps and identity joins. Conflicting or partial latest rosters fail closed. Source authentication does not independently prove upstream authorship, historical membership, current authority, full message coverage or freshness."
         },
         {
           "id": "campaign_links",
@@ -6140,11 +6186,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "campaign_links"
               ],
               "subjectKinds": [
-                "campaign"
+                "agent",
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ]
@@ -6164,15 +6216,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "evidence"
+                "profile_links"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
                 "episode",
                 "journey",
-                "source"
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6191,15 +6245,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "evidence"
+                "journey_links"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
                 "episode",
                 "journey",
-                "source"
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6208,7 +6264,7 @@
         {
           "id": "response_events",
           "requirement": "required",
-          "description": "Response-like canonical communication acts joined to exact tenant-scoped message and authenticated sender identity where available.",
+          "description": "Response-like canonical acts and durable Silver replies with exact provider-reported In-Reply-To target associations, independent of actor identity or causal outcomes.",
           "canonicalAuthorityRefs": [
             "communication",
             "communication_facts",
@@ -6220,15 +6276,21 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "interactions"
+                "response_events"
               ],
               "subjectKinds": [
                 "agent",
-                "campaign"
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
-          "partialImplementationReason": "Only bounded exact act-to-message and sender joins are observed. Reply target, causal response outcome, complete message history, and source freshness remain unknown."
+          "partialImplementationReason": "Bounded exact act-to-message and sender joins, or durable Silver replies without synthetic acts, support observed provider-reported reply associations only for explicit In-Reply-To references with a unique evidence-backed target in the exact tenant, provider, provider account and thread, occurring no later than the reply. Exact source-linked messages require a bounded canonical observation-to-Silver rejoin. Missing, malformed, mismatched, ambiguous or truncated reads remain unknown. Reply association does not establish actor identity or authority, causal response outcome, complete message history or source freshness."
         },
         {
           "id": "agent_authorship",
@@ -6244,11 +6306,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "interactions",
-                "evidence"
+                "agent_authorship"
               ],
               "subjectKinds": [
-                "agent"
+                "agent",
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6268,14 +6336,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary"
+                "policy_state"
               ],
               "subjectKinds": [
                 "agent",
                 "campaign",
                 "episode",
                 "journey",
-                "source"
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ],
@@ -6302,11 +6373,11 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "evidence"
+                "risk_flags"
               ],
               "subjectKinds": [
                 "agent",
+                "profile",
                 "source"
               ]
             }
@@ -6326,11 +6397,17 @@
               "projectionId": "communication360",
               "role": "primary",
               "sectionIds": [
-                "evidence"
+                "evidence_trace"
               ],
               "subjectKinds": [
                 "agent",
-                "campaign"
+                "campaign",
+                "episode",
+                "journey",
+                "message",
+                "profile",
+                "source",
+                "thread"
               ]
             }
           ]
@@ -7479,11 +7556,7 @@
               ]
             }
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "model_governance"
-          ],
-          "authorityGapReason": "model_governance_calibration_and_validation_not_joined",
-          "partialImplementationReason": "Exact conversion/run/credit-linked model-reported confidence may include a persisted check of recorded run configuration lineage against the current matching config. Model governance approval, calibration, historical config immutability, and applicability to realized value remain unvalidated."
+          "partialImplementationReason": "Exact conversion/run/credit-linked model-reported confidence binds model_governance through durable exact tenant/run/config snapshot lineage and authenticated administrator approval or rejection with actor, permission and authorization-time provenance. A separately identified value-credit-temporal-eligibility.v1 evaluation rejoins bounded canonical credit, conversion and touchpoint samples and validates its manifest and temporal eligibility metric; it does not calibrate model-reported confidence. Missing, changed, conflicting, future or truncated evidence remains unknown. Confidence calibration remains unvalidated; independent attribution correctness, causal value, credit-weight validity, historical config immutability, applicability to realized value and complete producer coverage remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -10282,7 +10355,7 @@
         {
           "id": "actions",
           "requirement": "required",
-          "description": "Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices.",
+          "description": "Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices, with bounded receipt-backed observed reads of exact public HTTPS MCP resources.",
           "canonicalAuthorityRefs": [
             "actions",
             "agent_executions",
@@ -10303,11 +10376,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant and invocation-time policy decision. Initialization failures, caller observations and worker callbacks cannot establish a tool invocation. Reads are bounded and fail closed on ambiguous or mismatched evidence. Credentialed or private MCP endpoints, resource-operation outcomes, external effects, standing authorization, complete producer coverage, historical replay and freshness remain unsupported or unknown.",
-          "unboundCanonicalAuthorityRefs": [
-            "resources"
-          ],
-          "authorityGapReason": "resource_operation_outcomes_are_not_joined_to_a_server_owned_resource_operation_producer"
+          "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant, and invocation-time policy decision. Separate server-owned MCP resources/read receipts are joined to exact admitted tenant, agent, execution, workflow run, resource ID and URI, authenticated initiating principal, dedicated resource-read grant, invocation-time policy decision, and timestamps; returned content is observed only when complete and digest-validated. Initialization failures, caller observations, worker callbacks, and ambiguous or mismatched evidence cannot establish a read. Credentialed or private MCP endpoints are unsupported. Mutation, external effects, standing authorization, historical replay, freshness, and complete producer coverage remain unknown."
         },
         {
           "id": "failures",
@@ -11274,19 +11343,20 @@
             "support_cases",
             "support_case_events",
             "provider_connections",
-            "evidence"
+            "evidence",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "summary",
-                "state",
-                "evidence"
+                "support_case_summary"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ]
@@ -11300,18 +11370,21 @@
             "evidence",
             "provider_connections",
             "support_cases",
-            "support_case_events"
+            "support_case_events",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "interactions"
+                "support_conversation_history"
               ],
               "subjectKinds": [
                 "entity",
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11328,20 +11401,21 @@
             "support_cases",
             "support_case_events",
             "provider_connections",
-            "evidence"
+            "evidence",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "timeline",
-                "evidence"
+                "support_callbacks"
               ],
               "subjectKinds": [
                 "support_case",
-                "callback"
+                "callback",
+                "ticket",
+                "conversation"
               ]
             }
           ]
@@ -11354,18 +11428,20 @@
             "communication_facts",
             "identity",
             "provider_connections",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "interactions",
-                "evidence"
+                "support_participants"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11374,26 +11450,28 @@
         {
           "id": "sla",
           "requirement": "required",
-          "description": "Support service level contract and timer state.",
+          "description": "Support service level contract, source timer state, and versioned explicit active elapsed timer comparison.",
           "canonicalAuthorityRefs": [
             "measurement_contract",
             "support_case_context_events",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "support_sla"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
-          "partialImplementationReason": "Exact tenant-registered source policy revisions bind matching case timers and target durations, with contract evidence. Historical applicability, measured breach evaluation, source-history completeness, and freshness remain unknown."
+          "partialImplementationReason": "Exact tenant-registered source policy revisions bind matching case timers and targets. Versioned active elapsed comparison requires complete bounded explicit start/pause/resume/stop events and retains sequence evidence; reported breaches are not measured results. Upstream authentication, historical applicability, source-history completeness, and freshness remain unknown."
         },
         {
           "id": "journey_links",
@@ -11403,18 +11481,20 @@
             "episode_facts",
             "journeys",
             "support_case_context_events",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "support_journey_links"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11428,18 +11508,20 @@
             "agent_entities",
             "communication_facts",
             "support_case_agent_assignment_events",
-            "support_cases"
+            "support_cases",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "state",
-                "evidence"
+                "support_agents"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11448,12 +11530,14 @@
         {
           "id": "risk",
           "requirement": "required",
-          "description": "Risk outputs associated with the exact support case.",
+          "description": "Exact canonical case RiskAssessment and RiskSignal observations, with ticket/conversation scope admitted only through authenticated persisted subject mappings and current verified provider/account connections.",
           "canonicalAuthorityRefs": [
+            "evidence",
+            "provider_connections",
             "risk_outputs",
             "risk_signals",
-            "support_cases",
-            "evidence"
+            "support_case_subjects",
+            "support_cases"
           ],
           "projectionBindings": [
             {
@@ -11466,14 +11550,16 @@
                 "findings"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
           "implementationCrosswalk": [
             "risk_and_contagion"
           ],
-          "partialImplementationReason": "The tenant-owned support case and its exact risk assessment and signals are joined with canonical evidence; risk-history completeness, support-case freshness SLA, and business outcome remain unknown."
+          "partialImplementationReason": "Mapped ticket/conversation reads validate exact tenant, subject, case, provider, connection, account, source event and temporal evidence before Risk reads. Claims retain the requested subject and policy boundary; invalid mappings and incomplete signal reads release no partial signal evidence. Historical mappings, upstream authenticity, risk/source history completeness, freshness, business outcomes and contagion remain unknown."
         },
         {
           "id": "resolution",
@@ -11481,18 +11567,20 @@
           "description": "Recorded support outcome and resolution state; lifecycle resolution alone does not prove the business outcome.",
           "canonicalAuthorityRefs": [
             "support_cases",
-            "support_case_events"
+            "support_case_events",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "outcomes",
-                "state"
+                "support_resolution"
               ],
               "subjectKinds": [
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ],
@@ -11508,20 +11596,21 @@
             "evidence",
             "provider_connections",
             "support_cases",
-            "support_case_events"
+            "support_case_events",
+            "support_case_subjects"
           ],
           "projectionBindings": [
             {
               "projectionId": "support360",
               "role": "primary",
               "sectionIds": [
-                "evidence",
-                "summary",
-                "state"
+                "support_evidence_trace"
               ],
               "subjectKinds": [
                 "entity",
-                "support_case"
+                "support_case",
+                "ticket",
+                "conversation"
               ]
             }
           ]
@@ -11573,7 +11662,10 @@
                 "outcomes"
               ],
               "subjectKinds": [
-                "entity"
+                "entity",
+                "agent",
+                "episode",
+                "source"
               ]
             }
           ]
@@ -11746,6 +11838,7 @@
           "support_case_agent_assignment_events",
           "support_case_context_events",
           "support_case_events",
+          "support_case_subjects",
           "support_cases"
         ],
         "ownsCanonicalTruth": false,
@@ -11851,7 +11944,7 @@
   ],
   "productSurfaceBlueprintSource": {
     "document": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
-    "sha256": "23d0b1fb212aa7cc6e52c632cf05676f78dc64a216303adade0950f3f4540341",
+    "sha256": "b1a60301c0ebfb1dccefc23c62bd552c27c525d58ee20cf412e5979c023d6767",
     "surfaceSectionPrefix": "11.",
     "scope": "18 product surfaces; backend contract only"
   }
