@@ -76,6 +76,7 @@ LEGAL_TRANSITIONS: dict[SuggestionStatus, frozenset[SuggestionStatus]] = {
     SuggestionStatus.APPROVED: frozenset({
         SuggestionStatus.EXECUTING,
         SuggestionStatus.DELIVERED,
+        SuggestionStatus.EXPIRED,
         SuggestionStatus.CLOSED,
     }),
     SuggestionStatus.EXECUTING: frozenset({
@@ -211,6 +212,7 @@ async def apply_transition(
         from_status=from_status_str,
         to_status=to_status.value,
         audit_event=audit,
+        patch=patch,
     )
 
 

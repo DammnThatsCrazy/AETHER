@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
   "services/api/identity/": "sha256:a7f1dce493471a067cf90946257aeeffc9e62627cb505302086849b9d2bd0673"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
-  "services/api/intelligence/": "sha256:ff7f6c135d00cee1deae781cfff9d374914f8107117e7264f0177b7b1a1f5196"
+  "services/api/intelligence/": "sha256:4e61d818ef0512b911b3cbc5d60fff606b2398a3ebb53e869694898fd5d082e2"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -3815,6 +3815,13 @@ Proactive AI-driven suggestions for operators and tenants — surfaces actionabl
 | POST | `/v1/suggestions/{suggestion_id}/execute` | Execute the suggested action directly |
 | POST | `/v1/suggestions/{suggestion_id}/deliver` | Deliver via notification channel |
 | POST | `/v1/suggestions/{suggestion_id}/outcome` | Record observed outcome after execution |
+
+Lifecycle guarantees on these routes:
+
+- The reviewer recorded on approve, reject, suppress, and execute is the authenticated principal. A client-supplied `actor_id` is ignored.
+- `expires_at` must be an ISO 8601 timestamp. Approve, execute, and deliver on a past-due suggestion move it to `expired` and return 400.
+- `POST /v1/suggestions` accepts an optional `idempotency_key` (1-128 characters). The same key from the same principal with the same content returns the original suggestion; the same key with different content returns 409. Without a key every call creates a new suggestion.
+- State transitions are compare-and-set on status. Of two concurrent approvals, one succeeds and the other gets 409 or 400.
 
 ### Kyber Admin Routes (`/v1/admin/kyber/suggestions`)
 

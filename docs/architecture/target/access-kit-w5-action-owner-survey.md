@@ -15,7 +15,12 @@ stays read-only for governed 360 data. The existing `continuations create`
 operation is a principal-scoped durable resource write, not an action with an
 external effect, and it does not count toward W5.
 
-**Audit depth.** This audit read the suggestion lifecycle end to end with file and
+**Status.** Four of the five gaps below are closed in the owner (see "Fixed in the
+owner"). The consent and compensation gap remains open, so there is still no
+Access Kit action operation.
+
+**Audit depth.** Line numbers in the table cite the code as it was at commit
+`98f7e2f9c`, before the fixes below. This audit read the suggestion lifecycle end to end with file and
 line citations: `lifecycle.py`, `service.py`, `repository.py`, `dispatcher.py`,
 `policy.py`, `routes.py`, and `adapters/notification_adapter.py` under
 `services/api/intelligence/suggestions/`. It read test names only, not test bodies.
@@ -30,12 +35,12 @@ notification hand-off. Citations are `file:line` inside that directory.
 | W5 precondition | Finding | Status |
 |---|---|---|
 | Authenticated principal and tenant binding | Create rejects a `tenant_id` that differs from the caller (`service.py:63`, `routes.py:142`). Every read and transition goes through `get_or_fail(id, tenant_id)`, which returns not-found for another tenant (`repository.py:38-50`). | Met |
-| Reviewer identity is the authenticated principal | `approve`, `reject`, and `suppress` use `body.actor_id or tenant_context.user_id` (`service.py:194`, `:221`, `:241`). A caller with `write` can record any `actor_id` as `reviewed_by` (`lifecycle.py:191-194`). | **Gap: the request body can override the reviewer** |
+| Reviewer identity is the authenticated principal | `approve`, `reject`, and `suppress` use `body.actor_id or tenant_context.user_id` (`service.py:194`, `:221`, `:241`). A caller with `write` can record any `actor_id` as `reviewed_by` (`lifecycle.py:191-194`). | **Fixed:** reviewer is always the authenticated principal; `body.actor_id` is ignored |
 | Rights and consent from the real owner | Policy only appends the string obligation `verify_consent_before_delivery` for marketing and identity classes (`policy.py:161-166`). No code calls a consent or rights owner. | **Gap: obligation is recorded, never checked** |
 | Durable policy decision and approval chain | The decision is stored on the record (`service.py:124`). `requires_approval` blocks the `suggested → approved` shortcut (`lifecycle.py:131-139`). Approve needs `write` (`routes.py:172`); execute needs `admin` (`routes.py:211`). | Met for approval; see expiry |
-| Expiry | `expires_at` is stored (`service.py:126`) and `EXPIRED` is a legal target (`lifecycle.py:57`), but nothing sets `EXPIRED` and approve never compares `expires_at` to the clock (`service.py:176-208`). | **Gap: an expired suggestion can still be approved** |
-| Atomic, idempotent create with a semantic fingerprint | `create_suggestion` always mints a new UUID (`service.py:82`) and inserts (`repository.py:30-32`). No idempotency key, no fingerprint. `find_by_source_ref` exists (`repository.py:114`) but is a 200-row scan used only by the recommendation adapter. | **Gap: a retried create makes a duplicate** |
-| Atomic state transitions | `apply_transition` reads, validates, then calls `repo.transition`, which re-reads and checks `from_status` before `update` (`lifecycle.py:176-214`, `repository.py:145-154`). The check and the write are separate calls, not a compare-and-set. | **Gap: two concurrent approvals can both pass the check** |
+| Expiry | `expires_at` is stored (`service.py:126`) and `EXPIRED` is a legal target (`lifecycle.py:57`), but nothing sets `EXPIRED` and approve never compares `expires_at` to the clock (`service.py:176-208`). | **Fixed:** approve, execute, and deliver check `expires_at`, move the suggestion to `EXPIRED`, and refuse |
+| Atomic, idempotent create with a semantic fingerprint | `create_suggestion` always mints a new UUID (`service.py:82`) and inserts (`repository.py:30-32`). No idempotency key, no fingerprint. `find_by_source_ref` exists (`repository.py:114`) but is a 200-row scan used only by the recommendation adapter. | **Fixed:** optional `idempotency_key` plus a content fingerprint, scoped to tenant and principal; same key and content replays, same key and different content is a 409 |
+| Atomic state transitions | `apply_transition` reads, validates, then calls `repo.transition`, which re-reads and checks `from_status` before `update` (`lifecycle.py:176-214`, `repository.py:145-154`). The check and the write are separate calls, not a compare-and-set. | **Fixed:** `repo.transition` is a compare-and-set on status and revision (`replace_if_matches`); the loser gets a conflict |
 | Sequential double-approval | A second approve sees `APPROVED`, which is not `review_required` or `suggested`, and raises (`service.py:184-188`). | Met sequentially only |
 | Owner-produced receipt and readback | Approval hands off to delivery and the suggestion stays `APPROVED` until a delivery worker confirms a provider receipt (`service.py:199-207`, `adapters/notification_adapter.py:91-94`). A hand-off failure is logged and the approval stands (`service.py:206-207`). | Met for notify-only delivery |
 | Execution gate | Execute needs `APPROVED`, `execution_eligible`, and the `AETHER_SUGGESTIONS_EXECUTION_ENABLED` flag, which defaults to disabled (`service.py:257-265`). Only the recommendation source can run the legacy executor (`dispatcher.py:36-38`, `:54-55`). | Met; off by default |
@@ -50,11 +55,35 @@ By test name, the only replay or idempotency cases are dispatcher no-ops
 (`test_suggestion_recommendation_adapter.py:188`). No test name covers expiry
 enforcement, concurrent approval, create replay, or an `actor_id` override.
 
+## Fixed in the owner
+
+- `service.py`: reviewer from the principal; `_expire_if_due` on approve, execute,
+  and deliver; deterministic suggestion ID and fingerprint for keyed creates.
+- `repository.py`: `create_if_absent` and a compare-and-set `transition`. The
+  `patch` that `apply_transition` always built (`reviewed_by`, `reviewed_at`,
+  `closed_at`, `ooda_phase`) was never persisted before; it is now.
+- `lifecycle.py`: `approved → expired` is a legal transition.
+- `models.py`: `expires_at` must parse as an ISO 8601 timestamp.
+- Tests: `test_suggestion_w5_owner_gaps.py` runs against the real in-memory
+  repository (reviewer override, expiry, replay, conflict, principal scoping,
+  concurrent creates, concurrent approvals).
+
+## Still open
+
+Consent and compensation. Policy appends `verify_consent_before_delivery` for
+marketing and identity classes, but nothing calls a consent owner. The consent
+store (`ConsentRepository`) is keyed by end-user, and a suggestion's subject is
+an entity, so there is no defined mapping from a suggestion to the record that
+would prove consent. Failing closed would stop all `notification` class
+deliveries, which is a behavior change that needs the consent owner's contract.
+There is also no compensation path. Until both exist, no Access Kit action
+operation is declared.
+
 ## Conclusion
 
 The lifecycle is a sound base for a human-reviewed, notify-only flow. It is not
-ready to back an Access Kit write operation. Five owner-side gaps must close
-first, in the owner and not in the adapter:
+yet ready to back an Access Kit write operation. The original five owner-side
+gaps were, in the owner and not in the adapter:
 
 1. Take the reviewer from the authenticated principal; ignore `body.actor_id`
    unless the caller is a verified operator.

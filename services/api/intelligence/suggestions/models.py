@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def parse_timestamp(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO 8601 timestamp to an aware UTC datetime, or None if invalid."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +204,9 @@ class Suggestion(BaseModel):
     outcome: Optional[SuggestionOutcome] = None
 
     expires_at: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    request_fingerprint: Optional[str] = None
+    created_by: Optional[str] = None
     created_at: str
     updated_at: str
     reviewed_at: Optional[str] = None
@@ -226,6 +240,17 @@ class SuggestionCreate(BaseModel):
     evidence: list[dict[str, Any]] = Field(default_factory=list)
     lineage_event_ids: list[str] = Field(default_factory=list)
     expires_at: Optional[str] = None
+    # Optional replay key, scoped to tenant and authenticated principal. The same
+    # key with the same content returns the original suggestion; the same key
+    # with different content is a conflict.
+    idempotency_key: Optional[str] = Field(None, min_length=1, max_length=128)
+
+    @field_validator("expires_at")
+    @classmethod
+    def _expires_at_is_a_timestamp(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and parse_timestamp(value) is None:
+            raise ValueError("expires_at must be an ISO 8601 timestamp")
+        return value
 
 
 class SuggestionQuery(BaseModel):
