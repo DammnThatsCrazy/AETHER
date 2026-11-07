@@ -2545,6 +2545,19 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/target/access-kit-w4-limits-contract.md",
+      "title": "Access Kit × 360 — W4 Limits and Metering Contract",
+      "slug": "access-kit-w4-limits-contract",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/target/access-kit-w5-action-owner-survey.md",
       "title": "Access Kit × 360 — W5 Action Owner Audit",
       "slug": "access-kit-w5-action-owner-survey",
