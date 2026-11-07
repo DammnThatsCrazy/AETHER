@@ -233,9 +233,9 @@ async def test_mapped_case_slots_preserve_exact_policy_isolation(kind, slot, rea
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("field", "value"), [
     ("tenant_id", "other-tenant"), ("subject_kind", "conversation"),
-    ("subject_id", str(uuid4())), ("source_connection_id", "other-connection"),
+    ("subject_id", "c013c99a-4947-445a-b1ae-da48cb33e70e"), ("source_connection_id", "other-connection"),
     ("source_provider_identity", "other-provider"), ("source_case_id", "wrong-source-case"),
-    ("case_id", str(uuid4())), ("source_account_id", None), ("actor_id", ""),
+    ("case_id", "5a1c7d2e-58c4-4f0b-9f3d-2f1f2c8e6b11"), ("source_account_id", None), ("actor_id", ""),
     ("source_event_id", None), ("source_occurred_at", "invalid"),
     ("source_occurred_at", OBSERVED.replace(tzinfo=None)),
     ("connection_verified_at", None), ("connection_verified_at", "invalid"),

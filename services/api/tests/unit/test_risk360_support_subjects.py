@@ -7,7 +7,6 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
 
 import pytest
 
@@ -173,7 +172,7 @@ async def test_persisted_alias_reads_only_canonical_case_risk(kind):
 @pytest.mark.parametrize("kind", ["ticket", "conversation"])
 @pytest.mark.parametrize("field,value", [
     ("tenant_id", "other-tenant"), ("subject_kind", "entity"),
-    ("subject_id", str(uuid4())), ("case_id", "source-case"),
+    ("subject_id", "c013c99a-4947-445a-b1ae-da48cb33e70e"), ("case_id", "source-case"),
     ("source_connection_id", "other-connection"), ("source_provider_identity", "other-provider"),
     ("source_account_id", "other-account"), ("source_subject_id", " padded"),
     ("source_case_id", "other-case"), ("source_event_id", "other-event"),

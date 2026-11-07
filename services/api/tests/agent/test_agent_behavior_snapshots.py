@@ -100,6 +100,10 @@ async def test_snapshot_routes_store_and_report_drift():
     drift = (await routes.behavior_drift("a1", req()))["data"]["drift"]
     assert drift["status"] == "drift_detected"
     assert (await routes.behavior_drift("a1", req("other-tenant")))["data"]["drift"]["status"] == "insufficient_windows"
+    cal = (await routes.behavior_calibration("a1", req()))["data"]["calibration"]
+    assert cal["calibrated"] is False
+    assert cal["features"]["tool_success_rate"]["status"] == "insufficient_evidence"
+    assert (await routes.behavior_calibration("a1", req("other-tenant")))["data"]["calibration"]["agents"] == 0
     with pytest.raises(BadRequestError):
         await routes.record_behavior_snapshot(
             "a1", routes.BehaviorSnapshotRequest(window_start=D2[0], window_end=D1[0]), req())

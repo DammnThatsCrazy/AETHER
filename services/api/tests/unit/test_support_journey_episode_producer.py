@@ -184,7 +184,7 @@ async def test_future_journey_observations_cannot_produce_episodes(field):
 @pytest.mark.parametrize(("field", "value"), [
     ("connection_id", "foreign-connection"), ("tenant_id", "foreign-tenant"),
     ("provider_identity", "foreign-provider"), ("last_verified_at", "invalid"),
-    ("last_verified_at", (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()),
+    ("last_verified_at", "2999-01-01T00:00:00+00:00"),
 ])
 async def test_journey_episode_ingress_rejects_wrong_verified_connection(field, value):
     _, _, _, _, service, event, _ = await produce()
@@ -228,3 +228,17 @@ async def test_episode_scan_incompleteness_clears_even_exact_relations(incomplet
     )
     assert slot["state"] == "unknown" and slot["relations"] == [] and refs == []
     assert "support_case_journey_episode_read_truncated" in reasons
+
+
+@pytest.mark.asyncio
+async def test_persisted_uuid_context_event_id_still_publishes_the_same_episode():
+    from uuid import UUID
+
+    from journeys.support360.context_authorities import _row_dict
+    from journeys.support360.episodes import publish_journey_link_episode
+
+    *_, record = await produce()
+    persisted = _row_dict({**record, "context_event_id": UUID(record["context_event_id"])})
+    assert persisted["context_event_id"] == record["context_event_id"]
+    episode = await publish_journey_link_episode(persisted)
+    assert episode.observation_ids == [record["context_event_id"]]

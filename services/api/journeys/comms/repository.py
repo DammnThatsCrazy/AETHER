@@ -218,7 +218,10 @@ class CommsFactsRepository:
         self, tenant_id: str, provider: str, provider_account_id: str,
         external_thread_id: str, external_message_id: str, *, limit: int = 2,
     ) -> tuple[list[dict[str, Any]], bool]:
-        """Read exact provider reply targets; completeness is bounded to ambiguity detection."""
+        """Read exact provider reply targets, one earliest observation per message.
+
+        Lifecycle facts of one message are not separate targets; completeness is
+        bounded to detecting more than one distinct message."""
         if not all((tenant_id, provider, provider_account_id, external_thread_id, external_message_id)):
             return [], True
         cap = min(max(int(limit), 1), 2)
@@ -234,14 +237,25 @@ class CommsFactsRepository:
 
         pool = await self._pool()
         if pool is None:
-            rows = [row for row in _local_facts.values() if matches(row)]
+            earliest: dict[str, dict[str, Any]] = {}
+            for row in sorted(
+                (row for row in _local_facts.values() if matches(row)),
+                key=lambda row: (str(row.get("occurred_at")), str(row.get("fact_id"))),
+            ):
+                identity = row.get("message_id") or row.get("canonical_activity_key") or row.get("fact_id")
+                earliest.setdefault(str(identity), row)
+            rows = list(earliest.values())
             return rows[:cap], len(rows) <= cap
         async with pool.acquire() as conn:
             records = await conn.fetch(
-                """SELECT * FROM silver_comms_facts
+                """SELECT DISTINCT ON (
+                       COALESCE(NULLIF(message_id, ''), NULLIF(canonical_activity_key, ''), fact_id::text)
+                   ) * FROM silver_comms_facts
                    WHERE tenant_id = $1 AND provider = $2 AND provider_account_id = $3
                      AND external_thread_id = $4 AND external_message_id = $5
-                   ORDER BY occurred_at DESC, fact_id DESC LIMIT $6""",
+                   ORDER BY COALESCE(NULLIF(message_id, ''), NULLIF(canonical_activity_key, ''), fact_id::text),
+                            occurred_at ASC, fact_id ASC
+                   LIMIT $6""",
                 tenant_id, provider, provider_account_id, external_thread_id,
                 external_message_id, cap + 1,
             )

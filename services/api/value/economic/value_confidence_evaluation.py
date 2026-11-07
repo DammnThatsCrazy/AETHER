@@ -82,7 +82,7 @@ class ValueConfidenceEvaluationRepository(TypedTableRepository):
         row = await pool.fetchrow("SELECT * FROM value_confidence_evaluations WHERE tenant_id=$1 AND attribution_run_id=$2 ORDER BY created_at DESC, evaluation_id DESC LIMIT 1", tenant_id, UUID(str(run_id)))
         if row is None:
             return None
-        result = dict(row)
+        result = {key: str(value) if isinstance(value, UUID) else value for key, value in dict(row).items()}
         if isinstance(result.get("sample_refs"), str):
             result["sample_refs"] = json.loads(result["sample_refs"])
         return result

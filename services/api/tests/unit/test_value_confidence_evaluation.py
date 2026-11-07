@@ -249,3 +249,23 @@ async def test_reader_requires_exact_durable_validation_and_rejects_future_sourc
     touchpoint["occurred_at"] = row["created_at"] + timedelta(seconds=1)
     assert not await verify_evaluation_sources("tenant-a", row, runs=sources, conversions=sources,
         touchpoints=sources, validations=Validations(validation))
+
+
+@pytest.mark.asyncio
+async def test_persisted_uuid_columns_read_back_as_the_provider_join_strings(monkeypatch):
+    run_id, config_id = uuid4(), uuid4()
+
+    class Pool:
+        async def fetchrow(self, *args):
+            return {"attribution_run_id": run_id, "model_config_id": config_id, "sample_refs": "[]"}
+
+    repository = ValueConfidenceEvaluationRepository()
+
+    async def pool():
+        return Pool()
+
+    monkeypatch.setattr(repository, "_pool", pool)
+    row = await repository.latest_for_run("tenant-a", str(run_id))
+    assert row["attribution_run_id"] == str(run_id)
+    assert row["model_config_id"] == str(config_id)
+    assert row["sample_refs"] == []

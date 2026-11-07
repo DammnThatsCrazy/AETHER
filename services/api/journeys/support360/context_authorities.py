@@ -222,6 +222,8 @@ def _row_dict(row: Any) -> dict[str, Any]:
     for key, item in value.items():
         if isinstance(item, datetime):
             value[key] = coerce_utc_lenient(item).astimezone(timezone.utc).isoformat()
+        elif isinstance(item, UUID):
+            value[key] = str(item)
         elif key in {"payload", "evidence_refs"} and isinstance(item, str):
             try:
                 value[key] = json.loads(item)

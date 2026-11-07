@@ -155,3 +155,32 @@ def test_to_message_preserves_server_bound_sender_agent_evidence() -> None:
     assert message.sender_identity_binding_id == "agent-binding-1"
     assert message.sender_identity_evidence_ref is not None
     assert message.sender_identity_evidence_ref.source == "agent_deployment_identity_bindings"
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_facts_of_one_message_resolve_to_one_earliest_reply_target(monkeypatch):
+    repo = CommsFactsRepository()
+
+    async def no_pool():
+        return None
+
+    monkeypatch.setattr(repo, "_pool", no_pool)
+    scope = dict(
+        tenant_id="tenant-lifecycle", provider="reply-provider", provider_account_id="account-1",
+        external_thread_id="thread-1", external_message_id="target-external",
+    )
+    for fact_id, at in (("read", "12:02"), ("sent", "12:00"), ("delivered", "12:01")):
+        await repo.upsert(_silver_row(
+            **scope, fact_id=f"lifecycle-{fact_id}", idempotency_key=f"lifecycle-{fact_id}", message_id="target-external",
+            occurred_at=f"2026-10-18T{at}:00+00:00",
+        ))
+    keys = ("tenant-lifecycle", "reply-provider", "account-1", "thread-1", "target-external")
+    rows, complete = await repo.reply_targets(*keys)
+    assert complete is True
+    assert [row["fact_id"] for row in rows] == ["lifecycle-sent"]
+
+    await repo.upsert(_silver_row(**scope, fact_id="other-1", idempotency_key="other-1", message_id="other-message-1"))
+    assert [len((await repo.reply_targets(*keys))[0]), (await repo.reply_targets(*keys))[1]] == [2, True]
+    await repo.upsert(_silver_row(**scope, fact_id="other-2", idempotency_key="other-2", message_id="other-message-2"))
+    rows, complete = await repo.reply_targets(*keys)
+    assert len(rows) == 2 and complete is False
