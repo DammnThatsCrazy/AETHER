@@ -102,7 +102,7 @@ source_hashes:
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
-  "services/api/middleware/middleware.py": "sha256:7dabf94c786a55948ae5ae3a852018bdb9b36e8171e84beeb5c0b979aa687986"
+  "services/api/middleware/middleware.py": "sha256:e21f4dd3833dd2b6c276d00f0d1245d20b747442f65ef8f2ffb0cac625e5fe7d"
   "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
@@ -197,7 +197,11 @@ attributed read: it needs `read` permission, is recorded like any other Access
 Kit read, and returns slot status, evidence references, and limitations exactly
 as the projection owner reports them. A successful usage-summary read is not
 recorded, so reading the count does not change it; denied or failed reads of it
-are still audited. See `docs/architecture/target/access-kit-360-w0-matrix.md`.
+are still audited. Access Kit reads are also capped per credential and per
+operation (120 requests per minute by default, `AETHER_ACCESS_KIT_CREDENTIAL_RPM`,
+`0` disables) beneath the tenant burst limit; a capped call returns 429 and is
+audited as blocked. See `docs/architecture/target/access-kit-360-w0-matrix.md` and
+`docs/architecture/target/access-kit-w4-limits-contract.md`.
 
 The SDK also collects raw user interactions, device fingerprints, wallet events, and session data — then ships everything to the backend for processing, enrichment, identity resolution, and analysis.
 

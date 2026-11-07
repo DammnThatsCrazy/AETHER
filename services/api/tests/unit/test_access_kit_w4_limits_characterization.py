@@ -23,9 +23,9 @@ _ACCESS_KIT_READ_PATHS = (
 
 @pytest.mark.parametrize("path", _ACCESS_KIT_READ_PATHS)
 def test_access_kit_read_routes_are_not_plan_gated_services(path):
-    # No catalog service owns these paths, so the plan gate passes every tier and
-    # monthly overage cannot be attributed to a service. Adding a service entry is
-    # a pricing decision for the billing owner.
+    # Decision: Access Kit reads and frames are included on every plan. No priced
+    # catalog service owns these paths, so the plan gate passes every tier. Adding
+    # a service entry would invent a price; see access-kit-w4-limits-contract.md.
     assert resolve_service(path) is None
     for tier in PlanTier:
         assert FeatureGate().check_access(tier, path).allowed is True

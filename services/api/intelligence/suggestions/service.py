@@ -20,6 +20,7 @@ from shared.events.events import EventProducer
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger
 
+from .consent import delivery_consent_verdict
 from .dispatcher import dispatch, resolve_dispatch_mode
 from .events import emit_suggestion_event
 from .lifecycle import apply_transition, build_audit_event
@@ -27,6 +28,7 @@ from .models import (
     OodaPhase,
     Suggestion,
     SuggestionActionRequest,
+    SuggestionCompensationRequest,
     SuggestionCreate,
     SuggestionFeedbackRequest,
     SuggestionOutcomeRequest,
@@ -52,6 +54,7 @@ _FINGERPRINT_FIELDS = (
     "org_id", "subject", "source", "source_ref", "suggestion_class", "title",
     "summary", "what", "why", "impact", "recommended_action", "expected_outcome",
     "confidence_score", "risk_score", "reversible", "expires_at",
+    "audience", "consent_subject_id",
 )
 
 
@@ -167,6 +170,8 @@ class SuggestionService:
             policy_decision=policy_decision,
             audit_trail=[audit_event],
             expires_at=create.expires_at,
+            audience=create.audience,
+            consent_subject_id=create.consent_subject_id,
             idempotency_key=create.idempotency_key,
             request_fingerprint=fingerprint,
             created_by=principal,
@@ -281,6 +286,15 @@ class SuggestionService:
             # A delivery problem never undoes the approval.
             try:
                 updated = await dispatch(updated, tenant_context, self, execution_enabled=False)
+                if (
+                    updated.get("status") == SuggestionStatus.APPROVED.value
+                    and updated.get("effect_state", "none") == "none"
+                ):
+                    # Handed off; nothing is confirmed until a provider receipt arrives.
+                    updated = await self._repo.patch(
+                        suggestion_id, tenant_context.tenant_id,
+                        {"effect_state": "pending_receipt"},
+                    )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"Delivery hand-off failed for suggestion {suggestion_id!r}: {exc}")
         return updated
@@ -360,6 +374,55 @@ class SuggestionService:
         await emit_suggestion_event(self._producer, "suggestion.executing", updated)
         return updated
 
+    async def _record_consent_block(self, record: dict, reason: str) -> None:
+        """Audit a consent denial and mark the effect as blocked; status is unchanged."""
+        await self._repo.append_audit(
+            record["id"], record["tenant_id"],
+            build_audit_event(
+                action="delivery_blocked_consent", from_status=record.get("status"),
+                to_status=record.get("status"), actor_kind="system",
+                metadata={"reason": reason},
+            ),
+        )
+        await self._repo.patch(record["id"], record["tenant_id"], {"effect_state": "blocked_consent"})
+
+    async def request_compensation(
+        self,
+        suggestion_id: str,
+        body: SuggestionCompensationRequest,
+        tenant_context: TenantContext,
+    ) -> dict:
+        """Record a request to reverse an acted-on suggestion.
+
+        This does not undo anything. It marks the effect, audits who asked and why,
+        and emits ``suggestion.compensation_requested`` so the owner of the
+        affected system can act through its own authority.
+        """
+        record = await self._repo.get_or_fail(suggestion_id, tenant_context.tenant_id)
+        if record.get("status") not in (
+            SuggestionStatus.EXECUTED.value, SuggestionStatus.DELIVERED.value,
+            SuggestionStatus.FAILED.value,
+        ):
+            raise BadRequestError(
+                "Compensation can only be requested for an executed, delivered, or failed suggestion."
+            )
+        if record.get("effect_state") == "compensation_requested":
+            return record  # replay
+        await self._repo.append_audit(
+            suggestion_id, tenant_context.tenant_id,
+            build_audit_event(
+                action="compensation_requested", from_status=record["status"],
+                to_status=record["status"], actor_id=tenant_context.user_id,
+                actor_kind="tenant_user" if tenant_context.user_id else "operator",
+                metadata={"reason": body.reason},
+            ),
+        )
+        updated = await self._repo.patch(
+            suggestion_id, tenant_context.tenant_id, {"effect_state": "compensation_requested"},
+        )
+        await emit_suggestion_event(self._producer, "suggestion.compensation_requested", updated)
+        return updated
+
     async def deliver_suggestion(
         self,
         suggestion_id: str,
@@ -369,6 +432,10 @@ class SuggestionService:
         if not record.get("delivery_eligible", True):
             raise BadRequestError("This suggestion is not eligible for delivery.")
         await self._expire_if_due(record, tenant_context)
+        verdict = await delivery_consent_verdict(record)
+        if not verdict.allowed:
+            await self._record_consent_block(record, verdict.reason)
+            raise ForbiddenError(f"Delivery blocked: {verdict.reason}")
 
         updated = await apply_transition(
             repo=self._repo,
@@ -376,6 +443,7 @@ class SuggestionService:
             tenant_id=tenant_context.tenant_id,
             to_status=SuggestionStatus.DELIVERED,
             actor_kind="system",
+            extra_patch={"effect_state": "confirmed"},
         )
         await emit_suggestion_event(self._producer, "suggestion.delivered", updated)
         return updated

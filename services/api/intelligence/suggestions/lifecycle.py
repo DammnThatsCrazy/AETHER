@@ -168,6 +168,7 @@ async def apply_transition(
     actor_id: Optional[str] = None,
     actor_kind: str = "system",
     notes: Optional[str] = None,
+    extra_patch: Optional[dict] = None,
 ) -> dict:
     """Atomically transition a suggestion to `to_status`.
 
@@ -196,6 +197,9 @@ async def apply_transition(
 
     if to_status == SuggestionStatus.CLOSED:
         patch["closed_at"] = now
+
+    if extra_patch:
+        patch.update(extra_patch)
 
     audit = build_audit_event(
         action=f"transition_to_{to_status.value}",

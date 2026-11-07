@@ -202,3 +202,116 @@ def test_concurrent_approvals_have_one_winner():
         approvals = [e for e in stored["audit_trail"] if e["to_status"] == "approved"]
         assert len(approvals) == 1
     asyncio.run(go())
+
+
+# ---------------------------------------------------------------------------
+# Consent gate, effect state, and compensation
+# ---------------------------------------------------------------------------
+
+class _FakeConsentRepo:
+    def __init__(self, record=None, fail=False):
+        self.record, self.fail = record, fail
+
+    async def get_consent(self, tenant_id, user_id):
+        if self.fail:
+            raise RuntimeError("store down")
+        return self.record
+
+
+def test_end_user_audience_requires_a_consent_subject():
+    with pytest.raises(ValidationError):
+        _create(audience="end_user")
+
+
+def test_consent_gate_allows_tenant_staff_and_denies_without_a_grant():
+    from intelligence.suggestions.consent import delivery_consent_verdict
+
+    async def go():
+        staff = {"tenant_id": "t", "suggestion_class": "notification"}
+        assert (await delivery_consent_verdict(staff)).allowed is True
+        end_user = {"tenant_id": "t", "audience": "end_user", "consent_subject_id": "u1",
+                    "suggestion_class": "campaign"}
+        granted = _FakeConsentRepo({"granted": True, "purposes": ["marketing"]})
+        assert (await delivery_consent_verdict(end_user, granted)).allowed is True
+        wrong_purpose = _FakeConsentRepo({"granted": True, "purposes": ["analytics"]})
+        assert (await delivery_consent_verdict(end_user, wrong_purpose)).allowed is False
+        assert (await delivery_consent_verdict(end_user, _FakeConsentRepo(None))).allowed is False
+        assert (await delivery_consent_verdict(end_user, _FakeConsentRepo(fail=True))).reason == "consent_lookup_failed"
+        no_subject = {"tenant_id": "t", "audience": "end_user"}
+        assert (await delivery_consent_verdict(no_subject)).reason == "consent_subject_missing"
+    asyncio.run(go())
+
+
+def test_end_user_delivery_without_consent_is_blocked_and_audited(monkeypatch):
+    async def go():
+        svc = _service()
+        sid = await _review_required(
+            svc, audience="end_user", consent_subject_id="u1",
+            suggestion_class=SuggestionClass.CAMPAIGN,
+        )
+        with pytest.raises(Exception, match="consent"):
+            await svc.deliver_suggestion(sid, _tenant())
+        stored = await svc._repo.get(sid, _TENANT)
+        assert stored["status"] == SuggestionStatus.REVIEW_REQUIRED.value
+        assert stored["effect_state"] == "blocked_consent"
+        assert stored["audit_trail"][-1]["action"] == "delivery_blocked_consent"
+    asyncio.run(go())
+
+
+def test_staff_delivery_marks_the_effect_confirmed():
+    async def go():
+        svc = _service()
+        sid = await _review_required(svc)
+        await svc.approve_suggestion(sid, SuggestionActionRequest(), _tenant())
+        delivered = await svc.deliver_suggestion(sid, _tenant())
+        assert delivered["status"] == SuggestionStatus.DELIVERED.value
+        assert delivered["effect_state"] == "confirmed"
+    asyncio.run(go())
+
+
+def test_compensation_request_is_audited_idempotent_and_does_not_change_status():
+    from intelligence.suggestions.models import SuggestionCompensationRequest
+
+    async def go():
+        svc = _service()
+        sid = await _review_required(svc)
+        await svc.approve_suggestion(sid, SuggestionActionRequest(), _tenant())
+        await svc.deliver_suggestion(sid, _tenant())
+        body = SuggestionCompensationRequest(reason="sent in error")
+        first = await svc.request_compensation(sid, body, _tenant())
+        again = await svc.request_compensation(sid, body, _tenant())
+        assert first["effect_state"] == again["effect_state"] == "compensation_requested"
+        assert first["status"] == SuggestionStatus.DELIVERED.value
+        asks = [e for e in again["audit_trail"] if e["action"] == "compensation_requested"]
+        assert len(asks) == 1 and asks[0]["metadata"]["reason"] == "sent in error"
+    asyncio.run(go())
+
+
+def test_compensation_is_refused_before_any_effect():
+    from intelligence.suggestions.models import SuggestionCompensationRequest
+
+    async def go():
+        svc = _service()
+        sid = await _review_required(svc)
+        with pytest.raises(BadRequestError):
+            await svc.request_compensation(sid, SuggestionCompensationRequest(reason="x"), _tenant())
+    asyncio.run(go())
+
+
+def test_dispatch_holds_an_end_user_suggestion_without_consent():
+    from intelligence.suggestions.dispatcher import dispatch
+
+    async def go():
+        svc = _service()
+        sid = await _review_required(
+            svc, audience="end_user", consent_subject_id="u1",
+            source=SuggestionSource.NOTIFICATION_INTELLIGENCE,
+            suggestion_class=SuggestionClass.NOTIFICATION,
+        )
+        approved = await svc.approve_suggestion(sid, SuggestionActionRequest(), _tenant())
+        result = await dispatch(approved, _tenant(), svc)
+        assert result["status"] == SuggestionStatus.APPROVED.value
+        assert result["effect_state"] == "blocked_consent"
+        blocks = [e for e in result["audit_trail"] if e["action"] == "delivery_blocked_consent"]
+        assert blocks
+    asyncio.run(go())

@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
   "services/api/identity/": "sha256:a7f1dce493471a067cf90946257aeeffc9e62627cb505302086849b9d2bd0673"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
-  "services/api/intelligence/": "sha256:4e61d818ef0512b911b3cbc5d60fff606b2398a3ebb53e869694898fd5d082e2"
+  "services/api/intelligence/": "sha256:7ad836e8faed261f25f20ca11cf32e7948f7f94e6082dc28af5d312a99dc26a8"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -3815,12 +3815,15 @@ Proactive AI-driven suggestions for operators and tenants — surfaces actionabl
 | POST | `/v1/suggestions/{suggestion_id}/execute` | Execute the suggested action directly |
 | POST | `/v1/suggestions/{suggestion_id}/deliver` | Deliver via notification channel |
 | POST | `/v1/suggestions/{suggestion_id}/outcome` | Record observed outcome after execution |
+| POST | `/v1/suggestions/{suggestion_id}/compensate` | Record a request to reverse an executed, delivered, or failed suggestion (requires `admin`); marks `effect_state` and emits an event, it does not undo anything itself |
 
 Lifecycle guarantees on these routes:
 
 - The reviewer recorded on approve, reject, suppress, and execute is the authenticated principal. A client-supplied `actor_id` is ignored.
 - `expires_at` must be an ISO 8601 timestamp. Approve, execute, and deliver on a past-due suggestion move it to `expired` and return 400.
 - `POST /v1/suggestions` accepts an optional `idempotency_key` (1-128 characters). The same key from the same principal with the same content returns the original suggestion; the same key with different content returns 409. Without a key every call creates a new suggestion.
+- `audience` is `tenant_staff` (default) or `end_user`. End-user suggestions require `consent_subject_id` and are delivered only when the consent owner reports a grant for the purpose; otherwise delivery is held, audited, and `effect_state` is `blocked_consent`.
+- `effect_state` reports what is known about the effect: `none`, `pending_receipt`, `confirmed`, `unverified`, `blocked_consent`, `failed`, or `compensation_requested`.
 - State transitions are compare-and-set on status. Of two concurrent approvals, one succeeds and the other gets 409 or 400.
 
 ### Kyber Admin Routes (`/v1/admin/kyber/suggestions`)

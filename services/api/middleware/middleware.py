@@ -22,7 +22,7 @@ import json
 import threading
 import time
 import uuid
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -87,6 +87,41 @@ _MCP_OAUTH_READ_ROUTES = frozenset(
 
 class _SkipMetering(Exception):
     """Internal control flow: this capability is audited but never metered."""
+
+
+_access_credential_limiter = None
+
+
+async def _access_credential_denial(request: Request, context: Any, credential: str, registry: Any):
+    """Return a denied RateLimitResult when this credential exceeds its capability cap.
+
+    Applies only to requests with a valid Access Kit surface label on a named
+    Access Kit route. Everything else, and any limiter failure, is allowed.
+    """
+    global _access_credential_limiter
+    surface = request.headers.get("x-aether-access-surface", "")
+    capability_id = _ACCESS_KIT_CAPABILITIES.get(
+        (request.method.upper(), getattr(request.state, "access_route_template", None))
+    )
+    if surface not in _ACCESS_KIT_SURFACES or not capability_id:
+        return None
+    from shared.rate_limit.access_capability_limit import (
+        AccessCredentialLimiter,
+        credential_fingerprint,
+    )
+    if _access_credential_limiter is None:
+        _access_credential_limiter = AccessCredentialLimiter()
+    try:
+        result = await _access_credential_limiter.check(
+            context.tenant_id,
+            credential_fingerprint(credential, getattr(context, "user_id", "") or ""),
+            capability_id,
+            redis=getattr(getattr(registry, "rate_limiter", None), "_redis", None),
+        )
+    except Exception as exc:  # noqa: BLE001 - the cap must never take reads down
+        logger.warning(f"Access credential limiter error: {exc}")
+        return None
+    return None if result.allowed else result
 
 
 class McpReadScopeDeniedError(ForbiddenError):
@@ -720,6 +755,22 @@ def register_middleware(app: FastAPI) -> None:
                             "Retry-After": str(retry_after),
                             "X-RateLimit-Remaining": "0",
                         },
+                    ))
+
+            # --- Per-credential Access Kit cap (under the tenant burst pool) ---
+            if not platform_operator:
+                cap_denial = await _access_credential_denial(request, context, api_key, registry)
+                if cap_denial is not None:
+                    metrics.increment("access_credential_rate_limited")
+                    return await _finalize_access_response(request, problem_response(
+                        429,
+                        "Rate Limit Exceeded",
+                        f"This credential reached its limit of {cap_denial.limit} requests per minute for this operation.",
+                        code="ACCESS_CREDENTIAL_RATE_LIMIT_EXCEEDED",
+                        retryable=True,
+                        request_id=request_id,
+                        extensions={"retry_after_seconds": cap_denial.retry_after},
+                        headers={**rate_headers, "Retry-After": str(cap_denial.retry_after)},
                     ))
 
             # --- Feature Gate (per-plan service access control) ---

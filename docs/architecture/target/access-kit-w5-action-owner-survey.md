@@ -15,9 +15,10 @@ stays read-only for governed 360 data. The existing `continuations create`
 operation is a principal-scoped durable resource write, not an action with an
 external effect, and it does not count toward W5.
 
-**Status.** Four of the five gaps below are closed in the owner (see "Fixed in the
-owner"). The consent and compensation gap remains open, so there is still no
-Access Kit action operation.
+**Status.** All five gaps below are closed in the owner (see "Fixed in the owner").
+No Access Kit action operation is declared, and none is needed to close W5: the
+precondition work was in the owner, and adding an operation is a separate,
+opt-in decision.
 
 **Audit depth.** Line numbers in the table cite the code as it was at commit
 `98f7e2f9c`, before the fixes below. This audit read the suggestion lifecycle end to end with file and
@@ -68,20 +69,27 @@ enforcement, concurrent approval, create replay, or an `actor_id` override.
   repository (reviewer override, expiry, replay, conflict, principal scoping,
   concurrent creates, concurrent approvals).
 
-## Still open
+## Consent, effect state, and compensation (fixed)
 
-Consent and compensation. Policy appends `verify_consent_before_delivery` for
-marketing and identity classes, but nothing calls a consent owner. The consent
-store (`ConsentRepository`) is keyed by end-user, and a suggestion's subject is
-an entity, so there is no defined mapping from a suggestion to the record that
-would prove consent. Delivery today goes only to the tenant's own staff
-notification channels (`adapters/notification_adapter.py`), so the obligation is
-latent: no path delivers to an end user. Failing closed on the consent-sensitive
-classes would stop staff alerts of those classes, and enforcing it properly needs
-the consent owner's contract before any end-user-facing delivery or Access Kit
-action exists.
-There is also no compensation path. Until both exist, no Access Kit action
-operation is declared.
+- `consent.py`: a suggestion has an `audience` (`tenant_staff` by default, or
+  `end_user`). End-user suggestions must name a `consent_subject_id` and are
+  delivered only when `shared.privacy.consent_enforcement.check_consent` (the
+  consent owner) reports a grant for the purpose mapped from the suggestion class
+  (`marketing` for campaign, retargeting, and notification; `personalization` for
+  identity). A missing subject, no record, or a failed lookup is a denial.
+- Enforcement points: `dispatcher.dispatch` (approval hand-off and execute) and
+  `service.deliver_suggestion`. A denial leaves the status unchanged, writes a
+  `delivery_blocked_consent` audit event, and sets `effect_state` to
+  `blocked_consent`.
+- `effect_state` records what is known about the effect: `pending_receipt` after a
+  delivery hand-off, `confirmed` when delivery is recorded, `unverified` after the
+  legacy executor reports success, `failed`, `blocked_consent`, and
+  `compensation_requested`. A request alone never reads as success.
+- Compensation: `POST /v1/suggestions/{id}/compensate` (admin) on an executed,
+  delivered, or failed suggestion records who asked and why, sets
+  `effect_state`, and emits `suggestion.compensation_requested` for the owner of
+  the affected system. It does not reverse anything itself, and a replay is a
+  no-op.
 
 ## Conclusion
 
@@ -103,6 +111,10 @@ gaps were, in the owner and not in the adapter:
 Then prove a full lifecycle through the direct API with double-approval, expiry,
 replay, and partial-failure tests. Only then add one opt-in Access Kit operation,
 with negative proof that read-only delegated tokens cannot call it.
+
+Declaring an Access Kit action operation remains a separate decision. It would
+still need the lifecycle proven through the direct API on a live tenant (W3) and
+negative proof that read-only delegated tokens cannot call it.
 
 A recorded request alone is not success; completion needs an owner-produced
 receipt or an explicit "effect unverified" state.
