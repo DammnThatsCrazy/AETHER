@@ -2518,6 +2518,19 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/target/access-kit-360-w0-matrix.md",
+      "title": "Access Kit × 360 — W0 Ownership and Evidence Matrix",
+      "slug": "access-kit-360-w0-matrix",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/target/access-kit-post-773-work-orders.md",
       "title": "Access Kit Post-773 Work Orders",
       "slug": "access-kit-post-773-work-orders",
@@ -2527,6 +2540,19 @@
         "architect",
         "dev-senior",
         "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/access-kit-w5-action-owner-survey.md",
+      "title": "Access Kit × 360 — W5 Action Owner Audit",
+      "slug": "access-kit-w5-action-owner-survey",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
       ],
       "status": "experimental",
       "since_version": "0.1.0"

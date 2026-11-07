@@ -1,5 +1,5 @@
 ---
-title: Access Kit × 360 — W5 Action Owner Survey
+title: Access Kit × 360 — W5 Action Owner Audit
 slug: access-kit-w5-action-owner-survey
 section: architecture
 visibility: I
@@ -8,47 +8,68 @@ status: experimental
 since_version: "0.1.0"
 ---
 
-# Access Kit × 360 — W5 Action Owner Survey
+# Access Kit × 360 — W5 Action Owner Audit
 
 **Decision: no Access Kit write or action operation is declared.** The Access Kit
 stays read-only for governed 360 data. The existing `continuations create`
 operation is a principal-scoped durable resource write, not an action with an
 external effect, and it does not count toward W5.
 
-**Survey depth.** This was a shallow code survey (file names, enums, route lists,
-test names). Items marked unknown were not read. It is not a W5 precondition audit
-with file and line citations. The audit agent that was to produce one was stopped
-by an API rate limit before it wrote anything.
+**Audit depth.** This audit read the suggestion lifecycle end to end with file and
+line citations: `lifecycle.py`, `service.py`, `repository.py`, `dispatcher.py`,
+`policy.py`, `routes.py`, and `adapters/notification_adapter.py` under
+`services/api/intelligence/suggestions/`. It read test names only, not test bodies.
+Nothing here was run against a live tenant.
 
 ## Candidate: the suggestion lifecycle
 
-`services/api/intelligence/suggestions/` is the strongest existing owner found. It
-is a tenant-scoped, approval-gated state machine with a policy decision, expiry,
-audit events, an outcome record, and routes for approve, reject, suppress,
-execute, deliver, and outcome.
+`services/api/intelligence/suggestions/` is the strongest existing owner. It is a
+tenant-scoped state machine with a policy decision, an audit trail, and a
+notification hand-off. Citations are `file:line` inside that directory.
 
-| W5 precondition | Observed | Status |
+| W5 precondition | Finding | Status |
 |---|---|---|
-| Authenticated principal and tenant binding | `test_suggestion_tenant_isolation.py` exists | Partly met; route auth not read |
-| Rights and consent from the real owner | Not seen in the service or models | Unknown |
-| Durable policy decision and approval chain, with expiry | `SuggestionPolicyDecision`, `requires_approval`, `expires_at`, and `approve`/`reject` routes exist | Partly met |
-| Atomic cross-instance idempotent create with semantic fingerprint | No idempotency or fingerprint code matched in `service.py` | Not seen |
-| Durable state machine | `SuggestionStatus` runs detected → … → executing → executed → delivered → measured → closed, plus expired and failed | Met on paper; transition atomicity unread |
-| Owner-produced receipt, readback, and effect vs request | A code comment says a suggestion stays `APPROVED` until the delivery worker confirms a provider receipt; `SuggestionOutcome` exists | Partly met |
-| Compensation through authorized owners | No compensate or rollback code matched | Not seen |
-| Replay, retry, denial, expiry, double-approval, and partial-failure tests | Lifecycle, dispatcher, policy, and outcome test files exist; contents unread | Unknown |
+| Authenticated principal and tenant binding | Create rejects a `tenant_id` that differs from the caller (`service.py:63`, `routes.py:142`). Every read and transition goes through `get_or_fail(id, tenant_id)`, which returns not-found for another tenant (`repository.py:38-50`). | Met |
+| Reviewer identity is the authenticated principal | `approve`, `reject`, and `suppress` use `body.actor_id or tenant_context.user_id` (`service.py:194`, `:221`, `:241`). A caller with `write` can record any `actor_id` as `reviewed_by` (`lifecycle.py:191-194`). | **Gap: the request body can override the reviewer** |
+| Rights and consent from the real owner | Policy only appends the string obligation `verify_consent_before_delivery` for marketing and identity classes (`policy.py:161-166`). No code calls a consent or rights owner. | **Gap: obligation is recorded, never checked** |
+| Durable policy decision and approval chain | The decision is stored on the record (`service.py:124`). `requires_approval` blocks the `suggested → approved` shortcut (`lifecycle.py:131-139`). Approve needs `write` (`routes.py:172`); execute needs `admin` (`routes.py:211`). | Met for approval; see expiry |
+| Expiry | `expires_at` is stored (`service.py:126`) and `EXPIRED` is a legal target (`lifecycle.py:57`), but nothing sets `EXPIRED` and approve never compares `expires_at` to the clock (`service.py:176-208`). | **Gap: an expired suggestion can still be approved** |
+| Atomic, idempotent create with a semantic fingerprint | `create_suggestion` always mints a new UUID (`service.py:82`) and inserts (`repository.py:30-32`). No idempotency key, no fingerprint. `find_by_source_ref` exists (`repository.py:114`) but is a 200-row scan used only by the recommendation adapter. | **Gap: a retried create makes a duplicate** |
+| Atomic state transitions | `apply_transition` reads, validates, then calls `repo.transition`, which re-reads and checks `from_status` before `update` (`lifecycle.py:176-214`, `repository.py:145-154`). The check and the write are separate calls, not a compare-and-set. | **Gap: two concurrent approvals can both pass the check** |
+| Sequential double-approval | A second approve sees `APPROVED`, which is not `review_required` or `suggested`, and raises (`service.py:184-188`). | Met sequentially only |
+| Owner-produced receipt and readback | Approval hands off to delivery and the suggestion stays `APPROVED` until a delivery worker confirms a provider receipt (`service.py:199-207`, `adapters/notification_adapter.py:91-94`). A hand-off failure is logged and the approval stands (`service.py:206-207`). | Met for notify-only delivery |
+| Execution gate | Execute needs `APPROVED`, `execution_eligible`, and the `AETHER_SUGGESTIONS_EXECUTION_ENABLED` flag, which defaults to disabled (`service.py:257-265`). Only the recommendation source can run the legacy executor (`dispatcher.py:36-38`, `:54-55`). | Met; off by default |
+| Dispatch failure handling | A non-validation error moves the suggestion to `FAILED` with an audit event; if that also fails the original record is returned unchanged (`dispatcher.py:113-130`). `FAILED` can go back to `review_required` (`lifecycle.py:100-103`). | Partly met |
+| Replay and retry | Dispatch is a no-op for `EXECUTED`, `DELIVERED`, and `CLOSED` (`dispatcher.py:29-33`, `:78-80`). | Met for dispatch only |
+| Compensation through authorized owners | No compensate, undo, or rollback code exists in the directory. `reversible` is a score input, not a mechanism (`service.py:118`). | **Gap: none** |
 
-## What must be true before any write operation is declared
+Tests exist for lifecycle, dispatcher, policy, repository, routes, service,
+outcome, and tenant isolation (`services/api/tests/unit/test_suggestion_*.py`).
+By test name, the only replay or idempotency cases are dispatcher no-ops
+(`test_suggestion_dispatcher.py:216-246`) and recommendation find-or-create
+(`test_suggestion_recommendation_adapter.py:188`). No test name covers expiry
+enforcement, concurrent approval, create replay, or an `actor_id` override.
 
-1. Read the suggestion service and repository end to end, then re-run this table
-   with file and line citations.
-2. Close the gaps found: an idempotency key with a semantic fingerprint scoped to
-   principal and tenant, a rights and consent check against the real owner, and a
-   compensation path.
-3. Prove a full lifecycle through the direct API, with double-approval, expiry,
-   replay, and partial-failure tests.
-4. Only then add one explicitly declared, opt-in Access Kit operation, with
-   negative proof that read-only delegated tokens cannot call it.
+## Conclusion
+
+The lifecycle is a sound base for a human-reviewed, notify-only flow. It is not
+ready to back an Access Kit write operation. Five owner-side gaps must close
+first, in the owner and not in the adapter:
+
+1. Take the reviewer from the authenticated principal; ignore `body.actor_id`
+   unless the caller is a verified operator.
+2. Enforce `expires_at` on approve, execute, and deliver, and add the transition
+   to `EXPIRED`.
+3. Add an idempotency key plus a semantic fingerprint scoped to tenant and
+   principal on create.
+4. Make `repo.transition` a compare-and-set on `from_status`.
+5. Call the real consent or rights owner for classes that carry
+   `verify_consent_before_delivery`, and add a compensation path or an explicit
+   "effect unverified" state.
+
+Then prove a full lifecycle through the direct API with double-approval, expiry,
+replay, and partial-failure tests. Only then add one opt-in Access Kit operation,
+with negative proof that read-only delegated tokens cannot call it.
 
 A recorded request alone is not success; completion needs an owner-produced
 receipt or an explicit "effect unverified" state.
