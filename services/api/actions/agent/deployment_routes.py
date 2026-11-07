@@ -825,6 +825,20 @@ async def behavior_drift(agent_ref: str, request: Request):
     return APIResponse(data={"agent_ref": agent_ref, "drift": drift}).to_dict()
 
 
+@lineage_router.get("/{agent_ref}/behavior/calibration")
+async def behavior_calibration(agent_ref: str, request: Request):
+    """Forward interval coverage over stored windows. A stability diagnostic;
+    rates stay uncalibrated (``calibrated`` is always false)."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.snapshot_store import (
+        BehaviorSnapshotRepository, calibration_over_stored_windows,
+    )
+
+    report = await calibration_over_stored_windows(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref)
+    return APIResponse(data={"agent_ref": agent_ref, "calibration": report}).to_dict()
+
+
 @lineage_router.get("/{agent_ref}/decisions/{decision_id}")
 async def agent_decision_detail(agent_ref: str, decision_id: str, request: Request):
     """One reconstructed DecisionEnvelope with attribution, responsibility roles
