@@ -40,7 +40,29 @@ _ROUTE_RE = re.compile(r'<Route\s+path="([^"]+)"')
 #: decision that a Kyber operator has nothing to gain from seeing the tenant's
 #: exact view — pre-auth pages, the tenant's own account/settings shell, or a
 #: surface whose operator equivalent lives elsewhere in Kyber.
+_NO_GRAPH_INPUT = (
+    "reads relational stores ({stores}), not graph vertices, so a vertex-scan mirror would "
+    "show a healthy empty tenant; needs a mirror resolver over those stores before parity applies"
+)
 NON_SURFACE: dict[str, str] = {
+    "/relationships": (
+        "shows edges from entity-anchored graph traversal; the mirror's tenant-wide vertex scan "
+        "cannot represent it, so it needs a neighbourhood resolver before parity applies"
+    ),
+    "/relationships/:entityId": (
+        "shows edges anchored on one entity; mirror rendering takes no entity id, so it needs a "
+        "neighbourhood resolver before parity applies"
+    ),
+    "/syndicates": _NO_GRAPH_INPUT.format(stores="population groups, plus the cluster graph query"),
+    "/syndicates/:syndicateId": _NO_GRAPH_INPUT.format(stores="population groups and members"),
+    "/journeys": _NO_GRAPH_INPUT.format(stores="entities, journey versions and steps"),
+    "/journeys/:profileId": _NO_GRAPH_INPUT.format(stores="journey versions and steps"),
+    "/episodes": _NO_GRAPH_INPUT.format(stores="entities, journey versions and steps"),
+    "/episodes/:profileId/:episodeId": _NO_GRAPH_INPUT.format(stores="journey versions and steps"),
+    "/communications": _NO_GRAPH_INPUT.format(stores="campaigns, messages and comms facts"),
+    "/communications/:campaignId/:messageId": _NO_GRAPH_INPUT.format(stores="messages and comms facts"),
+    "/signals": _NO_GRAPH_INPUT.format(stores="notification inbox, alert rules and preferences"),
+    "/risk": _NO_GRAPH_INPUT.format(stores="investigation cases, data quality and capability findings"),
     "/callback": "pre-authentication OIDC landing",
     "/login": "pre-authentication",
     "/signup": "pre-authentication tenant creation",

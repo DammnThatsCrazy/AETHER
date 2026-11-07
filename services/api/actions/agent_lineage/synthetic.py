@@ -22,7 +22,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Iterable, Iterator, Optional
 
 from .evidence import AuthorityRecord, PrincipalBinding
 
@@ -142,7 +142,7 @@ def _legit_swarm(b: _Builder, count: int) -> None:
             parent = parents[index % len(parents)]
             # High spawn velocity is deliberate: scale must not read as fraud.
             at = 60 + index * 0.05
-            b.spawn(parent, agent, at, state="deployment_verified", deployment="dep-legit-core")
+            b.spawn(parent, agent, at, state="attested", deployment="dep-legit-core")
             b.work(
                 agent, at + 1, deployment=f"dep-legit-{level}", definition=f"def-legit-worker-{level}",
                 state="deployment_verified", tools=("read_file", "run_tests"), operator_entity_id="org:acme",
@@ -184,7 +184,7 @@ def _malicious_swarm(b: _Builder, count: int) -> None:
             # The ephemeral layer's spawns are only source reported: strong at the
             # top of the swarm and inferred at the bottom, shown separately.
             ephemeral = level == len(layers) - 1
-            b.spawn(parent, agent, at, state=None if ephemeral else "deployment_verified",
+            b.spawn(parent, agent, at, state=None if ephemeral else "attested",
                     deployment="dep-mal-core")
             depth = level + 2
             if level == 1 and revoked_root is None:
@@ -287,7 +287,7 @@ def _edge_cases(b: _Builder, count: int) -> None:
     for level, agent in enumerate(chain):
         parent = chain[level - 1] if level else None
         if parent:
-            b.spawn(parent, agent, 13000 + level, state="deployment_verified", deployment="dep-chain")
+            b.spawn(parent, agent, 13000 + level, state="attested", deployment="dep-chain")
         b.fact(agent, "agent_task_started", 13000 + level, deployment_id="dep-chain",
                execution_verification_state="deployment_verified")
         # Past the processed depth (64) the chain is not walked, so only the shared
@@ -338,6 +338,24 @@ def build_fixture(tier: int, seed: int = 7) -> Fixture:
         for i, row in enumerate(fixture.facts[: max(1, len(fixture.facts) // 100)])
     ]
     return fixture
+
+
+def high_volume_facts(
+    agents: Iterable[str], *, events_per_agent: int, instances_per_agent: int, runs_per_agent: int,
+) -> Iterator[dict[str, Any]]:
+    """Stream tool observations for ``agents``. Generated, so the fixture stays out of memory."""
+    for agent in agents:
+        for index in range(events_per_agent):
+            yield {
+                "tenant_id": TENANT,
+                "source_event_id": f"vol-{agent}-{index}",
+                "source_event_type": "agent_tool_invocation_observed",
+                "agent_id": agent,
+                "occurred_at": _at(100 + index % 3000),
+                "tool_name": "read_file",
+                "source_run_id": f"vrun-{agent}-{index % runs_per_agent}",
+                "agent_instance_id": f"vinst-{agent}-{index % instances_per_agent}",
+            }
 
 
 def load(engine: Any, fixture: Fixture) -> None:

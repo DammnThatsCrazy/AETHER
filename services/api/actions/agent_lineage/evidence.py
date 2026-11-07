@@ -18,6 +18,9 @@ from ._common import epoch, ref
 _EVIDENCE_CLASSES = frozenset(vocab.PRINCIPAL_EVIDENCE_CLASSES)
 
 
+BINDING_SOURCES: tuple[str, ...] = ("declared", "registry", "identity")
+
+
 @dataclass(frozen=True)
 class AuthorityRecord:
     """One delegation / mandate / approval record, tenant scoped."""
@@ -94,6 +97,9 @@ class PrincipalBinding:
     agent_entity_id: Optional[str] = None
     version: int = 1
     evidence_refs: tuple[str, ...] = field(default_factory=tuple)
+    #: Bindings from different sources never supersede each other: re-posting a
+    #: declaration must not displace a registered owner or an identity resolution.
+    source: str = "declared"
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "PrincipalBinding":
@@ -124,5 +130,5 @@ class PrincipalBinding:
     @property
     def key(self) -> tuple:
         if self.kind == "claim":
-            return ("claim", self.namespace or "", self.claim_ref)
-        return ("agent", self.agent_entity_id)
+            return ("claim", self.namespace or "", self.claim_ref, self.source)
+        return ("agent", self.agent_entity_id, self.source)

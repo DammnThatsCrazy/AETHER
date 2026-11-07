@@ -445,6 +445,6 @@ export class AetherServerSDK {
 
 // External Agent Telemetry Plane V1 — re-exported after the class definition
 // because agent-telemetry extends AetherServerSDK from this module.
-export { AgentTelemetryClient, validateAgentDeploymentContext } from './agent-telemetry';
+export { AgentTelemetryClient, attestAgentEvent, validateAgentDeploymentContext } from './agent-telemetry';
 export type { AgentTelemetryConfig } from './agent-telemetry';
 export type { AgentDeploymentContext } from '@aether/shared';

@@ -22,9 +22,9 @@ source_hashes:
   "services/api/config/settings.py": "sha256:abde25ae3783e080355d11c81bafcfdff643240934ea50a0859e4fabdfb97441"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:583eeb2de1dc946b6f57e4fbc4498f9855a30965f669496c2ecd0db27bba171d"
+  "services/api/workers/runtime/roles.py": "sha256:50cd242da2ca6c62417b6e58192f0b40a47c9604e77787ae9717f32e13cd84c5"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:52c3a3a3ccfd84bd0a22fa25d63012e6c8e902d873a0a7700ef2ea0de0894774"
+  "services/api/workers/runtime/specs.py": "sha256:440199aa711ba2c921b88bbd5df3a40659e05fafabba052149b4171acc68ac3e"
 ---
 
 # Backend Execution Model

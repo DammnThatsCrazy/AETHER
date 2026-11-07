@@ -127,6 +127,12 @@ def fail(check: str, message: str) -> None:
 # ── 1. Coverage ──────────────────────────────────────────────────────────────
 
 
+def _known_vertex_types() -> set[str]:
+    from shared.graph.graph import VertexType
+
+    return {value for name, value in vars(VertexType).items() if name.isupper() and isinstance(value, str)}
+
+
 def check_coverage(surface_vertex_types: dict) -> int:
     if not MANIFEST.is_file():
         fail("coverage", f"manifest missing: {MANIFEST}")
@@ -159,6 +165,13 @@ def check_coverage(surface_vertex_types: dict) -> int:
                 "coverage",
                 f"{feature_id!r} declares an empty vertex-type tuple; an empty "
                 f"resolver reads to an operator as an empty tenant",
+            )
+        unknown = sorted(set(types) - _known_vertex_types())
+        if unknown:
+            fail(
+                "coverage",
+                f"{feature_id!r} reads unknown vertex types {unknown}; a type nothing can "
+                f"hold reads to an operator as an empty tenant",
             )
     return len(required)
 

@@ -244,6 +244,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_export_expiry_sweep_coro()
 
+    def _agent_lineage_reconcile_sweep() -> Coroutine[Any, Any, None]:
+        from actions.agent_lineage.jobs import build_reconcile_sweep_coro
+
+        return build_reconcile_sweep_coro()
+
     def _agent_behavior_jobs() -> Coroutine[Any, Any, None]:
         """Snapshot, drift and Risk360 evidence for deployment agents (default OFF)."""
         from intelligence.agent_behavior.scheduler import build_agent_behavior_coro
@@ -611,6 +616,12 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="export_expiry_sweep",
             factory=_export_expiry_sweep,
+        ),
+        # Hourly reconcile of the derived agent lineage read model; inert unless
+        # the deployment registry flag is on (re-read every pass).
+        WorkerSpec(
+            name="agent_lineage_reconcile_sweep",
+            factory=_agent_lineage_reconcile_sweep,
         ),
         # Retention for journey handoff rows (they hold anonymous IDs): hard
         # deletes rows past their retention window. Runs even when the handoff

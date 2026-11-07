@@ -326,6 +326,11 @@ async def register(
     tenant = request.state.tenant
     tenant.require_permission("write")
     agent_id = body.agent_id or str(uuid.uuid4())
+    # Insert would replace the row, handing any writer the agent's ownership.
+    existing = await _configs.find_by_id(agent_id) if body.agent_id else None
+    # A row in another tenant falls through to insert's generic refusal.
+    if existing is not None and existing.get("tenant_id") == tenant.tenant_id:
+        raise ConflictError("Agent is already registered")
     record = await _configs.register(
         agent_id=agent_id,
         owner_entity_id=body.owner_entity_id,
@@ -335,6 +340,8 @@ async def register(
         resource_uris=body.resource_uris,
         constraints=body.constraints,
         risk_tolerance=body.risk_tolerance,
+        # Server-derived: only an owner registering their own agent proves ownership.
+        asserted_by_entity_id=getattr(tenant, "user_id", None),
     )
     # Project agent + ownership.
     gateway = GraphMutationGateway(graph_client=graph)

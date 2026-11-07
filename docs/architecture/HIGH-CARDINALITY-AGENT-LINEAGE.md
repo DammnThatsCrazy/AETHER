@@ -74,24 +74,29 @@ rests on.
 
 | Source | Evidence class | Attribution |
 |---|---|---|
-| Verified grant from a principal | `VERIFIED_AUTHORITY` | verified |
-| Registered agent owner, deterministic binding | `DETERMINISTIC_BINDING` | verified |
+| Grant its own grantor made, over an unowned agent or as its registered owner | `VERIFIED_AUTHORITY` | verified |
+| Agent registered by its owner | `DETERMINISTIC_BINDING` | verified |
 | Attestation | `CRYPTOGRAPHICALLY_ATTESTED` | verified |
 | Claim with a provider binding | `PROVIDER_ASSERTED` | inferred |
-| Tenant declaration | `TENANT_DECLARED` | inferred |
+| Tenant declaration, or a grant or owner someone else asserted | `TENANT_DECLARED` | inferred |
 | Shared deployment, gated on count and share | `INFRASTRUCTURE_CORRELATED` | suspected cluster |
 | Reported claim with no binding | none | unresolved, under `unattributed` |
 
 A link inherited down the tree is only as strong as its weakest hop. A parent reporting
-a spawn from a verified deployment is a deterministic hop, and from an unverified one a
-provider-asserted hop. An agent's own statement of its parent carries no attribution,
+a spawn with attested or reconciled evidence is a deterministic hop, and otherwise a
+provider-asserted hop. `deployment_verified` is not proof: it says the deployment id
+exists in the tenant, and no credential is bound to a deployment. An agent's own statement of its parent carries no attribution,
 so an impostor naming a verified orchestrator as parent appears as an unresolved
 candidate rather than a verified member of that fleet.
 
 A non-proof link that a proof link contradicts is demoted to `unresolved`, not dropped,
 and both rows list `competing_principal_ids`. Two weak claims both stay inferred. An
-id named as a principal that is also observed as an agent is not attribution, which
-keeps human and agent identities apart.
+id named as a principal that is also seen reporting as an agent is not attribution,
+which keeps human and agent identities apart. A ref in someone else's spawn or binding
+is only a claim, so it cannot turn a principal into an agent. Bindings from different
+sources never supersede each other. Behavioral risk inputs count verified links only,
+so neither a self-claimed child nor a grant someone else wrote can raise the risk of the
+principal it names. Inferred links are reported beside them, not added to them.
 
 **Authority.** A grant's `delegation_allowed` and `maximum_delegation_depth` carry down
 the chain. Descendants past them are `out_of_scope`, and revoked or expired authority
@@ -142,12 +147,57 @@ never becomes a finding about anyone downstream.
 | No cross-tenant attribution | `ingest`, repositories | `test_tenants_are_isolated_on_read` |
 | Corrections restate | `_log_restatement` | `test_a_correction_restates_downstream_rows_and_reversing_it_returns_the_same_state` |
 
+## Operations
+
+The `agent_lineage_reconcile_sweep` worker (materializer role) enqueues one
+`agent_lineage.reconcile` job per tenant with execution facts each hour, and requests a
+full rebuild at 03:00 UTC so facts arriving with old timestamps are picked up. It is
+inert unless the deployment registry flag is on, and re-reads that flag every pass.
+
+Each reconcile also publishes the principal's behavioral signals to `risk_signals`, so
+Risk360 assessments read them, and withdraws signals that no longer hold. A failed
+publish reports `fanout_signals_published: null` and leaves the projection correct. The
+DSR component erases those signals.
+
+## Attestation
+
+A deployment may register `attestation_public_key`, a base64 Ed25519 public key.
+Registering or rotating one needs `admin` and a named user, and an agent has one key, so
+the trust root is the tenant admin. The agent signs each event with the private key,
+which Aether never holds: `AgentTelemetryClient` does this when given
+`attestationPrivateKey`, and `attestAgentEvent` is available to other callers.
+
+The signature covers the deployment, agent, event id, type and timestamp, plus a hash of
+all properties and lineage context, so it cannot be reused for another event and no
+effect or delegation field can be added under it. An event that verifies is recorded
+`attested`, and an attested spawn from its parent is a deterministic hop. A missing or
+bad signature does not reject the event; it stays `deployment_verified`, which is not
+proof. A value that does not survive the JSON round trip the same way in both languages
+fails verification, which leaves the event unattested rather than wrongly attested.
+
+## Adjudication and calibration
+
+`PUT /v1/agent-lineage/agents/{id}/adjudication` records a named person's verdict,
+`confirmed_malicious` or `cleared`, with evidence. It needs `admin` and a user, not an
+API key. Verdicts are the only source of `confirmed_malicious`, and a principal with
+none reports `null`, because nobody having decided is not the same as none found. Only
+verified links count toward a principal's confirmed total, so a declared link cannot put
+a confirmed finding on someone; inferred ones are reported separately.
+
+`GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/calibration` reports precision and
+recall for candidate thresholds against adjudicated principals. It changes nothing and
+recommends no threshold below 50 labels per class. A person updates `fanout.POLICY`.
+
 ## Known gaps
 
-- Reconciliation needs a `job_schedules` row per tenant. No default schedule is seeded.
-  An incremental pass misses facts with old timestamps until a periodic full rebuild.
-- `delegated_by_risky_actor`, `interacted_with_risky_resource`, `resembles_risky_behavior`,
-  `identity_churn` and `coordinated_execution_score` have no input yet and report `null`.
-- `RiskEvidenceBundle.agent_lineage_fanout` is caller-supplied and no caller populates
-  it yet. The `/risk` route reads the assessment directly.
-- A source ref bound to different canonical agents in two namespaces stays a source ref.
+- Fan-out thresholds are uncalibrated until there are enough real adjudications:
+  `policy.calibrated` stays `false`. The tooling exists, the labels do not.
+- Verified indirect links need deployments to register keys and sign events. Until they
+  do, expect most indirect links to read inferred. This is deliberate: the costly failure
+  is a false verified link.
+- A grant counts as proof only when the authenticated actor is the grantor, so tenants
+  whose user ids differ from their entity ids get no verified grants.
+- `resembles_risky_behavior`, `identity_churn` and `coordinated_execution_score` are
+  simple heuristics. They are context only and can never raise a principal's level.
+- A source ref bound two ways stays a source ref when a fact's deployment has no known
+  namespace.

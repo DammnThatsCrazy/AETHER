@@ -19,7 +19,7 @@ Projectors in EXACT dispatcher order (ADR-C3). Activity ownership is ADR-C4: one
 | 8 | `FrictionProjector` | `silver_friction_facts` | no_activity | `friction` | 12 | 0 |
 | 9 | `AccountActivityProjector` | `silver_account_activity_facts` | fact_emitter | `b2b` | 20 | 20 |
 | 10 | `ServerOperationProjector` | `silver_server_operation_facts` | no_activity | `server` | 11 | 0 |
-| 11 | `AgentExecutionProjector` | `silver_agent_execution_facts` | fact_emitter | `agent` | 60 | 60 |
+| 11 | `AgentExecutionProjector` | `silver_agent_execution_facts` | fact_emitter | `agent` | 97 | 97 |
 | 12 | `AIInvocationProjector` | `ai_execution_facts` | no_activity | `agent` | 1 | 0 |
 | 13 | `Web3TransactionProjector` | `silver_web3_transaction_facts` | fact_emitter | `wallet`, `web3_lc` | 17 | 17 |
 | 14 | `X402FlowProjector` | `silver_x402_flow_facts` | fact_emitter | — | 6 | 6 |

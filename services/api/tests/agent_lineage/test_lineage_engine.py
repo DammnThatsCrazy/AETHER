@@ -23,7 +23,7 @@ def _fact(agent, event="agent_task_started", at="2026-10-01T10:00:00Z", **extra)
     }
 
 
-def _spawn(parent, child, at="2026-10-01T10:00:00Z", state="deployment_verified"):
+def _spawn(parent, child, at="2026-10-01T10:00:00Z", state="attested"):
     return _fact(parent, "agent_subagent_spawned", at, parent_agent_ref=parent, child_agent_ref=child,
                  execution_verification_state=state)
 
@@ -479,3 +479,69 @@ def test_real_projector_output_flows_through_the_engine():
     # The projector leaves canonical columns NULL; the engine never reads a claim as truth.
     assert all(fact.get("canonical_principal_entity_id") is None for fact in rows)
     assert result.summaries[0]["tools_used"] == 1
+
+
+def test_a_deployment_id_alone_does_not_prove_who_reported_a_spawn():
+    engine, _ = _resolved(
+        [_fact("a"), _spawn("a", "evil", state="deployment_verified")], _grant("a"),
+    )
+    assert _row(engine, "evil")["attribution_class"] == "inferred"
+
+
+def test_a_self_claimed_child_cannot_raise_the_named_principals_risk_inputs():
+    rows = [_fact("a")]
+    for i in range(10):
+        rows.append(_fact(f"evil{i}", "agent_policy_evaluated", parent_agent_ref="a", policy_decision="deny"))
+    _, result = _resolved(rows, _grant("a", ref="g", maximum_delegation_depth=0, delegation_allowed=False))
+    summary = next(s for s in result.summaries if s["principal_entity_id"] == "human:h")
+    assert summary["unresolved_agents"] == 10
+    assert summary["activity"]["denied_event_count"] == 0
+    assert summary["activity"]["agent_count"] == 1
+    assert summary["out_of_scope_agents"] == 0
+
+
+def test_a_repeated_declaration_cannot_displace_a_registered_owner():
+    engine = LineageEngine(T)
+    engine.upsert_binding(PrincipalBinding(
+        tenant_id=T, kind="agent", principal_entity_id="human:owner", agent_entity_id="a",
+        evidence_class="DETERMINISTIC_BINDING", source="registry",
+    ))
+    for version in (1, 2, 3):
+        engine.upsert_binding(PrincipalBinding(
+            tenant_id=T, kind="agent", principal_entity_id="human:scapegoat", agent_entity_id="a",
+            evidence_class="TENANT_DECLARED", version=version,
+        ))
+    engine.ingest([_fact("a")])
+    engine.resolve()
+    assert _row(engine, "a", "human:owner")["attribution_class"] == "verified"
+    assert _row(engine, "a", "human:scapegoat")["attribution_class"] == "unresolved"
+
+
+def test_a_ref_in_someone_elses_spawn_cannot_turn_a_principal_into_an_agent():
+    rows = [_fact("a"), _spawn("a", "b"), _spawn("a", "human:h")]
+    engine, _ = _resolved(rows, _grant("a"))
+    assert _row(engine, "a")["attribution_class"] == "verified"
+    assert _row(engine, "b")["attribution_class"] == "verified"
+    # Declaring a known principal to be an agent does not redirect its fleet either.
+    engine.upsert_binding(PrincipalBinding(
+        tenant_id=T, kind="agent", principal_entity_id="human:q", agent_entity_id="human:h",
+        evidence_class="TENANT_DECLARED",
+    ))
+    engine.resolve()
+    assert _row(engine, "a")["attribution_class"] == "verified"
+    assert ("human:q", "a") not in engine.rows()
+
+
+def test_a_self_grant_over_an_owned_agent_is_not_proof_and_keeps_the_owner():
+    engine = LineageEngine(T)
+    engine.upsert_binding(PrincipalBinding(
+        tenant_id=T, kind="agent", principal_entity_id="human:owner", agent_entity_id="a",
+        evidence_class="DETERMINISTIC_BINDING", source="registry",
+    ))
+    engine.upsert_authority(_grant("a", principal="human:attacker"))
+    engine.upsert_authority(_grant("a", principal="human:owner"))
+    engine.ingest([_fact("a")])
+    engine.resolve()
+    assert _row(engine, "a", "human:owner")["attribution_class"] == "verified"
+    assert _row(engine, "a", "human:attacker")["attribution_class"] == "unresolved"
+

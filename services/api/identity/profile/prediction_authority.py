@@ -18,6 +18,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from shared.temporal.instant import MAX_INSTANT, MIN_INSTANT
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from repositories.typed_repo import TypedTableRepository
@@ -360,12 +362,12 @@ class ProfilePredictionOutputRepository(TypedTableRepository):
                 for row in self._rows
                 if row.get("tenant_id") == tenant_id
                 and row.get("entity_id") == entity_id
-                and (_utc(row.get("generated_at")) or datetime.max.replace(tzinfo=timezone.utc)) <= anchor
-                and (_utc(row.get("valid_from")) or datetime.max.replace(tzinfo=timezone.utc)) <= anchor
-                and (_utc(row.get("valid_until")) or datetime.min.replace(tzinfo=timezone.utc)) >= anchor
+                and (_utc(row.get("generated_at")) or MAX_INSTANT) <= anchor
+                and (_utc(row.get("valid_from")) or MAX_INSTANT) <= anchor
+                and (_utc(row.get("valid_until")) or MIN_INSTANT) >= anchor
             ]
             candidates.sort(
-                key=lambda row: (_utc(row.get("generated_at")) or datetime.min.replace(tzinfo=timezone.utc), str(row.get("prediction_id") or "")),
+                key=lambda row: (_utc(row.get("generated_at")) or MIN_INSTANT, str(row.get("prediction_id") or "")),
                 reverse=True,
             )
             return candidates[:bounded], len(candidates) > bounded
@@ -399,7 +401,7 @@ class ProfilePredictionOutputRepository(TypedTableRepository):
                 if row.get("tenant_id") == tenant_id
                 and row.get("model_id") == model_id
                 and row.get("artifact_version") == artifact_version
-                and start <= (_utc(row.get("generated_at")) or datetime.min.replace(tzinfo=timezone.utc)) < end
+                and start <= (_utc(row.get("generated_at")) or MIN_INSTANT) < end
             ]
             candidates.sort(key=lambda row: (str(row.get("prediction_id") or "")))
             return candidates[:bounded], len(candidates) > bounded

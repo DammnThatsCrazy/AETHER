@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, Literal, Optional, Protocol, TypeAlias
+
+from shared.temporal.instant import assume_utc
 from urllib.parse import quote
 from uuid import UUID
 
@@ -1001,7 +1003,7 @@ def _text(value: Any) -> Optional[str]:
 def _timestamp(value: Any) -> Optional[datetime]:
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return assume_utc(value)
         return value.astimezone(timezone.utc)
     if not isinstance(value, str) or not value.strip():
         return None
@@ -1009,7 +1011,7 @@ def _timestamp(value: Any) -> Optional[datetime]:
         parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
-    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return assume_utc(parsed) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 
 def _decimal_text(value: Any) -> Optional[str]:

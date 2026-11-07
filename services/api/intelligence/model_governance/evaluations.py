@@ -11,6 +11,8 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Any
+
+from shared.temporal.instant import MIN_INSTANT
 from uuid import uuid4
 
 from repositories.typed_repo import TypedTableRepository
@@ -61,7 +63,7 @@ class ModelEvaluationRepository(TypedTableRepository):
                     and r.get("domain") == domain and r.get("model_id") == model_id
                     and r.get("artifact_version") == artifact_version
                     and r.get("artifact_checksum_sha256") == artifact_checksum_sha256]
-            return max(rows, key=lambda r: _instant(r.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc), default=None)
+            return max(rows, key=lambda r: _instant(r.get("created_at")) or MIN_INSTANT, default=None)
         row = await pool.fetchrow(
             "SELECT * FROM model_governance_evaluations WHERE tenant_id=$1 AND domain=$2 AND model_id=$3 AND artifact_version=$4 AND artifact_checksum_sha256=$5 ORDER BY created_at DESC, evaluation_id DESC LIMIT 1",
             tenant_id, domain, model_id, artifact_version, artifact_checksum_sha256,

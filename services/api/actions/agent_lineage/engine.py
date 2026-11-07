@@ -25,8 +25,10 @@ Rules enforced here:
 """
 from __future__ import annotations
 
+import gc
 from bisect import insort
 from collections import Counter, defaultdict, deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Iterable, NamedTuple, Optional
 
@@ -47,14 +49,16 @@ from ._common import (
     stable_hash,
 )
 from .config import DEFAULT_CONFIG, PROJECTION_VERSION, LineageConfig
-from .evidence import AuthorityRecord, PrincipalBinding
+from .evidence import BINDING_SOURCES, AuthorityRecord, PrincipalBinding
 
 SPAWN_EVENT = "agent_subagent_spawned"
 DELEGATION_EVENTS = frozenset({"agent_delegated_task", "agent_handoff_observed"})
 TERMINAL_EVENTS = frozenset({"agent_terminated", "agent_instance_terminated"})
 DENIED_DECISIONS = frozenset({"deny", "denied", "block", "blocked", "rejected"})
 HIGH_RISK_LEVELS = frozenset({"high", "critical"})
-VERIFIED_STATES = frozenset({"deployment_verified", "attested", "reconciled"})
+#: ``deployment_verified`` only says the deployment id exists in the tenant, and no
+#: credential is bound to it, so it does not prove who reported an edge.
+VERIFIED_STATES = frozenset({"attested", "reconciled"})
 EFFECT_PROOF_STATES = frozenset({"attested", "reconciled"})
 ECONOMIC_REF_FIELDS = ("payment_intent_ref", "settlement_event_ref", "external_order_id")
 COMMUNICATION_MARKERS = ("agent_comm", "communication", "message")
@@ -74,6 +78,18 @@ _RESTATED_FIELDS = (
     "root_agent_id", "depth", "lineage_status", "authority_resolution_status",
 )
 _INSTANCE_SHORTLIVED_RUNS = 1
+
+
+@contextmanager
+def _gc_paused():
+    """Folding allocates millions of live objects and no cycles; collection only re-scans them."""
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if was_enabled:
+            gc.enable()
 
 
 class Edge(NamedTuple):
@@ -220,6 +236,9 @@ class LineageEngine:
         self._principal_agents: dict[str, set[str]] = defaultdict(set)
         self._risk_flags: dict[str, int] = {}
         self._risk_input_seen = False
+        self._risky_resources: Optional[frozenset[str]] = None
+        self._risky_ancestors: set[str] = set()
+        self._adjudications: dict[str, str] = {}
         self._source_truncation: list[str] = []
         self._pass_disclosures: list[str] = []
         self._persisted_summaries: set[str] = set()
@@ -231,20 +250,21 @@ class LineageEngine:
     def ingest(self, rows: Iterable[dict[str, Any]]) -> int:
         """Fold Silver facts; a replayed event id is ignored. Returns rows applied."""
         applied = 0
-        for row in rows:
-            if row.get("tenant_id") != self.tenant_id:
-                self.cross_tenant_rejected += 1
-                continue
-            event_id = ref(row.get("source_event_id")) or ref(row.get("fact_id")) or stable_hash(
-                row.get("agent_id"), row.get("source_event_type"), row.get("occurred_at"),
-                row.get("child_agent_ref"), row.get("trace_id"), row.get("span_id"),
-            )
-            if event_id in self._seen:
-                self.duplicates_ignored += 1
-                continue
-            self._seen.add(event_id)
-            self._apply(row, event_id)
-            applied += 1
+        with _gc_paused():
+            for row in rows:
+                if row.get("tenant_id") != self.tenant_id:
+                    self.cross_tenant_rejected += 1
+                    continue
+                event_id = ref(row.get("source_event_id")) or ref(row.get("fact_id")) or stable_hash(
+                    row.get("agent_id"), row.get("source_event_type"), row.get("occurred_at"),
+                    row.get("child_agent_ref"), row.get("trace_id"), row.get("span_id"),
+                )
+                if event_id in self._seen:
+                    self.duplicates_ignored += 1
+                    continue
+                self._seen.add(event_id)
+                self._apply(row, event_id)
+                applied += 1
         return applied
 
     def _node(self, agent_id: str) -> _Node:
@@ -283,7 +303,12 @@ class LineageEngine:
         if agent is None:
             return
         node = self._node(agent)
-        node.observed = True
+        if not node.observed:
+            node.observed = True
+            for key in self._auth_by_grantor.get(agent, ()):
+                self._dirty.add(self._authority[key].grantee_entity_id)
+            self._dirty.update(self._edge_children.get(agent, ()))
+            self._dirty.update(self._principal_refs.get(agent, ()))
         node.events += 1
         node.digest ^= digest_int(event_id)
         samples = node.samples
@@ -427,6 +452,14 @@ class LineageEngine:
                 self._dirty.add(agent)
         self._risk_flags = current
 
+    def set_adjudications(self, verdicts: dict[str, str]) -> None:
+        """A person's verdicts per agent. The only source of confirmed malicious."""
+        self._adjudications = dict(verdicts)
+
+    def set_risky_resources(self, resources: Iterable[str]) -> None:
+        """Wallets, tools and providers the risk plane flags. Input, never derived here."""
+        self._risky_resources = frozenset(resources)
+
     def set_pass_disclosures(self, reasons: Iterable[str]) -> None:
         """Reasons true of this pass only. Source truncation stays until a clean rebuild."""
         self._pass_disclosures = list(reasons)
@@ -437,10 +470,16 @@ class LineageEngine:
 
     # ── resolution ────────────────────────────────────────────────────────
 
+    def _is_observed_agent(self, entity_id: str) -> bool:
+        """Seen reporting as an agent. A ref in someone else's spawn or binding is only a claim,
+        so it cannot turn a principal into an agent and strip the principal's fleet."""
+        node = self._nodes.get(entity_id)
+        return node is not None and node.observed
+
     def _grantor_is_agent(self, record: AuthorityRecord) -> bool:
         if record.grantor_kind:
             return record.grantor_kind == "agent"
-        return record.grantor_entity_id in self._nodes
+        return self._is_observed_agent(record.grantor_entity_id)
 
     def _select_parent(self, node: _Node) -> None:
         agent = node.agent_id
@@ -501,7 +540,7 @@ class LineageEngine:
 
         def offer(link: Link) -> None:
             self._principal_refs[link.principal].add(agent)
-            if link.principal == agent or link.principal in self._nodes:
+            if link.principal == agent or self._is_observed_agent(link.principal):
                 # A principal is never an agent: identity and relationship stay
                 # separate, and an agent id named as principal is not attribution.
                 return
@@ -513,9 +552,13 @@ class LineageEngine:
             record = self._authority[key]
             if self._grantor_is_agent(record):
                 continue
+            # Only the registered owner can prove a grant over an owned agent. Otherwise
+            # any user could self-grant someone else's agent and demote its real owner.
+            owner = self._bindings.get(("agent", agent, "registry"))
+            foreign = owner is not None and owner.principal_entity_id != record.grantor_entity_id
             offer(Link(
                 principal=record.grantor_entity_id,
-                rank=_RANK_VERIFIED if record.verified else _RANK_DECLARED,
+                rank=_RANK_VERIFIED if record.verified and not foreign else _RANK_DECLARED,
                 relationship="AUTHORIZED",
                 depth=1,
                 authority_status=self._authority_status(record, node),
@@ -529,25 +572,27 @@ class LineageEngine:
                 revoked_at=record.revoked_at,
                 refs=record.evidence_refs,
             ))
-        binding = self._bindings.get(("agent", agent))
-        if binding is not None:
-            offer(Link(
-                principal=binding.principal_entity_id,
-                rank=EVIDENCE_RANK[binding.evidence_class],
-                relationship="PRINCIPAL_OF",
-                depth=1,
-                refs=binding.evidence_refs,
-            ))
-        for namespace, claim in node.claims:
-            bound = self._bindings.get(("claim", namespace, claim))
-            if bound is not None:
+        for source in BINDING_SOURCES:
+            binding = self._bindings.get(("agent", agent, source))
+            if binding is not None:
                 offer(Link(
-                    principal=bound.principal_entity_id,
-                    rank=EVIDENCE_RANK[bound.evidence_class],
-                    relationship="ACTED_ON_BEHALF_OF",
+                    principal=binding.principal_entity_id,
+                    rank=EVIDENCE_RANK[binding.evidence_class],
+                    relationship="PRINCIPAL_OF",
                     depth=1,
-                    refs=bound.evidence_refs,
+                    refs=binding.evidence_refs,
                 ))
+        for namespace, claim in node.claims:
+            for source in BINDING_SOURCES:
+                bound = self._bindings.get(("claim", namespace, claim, source))
+                if bound is not None:
+                    offer(Link(
+                        principal=bound.principal_entity_id,
+                        rank=EVIDENCE_RANK[bound.evidence_class],
+                        relationship="ACTED_ON_BEHALF_OF",
+                        depth=1,
+                        refs=bound.evidence_refs,
+                    ))
         return links
 
     def _extend(
@@ -706,7 +751,9 @@ class LineageEngine:
             node = self._nodes.get(agent)
             if node is None or node.observed or node.edges or node.self_edge:
                 continue
-            if self._auth_by_grantee.get(agent) or ("agent", agent) in self._bindings:
+            if self._auth_by_grantee.get(agent) or any(
+                ("agent", agent, source) in self._bindings for source in BINDING_SOURCES
+            ):
                 continue
             removed.append(agent)
         for agent in removed:
@@ -729,6 +776,10 @@ class LineageEngine:
 
     def resolve(self) -> ResolveResult:
         """Re-derive what changed and return the row delta for the read model."""
+        with _gc_paused():
+            return self._resolve()
+
+    def _resolve(self) -> ResolveResult:
         removed = self._prune()
         dirty = set(self._dirty)
         for agent in dirty:
@@ -1035,6 +1086,13 @@ class LineageEngine:
             for agent in self._nodes
         }
         order = sorted(self._nodes, key=lambda agent: -self._res[agent].depth)
+        self._risky_ancestors = set()
+        for agent in reversed(order):
+            parent = self._res[agent].parent
+            if parent is not None and (
+                parent in self._risky_ancestors or self._risk_count(self._nodes[parent])
+            ):
+                self._risky_ancestors.add(agent)
         for agent in order:
             parent = self._res[agent].parent
             if parent is None:
@@ -1141,6 +1199,10 @@ class LineageEngine:
         rows = [self._rows[(principal, agent)] for agent in agents]
         by_attr = Counter(row["attribution_class"] for row in rows)
         attributed = [row for row in rows if row["attribution_class"] in ("verified", "inferred")]
+        # Behavioral inputs count proof-class links only: a self-claimed child or a grant
+        # someone else wrote must not be able to raise the risk of the principal it names.
+        proven = [row for row in rows if row["attribution_class"] == "verified"]
+        proven_nodes = [self._nodes[row["agent_entity_id"]] for row in proven]
         direct = sum(1 for row in attributed if row["direct_or_indirect"] == "direct")
         active = sum(1 for row in rows if row["active_state"] == "active")
         unknown_state = sum(1 for row in rows if row["active_state"] == "unknown")
@@ -1188,8 +1250,8 @@ class LineageEngine:
             "indirect_agents": len(attributed) - direct,
             "probabilistic_agents": by_attr.get("suspected_cluster", 0),
             "unresolved_agents": by_attr.get("unresolved", 0),
-            "revoked_agents": sum(1 for row in rows if row["relationship_status"] == "revoked"),
-            "out_of_scope_agents": sum(1 for row in rows if row["authority_resolution_status"] == "out_of_scope"),
+            "revoked_agents": sum(1 for row in attributed if row["relationship_status"] == "revoked"),
+            "out_of_scope_agents": sum(1 for row in attributed if row["authority_resolution_status"] == "out_of_scope"),
             "unknown_state_agents": unknown_state,
             "risk_flagged_agents": (
                 None if all(value is None for value in risk_values)
@@ -1211,7 +1273,17 @@ class LineageEngine:
                 "truncated": bool(reasons),
                 "truncation_reasons": reasons + partial_reasons,
             },
-            "activity": self._activity(principal, nodes, rows, clusters, as_of),
+            "activity": {
+                **self._activity(principal, proven_nodes, proven, clusters, as_of),
+                # Reported beside the verified total: context, and never published as verified.
+                "confirmed_malicious_inferred_links": sum(
+                    1 for row in attributed
+                    if row["attribution_class"] == "inferred"
+                    and self._adjudications.get(row["agent_entity_id"]) == "confirmed_malicious"
+                ),
+                "revoked_agents": sum(1 for row in proven if row["relationship_status"] == "revoked"),
+                "out_of_scope_agents": sum(1 for row in proven if row["authority_resolution_status"] == "out_of_scope"),
+            },
         }
 
     def _activity(
@@ -1248,12 +1320,34 @@ class LineageEngine:
             if len(node.runs) <= _INSTANCE_SHORTLIVED_RUNS and node.first is not None and node.first == node.last:
                 ephemeral += 1
         for row in rows:
-            if row["relationship_status"] == "revoked" and row["active_state"] == "revoked":
+            # Published as observed, so it rests on proof-class links alone.
+            if row["attribution_class"] == "verified" and row["relationship_status"] == "revoked":
                 node = self._nodes[row["agent_entity_id"]]
                 link = next((li for li in self._effective_links(node.agent_id) if li.principal == principal), None)
                 if link and link.revoked_at is not None and node.last is not None and node.last > link.revoked_at:
                     revoked_active += 1
         direct_children = Counter(row["parent_agent_id"] for row in rows if row["parent_agent_id"])
+        risk_known = any(row["risk_signal_count"] is not None for row in rows)
+        signatures: Counter[tuple[str, ...]] = Counter()
+        flagged_signatures: set[tuple[str, ...]] = set()
+        coordinated: Counter[tuple[int, tuple[str, ...]]] = Counter()
+        touched = risky_ancestor = 0
+        for node in nodes:
+            if node.agent_id in self._risky_ancestors:
+                risky_ancestor += 1
+            if self._risky_resources and not self._risky_resources.isdisjoint(
+                node.wallets | node.tools | node.providers | node.services
+            ):
+                touched += 1
+            if not node.tools:
+                continue
+            signature = tuple(sorted(node.tools))
+            if self._risk_count(node):
+                flagged_signatures.add(signature)
+            else:
+                signatures[signature] += 1
+            if node.first is not None:
+                coordinated[(int(node.first // self.config.swarm_bucket_seconds), signature)] += 1
         ordered_buckets = sorted(timeline.items())[-1440:]
         return {
             "agent_count": len(nodes),
@@ -1273,6 +1367,24 @@ class LineageEngine:
             "outcome_count": len(outcomes),
             "revoked_agent_activity": revoked_active,
             "max_direct_fanout": max(direct_children.values(), default=0),
+            "delegated_by_risky_actor": risky_ancestor if risk_known else None,
+            "interacted_with_risky_resource": None if self._risky_resources is None else touched,
+            # Same tool set as a flagged agent. A likeness, never a finding.
+            "resembles_risky_behavior": (
+                sum(signatures[signature] for signature in flagged_signatures) if risk_known else None
+            ),
+            "largest_coordinated_group": max(coordinated.values(), default=None),
+            # No verdict on any linked agent means nobody has decided, not none found.
+            # Published as verified, so it counts proof-class links alone. A declared link
+            # must not put a confirmed finding on someone.
+            "confirmed_malicious_agents": (
+                sum(
+                    1 for row in rows
+                    if row["attribution_class"] == "verified"
+                    and self._adjudications.get(row["agent_entity_id"]) == "confirmed_malicious"
+                )
+                if any(node.agent_id in self._adjudications for node in nodes) else None
+            ),
             "shared_infra_largest_share": max(
                 (c["member_count"] for c in clusters if c["kind"] in ("infrastructure_cluster", "agent_fleet")),
                 default=0,
