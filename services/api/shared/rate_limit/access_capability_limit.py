@@ -3,7 +3,7 @@
 The tenant burst limiter (``limiter.py``) shares one pool across every key in a
 tenant. This cap sits under it so a single API key or delegated token cannot use
 the whole tenant allowance on one capability. It applies only to requests that
-carry a valid Access Kit surface label, and never to platform operators.
+hit a named Access Kit route (whatever surface label the client sends), and never to platform operators. The caller keys it on the credential the authenticator validated, not on request headers.
 
 The limit is requests per minute per (credential, capability). It defaults to
 ``DEFAULT_LIMIT_RPM`` and is set with ``AETHER_ACCESS_KIT_CREDENTIAL_RPM``;

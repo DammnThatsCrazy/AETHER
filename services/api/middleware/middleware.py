@@ -92,18 +92,21 @@ class _SkipMetering(Exception):
 _access_credential_limiter = None
 
 
-async def _access_credential_denial(request: Request, context: Any, credential: str, registry: Any):
-    """Return a denied RateLimitResult when this credential exceeds its capability cap.
+async def _access_credential_denial(request: Request, context: Any, registry: Any):
+    """Return a denied RateLimitResult when this credential exceeds its operation cap.
 
-    Applies only to requests with a valid Access Kit surface label on a named
-    Access Kit route. Everything else, and any limiter failure, is allowed.
+    The cap follows the authenticated route, not a client-supplied label: any call
+    to a named Access Kit route is counted, whatever surface header it sends. The
+    bucket is keyed on the credential the authenticator actually validated
+    (``request.state.validated_credential``), never on raw request headers, so
+    garbage or rotated headers cannot mint new buckets. If that is unavailable the
+    key falls back to the authenticated principal, never to client input.
     """
     global _access_credential_limiter
-    surface = request.headers.get("x-aether-access-surface", "")
     capability_id = _ACCESS_KIT_CAPABILITIES.get(
         (request.method.upper(), getattr(request.state, "access_route_template", None))
     )
-    if surface not in _ACCESS_KIT_SURFACES or not capability_id:
+    if not capability_id:
         return None
     from shared.rate_limit.access_capability_limit import (
         AccessCredentialLimiter,
@@ -111,10 +114,15 @@ async def _access_credential_denial(request: Request, context: Any, credential: 
     )
     if _access_credential_limiter is None:
         _access_credential_limiter = AccessCredentialLimiter()
+    validated = getattr(request.state, "validated_credential", "") or ""
+    principal = "|".join((
+        str(getattr(context, "user_id", "") or ""),
+        str(getattr(context, "credential_class", "") or ""),
+    ))
     try:
         result = await _access_credential_limiter.check(
             context.tenant_id,
-            credential_fingerprint(credential, getattr(context, "user_id", "") or ""),
+            credential_fingerprint(validated, principal),
             capability_id,
             redis=getattr(getattr(registry, "rate_limiter", None), "_redis", None),
         )
@@ -759,7 +767,7 @@ def register_middleware(app: FastAPI) -> None:
 
             # --- Per-credential Access Kit cap (under the tenant burst pool) ---
             if not platform_operator:
-                cap_denial = await _access_credential_denial(request, context, api_key, registry)
+                cap_denial = await _access_credential_denial(request, context, registry)
                 if cap_denial is not None:
                     metrics.increment("access_credential_rate_limited")
                     return await _finalize_access_response(request, problem_response(
@@ -1519,9 +1527,12 @@ async def _authenticate_async(
     """
     api_key = request.headers.get("X-API-Key")
     if api_key:
-        return await api_key_validator.validate_async(api_key)
+        ctx = await api_key_validator.validate_async(api_key)
+        request.state.validated_credential = api_key
+        return ctx
 
     # Additive: trust-plane credential classes (sessions / ingest / service).
+    # ``_resolve_trust_plane_context`` records the credential it validated.
     trust_ctx = await _resolve_trust_plane_context(request)
     if trust_ctx is not None:
         return trust_ctx
@@ -1542,20 +1553,27 @@ async def _authenticate_async(
                 or (method == "POST" and (method, route) not in _READ_SEMANTIC_POST_ROUTES)
             ):
                 raise UnauthorizedError("MCP OAuth token is not valid for this route")
-            return await _resolve_mcp_oauth_token(token)
+            ctx = await _resolve_mcp_oauth_token(token)
+            request.state.validated_credential = token
+            return ctx
         if _token_declares_mcp_audience(token):
             raise UnauthorizedError("MCP OAuth token requires the hosted MCP service")
         # Try API key first (SDK pattern); fall back to JWT (SSO/user pattern)
         try:
-            return await api_key_validator.validate_async(token)
+            ctx = await api_key_validator.validate_async(token)
+            request.state.validated_credential = token
+            return ctx
         except Exception:
             pass
         # A session token may also arrive via Bearer.
         sess_ctx = await _resolve_session_token(token)
         if sess_ctx is not None:
+            request.state.validated_credential = token
             return sess_ctx
         payload = jwt_handler.decode(token)
-        return jwt_handler.extract_context(payload)
+        ctx = jwt_handler.extract_context(payload)
+        request.state.validated_credential = token
+        return ctx
 
     raise UnauthorizedError("Missing API key or Bearer token")
 
@@ -1624,6 +1642,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if token:
             ctx = await _resolve_session_token(token)
             if ctx is not None:
+                request.state.validated_credential = token
                 return ctx
 
     if getattr(tp, "public_ingest_identifier_enabled", False):
@@ -1631,6 +1650,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if ident:
             ctx = await _resolve_public_ingest(ident)
             if ctx is not None:
+                request.state.validated_credential = ident
                 return ctx
 
     if getattr(tp, "service_credentials_enabled", False):
@@ -1638,6 +1658,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if cred:
             ctx = await _resolve_service_credential(cred)
             if ctx is not None:
+                request.state.validated_credential = cred
                 return ctx
 
     return None

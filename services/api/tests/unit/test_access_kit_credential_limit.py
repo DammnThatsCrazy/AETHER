@@ -66,29 +66,78 @@ def test_fingerprint_is_stable_and_not_the_secret():
     assert credential_fingerprint("") == ""
 
 
-async def test_middleware_helper_caps_only_attributed_access_kit_calls(monkeypatch):
+def _bound(request, credential):
+    request.state.validated_credential = credential
+    return request
+
+
+async def test_cap_follows_the_authenticated_route_not_the_surface_label(monkeypatch):
     monkeypatch.setenv("AETHER_ACCESS_KIT_CREDENTIAL_RPM", "2")
-    context = SimpleNamespace(tenant_id="t", user_id="u")
+    context = SimpleNamespace(tenant_id="t", user_id="u", credential_class="legacy")
     registry = SimpleNamespace(rate_limiter=SimpleNamespace(_redis=None))
-    request = _request()
-    assert await mw._access_credential_denial(request, context, "key-1", registry) is None
-    assert await mw._access_credential_denial(request, context, "key-1", registry) is None
-    denied = await mw._access_credential_denial(request, context, "key-1", registry)
-    assert denied is not None and denied.limit == 2
-    # Another credential, a non-Access-Kit caller, and an unlisted route are untouched.
-    assert await mw._access_credential_denial(request, context, "key-2", registry) is None
-    assert await mw._access_credential_denial(_request(surface=""), context, "key-1", registry) is None
-    assert await mw._access_credential_denial(_request(route="/v1/other"), context, "key-1", registry) is None
-    assert await mw._access_credential_denial(_request(surface="customer-supplied"), context, "key-1", registry) is None
+    # No surface header, and a made-up one, are capped exactly like a real one.
+    for surface in ("cli", "", "customer-supplied"):
+        monkeypatch.setattr(mw, "_access_credential_limiter", None)
+        request = _bound(_request(surface=surface), "key-1")
+        assert await mw._access_credential_denial(request, context, registry) is None
+        assert await mw._access_credential_denial(request, context, registry) is None
+        denied = await mw._access_credential_denial(request, context, registry)
+        assert denied is not None and denied.limit == 2
+
+
+async def test_cap_only_applies_to_named_access_kit_routes(monkeypatch):
+    monkeypatch.setenv("AETHER_ACCESS_KIT_CREDENTIAL_RPM", "1")
+    context = SimpleNamespace(tenant_id="t", user_id="u", credential_class="legacy")
+    registry = SimpleNamespace(rate_limiter=SimpleNamespace(_redis=None))
+    other = _bound(_request(route="/v1/other"), "key-1")
+    for _ in range(3):
+        assert await mw._access_credential_denial(other, context, registry) is None
+
+
+async def test_a_different_validated_credential_has_its_own_bucket(monkeypatch):
+    monkeypatch.setenv("AETHER_ACCESS_KIT_CREDENTIAL_RPM", "1")
+    context = SimpleNamespace(tenant_id="t", user_id="u", credential_class="legacy")
+    registry = SimpleNamespace(rate_limiter=SimpleNamespace(_redis=None))
+    assert await mw._access_credential_denial(_bound(_request(), "key-1"), context, registry) is None
+    assert await mw._access_credential_denial(_bound(_request(), "key-1"), context, registry) is not None
+    assert await mw._access_credential_denial(_bound(_request(), "key-2"), context, registry) is None
+
+
+async def test_rotating_unvalidated_headers_cannot_mint_new_buckets(monkeypatch):
+    monkeypatch.setenv("AETHER_ACCESS_KIT_CREDENTIAL_RPM", "2")
+    context = SimpleNamespace(tenant_id="t", user_id="u", credential_class="human_session")
+    registry = SimpleNamespace(rate_limiter=SimpleNamespace(_redis=None))
+    results = []
+    for index in range(5):
+        # Same authenticated session; the client varies Authorization/X-API-Key text.
+        request = _request()
+        request.scope["headers"] = [
+            (b"authorization", f"Bearer junk-{index}".encode()),
+            (b"x-api-key-ignored", f"junk-{index}".encode()),
+        ]
+        request.state.validated_credential = "session-token"
+        results.append(await mw._access_credential_denial(request, context, registry))
+    assert [r is None for r in results] == [True, True, False, False, False]
+
+
+async def test_missing_validated_credential_falls_back_to_the_principal_not_headers(monkeypatch):
+    monkeypatch.setenv("AETHER_ACCESS_KIT_CREDENTIAL_RPM", "1")
+    context = SimpleNamespace(tenant_id="t", user_id="u", credential_class="legacy")
+    registry = SimpleNamespace(rate_limiter=SimpleNamespace(_redis=None))
+    first, second = _request(), _request()
+    first.scope["headers"] = [(b"authorization", b"Bearer a")]
+    second.scope["headers"] = [(b"authorization", b"Bearer b")]
+    assert await mw._access_credential_denial(first, context, registry) is None
+    assert await mw._access_credential_denial(second, context, registry) is not None
 
 
 async def test_frame_reads_are_capped_per_credential(monkeypatch):
     monkeypatch.setenv("AETHER_ACCESS_KIT_CREDENTIAL_RPM", "1")
-    context = SimpleNamespace(tenant_id="t", user_id="u")
+    context = SimpleNamespace(tenant_id="t", user_id="u", credential_class="legacy")
     registry = SimpleNamespace(rate_limiter=SimpleNamespace(_redis=None))
-    request = _request(method="POST", route="/v1/experience360/frames")
-    assert await mw._access_credential_denial(request, context, "k", registry) is None
-    assert await mw._access_credential_denial(request, context, "k", registry) is not None
+    request = _bound(_request(method="POST", route="/v1/experience360/frames"), "k")
+    assert await mw._access_credential_denial(request, context, registry) is None
+    assert await mw._access_credential_denial(request, context, registry) is not None
 
 
 async def test_limiter_failure_never_blocks_a_read(monkeypatch):
@@ -97,5 +146,25 @@ async def test_limiter_failure_never_blocks_a_read(monkeypatch):
             raise RuntimeError("redis down")
 
     monkeypatch.setattr(mw, "_access_credential_limiter", Boom())
-    context = SimpleNamespace(tenant_id="t", user_id="u")
-    assert await mw._access_credential_denial(_request(), context, "k", SimpleNamespace()) is None
+    context = SimpleNamespace(tenant_id="t", user_id="u", credential_class="legacy")
+    assert await mw._access_credential_denial(_bound(_request(), "k"), context, SimpleNamespace()) is None
+
+
+class _Validator:
+    def __init__(self, valid): self.valid = valid
+    async def validate_async(self, key):
+        if key not in self.valid:
+            raise RuntimeError("invalid")
+        return SimpleNamespace(tenant_id="t", user_id=None, credential_class="legacy")
+
+
+async def test_authenticator_records_the_credential_it_validated():
+    request = _request()
+    request.scope["headers"] = [(b"x-api-key", b"good-key"), (b"authorization", b"Bearer junk")]
+    await mw._authenticate_async(request, None, _Validator({"good-key"}))
+    assert request.state.validated_credential == "good-key"
+
+    bearer = _request()
+    bearer.scope["headers"] = [(b"authorization", b"Bearer good-token")]
+    await mw._authenticate_async(bearer, None, _Validator({"good-token"}))
+    assert bearer.state.validated_credential == "good-token"
