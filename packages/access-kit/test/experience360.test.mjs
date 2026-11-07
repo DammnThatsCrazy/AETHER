@@ -77,7 +77,7 @@ const cliFrameArgs = [
 ];
 
 test('operation list declares the bounded 360 frame read once, as a read-only closed-table entry', () => {
-  assert.equal(accessOperationIds.length, 9);
+  assert.equal(accessOperationIds.length, 11);
   assert.equal(accessOperationIds.filter((id) => id === OPERATION_ID).length, 1);
   const operation = getAccessOperation(OPERATION_ID);
   assert.deepEqual(

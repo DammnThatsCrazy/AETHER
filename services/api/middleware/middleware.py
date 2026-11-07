@@ -72,6 +72,7 @@ _ACCESS_KIT_CAPABILITIES = {
 _READ_SEMANTIC_POST_ROUTES = frozenset({
     ("POST", "/v1/experience360/frames"),
 })
+_UNMETERED_ACCESS_CAPABILITIES = frozenset({"billing.usage.summary.read"})
 _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # A delegated MCP token is accepted only for these named read routes. The
 # request header selects this path only when a per-request assertion from the
@@ -109,6 +110,9 @@ async def _record_access_interaction(request: Request, response: Response) -> di
     capability_id = _ACCESS_KIT_CAPABILITIES.get((request.method.upper(), route_template))
     tenant = getattr(request.state, "tenant", None)
     if surface not in _ACCESS_KIT_SURFACES or not capability_id or tenant is None:
+        return {}
+    # Reading the interaction count must not change the count it reports.
+    if capability_id in _UNMETERED_ACCESS_CAPABILITIES:
         return {}
 
     request_id = getattr(request.state, "request_id", "")

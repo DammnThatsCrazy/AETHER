@@ -57,16 +57,19 @@ orchestrator wants it. A frame existing is not a claim that a surface is complet
 | Audit / usage IDs | Fixed: the route now has an `_ACCESS_KIT_CAPABILITIES` entry (`experience360.frame.read`) and is attributed as a read, so audit and usage IDs come back when the surface header is sent. Usage stays non-billable. |
 | Catalog table | The adapter's allowlist is hand-maintained, guarded by a drift test against `packages/shared/contracts/intelligence-projection-registry.json`. Generating it is a follow-up. |
 | Source-linked docs | `mcp-api-cli-access-kit.md` links this package and needs review and restamp. |
-| W1 triage | On unmodified `origin/development` (`46cbb7141`), 4 of 310 tests in `-k "experience360 or economic360 or cross_360 or intelligence_projection"` fail identically with and without this branch: `test_experience360_agent_outcomes_frame::test_agent360_business_outcomes_reads_exact_agent_truth_with_evidence` ("projection result is not bound to a requested 360 slot"), and `test_experience360_composition::{test_signals360_unjoined_risk_flags_do_not_query_risk360, test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360, test_profile_relationships_routes_exact_entity_to_relationship360_after_policy}` (composition routing mismatches). They are pre-existing logic divergences, not environment flakes. Economic360 suites pass. Not fixed: they need the 360 composition owner. Hosted `ci / verdict` and the payment/spending-limit status were not checked. |
-| W2 server gaps | Fixed (see above). |
-| W3, W4, W5, W6 | Not attempted. They need hosted CI, staging, real credentials, and owner contracts. |
+| W1 triage | Closed on the rebased base (`af3f0af62`). The 4 failures seen on `46cbb7141` were reduced to 1 by upstream work: `test_experience360_agent_outcomes_frame` asserted section provenance only, but Outcome360 now emits a claim-kind provenance entry, so the test now asserts section and claim provenance separately. `test_usage_summary_itself_is_not_metered` failed because no exclusion existed; `billing.usage.summary.read` is now excluded from interaction metering. Hosted `ci / verdict` and the payment/spending-limit status were not checked. |
+| W2 server gaps | Fixed (see above). Server request bounds added: at most 64 slots (each 1 to 128 characters), 16 lens IDs, 256-character subject ID, `purpose`, and `authorizationContextRef`, and a 64-character `asOf`. |
+| W3 | Deferred by the user until development is merged to staging. Not attempted. |
+| W4 | Partial: server-side input bounds, retry-safe single-attempt adapter, non-billable attribution. Not done: plan/ACU gate, per-credential or per-capability limits, spend budget, reconciliation. Those need a meter and limit contract that the billing owner has not approved. |
+| W5 | Survey only; no action operation declared. See `access-kit-w5-action-owner-survey.md`. |
+| W6 | Docs and operator runbook added to `mcp-api-cli-access-kit.md`. Not done: aether-web per-slot state display, kyber-web diagnostics, npm clean-install check, remote MCP login conformance. |
 
 ## Evidence matrix
 
 | Level | Status |
 |---|---|
 | E1 code present | Yes (working tree; not committed) |
-| E2 local focused | Access Kit `npm test`: 68 pass, 0 fail. API tests (Python 3.11): contract 19 pass, read-semantic POST 5 pass. `test_usage_summary_itself_is_not_metered` fails on unmodified `development` (no exclusion exists in `_record_access_interaction`), so it predates this work |
+| E2 local focused | Access Kit `npm test`: 77 pass, 0 fail. API tests (Python 3.11): 343 pass, 0 fail in `-k "experience360 or economic360 or cross_360 or intelligence_projection or access_kit or middleware or route_polic or mcp"` |
 | E3 fixture integration | Mock-fetch parity across Node/CLI/MCP, with negative controls |
 | E4 hosted `ci / verdict` | Not run |
 | E5 staging | Not run |

@@ -179,4 +179,12 @@ async def test_agent360_business_outcomes_reads_exact_agent_truth_with_evidence(
     ]
     assert [ref.id for ref in slot.evidenceRefs] == [evidence.id]
     assert {item.projectionId for item in slot.provenance} == {"outcome360"}
-    assert {item.sectionId for item in slot.provenance} == {"evidence", "outcomes"}
+    assert {
+        item.sectionId for item in slot.provenance if item.sourceKind == "section"
+    } == {"evidence", "outcomes"}
+    # The provider marks this exact slot on its claim, so the composer adds a
+    # claim-kind entry that is bound to the claim and carries no section.
+    claim_provenance = [item for item in slot.provenance if item.sourceKind == "claim"]
+    assert [(item.claimId, item.sectionId) for item in claim_provenance] == [
+        ("outcome.agent-outcome-valid", None)
+    ]

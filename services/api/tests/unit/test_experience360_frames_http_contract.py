@@ -320,6 +320,14 @@ def test_unknown_provider_evidence_is_preserved_not_promoted(client, runtime) ->
         {"asOf": "2026-10-30T12:00:00"},  # timezone required
         {"asOf": "not-a-date"},
         {"unexpectedField": True},
+        # Server-side bounds hold for any client, not only the Access Kit adapter.
+        {"subject": {"kind": "entity", "id": "e" * 257}},
+        {"requestedSlotIds": ["identity_spine"] * 65},
+        {"requestedSlotIds": ["s" * 129]},
+        {"lensIds": ["l"] * 17},
+        {"purpose": "p" * 257},
+        {"authorizationContextRef": "a" * 257},
+        {"asOf": "2026-10-30T12:00:00+00:00" + " " * 64},
     ],
 )
 def test_invalid_requests_are_rejected_before_any_read(client, runtime, override) -> None:
