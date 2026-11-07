@@ -104,3 +104,47 @@ async def test_reconciliation_route_requires_admin_and_is_tenant_scoped(monkeypa
     body = await routes.get_access_kit_reconciliation(request_for(["read", "admin"]), START, END)
     assert seen["args"] == ("t-1", START, END)
     assert body["data"]["consistent"] is True
+
+
+async def test_daily_cycle_reconciles_yesterday_for_every_tenant_and_isolates_failures():
+    from datetime import datetime, timezone
+
+    from billing.billing.access_reconciliation import previous_utc_day, run_access_reconciliation_cycle
+
+    now = datetime(2026, 11, 8, 2, 10, tzinfo=timezone.utc)
+    start, end = previous_utc_day(now)
+    assert start.startswith("2026-11-07T00:00:00") and end.startswith("2026-11-08T00:00:00")
+
+    class Audit:
+        async def list_for_tenant(self, tenant_id, limit=0):
+            if tenant_id == "boom":
+                raise RuntimeError("store down")
+            if tenant_id == "gap":
+                return [_audit("r1", tenant="gap", created="2026-11-07T12:00:00+00:00")]
+            return []
+
+    summary = await run_access_reconciliation_cycle(
+        now, tenant_ids=["ok", "gap", "boom"], audit_repo=Audit(), metering_repo=_Meter([]),
+    )
+    assert summary["tenants"] == 3
+    assert (summary["consistent"], summary["inconsistent"], summary["failed"]) == (1, 1, 1)
+
+
+def test_cycle_is_registered_as_a_supervised_maintenance_worker():
+    from types import SimpleNamespace
+
+    from workers.runtime.roles import ROLE_TO_SPEC_NAMES as ROLE_WORKERS
+    from workers.runtime.specs import build_worker_specs
+
+    names = {s.name for s in build_worker_specs(registry=SimpleNamespace(), settings=SimpleNamespace())}
+    assert "access_reconciliation" in names
+    assert "access_reconciliation" in ROLE_WORKERS["maintenance"]
+
+
+def test_next_run_is_within_a_day():
+    from datetime import datetime, timezone
+
+    from billing.billing.access_reconciliation import _seconds_until_next_run
+
+    assert 0 < _seconds_until_next_run(datetime(2026, 11, 8, 1, 0, tzinfo=timezone.utc)) == 70 * 60
+    assert _seconds_until_next_run(datetime(2026, 11, 8, 3, 0, tzinfo=timezone.utc)) == 23 * 3600 + 10 * 60

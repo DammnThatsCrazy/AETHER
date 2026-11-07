@@ -52,7 +52,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
-  "services/api/connectors/provider_runtime/": "sha256:7bc893666ac1be2acf3c02a8318ff9fdbeffac4ab46229ecdfbc28f29fbdc5e2"
+  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
@@ -62,8 +62,8 @@ source_hashes:
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
-  "services/api/workers/runtime/roles.py": "sha256:50cd242da2ca6c62417b6e58192f0b40a47c9604e77787ae9717f32e13cd84c5"
-  "services/api/workers/runtime/specs.py": "sha256:440199aa711ba2c921b88bbd5df3a40659e05fafabba052149b4171acc68ac3e"
+  "services/api/workers/runtime/roles.py": "sha256:9dc895c61c99ce3bcf81c979bc4b195a2e230822233ab178159a48379f6d4f0b"
+  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
 ---
 # Operations Runbook v0.1.0-alpha.0
 

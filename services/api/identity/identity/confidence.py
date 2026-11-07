@@ -133,7 +133,8 @@ _REASON_BY_SIGNAL: dict[IdentitySignalType, str] = {
     IdentitySignalType.MOBILE_INSTALL_ID:          REASON_SAME_DEVICE_INSTALL,
     IdentitySignalType.INSTALLATION_ID:            REASON_SAME_DEVICE_INSTALL,
     IdentitySignalType.BROWSER_ID:                 REASON_SAME_DEVICE_INSTALL,
-    IdentitySignalType.DEVICE_FINGERPRINT:         REASON_FINGERPRINT_ONLY_BLOCKED,
+    # No per-signal label for DEVICE_FINGERPRINT: ``fingerprint_only_blocked`` is
+    # emitted only by the block rule above, never for a corroborated fingerprint.
     IdentitySignalType.CAMPAIGN_ID:                REASON_SAME_CAMPAIGN_PATH,
     IdentitySignalType.JOURNEY_ID:                 REASON_SAME_JOURNEY_PATH,
     IdentitySignalType.AGENT_ID:                   REASON_SAME_AGENT_DELEGATION,

@@ -132,6 +132,7 @@ def test_workflow_permission_receipt_requires_exact_decision_binding(changed):
         approval_rows=[row], execution_refs=[EvidenceRef(id="execution-a", type="event", source="agent_executions")],
         available=True, complete=True, reason=None,
         principal_identity_read=WorkflowPrincipalIdentityRead((), True, True),
+        agent_access_rows=[],
     )
     check = section.content["approvals"][0]["approverPermissionCheck"]
     assert check["state"] == ("recorded" if changed is None else "unknown")

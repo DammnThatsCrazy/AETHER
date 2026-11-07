@@ -60,7 +60,11 @@ GET_PATHS = (
 )
 PUT_PATH = "/v1/model-runtime/tenant-default"
 
-ALL_ROUTES = tuple(("GET", path) for path in GET_PATHS) + (("PUT", PUT_PATH),)
+POST_PATH = "/v1/model-runtime/complete"
+
+ALL_ROUTES = (
+    tuple(("GET", path) for path in GET_PATHS) + (("PUT", PUT_PATH), ("POST", POST_PATH))
+)
 
 # Field sets taken verbatim from the landed frontend types.
 MODEL_FIELDS = {
@@ -135,11 +139,62 @@ def non_operator_client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def _restore_seed_store() -> None:
-    """Restore the in-memory tenant-default seed between tests."""
-    saved = dict(routes._TENANT_DEFAULT_MODELS)
-    routes._TENANT_DEFAULT_MODELS.clear()
-    routes._TENANT_DEFAULT_MODELS.update(saved)
+    """Restore the in-memory durable stores these routes read between tests.
+
+    Tenant defaults, entitlements, and usage come from durable repositories (the
+    tenant preference store and the billing entitlement and metering tables);
+    without a database their rows live in the repositories' in-memory stores.
+    """
+    from billing.billing.revops import TenantEntitlementRepository, UsageMeteringEventRepository
+    from intelligence.model_runtime.tenant_state import TenantModelPreferenceRepository
+
+    stores = [
+        repo()._store
+        for repo in (TenantModelPreferenceRepository, TenantEntitlementRepository, UsageMeteringEventRepository)
+    ]
+    saved = [dict(store) for store in stores]
     yield
+    for store, snapshot in zip(stores, saved):
+        store.clear()
+        store.update(snapshot)
+
+
+def _run(coro):
+    import asyncio
+
+    return asyncio.run(coro)
+
+
+def _seed_default(tenant_id: str, model_id: str) -> None:
+    from intelligence.model_runtime.tenant_state import TenantModelPreferenceRepository
+
+    _run(TenantModelPreferenceRepository().set_default(tenant_id, model_id))
+
+
+def _seed_entitlement(tenant_id: str, model_id: str) -> None:
+    """Grant the tenant model runtime plus one model, as billing would."""
+    from billing.billing.revops import TenantEntitlementRepository
+
+    repo = TenantEntitlementRepository()
+    for key in ("model_runtime.enabled", f"model_runtime.model:{model_id}"):
+        _run(repo.insert(f"{tenant_id}:{key}", {
+            "tenant_id": tenant_id, "feature_key": key, "enabled": True,
+        }))
+
+
+def _seed_usage(tenant_id: str, model_id: str, input_tokens: int, output_tokens: int) -> None:
+    """Record one model invocation on the canonical billing meter."""
+    from billing.billing.revops import MeteringService, UsageMeteringEvent
+
+    _run(MeteringService().record_event(UsageMeteringEvent(
+        tenant_id=tenant_id,
+        event_type="model_runtime_token_usage",
+        quantity=input_tokens + output_tokens,
+        source_type="model_runtime_invocation",
+        source_id=f"{tenant_id}:{model_id}",
+        metadata={"model_id": model_id, "provider": "anthropic",
+                  "input_tokens": input_tokens, "output_tokens": output_tokens},
+    )))
 
 
 def _enable_gate(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -276,6 +331,7 @@ def test_enabled_models_response_shape(
 ) -> None:
     """GET /models → Aether ModelListResponse { models, tenantDefaultModel }."""
     _enable_gate(monkeypatch)
+    _seed_default("tenant-demo", "claude-haiku-4-5-20251001")
     resp = client.get("/v1/model-runtime/models", headers=TENANT_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
@@ -340,6 +396,7 @@ def test_enabled_usage_response_shape(
 ) -> None:
     """GET /usage → Kyber UsageResponse { period, totals, byModel }."""
     _enable_gate(monkeypatch)
+    _seed_usage("tenant-demo", "claude-haiku-4-5-20251001", 1200, 300)
     resp = client.get("/v1/model-runtime/usage", headers=TENANT_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
@@ -382,11 +439,16 @@ def test_tenant_header_required_on_every_route(
     operator, so their operator gate fails closed first (HTTP 401).
     """
     _enable_gate(monkeypatch)
-    tenant_surfaces = {"/v1/model-runtime/models", "/v1/model-runtime/tenant-default"}
+    tenant_surfaces = {"/v1/model-runtime/models", PUT_PATH, POST_PATH}
     for method, path in ALL_ROUTES:
         kwargs = {}
         if path == PUT_PATH:
             kwargs["json"] = {"modelId": "claude-haiku-4-5-20251001"}
+        if path == POST_PATH:
+            kwargs["json"] = {
+                "modelId": "claude-haiku-4-5-20251001",
+                "messages": [{"role": "user", "content": "hi"}],
+            }
         resp = client.request(method, path, **kwargs)
         if path in tenant_surfaces:
             assert resp.status_code == 400, f"{method} {path} → {resp.status_code}"
@@ -646,6 +708,7 @@ def test_tenant_default_put_roundtrip(
     """A successful PUT persists the default for an entitled tenant+model."""
     _enable_gate(monkeypatch)
     tenant = "tenant-demo"
+    _seed_entitlement(tenant, "gpt-4o-mini")
     resp = client.put(
         "/v1/model-runtime/tenant-default",
         headers={"X-Tenant-ID": tenant},

@@ -81,3 +81,93 @@ async def reconcile_access_interactions(
         "truncated": bool(meter_truncated or len(audit_rows) >= _READ_LIMIT),
         "consistent": not missing_usage and not orphan_usage,
     }
+
+
+_RUN_AT_UTC = (2, 10)  # hour, minute; after the previous UTC day has closed
+
+
+def previous_utc_day(now: Optional[Any] = None) -> tuple[str, str]:
+    """Return ``[start, end)`` for the last complete UTC day."""
+    from datetime import datetime, timedelta, timezone
+
+    now = now or datetime.now(timezone.utc)
+    end = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return (end - timedelta(days=1)).isoformat(), end.isoformat()
+
+
+async def _tenant_ids() -> list[str]:
+    from repositories.repos import AdminRepository
+
+    rows = await AdminRepository().find_many(limit=10_000)
+    return [r.get("id") or r.get("tenant_id") for r in rows if (r.get("id") or r.get("tenant_id"))]
+
+
+async def run_access_reconciliation_cycle(
+    now: Optional[Any] = None,
+    *,
+    tenant_ids: Optional[list[str]] = None,
+    audit_repo: Optional[Any] = None,
+    metering_repo: Optional[Any] = None,
+) -> dict[str, Any]:
+    """Reconcile the previous UTC day for every tenant; one tenant's failure never stops the rest.
+
+    Inconsistent tenants are logged at warning level with their gap counts and
+    counted in the ``access_reconciliation_inconsistent`` metric. Nothing is
+    written or repaired.
+    """
+    from shared.logger.logger import get_logger, metrics
+
+    log = get_logger("aether.billing.access_reconciliation")
+    start, end = previous_utc_day(now)
+    tenants = tenant_ids if tenant_ids is not None else await _tenant_ids()
+    summary: dict[str, Any] = {
+        "start": start, "end": end, "tenants": len(tenants),
+        "consistent": 0, "inconsistent": 0, "failed": 0, "truncated": 0,
+    }
+    for tenant_id in tenants:
+        try:
+            report = await reconcile_access_interactions(
+                tenant_id, start, end, audit_repo=audit_repo, metering_repo=metering_repo,
+            )
+        except Exception as exc:  # noqa: BLE001 - isolate per tenant
+            summary["failed"] += 1
+            log.warning(f"Access reconciliation failed for tenant={tenant_id}: {type(exc).__name__}")
+            continue
+        if report["truncated"]:
+            summary["truncated"] += 1
+        if report["consistent"]:
+            summary["consistent"] += 1
+            continue
+        summary["inconsistent"] += 1
+        metrics.increment("access_reconciliation_inconsistent")
+        log.warning(
+            "Access reconciliation gap tenant=%s audit_without_usage=%d usage_without_audit=%d window=%s..%s",
+            tenant_id, len(report["audit_without_usage"]), len(report["usage_without_audit"]), start, end,
+        )
+    return summary
+
+
+def _seconds_until_next_run(now: Optional[Any] = None) -> float:
+    from datetime import datetime, timedelta, timezone
+
+    now = now or datetime.now(timezone.utc)
+    run = now.replace(hour=_RUN_AT_UTC[0], minute=_RUN_AT_UTC[1], second=0, microsecond=0)
+    if run <= now:
+        run += timedelta(days=1)
+    return (run - now).total_seconds()
+
+
+async def run_access_reconciliation_cron() -> None:
+    """Supervised daily loop: reconcile yesterday's Access Kit interactions."""
+    import asyncio
+
+    from shared.logger.logger import get_logger
+
+    log = get_logger("aether.billing.access_reconciliation")
+    while True:
+        await asyncio.sleep(_seconds_until_next_run())
+        try:
+            log.info(f"Access reconciliation cycle complete: {await run_access_reconciliation_cycle()}")
+        except Exception as exc:  # noqa: BLE001 - the loop must survive one bad cycle
+            log.error(f"Access reconciliation cycle failed: {exc}")
+        await asyncio.sleep(600)

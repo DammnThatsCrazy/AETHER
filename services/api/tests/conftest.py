@@ -64,3 +64,26 @@ def pytest_pyfunc_call(pyfuncitem: pytest.Function) -> bool | None:
 
     asyncio.run(test_fn(**_call_args_for_test(pyfuncitem)))
     return True
+
+
+@pytest.fixture(autouse=True)
+def _restore_config_settings_module():
+    """Put ``config.settings`` back after any test that reloads it.
+
+    ``importlib.reload`` rebinds the module's ``settings`` singleton and config
+    classes, while every other module keeps the objects it already imported. Left
+    as is, later tests see two different ``settings`` objects and fail depending
+    on test order. Restoring the original module attributes after each test keeps
+    reload-style tests from leaking into the rest of the suite.
+    """
+    module = sys.modules.get("config.settings")
+    if module is None:
+        yield
+        return
+    original = dict(vars(module))
+    yield
+    module = sys.modules.get("config.settings", module)
+    for name in [n for n in vars(module) if n not in original]:
+        delattr(module, name)
+    for name, value in original.items():
+        setattr(module, name, value)

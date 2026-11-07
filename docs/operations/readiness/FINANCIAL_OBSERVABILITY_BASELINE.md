@@ -38,7 +38,7 @@ source_hashes:
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/specs.py": "sha256:440199aa711ba2c921b88bbd5df3a40659e05fafabba052149b4171acc68ac3e"
+  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
 ---
 
 # Financial Observability Baseline Manifest

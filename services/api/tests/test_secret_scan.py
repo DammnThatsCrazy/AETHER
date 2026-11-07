@@ -80,6 +80,17 @@ SYNTHETIC_FIXTURE_VALUES: frozenset[str] = frozenset({
     # redaction/leak-detection gates reject PEM-format material (no key body).
     "-----BEGIN PRIVATE KEY-----",
     'SECRET="test-sdk-config-secret-for-tests"',
+    # Fixture literals in tests that assert secrets are never logged, printed, or
+    # persisted; each is a synthetic value used only inside test paths.
+    "API_KEY = 'ak_0123456789abcdef01234567'",
+    'SECRET = "platform-wide-inbound-secret"',
+    'SECRET = "provider-token-never-log"',
+    'SECRET = "slack-app-signing-secret"',
+    "token: 'aether-session-never-print'",
+    "token: 'auth0-access-token-never-persist'",
+    "token: 'in-memory-session-secret'",
+    'xoxb-other-tenant',
+    'xoxb-own-tenant',
 })
 
 

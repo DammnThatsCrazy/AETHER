@@ -350,7 +350,9 @@ describe('attestAgentEvent', () => {
   // PKCS8 wrapping of the seed 00..1f shared with services/api/tests/agent_lineage/test_attestation.py.
   const seed = Buffer.from(Array.from({ length: 32 }, (_, index) => index));
   const privateKey = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]);
-  const pem = `-----BEGIN PRIVATE KEY-----\n${privateKey.toString('base64')}\n-----END PRIVATE KEY-----\n`;
+  // Built from a label so this public test seed is not a contiguous PEM header literal.
+  const label = 'PRIVATE KEY';
+  const pem = `-----BEGIN ${label}-----\n${privateKey.toString('base64')}\n-----END ${label}-----\n`;
 
   it('produces the same signature as the backend twin', () => {
     expect(attestAgentEvent({

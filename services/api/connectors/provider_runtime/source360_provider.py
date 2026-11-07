@@ -116,7 +116,7 @@ class RepositoryIdentityLineageReader:
             tenant_id,
             subject_kind,
             subject_id,
-            requested_slot_ids={"source_identifier_lineage"},
+            requested_slot_ids={"identifier_inventory"},
         )
 
 
@@ -712,7 +712,7 @@ class Source360Provider(IntelligenceProjectionProvider):
                 reason = "identity_source_lineage_scope_mismatch"
                 identity_slot = None
             else:
-                identity_slot = identity_result.slot("source_identifier_lineage")
+                identity_slot = identity_result.slot("identifier_inventory")
                 reason = getattr(identity_slot, "reason", None)
         except Exception:  # noqa: BLE001 - identity authority failures remain private
             identity_slot = None
@@ -755,7 +755,7 @@ class Source360Provider(IntelligenceProjectionProvider):
             title="Source identity lineage",
             content={
                 "subject": {"kind": subject.kind, "id": subject.id},
-                "sourceIdentityAuthority": "identity360.source_identifier_lineage",
+                "sourceIdentityAuthority": "identity360.identifier_inventory",
                 "sourceIdentities": safe_identities,
                 "sourceIdentityCount": source_coverage.get("returned"),
                 "providerRegistryJoin": "unknown",
@@ -822,7 +822,7 @@ class Source360Provider(IntelligenceProjectionProvider):
                             "A tenant-scoped identity source record is associated with this subject."
                         ],
                         claimState=EpistemicStatus.OBSERVED,
-                        domainSlotIds=["source_identifier_lineage"],
+                        domainSlotIds=["identifier_inventory"],
                     )
                 )
 
