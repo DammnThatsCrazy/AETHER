@@ -71,8 +71,8 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:0d2150c0e37fe21d64d75c29a9184e8f01b980d0c158bb6d11f6332f25b8c28d"
-  "scripts/generate_feature_surface_manifest.py": "sha256:e657ca3cae7a8e9326a1a940580c4ca915a1b3d39f8409f2d8479ae857bd2d1d"
+  "packages/shared/": "sha256:08b3400bbce6779b9d6f8e66b444f6fb44c373954162079e04eda3c18c2bebf7"
+  "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:3438710d537a48fe068478cfe3170255a9decfec1d81adecabeabd03b3766ec7"
   "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
   "services/api/actions/agent/execution360_provider.py": "sha256:c224bc3be2745382c4952d6fd43e2494302c027cb9829d454e73c34633aba000"
@@ -1233,6 +1233,21 @@ it combines a tenant profile, deployment-run evidence, and a public marketplace
 snapshot, while Kyber's agentic-observability surface is a separate operator
 contract and does not reproduce that customer view. It is not a byte-parity
 Tenant Mirror surface until an equivalent resolver and parity proof exist.
+
+Twelve surfaces read relational stores or one entity's neighbourhood rather than a
+tenant-wide vertex scan: `/relationships`, `/syndicates`, `/journeys`, `/episodes`,
+`/communications` (each with its detail route), `/signals` and `/risk`. The scoped
+gateway's `read_surface` serves them after the same ordered authorization gate.
+`services/api/governance/kyber/graph/surface_reads.py` calls Aether's own route
+handlers under a read-only tenant context whose tenant comes from the authorized
+scope, so the mirror has no second query to drift. Relationship surfaces use the
+gateway's neighbourhood walk instead, which renders vertices rather than the tenant
+route's traversal payload. Detail surfaces require their identifiers as query
+parameters, which the manifest lists as `mirror_params`, and a foreign identifier
+gets the same 404 as a missing one. A failed source is `null` with a disclosed missing
+input, and that rendering is not parity-comparable. Below D3, every string in a handler
+payload is masked unless its key names a closed vocabulary or a timestamp. No parity
+comparison against live tenant data has been run yet.
 
 Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
 generates `packages/shared/lenses_generated.ts`, and projection availability

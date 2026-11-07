@@ -68,6 +68,11 @@ def _require(capability: str, **kwargs: Any) -> Callable[..., Any]:
     return require_kyber_access(capability, **kwargs)
 
 
+def _surface_params(request: Request) -> dict[str, str]:
+    """Every query parameter but ``compare``. The service refuses any the surface doesn't declare."""
+    return {key: value for key, value in request.query_params.items() if key != "compare"}
+
+
 def _parse_compare(raw: Optional[str]) -> Any:
     """Decode the supplied Aether payload, refusing anything ambiguous."""
     if raw is None:
@@ -113,7 +118,7 @@ async def read_tenant_mirror(
     blank screen reads to an operator as "this tenant has no data".
     """
     envelope = await tenant_mirror_service.render(
-        request, tenant_id=tenant_id, surface=surface
+        request, tenant_id=tenant_id, surface=surface, params=_surface_params(request)
     )
     return APIResponse(
         data=envelope.model_dump(),
@@ -158,7 +163,7 @@ async def read_tenant_mirror_parity(
     # different answers for one question.
     if aether_payload is None:
         envelope = await tenant_mirror_service.render(
-            request, tenant_id=tenant_id, surface=surface
+            request, tenant_id=tenant_id, surface=surface, params=_surface_params(request)
         )
         data: dict[str, Any] = {
             "surface": envelope.surface_id,
@@ -174,6 +179,7 @@ async def read_tenant_mirror_parity(
             tenant_id=tenant_id,
             surface=surface,
             aether_payload=aether_payload,
+            params=_surface_params(request),
         )
         data = {
             "surface": surface,
@@ -211,7 +217,7 @@ async def read_tenant_mirror_masked(
     from what the tenant sees, and digesting them would manufacture divergence.
     """
     envelope = await tenant_mirror_service.render(
-        request, tenant_id=tenant_id, surface=surface
+        request, tenant_id=tenant_id, surface=surface, params=_surface_params(request)
     )
     return APIResponse(
         data=envelope.model_dump(),

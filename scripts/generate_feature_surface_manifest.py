@@ -36,33 +36,22 @@ MANIFEST = ROOT / "packages" / "shared" / "contracts" / "kyber-feature-surface-m
 
 _ROUTE_RE = re.compile(r'<Route\s+path="([^"]+)"')
 
+#: Identifiers a surface needs as mirror query parameters, because a store read has
+#: no answer without them. `SURFACE_READ_PARAMS` must agree; the parity gate checks.
+MIRROR_PARAMS: dict[str, list[str]] = {
+    "/relationships": ["entity_id"],
+    "/relationships/:entityId": ["entity_id"],
+    "/syndicates/:syndicateId": ["syndicate_id"],
+    "/journeys/:profileId": ["profile_id"],
+    "/episodes/:profileId/:episodeId": ["profile_id", "episode_id"],
+    "/communications/:campaignId/:messageId": ["campaign_id", "message_id"],
+}
+
 #: Surfaces with no operator mirror, and the reason. Every entry is a deliberate
 #: decision that a Kyber operator has nothing to gain from seeing the tenant's
 #: exact view — pre-auth pages, the tenant's own account/settings shell, or a
 #: surface whose operator equivalent lives elsewhere in Kyber.
-_NO_GRAPH_INPUT = (
-    "reads relational stores ({stores}), not graph vertices, so a vertex-scan mirror would "
-    "show a healthy empty tenant; needs a mirror resolver over those stores before parity applies"
-)
 NON_SURFACE: dict[str, str] = {
-    "/relationships": (
-        "shows edges from entity-anchored graph traversal; the mirror's tenant-wide vertex scan "
-        "cannot represent it, so it needs a neighbourhood resolver before parity applies"
-    ),
-    "/relationships/:entityId": (
-        "shows edges anchored on one entity; mirror rendering takes no entity id, so it needs a "
-        "neighbourhood resolver before parity applies"
-    ),
-    "/syndicates": _NO_GRAPH_INPUT.format(stores="population groups, plus the cluster graph query"),
-    "/syndicates/:syndicateId": _NO_GRAPH_INPUT.format(stores="population groups and members"),
-    "/journeys": _NO_GRAPH_INPUT.format(stores="entities, journey versions and steps"),
-    "/journeys/:profileId": _NO_GRAPH_INPUT.format(stores="journey versions and steps"),
-    "/episodes": _NO_GRAPH_INPUT.format(stores="entities, journey versions and steps"),
-    "/episodes/:profileId/:episodeId": _NO_GRAPH_INPUT.format(stores="journey versions and steps"),
-    "/communications": _NO_GRAPH_INPUT.format(stores="campaigns, messages and comms facts"),
-    "/communications/:campaignId/:messageId": _NO_GRAPH_INPUT.format(stores="messages and comms facts"),
-    "/signals": _NO_GRAPH_INPUT.format(stores="notification inbox, alert rules and preferences"),
-    "/risk": _NO_GRAPH_INPUT.format(stores="investigation cases, data quality and capability findings"),
     "/callback": "pre-authentication OIDC landing",
     "/login": "pre-authentication",
     "/signup": "pre-authentication tenant creation",
@@ -181,7 +170,7 @@ def build_entry(path: str) -> dict[str, Any]:
             "kyber_mirror_route": None,
             "minimum_disclosure": "D0",
         }
-    return {
+    entry: dict[str, Any] = {
         "feature_id": feature_id,
         "aether_route": path,
         "tenant_parity_required": True,
@@ -193,6 +182,9 @@ def build_entry(path: str) -> dict[str, Any]:
             "quality", "lineage", "policy", "health", "recomputeOptions",
         ],
     }
+    if path in MIRROR_PARAMS:
+        entry["mirror_params"] = MIRROR_PARAMS[path]
+    return entry
 
 
 def build_manifest() -> dict[str, Any]:
