@@ -35,6 +35,7 @@ from actions.agent.execution360_provider import (  # noqa: E402
     _resolve_server_delegation_reference,
     register_provider,
 )
+from actions.agent.execution360_provenance import ExecutionSourceProvenanceRead  # noqa: E402
 from actions.agent.identity_resolution import (  # noqa: E402
     resolve_agent_identities,
 )
@@ -104,7 +105,8 @@ def _server_row(tenant_id: str = TENANT, agent_id: str = AGENT) -> dict:
             "resource": "account:4",
             "payload": {"secret": "must-not-appear"},
         },
-        "policy_log": {"delegation_check": {"allowed": True, "delegation_id": "deleg-1"}},
+        "policy_log": {"delegation_check_tenant_id": tenant_id,
+                       "delegation_check": {"allowed": True, "delegation_id": "deleg-1"}},
         "reasoning": "must-not-appear",
         "output": {"secret": "must-not-appear"},
     }
@@ -1198,6 +1200,7 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
         "completeness": "unknown",
         "sourceReportedToolRelatedFactCount": 1,
         "joinedExecutionToolCalls": [],
+        "receiptBackedToolCallResults": [],
         "evidenceRefs": [],
         "sourceReportedEvidenceRefs": [
             {
@@ -1674,6 +1677,89 @@ async def test_canonical_tool_call_edge_joins_exact_execution_and_remains_partia
     assert not [claim for claim in result.claims if "risk_events" in claim.domainSlotIds]
 
 
+@pytest.mark.parametrize(
+    "receipt_override,principal,accepted",
+    [
+        ({}, "principal-1", True),
+        ({"toolName": "other-tool"}, "principal-1", False),
+        ({"receiptId": "another-receipt"}, "principal-1", False),
+        ({}, "other-principal", False),
+        ({"action": "delete"}, "principal-1", False),
+        ({"invokedAt": "2026-10-16T10:00:00+00:00"}, "principal-1", False),
+    ],
+)
+async def test_execution_tool_receipt_requires_exact_edge_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+    receipt_override: dict,
+    principal: str,
+    accepted: bool,
+) -> None:
+    import actions.agent.invocation_runtime as invocation_runtime
+    from actions.agent.execution360_provider import _read_execution_tool_receipt
+
+    raw = {
+        "initiating_principal_user_id": principal,
+        "receipt_id": "receipt-1",
+        "tenant_id": TENANT,
+        "agent_id": "runtime-agent-1",
+        "execution_id": "exec-1",
+    }
+
+    class ReceiptRepository:
+        async def find_many(self, *, filters, limit):
+            assert filters == {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-1",
+                "execution_id": "exec-1",
+            }
+            assert limit == 101
+            return [raw]
+
+    async def validate(**kwargs):
+        assert kwargs["tenant_id"] == TENANT
+        assert kwargs["agent_id"] == "runtime-agent-1"
+        return {
+            "state": "provider_invocation_succeeded",
+            "receiptId": "receipt-1",
+            "toolName": "payments.send",
+            "capabilityId": "cap-1",
+            "action": "invoke",
+            "resource": "capability:cap-1",
+            "policyResource": "capability:cap-1",
+            "policyDecision": {"allowed": True},
+            "grantId": "grant-1",
+            "invokedAt": "2026-10-16T10:00:01+00:00",
+            "completedAt": "2026-10-16T10:00:02+00:00",
+            "resultStatus": "succeeded",
+            "providerResultDigest": "a" * 64,
+            "providerResultComplete": True,
+            **receipt_override,
+        }
+
+    monkeypatch.setattr(invocation_runtime, "InvocationReceiptRepository", ReceiptRepository)
+    monkeypatch.setattr(invocation_runtime, "validated_agent_receipt", validate)
+    execution = {
+        "tenant_id": TENANT,
+        "agent_id": "runtime-agent-1",
+        "execution_id": "exec-1",
+        "initiating_principal_user_id": "principal-1",
+        "started_at": "2026-10-16T10:00:00+00:00",
+        "ended_at": "2026-10-16T10:00:03+00:00",
+    }
+    result = await _read_execution_tool_receipt(
+        tenant_id=TENANT,
+        execution=execution,
+        expected_tool="payments.send",
+        called_at="2026-10-16T10:00:01+00:00",
+    )
+
+    assert (result is not None) is accepted
+    if result is not None:
+        assert result["receiptId"] == "receipt-1"
+        assert result["externalEffect"] == "unknown"
+        assert result["mutation"] == "unknown"
+
+
 async def test_ambiguous_execution_actor_binding_does_not_join_tool_edges() -> None:
     read = await RepositoryExecution360Source()._read_execution_tool_calls(
         TENANT,
@@ -1701,6 +1787,55 @@ async def test_ambiguous_execution_actor_binding_does_not_join_tool_edges() -> N
     assert read.scope_known is False
     assert read.rows == []
     assert read.reason == "execution_identity_ambiguous_for_tool_join"
+
+
+@pytest.mark.parametrize("invalid", [None, "duplicate", "truncated", "unavailable", "scope", "malformed", "status_shape"])
+async def test_execution_receipt_projection_fails_closed_and_preserves_evidence(invalid) -> None:
+    receipt = {
+        "executionId": "exec-1",
+        "receiptId": "receipt-1",
+        "toolName": "payments.send",
+        "action": "invoke",
+        "resource": "capability:cap-1",
+        "policyResource": "capability:cap-1",
+        "principalUserId": "principal-1",
+        "grantId": "grant-1",
+        "policyDecision": {"allowed": True},
+        "invokedAt": "2026-10-16T10:00:01+00:00",
+        "completedAt": "2026-10-16T10:00:02+00:00",
+        "resultStatus": "succeeded",
+    }
+    if invalid == "malformed":
+        receipt.pop("completedAt")
+    if invalid == "status_shape":
+        receipt["resultStatus"] = {}
+    source_read = ExecutionToolCallRead(
+        rows=[],
+        available=invalid != "unavailable",
+        scope_known=invalid != "scope",
+        truncated=invalid == "truncated",
+        receipt_results=[receipt, receipt] if invalid == "duplicate" else [receipt],
+    )
+    request = _request()
+    result = await Execution360Provider(FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()], available=True, scope_known=True,
+            agent_ids=(AGENT,), tool_calls=source_read,
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )).project(request, await _context(request))
+    linkage = next(section for section in result.sections if section.id == "interactions").content["toolInvocationLinkage"]
+    receipt_claims = [claim for claim in result.claims if claim.kind == "server_validated_execution_tool_invocation_receipt"]
+    if invalid is not None:
+        assert linkage["receiptBackedToolCallResults"] == []
+        assert receipt_claims == []
+    else:
+        assert linkage["state"] == "partial"
+        assert linkage["receiptBackedToolCallResults"] == [receipt]
+        assert linkage["evidenceRefs"][0]["id"] == "receipt-1"
+        assert receipt_claims[0].evidenceRefs[0].source == "agent_invocation_receipts"
+        evidence = next(section for section in result.sections if section.id == "evidence")
+        assert any(ref["id"] == "receipt-1" for ref in evidence.content["evidence"])
 
 
 async def test_untrusted_tool_and_risk_ids_do_not_complete_execution_slots() -> None:
@@ -3620,6 +3755,7 @@ async def test_recorded_denial_without_matching_grant_reaches_agent_frame() -> N
         "canonical_delegation_matched": False,
         "status": "revoked",
         "policy_log": {
+            "delegation_check_tenant_id": TENANT,
             "delegation_check": {
                 "allowed": False,
                 "delegation_id": None,
@@ -3731,6 +3867,7 @@ async def test_execution_authority_check_exposes_persisted_evaluation_timestamp(
         **_server_row(),
         "created_at": "2026-10-16T10:00:03+00:00",
         "policy_log": {
+            "delegation_check_tenant_id": TENANT,
             "delegation_check": {
                 "allowed": True,
                 "delegation_id": "deleg-1",
@@ -3768,6 +3905,7 @@ async def test_execution_authority_check_rejects_decision_timestamp_after_record
         **_server_row(),
         "created_at": "2026-10-16T10:00:03+00:00",
         "policy_log": {
+            "delegation_check_tenant_id": TENANT,
             "delegation_check": {
                 "allowed": True,
                 "delegation_id": "deleg-1",
@@ -3822,6 +3960,12 @@ async def test_execution_authority_check_rejects_ambiguous_or_malformed_decision
     assert duplicate_authority["joinedActionScopedDecisions"] == []
 
     malformed_rows = []
+    legacy = _server_row()
+    legacy["policy_log"].pop("delegation_check_tenant_id")
+    malformed_rows.append(legacy)
+    foreign_scope = _server_row()
+    foreign_scope["policy_log"]["delegation_check_tenant_id"] = "foreign-tenant"
+    malformed_rows.append(foreign_scope)
     malformed_decision = _server_row()
     malformed_decision["policy_log"]["delegation_check"]["allowed"] = "true"
     malformed_rows.append(malformed_decision)
@@ -3851,6 +3995,40 @@ async def test_execution_authority_check_rejects_ambiguous_or_malformed_decision
         assert malformed_authority["reason"] == (
             "execution_authority_record_scope_or_evidence_ambiguous"
         )
+
+
+async def test_execution_authority_conflicted_persisted_delegation_refs_cannot_emit_allow() -> None:
+    row = _server_row()
+    row["policy_log"]["delegation_check"]["delegation_id"] = "other-delegation"
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[row], available=True, scope_known=True, agent_ids=(AGENT,)
+            ),
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    assert authority["state"] == "degraded"
+    assert authority["joinedActionScopedDecisions"] == []
+    assert not any(
+        claim.kind == "server_recorded_delegation_decision" for claim in result.claims
+    )
+
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    decision = metadata["authority_envelope"].authorityDecision
+    assert decision is not None
+    assert decision.outcome == "unknown"
+    assert decision.actionRefs == []
+    assert decision.executionRefs == []
 
 
 async def test_execution_authority_window_uses_lifecycle_time_only() -> None:
@@ -4687,3 +4865,83 @@ async def test_entity_observed_execution_read_exposes_owner_roster_truncation(
     assert result.scope_known is False
     assert result.truncated is True
     assert result.reason == "owner_agent_roster_read_truncated"
+
+
+@pytest.mark.asyncio
+async def test_execution_evidence_joins_only_admitted_telemetry_bronze_provenance() -> None:
+    source = FakeSource()
+    calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
+
+    async def provenance(*, tenant_id: str, events: tuple[tuple[str, str], ...]):
+        calls.append((tenant_id, events))
+        return ExecutionSourceProvenanceRead(
+            rows=[
+                {
+                    "tenantId": TENANT,
+                    "sourceEventId": "silver-event-1",
+                    "eventName": "agent_tool_call_observed",
+                    "bronzeSchemaVersion": "7.0",
+                    "sourceId": "source-1",
+                    "sourceTrust": "PUBLIC_CLIENT",
+                    "credentialClass": "PUBLIC_CLIENT",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                    "evidenceRef": EvidenceRef(
+                        id="silver-event-1",
+                        type="event",
+                        source="bronze_sdk_events",
+                        observedAt="2026-10-16T10:00:01+00:00",
+                        uri="store://bronze_sdk_events/bronze-row-1",
+                    ).model_dump(mode="json", by_alias=True),
+                    "payload": "must-not-leak",
+                    "externalExecutionVerified": True,
+                }
+            ],
+            available=True,
+            scope_known=True,
+        )
+
+    source.source_provenance = provenance  # type: ignore[attr-defined]
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    linked = evidence.content["sourceProvenance"]
+    assert calls == [(TENANT, (("silver-event-1", "agent_tool_call_observed"),))]
+    assert linked["state"] == "partial"
+    assert linked["records"][0]["sourceId"] == "source-1"
+    assert linked["records"][0]["externalExecutionVerified"] is False
+    assert any(ref["source"] == "bronze_sdk_events" for ref in evidence.content["evidence"])
+    assert "must-not-leak" not in str(result.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_execution_evidence_rejects_foreign_provenance_from_injected_reader() -> None:
+    source = FakeSource()
+
+    async def provenance(*, tenant_id: str, events: tuple[tuple[str, str], ...]):
+        return ExecutionSourceProvenanceRead(
+            rows=[
+                {
+                    "tenantId": "other-tenant",
+                    "sourceEventId": "silver-event-1",
+                    "eventName": "agent_tool_call_observed",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                    "evidenceRef": EvidenceRef(
+                        id="silver-event-1",
+                        type="event",
+                        source="bronze_sdk_events",
+                        observedAt="2026-10-16T10:00:01+00:00",
+                        uri="store://bronze_sdk_events/foreign",
+                    ).model_dump(mode="json", by_alias=True),
+                }
+            ],
+            available=True,
+            scope_known=True,
+        )
+
+    source.source_provenance = provenance  # type: ignore[attr-defined]
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.content["sourceProvenance"]["records"] == []
+    assert evidence.content["sourceProvenance"]["reason"] == "source_provenance_response_scope_mismatch"
+    assert all(ref["source"] != "bronze_sdk_events" for ref in evidence.content["evidence"])

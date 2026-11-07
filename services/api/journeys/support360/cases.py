@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Optional
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -522,7 +522,9 @@ class SupportCaseRepository:
             record["retention_expires_at"] = max(record["retention_expires_at"], expires_at)
             record["updated_at"] = received_at
         _LOCAL_EVENTS[event_key] = {
+            "tenant_id": tenant_id,
             "case_id": record["case_id"],
+            "source_connection_id": connection_id,
             "source_event_id": event.source_event_id,
             "event_type": event.event_type.value,
             "source_occurred_at": event.occurred_at,
@@ -604,7 +606,8 @@ class SupportCaseRepository:
         record = _row_dict(row)
         expires_at = _as_datetime(record.get("retention_expires_at"))
         event_rows = await pool.fetch(
-            """SELECT source_event_id, event_type, source_occurred_at,
+            """SELECT tenant_id, case_id, source_connection_id,
+                      source_event_id, event_type, source_occurred_at,
                       received_at, lifecycle_applied, evidence_refs
                FROM support_case_events
                WHERE tenant_id=$1 AND case_id=$2
@@ -794,6 +797,8 @@ def _row_dict(row: Any) -> dict[str, Any]:
     for key, value in result.items():
         if isinstance(value, datetime):
             result[key] = coerce_utc_lenient(value).astimezone(timezone.utc).isoformat()
+        elif isinstance(value, UUID):
+            result[key] = str(value)
         elif key == "evidence_refs" and isinstance(value, str):
             try:
                 result[key] = json.loads(value)

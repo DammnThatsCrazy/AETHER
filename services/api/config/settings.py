@@ -1523,6 +1523,13 @@ class ExternalAgentTelemetryConfig:
     catalog_poll_interval_seconds: int = max(
         900, _env_int("AETHER_AGENT_MARKETPLACE_CATALOG_POLL_SECONDS", 21_600)
     )
+    #: Scheduled agent behavior job: records each deployment agent's last complete
+    #: UTC day snapshot, compares stored windows, and persists Risk360 assessments
+    #: from agent behavior evidence. Derived caches only; default OFF.
+    behavior_jobs_enabled: bool = _env_bool("AETHER_AGENT_BEHAVIOR_JOBS_ENABLED", False)
+    behavior_jobs_interval_seconds: int = max(
+        900, _env_int("AETHER_AGENT_BEHAVIOR_JOBS_INTERVAL_SECONDS", 21_600)
+    )
 
 
 @dataclass(frozen=True)

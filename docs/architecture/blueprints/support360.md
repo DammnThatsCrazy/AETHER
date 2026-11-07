@@ -30,12 +30,41 @@ support-case subjects, it joins communication facts through the exact tenant,
 provider connection, and source case ID from the canonical case record, then
 rechecks each returned fact.
 
+Ticket and conversation subjects use generated canonical UUIDs from the durable
+`support_case_subjects` authority. The authenticated ingestion route requires a
+verified connection, a selected provider account, and an existing exact case.
+Immutable mappings retain tenant, kind, account, source subject, source case,
+connection, event, actor, and timestamps. Conflicting replay is rejected; the
+case foreign key cascades retention deletion. Readers revalidate this mapping
+before projecting any of the nine isolated Support-owned slots. A mapped
+conversation exposes case context, not conversation-exclusive history.
+
 The provider emits structural interaction metadata, event timestamps, and
 evidence references. It suppresses message bodies and unresolved participant
 IDs. The case path joins persisted lifecycle events and reports communication
 history as current-store coverage only; complete source history and freshness
 remain unknown. Case resolution describes observed lifecycle state and does not
 establish a separately attributed business outcome.
+
+Case-scoped callback, assignment and handoff, SLA, and journey context events
+are retained by their own append-only support authorities. The projection
+rechecks exact tenant, case, provider connection, event, and canonical identity
+links where applicable. A source-reported SLA timer is not a measured breach;
+a journey link does not by itself prove an episode relationship. The versioned
+`active_elapsed_v1` contract permits a local active elapsed comparison only over
+complete bounded explicit start/pause/resume/stop events for the exact case,
+provider, timer, and policy revision. Pauses are excluded; every sequence event
+ID is retained. Future timestamps, mixed revisions, ambiguous ordering, and
+conflicting targets suppress measurement. Legacy contracts stay reported-only.
+This does not authenticate upstream timer facts or prove general SLA compliance.
+When an
+EpisodeRecord explicitly cites the verified case journey-link event and names
+the same journey, the provider can report that exact relation as partial
+evidence. These reads do not establish upstream event authorship, complete
+source history, or historical state. The journey-link ingestion path now
+persists this exact EpisodeRecord when the episode-engine feature flag is
+enabled; replay repairs a failed episode write without inventing a relation
+from a shared journey ID.
 
 ## Runtime contract
 
@@ -54,16 +83,25 @@ establish a separately attributed business outcome.
   case-keyed assessments and signals with risk and case evidence. This path does
   not establish complete risk history, signal coverage, a freshness SLA,
   business outcome, or contagion authority.
+- `callbacks`, `agents`, `participants`, `sla`, and `journey_links` expose only
+  the exact records admitted by their respective tenant and case joins.
+  `sla` evaluates the versioned active elapsed measurement contract. The optional
+  episode relation requires the episode to cite the exact case journey-link
+  event; shared journey ID alone is insufficient.
 - Results must retain tenant scope, source timestamps, section state, evidence
   provenance, and explicit provider limitations. Policy suppression must not
   be inferred as absence.
 
 ## Explicit gaps
 
-- Callback scheduling, SLA timers, case-to-journey links, agent assignments,
-  and handoffs lack canonical provider paths.
-- Participant identity and message content policy authorities are not joined;
-  participant IDs and message bodies remain suppressed.
+- Callback and assignment source authorship, complete history, historical
+  replay, and freshness are not established. SLA comparison is limited to the
+  registered active elapsed contract and does not prove general compliance. Episode relations
+  require a producer to persist exact case event evidence; population coverage
+  remains unknown.
+- Participant identity is limited to exact current provider account bindings;
+  historical membership and message-content policy remain unproven. Message
+  bodies remain suppressed.
 - Communication source-history completeness, a support-specific freshness
   service level, and historical replay are unavailable.
 - No authoritative support business outcome attribution is connected.
@@ -73,3 +111,24 @@ establish a separately attributed business outcome.
 
 Until these gaps close, affected slots stay unknown or degraded and the
 projection must not be described as a complete Support 360 implementation.
+
+## Isolated required-slot dispatch
+
+Each of the nine Support-owned required slots uses its own `support_<slot_id>`
+output section. The frame policy selects these sections before any secondary
+authority reads; a permitted resolution read cannot fetch denied SLA,
+participant, callback, or assignment data. Legacy sections remain available for
+existing direct consumers. Risk retains its independent Risk360 binding.
+Lifecycle events are revalidated against the exact tenant, case, and provider
+connection before secondary reads; communication facts must also match the case
+provider identity. Available sections mean evidence-backed bounded observations,
+not complete history or independently verified outcomes. Ticket and conversation
+subjects now dispatch these nine sections through their persisted case joins.
+Risk360 now admits mapped ticket/conversation subjects only after revalidating
+the persisted alias, authenticated tenant, verified current provider connection,
+selected account and canonical case before any Risk read. Claims retain their
+requested subject and slot policy; invalid mappings withhold binding evidence,
+and incomplete signal reads release no partial signal evidence. Historical
+mapped Risk reads remain unsupported. Existing entity, agent, episode, and source
+communication reads retain their exact source bindings; they do not imply
+case-only authority.

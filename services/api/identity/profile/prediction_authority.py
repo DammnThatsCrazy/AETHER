@@ -18,6 +18,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from shared.temporal.instant import MAX_INSTANT, MIN_INSTANT
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from repositories.typed_repo import TypedTableRepository
@@ -232,6 +234,65 @@ def consent_policy_version() -> Optional[str]:
         return None
 
 
+async def verify_prediction_policy_evidence(output: ProfilePredictionOutput) -> bool:
+    """Rejoin the inference decision and any session identity binding.
+
+    The decision is historical evidence; current consent and historical
+    identity state are not established by this read.
+    """
+    try:
+        from governance.policy.repositories import ConsentPolicyDecisionRepository
+
+        decision = await ConsentPolicyDecisionRepository().find_by_id(output.policy_decision_id)
+        if not isinstance(decision, dict):
+            return False
+        subject = decision.get("subject_ref")
+        decision_at = _utc(decision.get("created_at"))
+        if (
+            decision.get("tenant_id") != output.tenant_id
+            or decision.get("policy_decision_id") != output.policy_decision_id
+            or decision.get("actor_id") != output.actor_id
+            or decision.get("action") != "serve_inference"
+            or decision.get("resource_type") != "ml_model"
+            or decision.get("resource_id") != output.model_id
+            or decision.get("consent_policy_version") != output.policy_version
+            or decision.get("allowed") is not True
+            or decision_at is None
+            or decision_at > output.generated_at
+            or not isinstance(subject, str)
+            or not subject.strip()
+        ):
+            return False
+        if output.model_id in _IDENTITY_MODEL_IDS:
+            return subject == output.entity_id
+        if output.model_id not in _SESSION_MODEL_IDS:
+            return False
+        identity_refs = [
+            ref.id for ref in output.evidence_refs
+            if ref.source == "identity_source_identities" and ref.type == "entity"
+        ]
+        if len(identity_refs) != 1:
+            return False
+        from identity.identity.repository import IdentityResolutionRepository
+
+        rows = await IdentityResolutionRepository()._source_identities.find_many(
+            filters={"tenant_id": output.tenant_id, "session_id": subject, "status": "resolved"},
+            limit=2,
+        )
+        if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+            return False
+        row = rows[0]
+        return (
+            row.get("tenant_id") == output.tenant_id
+            and row.get("session_id") == subject
+            and row.get("status") == "resolved"
+            and str(row.get("canonical_entity_id") or "") == output.entity_id
+            and str(row.get("id") or row.get("source_identity_id") or "") == identity_refs[0]
+        )
+    except Exception:  # noqa: BLE001 - inaccessible evidence fails closed
+        return False
+
+
 class ProfilePredictionOutputRepository(TypedTableRepository):
     """Append-only typed repository for approved profile prediction outputs."""
 
@@ -257,6 +318,22 @@ class ProfilePredictionOutputRepository(TypedTableRepository):
         "states",
         "evidence_refs",
     )
+
+    async def get_prediction(self, tenant_id: str, prediction_id: str) -> Optional[dict[str, Any]]:
+        """Return one exact tenant/prediction row for canonical outcome binding."""
+        if not tenant_id or not prediction_id:
+            return None
+        pool = await self._pool()
+        if pool is None:
+            row = next((row for row in self._rows
+                        if row.get("tenant_id") == tenant_id
+                        and row.get("prediction_id") == prediction_id), None)
+            return dict(row) if row is not None else None
+        row = await pool.fetchrow(
+            f"SELECT {', '.join(self.columns)} FROM {self.table_name} WHERE tenant_id=$1 AND prediction_id=$2",
+            tenant_id, prediction_id,
+        )
+        return self._decode_row(dict(row)) if row is not None else None
     jsonb_columns = frozenset({"states", "evidence_refs"})
     conflict_key = ("tenant_id", "idempotency_key")
 
@@ -285,12 +362,12 @@ class ProfilePredictionOutputRepository(TypedTableRepository):
                 for row in self._rows
                 if row.get("tenant_id") == tenant_id
                 and row.get("entity_id") == entity_id
-                and (_utc(row.get("generated_at")) or datetime.max.replace(tzinfo=timezone.utc)) <= anchor
-                and (_utc(row.get("valid_from")) or datetime.max.replace(tzinfo=timezone.utc)) <= anchor
-                and (_utc(row.get("valid_until")) or datetime.min.replace(tzinfo=timezone.utc)) >= anchor
+                and (_utc(row.get("generated_at")) or MAX_INSTANT) <= anchor
+                and (_utc(row.get("valid_from")) or MAX_INSTANT) <= anchor
+                and (_utc(row.get("valid_until")) or MIN_INSTANT) >= anchor
             ]
             candidates.sort(
-                key=lambda row: (_utc(row.get("generated_at")) or datetime.min.replace(tzinfo=timezone.utc), str(row.get("prediction_id") or "")),
+                key=lambda row: (_utc(row.get("generated_at")) or MIN_INSTANT, str(row.get("prediction_id") or "")),
                 reverse=True,
             )
             return candidates[:bounded], len(candidates) > bounded
@@ -308,11 +385,42 @@ class ProfilePredictionOutputRepository(TypedTableRepository):
         decoded = [self._decode_row(dict(row)) for row in rows]
         return decoded[:bounded], len(decoded) > bounded
 
+    async def list_for_artifact(
+        self, tenant_id: str, model_id: str, artifact_version: str,
+        window_start: datetime, window_end: datetime, *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Bounded exact tenant/model/artifact prediction dataset read."""
+        bounded = min(max(int(limit), 1), 5_000)
+        start, end = _utc(window_start), _utc(window_end)
+        if not tenant_id or not model_id or not artifact_version or start is None or end is None or start >= end:
+            return [], False
+        pool = await self._pool()
+        if pool is None:
+            candidates = [
+                dict(row) for row in self._rows
+                if row.get("tenant_id") == tenant_id
+                and row.get("model_id") == model_id
+                and row.get("artifact_version") == artifact_version
+                and start <= (_utc(row.get("generated_at")) or MIN_INSTANT) < end
+            ]
+            candidates.sort(key=lambda row: (str(row.get("prediction_id") or "")))
+            return candidates[:bounded], len(candidates) > bounded
+        rows = await pool.fetch(
+            f"""SELECT {', '.join(self.columns)} FROM {self.table_name}
+                WHERE tenant_id = $1 AND model_id = $2 AND artifact_version = $3
+                  AND generated_at >= $4 AND generated_at < $5
+                ORDER BY prediction_id LIMIT $6""",
+            tenant_id, model_id, artifact_version, start, end, bounded + 1,
+        )
+        decoded = [self._decode_row(dict(row)) for row in rows]
+        return decoded[:bounded], len(decoded) > bounded
+
 
 async def record_eligible_profile_prediction(
     *,
     tenant_id: str,
     requested_subject_id: str,
+    actor_id: str,
     model_id: str,
     feature_digest: Optional[str],
     feature_schema_hash: Optional[str],
@@ -335,7 +443,7 @@ async def record_eligible_profile_prediction(
     def skip(reason: str) -> ProfilePredictionWrite:
         return ProfilePredictionWrite(output=None, stored=False, reason=reason)
 
-    if not tenant_id.strip() or not requested_subject_id.strip():
+    if not tenant_id.strip() or not requested_subject_id.strip() or not actor_id.strip():
         return skip("prediction_tenant_or_subject_missing")
     if not isinstance(model_result, dict):
         return skip("prediction_model_result_not_object")
@@ -456,9 +564,9 @@ async def record_eligible_profile_prediction(
         or policy_decision.get("resource_type") != "ml_model"
         or policy_decision.get("resource_id") != model_id
         or policy_decision.get("subject_ref") != requested_subject_id
+        or policy_decision.get("actor_id") != actor_id
         or policy_decision.get("allowed") is not True
         or policy_decision.get("consent_policy_version") != policy_version
-        or not str(policy_decision.get("actor_id") or "").strip()
     ):
         return skip("prediction_policy_decision_scope_or_version_invalid")
 
@@ -592,7 +700,7 @@ async def record_eligible_profile_prediction(
             state_schema_version=PROFILE_FUTURE_STATE_SCHEMA_VERSION,
             policy_decision_id=policy_decision_id,
             policy_version=policy_version,
-            actor_id=str(policy_decision["actor_id"]),
+            actor_id=actor_id,
             generated_at=generated_at,
             valid_from=valid_from,
             valid_until=valid_until,

@@ -128,6 +128,31 @@ valid. Weak evidence alone cannot silently merge people. An unexplained result
 cannot be promoted into an automated action. Feature flags and entitlements
 never override access or data-rights checks.
 
+## Agents, authority and high-cardinality lineage
+
+One person or organization may act through very many agents. Machine activity is
+modeled as a chain of separate truths:
+
+```text
+Principal -> Authority -> Agent Definition -> Deployment -> Instance -> Run
+          -> Task -> Invocation -> External Effect -> Outcome
+```
+
+- A human and an agent never become one canonical identity. Relationships connect
+  them; merges do not.
+- A source-reported principal is a claim until a binding or authority record resolves
+  it. A trace is not a run. Source and canonical values are stored side by side.
+- Execution volume stays in Bronze and Silver. The graph receives durable semantic
+  facts only. `principal_agent_lineage` is a derived, rebuildable read model.
+- Interactive budgets (500 nodes, 2,000 edges) limit a response, never what Aether
+  knows. Anything left out of a response is disclosed. Unknown is never zero.
+- Weak evidence can cluster agents but cannot prove common control. Scale alone is
+  never a risk finding.
+
+Design and invariants: `docs/architecture/HIGH-CARDINALITY-AGENT-LINEAGE.md`. Measured
+results, and what is not yet measured:
+`docs/product/productization/agent-lineage-scale-proof-ledger.md`.
+
 ## Product and operator surfaces
 
 The Aether customer navigation target is **Snapshot, Graph, Profiles, Journeys,

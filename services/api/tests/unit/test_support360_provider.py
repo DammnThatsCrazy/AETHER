@@ -423,6 +423,8 @@ async def test_canonical_support_case_subject_reads_exact_case_summary_with_evid
     assert slots["participants"]["state"] == "unknown"
     assert slots["sla"]["state"] == "empty"
     assert slots["journey_links"]["state"] == "empty"
+    assert "episode_facts" not in sections["state"].canonicalAuthorityRefs
+    assert "episode_facts" not in sections["evidence"].canonicalAuthorityRefs
     assert slots["risk"]["state"] == "unknown"
     assert slots["resolution"]["state"] == "observed"
     assert slots["agents"]["state"] == "degraded"
@@ -1316,8 +1318,11 @@ def test_support360_is_an_in_flight_projection_id_when_contract_is_generated() -
 
     definition = INTELLIGENCE_PROJECTION_DEFINITIONS[PROJECTION_ID]
     assert definition["implementationState"] == "in_flight"
-    assert set(definition["outputSections"]) == set(OUTPUT_SECTIONS)
-    assert len(definition["outputSections"]) == len(OUTPUT_SECTIONS)
+    from journeys.support360.provider import SUPPORT_SLOT_SECTIONS
+
+    expected_sections = set(OUTPUT_SECTIONS) | set(SUPPORT_SLOT_SECTIONS.values())
+    assert set(definition["outputSections"]) == expected_sections
+    assert len(definition["outputSections"]) == len(expected_sections)
     registry = ProviderRegistry()
     from journeys.support360.provider import register_provider
 

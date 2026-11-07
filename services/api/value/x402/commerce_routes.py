@@ -8,7 +8,9 @@ explicit permission checks. Responses use the standard APIResponse envelope.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -19,6 +21,7 @@ from shared.logger.logger import get_logger
 from .approvals import get_approval_service
 from .commerce_models import (
     ApprovalPriority,
+    ApprovalPermissionReceipt,
     ApprovalStatus,
     ProtectedResource,
 )
@@ -59,8 +62,9 @@ def _require_perm(request: Request, perm: str) -> None:
             return
         except Exception as e:
             raise HTTPException(status_code=403, detail=str(e))
-    if hasattr(tenant, "has_permission") and not tenant.has_permission(perm):
-        raise HTTPException(status_code=403, detail=f"Permission denied: {perm}")
+    if hasattr(tenant, "has_permission") and tenant.has_permission(perm):
+        return
+    raise HTTPException(status_code=403, detail=f"Permission denied: {perm}")
 
 
 # ─── Request bodies ────────────────────────────────────────────────────
@@ -420,9 +424,11 @@ async def assign_approval(approval_id: str, body: ApprovalAssignBody, request: R
 @approvals_router.post("/{approval_id}/decide")
 async def decide_approval(approval_id: str, body: ApprovalDecisionBody, request: Request):
     _require_perm(request, "commerce:approve")
+    permission_checked_at = datetime.now(timezone.utc).isoformat()
     plane = get_control_plane()
     try:
         decided_by = body.decided_by
+        permission_receipt = None
         existing = await get_approval_service().get(_tenant_id(request), approval_id)
         if existing is not None and existing.execution_id is not None:
             # Bound execution approvals are actor evidence. Record the
@@ -434,6 +440,14 @@ async def decide_approval(approval_id: str, body: ApprovalDecisionBody, request:
                     detail="An authenticated tenant user is required to decide an execution-bound approval",
                 )
             decided_by = authenticated_user_id
+            permission_receipt = ApprovalPermissionReceipt(
+                receipt_id=f"appr_perm_{uuid4().hex}",
+                tenant_id=_tenant_id(request),
+                approval_id=approval_id,
+                execution_id=existing.execution_id,
+                principal_id=authenticated_user_id,
+                checked_at=permission_checked_at,
+            )
         result = await plane.apply_decision(
             tenant_id=_tenant_id(request),
             approval_id=approval_id,
@@ -441,6 +455,7 @@ async def decide_approval(approval_id: str, body: ApprovalDecisionBody, request:
             decided_by=decided_by,
             reason=body.reason,
             is_override=body.is_override,
+            permission_receipt=permission_receipt,
         )
         return APIResponse(data=result.model_dump()).to_dict()
     except ValueError as e:

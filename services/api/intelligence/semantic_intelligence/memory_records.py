@@ -50,6 +50,9 @@ class SemanticMemoryRecord(BaseModel):
     confidence: float = Field(ge=0, le=1)
     source_observation_ids: list[str] = Field(min_length=1, max_length=_MAX_SOURCE_OBSERVATIONS)
     policy_decision_ref: str = Field(min_length=1, max_length=256)
+    # None is an explicit unknown for legacy decisions without required_purposes.
+    # A stamped list is historical evidence only, never current consent.
+    required_consent_purposes_at_write: Optional[list[str]] = None
     retention_class: Literal["standard_90d"] = "standard_90d"
     status: Literal[
         "classified",
@@ -79,6 +82,18 @@ class SemanticMemoryRecord(BaseModel):
         if len(set(normalized)) != len(normalized):
             raise ValueError("source observation IDs must be unique")
         return normalized
+
+    @field_validator("required_consent_purposes_at_write")
+    @classmethod
+    def stamped_purposes_are_exact_and_nonempty(
+        cls, value: Optional[list[str]]
+    ) -> Optional[list[str]]:
+        if value is None:
+            return None
+        normalized = _required_purposes({"required_purposes": value})
+        if normalized is None:
+            raise ValueError("required consent purposes must be unique and nonempty")
+        return list(normalized)
 
     @field_validator("created_at")
     @classmethod
@@ -171,6 +186,22 @@ class SemanticMemoryRecordRepository:
         policy_ref = _policy_evidence_ref(policy_row, typed.tenant_id)
         if policy_ref is None:
             raise ValueError("memory_policy_decision_timestamp_missing_or_invalid")
+
+        required_purposes = _required_purposes(policy_row)
+        if (
+            typed.required_consent_purposes_at_write is not None
+            and typed.required_consent_purposes_at_write != (
+                list(required_purposes) if required_purposes is not None else None
+            )
+        ):
+            raise ValueError("memory_policy_required_purposes_not_exact_authority")
+        typed = typed.model_copy(
+            update={
+                "required_consent_purposes_at_write": (
+                    list(required_purposes) if required_purposes is not None else None
+                )
+            }
+        )
 
         data = typed.model_dump(mode="json")
         data["idempotency_key"] = f"semantic-memory:{typed.tenant_id}:{typed.memory_id}"
@@ -281,6 +312,9 @@ class SemanticMemoryRecordRepository:
             if not _policy_matches_record(policy_row, record):
                 warnings.append("semantic_memory_policy_decision_join_missing_or_denied")
                 continue
+            if not _purpose_stamp_matches_decision(record, policy_row):
+                warnings.append("semantic_memory_policy_purpose_stamp_mismatch")
+                continue
             policy_ref = _policy_evidence_ref(policy_row, tenant_id)
             if policy_ref is None:
                 warnings.append("semantic_memory_policy_decision_timestamp_invalid")
@@ -379,6 +413,9 @@ class SemanticMemoryRecordRepository:
             if not _policy_matches_record(policy_row, record):
                 warnings.append("semantic_memory_policy_decision_join_missing_or_denied")
                 continue
+            if not _purpose_stamp_matches_decision(record, policy_row):
+                warnings.append("semantic_memory_policy_purpose_stamp_mismatch")
+                continue
             policy_ref = _policy_evidence_ref(policy_row, tenant_id)
             memory_ref = _memory_record_ref(record)
             if policy_ref is None or memory_ref is None:
@@ -457,6 +494,29 @@ def _policy_matches_record(raw: Optional[dict[str, Any]], record: SemanticMemory
         and row.get("action") == "generate_feature"
         and row.get("allowed") is True
     )
+
+
+def _required_purposes(raw: Optional[dict[str, Any]]) -> Optional[tuple[str, ...]]:
+    row = _mapping(raw)
+    value = row.get("required_purposes") if row is not None else None
+    if not isinstance(value, list) or not value:
+        return None
+    if any(not isinstance(purpose, str) or not purpose or purpose != purpose.strip() for purpose in value):
+        return None
+    if len(set(value)) != len(value):
+        return None
+    return tuple(sorted(value))
+
+
+def _purpose_stamp_matches_decision(
+    record: SemanticMemoryRecord, raw: Optional[dict[str, Any]]
+) -> bool:
+    stamped = record.required_consent_purposes_at_write
+    # An unstamped legacy record has unknown purpose provenance, even if the
+    # decision can now be read; it remains eligible for the historical join.
+    if stamped is None:
+        return True
+    return tuple(stamped) == _required_purposes(raw)
 
 
 def _policy_evidence_ref(raw: Optional[dict[str, Any]], tenant_id: str) -> Optional[EvidenceRef]:

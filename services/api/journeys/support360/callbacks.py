@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Optional
+
+from shared.temporal.instant import MIN_INSTANT
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -731,7 +733,7 @@ class SupportCallbackRepository:
             rows.sort(
                 key=lambda row: (
                     _as_datetime(row.get("scheduled_for"))
-                    or datetime.min.replace(tzinfo=timezone.utc),
+                    or MIN_INSTANT,
                     str(row.get("callback_id") or ""),
                 ),
                 reverse=True,
@@ -754,9 +756,9 @@ class SupportCallbackRepository:
                 events.sort(
                     key=lambda row: (
                         _as_datetime(row.get("source_occurred_at"))
-                        or datetime.min.replace(tzinfo=timezone.utc),
+                        or MIN_INSTANT,
                         _as_datetime(row.get("received_at"))
-                        or datetime.min.replace(tzinfo=timezone.utc),
+                        or MIN_INSTANT,
                     ),
                     reverse=True,
                 )
@@ -871,9 +873,9 @@ class SupportCallbackRepository:
             events.sort(
                 key=lambda row: (
                     _as_datetime(row.get("source_occurred_at"))
-                    or datetime.min.replace(tzinfo=timezone.utc),
+                    or MIN_INSTANT,
                     _as_datetime(row.get("received_at"))
-                    or datetime.min.replace(tzinfo=timezone.utc),
+                    or MIN_INSTANT,
                 ),
                 reverse=True,
             )

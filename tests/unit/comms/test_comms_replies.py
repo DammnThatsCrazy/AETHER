@@ -82,13 +82,16 @@ class TestNormalization:
         event = normalize_inbound_reply("t1", {
             "from": "jane@example.com",
             "subject": "Re: offer",
+            "message_id": "<reply-88@inbound>",
             "in_reply_to": "<msg-77@klaviyo>",
             "received_at": "2026-07-01T10:00:00+00:00",
         })
         assert event["event_type"] == "email_replied"
         props = event["properties"]
         assert props["direction"] == "inbound"
-        assert props["external_message_id"] == "msg-77@klaviyo"
+        assert props["external_message_id"] == "reply-88@inbound"
+        assert props["reply_to_external_message_id"] == "msg-77@klaviyo"
+        assert props["reply_correlation_method"] == "in_reply_to"
         assert props["recipient_alias_id"]
         assert "automated_response_kind" not in props
         # no raw address, no subject retained
@@ -103,6 +106,14 @@ class TestNormalization:
             "in_reply_to": "<m@p>",
         })
         assert event["properties"]["automated_response_kind"] == "out_of_office"
+
+    def test_missing_reply_message_id_does_not_reuse_target_id(self):
+        from journeys.comms.replies import normalize_inbound_reply
+        event = normalize_inbound_reply("t1", {
+            "from": "jane@example.com", "in_reply_to": "<target@provider>",
+        })
+        assert "external_message_id" not in event["properties"]
+        assert event["properties"]["reply_to_external_message_id"] == "target@provider"
 
     def test_rejects_missing_sender(self):
         from journeys.comms.replies import normalize_inbound_reply

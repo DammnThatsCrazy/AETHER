@@ -2764,13 +2764,17 @@ class AgentConfigRepository(BaseRepository):
         tools: Optional[list] = None,
         constraints: Optional[dict] = None,
         risk_tolerance: str = "medium",
+        resource_uris: Optional[list[str]] = None,
+        asserted_by_entity_id: Optional[str] = None,
     ) -> dict:
         return await self.insert(agent_id, {
+            "asserted_by_entity_id": asserted_by_entity_id,
             "agent_id": agent_id,
             "owner_entity_id": owner_entity_id,
             "tenant_id": tenant_id,
             "model": model,
             "tools": tools or [],
+            "resource_uris": resource_uris or [],
             "constraints": constraints or {},
             "risk_tolerance": risk_tolerance,
             "policy_version": 1,
@@ -2815,6 +2819,7 @@ class AgentExecutionRepository(BaseRepository):
         workflow_definition_link: Optional[dict] = None,
         approval_id: Optional[str] = None,
         approval_decision_id: Optional[str] = None,
+        action_association: Optional[dict] = None,
         create_only: bool = False,
     ) -> dict:
         now = utc_now().isoformat()
@@ -2828,6 +2833,9 @@ class AgentExecutionRepository(BaseRepository):
             "workflow_definition_link": dict(workflow_definition_link) if workflow_definition_link else None,
             "approval_id": approval_id,
             "approval_decision_id": approval_decision_id,
+            "action_association_kind": action_association.get("kind") if action_association else None,
+            "action_association_record_id": action_association.get("record_id") if action_association else None,
+            "action_association": dict(action_association) if action_association else None,
             "delegation_id": delegation_id,
             "triggered_by_event_id": triggered_by_event_id,
             "status": status,
@@ -2942,8 +2950,10 @@ class DelegationRepository(BaseRepository):
         starts_at: Optional[str] = None,
         ends_at: Optional[str] = None,
         metadata: Optional[dict] = None,
+        asserted_by_entity_id: Optional[str] = None,
     ) -> dict:
         record = await self.insert(delegation_id, {
+            "asserted_by_entity_id": asserted_by_entity_id,
             "delegation_id": delegation_id,
             "tenant_id": tenant_id,
             "grantor_entity_id": grantor_entity_id,

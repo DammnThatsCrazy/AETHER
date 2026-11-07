@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 from pathlib import Path
+
+import pytest
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 if str(BACKEND_ROOT) not in sys.path:
@@ -14,7 +17,8 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from journeys.comms.contracts import MessageCategory  # noqa: E402
-from journeys.communication360.reader import to_message  # noqa: E402
+from journeys.communication360.reader import SilverCommsSource, to_message  # noqa: E402
+from journeys.comms.repository import CommsFactsRepository  # noqa: E402
 
 
 def _silver_row(**extra: object) -> dict[str, object]:
@@ -26,6 +30,37 @@ def _silver_row(**extra: object) -> dict[str, object]:
     }
     row.update(extra)
     return row
+
+
+@pytest.mark.asyncio
+async def test_reply_reference_survives_durable_payload_and_exact_target_read(monkeypatch):
+    repo = CommsFactsRepository()
+
+    async def no_pool():
+        return None
+
+    monkeypatch.setattr(repo, "_pool", no_pool)
+    scope = dict(provider="reply-provider", provider_account_id="account-1", external_thread_id="thread-1")
+    target = _silver_row(**scope, fact_id="reply-target-fact", message_id="reply-target", external_message_id="target-external", idempotency_key="reply-target-test")
+    await repo.upsert(target)
+    source = SilverCommsSource(repo)
+    messages, complete = await source.reply_targets("tenant-reader", "reply-provider", "account-1", "thread-1", "target-external")
+    assert complete and len(messages) == 1
+    assert messages[0].message_id == "reply-target"
+    reply = to_message(_silver_row(payload=json.dumps({"reply_to_external_message_id": "target-external", "reply_correlation_method": "in_reply_to"})))
+    assert reply.reply_to_external_message_id == "target-external"
+    assert reply.reply_correlation_method == "in_reply_to"
+    assert await source.reply_targets("tenant-reader", "reply-provider", "wrong-account", "thread-1", "target-external") == ([], True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [None, {"tenant_id": "other"}, {"tenant_id": "tenant-reader", "provider": []}])
+async def test_reply_target_source_does_not_hide_invalid_rows(invalid):
+    class Repo:
+        async def reply_targets(self, *args, **kwargs):
+            return [_silver_row(provider="provider", provider_account_id="account", external_thread_id="thread", external_message_id="message"), invalid], True
+
+    assert await SilverCommsSource(Repo()).reply_targets("tenant-reader", "provider", "account", "thread", "message") == ([], False)
 
 
 def test_to_message_preserves_canonical_message_category_as_enum() -> None:
@@ -120,3 +155,72 @@ def test_to_message_preserves_server_bound_sender_agent_evidence() -> None:
     assert message.sender_identity_binding_id == "agent-binding-1"
     assert message.sender_identity_evidence_ref is not None
     assert message.sender_identity_evidence_ref.source == "agent_deployment_identity_bindings"
+
+
+REPLY_SCOPE = dict(
+    tenant_id="tenant-lifecycle", provider="reply-provider", provider_account_id="account-1",
+    external_thread_id="thread-1", external_message_id="target-external",
+)
+REPLY_KEYS = ("tenant-lifecycle", "reply-provider", "account-1", "thread-1", "target-external")
+
+
+async def _reply_target_repo(monkeypatch, *facts):
+    """Rows shaped like the projector's: ``message_id`` equals ``external_message_id``."""
+    repo = CommsFactsRepository()
+
+    async def no_pool():
+        return None
+
+    monkeypatch.setattr(repo, "_pool", no_pool)
+    monkeypatch.setattr("journeys.comms.repository._local_facts", {})
+    for index, fact in enumerate(facts):
+        await repo.upsert(_silver_row(**{
+            **REPLY_SCOPE, "fact_id": f"fact-{index}", "idempotency_key": f"key-{index}",
+            "message_id": "target-external", "direction": "outbound",
+            "sender_identity_binding_id": "binding-1",
+            "occurred_at": f"2026-10-18T12:0{index}:00+00:00", **fact,
+        }))
+    return repo
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_facts_of_one_message_resolve_to_one_earliest_reply_target(monkeypatch):
+    repo = await _reply_target_repo(
+        monkeypatch,
+        {"communication_state": "sent"}, {"communication_state": "delivered"},
+        {"communication_state": "opened"},
+    )
+    rows, complete = await repo.reply_targets(*REPLY_KEYS)
+    assert complete is True
+    assert [row["fact_id"] for row in rows] == ["fact-0"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("conflict", [
+    {"communication_state": "replied", "direction": "inbound"},
+    {"communication_state": "delivered", "sender_identity_binding_id": "other-binding"},
+    {"communication_state": "delivered", "sender_entity_id": "other-entity"},
+    {"communication_state": "sent"},
+    {"communication_state": "delivered", "message_id": "other-message"},
+])
+async def test_conflicting_claims_on_one_external_id_stay_ambiguous(monkeypatch, conflict):
+    repo = await _reply_target_repo(monkeypatch, {"communication_state": "sent"}, conflict)
+    rows, complete = await repo.reply_targets(*REPLY_KEYS)
+    assert complete is True
+    assert len(rows) == 2
+
+
+@pytest.mark.asyncio
+async def test_more_than_two_claims_or_facts_over_the_bound_are_incomplete(monkeypatch):
+    repo = await _reply_target_repo(
+        monkeypatch, {"communication_state": "sent"}, {"direction": "inbound"}, {"direction": "internal"},
+    )
+    rows, complete = await repo.reply_targets(*REPLY_KEYS)
+    assert len(rows) == 2 and complete is False
+
+    monkeypatch.setattr("journeys.comms.repository._REPLY_TARGET_FACT_BOUND", 1)
+    repo = await _reply_target_repo(
+        monkeypatch, {"communication_state": "sent"}, {"communication_state": "delivered"},
+    )
+    rows, complete = await repo.reply_targets(*REPLY_KEYS)
+    assert [row["fact_id"] for row in rows] == ["fact-0"] and complete is False

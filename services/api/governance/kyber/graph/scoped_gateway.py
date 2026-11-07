@@ -56,6 +56,7 @@ from shared.logger.logger import get_logger, metrics
 
 from ..access.disclosure import DisclosureLevel
 from .contracts import now_iso
+from .surface_reads import NEIGHBORHOOD_SURFACES, SURFACE_READ_PARAMS, read_tenant_surface
 
 logger = get_logger("aether.kyber.graph.gateway")
 
@@ -251,6 +252,12 @@ def parse_iso(value: Optional[str]) -> Optional[datetime]:
     return parsed
 
 
+#: Keys whose string values are closed vocabularies, safe below D3.
+_VOCABULARY_KEYS = frozenset({"status", "state", "stage", "severity", "kind", "type", "channel", "value_state"})
+#: Keys holding maps whose own keys are tenant-authored.
+_FREE_FORM_KEYS = frozenset({"properties", "metadata", "attributes", "context"})
+
+
 def _mask(value: Any) -> str:
     """A stable, non-reversible token for one identifying value.
 
@@ -270,6 +277,27 @@ def _redact_properties(properties: dict[str, Any], *, masked: bool) -> dict[str,
         key: (_mask(value) if key.lower() in _TENANT_IDENTIFYING_KEYS else value)
         for key, value in properties.items()
     }
+
+
+def _mask_tree(value: Any, key: str = "") -> Any:
+    """Mask a handler payload, whose fields no one enumerated, so unknown strings hide.
+
+    A vertex has a known identifying-key list. A store row can carry an identifier
+    under any name, so every string is masked unless its key names a vocabulary
+    value or a timestamp. Keys under free-form maps are tenant-authored, so they go too.
+    """
+    if isinstance(value, dict):
+        free_form = key.lower() in _FREE_FORM_KEYS
+        return {
+            (_mask(child_key) if free_form else child_key): _mask_tree(child, str(child_key))
+            for child_key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_tree(item, key) for item in value]
+    if isinstance(value, str):
+        lowered = key.lower()
+        return value if lowered in _VOCABULARY_KEYS or lowered.endswith("_at") else _mask(value)
+    return value
 
 
 def _serialize_vertex(vertex: Any, *, masked: bool) -> dict[str, Any]:
@@ -559,6 +587,64 @@ class ScopedTenantGraphGateway:
             ),
         }
 
+    async def read_surface(
+        self,
+        request: Any,
+        *,
+        tenant_id: str,
+        surface: str,
+        params: dict[str, str],
+    ) -> dict[str, Any]:
+        """One Aether surface that reads outside the vertex scan, through the same gate.
+
+        The tenant comes from the authorized scope, not from ``params``. The result
+        has ``tenantVisible`` and ``operatorDiagnostics`` as every read does, plus
+        ``unavailable``, naming sources that failed: such a result is not comparable.
+        """
+        resolved = self._authorize(request, tenant_id)
+        echoed = _mask_tree(dict(params)) if resolved.masked else dict(params)
+        if surface in NEIGHBORHOOD_SURFACES:
+            walk = await self.neighborhood(request, tenant_id=tenant_id, vertex_id=params["entity_id"])
+            visible = walk["tenantVisible"]
+            return {
+                "tenantVisible": {
+                    "tenant_id": visible["tenant_id"],
+                    "params": echoed,
+                    "sources": {"neighborhood": visible},
+                    "truncated": visible["truncated"],
+                },
+                "operatorDiagnostics": walk["operatorDiagnostics"],
+                "unavailable": [],
+            }
+
+        reads = await read_tenant_surface(surface, resolved.tenant_id, params, graph=resolved.graph)
+        evidence, evidence_missing = await self._evidence(resolved)
+        metrics.increment(
+            "kyber_graph_gateway_reads_total",
+            labels={"surface": "store", "truncated": str(reads.truncated).lower()},
+        )
+        return {
+            "tenantVisible": {
+                "tenant_id": _mask(resolved.tenant_id) if resolved.masked else resolved.tenant_id,
+                "params": echoed,
+                "sources": _mask_tree(reads.sources) if resolved.masked else reads.sources,
+                "truncated": reads.truncated,
+            },
+            "operatorDiagnostics": self._diagnostics(
+                resolved,
+                surface="store",
+                budget=self.max_results,
+                requested_limit=self.max_results,
+                truncated=reads.truncated,
+                result_count=len(reads.sources),
+                evidence_references=evidence,
+                missing_inputs=evidence_missing
+                + [f"surface_source:{name}" for name in reads.unavailable]
+                + (["surface_source:page_limit_reached"] if reads.truncated else []),
+            ),
+            "unavailable": list(reads.unavailable),
+        }
+
     # ── Internals ────────────────────────────────────────────────────────────
 
     async def _walk(
@@ -696,6 +782,7 @@ __all__ = [
     "MINIMUM_DISCLOSURE",
     "TENANT_GRAPH_CAPABILITY",
     "TENANT_READ_CAPABILITIES",
+    "SURFACE_READ_PARAMS",
     "ScopedTenantGraphGateway",
     "get_store",
     "get_tenant_graph",

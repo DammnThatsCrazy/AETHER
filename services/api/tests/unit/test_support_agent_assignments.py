@@ -339,12 +339,13 @@ async def test_support360_exposes_only_evidence_backed_assignment_observations()
         dependencyState=[],
         warnings=[],
     )
-    result = await Support360Provider(
+    provider = Support360Provider(
         CaseFactsSource(),
         case_repository=cases,
         agent_assignment_repository=assignments,
         canonical_agent_entity_repository=identity,
-    ).project(request, context)
+    )
+    result = await provider.project(request, context)
 
     state = next(section.content for section in result.sections if section.id == "state")
     slot = state["requiredSlots"]["agents"]
@@ -356,6 +357,16 @@ async def test_support360_exposes_only_evidence_backed_assignment_observations()
     assert slot["outcomeState"] == "not_joined"
     assert any(claim.kind == "support_agent_assignment_observation" for claim in result.claims)
     assert "source_history_coverage_unverified" in " ".join(slot["reasonCodes"])
+
+    scoped_result = await provider.project(
+        request.model_copy(update={"includeSections": ["support_agents"]}), context
+    )
+    assert [section.id for section in scoped_result.sections] == ["support_agents"]
+    assert scoped_result.sections[0].state == "available"
+    assert scoped_result.sections[0].content["assignmentEvents"][0]["canonicalAgentEntityId"] == AGENT_A
+    assert scoped_result.sections[0].content["executionState"] == "not_joined"
+    assert scoped_result.sections[0].content["outcomeState"] == "not_joined"
+    assert scoped_result.claims
 
 
 def test_assignment_ingress_rejects_payload_actor_or_tenant_claims() -> None:

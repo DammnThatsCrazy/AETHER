@@ -704,6 +704,16 @@ class EdgeType:
     AGENT_ACTED_ON_BEHALF_OF = "AGENT_ACTED_ON_BEHALF_OF"
     AGENT_CONNECTED_VIA_MCP = "AGENT_CONNECTED_VIA_MCP"
     AGENT_USED_TOOL_OBS = "AGENT_USED_TOOL_OBS"
+    # ── High-cardinality agent lineage — durable semantic edges only ──────
+    # Tool invocations / steps are NOT graphed per call: they stay in
+    # silver_agent_execution_facts. Spawn / delegation / authorization /
+    # on-behalf-of reuse SPAWNED_SUBAGENT, DELEGATED_TO, AUTHORIZED_AGENT and
+    # AGENT_ACTED_ON_BEHALF_OF; only the missing identity-hierarchy and
+    # principal/supervision edges are added here.
+    DEPLOYED_AS = "DEPLOYED_AS"                     # AgentDefinition → AgentDeployment
+    INSTANTIATED_AS = "INSTANTIATED_AS"             # AgentDeployment → AgentInstance
+    PRINCIPAL_OF = "PRINCIPAL_OF"                   # Principal (Human/Org) → Agent (evidence-resolved)
+    SUPERVISES = "SUPERVISES"                       # Human/Org/Agent → Agent
     AGENT_TRIGGERED_ACTIVITY = "AGENT_TRIGGERED_ACTIVITY"
     AGENT_PRODUCED_RISK_SIGNAL = "AGENT_PRODUCED_RISK_SIGNAL"
 

@@ -74,6 +74,14 @@ class TenantCollection:
             self._data[tenant_id][key] = obj
             return obj
 
+    async def put_immutable(self, tenant_id: str, obj: BaseModel) -> bool:
+        async with self._lock:
+            key = getattr(obj, self._id_field)
+            if key in self._data[tenant_id]:
+                return False
+            self._data[tenant_id][key] = obj.model_copy(deep=True)
+            return True
+
     async def get(self, tenant_id: str, obj_id: str) -> Optional[Any]:
         return self._data[tenant_id].get(obj_id)
 
@@ -174,6 +182,16 @@ class _RepoCollection:
         row_id, _ = await self._find(data["tenant_id"], obj_id)
         await self._repo.insert(row_id or tenant_record_id(data["tenant_id"], obj_id), data)
         return obj
+
+    async def put_immutable(self, tenant_id: str, obj: BaseModel) -> bool:
+        obj_id = getattr(obj, self._id_field)
+        _, existing = await self._find(tenant_id, obj_id)
+        if existing is not None:
+            return False
+        data = obj.model_dump(mode="json")
+        if data.get("tenant_id") != tenant_id:
+            raise ValueError("approval decision tenant mismatch")
+        return await self._repo.insert_immutable(tenant_record_id(tenant_id, obj_id), data)
 
     async def get(self, tenant_id: str, obj_id: str) -> Optional[Any]:
         _, raw = await self._find(tenant_id, obj_id)
@@ -485,17 +503,18 @@ class CommerceStore:
         return items[: max(0, min(int(limit), 500))]
 
     async def put_approval_decision(self, decision: ApprovalDecision) -> ApprovalDecision:
+        if await self.approval_decisions.put_immutable(decision.tenant_id, decision):
+            return decision.model_copy(deep=True)
         existing = await self.approval_decisions.get(decision.tenant_id, decision.decision_id)
-        if existing is not None:
-            if existing.model_dump(mode="json") != decision.model_dump(mode="json"):
-                raise ValueError("Approval decision IDs are immutable")
-            return existing
-        return await self.approval_decisions.put(decision.tenant_id, decision)
+        if existing is None or existing.model_dump(mode="json") != decision.model_dump(mode="json"):
+            raise ValueError("Approval decision IDs are immutable")
+        return existing.model_copy(deep=True)
 
     async def get_approval_decision(
         self, tenant_id: str, decision_id: str
     ) -> Optional[ApprovalDecision]:
-        return await self.approval_decisions.get(tenant_id, decision_id)
+        decision = await self.approval_decisions.get(tenant_id, decision_id)
+        return decision.model_copy(deep=True) if decision is not None else None
 
     async def list_approval_decisions_for_executions(
         self, tenant_id: str, execution_ids: list[str], limit: int = 1000
@@ -514,7 +533,7 @@ class CommerceStore:
             if decision.execution_id in selected_ids
         ]
         rows.sort(key=lambda row: row.decided_at)
-        return rows[:bounded_limit]
+        return [row.model_copy(deep=True) for row in rows[:bounded_limit]]
 
     # ── Authorizations / Receipts / Settlements ──────────────────────
 

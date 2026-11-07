@@ -2,6 +2,8 @@ import * as z from 'zod/v4';
 
 import {
   getAccountContext,
+  getAgentBehavior,
+  getAgentDecision,
   getCapability,
   getCapabilityOverview,
   getEntity,
@@ -15,6 +17,13 @@ import {
 // this package can make; it is not a tenant grant or an Aether server registry.
 // Every handler delegates to the owning tenant API, which resolves the caller
 // and makes the authorization and data decisions on each request.
+// ``required_server_permission`` declares the permission the owning API checks
+// (default ``read``); it is documentation of that check, never a grant.
+export const DEFAULT_SERVER_PERMISSION = 'read';
+export const SERVER_PERMISSIONS = Object.freeze(['read', 'agent:manage']);
+
+const agentRef = z.string().trim().min(1).max(256);
+
 const definitions = [
   {
     id: 'account.context',
@@ -102,6 +111,28 @@ const definitions = [
     call: ({ capability_id }, env) => getCapability(capability_id, env),
   },
   {
+    id: 'agents.behavior',
+    description: 'Read the evidence-qualified Agent360 behavior read model for one source-reported agent ref; not an identity resolution.',
+    api: 'GET /v1/agent/agents/{agent_ref}/behavior',
+    owner: 'agent_behavior',
+    required_server_permission: 'agent:manage',
+    cli: 'aether agents behavior show',
+    mcp: 'agents_behavior',
+    input: z.object({ agent_ref: agentRef }).strict(),
+    call: ({ agent_ref }, env) => getAgentBehavior(agent_ref, env),
+  },
+  {
+    id: 'agents.decision',
+    description: 'Read one reconstructed agent decision with attribution, responsibility roles, and a labelled counterfactual.',
+    api: 'GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}',
+    owner: 'agent_behavior',
+    required_server_permission: 'agent:manage',
+    cli: 'aether agents decisions show',
+    mcp: 'agents_decision',
+    input: z.object({ agent_ref: agentRef, decision_id: z.string().trim().min(1).max(256) }).strict(),
+    call: ({ agent_ref, decision_id }, env) => getAgentDecision(agent_ref, decision_id, env),
+  },
+  {
     id: 'usage.summary',
     description: 'Read the current non-billable Access Kit interaction count.',
     api: 'GET /v1/billing/usage/summary',
@@ -115,13 +146,18 @@ const definitions = [
 
 const byId = new Map(definitions.map((definition) => [definition.id, definition]));
 if (byId.size !== definitions.length) throw new Error('Duplicate Access Kit operation ID.');
+for (const definition of definitions) {
+  if (!SERVER_PERMISSIONS.includes(definition.required_server_permission ?? DEFAULT_SERVER_PERMISSION)) {
+    throw new Error(`Unknown server permission for Access Kit operation ${definition.id}.`);
+  }
+}
 
 function describe(definition) {
   return {
     id: definition.id,
     description: definition.description,
     operation: 'query',
-    required_server_permission: 'read',
+    required_server_permission: definition.required_server_permission ?? DEFAULT_SERVER_PERMISSION,
     api: definition.api,
     owner: definition.owner,
     cli: definition.cli,

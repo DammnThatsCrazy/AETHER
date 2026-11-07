@@ -430,3 +430,20 @@ async def _governance_evidence_pack_exporter(tenant_id: str, params: dict) -> Ex
         packs = [p for p in packs if p.get("pack_type") == pack_type]
 
     return ExportPayload(rows=packs, per_source={"governance_evidence_packs": len(packs)})
+
+
+@register_exporter("agent_lineage")
+async def _agent_lineage_exporter(tenant_id: str, params: dict) -> ExportPayload:
+    """Full principal lineage as a durable artifact; only this tenant's rows are read."""
+    from actions.agent_lineage.service import get_service
+
+    principal = params.get("principal_entity_id")
+    if not principal:
+        raise BadRequestError("agent_lineage export requires principal_entity_id")
+    service = await get_service()
+    filters = {key: params.get(key) for key in ("relationship", "attribution_class")}
+    part = await service.export_part(tenant_id, str(principal), filters=filters, after=params.get("after"))
+    # ``rows_remaining`` tells the caller to request the next part, after the last row's agent.
+    return ExportPayload(rows=part["rows"], per_source={
+        "principal_agent_lineage": len(part["rows"]), "rows_remaining": 0 if part["complete"] else 1,
+    })

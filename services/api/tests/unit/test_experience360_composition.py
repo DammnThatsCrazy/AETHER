@@ -103,7 +103,9 @@ def test_value_financial_risk_catalog_requires_both_exact_subject_projections() 
         "economic360": {"agent", "cluster", "entity", "source"},
         "risk360": {"agent", "cluster", "entity", "source"},
     }
-    assert {"economic_facts", "risk_outputs"} == set(slot["canonicalAuthorityRefs"])
+    assert {"economic_facts", "ai_execution_facts", "risk_outputs"} == set(
+        slot["canonicalAuthorityRefs"]
+    )
     assert {"risk360.explore", "risk360.read"}.issubset(
         set(surface["backendCapabilities"]["projectionCapabilityKeys"])
     )
@@ -294,7 +296,49 @@ def test_value_financial_risk_requires_economic_and_risk_source_claims(
     assert missing == set()
 
 
-def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> None:
+@pytest.mark.parametrize(
+    ("surface_id", "slot_id"),
+    [("journey360", "recommended_actions"), ("risk360", "interventions")],
+)
+def test_dispatch_actions_authority_is_bound_without_claiming_slot_completion(
+    surface_id: str, slot_id: str,
+) -> None:
+    slot = next(
+        item for item in PRODUCT_360_SURFACE_DEFINITIONS[surface_id]["domainSlots"]
+        if item["id"] == slot_id
+    )
+    assert "actions" in slot["canonicalAuthorityRefs"]
+    assert "actions" not in slot.get("unboundCanonicalAuthorityRefs", [])
+    assert slot["partialImplementationReason"]
+    assert "Jira" in slot["partialImplementationReason"]
+
+
+@pytest.mark.parametrize(("surface_id", "slot_id"), [
+    ("agent360", "capabilities"), ("workflow360", "actions"),
+])
+def test_mcp_invocation_and_receipt_backed_resource_reads_remain_bounded(surface_id, slot_id):
+    slot = next(item for item in PRODUCT_360_SURFACE_DEFINITIONS[surface_id]["domainSlots"]
+                if item["id"] == slot_id)
+    assert "resources" in slot["canonicalAuthorityRefs"]
+    assert "resources" not in slot.get("unboundCanonicalAuthorityRefs", [])
+    assert "actions" in slot["canonicalAuthorityRefs"]
+    reason = slot["partialImplementationReason"].lower()
+    for bounded_limit in (
+        "server-owned",
+        "public https mcp",
+        "resources/read",
+        "receipt",
+        "mutation",
+        "external effects",
+        "standing authorization",
+        "historical replay",
+        "freshness",
+        "producer coverage",
+    ):
+        assert bounded_limit in reason
+
+
+def test_value360_confidence_binds_scoped_governance_without_calibration() -> None:
     confidence = next(
         slot
         for slot in PRODUCT_360_SURFACE_DEFINITIONS["value360"]["domainSlots"]
@@ -308,11 +352,13 @@ def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> 
         "canonical_conversions",
         "model_governance",
     }
-    assert set(confidence["unboundCanonicalAuthorityRefs"]) == {"model_governance"}
-    assert confidence["authorityGapReason"] == (
-        "model_governance_calibration_and_validation_not_joined"
-    )
-    assert confidence["partialImplementationReason"]
+    assert not confidence.get("unboundCanonicalAuthorityRefs")
+    assert not confidence.get("authorityGapReason")
+    reason = confidence["partialImplementationReason"]
+    assert "authenticated administrator approval or rejection" in reason
+    assert "value-credit-temporal-eligibility.v1" in reason
+    assert "Confidence calibration remains unvalidated" in reason
+    assert "complete producer coverage remain unknown" in reason
     assert len(confidence["projectionBindings"]) == 1
     binding = confidence["projectionBindings"][0]
     assert binding["projectionId"] == "economic360"
@@ -907,9 +953,13 @@ async def test_signals360_unjoined_risk_flags_do_not_query_risk360() -> None:
         projection_runtime=Runtime(),
     )
 
-    assert projection_calls == []
+    # Signals360 owns the typed, exact-subject RiskSignal read. The slot is
+    # intentionally independent of Risk360, whose assessment/evidence path is
+    # reserved for joined risk claims.
+    assert projection_calls == [("signals360", "signal-1", ("risk_flags",))]
+    assert all(projection_id != "risk360" for projection_id, _, _ in projection_calls)
     assert frame.slots[0].state == "unknown"
-    assert "slot_provider_not_connected" in frame.slots[0].reasonCodes
+    assert "exact_slot_claim_missing" in frame.slots[0].reasonCodes
     assert frame.slots[0].evidenceRefs == []
 
 
@@ -974,13 +1024,18 @@ async def test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360() ->
         generated_at="2026-10-18T12:30:00Z",
     )
 
-    assert calls == [("risk360", "agent", ("evidence", "findings"))]
+    assert calls == [
+        ("agent360", "agent", ("state",)),
+        ("risk360", "agent", ("evidence", "findings")),
+    ]
     assert frame.slots[0].state == "degraded"
-    assert "slot_canonical_authority_gap" in frame.slots[0].reasonCodes
-    assert (
-        "agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined"
-        in frame.slots[0].reasonCodes
+    assert "slot_partial_implementation" in frame.slots[0].reasonCodes
+    agent_risk_slot = next(
+        item
+        for item in PRODUCT_360_SURFACE_DEFINITIONS["agent360"]["domainSlots"]
+        if item["id"] == "risk_summary"
     )
+    assert agent_risk_slot["partialImplementationReason"] in frame.slots[0].reasonCodes
     risk_payload = next(
         payload
         for payload in frame.slots[0].content["sections"]
@@ -1161,7 +1216,9 @@ def test_partial_financial_contagion_claim_does_not_complete_risk_slot() -> None
 
     assert slot.state == "degraded"
     assert "slot_partial_implementation" in slot.reasonCodes
-    assert "causal_contagion_exposure_and_loss_model_not_available" in slot.reasonCodes
+    assert any(
+        "Causal contagion, exposure, loss" in reason for reason in slot.reasonCodes
+    )
     assert slot.evidenceRefs == [EVIDENCE]
 
 
@@ -1215,7 +1272,10 @@ def test_value_conversion_inventory_routes_exact_conversion_claim_with_partial_s
 
     assert slot.state == "degraded"
     assert "slot_partial_implementation" in slot.reasonCodes
-    assert "value_subject_wallet_cluster_and_historical_inventory_joins_not_available" in slot.reasonCodes
+    assert any(
+        "wallet-cluster crosswalks, historical replay" in reason
+        for reason in slot.reasonCodes
+    )
     assert [claim.kind for claim in slot.claims] == ["canonical_conversion_inventory"]
     assert slot.evidenceRefs == [conversion_ref]
 
@@ -2810,7 +2870,7 @@ async def test_profile_value_summary_routes_exact_subject_to_economic360_after_p
 
 
 @pytest.mark.asyncio
-async def test_profile_relationships_routes_exact_entity_to_relationship360_after_policy():
+async def test_profile_relationships_routes_exact_entity_to_profile360_after_policy():
     events: list[tuple[str, str, str]] = []
     entity_id = "profile-relationship-entity-1"
     subject = ProjectionSubject(kind="entity", id=entity_id)
@@ -2853,7 +2913,7 @@ async def test_profile_relationships_routes_exact_entity_to_relationship360_afte
             assert projection_request.tenantId == TENANT
             assert projection_request.subject == subject
             claim = ClaimEnvelope(
-                id="relationship360.graph-event.profile-relationship-1",
+                id="profile360.relationship-event.profile-relationship-1",
                 kind="relationship_graph_event",
                 subject=subject,
                 evidenceRefs=[relationship_evidence],
@@ -2861,7 +2921,7 @@ async def test_profile_relationships_routes_exact_entity_to_relationship360_afte
                 domainSlotIds=["relationships"],
             )
             return ProjectionResult(
-                projectionId="relationship360",
+                projectionId=projection_request.projectionId,
                 tenantId=projection_request.tenantId,
                 contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
                 sections=[
@@ -2895,21 +2955,17 @@ async def test_profile_relationships_routes_exact_entity_to_relationship360_afte
     )
 
     assert events[0] == ("policy", "profile360", entity_id)
-    assert runtime.calls == [
-        ("relationship360", entity_id, ("evidence", "interactions", "summary"))
-    ]
-    assert events[1] == ("projection", "relationship360", entity_id)
+    assert runtime.calls == [("profile360", entity_id, ("relationships",))]
+    assert events[1] == ("projection", "profile360", entity_id)
     slot = frame.slots[0]
     assert slot.state == "degraded"
     assert slot.content is not None
     assert [claim.id for claim in slot.claims] == [
-        "relationship360.graph-event.profile-relationship-1"
+        "profile360.relationship-event.profile-relationship-1"
     ]
     assert slot.evidenceRefs == [relationship_evidence]
     assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
-        "evidence",
-        "interactions",
-        "summary",
+        "relationships",
     }
     assert "slot_partial_implementation" in slot.reasonCodes
 

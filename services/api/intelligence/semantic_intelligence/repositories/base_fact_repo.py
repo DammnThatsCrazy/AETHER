@@ -588,23 +588,29 @@ class SemanticFactRepository:
         return matches
 
     async def find_by_source_event(
-        self, tenant_id: str, source_event_id: str
+        self, tenant_id: str, source_event_id: str, *, limit: Optional[int] = None
     ) -> list[dict[str, Any]]:
+        if limit is not None and limit < 1:
+            raise ValueError("limit must be positive")
         pool = await self._pool()
         if pool is None:
-            return [
-                row.get("data", {})
-                for row in self._store.values()
+            matches = [
+                (record_id, row.get("data", {}))
+                for record_id, row in self._store.items()
                 if row.get("tenant_id") == tenant_id
                 and row.get("source_event_id") == source_event_id
             ]
+            matches.sort(key=lambda item: item[0])
+            return [data for _, data in matches[:limit]]
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
+            query = (
                 f"SELECT data FROM {self.table_name} "
-                "WHERE tenant_id = $1 AND source_event_id = $2",
-                tenant_id,
-                source_event_id,
+                "WHERE tenant_id = $1 AND source_event_id = $2 ORDER BY id ASC"
             )
+            if limit is None:
+                rows = await conn.fetch(query, tenant_id, source_event_id)
+            else:
+                rows = await conn.fetch(query + " LIMIT $3", tenant_id, source_event_id, limit)
         return [json.loads(r["data"]) for r in rows]
 
     async def aggregate_counts(self, tenant_id: Optional[str] = None) -> dict[str, Any]:

@@ -127,6 +127,7 @@ AUTHORITY_DOMAIN_BY_REF: dict[str, str] = {
     "support_case_agent_assignment_events": "customer_success",
     "support_case_context_events": "customer_success",
     "support_case_events": "customer_success",
+    "support_case_subjects": "customer_success",
     "support_cases": "customer_success",
     "temporal": "graph",
     "temporal_kernel": "graph",
@@ -148,6 +149,75 @@ class RequestAccessPolicyEvaluator:
 
     def __init__(self, request: Request) -> None:
         self._request = request
+
+    async def evaluate_risk_dispatch_read(self, frame_request: Experience360FrameRequest) -> Experience360PolicyDisposition:
+        actor = tenant_actor(self._request)
+        if actor.tenant_id != frame_request.tenantId or frame_request.surfaceId != "risk360":
+            raise ValueError("risk dispatch policy scope mismatch")
+        decision = await access_control.evaluate(
+            actor_id=actor.actor_id, actor_type=actor.actor_type, roles=actor.roles,
+            domain="actions", action="read", actor_tenant=actor.tenant_id,
+            target_tenant=frame_request.tenantId, resource_type="risk_intervention_dispatch",
+            resource_id=frame_request.subject.id, ip_address=actor.ip_address, user_agent=actor.user_agent,
+        )
+        return Experience360PolicyDisposition(
+            state="allowed" if decision.allowed else "denied", policyIds=[decision.policy_key],
+            reasonCodes=["access_granted" if decision.allowed else "access_denied"], evaluatedAt=_utc_now_iso(),
+        )
+
+    async def evaluate_journey_dispatch_read(
+        self, frame_request: Experience360FrameRequest
+    ) -> Experience360PolicyDisposition:
+        actor = tenant_actor(self._request)
+        if (actor.tenant_id != frame_request.tenantId or frame_request.surfaceId != "journey360"
+                or frame_request.subject.kind != "journey"):
+            raise ValueError("journey dispatch policy scope mismatch")
+        decision = await access_control.evaluate(
+            actor_id=actor.actor_id, actor_type=actor.actor_type, roles=actor.roles,
+            domain="actions", action="read", actor_tenant=actor.tenant_id,
+            target_tenant=frame_request.tenantId, resource_type="journey_action_dispatch",
+            resource_id=frame_request.subject.id, ip_address=actor.ip_address,
+            user_agent=actor.user_agent,
+        )
+        return Experience360PolicyDisposition(
+            state="allowed" if decision.allowed else "denied", policyIds=[decision.policy_key],
+            reasonCodes=["access_granted" if decision.allowed else "access_denied"],
+            evaluatedAt=_utc_now_iso(),
+        )
+
+    async def evaluate_profile_prediction_outcome_read(
+        self, frame_request: Experience360FrameRequest
+    ) -> Experience360PolicyDisposition:
+        actor = tenant_actor(self._request)
+        if (
+            actor.tenant_id != frame_request.tenantId
+            or frame_request.surfaceId != "profile360"
+            or frame_request.subject.kind != "entity"
+            or (
+                frame_request.requestedSlotIds is not None
+                and "likely_next_states" not in frame_request.requestedSlotIds
+            )
+        ):
+            raise ValueError("profile prediction outcome policy scope mismatch")
+        decision = await access_control.evaluate(
+            actor_id=actor.actor_id,
+            actor_type=actor.actor_type,
+            roles=actor.roles,
+            domain="outcomes",
+            action="read",
+            actor_tenant=actor.tenant_id,
+            target_tenant=frame_request.tenantId,
+            resource_type="profile_prediction_outcomes",
+            resource_id=frame_request.subject.id,
+            ip_address=actor.ip_address,
+            user_agent=actor.user_agent,
+        )
+        return Experience360PolicyDisposition(
+            state="allowed" if decision.allowed else "denied",
+            policyIds=[decision.policy_key],
+            reasonCodes=["access_granted" if decision.allowed else "access_denied"],
+            evaluatedAt=_utc_now_iso(),
+        )
 
     async def evaluate(
         self, frame_request: Experience360FrameRequest

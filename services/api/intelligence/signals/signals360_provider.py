@@ -55,6 +55,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 _MAX_SIGNAL_RECORDS = 100
 _MAX_SIGNAL_CAMPAIGN_TOUCHPOINTS = 100
 _MAX_RISK_SIGNALS = 100
+_MAX_SEMANTIC_EVENT_OBSERVATIONS = 100
 _SUMMARY_SOURCE = "repositories.repos.SignalRepository:behavioral_signals"
 _RISK_SUBJECT_KINDS = frozenset({"event", "observation", "signal", "source", "stream"})
 
@@ -74,6 +75,40 @@ class ObservationQualityRead:
     """One exact tenant-scoped SDK Bronze event row, when available."""
 
     record: Optional[dict[str, Any]]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SiteInstallHealthRead:
+    """Current tenant/site install observation, separate from event quality."""
+
+    tenant_id: str
+    site_id: str
+    record: Optional[dict[str, Any]]
+    available: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SiteSourceFactRead:
+    """Current canonical site registration for one authenticated SDK site."""
+
+    tenant_id: str
+    site_id: str
+    record: Optional[dict[str, Any]]
+    available: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SemanticEventRead:
+    """Capped Silver model-output rows for one exact tenant SDK event."""
+
+    tenant_id: str
+    source_event_id: str
+    rows: tuple[dict[str, Any], ...]
     available: bool
     complete: bool
     reason: Optional[str] = None
@@ -201,6 +236,18 @@ class Signal360Source(Protocol):
         self, *, tenant_id: str, observation_id: str
     ) -> ObservationQualityRead: ...
 
+    async def site_install_health(
+        self, *, tenant_id: str, site_id: str
+    ) -> SiteInstallHealthRead: ...
+
+    async def site_source_fact(
+        self, *, tenant_id: str, site_id: str
+    ) -> SiteSourceFactRead: ...
+
+    async def semantic_observations_for_event(
+        self, *, tenant_id: str, event_id: str, limit: int
+    ) -> SemanticEventRead: ...
+
     async def observation_source_authority(
         self, *, tenant_id: str, observation_id: str, record: dict[str, Any]
     ) -> ObservationSourceAuthorityRead: ...
@@ -231,6 +278,9 @@ class RepositorySignal360Source:
         campaign_repository: Any = None,
         rights_lineage_repository: Any = None,
         source_authority_trace: Any = None,
+        semantic_observations: Any = None,
+        site_installations: Any = None,
+        sites: Any = None,
     ) -> None:
         self._bronze = bronze
         self._signals = signals
@@ -239,6 +289,79 @@ class RepositorySignal360Source:
         self._campaign_repository = campaign_repository
         self._rights_lineage_repository = rights_lineage_repository
         self._source_authority_trace = source_authority_trace
+        self._semantic_observations = semantic_observations
+        self._site_installations = site_installations
+        self._sites = sites
+
+    async def site_source_fact(
+        self, *, tenant_id: str, site_id: str
+    ) -> SiteSourceFactRead:
+        if not _safe_identifier(tenant_id) or not _safe_identifier(site_id):
+            return SiteSourceFactRead(tenant_id, site_id, None, False, "exact_site_scope_required")
+        try:
+            if self._sites is None:
+                from ingestion.sdk_distribution.sites import SDKSiteRepository
+
+                self._sites = SDKSiteRepository()
+            row = await self._sites.get(tenant_id, site_id)
+        except Exception:  # noqa: BLE001 - site registry is independent of Bronze
+            return SiteSourceFactRead(tenant_id, site_id, None, False, "site_registry_unavailable")
+        if row is not None and not isinstance(row, dict):
+            return SiteSourceFactRead(tenant_id, site_id, None, False, "site_registry_row_invalid")
+        return SiteSourceFactRead(tenant_id, site_id, row, True)
+
+    async def site_install_health(
+        self, *, tenant_id: str, site_id: str
+    ) -> SiteInstallHealthRead:
+        if not _safe_identifier(tenant_id) or not _safe_identifier(site_id):
+            return SiteInstallHealthRead(tenant_id, site_id, None, False, "exact_site_scope_required")
+        try:
+            if self._site_installations is None:
+                from repositories.sdk_repos import SDKInstallationRepository
+
+                self._site_installations = SDKInstallationRepository()
+            row = await self._site_installations.get(tenant_id, site_id)
+        except Exception:  # noqa: BLE001 - site health is independent of event read
+            return SiteInstallHealthRead(tenant_id, site_id, None, False, "site_install_authority_unavailable")
+        if row is not None and not isinstance(row, dict):
+            return SiteInstallHealthRead(tenant_id, site_id, None, False, "site_install_row_invalid")
+        return SiteInstallHealthRead(tenant_id, site_id, row, True)
+
+    async def semantic_observations_for_event(
+        self, *, tenant_id: str, event_id: str, limit: int
+    ) -> SemanticEventRead:
+        if not _safe_identifier(tenant_id) or not _safe_identifier(event_id):
+            return SemanticEventRead(tenant_id, event_id, (), False, False, "exact_event_scope_required")
+        cap = min(max(int(limit), 1), _MAX_SEMANTIC_EVENT_OBSERVATIONS)
+        try:
+            if self._semantic_observations is None:
+                from intelligence.semantic_intelligence.repositories.base_fact_repo import (
+                    SemanticFactRepository,
+                )
+
+                self._semantic_observations = SemanticFactRepository(
+                    "silver_semantic_observations"
+                )
+            rows = await self._semantic_observations.find_by_source_event(
+                tenant_id, event_id, limit=cap + 1
+            )
+        except Exception:  # noqa: BLE001 - authority diagnostics stay private
+            return SemanticEventRead(
+                tenant_id, event_id, (), False, False, "semantic_event_authority_unavailable"
+            )
+        if not isinstance(rows, list):
+            return SemanticEventRead(
+                tenant_id, event_id, (), False, False, "semantic_event_read_invalid"
+            )
+        if len(rows) > cap:
+            return SemanticEventRead(
+                tenant_id, event_id, (), True, False, "semantic_event_read_truncated"
+            )
+        if not all(isinstance(row, dict) for row in rows):
+            return SemanticEventRead(
+                tenant_id, event_id, (), True, False, "semantic_event_row_invalid"
+            )
+        return SemanticEventRead(tenant_id, event_id, tuple(rows), True, True)
 
     async def entity_signals(
         self, *, tenant_id: str, entity_id: str, limit: int
@@ -1102,6 +1225,29 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         "sdk_observation_bronze_unavailable",
                     )
 
+        site_install_read: Optional[SiteInstallHealthRead] = None
+        if (
+            "quality" in requested_sections
+            and request.asOf is None
+            and request.timeRange is None
+            and quality_read is not None
+            and quality_read.available
+            and quality_read.complete
+            and isinstance(quality_read.record, dict)
+        ):
+            site_id = _stamped_site_id(
+                quality_read.record, tenant_id=tenant_id,
+                observation_id=request.subject.id,
+            )
+            site_reader = getattr(self._source, "site_install_health", None)
+            if site_id is not None and callable(site_reader):
+                try:
+                    site_install_read = await site_reader(tenant_id=tenant_id, site_id=site_id)
+                except Exception:  # noqa: BLE001 - site status is slot-local
+                    site_install_read = SiteInstallHealthRead(
+                        tenant_id, site_id, None, False, "site_install_authority_unavailable"
+                    )
+
         # Reuse the exact, bounded SDK Bronze read for canonical event
         # classification. Translator output and free-form payload properties
         # are not source-event classification authorities.
@@ -1125,7 +1271,30 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         "sdk_observation_bronze_unavailable",
                     )
 
+        semantic_read: Optional[SemanticEventRead] = None
+        semantic_skip_reason: Optional[str] = None
+        if "classification" in requested_sections and request.subject.kind in {"event", "observation"}:
+            if request.asOf is not None or request.timeRange is not None:
+                semantic_skip_reason = "semantic_event_temporal_read_not_supported"
+            elif quality_read is not None and quality_read.available and quality_read.complete and quality_read.record is not None:
+                semantic_reader = getattr(self._source, "semantic_observations_for_event", None)
+                if callable(semantic_reader):
+                    try:
+                        semantic_read = await semantic_reader(
+                            tenant_id=tenant_id,
+                            event_id=request.subject.id,
+                            limit=_MAX_SEMANTIC_EVENT_OBSERVATIONS,
+                        )
+                        if not isinstance(semantic_read, SemanticEventRead):
+                            semantic_read = None
+                            semantic_skip_reason = "semantic_event_read_invalid"
+                    except Exception:  # noqa: BLE001 - authority diagnostics stay private
+                        semantic_skip_reason = "semantic_event_authority_unavailable"
+                else:
+                    semantic_skip_reason = "semantic_event_authority_not_joined"
+
         source_authority_read: Optional[ObservationSourceAuthorityRead] = None
+        site_source_fact_read: Optional[SiteSourceFactRead] = None
         if (
             "source_inventory" in requested_sections
             and quality_read is not None
@@ -1151,6 +1320,22 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         False,
                         "observation_source_authority_unavailable",
                     )
+            if request.asOf is None and request.timeRange is None:
+                site_id = _stamped_site_id(
+                    quality_read.record,
+                    tenant_id=tenant_id,
+                    observation_id=request.subject.id,
+                )
+                site_reader = getattr(self._source, "site_source_fact", None)
+                if site_id is not None and callable(site_reader):
+                    try:
+                        site_source_fact_read = await site_reader(
+                            tenant_id=tenant_id, site_id=site_id
+                        )
+                    except Exception:  # noqa: BLE001 - source fact is slot-local
+                        site_source_fact_read = SiteSourceFactRead(
+                            tenant_id, site_id, None, False, "site_registry_unavailable"
+                        )
 
         linked_read: Optional[LinkedEntitiesRead] = None
         if "linked_entities" in requested_sections:
@@ -1324,6 +1509,7 @@ class Signals360Provider(IntelligenceProjectionProvider):
                     tenant_id=tenant_id,
                     read=quality_read,
                     authority_read=source_authority_read,
+                    site_source_fact_read=site_source_fact_read,
                 )
                 sections.append(source_section)
                 if source_claim is not None:
@@ -1333,6 +1519,7 @@ class Signals360Provider(IntelligenceProjectionProvider):
                     request.subject,
                     tenant_id=tenant_id,
                     read=quality_read,
+                    site_install_read=site_install_read,
                 )
                 sections.append(quality_section)
                 if quality_claim is not None:
@@ -1351,6 +1538,8 @@ class Signals360Provider(IntelligenceProjectionProvider):
                     request.subject,
                     tenant_id=tenant_id,
                     read=quality_read,
+                    semantic_read=semantic_read,
+                    semantic_skip_reason=semantic_skip_reason,
                 )
                 sections.append(classification_section)
                 if classification_claim is not None:
@@ -1642,6 +1831,8 @@ def _classification_section(
     *,
     tenant_id: str,
     read: Optional[ObservationQualityRead],
+    semantic_read: Optional[SemanticEventRead] = None,
+    semantic_skip_reason: Optional[str] = None,
 ) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
     """Project the canonical event type/family for one exact SDK observation.
 
@@ -1776,6 +1967,7 @@ def _classification_section(
             "sourceClassificationState": "unknown",
             "sourceClassificationReason": "tenant_source_classification_authority_not_joined",
             "semanticSignalState": "unknown",
+            "semanticSignalReason": semantic_skip_reason or "semantic_event_authority_not_joined",
             "policyState": "not_evaluated_by_signals360_classification_read",
             "freshnessState": "unknown",
             "evidenceRefs": [
@@ -1801,7 +1993,144 @@ def _classification_section(
         claimState=EpistemicStatus.OBSERVED,
         domainSlotIds=["classification"],
     )
+    semantic_content, semantic_evidence = _exact_semantic_event_metadata(
+        tenant_id=tenant_id,
+        event_id=subject.id,
+        event_type=event_type,
+        envelope=envelope,
+        row=row,
+        read=semantic_read,
+        skip_reason=semantic_skip_reason,
+    )
+    section.content.update(semantic_content)
+    if semantic_evidence:
+        section.content["evidenceRefs"].extend(
+            ref.model_dump(mode="json") for ref in semantic_evidence
+        )
+        section.canonicalAuthorityRefs.append("silver_semantic_observations")
+        section.content["reasonCode"] = "event_registry_and_exact_semantic_model_output_metadata_only"
+        section.warnings = [
+            "Event type and family and stored semantic model-output metadata are observed; model correctness, source classification, policy, producer coverage, and freshness remain unknown."
+        ]
     return section, claim
+
+
+def _exact_semantic_event_metadata(
+    *,
+    tenant_id: str,
+    event_id: str,
+    event_type: str,
+    envelope: dict[str, Any],
+    row: dict[str, Any],
+    read: Optional[SemanticEventRead],
+    skip_reason: Optional[str],
+) -> tuple[dict[str, Any], list[EvidenceRef]]:
+    """Admit only active model-output metadata for the exact stamped SDK event.
+
+    This verifies association, not model correctness, consent, source trust,
+    complete producer coverage, or an as-of semantic state. Derived labels and
+    actor/subject references remain suppressed by this projection.
+    """
+    def unknown(reason: str) -> tuple[dict[str, Any], list[EvidenceRef]]:
+        return {"semanticSignalState": "unknown", "semanticSignalReason": reason}, []
+
+    if skip_reason is not None:
+        return unknown(skip_reason)
+    if read is None:
+        return unknown("semantic_event_authority_not_joined")
+    if read.tenant_id != tenant_id or read.source_event_id != event_id:
+        return unknown("semantic_event_read_scope_mismatch")
+    if not read.available or not read.complete:
+        return unknown(read.reason or "semantic_event_read_incomplete")
+    if len(read.rows) > _MAX_SEMANTIC_EVENT_OBSERVATIONS:
+        return unknown("semantic_event_read_truncated")
+    if not read.rows:
+        return unknown("semantic_event_producer_coverage_unknown")
+    payload = row.get("payload")
+    context = payload.get("context") if isinstance(payload, dict) else None
+    source = envelope.get("source")
+    observation = envelope.get("observation")
+    namespace = source.get("source_instance") if isinstance(source, dict) else None
+    event_at = _safe_timestamp(observation.get("occurred_at")) if isinstance(observation, dict) else None
+    if (
+        not isinstance(context, dict)
+        or not isinstance(namespace, str)
+        or namespace != context.get("identity_namespace")
+        or not (
+            namespace == f"tenant:{tenant_id}"
+            or (namespace.startswith("site:") and bool(namespace[5:].strip()))
+        )
+        or event_at is None
+    ):
+        return unknown("semantic_event_source_namespace_or_time_unverified")
+
+    records: list[dict[str, Any]] = []
+    evidence: list[EvidenceRef] = []
+    seen: set[str] = set()
+    for semantic in read.rows:
+        if not isinstance(semantic, dict):
+            return unknown("semantic_event_row_invalid")
+        if (
+            semantic.get("tenant_id") != tenant_id
+            or semantic.get("source_event_id") != event_id
+            or semantic.get("source_namespace") != namespace
+            or semantic.get("source_type") != event_type
+        ):
+            return unknown("semantic_event_row_scope_mismatch")
+        status = _safe_token(semantic.get("status"))
+        if status in {"deleted", "expired", "superseded", "failed", "quarantined", "consent_restricted"}:
+            continue
+        semantic_id = _safe_identifier(semantic.get("observation_id"))
+        model_id = _safe_identifier(semantic.get("model_id"))
+        model_version = _safe_identifier(semantic.get("model_version"))
+        processed_at = _safe_timestamp(semantic.get("processed_at"))
+        supporting = semantic.get("evidence_refs")
+        if (
+            _safe_timestamp(semantic.get("occurred_at")) != event_at
+            or status not in {"classified", "partial", "abstained"}
+            or semantic_id is None
+            or semantic_id in seen
+            or model_id is None
+            or model_version is None
+            or processed_at is None
+            or not isinstance(supporting, list)
+            or not any(
+                isinstance(ref, dict)
+                and ref.get("source_ref") == event_id
+                and ref.get("source_type") == event_type
+                for ref in supporting
+            )
+        ):
+            return unknown("semantic_event_row_evidence_mismatch")
+        seen.add(semantic_id)
+        evidence.append(
+            EvidenceRef(
+                id=semantic_id,
+                type="model_output",
+                source="silver_semantic_observations",
+                observedAt=processed_at,
+            )
+        )
+        records.append(
+            {
+                "observationId": semantic_id,
+                "status": status,
+                "modelId": model_id,
+                "modelVersion": model_version,
+            }
+        )
+    if not records:
+        return unknown("no_active_semantic_event_model_output")
+    return (
+        {
+            "semanticSignalState": "stored_model_output_observed",
+            "semanticSignalReason": "exact_tenant_event_namespace_and_evidence_join",
+            "semanticObservations": records,
+            "semanticCorrectnessState": "unknown",
+            "semanticProducerCoverageState": "unknown",
+        },
+        evidence,
+    )
 
 
 def _linked_entities_section(
@@ -2076,11 +2405,58 @@ def _campaign_links_section(
     return section, claims
 
 
+def _stamped_site_id(
+    row: dict[str, Any], *, tenant_id: str, observation_id: str
+) -> Optional[str]:
+    """Resolve only the site namespace stamped by authenticated SDK ingress."""
+    if (
+        row.get("tenant_id") != tenant_id
+        or row.get("provider_record_id") != observation_id
+        or row.get("source") != "sdk"
+    ):
+        return None
+    payload = row.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    envelope = payload.get("observation_envelope")
+    if not isinstance(envelope, dict):
+        return None
+    observation = envelope.get("observation")
+    tenancy = envelope.get("tenancy")
+    source = envelope.get("source")
+    quality = envelope.get("quality")
+    context = payload.get("context")
+    if (
+        not isinstance(observation, dict)
+        or observation.get("observation_id") != observation_id
+        or not isinstance(tenancy, dict)
+        or tenancy.get("tenant_id") != tenant_id
+        or not isinstance(source, dict)
+        or source.get("source_type") != "sdk"
+        or not isinstance(quality, dict)
+        or quality.get("validation_state") != "gateway:accepted"
+        or not isinstance(context, dict)
+    ):
+        return None
+    namespace = _safe_token(source.get("source_instance"))
+    if namespace is None or not namespace.startswith("site:"):
+        return None
+    site_id = _safe_token(namespace.removeprefix("site:"))
+    if (
+        site_id is None
+        or not site_id.startswith("site_")
+        or context.get("identity_namespace") != namespace
+    ):
+        return None
+    return site_id
+
+
 def _quality_section(
     subject: ProjectionSubject,
     *,
     tenant_id: str,
     read: Optional[ObservationQualityRead],
+    site_install_read: Optional[SiteInstallHealthRead] = None,
 ) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
     """Expose only gateway-stamped quality from an exact SDK observation."""
     reason: Optional[str] = None
@@ -2181,6 +2557,59 @@ def _quality_section(
         source="bronze_sdk_events",
         observedAt=observed_at,
     )
+    site_health: dict[str, Any] = {
+        "state": "unknown",
+        "reasonCode": "exact_authenticated_site_install_health_unavailable",
+    }
+    site_evidence: Optional[EvidenceRef] = None
+    expected_site = _stamped_site_id(
+        row, tenant_id=tenant_id, observation_id=subject.id
+    )
+    if expected_site is None:
+        site_health["reasonCode"] = "no_authenticated_site_namespace_for_observation"
+    elif isinstance(site_install_read, SiteInstallHealthRead):
+        install = site_install_read.record
+        if (
+            site_install_read.available
+            and site_install_read.tenant_id == tenant_id
+            and site_install_read.site_id == expected_site
+            and isinstance(install, dict)
+            and install.get("id") == f"{tenant_id}:{expected_site}"
+            and install.get("tenant_id") == tenant_id
+            and install.get("installation_id") == expected_site
+            and install.get("site_id") == expected_site
+            and install.get("record_type") == "site_install"
+            and install.get("status") in {"loaded", "live", "failed"}
+            and install.get("last_signal") in {
+                "sdk_loaded", "sdk_initialized", "sdk_init_failed"
+            }
+            and _safe_timestamp(install.get("last_signal_at")) is not None
+        ):
+            signal_at = _safe_timestamp(install["last_signal_at"])
+            site_evidence = EvidenceRef(
+                id=install["id"],
+                type="document",
+                source="repositories.sdk_repos.SDKInstallationRepository:sdk_installations",
+                observedAt=signal_at,
+            )
+            site_health = {
+                "state": "observed",
+                "siteId": expected_site,
+                "lastObservedInstallStatus": install["status"],
+                "lastSignal": install["last_signal"],
+                "lastSignalAt": signal_at,
+                "coverage": "one_exact_authenticated_site_install",
+                "fleetHealth": "unknown",
+                "eventTimeHealth": "unknown",
+                "evidenceRefs": [site_evidence.model_dump(mode="json")],
+            }
+        else:
+            site_health["reasonCode"] = (
+                site_install_read.reason
+                if not site_install_read.available and site_install_read.reason
+                else "site_install_record_scope_or_shape_invalid"
+            )
+    quality_evidence = [evidence, *([site_evidence] if site_evidence else [])]
     section = ProjectionSection(
         id="quality",
         state="degraded",
@@ -2198,21 +2627,26 @@ def _quality_section(
             "sourceReliability": "unknown",
             "eventSemanticQuality": "unknown",
             "freshnessSla": "unknown",
-            "evidenceRefs": [evidence.model_dump(mode="json")],
+            "siteInstallHealth": site_health,
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in quality_evidence],
             "reasonCode": "gateway_validation_only_quality",
         },
         warnings=[
             "gateway validation is observed; source reliability, event semantics, and freshness SLA remain unknown"
         ],
-        canonicalAuthorityRefs=["observations"],
+        canonicalAuthorityRefs=["observations", *(["ingestion_health"] if site_evidence else [])],
     )
     claim = ClaimEnvelope(
         id=f"signals360.observation_quality.{subject.id}",
         kind="gateway_observation_validation_record",
         subject=subject,
-        evidenceRefs=[evidence],
+        evidenceRefs=quality_evidence,
         claims=[
             "The tenant-scoped SDK observation envelope records gateway:accepted validation; this does not establish source reliability, event semantic quality, or a freshness SLA."
+            + (
+                " The authenticated site namespace has a separately stored current install-signal status; that status does not establish this event's health or fleet health."
+                if site_evidence else ""
+            )
         ],
         confidence=1.0,
         claimState=EpistemicStatus.OBSERVED,
@@ -2370,6 +2804,7 @@ def _source_inventory_section(
     tenant_id: str,
     read: Optional[ObservationQualityRead],
     authority_read: Optional[ObservationSourceAuthorityRead],
+    site_source_fact_read: Optional[SiteSourceFactRead] = None,
 ) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
     """Expose one SDK event's source facts and independently traced authority."""
     reason: Optional[str] = None
@@ -2498,6 +2933,51 @@ def _source_inventory_section(
             if not authority_read.available:
                 authority["state"] = "degraded"
     authority["reasonCode"] = authority_reason
+    site_source_fact: dict[str, Any] = {
+        "state": "unknown",
+        "reasonCode": "exact_authenticated_site_registry_fact_unavailable",
+    }
+    site_evidence: Optional[EvidenceRef] = None
+    expected_site = _stamped_site_id(
+        row, tenant_id=tenant_id, observation_id=subject.id
+    )
+    if expected_site is None:
+        site_source_fact["reasonCode"] = "no_authenticated_site_namespace_for_observation"
+    elif isinstance(site_source_fact_read, SiteSourceFactRead):
+        site_row = site_source_fact_read.record
+        if (
+            site_source_fact_read.available
+            and site_source_fact_read.tenant_id == tenant_id
+            and site_source_fact_read.site_id == expected_site
+            and isinstance(site_row, dict)
+            and site_row.get("id") == expected_site
+            and site_row.get("tenant_id") == tenant_id
+            and site_row.get("status") in {"active", "revoked"}
+            and _safe_timestamp(site_row.get("updated_at")) is not None
+        ):
+            updated_at = _safe_timestamp(site_row["updated_at"])
+            site_evidence = EvidenceRef(
+                id=expected_site,
+                type="document",
+                source="ingestion.sdk_distribution.sites.SDKSiteRepository:sdk_sites",
+                observedAt=updated_at,
+            )
+            site_source_fact = {
+                "state": "observed",
+                "siteId": expected_site,
+                "currentRegistrationStatus": site_row["status"],
+                "lastUpdatedAt": updated_at,
+                "coverage": "one_exact_authenticated_site_registration",
+                "eventTimeRegistrationStatus": "unknown",
+                "fleetInventory": "unknown",
+                "evidenceRefs": [site_evidence.model_dump(mode="json")],
+            }
+        else:
+            site_source_fact["reasonCode"] = (
+                site_source_fact_read.reason
+                if not site_source_fact_read.available and site_source_fact_read.reason
+                else "site_registry_record_scope_or_shape_invalid"
+            )
     item = {
         "observationId": subject.id,
         "sourceType": source_type,
@@ -2507,9 +2987,10 @@ def _source_inventory_section(
         "adapterVersion": adapter_version,
         "observedAt": observed_at,
         "sourceAuthority": authority,
+        "siteSourceFact": site_source_fact,
         "evidenceRefs": [evidence.model_dump(mode="json")],
     }
-    evidence_refs = [evidence, *authority_evidence]
+    evidence_refs = [evidence, *authority_evidence, *([site_evidence] if site_evidence else [])]
     section = ProjectionSection(
         id="source_inventory",
         state="available",
@@ -2528,7 +3009,9 @@ def _source_inventory_section(
             "one exact SDK observation is described; fleet inventory and source reliability remain unknown",
             authority_reason,
         ],
-        canonicalAuthorityRefs=["observations", "source_provenance"],
+        canonicalAuthorityRefs=[
+            "observations", "source_provenance", *(["source_facts"] if site_evidence else [])
+        ],
     )
     claim = ClaimEnvelope(
         id=f"signals360.source_inventory.{subject.id}",
@@ -2541,6 +3024,10 @@ def _source_inventory_section(
                 " Its recorded rights reference resolves to the same tenant's source grant."
                 if authority["state"] == "available"
                 else " Canonical source authority remains unverified."
+            )
+            + (
+                " Its authenticated site namespace resolves to a separately stored current tenant site registration."
+                if site_evidence else ""
             )
             + " Source reliability and fleet inventory completeness remain unknown."
         ],
@@ -2796,5 +3283,7 @@ __all__ = [
     "Signals360Provider",
     "Signal360Source",
     "SignalSummaryRead",
+    "SiteInstallHealthRead",
+    "SiteSourceFactRead",
     "register_provider",
 ]

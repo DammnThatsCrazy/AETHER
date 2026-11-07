@@ -1,0 +1,1961 @@
+{
+  "_comment": "Agent Behavioral Intelligence golden scenarios (WO-002). Deterministic IDs. 'current' expectations are asserted against today's code; 'pending' expectations name the work order that must make them current. See docs/architecture/agent-behavior/01-golden-scenarios.md.",
+  "schema_version": "1.0.0",
+  "tenant_id": "tenant-gs",
+  "scenarios": [
+    {
+      "id": "GS-A",
+      "title": "Cross-device human to agent journey",
+      "narrative": "A person starts on mobile, continues on web through an explicit handoff, delegates a trip task to an orchestrator, which spawns two workers that call tools and return; the orchestrator returns the outcome.",
+      "handoff": {
+        "journey_id": "gsa-jrn-checkout",
+        "source": {
+          "session_id": "gsa-ses-mobile",
+          "anonymous_id": "gsa-anon-mobile",
+          "platform": "ios"
+        },
+        "destination": {
+          "session_id": "gsa-ses-web",
+          "anonymous_id": "gsa-anon-web",
+          "platform": "web"
+        },
+        "expected": {
+          "link_basis": "explicit_handoff",
+          "identity_merge": "not_performed"
+        }
+      },
+      "principals": [
+        {
+          "entity_id": "gsa-person-1",
+          "kind": "human"
+        }
+      ],
+      "delegations": [
+        {
+          "delegation_id": "gsa-del-1",
+          "grantor": "gsa-person-1",
+          "grantee": "gsa-orch",
+          "scope": {
+            "type": "task"
+          }
+        }
+      ],
+      "risk_flagged_agents": [],
+      "events": [
+        {
+          "id": "gsa-evt-0001",
+          "type": "agent_task_started",
+          "agent": "gsa-orch",
+          "at": "2026-10-22T10:00:00Z",
+          "properties": {
+            "runId": "gsa-run-orch",
+            "taskId": "gsa-task-trip",
+            "journeyId": "gsa-jrn-checkout"
+          }
+        },
+        {
+          "id": "gsa-evt-0002",
+          "type": "agent_subagent_spawned",
+          "agent": "gsa-orch",
+          "at": "2026-10-22T10:00:01Z",
+          "properties": {
+            "parentAgentId": "gsa-orch",
+            "childAgentId": "gsa-wkr-flights",
+            "rootAgentId": "gsa-orch",
+            "runId": "gsa-run-orch",
+            "taskId": "gsa-task-trip"
+          }
+        },
+        {
+          "id": "gsa-evt-0003",
+          "type": "agent_subagent_spawned",
+          "agent": "gsa-orch",
+          "at": "2026-10-22T10:00:02Z",
+          "properties": {
+            "parentAgentId": "gsa-orch",
+            "childAgentId": "gsa-wkr-hotels",
+            "rootAgentId": "gsa-orch",
+            "runId": "gsa-run-orch",
+            "taskId": "gsa-task-trip"
+          }
+        },
+        {
+          "id": "gsa-evt-0004",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsa-wkr-flights",
+          "at": "2026-10-22T10:00:11Z",
+          "properties": {
+            "runId": "gsa-run-flights",
+            "toolName": "flights_search",
+            "taskId": "gsa-task-flights",
+            "status": "succeeded"
+          }
+        },
+        {
+          "id": "gsa-evt-0005",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsa-wkr-hotels",
+          "at": "2026-10-22T10:00:12Z",
+          "properties": {
+            "runId": "gsa-run-hotels",
+            "toolName": "hotels_search",
+            "taskId": "gsa-task-hotels",
+            "status": "succeeded"
+          }
+        },
+        {
+          "id": "gsa-evt-0006",
+          "type": "agent_task_completed",
+          "agent": "gsa-wkr-flights",
+          "at": "2026-10-22T10:00:21Z",
+          "properties": {
+            "runId": "gsa-run-flights",
+            "taskId": "gsa-task-flights",
+            "outcome": "completed"
+          }
+        },
+        {
+          "id": "gsa-evt-0007",
+          "type": "agent_task_completed",
+          "agent": "gsa-wkr-hotels",
+          "at": "2026-10-22T10:00:22Z",
+          "properties": {
+            "runId": "gsa-run-hotels",
+            "taskId": "gsa-task-hotels",
+            "outcome": "completed"
+          }
+        },
+        {
+          "id": "gsa-evt-0008",
+          "type": "agent_task_completed",
+          "agent": "gsa-orch",
+          "at": "2026-10-22T10:00:30Z",
+          "properties": {
+            "runId": "gsa-run-orch",
+            "taskId": "gsa-task-trip",
+            "outcome": "completed"
+          }
+        }
+      ],
+      "expected": {
+        "lineage": {
+          "root": "gsa-orch",
+          "agent_count": 3,
+          "max_depth": 1,
+          "tool_call_count": 2,
+          "attribution": "none",
+          "evidence_status": "source_reported",
+          "truncated": [],
+          "children": {
+            "gsa-wkr-flights": {
+              "spawn_event_id": "gsa-evt-0002",
+              "tools": {
+                "flights_search": 1
+              },
+              "outcomes": {
+                "completed": 1
+              }
+            },
+            "gsa-wkr-hotels": {
+              "spawn_event_id": "gsa-evt-0003",
+              "tools": {
+                "hotels_search": 1
+              },
+              "outcomes": {
+                "completed": 1
+              }
+            }
+          },
+          "root_outcomes": {
+            "completed": 1
+          }
+        },
+        "tool_results": [
+          {
+            "agent": "gsa-wkr-flights",
+            "tool": "flights_search",
+            "status": "succeeded",
+            "event_id": "gsa-evt-0004"
+          },
+          {
+            "agent": "gsa-wkr-hotels",
+            "tool": "hotels_search",
+            "status": "succeeded",
+            "event_id": "gsa-evt-0005"
+          }
+        ],
+        "fleet_hypothesis": {
+          "member_count": 3,
+          "status": "unconfirmed",
+          "priority": "low",
+          "principal_entity_ids": [
+            "gsa-person-1"
+          ],
+          "person_link_claim": "authority_granted"
+        },
+        "graph_edges": [
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsa-wkr-flights",
+            "to": "tool:tenant-gs:flights_search",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsa-evt-0004"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsa-wkr-hotels",
+            "to": "tool:tenant-gs:hotels_search",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsa-evt-0005"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsa-orch",
+            "to": "gsa-wkr-flights",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsa-evt-0002"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsa-orch",
+            "to": "gsa-wkr-hotels",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsa-evt-0003"
+            ]
+          },
+          {
+            "type": "DELEGATES",
+            "from": "gsa-person-1",
+            "to": "gsa-orch",
+            "status": "current",
+            "emitted_by": "delegation_authority",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [],
+            "evidence_record": "gsa-del-1"
+          }
+        ],
+        "decision_envelope": {
+          "status": "current",
+          "design": {
+            "decision_id": "derived:gsa-orch:gsa-task-trip",
+            "decision_actor": "gsa-orch",
+            "objective_ref": "task:gsa-task-trip",
+            "disposition": "unknown",
+            "status": "closed",
+            "outcome": "completed",
+            "outcome_event_id": "gsa-evt-0008",
+            "note": "no explicit decision events: window derived from the task, actor and objective are derived"
+          }
+        },
+        "agent_journey": {
+          "status": "current",
+          "design": {
+            "root_agent": "gsa-orch",
+            "agents": [
+              "gsa-orch",
+              "gsa-wkr-flights",
+              "gsa-wkr-hotels"
+            ],
+            "human_journey_id": "gsa-jrn-checkout",
+            "join_with_recorded_handoff": "observed",
+            "join_without_handoff": "declared",
+            "outcome": "completed"
+          }
+        },
+        "read_model": {
+          "status": "current",
+          "design": {
+            "surface": "Agent360",
+            "subject": "gsa-orch",
+            "sections": {
+              "behavior": "available",
+              "journey": "available",
+              "influence": "available",
+              "identity": "available",
+              "authority": "unavailable",
+              "value": "unavailable"
+            },
+            "attribution": "none"
+          }
+        }
+      },
+      "known_gaps": [
+        "Agent refs are source-reported, not resolved identities (WO-011/WO-013).",
+        "The human journey is joined by the journeyId the orchestrator reports; a recorded handoff makes the join observed, otherwise it is only declared."
+      ]
+    },
+    {
+      "id": "GS-B",
+      "title": "Risk / fleet scenario",
+      "narrative": "A Risk360-flagged actor's orchestrator spawns 15 workers that scan and quote swaps against one wallet over one shared RPC endpoint; one swap attempt is rejected. The fleet is attributed to the delegating person only as a reviewable hypothesis.",
+      "handoff": null,
+      "principals": [
+        {
+          "entity_id": "gsb-person-9",
+          "kind": "human"
+        }
+      ],
+      "delegations": [
+        {
+          "delegation_id": "gsb-del-ops",
+          "grantor": "gsb-person-9",
+          "grantee": "gsb-swarm-root",
+          "scope": {
+            "type": "task"
+          }
+        }
+      ],
+      "risk_flagged_agents": [
+        "gsb-scan-03"
+      ],
+      "events": [
+        {
+          "id": "gsb-evt-0001",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:00Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-00",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0002",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:01Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-01",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0003",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:02Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-02",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0004",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:03Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-03",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0005",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:04Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-04",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0006",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:05Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-05",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0007",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:06Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-06",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0008",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:07Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-07",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0009",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:08Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-08",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0010",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:09Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-09",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0011",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:10Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-10",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0012",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:11Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-11",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0013",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:12Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-12",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0014",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:13Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-13",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0015",
+          "type": "agent_subagent_spawned",
+          "agent": "gsb-swarm-root",
+          "at": "2026-10-22T11:00:14Z",
+          "properties": {
+            "parentAgentId": "gsb-swarm-root",
+            "childAgentId": "gsb-scan-14",
+            "rootAgentId": "gsb-swarm-root",
+            "runId": "gsb-run-swarm"
+          }
+        },
+        {
+          "id": "gsb-evt-0016",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-00",
+          "at": "2026-10-22T11:05:00.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-00",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-00"
+          }
+        },
+        {
+          "id": "gsb-evt-0017",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-00",
+          "at": "2026-10-22T11:05:00.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-00",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-00"
+          }
+        },
+        {
+          "id": "gsb-evt-0018",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-01",
+          "at": "2026-10-22T11:05:01.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-01",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-01"
+          }
+        },
+        {
+          "id": "gsb-evt-0019",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-01",
+          "at": "2026-10-22T11:05:01.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-01",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-01"
+          }
+        },
+        {
+          "id": "gsb-evt-0020",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-02",
+          "at": "2026-10-22T11:05:02.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-02",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-02"
+          }
+        },
+        {
+          "id": "gsb-evt-0021",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-02",
+          "at": "2026-10-22T11:05:02.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-02",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-02"
+          }
+        },
+        {
+          "id": "gsb-evt-0022",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-03",
+          "at": "2026-10-22T11:05:03.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-03",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-03"
+          }
+        },
+        {
+          "id": "gsb-evt-0023",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-03",
+          "at": "2026-10-22T11:05:03.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-03",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-03"
+          }
+        },
+        {
+          "id": "gsb-evt-0024",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-04",
+          "at": "2026-10-22T11:05:04.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-04",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-04"
+          }
+        },
+        {
+          "id": "gsb-evt-0025",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-04",
+          "at": "2026-10-22T11:05:04.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-04",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-04"
+          }
+        },
+        {
+          "id": "gsb-evt-0026",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-05",
+          "at": "2026-10-22T11:05:05.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-05",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-05"
+          }
+        },
+        {
+          "id": "gsb-evt-0027",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-05",
+          "at": "2026-10-22T11:05:05.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-05",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-05"
+          }
+        },
+        {
+          "id": "gsb-evt-0028",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-06",
+          "at": "2026-10-22T11:05:06.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-06",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-06"
+          }
+        },
+        {
+          "id": "gsb-evt-0029",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-06",
+          "at": "2026-10-22T11:05:06.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-06",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-06"
+          }
+        },
+        {
+          "id": "gsb-evt-0030",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-07",
+          "at": "2026-10-22T11:05:07.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-07",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-07"
+          }
+        },
+        {
+          "id": "gsb-evt-0031",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-07",
+          "at": "2026-10-22T11:05:07.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-07",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-07"
+          }
+        },
+        {
+          "id": "gsb-evt-0032",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-08",
+          "at": "2026-10-22T11:05:08.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-08",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-08"
+          }
+        },
+        {
+          "id": "gsb-evt-0033",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-08",
+          "at": "2026-10-22T11:05:08.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-08",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-08"
+          }
+        },
+        {
+          "id": "gsb-evt-0034",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-09",
+          "at": "2026-10-22T11:05:09.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-09",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-09"
+          }
+        },
+        {
+          "id": "gsb-evt-0035",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-09",
+          "at": "2026-10-22T11:05:09.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-09",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-09"
+          }
+        },
+        {
+          "id": "gsb-evt-0036",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-10",
+          "at": "2026-10-22T11:05:10.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-10",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-10"
+          }
+        },
+        {
+          "id": "gsb-evt-0037",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-10",
+          "at": "2026-10-22T11:05:10.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-10",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-10"
+          }
+        },
+        {
+          "id": "gsb-evt-0038",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-11",
+          "at": "2026-10-22T11:05:11.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-11",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-11"
+          }
+        },
+        {
+          "id": "gsb-evt-0039",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-11",
+          "at": "2026-10-22T11:05:11.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-11",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-11"
+          }
+        },
+        {
+          "id": "gsb-evt-0040",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-12",
+          "at": "2026-10-22T11:05:12.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-12",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-12"
+          }
+        },
+        {
+          "id": "gsb-evt-0041",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-12",
+          "at": "2026-10-22T11:05:12.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-12",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-12"
+          }
+        },
+        {
+          "id": "gsb-evt-0042",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-13",
+          "at": "2026-10-22T11:05:13.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-13",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-13"
+          }
+        },
+        {
+          "id": "gsb-evt-0043",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-13",
+          "at": "2026-10-22T11:05:13.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-13",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-13"
+          }
+        },
+        {
+          "id": "gsb-evt-0044",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-14",
+          "at": "2026-10-22T11:05:14.0Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-14",
+            "toolName": "wallet_scan",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-14"
+          }
+        },
+        {
+          "id": "gsb-evt-0045",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsb-scan-14",
+          "at": "2026-10-22T11:05:14.1Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-14",
+            "toolName": "swap_quote",
+            "status": "succeeded",
+            "serverUrl": "https://rpc.shared.example/v1",
+            "objectType": "wallet",
+            "objectId": "0xdeadbeef",
+            "taskId": "gsb-task-gsb-scan-14"
+          }
+        },
+        {
+          "id": "gsb-evt-0046",
+          "type": "agent_trade_rejection_observed",
+          "agent": "gsb-scan-03",
+          "at": "2026-10-22T11:06:00Z",
+          "properties": {
+            "runId": "gsb-run-gsb-scan-03",
+            "symbol": "USDC",
+            "side": "sell",
+            "quantity": "2500.00",
+            "status": "rejected",
+            "taskId": "gsb-task-gsb-scan-03"
+          }
+        }
+      ],
+      "expected": {
+        "lineage": {
+          "root": "gsb-swarm-root",
+          "agent_count": 16,
+          "max_depth": 1,
+          "tool_call_count": 30,
+          "attribution": "none",
+          "evidence_status": "source_reported",
+          "truncated": [],
+          "children": {
+            "gsb-scan-00": {
+              "spawn_event_id": "gsb-evt-0001",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-01": {
+              "spawn_event_id": "gsb-evt-0002",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-02": {
+              "spawn_event_id": "gsb-evt-0003",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-03": {
+              "spawn_event_id": "gsb-evt-0004",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-04": {
+              "spawn_event_id": "gsb-evt-0005",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-05": {
+              "spawn_event_id": "gsb-evt-0006",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-06": {
+              "spawn_event_id": "gsb-evt-0007",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-07": {
+              "spawn_event_id": "gsb-evt-0008",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-08": {
+              "spawn_event_id": "gsb-evt-0009",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-09": {
+              "spawn_event_id": "gsb-evt-0010",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-10": {
+              "spawn_event_id": "gsb-evt-0011",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-11": {
+              "spawn_event_id": "gsb-evt-0012",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-12": {
+              "spawn_event_id": "gsb-evt-0013",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-13": {
+              "spawn_event_id": "gsb-evt-0014",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            },
+            "gsb-scan-14": {
+              "spawn_event_id": "gsb-evt-0015",
+              "tools": {
+                "swap_quote": 1,
+                "wallet_scan": 1
+              }
+            }
+          }
+        },
+        "fleet_hypothesis": {
+          "member_count": 16,
+          "status": "needs_review",
+          "priority": "high",
+          "principal_entity_ids": [
+            "gsb-person-9"
+          ],
+          "person_link_claim": "authority_granted",
+          "max_confidence": 0.9,
+          "flagged_agent_refs": [
+            "gsb-scan-03"
+          ],
+          "evidence_types_include": [
+            "observed_spawn_tree",
+            "spawn_burst",
+            "shared_endpoint",
+            "identical_tool_sequence",
+            "overlapping_targets",
+            "canonical_principal_delegation"
+          ],
+          "competing_explanations_include": [
+            "shared_third_party_infrastructure",
+            "same_vendor_template",
+            "principal_is_not_the_actor"
+          ],
+          "never_status": "confirmed_by_reviewer"
+        },
+        "economic_attempts": [
+          {
+            "agent": "gsb-scan-03",
+            "event_id": "gsb-evt-0046",
+            "status": "rejected"
+          }
+        ],
+        "graph_edges": [
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-00",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0016"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-00",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0017"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-01",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0018"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-01",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0019"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-02",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0020"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-02",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0021"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-03",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0022"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-03",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0023"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-04",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0024"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-04",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0025"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-05",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0026"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-05",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0027"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-06",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0028"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-06",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0029"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-07",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0030"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-07",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0031"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-08",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0032"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-08",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0033"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-09",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0034"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-09",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0035"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-10",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0036"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-10",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0037"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-11",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0038"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-11",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0039"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-12",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0040"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-12",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0041"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-13",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0042"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-13",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0043"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-14",
+            "to": "tool:tenant-gs:wallet_scan",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0044"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsb-scan-14",
+            "to": "tool:tenant-gs:swap_quote",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0045"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-00",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0001"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-01",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0002"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-02",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0003"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-03",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0004"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-04",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0005"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-05",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0006"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-06",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0007"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-07",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0008"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-08",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0009"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-09",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0010"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-10",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0011"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-11",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0012"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-12",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0013"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-13",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0014"
+            ]
+          },
+          {
+            "type": "SPAWNED_SUBAGENT",
+            "from": "gsb-swarm-root",
+            "to": "gsb-scan-14",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsb-evt-0015"
+            ]
+          }
+        ],
+        "decision_envelope": {
+          "status": "current",
+          "design": {
+            "decision_id": "derived:gsb-scan-03:gsb-task-gsb-scan-03",
+            "decision_actor": "gsb-scan-03",
+            "status": "open",
+            "disposition": "unknown",
+            "note": "worker tool calls with no outcome observed: the envelope stays open"
+          }
+        },
+        "agent_journey": {
+          "status": "current",
+          "design": {
+            "root_agent": "gsb-swarm-root",
+            "agent_count": 16,
+            "human_journey": "unknown"
+          }
+        },
+        "read_model": {
+          "status": "current",
+          "design": {
+            "surface": "Agent360",
+            "subject": "gsb-scan-03",
+            "sections": {
+              "behavior": "available",
+              "decisions": "available",
+              "risk": "available"
+            },
+            "risk_signal_sources_include": []
+          }
+        }
+      },
+      "known_gaps": [
+        "Cluster evidence must never collapse into a proven common operator; only a reviewer can confirm.",
+        "Economic attempt events are Silver facts only; Value/Risk do not yet consume them as behavior (WO-092/WO-093)."
+      ]
+    },
+    {
+      "id": "GS-C",
+      "title": "Constrained non-action",
+      "narrative": "An agent with a purchase objective finds a candidate, a spend policy denies the purchase, and the agent abstains.",
+      "handoff": null,
+      "principals": [],
+      "delegations": [],
+      "risk_flagged_agents": [],
+      "events": [
+        {
+          "id": "gsc-evt-0001",
+          "type": "agent_task_started",
+          "agent": "gsc-buyer",
+          "at": "2026-10-22T12:00:00Z",
+          "properties": {
+            "runId": "gsc-run-1",
+            "taskId": "gsc-task-buy"
+          }
+        },
+        {
+          "id": "gsc-evt-0002",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsc-buyer",
+          "at": "2026-10-22T12:00:05Z",
+          "properties": {
+            "runId": "gsc-run-1",
+            "taskId": "gsc-task-buy",
+            "toolName": "commerce_search",
+            "status": "succeeded",
+            "objectType": "product",
+            "objectId": "sku-123"
+          }
+        },
+        {
+          "id": "gsc-evt-0003",
+          "type": "agent_policy_evaluated",
+          "agent": "gsc-buyer",
+          "at": "2026-10-22T12:00:06Z",
+          "properties": {
+            "runId": "gsc-run-1",
+            "taskId": "gsc-task-buy",
+            "policyId": "gsc-pol-spend",
+            "policyVersion": "3",
+            "decision": "deny",
+            "reasonCodes": [
+              "max_transaction_exceeded"
+            ],
+            "actionType": "purchase",
+            "resourceRef": "merchant:shop-1"
+          }
+        },
+        {
+          "id": "gsc-evt-0004",
+          "type": "agent_task_completed",
+          "agent": "gsc-buyer",
+          "at": "2026-10-22T12:00:07Z",
+          "properties": {
+            "runId": "gsc-run-1",
+            "taskId": "gsc-task-buy",
+            "outcome": "abstained"
+          }
+        }
+      ],
+      "expected": {
+        "lineage": {
+          "root": "gsc-buyer",
+          "agent_count": 1,
+          "max_depth": 0,
+          "tool_call_count": 1,
+          "attribution": "none",
+          "evidence_status": "source_reported",
+          "truncated": [],
+          "children": {},
+          "root_outcomes": {
+            "abstained": 1
+          }
+        },
+        "policy_decisions": [
+          {
+            "event_id": "gsc-evt-0003",
+            "policy_id": "gsc-pol-spend",
+            "policy_decision": "deny",
+            "action_type": "purchase",
+            "reason_codes": [
+              "max_transaction_exceeded"
+            ]
+          }
+        ],
+        "forbidden_event_types": [
+          "agent_trade_order_observed",
+          "agent_trade_fill_observed",
+          "payment_initiated",
+          "payment_completed"
+        ],
+        "graph_edges": [
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsc-buyer",
+            "to": "tool:tenant-gs:commerce_search",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsc-evt-0002"
+            ]
+          }
+        ],
+        "decision_envelope": {
+          "status": "current",
+          "design": {
+            "decision_id": "derived:gsc-buyer:gsc-task-buy",
+            "decision_actor": "gsc-buyer",
+            "objective_ref": "task:gsc-task-buy",
+            "candidates": [
+              "product:sku-123"
+            ],
+            "constraint_refs": [
+              "gsc-pol-spend@3"
+            ],
+            "disposition": "constrained_non_action",
+            "authority_check_event_id": "gsc-evt-0003",
+            "outcome_event_id": "gsc-evt-0004",
+            "status": "closed"
+          }
+        },
+        "opportunity_envelope": {
+          "status": "current",
+          "design": {
+            "available": [
+              "product:sku-123"
+            ],
+            "permitted": [],
+            "preference_inference": "not_applicable"
+          }
+        },
+        "action_disposition": {
+          "status": "current",
+          "design": {
+            "disposition": "constrained_non_action"
+          }
+        },
+        "agent_journey": {
+          "status": "current",
+          "design": {
+            "root_agent": "gsc-buyer",
+            "agent_count": 1,
+            "human_journey": "unknown"
+          }
+        },
+        "read_model": {
+          "status": "current",
+          "design": {
+            "surface": "Agent360",
+            "subject": "gsc-buyer",
+            "sections": {
+              "behavior": "available",
+              "decisions": "available"
+            }
+          }
+        }
+      },
+      "known_gaps": [
+        "Non-selection caused by policy must not be read as a negative preference (ADR-AB-004)."
+      ]
+    },
+    {
+      "id": "GS-D",
+      "title": "Failure adaptation",
+      "narrative": "Tool A fails, is retried and fails again; the agent switches to tool B, which succeeds.",
+      "handoff": null,
+      "principals": [],
+      "delegations": [],
+      "risk_flagged_agents": [],
+      "events": [
+        {
+          "id": "gsd-evt-0001",
+          "type": "agent_task_started",
+          "agent": "gsd-agent",
+          "at": "2026-10-22T13:00:00Z",
+          "properties": {
+            "runId": "gsd-run-1",
+            "taskId": "gsd-task-geo"
+          }
+        },
+        {
+          "id": "gsd-evt-0002",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsd-agent",
+          "at": "2026-10-22T13:00:01Z",
+          "properties": {
+            "runId": "gsd-run-1",
+            "taskId": "gsd-task-geo",
+            "toolName": "geo_lookup_primary",
+            "status": "failed",
+            "attempt": 1
+          }
+        },
+        {
+          "id": "gsd-evt-0003",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsd-agent",
+          "at": "2026-10-22T13:00:03Z",
+          "properties": {
+            "runId": "gsd-run-1",
+            "taskId": "gsd-task-geo",
+            "toolName": "geo_lookup_primary",
+            "status": "failed",
+            "attempt": 2
+          }
+        },
+        {
+          "id": "gsd-evt-0004",
+          "type": "agent_tool_invocation_observed",
+          "agent": "gsd-agent",
+          "at": "2026-10-22T13:00:04Z",
+          "properties": {
+            "runId": "gsd-run-1",
+            "taskId": "gsd-task-geo",
+            "toolName": "geo_lookup_fallback",
+            "status": "succeeded",
+            "attempt": 1
+          }
+        },
+        {
+          "id": "gsd-evt-0005",
+          "type": "agent_task_completed",
+          "agent": "gsd-agent",
+          "at": "2026-10-22T13:00:05Z",
+          "properties": {
+            "runId": "gsd-run-1",
+            "taskId": "gsd-task-geo",
+            "outcome": "completed"
+          }
+        }
+      ],
+      "expected": {
+        "lineage": {
+          "root": "gsd-agent",
+          "agent_count": 1,
+          "max_depth": 0,
+          "tool_call_count": 3,
+          "attribution": "none",
+          "evidence_status": "source_reported",
+          "truncated": [],
+          "children": {},
+          "root_tools": {
+            "geo_lookup_primary": 2,
+            "geo_lookup_fallback": 1
+          },
+          "root_outcomes": {
+            "completed": 1
+          }
+        },
+        "tool_results": [
+          {
+            "agent": "gsd-agent",
+            "tool": "geo_lookup_primary",
+            "status": "failed",
+            "event_id": "gsd-evt-0002"
+          },
+          {
+            "agent": "gsd-agent",
+            "tool": "geo_lookup_primary",
+            "status": "failed",
+            "event_id": "gsd-evt-0003"
+          },
+          {
+            "agent": "gsd-agent",
+            "tool": "geo_lookup_fallback",
+            "status": "succeeded",
+            "event_id": "gsd-evt-0004"
+          }
+        ],
+        "graph_edges": [
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsd-agent",
+            "to": "tool:tenant-gs:geo_lookup_primary",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsd-evt-0002",
+              "gsd-evt-0003"
+            ]
+          },
+          {
+            "type": "AGENT_USED_TOOL_OBS",
+            "from": "gsd-agent",
+            "to": "tool:tenant-gs:geo_lookup_fallback",
+            "status": "current",
+            "epistemic_status": "observed",
+            "evidence_event_ids": [
+              "gsd-evt-0004"
+            ]
+          }
+        ],
+        "failure_resolution": {
+          "status": "current",
+          "design": {
+            "retries": [
+              {
+                "tool": "geo_lookup_primary",
+                "event_id": "gsd-evt-0003"
+              }
+            ],
+            "switches": [
+              {
+                "from_tool": "geo_lookup_primary",
+                "to_tool": "geo_lookup_fallback",
+                "event_id": "gsd-evt-0004"
+              }
+            ],
+            "resolved": true,
+            "basis": "derived"
+          }
+        },
+        "decision_envelope": {
+          "status": "current",
+          "design": {
+            "decision_id": "derived:gsd-agent:gsd-task-geo",
+            "decision_actor": "gsd-agent",
+            "objective_ref": "task:gsd-task-geo",
+            "disposition": "unknown",
+            "status": "closed",
+            "outcome": "completed"
+          }
+        },
+        "agent_journey": {
+          "status": "current",
+          "design": {
+            "root_agent": "gsd-agent",
+            "agent_count": 1,
+            "human_journey": "unknown"
+          }
+        },
+        "read_model": {
+          "status": "current",
+          "design": {
+            "surface": "Agent360",
+            "subject": "gsd-agent",
+            "sections": {
+              "behavior": "available",
+              "decisions": "available"
+            },
+            "failure_resolution_episodes": 1
+          }
+        }
+      },
+      "known_gaps": [
+        "The runtime did not emit agent_tool_retried / agent_tool_switched, so retry and switch are derived from ordered tool results.",
+        "Lineage counts failed calls as calls; per-tool success rate lives in the tool entity (WO-061)."
+      ]
+    }
+  ]
+}

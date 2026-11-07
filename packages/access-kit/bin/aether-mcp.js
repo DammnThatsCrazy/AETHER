@@ -14,6 +14,7 @@ import { registerEntityTools } from '../src/entity-tools.mjs';
 import { registerAccountContextTool } from '../src/account-context-tools.mjs';
 import { registerAccessOperationTools } from '../src/access-operation-tools.mjs';
 import { registerContinuationTools } from '../src/continuation-tools.mjs';
+import { registerAgentBehaviorTools } from '../src/agent-behavior-tools.mjs';
 import { invokeAccessOperation } from '../src/access-operations.mjs';
 import { interactionSchema } from '../src/interaction-schema.mjs';
 import { loadMcpStoredSession } from '../src/mcp-auth.mjs';
@@ -114,6 +115,14 @@ export function createAccessMcpServer(
   // advertise continuation state tools to that caller; API key and human
   // session callers still receive server-side read/write permission checks.
   if (!accessEnv.AETHER_MCP_OAUTH_TOKEN) registerContinuationTools(server, accessEnv);
+  // Agent behavior reads require agent:manage, which the read-only delegated
+  // OAuth scope never carries; advertise them only to API key and session callers.
+  if (!accessEnv.AETHER_MCP_OAUTH_TOKEN) registerAgentBehaviorTools(server, {
+    behavior: (agentRef) => invokeAccessOperation('agents.behavior', { agent_ref: agentRef }, accessEnv),
+    decision: (agentRef, decisionId) => invokeAccessOperation('agents.decision', {
+      agent_ref: agentRef, decision_id: decisionId,
+    }, accessEnv),
+  });
 
   server.registerTool(
     'agent_access_capabilities_list',

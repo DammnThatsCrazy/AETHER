@@ -9,16 +9,16 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "config/storage_policies.yaml": "sha256:977969e4a29c4cd4d3269f18bf5d8d79e9ef779a83170ef7c68712d769f0245b"
+  "config/storage_policies.yaml": "sha256:dd0170e28a9e22f6169ece57f2a05063d18f4b7a7e369dda182bbb5ef4f383e3"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
-  "services/api/governance/consent/erasure_jobs.py": "sha256:2761a882b5af7e261334e64c10ab3a4081c2514ff64414328c39060e4529f669"
-  "services/api/governance/consent/erasure_planes.py": "sha256:b4898c154113e82c44e53d319422968ed41545b4ade66e7776e2f801b64b5822"
-  "services/api/governance/dsr_propagation/models.py": "sha256:c70143dd971ce7be836fa156a8902a51aa6cc5f3a4652567209647c146855933"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:e7209845abf90683109a52f895142862b5c8a421f80bf427cb4a90c4143c9a96"
+  "services/api/governance/consent/erasure_planes.py": "sha256:dd529398d1e0d3b60bb8c61bf6371aa241ef63bdaa57738993ab823c8b57cf9e"
+  "services/api/governance/dsr_propagation/models.py": "sha256:132e4816b38b5abe03ba6105b92836da2380fe728e522afdd282e05fc0f8efc5"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
   "services/api/services/social360/evidence_authority.py": "sha256:0b4d377d5a8b0316e11f9cabc13f0fa69c62aac9fc4d7ac313e42d1b38647322"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
-  "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store
@@ -52,8 +52,18 @@ component, and `scripts/release/check_dsr_coverage.py` fails CI when a
   `skipped_legal_hold` with the retained count and a `policy_decision_id`;
   erasure that needs an operator is `requires_manual_review` with
   `requires_retrain`.
+- The storage registry classifies `agent_invocation_claims` and
+  `agent_invocation_receipts` as PostgreSQL rows with legal retention and
+  `delete_behavior: preserve`. This storage policy is not itself a DSR plane
+  receipt; any subject erasure handling must preserve that distinction.
 
 ## Subject resolution
+
+The `support_case_subjects` storage policy classifies ticket/conversation case
+mappings as standard-retention PostgreSQL metadata with hard deletion and legal
+hold support. Its canonical case foreign key cascades case deletion. This policy
+and database cascade do not create a separate user-subject DSR erasure receipt
+or prove that a DSR request resolved and erased the mapped case.
 
 The DSR names `user_id` (and optionally the SDK `anonymous_id`). Before any
 store is touched, `resolve_subject` reads `identity_aliases` (the `user_id` and
@@ -92,6 +102,7 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `risk_poisoning_evidence` | `risk_poisoning_evidence` | hard delete exact tenant rows whose subject or source ID equals a subject ref; legal holds respected | rows deleted |
 | `risk_intervention_records` | `risk_intervention_records` | hard delete exact tenant rows whose subject or actor ID equals a subject ref; legal holds respected | rows deleted |
 | `social_relationship_evidence_events` | `social_relationship_evidence_events` | hard delete exact tenant assertions naming the subject as the indexed subject, source, target, a path participant, or the authenticated actor; legal holds respected | rows deleted |
+| `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings`, `agent_lineage_adjudications`, `delegations`, fan-out `risk_signals` | hard delete rows naming a subject ref as principal, agent, grantor or grantee; `agent_configs` rows owned by the subject keep the agent but lose the owner. Legal holds are checked on each affected row's id and counterparty, and on the subject's refs against every table named here, and any hold skips the plane. `agent_configs` rows naming the subject as the agent are deleted, and `asserted_by_entity_id` and `revoked_by_entity_id` are cleared on rows that stay. The erase bumps `agent_lineage_tenant_state`, so every worker discards its older fold and an in-flight write fails and rebuilds from erased evidence. A full rebuild then runs in the same step, removing derived copies such as parent and root references and cluster labels. The `active_for` delegation cache is invalidated for each affected grantee. `Delegation` graph vertices projected from deleted grants are tombstoned with their parties blanked and their edges revoked | rows deleted across the tables |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a
@@ -99,7 +110,7 @@ regenerable, 7-day derived copy. The value-semantics snapshot stores
 (`value_valuation_snapshots`, `value_rollup_snapshots`,
 `value_price_snapshots`, `valuation_snapshots`,
 `stablecoin_valuation_snapshots`) record asset and metric valuations with no
-subject key; `test_value_snapshot_stores_carry_no_subject_key` pins that. Silver
+subject key; `test_value_snapshot_stores_carry_no_subject_key` pins that. The agent behavior snapshot store (`agent_behavior_snapshots`) is likewise a derived, rebuildable cache: it holds aggregated rates and Silver event ids keyed by tenant, source-reported agent ref and window, with no payloads or person identifiers. It has no DSR component of its own; erasing the underlying Silver facts is followed by recomputation, and `delete_by_agent` / `purge_before` give operators a physical delete. Silver
 tables owned by another component are excluded from `silver_facts`:
 `silver_campaign_touchpoint_facts` and `canonical_conversions`
 (`attribution_records`). The semantic handler owns and hard-deletes

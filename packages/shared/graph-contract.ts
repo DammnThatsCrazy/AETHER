@@ -9,6 +9,8 @@
  * Validated in CI by tests/contracts/test_graph_contract_parity.py.
  */
 
+import type { RelationshipStatus } from './agent-lineage';
+
 // ── Relationship layers ───────────────────────────────────────────────────────
 
 /** All four canonical relationship layers. Must never be reduced to three. */
@@ -121,6 +123,19 @@ export const EDGE_LAYER_MAP: Record<string, GraphEdgeLayer> = {
   EXECUTED_AS: 'A2A',
   PRODUCED: 'A2A',
   UPDATES_CONFIDENCE_FOR: 'A2A',
+
+  // High-cardinality agent lineage (durable semantic edges only; tool
+  // invocations are never graphed per call). Mirrors relationship_layers.py.
+  DELEGATED_TO: 'A2A',
+  SPAWNED_SUBAGENT: 'A2A',
+  AUTHORIZED_AGENT: 'H2A',
+  AGENT_ACTED_ON_BEHALF_OF: 'A2A',
+  HUMAN_DELEGATED_TO_AGENT: 'H2A',
+  ORG_DELEGATED_TO_AGENT: 'H2A',
+  DEPLOYED_AS: 'A2A',
+  INSTANTIATED_AS: 'A2A',
+  PRINCIPAL_OF: 'H2A',
+  SUPERVISES: 'H2A',
 
   // Fraud Network Intelligence edges
   MEMBER_OF_FRAUD_NETWORK: 'H2H',
@@ -244,6 +259,81 @@ export function countEdgesByLayer(edges: Array<{ type: string }>): LayerCounts {
   }
   return counts;
 }
+
+// ── Agent lineage semantics ───────────────────────────────────────────────────
+// High-Cardinality Agent Lineage work order §17/§30. Mirrors
+// LINEAGE_EDGE_PROPERTIES / LINEAGE_RELATIONSHIP_EDGE_TYPES /
+// LINEAGE_EXECUTION_PLANE_ONLY in services/api/shared/graph/{edge_properties,
+// graph_contract}.py (parity: tests/unit/test_graph_lineage_parity.py).
+
+/** Properties every durable lineage edge carries (valid_from / valid_to are bitemporal). */
+export const LINEAGE_EDGE_PROPERTIES = [
+  'evidence_refs',
+  'relationship_confidence',
+  'authority_ref',
+  'valid_from',
+  'valid_to',
+  'observed_at',
+  'source_namespace',
+  'relationship_status',
+  'resolution_method',
+] as const;
+
+/** How a lineage relationship was established. */
+export const LINEAGE_RESOLUTION_METHODS = [
+  'deterministic',
+  'authority_record',
+  'attested',
+  'provider_asserted',
+  'tenant_declared',
+  'source_reported',
+  'probabilistic',
+  'manual',
+] as const;
+
+export type LineageResolutionMethod = (typeof LINEAGE_RESOLUTION_METHODS)[number];
+
+/** Lineage edge properties (wire shape, snake_case). Evidence is mandatory. */
+export interface LineageEdgeProperties {
+  evidence_refs: string[];
+  relationship_confidence?: number | null; // 0–1; omitted/null = not assessed (never 0)
+  authority_ref?: string | null;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  observed_at?: string | null;
+  source_namespace?: string | null;
+  relationship_status: RelationshipStatus;
+  resolution_method: LineageResolutionMethod;
+}
+
+/**
+ * Lineage relationship → graph edge type. Only durable semantic facts are
+ * graph-projected. SPAWNED_BY is the inverse view of SPAWNED, never a second edge.
+ */
+export const LINEAGE_RELATIONSHIP_EDGE_TYPES: Record<string, string> = {
+  PRINCIPAL_OF: 'PRINCIPAL_OF',
+  OPERATES: 'OPERATES',
+  CONTROLS: 'CONTROLS',
+  AUTHORIZED: 'AUTHORIZED_AGENT',
+  DELEGATED_TO: 'DELEGATED_TO',
+  SPAWNED: 'SPAWNED_SUBAGENT',
+  SPAWNED_BY: 'SPAWNED_SUBAGENT',
+  EXECUTED_AS: 'EXECUTED_AS',
+  ACTED_ON_BEHALF_OF: 'AGENT_ACTED_ON_BEHALF_OF',
+  SUPERVISES: 'SUPERVISES',
+  USES: 'AGENT_CONNECTED_VIA_MCP',
+  COMMUNICATED_WITH: 'COMMUNICATES_WITH',
+  PAID: 'PAYS',
+  TRANSFERS_TO: 'TRANSFERS_TO',
+  PRODUCED_EFFECT: 'PRODUCED',
+  PRODUCED_OUTCOME: 'RESULTED_IN_OUTCOME',
+  DEPLOYED_AS: 'DEPLOYED_AS',
+  INSTANTIATED_AS: 'INSTANTIATED_AS',
+  OWNS: 'OWNS',
+};
+
+/** Stays in the execution evidence plane; never graph-projected per call. */
+export const LINEAGE_EXECUTION_PLANE_ONLY: readonly string[] = ['INVOKED'];
 
 // ── Overlay status ────────────────────────────────────────────────────────────
 

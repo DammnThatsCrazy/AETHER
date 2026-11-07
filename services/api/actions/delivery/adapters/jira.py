@@ -48,6 +48,33 @@ class JiraAdapter(ProviderAdapter):
 
     adapter_name = "jira"
 
+    async def verify_readback(self, external_id: str, payload: dict[str, Any],
+                              provider_config: dict[str, Any], credential: Optional[str]) -> bool:
+        """Verify the created issue exists in the credential-bound Jira site."""
+        import urllib.parse
+        base_url = provider_config.get("base_url") or provider_config.get("site_url")
+        if not base_url or not credential:
+            return False
+        headers = {"Accept": "application/json"}
+        if ":" in credential and not credential.startswith("Bearer "):
+            headers["Authorization"] = "Basic " + base64.b64encode(credential.encode()).decode()
+        else:
+            headers["Authorization"] = "Bearer " + credential.removeprefix("Bearer ").strip()
+        url = base_url.rstrip("/") + "/rest/api/3/issue/" + urllib.parse.quote(external_id, safe="")
+        try:
+            resp = await send_public_request("GET", url, headers=headers, timeout=20.0)
+            if resp.status_code != 200:
+                return False
+            data = resp.json()
+            fields = data.get("fields", {}) if isinstance(data, dict) else {}
+            project = fields.get("project", {})
+            expected_title = str(payload.get("title", "Aether Notification"))[:255]
+            return (data.get("key") == external_id and
+                    project.get("key") == provider_config.get("project_key") and
+                    fields.get("summary") == expected_title)
+        except Exception:
+            return False
+
     async def dispatch(
         self,
         payload: dict[str, Any],

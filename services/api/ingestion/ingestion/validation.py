@@ -89,6 +89,50 @@ _DEPLOYMENT_REQUIRED_AGENT_EVENTS = frozenset(
         "agent_outcome_recorded",
         "agent_policy_evaluated",
         "agent_delegated_task",
+        "agent_subagent_spawned",
+    }
+) | frozenset(
+    {
+        # Agent behavior taxonomy (WO-030). Authority, execution, economic,
+        # lifecycle and objective claims are only accepted from a validated
+        # deployment, never from an anonymous SDK key.
+        "agent_objective_created",
+        "agent_objective_started",
+        "agent_objective_modified",
+        "agent_objective_completed",
+        "agent_objective_failed",
+        "agent_objective_abandoned",
+        "agent_information_retrieved",
+        "agent_source_consulted",
+        "agent_context_received",
+        "agent_decision_started",
+        "agent_candidate_considered",
+        "agent_candidate_rejected",
+        "agent_action_selected",
+        "agent_decision_completed",
+        "agent_authorization_requested",
+        "agent_authorization_granted",
+        "agent_authorization_denied",
+        "agent_tool_retried",
+        "agent_tool_switched",
+        "agent_terminated",
+        "agent_task_returned",
+        "agent_execution_started",
+        "agent_execution_succeeded",
+        "agent_execution_failed",
+        "agent_execution_aborted",
+        "agent_quote_received",
+        "agent_price_evaluated",
+        "agent_transaction_initiated",
+        "agent_transaction_authorized",
+        "agent_transaction_settled",
+        "agent_transaction_failed",
+        "agent_message_generated",
+        "agent_memory_created",
+        "agent_memory_retrieved",
+        "agent_memory_updated",
+        "agent_memory_invalidated",
+        "agent_memory_expired",
     }
 )
 
@@ -342,6 +386,40 @@ def format_rejection(result: EventValidationResult, sdk_event: Any) -> str:
     if result.required_purpose:
         return f"{code}:{result.required_purpose}"
     return code
+
+
+_ATTESTED_CONTEXT_BLOCKS: tuple[tuple[str, str], ...] = (
+    ("actor_context", "actorContext"), ("authority_context", "authorityContext"),
+    ("execution_context", "executionContext"), ("protocol_context", "protocolContext"),
+)
+
+
+def _event_is_attested(sdk_event: Any, deployment_ctx: Any, record: dict[str, Any]) -> bool:
+    from actions.agent.attestation import canonical_payload, verify_attestation
+
+    public_key = record.get("attestation_public_key")
+    if not public_key or not isinstance(deployment_ctx, dict):
+        return False
+    timestamp = sdk_event.timestamp
+    context = getattr(sdk_event, "context", None)
+    blocks = {}
+    for name, alias in _ATTESTED_CONTEXT_BLOCKS:
+        value = getattr(context, name, None) or getattr(context, alias, None)
+        if isinstance(value, dict):
+            blocks[name] = value
+    try:
+        payload = canonical_payload(
+            deployment_id=str(record.get("id")),
+            agent_id=str(record.get("agent_id")),
+            message_id=str(sdk_event.id),
+            event_type=sdk_event.type,
+            timestamp=timestamp if isinstance(timestamp, str) else None,
+            properties=sdk_event.properties or {},
+            blocks=blocks,
+        )
+    except (TypeError, ValueError):
+        return False
+    return verify_attestation(public_key, deployment_ctx.get("attestation"), payload)
 
 
 async def validate_event(
@@ -604,6 +682,10 @@ async def validate_event(
                 "deployment_id": str(deployment_id),
                 "agent_id": deployment_record.get("agent_id"),
             }
+            # Added only when a signature verifies against the registered key,
+            # so a client cannot claim attestation by setting a field.
+            if _event_is_attested(sdk_event, deployment_ctx, deployment_record):
+                normalized["validated_agent_deployment"]["attested"] = True
     return EventValidationResult(
         allowed=True,
         reason_code=None,

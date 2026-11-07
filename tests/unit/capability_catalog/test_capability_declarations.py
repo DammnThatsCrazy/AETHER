@@ -132,13 +132,39 @@ async def test_declaration_joins_the_observed_catalog_exactly(svc, catalog):
     row = await catalog.get_capability(tenant_id="t1", capability_id=observed["capability_id"])
     # The declared digest is the digest of the observed row's own identity fields — i.e.
     # a matching declaration is comparable, not drifted-by-construction.
-    assert declared["artifact_digest"] == identity.artifact_digest_for(row)
+    assert declared["artifact_digest"] == identity.artifact_digest_for(
+        row, declared["declared_fields"]
+    )
     assert declared["publisher_ref"] == row["publisher_ref"]
 
     # A declaration whose protocol version differs digests differently — that is what
     # §9.5 drift compares.
     drifted = await svc.declare(**_decl(tool_name="write", protocol_version="1999-01-01"))
     assert drifted["artifact_digest"] != declared["artifact_digest"]
+
+
+async def test_resource_declaration_joins_only_the_exact_observed_uri(svc, catalog):
+    """Resource declarations use resource IDs and preserve URI path case in the join."""
+    observed = await catalog.record_from_fact(_fact(
+        tool_name=None, resource_uri="mcp://srvX/Docs/Readme",
+    ))
+    declared = await svc.declare(
+        tenant_id="t1", declared_by_entity_id="u1", provider="acme",
+        server_name="srvX", resource_uri="mcp://srvX/Docs/Readme",
+    )
+    different_case = await svc.declare(
+        tenant_id="t1", declared_by_entity_id="u1", provider="acme",
+        server_name="srvX", resource_uri="mcp://srvX/docs/Readme",
+    )
+
+    assert declared["capability_id"] == observed["capability_id"]
+    assert declared["artifact_digest"] == identity.artifact_digest_for(
+        await catalog.get_capability(tenant_id="t1", capability_id=observed["capability_id"]),
+        declared["declared_fields"],
+    )
+    assert different_case["capability_id"] != declared["capability_id"]
+    assert different_case["declaration_id"] != declared["declaration_id"]
+    assert different_case["artifact_digest"] != declared["artifact_digest"]
 
 
 async def test_credential_bearing_server_url_is_sanitized_before_storage(svc, repo):

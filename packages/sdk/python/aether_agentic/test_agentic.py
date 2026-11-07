@@ -153,3 +153,32 @@ class TestBuildRiskSignal:
             tenant_id="t-1", risk_level="high", deployment=_deployment()
         )
         assert sig["context"]["agentDeployment"]["consentMode"] == "tenant_managed"
+
+
+def test_behavior_event_builder_requires_deployment_and_rejects_content():
+    import json
+    from pathlib import Path
+
+    import pytest
+
+    from aether_agentic.agentic import AGENT_BEHAVIOR_EVENT_TYPES, build_behavior_event
+
+    registry = json.loads((Path(__file__).resolve().parents[4] / "packages/shared/contracts/event-registry.json").read_text())
+    rows = {e["type"]: e for e in registry["events"]}
+    assert AGENT_BEHAVIOR_EVENT_TYPES == {t for t, e in rows.items()
+                                          if e["introducedVersion"] == "0.1.0-alpha.0" and t.startswith("agent_")}
+    dep = {"deploymentId": "dep-1", "agentId": "a1", "externalPlatform": "mcp_server",
+           "environment": "production", "consentMode": "tenant_managed"}
+    ev = build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m1",
+                              timestamp="2026-10-22T10:00:00Z", properties={"amount": "10.5"}, deployment=dep)
+    assert ev["properties"]["agentId"] == "a1" and ev["context"]
+    with pytest.raises(ValueError):
+        build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m", timestamp="t")
+    with pytest.raises(ValueError):
+        build_behavior_event(event_type="agent_memory_created", agent_id="a1", message_id="m", timestamp="t",
+                             properties={"content": "secret"}, deployment=dep)
+    with pytest.raises(ValueError):
+        build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m", timestamp="t",
+                             properties={"amount": 1.5}, deployment=dep)
+    with pytest.raises(ValueError):
+        build_behavior_event(event_type="track", agent_id="a1", message_id="m", timestamp="t", deployment=dep)

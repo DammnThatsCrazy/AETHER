@@ -22,28 +22,46 @@ source_files:
   - services/api/alembic/versions/20261022_execution_approval_decisions.py
   - services/api/alembic/versions/20261022_risk_poisoning_evidence.py
   - services/api/alembic/versions/20261024_risk_intervention_records.py
+  - services/api/alembic/versions/20261030_agent_invocation_receipts.py
+  - services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py
+  - services/api/alembic/versions/20261030_merge_authority_heads.py
+  - services/api/alembic/versions/20261104_merge_value_behavior_heads.py
+  - services/api/actions/agent/invocation_runtime.py
+  - services/api/intelligence/model_governance/evaluations.py
+  - services/api/value/economic/attribution_model_validation.py
+  - config/storage_policies.yaml
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
   - {'commit': '30d10ccb6', 'reason': 'Reviewed CSV import rights-lineage persistence. The body now documents the additive Bronze metadata and silver_import_facts JSONB refs/record IDs; other repository and database dispatch behavior is unchanged.'}
+  - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
+  - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "services/api/actions/agent/user_agents.py": "sha256:6a8dc66f37f293699cd261592f6de4655c94b2eea2140cf3c0c85c4df05aaa2a"
+  "config/storage_policies.yaml": "sha256:dd0170e28a9e22f6169ece57f2a05063d18f4b7a7e369dda182bbb5ef4f383e3"
+  "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:6ec173f0cf27ea51b0538bf1276e1afc7058e40c882c07bed61de6f44a84bc72"
   "services/api/alembic/versions/20261024_risk_intervention_records.py": "sha256:f3fadd1672c15560cab018906246e307438035404f4fcbcb84c976cae9bdc3b7"
+  "services/api/alembic/versions/20261030_agent_invocation_receipts.py": "sha256:fe1186d525ae2a2923dacccbbb1eae5a76f96407ed6243b85f2a94244e672537"
+  "services/api/alembic/versions/20261030_merge_authority_heads.py": "sha256:62aa6a6049c5f58b668cb788c36529902541581944d4dc5593f15105a4e539f2"
+  "services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py": "sha256:bb313b4f28028cca340689dbd67154cd9c02810ba08d31c3a0b8a48a98a3e842"
+  "services/api/alembic/versions/20261104_merge_value_behavior_heads.py": "sha256:1a84e8f75dfc529b50d8d82f4dc83de87fe5499c4370b2d2580b4f315e39d52c"
+  "services/api/intelligence/model_governance/evaluations.py": "sha256:687b5fb2d1e263a4ed921a1e76a5e74c1462ff3f1905b7ca9e9cedc2b10d07e3"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:fc18afe40ebfd2cc7a009d2b0f90fadbba4b56a5568a405ef78715b7e7b06f53"
-  "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
+  "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:fcaaad1267595bd0f2a936e0b39e402b9dacc909da5a4b74066023d99035e5c2"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
+  "services/api/value/economic/attribution_model_validation.py": "sha256:d2ea75981effed3f2aaba070ddcf29c9156acbab9a285a6601cb045a48774719"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -57,6 +75,15 @@ All relational data is stored via the repository pattern in `repositories/repos.
 - `AETHER_ENV=staging/production` → PostgreSQL via `asyncpg`
 
 ## Schema
+
+`support_case_subjects` stores immutable authenticated ticket and conversation
+identities linked by a tenant/case/connection foreign key to `support_cases`.
+Uniqueness binds the provider account and source subject, and separately the
+account and source event, to prevent remapping or conflicting replay. Case
+deletion cascades these metadata-only mappings. The storage policy uses standard
+retention and hard deletion with legal-hold support; deployment requires the
+`20261105_support_case_subjects` migration. A mapping is not proof of upstream
+authorship or an independent business outcome.
 
 All tables use a JSONB document model with auto-creation:
 
@@ -146,8 +173,8 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `operator_actions` | `OperatorActionRepository` | Operator approve/suppress/escalate/annotate audit |
 | `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
-| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition, exact workflow-run/invocation references, and an optional validated caller-reported workflow definition reference |
-| `commerce_approval_decisions` | `ApprovalDecisionsRepository` | Append-only tenant-scoped x402 decision history with exact execution references |
+| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning, policy and workflow references; optional validated caller associations to journey intents or risk decisions record a request without proving dispatch |
+| `commerce_approval_decisions` | `ApprovalDecisionsRepository` | Insert-once tenant-scoped x402 decision history with exact execution references and optional recorded human permission checks |
 | `risk_poisoning_evidence` | `RiskPoisoningEvidenceRepository` | Typed tenant-scoped risk evidence and append-only lifecycle/restatement history |
 | `risk_intervention_records` | `RiskInterventionRepository` | Exact tenant/subject intervention decision and reported outcome records; the row alone does not prove action execution |
 | `workflow_definition_revisions` | workflow definition authority | Immutable tenant-scoped revisions and idempotent content replay; persisted creation time is returned on replay. A bounded exact-tenant history read selects the highest revision created and effective by an `asOf` instant, with malformed or truncated history unknown. |
@@ -214,6 +241,19 @@ references on the exact tenant/run invocation facts to
 outcome scope and evidence, carries the invocation IDs as association lineage,
 and does not infer run causality; the outcome store's feature flag gates the
 read. Policy and freshness remain unknown.
+
+Workflow360's observed-actions projection reads bounded tenant graph edges
+joined to the admitted execution IDs. Tenant, execution, source-event, and
+Tool identifiers must be canonical and unpadded, and a resolved Tool vertex
+must match its exact persisted identity evidence. Invalid edges are omitted
+and mark coverage incomplete. If a bounded or scope-incomplete read still has
+valid edges, the projection reports degraded partial coverage; with no
+admissible edges it reports unknown. This read records tool-call edges only;
+it does not establish action authority, tool completion, or external effect.
+The approved-resource subread separately reports availability, completeness,
+and truncation; reads over its row limit expose no resource rows. An explicit
+`executionReceipt` remains unknown because no server-owned receipt is written
+at the actual tool or resource invocation boundary.
 
 ### Analytics event store
 
@@ -453,6 +493,11 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
   drops row keys without a column, so those fields were not persisted before.
   Silver stores the event type in `source_event_type`; there is no `event_name`
   column.
+- `20261030_agent_exec_lineage_hardening` separates source from canonical run and principal
+  identity on `silver_agent_execution_facts`; canonical columns stay NULL at projection.
+- `20261105_principal_agent_lineage` creates the derived, rebuildable lineage read model:
+  `principal_agent_lineage`, its summary and cluster tables, `agent_lineage_nodes`,
+  `agent_lineage_restatements`, plus tenant-declared `agent_lineage_principal_bindings`.
 - `20261022_journey_handoffs` creates `journey_handoffs` (token hash only,
   tenant/app/journey bound, single-use state), owned by
   `repositories/journey_handoff_repo.py` with DDL parity tested.
@@ -460,6 +505,30 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
   `{tenant}:fleet_hyp:{hash}`. Each record carries a `revision`; every write
   after the first is a compare-and-set on it (the first is insert-if-absent), so
   concurrent reviews and rebuilds cannot overwrite one another.
+
+The invocation claim and completion-receipt tables use PostgreSQL as their
+authoritative and metadata store, with legal retention and `preserve` deletion
+behavior; adaptive materialization and object externalization are disabled.
+Model-governance evaluation reads decode both JSONB `metrics` and `sample_refs`
+when returned in encoded form. Value-model approval inserts conflict on the
+migration's `decision_id` primary key. The invocation and governance migration
+heads are joined by `20261030_merge_authority_heads`; it adds no schema of its
+own.
+
+`20261104_value_model_approval_policy_evidence` follows that merge and adds the
+authenticated administrator's action, permission, decision, actor and
+authorization timestamp to Value approval records. Legacy rows without this
+evidence remain unavailable to the approval reader.
+`20261104_value_confidence_evaluations` follows it and stores append-only,
+tenant/run/config-bound temporal credit eligibility evaluations with sample
+references, manifest hash, bounded counts, evaluation window and authorization
+provenance. Legal-retention storage policy preserves these rows. The evaluation
+is not attribution correctness or confidence calibration.
+
+`20261104_merge_value_behavior_heads` joins this Value evidence lineage with
+`20261031_merge_agent_behavior_snapshots_heads` after integration with the
+agent behavior snapshot migrations. It adds no schema and restores a single
+Alembic head without rewriting either published lineage.
 
 These migrations are authored in the branch; this page does not claim they
 have been applied.

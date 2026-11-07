@@ -10,8 +10,8 @@ source_files: [services/api/value/economic/routes.py, services/api/identity/prof
 related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
-  "services/api/identity/profile/routes.py": "sha256:73c002b436a26ade807bfa2b0ff77a2ee574021ce86dadbdf4ff055b821c0dce"
-  "services/api/value/economic/routes.py": "sha256:b606e1038bf147686e2dc1a30575fb94132be5488ed146d4981a5f8030dc9897"
+  "services/api/identity/profile/routes.py": "sha256:8b085907602875b4bdad089fdbc084f1d5308c4559fb5678d2a836eb8134c589"
+  "services/api/value/economic/routes.py": "sha256:06f9a6abcc075c506423253e071386eedcc3a7cb88589752e4bfd3cf60235ec7"
 ---
 
 # Aether — Kyber Economic Observability
@@ -66,6 +66,7 @@ The Kyber operator console surfaces economic observability for platform operator
 ```
 GET /v1/economic/overview                    → Tenant economic overview
 GET /v1/economic/warnings                    → Tenant-wide warnings
+POST /v1/economic/attribution-runs/{run_id}/model-validation → Record an exact run/config lineage check
 GET /v1/profile/{id}/economic                → Economic profile: financials and on-chain asset composition (profile service)
 GET /v1/profile/{id}/economic/web2           → TradFi signals; requires `credit` consent, 403 without it (profile service)
 GET /v1/profile/{id}/economic/web3           → Asset composition, PNL and trading profile (profile service)
@@ -74,7 +75,16 @@ GET /v1/profile/{id}/economic/campaigns      → Campaign-attributed value
 GET /v1/profile/{id}/economic/warnings       → Missing, stale and contradicting dimensions (profile service)
 ```
 
-Every route requires the `read` permission. `/economic/agentic`, `/economic/campaigns`
+The GET routes require `read`; the lineage check requires `write`. It validates
+run/config lineage but does not itself approve or calibrate the model. A
+separate `POST /v1/economic/attribution-runs/{run_id}/model-approval` requires
+tenant-admin permission and records an approval or rejection bound to the exact
+validated run and configuration. This is an approval record, not calibration
+evidence. `POST /v1/economic/attribution-runs/{run_id}/confidence-evaluation`
+requires an authenticated principal and `write` permission. It evaluates only
+canonical credit touchpoint temporal eligibility, with bounded samples, an
+exact manifest and source rejoins. Its score does not calibrate model confidence
+or verify causal attribution. `/economic/agentic`, `/economic/campaigns`
 and the two `/v1/economic` routes are served by `services/api/value/economic/routes.py`; the
 other four profile routes are served by `services/api/identity/profile/routes.py`. Each URL has
 exactly one handler (`tests/unit/test_route_conflicts.py`).

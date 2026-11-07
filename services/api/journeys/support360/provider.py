@@ -27,6 +27,7 @@ from typing import Any, Optional, Protocol
 from urllib.parse import quote
 
 from graph.operational_intelligence.models import EvidenceRef
+from shared.backend_interpretation.primitives import EpisodeRecord
 from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
     ClaimEnvelope,
@@ -44,6 +45,11 @@ from shared.intelligence_projections.generated_registry import (
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
 from journeys.support360.cases import SupportCaseAuthorityRead, SupportCaseRepository
+from journeys.support360.subjects import (
+    SupportSubjectRead,
+    SupportSubjectRepository,
+    valid_subject_record,
+)
 from journeys.support360.callbacks import (
     SupportCallbackRead,
     SupportCallbackRepository,
@@ -56,6 +62,13 @@ from journeys.support360.assignments import (
 from journeys.support360.context_authorities import (
     SupportCaseContextRead,
     SupportCaseContextRepository,
+)
+from journeys.support360.sla_measurement import (
+    SupportSLAMeasurementContract,
+    SupportSLAMeasurementContractRead,
+    SupportSLAMeasurementContractRepository,
+    contract_evidence,
+    evaluate_active_elapsed_v1,
 )
 from repositories.repos import EntityRepository
 
@@ -100,6 +113,13 @@ _REASON_CASE_COMMUNICATION_HISTORY_UNVERIFIED = (
     "support_case_communication_source_history_coverage_unverified"
 )
 _REASON_JOURNEY_JOIN_MISSING = "canonical_support_case_journey_join_unavailable"
+_REASON_JOURNEY_EPISODE_AUTHORITY_UNAVAILABLE = "support_case_journey_episode_authority_unavailable"
+_REASON_JOURNEY_EPISODE_RELATION_MISSING = "support_case_journey_episode_exact_relation_unavailable"
+_REASON_JOURNEY_EPISODE_READ_TRUNCATED = "support_case_journey_episode_read_truncated"
+_REASON_JOURNEY_EPISODE_TEMPORAL_UNAVAILABLE = "support_case_journey_episode_window_read_unavailable"
+_REASON_JOURNEY_EPISODE_POPULATION_UNVERIFIED = "support_case_journey_episode_population_unverified"
+_REASON_JOURNEY_EPISODE_FRESHNESS_UNKNOWN = "support_case_journey_episode_freshness_sla_unavailable"
+_REASON_JOURNEY_EPISODE_POLICY_UNVERIFIED = "support_case_journey_episode_policy_unverified"
 _REASON_OUTCOME_JOIN_MISSING = "canonical_support_outcome_join_unavailable"
 _REASON_CALLBACK_AUTHORITY_MISSING = "canonical_support_callback_authority_unavailable"
 _REASON_CALLBACK_AUTHORITY_UNAVAILABLE = "support_callback_authority_unavailable"
@@ -165,6 +185,33 @@ _CANONICAL_SUBJECT_AUTHORITY_REASONS = {
     "conversation": _REASON_CONVERSATION_AUTHORITY_MISSING,
     "ticket": _REASON_TICKET_CASE_JOIN_MISSING,
 }
+
+SUPPORT_SLOT_SECTIONS = {
+    slot_id: f"support_{slot_id}"
+    for slot_id in _REQUIRED_SUPPORT_SLOT_IDS
+    if slot_id != "risk"
+}
+
+_SLOT_AUTHORITIES = {
+    "case_summary": ["support_cases", "support_case_events", "provider_connections", "evidence"],
+    "conversation_history": ["communication_facts", "evidence", "provider_connections", "support_cases", "support_case_events"],
+    "callbacks": ["support_callbacks", "support_callback_events", "support_cases", "support_case_events", "provider_connections", "evidence"],
+    "participants": ["communication_facts", "identity", "provider_connections", "support_cases"],
+    "sla": ["measurement_contract", "support_case_context_events", "support_cases"],
+    "journey_links": ["episode_facts", "journeys", "support_case_context_events", "support_cases"],
+    "agents": ["agent_entities", "communication_facts", "support_case_agent_assignment_events", "support_cases"],
+    "resolution": ["support_cases", "support_case_events"],
+    "evidence_trace": ["communication_facts", "evidence", "provider_connections", "support_cases", "support_case_events"],
+}
+
+
+def _slot_requested(request: ProjectionRequest, slot_id: str, *legacy_sections: str) -> bool:
+    sections = request.includeSections
+    if sections is None:
+        return True
+    if set(sections).intersection(SUPPORT_SLOT_SECTIONS.values()):
+        return SUPPORT_SLOT_SECTIONS.get(slot_id) in sections
+    return bool(set(sections).intersection(legacy_sections))
 
 
 def _safe_read_reason(reason: Optional[str]) -> str:
@@ -897,11 +944,14 @@ class Support360Provider(IntelligenceProjectionProvider):
         *,
         agent_identity_reader: Optional[SupportAgentIdentityReader] = None,
         case_repository: Optional[SupportCaseRepository] = None,
+        subject_repository: Optional[SupportSubjectRepository] = None,
         callback_repository: Optional[SupportCallbackRepository] = None,
         agent_assignment_repository: Optional[SupportAgentAssignmentRepository] = None,
         canonical_agent_entity_repository: Any = None,
         case_context_repository: Optional[SupportCaseContextRepository] = None,
+        sla_measurement_repository: Optional[SupportSLAMeasurementContractRepository] = None,
         canonical_journey_repository: Any = None,
+        canonical_episode_store: Any = None,
         risk_projection_registry: Any = None,
     ) -> None:
         self._source = source if source is not None else RepositorySupport360Source()
@@ -912,6 +962,10 @@ class Support360Provider(IntelligenceProjectionProvider):
         )
         self._case_repository = (
             case_repository if case_repository is not None else SupportCaseRepository()
+        )
+        self._subject_repository = (
+            subject_repository if subject_repository is not None
+            else SupportSubjectRepository(cases=self._case_repository)
         )
         self._callback_repository = (
             callback_repository
@@ -933,7 +987,13 @@ class Support360Provider(IntelligenceProjectionProvider):
             if case_context_repository is not None
             else SupportCaseContextRepository()
         )
+        self._sla_measurement_repository = (
+            sla_measurement_repository
+            if sla_measurement_repository is not None
+            else SupportSLAMeasurementContractRepository()
+        )
         self._canonical_journeys = canonical_journey_repository
+        self._canonical_episodes = canonical_episode_store
         self._risk_projection_registry = risk_projection_registry
 
     async def _support_case_risk_slot(
@@ -1046,6 +1106,57 @@ class Support360Provider(IntelligenceProjectionProvider):
         request: ProjectionRequest,
         context: ProjectionContext,
     ) -> ProjectionResult:
+        selected = {
+            slot_id: section_id
+            for slot_id, section_id in SUPPORT_SLOT_SECTIONS.items()
+            if section_id in (request.includeSections or [])
+        }
+        execution_request = request
+        if selected and request.temporalMode == "window" and request.timeRange is None:
+            execution_request = request.model_copy(update={"temporalMode": "live"})
+        result = await self._project(execution_request, context)
+        if not selected:
+            return result
+        state = next((section for section in result.sections if section.id == "state"), None)
+        slots = (state.content or {}).get("requiredSlots", {}) if state else {}
+        sections: list[ProjectionSection] = []
+        for slot_id, section_id in selected.items():
+            slot = slots.get(slot_id, {"state": "unknown"})
+            refs = slot.get("evidenceRefs") or []
+            reasons = list(slot.get("reasonCodes") or [])
+            if slot.get("reasonCode"):
+                reasons.append(slot["reasonCode"])
+            available = bool(refs) and slot.get("state") not in {"unknown", "suppressed"}
+            authorities = list(_SLOT_AUTHORITIES[slot_id])
+            if slot.get("subjectCaseJoin"):
+                authorities.append("support_case_subjects")
+            if slot_id == "journey_links" and not (slot.get("episodeFacts") or {}).get("relations"):
+                authorities.remove("episode_facts")
+            if slot_id == "sla" and not (slot.get("measurementContractJoin") or {}).get("boundTimerCount"):
+                authorities.remove("measurement_contract")
+            sections.append(ProjectionSection(
+                id=section_id,
+                state="available" if available else "empty" if slot.get("state") == "empty" else "unknown",
+                content={"scope": "bounded_current_store_observations", **slot} if available else None,
+                warnings=sorted(set(reasons or result.degradedReasons)),
+                canonicalAuthorityRefs=authorities,
+            ))
+        return result.model_copy(update={
+            "sections": sections,
+            "claims": [
+                claim for claim in result.claims
+                if set(claim.domainSlotIds or []).intersection(selected)
+                and any(section.state == "available" and section.id in {
+                    selected[slot_id] for slot_id in claim.domainSlotIds or [] if slot_id in selected
+                } for section in sections)
+            ],
+        })
+
+    async def _project(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> ProjectionResult:
         if request.projectionId != self.projection_id:
             raise ProjectionError(
                 "Support360 provider received a different projection id",
@@ -1059,6 +1170,8 @@ class Support360Provider(IntelligenceProjectionProvider):
             "source",
             "support_case",
             "callback",
+            "ticket",
+            "conversation",
         }:
             # Remaining valid SSOT subject identifiers do not all have a
             # canonical authority. Preserve them as typed unknowns instead of
@@ -1091,11 +1204,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 "support_temporal_mode_unavailable",
             )
         if request.temporalMode == "window" and request.timeRange is None:
-            return self._unknown_result(
-                request,
-                context,
-                "support_window_bounds_required",
-            )
+            return self._unknown_result(request, context, "support_window_bounds_required")
 
         window, window_error = _window_bounds(request.timeRange)
         if window_error is not None:
@@ -1112,6 +1221,10 @@ class Support360Provider(IntelligenceProjectionProvider):
             max(request.page.limit if request.page is not None else _DEFAULT_LIMIT, 1),
             _MAX_LIMIT,
         )
+        if request.subject.kind in {"ticket", "conversation"}:
+            return await self._project_bound_subject(
+                request, context, limit=limit, after=after, before=before,
+            )
         if request.subject.kind == "callback":
             return await self._project_callback(request, context, limit=limit)
         if request.subject.kind == "support_case":
@@ -1428,6 +1541,71 @@ class Support360Provider(IntelligenceProjectionProvider):
             ),
         )
 
+    async def _project_bound_subject(
+        self, request: ProjectionRequest, context: ProjectionContext,
+        *, limit: int, after: Optional[str], before: Optional[str],
+    ) -> ProjectionResult:
+        try:
+            binding_read = await self._subject_repository.read(
+                request.tenantId, request.subject.kind, request.subject.id,
+            )
+        except Exception:  # noqa: BLE001
+            return self._unknown_result(request, context, "support_subject_binding_unavailable")
+        if not isinstance(binding_read, SupportSubjectRead) or not binding_read.available:
+            return self._unknown_result(request, context, "support_subject_binding_unavailable")
+        if not binding_read.complete:
+            return self._unknown_result(request, context, "support_subject_binding_ambiguous")
+        binding = binding_read.record
+        if binding is None:
+            return self._unknown_result(
+                request, context, _CANONICAL_SUBJECT_AUTHORITY_REASONS[request.subject.kind],
+            )
+        if not valid_subject_record(binding, request.tenantId, request.subject.kind, request.subject.id):
+            return self._unknown_result(request, context, "support_subject_binding_scope_mismatch")
+        canonical_request = request.model_copy(update={
+            "subject": ProjectionSubject(kind="support_case", id=binding["case_id"]),
+        })
+        result = await self._project_case(
+            canonical_request, context, limit=limit, after=after, before=before,
+            subject_binding=binding,
+        )
+        reference = EvidenceRef(
+            id=binding["subject_id"], type="event", source="support_case_subjects",
+            observedAt=binding["received_at"],
+            uri=f"store://support_case_subjects/{quote(request.tenantId, safe='')}/{binding['subject_id']}",
+        )
+        join_refs = [reference, *_case_event_evidence_refs(binding, binding)]
+        join = {
+            "subjectKind": request.subject.kind, "canonicalSubjectId": request.subject.id,
+            "canonicalCaseId": binding["case_id"],
+            "sourceProvider": binding["source_provider_identity"],
+            "sourceConnectionId": binding["source_connection_id"],
+            "sourceAccountId": binding["source_account_id"],
+            "sourceSubjectId": binding["source_subject_id"],
+            "sourceCaseId": binding["source_case_id"],
+            "sourceEventId": binding["source_event_id"],
+            "sourceOccurredAt": binding["source_occurred_at"],
+            "scope": "explicitly_mapped_case_context", "claimState": "observed",
+            "persistedBindingReadComplete": True,
+            "sourceAuthenticity": "unverified", "sourceHistoryComplete": False,
+            "freshnessState": "unknown", "businessOutcomeState": "unknown",
+            "evidenceRefs": join_refs,
+        }
+        for section in result.sections:
+            if section.id == "state" and isinstance(section.content, dict):
+                for slot in section.content.get("requiredSlots", {}).values():
+                    if slot.get("evidenceRefs") and slot.get("state") not in {"unknown", "suppressed"}:
+                        slot["subjectCaseJoin"] = join
+                        slot["evidenceRefs"] = _dedupe_evidence_refs(slot["evidenceRefs"] + join_refs)
+        result.claims = [
+            claim.model_copy(update={
+                "subject": request.subject,
+                "evidenceRefs": _dedupe_evidence_refs(claim.evidenceRefs + join_refs),
+            }) if claim.subject == canonical_request.subject else claim
+            for claim in result.claims
+        ]
+        return result
+
     async def _project_case(
         self,
         request: ProjectionRequest,
@@ -1436,6 +1614,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         limit: int,
         after: Optional[str] = None,
         before: Optional[str] = None,
+        subject_binding: Optional[dict[str, Any]] = None,
     ) -> ProjectionResult:
         """Read exact tenant/canonical case state without guessing related slots."""
         try:
@@ -1455,15 +1634,31 @@ class Support360Provider(IntelligenceProjectionProvider):
             return self._unknown_result(request, context, _REASON_CASE_NOT_FOUND)
         if record.get("tenant_id") != request.tenantId or record.get("case_id") != request.subject.id:
             return self._unknown_result(request, context, "support_case_tenant_scope_mismatch")
+        if subject_binding is not None and any(
+            record.get(key) != subject_binding.get(key)
+            for key in ("tenant_id", "case_id", "source_connection_id", "source_provider_identity", "source_case_id")
+        ):
+            return self._unknown_result(request, context, "support_subject_binding_case_scope_mismatch")
+        if not isinstance(read.events, list) or any(
+            not isinstance(event, dict)
+            or event.get("tenant_id") != request.tenantId
+            or event.get("case_id") != request.subject.id
+            or event.get("source_connection_id") != record.get("source_connection_id")
+            for event in read.events
+        ):
+            return self._unknown_result(request, context, "support_case_event_scope_mismatch")
 
         try:
-            callback_read = await self._callback_repository.list_for_case(
-                request.tenantId,
-                request.subject.id,
-                limit=limit,
-                after=after,
-                before=before,
-            )
+            if _slot_requested(request, "callbacks", "state", "timeline", "evidence"):
+                callback_read = await self._callback_repository.list_for_case(
+                    request.tenantId,
+                    request.subject.id,
+                    limit=limit,
+                    after=after,
+                    before=before,
+                )
+            else:
+                callback_read = SupportCallbacksRead([], False, False)
         except Exception:  # noqa: BLE001 - callback authority failure is a typed unknown slot
             callback_read = SupportCallbacksRead([], False, False, reason=_REASON_CALLBACK_AUTHORITY_UNAVAILABLE)
         callback_slot, callback_evidence_refs, callback_reasons = _validated_callback_slot(
@@ -1475,9 +1670,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         # The `agents` product slot is policy-filtered by the frame runtime.
         # Avoid reading it unless its bound state section is in the post-policy
         # include set (or the caller requested the full frame).
-        if request.includeSections is None or {"state", "evidence"}.intersection(
-            request.includeSections
-        ):
+        if _slot_requested(request, "agents", "state", "evidence"):
             try:
                 assignment_read = await self._agent_assignment_repository.list_for_case(
                     request.tenantId,
@@ -1511,12 +1704,18 @@ class Support360Provider(IntelligenceProjectionProvider):
             agent_assignment_evidence_refs = []
             agent_assignment_reasons = []
 
-        context_slots_requested = request.includeSections is None or bool(
-            {"state", "evidence"}.intersection(request.includeSections)
+        context_slots_requested = any(
+            _slot_requested(request, slot_id, "state", "evidence", *extra_sections)
+            for slot_id, extra_sections in (
+                ("sla", ()), ("journey_links", ()), ("participants", ("interactions",))
+            )
         )
         if context_slots_requested:
             context_reads: dict[str, SupportCaseContextRead] = {}
             for kind in ("sla", "journey_links"):
+                if not _slot_requested(request, kind, "state", "evidence"):
+                    context_reads[kind] = SupportCaseContextRead([], False, False)
+                    continue
                 try:
                     context_reads[kind] = await self._case_context_repository.list_for_case(
                         request.tenantId,
@@ -1529,10 +1728,14 @@ class Support360Provider(IntelligenceProjectionProvider):
                     context_reads[kind] = SupportCaseContextRead(
                         [], False, False, reason="support_case_context_read_unavailable"
                     )
-            participant_read = await self._case_participant_read(
-                request.tenantId,
-                record,
-                limit=min(limit, 500),
+            participant_read = (
+                await self._case_participant_read(
+                    request.tenantId,
+                    record,
+                    limit=min(limit, 500),
+                )
+                if _slot_requested(request, "participants", "state", "evidence", "interactions")
+                else SupportFactsRead([], False)
             )
             (
                 participants_slot,
@@ -1544,10 +1747,25 @@ class Support360Provider(IntelligenceProjectionProvider):
                 case_record=record,
                 entity_repository=self._canonical_agent_entities,
             )
+            try:
+                sla_contract_read = (
+                    await self._sla_measurement_repository.read_for_case(
+                        request.tenantId,
+                        request.subject.id,
+                        str(record.get("source_connection_id") or ""),
+                    )
+                    if _slot_requested(request, "sla", "state", "evidence")
+                    else SupportSLAMeasurementContractRead((), False, False)
+                )
+            except Exception:  # noqa: BLE001 - contract outage is slot-local
+                sla_contract_read = SupportSLAMeasurementContractRead(
+                    (), False, False, "support_sla_contract_read_unavailable"
+                )
             sla_slot, sla_evidence_refs, sla_reasons = _validated_support_sla_slot(
                 context_reads["sla"],
                 tenant_id=request.tenantId,
                 case_record=record,
+                contract_read=sla_contract_read,
             )
             (
                 journey_links_slot,
@@ -1559,6 +1777,30 @@ class Support360Provider(IntelligenceProjectionProvider):
                 case_record=record,
                 journey_repository=self._canonical_journeys,
             )
+            if journey_links_slot.get("links") and (
+                not context_reads["journey_links"].complete
+                or context_reads["journey_links"].truncated
+            ):
+                journey_links_slot["episodeFacts"] = {
+                    "state": "unknown",
+                    "reasonCode": "support_case_context_read_truncated",
+                    "relations": None,
+                }
+            elif journey_links_slot.get("links"):
+                episode_facts, episode_refs, episode_reasons = await _validated_case_journey_episodes(
+                    tenant_id=request.tenantId,
+                    links=journey_links_slot["links"],
+                    episode_store=self._canonical_episodes,
+                    windowed=request.timeRange is not None,
+                )
+                journey_links_slot["episodeFacts"] = episode_facts
+                journey_link_evidence_refs = _dedupe_evidence_refs(
+                    journey_link_evidence_refs + episode_refs
+                )
+                journey_link_reasons.extend(episode_reasons)
+                journey_links_slot["reasonCodes"] = sorted(
+                    set(journey_links_slot.get("reasonCodes", []) + episode_reasons)
+                )
         else:
             participants_slot = {
                 "state": "unknown",
@@ -1578,7 +1820,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             journey_link_evidence_refs = []
             journey_link_reasons = []
 
-        if context_slots_requested:
+        if _slot_requested(request, "risk", "state", "evidence"):
             risk_slot, risk_evidence_refs, risk_reasons = await self._support_case_risk_slot(
                 request, context, record
             )
@@ -1698,9 +1940,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             "count": len(evidence_refs),
             "evidenceRefs": evidence_refs,
         }
-        communication_slot_readable = (
-            request.includeSections is None or "interactions" in request.includeSections
-        )
+        communication_slot_readable = _slot_requested(request, "conversation_history", "interactions")
         if communication_slot_readable:
             communication_read = await self._case_communication_read(
                 request,
@@ -1885,6 +2125,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 "state": journey_links_slot.get("state", "unknown"),
                 "reasonCode": journey_links_slot.get("reasonCode"),
                 "links": journey_links_slot.get("links"),
+                "episodeFacts": journey_links_slot.get("episodeFacts"),
             },
             "measuredOutcomes": {
                 "state": "unknown",
@@ -1958,7 +2199,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 claimState=EpistemicStatus.OBSERVED,
                 domainSlotIds=["agents", "evidence_trace"],
             )
-            for event in agent_assignment_slot.get("assignmentEvents", [])
+            for event in (agent_assignment_slot.get("assignmentEvents") or [])
             if isinstance(event, dict) and event.get("evidenceRefs")
         )
         claims.extend(
@@ -1977,8 +2218,22 @@ class Support360Provider(IntelligenceProjectionProvider):
                 ("SLA", "sla", sla_slot),
                 ("journey_link", "journey_links", journey_links_slot),
             )
-            for event in slot.get("events", [])
+            for event in (slot.get("events") or [])
             if isinstance(event, dict) and event.get("evidenceRefs")
+        )
+        claims.extend(
+            ClaimEnvelope(
+                id=f"support360.episode_journey.{relation['canonicalEpisodeId']}.{relation['contextEventId']}",
+                kind="support_case_episode_journey_observation",
+                subject=request.subject,
+                evidenceRefs=relation["evidenceRefs"],
+                claims=[
+                    "The exact tenant EpisodeRecord references this verified support case journey-link event and names the same canonical journey."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["journey_links", "evidence_trace"],
+            )
+            for relation in ((journey_links_slot.get("episodeFacts") or {}).get("relations") or [])
         )
         claims.extend(
             ClaimEnvelope(
@@ -2037,6 +2292,11 @@ class Support360Provider(IntelligenceProjectionProvider):
             )
             for reference in communication_refs
         )
+        episode_authority_refs = (
+            ["episode_facts"]
+            if (journey_links_slot.get("episodeFacts") or {}).get("relations")
+            else []
+        )
         sections = [
             ProjectionSection(
                 id="summary",
@@ -2078,7 +2338,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                     "measurement_contract",
                     "risk_outputs",
                     "evidence",
-                ],
+                ] + episode_authority_refs,
             ),
             ProjectionSection(
                 id="timeline",
@@ -2116,7 +2376,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                     "journey_versions",
                     "risk_outputs",
                     "evidence",
-                ],
+                ] + episode_authority_refs,
             ),
             ProjectionSection(
                 id="interactions",
@@ -2566,10 +2826,11 @@ class Support360Provider(IntelligenceProjectionProvider):
         connection_id = _safe_reference(_text(record.get("source_connection_id")))
         source_case_id = _safe_reference(_text(record.get("source_case_id")))
         raw_rows = [row for row in read.rows if isinstance(row, dict)]
-        mismatch = any(
+        mismatch = len(raw_rows) != len(read.rows) or any(
             row.get("tenant_id") != tenant_id
             or _safe_reference(row.get("source_connector_id")) != connection_id
             or _safe_reference(row.get("support_case_id")) != source_case_id
+            or _text(row.get("provider")) != _text(record.get("source_provider_identity"))
             or _text(row.get("message_category")) != "support"
             for row in raw_rows
         )
@@ -3367,6 +3628,7 @@ def _validated_support_sla_slot(
     *,
     tenant_id: str,
     case_record: dict[str, Any],
+    contract_read: Optional[SupportSLAMeasurementContractRead] = None,
 ) -> tuple[dict[str, Any], list[EvidenceRef], list[str]]:
     rows, refs, reasons, failure = _validated_support_context_events(
         read, kind="sla", tenant_id=tenant_id, case_record=case_record
@@ -3400,6 +3662,78 @@ def _validated_support_sla_slot(
         }
         for row in latest_timers.values()
     ]
+    joined_contracts = 0
+    contract_ref_by_id: dict[str, EvidenceRef] = {}
+    contract_reason = "support_sla_measurement_contract_unavailable"
+    if contract_read is not None and contract_read.available and contract_read.complete:
+        contract_reason = "support_sla_measurement_contract_not_registered_for_source_policy"
+        contracts_by_key: dict[tuple[str, str, str, str, Optional[str]], list[SupportSLAMeasurementContract]] = {}
+        valid_contracts = True
+        for raw in contract_read.rows:
+            try:
+                contract = SupportSLAMeasurementContract.model_validate(
+                    {
+                        **{key: value for key, value in raw.items() if key != "contract_id"},
+                        "measurement_method_version": raw.get(
+                            "measurement_method_version", "source_reported_only_v0"
+                        ),
+                    }
+                )
+            except Exception:  # noqa: BLE001 - malformed authority remains unbound
+                valid_contracts = False
+                break
+            if (
+                raw.get("contract_id") != contract.contract_id
+                or contract.tenant_id != tenant_id
+                or contract.case_id != str(case_record.get("case_id"))
+                or contract.source_connection_id != case_record.get("source_connection_id")
+                or contract.source_provider_identity != case_record.get("source_provider_identity")
+            ):
+                valid_contracts = False
+                break
+            key = (contract.source_sla_id, contract.source_policy_id,
+                   contract.source_policy_version, contract.timer_kind,
+                   contract.custom_timer_name)
+            contracts_by_key.setdefault(key, []).append(contract)
+        if valid_contracts:
+            for timer in timers:
+                key = (timer["sourceSlaId"], timer["sourcePolicyId"],
+                       timer["sourcePolicyVersion"], timer["timerKind"],
+                       timer["customTimerName"])
+                matches = contracts_by_key.get(key, [])
+                if len(matches) != 1:
+                    continue
+                contract = matches[0]
+                if (
+                    timer["targetDurationSeconds"] is not None
+                    and timer["targetDurationSeconds"] != contract.target_duration_seconds
+                ):
+                    contract_reason = "support_sla_source_target_conflicts_with_registered_contract"
+                    continue
+                evidence = contract_evidence(contract)
+                contract_ref_by_id[evidence.id] = evidence
+                timer["measurementContract"] = {
+                    "state": "bound",
+                    "contractId": contract.contract_id,
+                    "targetDurationSeconds": contract.target_duration_seconds,
+                    "measurementMethodVersion": contract.measurement_method_version,
+                    "registeredAt": contract.registered_at.isoformat(),
+                    "historicalApplicabilityState": "unknown",
+                    "evidenceRefs": [evidence.model_dump(mode="json", by_alias=True)],
+                }
+                timer["measurementEvaluation"] = evaluate_active_elapsed_v1(
+                    contract, rows, complete=read.complete and not read.truncated
+                )
+                timer["evidenceRefs"] = [*timer["evidenceRefs"], evidence.model_dump(mode="json", by_alias=True)]
+                joined_contracts += 1
+            if joined_contracts:
+                contract_reason = "exact_tenant_registered_source_policy_revision_join"
+        else:
+            contract_reason = "support_sla_measurement_contract_scope_or_payload_invalid"
+    elif contract_read is not None and not contract_read.complete:
+        contract_reason = contract_read.reason or "support_sla_measurement_contract_read_incomplete"
+    contract_refs = list(contract_ref_by_id.values())
+    refs = [*refs, *contract_refs]
     reasons = [_REASON_SLA_HISTORY_UNVERIFIED]
     if not rows:
         state = "empty"
@@ -3407,7 +3741,7 @@ def _validated_support_sla_slot(
         state = "degraded"
         reasons.extend(
             [
-                _REASON_SLA_POLICY_NOT_CANONICAL,
+                *([] if joined_contracts == len(timers) else [_REASON_SLA_POLICY_NOT_CANONICAL]),
                 _REASON_CONTEXT_SOURCE_AUTHENTICATION_UNVERIFIED,
                 "support_case_sla_freshness_sla_unavailable",
             ]
@@ -3420,11 +3754,27 @@ def _validated_support_sla_slot(
             "reasonCodes": reasons,
             "timers": timers,
             "events": rows,
-            "policyAuthority": "source_reported_not_joined_to_measurement_contract",
+            "policyAuthority": (
+                "tenant_registered_source_policy_revision_partial"
+                if joined_contracts else "source_reported_not_joined_to_measurement_contract"
+            ),
+            "measurementContractJoin": {
+                "state": "partial" if joined_contracts else "unknown",
+                "boundTimerCount": joined_contracts,
+                "reportedTimerCount": len(timers),
+                "reasonCode": contract_reason,
+            },
             "sourceAuthenticationState": "tenant_authorized_principal_only",
             "sourceHistoryComplete": False,
             "freshness": {"state": "unknown", "reasonCode": "support_case_sla_freshness_sla_unavailable"},
-            "breachEvaluation": "source_reported_only_no_local_timer_inference",
+            "breachEvaluation": (
+                "measured_explicit_active_elapsed_v1"
+                if any(
+                    timer.get("measurementEvaluation", {}).get("state") == "measured"
+                    for timer in timers
+                )
+                else "source_reported_only_no_local_timer_inference"
+            ),
             "evidenceRefs": refs,
         },
         refs,
@@ -3475,6 +3825,7 @@ async def _validated_support_journey_link_slot(
     active = [
         {
             "canonicalJourneyId": row["payload"]["journey_id"],
+            "contextEventId": row["contextEventId"],
             "journeyVersionId": current_journeys[str(row["payload"]["journey_id"])].get("journey_version_id"),
             "journeyState": current_journeys[str(row["payload"]["journey_id"])].get("journey_state"),
             "sourceLinkId": row["payload"]["source_link_id"],
@@ -3508,6 +3859,121 @@ async def _validated_support_journey_link_slot(
             "evidenceRefs": refs,
         },
         refs,
+        reasons,
+    )
+
+
+async def _validated_case_journey_episodes(
+    *,
+    tenant_id: str,
+    links: list[dict[str, Any]],
+    episode_store: Any,
+    windowed: bool,
+) -> tuple[dict[str, Any], list[EvidenceRef], list[str]]:
+    """Join only EpisodeRecords explicitly citing an exact case journey-link event.
+
+    Journey ID alone is shared by many cases and episodes. The verified context
+    event is the case-specific bridge; the episode must cite that exact event
+    and independently carry the same canonical journey ID. This bounded tenant
+    scan does not establish the complete episode population.
+    """
+    if windowed:
+        reason = _REASON_JOURNEY_EPISODE_TEMPORAL_UNAVAILABLE
+        return {"state": "unknown", "reasonCode": reason, "relations": None}, [], [reason]
+    try:
+        if episode_store is None:
+            from shared.backend_interpretation.stores import EpisodeStore
+
+            episode_store = EpisodeStore()
+        page = await episode_store.list_page_by_tenant(tenant_id, limit=100)
+    except Exception:  # noqa: BLE001 - no episode relation inference on source failure
+        reason = _REASON_JOURNEY_EPISODE_AUTHORITY_UNAVAILABLE
+        return {"state": "unknown", "reasonCode": reason, "relations": None}, [], [reason]
+
+    expected: dict[tuple[str, str], EvidenceRef] = {}
+    for link in links:
+        journey_id = _safe_reference(link.get("canonicalJourneyId"))
+        context_event_id = _safe_reference(link.get("contextEventId"))
+        if journey_id is None or context_event_id is None:
+            continue
+        expected_uri = f"store://support_case_context_events/{quote(context_event_id, safe='')}"
+        for ref in link.get("evidenceRefs", []):
+            if (
+                isinstance(ref, EvidenceRef)
+                and ref.id == context_event_id
+                and ref.type == "event"
+                and ref.source == "support_case_context_events"
+                and ref.uri == expected_uri
+                and _utc_timestamp(ref.observedAt) is not None
+            ):
+                expected[(journey_id, context_event_id)] = ref
+                break
+
+    relations: list[dict[str, Any]] = []
+    refs: list[EvidenceRef] = []
+    seen: set[tuple[str, str]] = set()
+    for episode in page.records:
+        if (
+            not isinstance(episode, EpisodeRecord)
+            or episode.tenant_id != tenant_id
+            or not _safe_reference(episode.episode_id)
+            or not _safe_reference(episode.journey_id)
+        ):
+            continue
+        episode_ref = _episode_evidence(episode)
+        if episode_ref is None:
+            continue
+        for (journey_id, context_event_id), context_ref in expected.items():
+            key = (episode.episode_id, context_event_id)
+            if key in seen or episode.journey_id != journey_id:
+                continue
+            if not any(
+                ref.id == context_ref.id
+                and ref.type == context_ref.type
+                and ref.source == context_ref.source
+                and ref.uri == context_ref.uri
+                and _utc_timestamp(ref.observedAt) == _utc_timestamp(context_ref.observedAt)
+                for ref in episode.evidence_refs
+            ):
+                continue
+            seen.add(key)
+            relation_refs = [episode_ref, context_ref]
+            refs.extend(relation_refs)
+            relations.append(
+                {
+                    "canonicalEpisodeId": episode.episode_id,
+                    "canonicalJourneyId": journey_id,
+                    "contextEventId": context_event_id,
+                    "subjectJoin": "episode_explicit_journey_and_case_context_event_evidence_exact_match",
+                    "evidenceRefs": relation_refs,
+                }
+            )
+
+    relations.sort(key=lambda relation: (relation["contextEventId"], relation["canonicalEpisodeId"]))
+    reasons = [
+        _REASON_JOURNEY_EPISODE_POPULATION_UNVERIFIED,
+        _REASON_JOURNEY_EPISODE_FRESHNESS_UNKNOWN,
+        _REASON_JOURNEY_EPISODE_POLICY_UNVERIFIED,
+    ]
+    if not relations:
+        reasons.append(_REASON_JOURNEY_EPISODE_RELATION_MISSING)
+    if page.truncated or page.next_cursor or page.invalid_records:
+        reasons.append(_REASON_JOURNEY_EPISODE_READ_TRUNCATED)
+        relations = []
+        refs = []
+    return (
+        {
+            "state": "degraded" if relations else "unknown",
+            "reasonCodes": reasons,
+            "relations": relations,
+            "sourceHistoryComplete": False,
+            "populationComplete": False,
+            "temporalState": "current_store_only",
+            "policy": {"state": "unknown", "reasonCode": _REASON_JOURNEY_EPISODE_POLICY_UNVERIFIED},
+            "freshness": {"state": "unknown", "reasonCode": _REASON_JOURNEY_EPISODE_FRESHNESS_UNKNOWN},
+            "evidenceRefs": _dedupe_evidence_refs(refs),
+        },
+        _dedupe_evidence_refs(refs),
         reasons,
     )
 
@@ -4295,6 +4761,7 @@ def _newest_timestamp(rows: list[dict[str, Any]]) -> Optional[str]:
 
 __all__ = [
     "OUTPUT_SECTIONS",
+    "SUPPORT_SLOT_SECTIONS",
     "PROJECTION_ID",
     "RepositorySupport360Source",
     "Support360Provider",

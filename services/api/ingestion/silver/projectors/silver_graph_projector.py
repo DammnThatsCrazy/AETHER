@@ -17,7 +17,11 @@ import os
 from typing import Any
 
 from ingestion.silver.projectors.base import ProjectionResult
-from shared.graph.edge_properties import build_edge_properties, make_edge_idempotency_key
+from shared.graph.edge_properties import (
+    build_edge_properties,
+    build_lineage_edge_properties,
+    make_edge_idempotency_key,
+)
 from shared.graph.graph import Edge, EdgeType, Vertex, VertexType
 from shared.graph.mutation_gateway import get_mutation_gateway
 from shared.graph.mutation_intents import edge_intent, vertex_intent
@@ -31,11 +35,25 @@ _EMIT_ENABLED = os.getenv("AETHER_SILVER_GRAPH_EMIT", "true").lower() != "false"
 # Everything else (generic activity, risk signals, trades, …) stays a Silver
 # fact only — high-cardinality per-event nodes never enter the graph.
 _MCP_EVENTS = frozenset({"agent_mcp_connection_observed"})
+_LINEAGE_EDGE_EVENTS = {
+    "agent_subagent_spawned": EdgeType.SPAWNED_SUBAGENT,
+    "agent_delegated_task": EdgeType.DELEGATED_TO,
+}
 _TOOL_EVENTS = frozenset({
     "agent_tool_invocation_observed",
     "agent_tool_observed",
     "agent_tool_called",
 })
+# Per-call execution events. These stay in silver_agent_execution_facts (the
+# execution evidence plane); a call only reaches the external-agent graph path
+# when it also carries durable semantic evidence (a policy decision, a
+# delegation, a spawn reference or an outcome). 17,492 identical tool calls are
+# a Silver query, not 17,492 ActionRecord vertices.
+_PER_CALL_EVENTS = _TOOL_EVENTS | frozenset({"agent_step_observed"})
+_DURABLE_SEMANTIC_FIELDS = (
+    "policy_id", "policy_decision", "delegation_id", "delegated_to_ref",
+    "outcome_ref", "parent_agent_ref", "child_agent_ref", "root_agent_ref",
+)
 
 
 def _tenant_scoped_graph_id(kind: str, tenant_id: str, *refs: str) -> str:
@@ -102,6 +120,15 @@ def _bounded_edge(
         valid_from=valid_from,
         source_event_id=source_event_id,
         confidence=0.9,
+        # Lineage edge semantics: the observing event is the evidence, the
+        # method is source_reported (a claim, not a resolved fact), and no
+        # relationship confidence is asserted beyond the legacy scalar.
+        **build_lineage_edge_properties(
+            evidence_refs=[source_event_id],
+            resolution_method="source_reported",
+            relationship_status="unknown",
+            observed_at=valid_from,
+        ),
     )
     props["idempotency_key"] = make_edge_idempotency_key(
         tenant_id, edge_type, from_id, to_id
@@ -228,14 +255,27 @@ def build_external_agent_run_mutations(
         "outcome_ref", "parent_agent_ref", "child_agent_ref", "root_agent_ref",
         "parent_run_id",
     )
-    action_fields = (*action_evidence_fields, "status", "principal_id")
+    # Source-reported lineage identity (AO-3 columns). ``reported_principal_ref``
+    # is a claim, labelled as such: no canonical principal ever enters the graph
+    # from this path.
+    lineage_fields = (
+        "source_run_id", "root_run_id", "agent_definition_id", "agent_instance_id",
+        "reported_principal_ref", "reported_principal_namespace", "control_mode",
+        "authority_type", "authority_ref", "protocol", "protocol_version",
+        "execution_verification_state",
+    )
+    action_fields = (*action_evidence_fields, *lineage_fields, "status", "principal_id")
     event_name = str(row.get("event_name") or "")
-    has_action_evidence = any(row.get(field) for field in action_evidence_fields) or event_name in {
-        "agent_task_started", "agent_task_completed", "agent_task_failed",
-        "agent_tool_invocation_observed", "agent_tool_called", "agent_tool_observed",
-        "agent_policy_evaluated", "agent_delegated_task", "agent_outcome_recorded",
-        "agent_subagent_spawned",
-    }
+    if event_name in _PER_CALL_EVENTS:
+        # Per-call evidence stays in Silver unless it also carries a durable
+        # semantic fact (policy decision, delegation, spawn, outcome).
+        has_action_evidence = any(row.get(field) for field in _DURABLE_SEMANTIC_FIELDS)
+    else:
+        has_action_evidence = any(row.get(field) for field in action_evidence_fields) or event_name in {
+            "agent_task_started", "agent_task_completed", "agent_task_failed",
+            "agent_policy_evaluated", "agent_delegated_task", "agent_outcome_recorded",
+            "agent_subagent_spawned",
+        }
     if has_action_evidence:
         action_vertex_id = _tenant_scoped_graph_id(
             "agent_action", tenant_id, deployment_id, source_event_id
@@ -452,6 +492,8 @@ class SilverGraphProjector:
         - Internal agent MCP/tool observations retain their existing bounded
           projections. External deployments use the separate run projection
           and never join a registry ``agent_id`` to a canonical Agent vertex.
+        - Spawn / delegation events → one ``SPAWNED_SUBAGENT`` or
+          ``DELEGATED_TO`` edge per (parent, child) (WO-021).
         - Everything else (generic activity, risk signals, trades, …) stays a
           Silver fact only — no per-event vertex enters the graph (high-cardinality
           stays in Silver, not the graph).
@@ -526,6 +568,26 @@ class SilverGraphProjector:
                     ),
                     subject_id=agent_id,
                 )
+            elif agent_id and event_name in _LINEAGE_EDGE_EVENTS:
+                # Spawn / delegation lineage (WO-021). Source-reported agent
+                # refs on both ends; the edge is bounded per (parent, child)
+                # and cites the first source event that supports it.
+                target = row.get("child_agent_ref") if event_name == "agent_subagent_spawned" \
+                    else row.get("delegated_to_ref")
+                # The edge source is the reporting agent itself. A payload that
+                # names a different parent cannot plant an edge for another agent.
+                parent = agent_id
+                claimed_parent = row.get("parent_agent_ref")
+                if claimed_parent and str(claimed_parent) != parent:
+                    continue
+                if target and str(target) != str(parent):
+                    await _emit(
+                        _bounded_edge(
+                            _LINEAGE_EDGE_EVENTS[event_name], str(parent), str(target),
+                            tenant_id, source_event_id, occurred_at,
+                        ),
+                        subject_id=str(parent),
+                    )
             # Generic activity remains Silver-only. Events with a validated
             # external deployment and explicit run correlation also add one
             # bounded AgentExecutionRun node and source-scoped task/outcome

@@ -16,7 +16,7 @@ canonical_owner: platform-intelligence@aether
 estimated_read_minutes: 8
 source_hashes:
   "packages/shared/semantic-sentiment.ts": "sha256:85333759d1977c54a8655e634b30a1ee90a644c0a6fe357f1bfc6132a2b0cda0"
-  "services/api/intelligence/semantic_intelligence/consumer.py": "sha256:4d3d1c0adff0dd177554053f351116bfc646408c453136340af4c1c607ca9845"
+  "services/api/intelligence/semantic_intelligence/consumer.py": "sha256:0ac721222ae13b050d2e439a23716762a6765bc5c6be56b40ce34c88b507e3db"
   "services/api/intelligence/semantic_intelligence/engine.py": "sha256:bc9108433ee39c3e19eb0a25733c2adba758ba385cdbd69d9efadf6cc1f926b6"
   "services/api/intelligence/semantic_intelligence/models.py": "sha256:ab92fd86b05450401286413d7b153e24bc4eb830f2de434a5b08032cbad85e9b"
   "services/api/intelligence/semantic_intelligence/routes.py": "sha256:ef8111c1a47c24b70b05b9ffc99439c05b6ad7e6d43c44c5c27149848bd590d5"
@@ -37,6 +37,16 @@ Runtime flow:
 3. Target-specific sentiment is emitted only when the event contains expressive evidence and a resolved target subject.
 4. Observations are tenant-scoped in the semantic-sentiment repository and can be read through observation, timeline, entity state, and sentiment endpoints.
 5. Kyber operator routes expose fleet health and review-queue status behind an explicit operator-scope guard.
+
+The validated-event consumer also preserves the backend resolver's subject type
+and, under `AETHER_BACKEND_EPISODE_ENGINE_ENABLED`, forwards qualifying classified
+observations into tenant/subject-scoped `semantic_observation_stream` episodes.
+Supported subject types, authenticated source namespaces, aware occurrence times,
+and evidence are mandatory. EpisodeEngine and Episode360 revalidate exact typed
+canonical Silver links; event redelivery reuses the observation and link rather
+than duplicating them. Unsupported, untyped, quarantined, or namespace-less inputs
+do not produce links. This does not establish complete activity/session coverage,
+policy applicability, freshness, historical completeness, or continuity.
 
 This slice is intentionally provider-agnostic and deterministic for local CI. Hosted model providers can be added behind the same contract without changing API response shape.
 

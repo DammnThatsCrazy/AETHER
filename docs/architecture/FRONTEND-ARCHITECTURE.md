@@ -45,8 +45,8 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:0954e9da5808ef25d78517666ce839df16516e00fdc1ea06977b5f516050125c"
-  "apps/kyber-web/src/": "sha256:bf855b8ef57d800295450d4efa710ebc1b9bc6193850d3feaf9431b882e9660e"
+  "apps/aether-web/src/": "sha256:014962a1f2a020041ae883f64c4bac37c2fc7cb92f2ffead37269e16644f9048"
+  "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
 
@@ -735,6 +735,13 @@ execution receipt the UI marks occurrence source-reported and unverified. A
 source outage is shown as unavailable rather than as missing coverage. Public
 catalog records remain platform-scoped and are not loaded into the tenant graph
 view.
+
+The Agent 360 behavior panel renders the backend behavior read model from
+`GET /v1/agent/agents/{agent_ref}/behavior` without recomputing it: usual
+outcome, tool, authority-denial and failure-recovery rates with their sample
+sizes and intervals, recent reconstructed decisions, and what Aether cannot
+see. A rate without enough evidence says so, an agent with no facts shows an
+empty state, and a capped read is flagged.
 
 ---
 

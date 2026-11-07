@@ -167,7 +167,7 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # payment_rail_sync / bronze_object_compaction): a single periodic loop
     # that re-reads its flag every pass, not a dedicated runtime role.
     "materializer": frozenset(
-        {"export_expiry_sweep", "payment_rail_sync", "payment_canonical_repair",
+        {"export_expiry_sweep", "agent_lineage_reconcile_sweep", "payment_rail_sync", "payment_canonical_repair",
          "bronze_object_compaction", "x402_settlement_reconciliation",
          "payment_alert_eval", "provider_sync_scheduler",
          # Derivatives venue reconciliation sweep + the shared dead-letter
@@ -194,6 +194,8 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # Retention for journey handoff rows (anonymous IDs): one low-frequency
             # periodic loop, so it rides maintenance.
             "journey_handoff_sweep",
+            # Agent behavior snapshots + Risk360 evidence: one periodic loop.
+            "agent_behavior_jobs",
             # Kyber workforce directory reconciliation. A single periodic loop,
             # so it rides the existing maintenance role rather than justifying a
             # dedicated runtime role and the deploy-profile/compose/Terraform

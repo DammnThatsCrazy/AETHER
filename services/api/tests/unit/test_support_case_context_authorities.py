@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,6 +29,7 @@ from journeys.support360.cases import (  # noqa: E402
 from journeys.support360.context_authorities import (  # noqa: E402
     SupportCaseContextAuthorityError,
     SupportCaseContextIngestionService,
+    SupportCaseContextRead,
     SupportCaseContextRepository,
     SupportJourneyLinkEventInput,
     SupportJourneyLinkEventType,
@@ -36,13 +38,31 @@ from journeys.support360.context_authorities import (  # noqa: E402
     SupportSLATimerKind,
     reset_local_support_case_context_store,
 )
-from journeys.support360.provider import Support360Provider, SupportFactsRead  # noqa: E402
+from journeys.support360.provider import (  # noqa: E402
+    SUPPORT_SLOT_SECTIONS,
+    Support360Provider,
+    SupportFactsRead,
+    _validated_case_journey_episodes,
+)
+from journeys.support360.sla_measurement import (  # noqa: E402
+    SupportSLAMeasurementContract,
+    SupportSLAMeasurementContractError,
+    SupportSLAMeasurementContractRepository,
+    SupportSLAMeasurementContractService,
+    evaluate_active_elapsed_v1,
+    reset_local_support_sla_contract_store,
+)
+from graph.operational_intelligence.models import EntityRef, EvidenceRef, TimeRangeFilter  # noqa: E402
+from shared.backend_interpretation.primitives import EpisodeRecord  # noqa: E402
+from shared.backend_interpretation.stores import EpisodePageRead  # noqa: E402
 from shared.intelligence_projections import (  # noqa: E402
     ProjectionContext,
     ProjectionRequest,
     ProjectionSection,
     ProjectionSubject,
 )
+from shared.intelligence_projections.composition import _compose_slot_content  # noqa: E402
+from shared.intelligence_projections.generated_registry import PRODUCT_360_SURFACE_DEFINITIONS  # noqa: E402
 
 TENANT = "tenant-support-context-a"
 CONNECTION = "support-context-connection-a"
@@ -203,9 +223,11 @@ class RiskRegistry:
 def clear_support_stores():
     reset_local_support_case_store()
     reset_local_support_case_context_store()
+    reset_local_support_sla_contract_store()
     yield
     reset_local_support_case_store()
     reset_local_support_case_context_store()
+    reset_local_support_sla_contract_store()
 
 
 async def _case() -> tuple[SupportCaseRepository, dict]:
@@ -224,6 +246,162 @@ async def _case() -> tuple[SupportCaseRepository, dict]:
         observed_at=NOW,
     )
     return repository, record
+
+
+def _contract(case_id: str, *, target: int = 1800) -> SupportSLAMeasurementContract:
+    return SupportSLAMeasurementContract(
+        tenant_id=TENANT,
+        case_id=case_id,
+        source_connection_id=CONNECTION,
+        source_provider_identity=PROVIDER,
+        source_sla_id="source-sla-1",
+        source_policy_id="response-policy",
+        source_policy_version="v2",
+        timer_kind="first_response",
+        target_duration_seconds=target,
+        registered_by=ACTOR,
+        registered_at=NOW,
+    )
+
+
+def _timer_row(contract, event_type, minute, *, event_id=None):
+    effective = NOW + timedelta(minutes=minute)
+    return {
+        "contextEventId": event_id or f"event-{event_type}-{minute}",
+        "eventType": event_type,
+        "effectiveAt": effective.isoformat(),
+        "sourceObservedAt": effective.isoformat(),
+        "receivedAt": (effective + timedelta(seconds=1)).isoformat(),
+        "payload": {
+            "source_sla_id": contract.source_sla_id,
+            "timer_kind": contract.timer_kind,
+            "custom_timer_name": contract.custom_timer_name,
+            "source_policy_id": contract.source_policy_id,
+            "source_policy_version": contract.source_policy_version,
+            "target_duration_seconds": contract.target_duration_seconds,
+            "effective_at": effective.isoformat(),
+        },
+    }
+
+
+def test_sla_active_elapsed_evaluation_rejects_incomplete_ambiguous_and_reported_breach():
+    contract = _contract(str(uuid4()))
+    events = [
+        _timer_row(contract, "support_sla_timer_started", 0),
+        _timer_row(contract, "support_sla_timer_stopped", 30),
+    ]
+    assert evaluate_active_elapsed_v1(contract, events, complete=False)["state"] == "unknown"
+
+    ambiguous = [*events, _timer_row(contract, "support_sla_timer_paused", 30)]
+    assert evaluate_active_elapsed_v1(contract, ambiguous, complete=True)["reasonCode"] == (
+        "support_sla_timer_event_order_ambiguous"
+    )
+
+    reported_breach = [
+        _timer_row(contract, "support_sla_timer_started", 0),
+        _timer_row(contract, "support_sla_timer_breached", 31),
+    ]
+    assert evaluate_active_elapsed_v1(contract, reported_breach, complete=True)["reasonCode"] == (
+        "support_sla_timer_transition_ambiguous_or_unsupported"
+    )
+
+    wrong_policy = [dict(events[0], payload={**events[0]["payload"], "source_policy_version": "other"})]
+    assert evaluate_active_elapsed_v1(contract, wrong_policy, complete=True)["state"] == "unknown"
+
+    invalid_anchor = [dict(events[0], receivedAt=(NOW - timedelta(seconds=1)).isoformat())]
+    assert evaluate_active_elapsed_v1(contract, invalid_anchor, complete=True)["reasonCode"] == (
+        "support_sla_timer_timestamp_anchor_invalid"
+    )
+
+
+def test_sla_measurement_rejects_future_and_mixed_revision_sequences():
+    contract = _contract(str(uuid4()))
+    events = [
+        _timer_row(contract, "support_sla_timer_started", 0),
+        _timer_row(contract, "support_sla_timer_paused", 10),
+        _timer_row(contract, "support_sla_timer_resumed", 15),
+        _timer_row(contract, "support_sla_timer_stopped", 30),
+    ]
+    measured = evaluate_active_elapsed_v1(contract, events, complete=True)
+    assert measured["sequenceEventIds"] == [event["contextEventId"] for event in events]
+    mixed = [*events, _timer_row(contract, "support_sla_timer_paused", 20)]
+    mixed[-1]["payload"]["source_policy_version"] = "other"
+    assert evaluate_active_elapsed_v1(contract, mixed, complete=True)["reasonCode"] == (
+        "support_sla_timer_policy_revision_ambiguous"
+    )
+    future = [dict(event) for event in events]
+    future[-1]["receivedAt"] = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    assert evaluate_active_elapsed_v1(contract, future, complete=True)["reasonCode"] == (
+        "support_sla_timer_timestamp_anchor_invalid"
+    )
+
+
+@pytest.mark.asyncio
+async def test_registered_sla_contract_is_immutable_and_case_provider_scoped():
+    cases, case = await _case()
+    repository = SupportSLAMeasurementContractRepository()
+    service = SupportSLAMeasurementContractService(
+        repository=repository, cases=cases, connections=FakeConnections()
+    )
+    contract = _contract(case["case_id"])
+    assert (await service.register(contract)).contract_id == contract.contract_id
+    assert (await service.register(contract)).contract_id == contract.contract_id
+    replay = contract.model_copy(update={"registered_at": datetime.now(timezone.utc), "registered_by": "another-admin"})
+    stored = await service.register(replay)
+    assert stored.registered_at == contract.registered_at
+    assert stored.registered_by == contract.registered_by
+    read = await repository.read_for_case(TENANT, case["case_id"], CONNECTION)
+    assert read.available and read.complete and len(read.rows) == 1
+    assert read.rows[0]["target_duration_seconds"] == 1800
+    with pytest.raises(SupportSLAMeasurementContractError, match="immutable"):
+        await service.register(_contract(case["case_id"], target=1200))
+    with pytest.raises(SupportSLAMeasurementContractError, match="exact tenant case"):
+        await service.register(_contract(str(uuid4())))
+    assert not (await repository.read_for_case("foreign-tenant", case["case_id"], CONNECTION)).rows
+
+
+@pytest.mark.asyncio
+async def test_sla_contract_target_conflict_does_not_bind_source_timer():
+    cases, case = await _case()
+    context_repository = SupportCaseContextRepository()
+    await SupportCaseContextIngestionService(
+        repository=context_repository, cases=cases, connections=FakeConnections()
+    ).ingest(
+        "sla", TENANT, CONNECTION,
+        SupportSLAEventInput(
+            case_id=case["case_id"], source_sla_id="source-sla-1",
+            source_revision_id="sla-rev-1", source_event_id="sla-target-conflict",
+            event_type=SupportSLAEventType.TIMER_STARTED,
+            timer_kind=SupportSLATimerKind.FIRST_RESPONSE,
+            source_policy_id="response-policy", source_policy_version="v2",
+            source_timer_state="running", target_duration_seconds=1800,
+            source_observed_at=NOW, effective_at=NOW,
+        ), actor_id=ACTOR, actor_type="tenant_user",
+    )
+    contracts = SupportSLAMeasurementContractRepository()
+    await SupportSLAMeasurementContractService(
+        repository=contracts, cases=cases, connections=FakeConnections()
+    ).register(_contract(case["case_id"], target=1200))
+    request = ProjectionRequest(
+        projectionId="support360", tenantId=TENANT,
+        subject=ProjectionSubject(kind="support_case", id=case["case_id"]),
+    )
+    context = ProjectionContext(
+        projectionId="support360", tenantId=TENANT,
+        registryState="in_flight", dependencyState=[], warnings=[],
+    )
+    result = await Support360Provider(
+        EmptyCaseFactsSource(), case_repository=cases,
+        case_context_repository=context_repository, sla_measurement_repository=contracts,
+    ).project(request, context)
+    state = next(section.content for section in result.sections if section.id == "state")
+    sla = state["requiredSlots"]["sla"]
+    assert sla["policyAuthority"] == "source_reported_not_joined_to_measurement_contract"
+    assert sla["measurementContractJoin"]["boundTimerCount"] == 0
+    assert sla["measurementContractJoin"]["reasonCode"] == (
+        "support_sla_source_target_conflicts_with_registered_contract"
+    )
+    assert "measurementContract" not in sla["timers"][0]
 
 
 @pytest.mark.asyncio
@@ -347,6 +525,10 @@ def test_context_event_contract_rejects_tenant_actor_and_malformed_sla_claims():
 @pytest.mark.asyncio
 async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence_slots():
     cases, case = await _case()
+    sla_contract_repository = SupportSLAMeasurementContractRepository()
+    registered_contract = await SupportSLAMeasurementContractService(
+        repository=sla_contract_repository, cases=cases, connections=FakeConnections()
+    ).register(_contract(case["case_id"]))
     journey_id = str(uuid4())
     journeys = FakeJourneys(journey_id)
     entities = FakeEntities([{"tenant_id": TENANT, "entity_id": ENTITY, "entity_type": "user"}])
@@ -371,6 +553,7 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
             source_policy_id="response-policy",
             source_policy_version="v2",
             source_timer_state="running",
+            target_duration_seconds=1800,
             due_at=NOW + timedelta(minutes=30),
             source_observed_at=NOW,
             effective_at=NOW,
@@ -378,7 +561,34 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         actor_id=ACTOR,
         actor_type="tenant_user",
     )
-    await service.ingest(
+    for event_type, state, minute in (
+        (SupportSLAEventType.TIMER_PAUSED, "paused", 10),
+        (SupportSLAEventType.TIMER_RESUMED, "running", 15),
+        (SupportSLAEventType.TIMER_STOPPED, "stopped", 35),
+    ):
+        effective_at = NOW + timedelta(minutes=minute, seconds=1 if minute == 35 else 0)
+        await service.ingest(
+            "sla",
+            TENANT,
+            CONNECTION,
+            SupportSLAEventInput(
+                case_id=case["case_id"],
+                source_sla_id="source-sla-1",
+                source_revision_id=f"sla-{event_type.value}",
+                source_event_id=f"sla-{event_type.value}",
+                event_type=event_type,
+                timer_kind=SupportSLATimerKind.FIRST_RESPONSE,
+                source_policy_id="response-policy",
+                source_policy_version="v2",
+                source_timer_state=state,
+                target_duration_seconds=(1800 if event_type is SupportSLAEventType.TIMER_RESUMED else None),
+                source_observed_at=effective_at,
+                effective_at=effective_at,
+            ),
+            actor_id=ACTOR,
+            actor_type="tenant_user",
+        )
+    link = await service.ingest(
         "journey_links",
         TENANT,
         CONNECTION,
@@ -395,6 +605,25 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         actor_id=ACTOR,
         actor_type="tenant_user",
     )
+    context_ref = next(
+        EvidenceRef.model_validate(ref)
+        for ref in link["evidence_refs"]
+        if ref["source"] == "support_case_context_events"
+    )
+    episode = EpisodeRecord(
+        episode_id="support-episode-exact-1",
+        tenant_id=TENANT,
+        subject=EntityRef(kind="user", id=ENTITY),
+        kind="support",
+        journey_id=journey_id,
+        evidence_refs=[context_ref],
+    )
+
+    class ExactEpisodeStore:
+        async def list_page_by_tenant(self, tenant_id, *, limit):
+            assert (tenant_id, limit) == (TENANT, 100)
+            return EpisodePageRead(records=(episode,), next_cursor=None, truncated=False)
+
     request = ProjectionRequest(
         projectionId="support360",
         tenantId=TENANT,
@@ -407,14 +636,17 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
         dependencyState=[],
         warnings=[],
     )
-    result = await Support360Provider(
+    provider = Support360Provider(
         EmptyCaseFactsSource(),
         case_repository=cases,
         case_context_repository=context_repo,
+        sla_measurement_repository=sla_contract_repository,
         canonical_agent_entity_repository=entities,
         canonical_journey_repository=journeys,
+        canonical_episode_store=ExactEpisodeStore(),
         risk_projection_registry=RiskRegistry(),
-    ).project(request, context)
+    )
+    result = await provider.project(request, context)
     state = next(section.content for section in result.sections if section.id == "state")
     slots = state["requiredSlots"]
 
@@ -424,14 +656,210 @@ async def test_support360_binds_context_sla_journey_resolution_risk_and_evidence
     assert slots["participants"]["sourceAuthority"] == "communication360_facts"
     assert slots["participants"]["sourceAuthenticationState"] == "tenant_webhook_hmac_verified"
     assert slots["sla"]["state"] == "degraded"
-    assert slots["sla"]["timers"][0]["sourceTimerState"] == "running"
-    assert slots["sla"]["breachEvaluation"] == "source_reported_only_no_local_timer_inference"
+    assert slots["sla"]["timers"][0]["sourceTimerState"] == "stopped"
+    assert slots["sla"]["timers"][0]["measurementContract"]["contractId"] == registered_contract.contract_id
+    assert slots["sla"]["measurementContractJoin"]["boundTimerCount"] == 1
+    assert slots["sla"]["policyAuthority"] == "tenant_registered_source_policy_revision_partial"
+    assert any(ref.id == registered_contract.contract_id for ref in slots["sla"]["evidenceRefs"])
+    assert slots["sla"]["breachEvaluation"] == "measured_explicit_active_elapsed_v1"
+    assert slots["sla"]["timers"][0]["measurementEvaluation"] == {
+        "state": "measured",
+        "methodVersion": "active_elapsed_v1",
+        "activeDurationSeconds": 1801,
+        "targetDurationSeconds": 1800,
+        "comparison": "over_target",
+        "stoppedAt": (NOW + timedelta(minutes=35, seconds=1)).isoformat(),
+        "sequenceEventIds": [
+            event["contextEventId"]
+            for event in sorted(slots["sla"]["events"], key=lambda event: event["effectiveAt"])
+        ],
+        "startAndStopEvents": [
+            next(event["contextEventId"] for event in slots["sla"]["events"] if event["eventType"] == "support_sla_timer_started"),
+            next(event["contextEventId"] for event in slots["sla"]["events"] if event["eventType"] == "support_sla_timer_stopped"),
+        ],
+        "pausedDurationExcluded": True,
+        "outcomeAuthority": "locally_measured_explicit_timer_semantics",
+    }
     assert slots["journey_links"]["links"][0]["canonicalJourneyId"] == journey_id
+    episode_facts = slots["journey_links"]["episodeFacts"]
+    assert episode_facts["state"] == "degraded"
+    assert episode_facts["populationComplete"] is False
+    assert episode_facts["policy"]["state"] == "unknown"
+    assert episode_facts["freshness"]["state"] == "unknown"
+    assert episode_facts["relations"][0]["canonicalEpisodeId"] == episode.episode_id
+    assert episode_facts["relations"][0]["contextEventId"] == link["context_event_id"]
+    assert state["journeyLinkage"]["episodeFacts"] == episode_facts
+    assert "episode_facts" in next(
+        section.canonicalAuthorityRefs for section in result.sections if section.id == "state"
+    )
+    assert "episode_facts" in next(
+        section.canonicalAuthorityRefs for section in result.sections if section.id == "evidence"
+    )
+    assert any(
+        claim.kind == "support_case_episode_journey_observation"
+        and claim.evidenceRefs[0].id == episode.episode_id
+        for claim in result.claims
+    )
     assert slots["resolution"]["resolutionState"] == "open"
     assert slots["resolution"]["resolutionOccurred"] is False
     assert slots["risk"]["state"] == "ready"
     assert slots["evidence_trace"]["count"] > 0
     assert any(claim.domainSlotIds == ["participants", "evidence_trace"] for claim in result.claims)
+
+    for slot_id in ("sla", "participants", "journey_links", "resolution", "case_summary", "evidence_trace"):
+        slot_result = await provider.project(
+            request.model_copy(update={"includeSections": [SUPPORT_SLOT_SECTIONS[slot_id]]}),
+            context,
+        )
+        assert len(slot_result.sections) == 1
+        section = slot_result.sections[0]
+        assert section.id == SUPPORT_SLOT_SECTIONS[slot_id]
+        assert section.state == "available"
+        assert section.content["evidenceRefs"]
+        assert section.content["scope"] == "bounded_current_store_observations"
+        assert section.warnings
+        assert slot_result.claims
+        definition = deepcopy(next(
+            item for item in PRODUCT_360_SURFACE_DEFINITIONS["support360"]["domainSlots"]
+            if item["id"] == slot_id
+        ))
+        for binding in definition["projectionBindings"]:
+            binding["sectionIds"] = [SUPPORT_SLOT_SECTIONS[slot_id]]
+        composed, reasons, missing = _compose_slot_content(
+            slot_id=slot_id, slot_definition=definition, results={"support360": slot_result},
+            include_evidence=True, tenant_id=TENANT, requested_as_of=None,
+            subject_kind="support_case", requires_exact_claim=True,
+        )
+        assert missing == set()
+        assert "projection_section_authority_refs_invalid" not in reasons
+        assert composed["content"]["sections"][0]["content"] == section.content
+        assert composed["evidenceRefs"]
+        if slot_id == "sla":
+            assert section.content["timers"][0]["measurementEvaluation"]["activeDurationSeconds"] == 1801
+            assert section.content["sourceAuthenticationState"] == "tenant_authorized_principal_only"
+            assert section.content["sourceHistoryComplete"] is False
+        if slot_id == "participants":
+            assert section.content["participants"][0]["canonicalEntityId"] == ENTITY
+        if slot_id == "journey_links":
+            assert section.content["episodeFacts"]["relations"][0]["canonicalEpisodeId"] == episode.episode_id
+
+    windowed_request = request.model_copy(
+        update={
+            "timeRange": TimeRangeFilter(
+                from_="2026-10-24T15:00:00Z", to="2026-10-24T17:00:00Z"
+            ),
+            "temporalMode": "window",
+        }
+    )
+    windowed_result = await provider.project(windowed_request, context)
+    windowed_state = next(section for section in windowed_result.sections if section.id == "state")
+    assert windowed_state.content["requiredSlots"]["journey_links"]["episodeFacts"]["state"] == "unknown"
+    assert "episode_facts" not in windowed_state.canonicalAuthorityRefs
+    assert not any(
+        claim.kind == "support_case_episode_journey_observation"
+        for claim in windowed_result.claims
+    )
+
+    class TruncatedContextRepository:
+        async def list_for_case(self, *args, **kwargs):
+            read = await context_repo.list_for_case(*args, **kwargs)
+            if kwargs.get("kind") == "journey_links":
+                return SupportCaseContextRead(read.events, True, False, True)
+            return read
+
+    class EpisodeStoreMustNotRead:
+        async def list_page_by_tenant(self, *args, **kwargs):
+            raise AssertionError("a partial link ledger cannot prove the current relation")
+
+    partial_result = await Support360Provider(
+        EmptyCaseFactsSource(),
+        case_repository=cases,
+        case_context_repository=TruncatedContextRepository(),
+        canonical_agent_entity_repository=entities,
+        canonical_journey_repository=journeys,
+        canonical_episode_store=EpisodeStoreMustNotRead(),
+        risk_projection_registry=RiskRegistry(),
+    ).project(request, context)
+    partial_state = next(section for section in partial_result.sections if section.id == "state")
+    assert partial_state.content["requiredSlots"]["journey_links"]["episodeFacts"] == {
+        "state": "unknown",
+        "reasonCode": "support_case_context_read_truncated",
+        "relations": None,
+    }
+    assert "episode_facts" not in partial_state.canonicalAuthorityRefs
+
+
+@pytest.mark.asyncio
+async def test_support_case_episode_join_rejects_shared_journey_without_exact_event_evidence():
+    journey_id = str(uuid4())
+    event_id = "verified-case-journey-link-event"
+    context_ref = EvidenceRef(
+        id=event_id,
+        type="event",
+        source="support_case_context_events",
+        uri=f"store://support_case_context_events/{event_id}",
+        observedAt=NOW.isoformat(),
+    )
+    link = {
+        "canonicalJourneyId": journey_id,
+        "contextEventId": event_id,
+        "evidenceRefs": [context_ref],
+    }
+
+    def episode(episode_id, *, tenant_id=TENANT, linked_journey=journey_id, ref=None):
+        return EpisodeRecord(
+            episode_id=episode_id,
+            tenant_id=tenant_id,
+            subject=EntityRef(kind="user", id=ENTITY),
+            kind="support",
+            journey_id=linked_journey,
+            evidence_refs=[ref] if ref is not None else [],
+        )
+
+    class IncompleteEpisodeStore:
+        calls = 0
+
+        async def list_page_by_tenant(self, tenant_id, *, limit):
+            self.calls += 1
+            assert (tenant_id, limit) == (TENANT, 100)
+            return EpisodePageRead(
+                records=(
+                    episode("shared-journey-only"),
+                    episode("wrong-tenant", tenant_id="tenant-other", ref=context_ref),
+                    episode("wrong-journey", linked_journey=str(uuid4()), ref=context_ref),
+                    episode("wrong-source", ref=context_ref.model_copy(update={"source": "other"})),
+                    episode("other-case-event", ref=context_ref.model_copy(update={"id": "other-case-event"})),
+                    episode("wrong-uri", ref=context_ref.model_copy(update={"uri": "store://other"})),
+                    episode("wrong-time", ref=context_ref.model_copy(update={"observedAt": "2026-10-23T16:00:00Z"})),
+                ),
+                next_cursor="next-page",
+                truncated=True,
+            )
+
+    store = IncompleteEpisodeStore()
+    slot, refs, reasons = await _validated_case_journey_episodes(
+        tenant_id=TENANT,
+        links=[link],
+        episode_store=store,
+        windowed=False,
+    )
+    assert slot["state"] == "unknown"
+    assert slot["relations"] == []
+    assert refs == []
+    assert "support_case_journey_episode_exact_relation_unavailable" in reasons
+    assert "support_case_journey_episode_read_truncated" in reasons
+
+    windowed, refs, reasons = await _validated_case_journey_episodes(
+        tenant_id=TENANT,
+        links=[link],
+        episode_store=store,
+        windowed=True,
+    )
+    assert windowed["state"] == "unknown"
+    assert windowed["relations"] is None
+    assert reasons == ["support_case_journey_episode_window_read_unavailable"]
+    assert refs == []
+    assert store.calls == 1
 
 
 @pytest.mark.asyncio

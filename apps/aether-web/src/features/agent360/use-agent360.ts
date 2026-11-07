@@ -133,3 +133,36 @@ export function useAgentMarketplaceCatalog() {
     staleTime: 5 * 60_000,
   });
 }
+
+const behaviorSectionSchema = z.object({
+  state: z.enum(['available', 'partial', 'unavailable']),
+  data: z.unknown(),
+  reason: z.string().optional(),
+}).passthrough();
+
+const agentBehaviorEnvelopeSchema = z.object({
+  data: z.object({
+    agent_ref: z.string(),
+    source_truncated: z.boolean().optional(),
+    source_status: z.string().optional(),
+    sections: z.record(behaviorSectionSchema).nullable(),
+  }).passthrough(),
+  status: z.string(),
+  timestamp: z.string(),
+}).passthrough();
+
+export type AgentBehaviorReadModel = z.infer<typeof agentBehaviorEnvelopeSchema>['data'];
+
+/** Backend-owned Agent360 behavior read model (WO-110/111). Rendered, never recomputed. */
+export function useAgentBehavior(agentRef: string) {
+  const { scope } = useGraphContext();
+  const tenantId = scope.tenant_id;
+  return useQuery({
+    key: `agent-360-behavior:${encodeURIComponent(tenantId)}:${encodeURIComponent(agentRef)}`,
+    fetcher: () => restClient
+      .get(`/v1/agent/agents/${encodeURIComponent(agentRef)}/behavior`, agentBehaviorEnvelopeSchema)
+      .then(response => response.data),
+    enabled: Boolean(tenantId && agentRef),
+    staleTime: 30_000,
+  });
+}
