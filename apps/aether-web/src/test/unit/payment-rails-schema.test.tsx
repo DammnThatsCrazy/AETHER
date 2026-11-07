@@ -70,6 +70,7 @@ function validHealth() {
     reconciliation_matched_rate: 0.982,
     reconciliation_conflicts: 0,
     last_event_at: '2026-07-08T14:07:11.000Z',
+    observation_status: 'observed',
     status: 'healthy',
     computed_at: '2026-07-09T00:00:00.000Z',
   };
@@ -149,6 +150,22 @@ describe('E1 · provider health (diagnostics) schema', () => {
 
   it('rejects an unknown status token safely', () => {
     expect(paymentRailHealthSchema.safeParse({ ...validHealth(), status: 'on_fire' }).success).toBe(false);
+  });
+
+  it('accepts unknown health and never-observed as distinct contract states', () => {
+    const parsed = paymentRailHealthSchema.parse({
+      ...validHealth(),
+      status: 'unknown',
+      observation_status: 'never_observed',
+    });
+    expect(parsed.status).toBe('unknown');
+    expect(parsed.observation_status).toBe('never_observed');
+  });
+
+  it('requires an explicit observation status', () => {
+    const missing = validHealth() as Record<string, unknown>;
+    delete missing.observation_status;
+    expect(paymentRailHealthSchema.safeParse(missing).success).toBe(false);
   });
 
   it('rejects a NULL required count — unknown must never masquerade as 0', () => {

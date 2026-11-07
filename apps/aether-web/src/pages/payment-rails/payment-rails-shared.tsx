@@ -75,13 +75,25 @@ const HEALTH_STATUS_LABELS: Record<ProviderHealthStatus, string> = {
   unknown: 'unknown',
 };
 
+export type ProviderObservationStatus = 'observed' | 'never_observed' | 'not_configured';
+
+const OBSERVATION_STATUS_LABELS: Record<ProviderObservationStatus, string> = {
+  observed: 'observed',
+  never_observed: 'never observed',
+  not_configured: 'not configured',
+};
+
+export function observationStatusLabel(status: ProviderObservationStatus | null | undefined): string {
+  return status ? OBSERVATION_STATUS_LABELS[status] ?? status : '—';
+}
+
 /**
  * Provider integration health is a capability credential-lifecycle signal, so it
  * renders on the canonical matrix (healthy → partner_live, not_configured, …).
  * The raw server status stays as the label so operators still see the exact term.
  */
 export function ProviderHealthBadge({ status }: { readonly status: ProviderHealthStatus }) {
-  const state = resolveCapabilityState(status) ?? 'not_configured';
+  const state = resolveCapabilityState(status) ?? (status === 'unknown' ? 'partial' : 'not_configured');
   return <CapabilityStateBadge state={state} label={HEALTH_STATUS_LABELS[status] ?? status} reason={`provider health: ${status}`} />;
 }
 

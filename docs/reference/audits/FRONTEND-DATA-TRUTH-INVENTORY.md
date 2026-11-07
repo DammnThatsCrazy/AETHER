@@ -18,9 +18,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction. It uses the API response type directly; tenant-owned webhook state, delivery history, and one-time secret behavior are unchanged."
 source_hashes:
-  "apps/aether-web/": "sha256:75cf9f1e3e2807af6c13802c4b08ff293b9454eb9912783de31ad19be8e3ea44"
+  "apps/aether-web/": "sha256:0441bd7e9f0803553e2cb76b434b967755f3701f08fd9be3ed0d5f110022a629"
   "apps/demo/": "sha256:68e3f82d5ac29330519e833dc50bca0023c83e9d6e5b448f09129917617d1b7c"
-  "apps/kyber-web/": "sha256:e7e4bf28d26fd793757e3d85e5bb1f2e6ac0d9d8d34c340fda1f977a46c30a49"
+  "apps/kyber-web/": "sha256:a5731cfe5f927c52e760620d99255e7e10bde1fcde1ca59ee9cce587ddebfb55"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
   "scripts/validate_frontend_data_truth.py": "sha256:25de73c82ac07cdc52b7a9be8d7f8ef69ff50ca7ba735c1e8d51652dcf92636c"
 ---

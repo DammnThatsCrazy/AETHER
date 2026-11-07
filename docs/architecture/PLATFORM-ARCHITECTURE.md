@@ -67,7 +67,7 @@ reviewed_source_commits:
   - commit: "78eb672ff"
     reason: "Reviewed 78eb672ff (Codex findings on semantic-intelligence): middleware.py now passes the request method to the route-policy classifier so method-specific Kyber declarations are enforced; nothing this doc describes changed, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:0c6e4302135fbebf875592215087bac0a38d323c7aed8274907c7be62c85b06a"
+  "packages/shared/": "sha256:fe5fa117b59ef1cf0f3cdff68c4d4b8dd954653e8aa92ea7fcd11e7fe6b1b79c"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/agent360_provider.py": "sha256:084b3ba0a7680dee48b146e3111c22c4854b736e86742b4484db9c0927866577"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
@@ -85,7 +85,7 @@ source_hashes:
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
-  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
+  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/account360_provider.py": "sha256:dd2b32bc4eb3fec20094ef053dfe99de88e39ec43388dae73c41f9d4cdcab838"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"

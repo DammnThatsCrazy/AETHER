@@ -1158,20 +1158,41 @@ class PaymentRailsService:
             conflicts = sum(1 for r in p_recons if r.get("state") == "conflict")
 
             account = await self.repos.accounts.get(tenant_id, name)
-            if not context["configured"]:
-                status = "not_configured"
-            elif rejected_24h > 0 and verified_24h == 0:
-                status = "error"
-            elif conflicts > 0 or rejected_24h > 0:
-                status = "degraded"
-            else:
-                status = "healthy"
-
             last_event_at = max(
                 (e.get("received_at") or "" for e in events if e.get("provider") == name),
                 default=None,
             ) or None
             last_poll_at = (account or {}).get("last_poll_at")
+            poll_health = (account or {}).get("provider_poll_health")
+
+            # Distinguish "configured but never observed" from healthy and from
+            # a real zero. A successful poll (or any verified event/session/
+            # reconciliation) is evidence provider truth was actually read;
+            # credentials alone are not.
+            has_observed = bool(
+                p_sessions
+                or p_recons
+                or last_event_at
+                or (
+                    adapter.polling_supported
+                    and last_poll_at
+                    and poll_health == "ok"
+                )
+            )
+            if not context["configured"]:
+                observation_status = "not_configured"
+                status = "not_configured"
+            elif not has_observed:
+                observation_status = "never_observed"
+                status = "error" if rejected_24h > 0 and verified_24h == 0 else "unknown"
+            else:
+                observation_status = "observed"
+                if rejected_24h > 0 and verified_24h == 0:
+                    status = "error"
+                elif conflicts > 0 or rejected_24h > 0:
+                    status = "degraded"
+                else:
+                    status = "healthy"
 
             # Provider freshness SLO: age of the newest observed provider signal.
             # For a pull provider this is the age of the last successful poll or
@@ -1203,6 +1224,7 @@ class PaymentRailsService:
                 reconciliation_conflicts=conflicts,
                 last_event_at=last_event_at,
                 last_poll_at=last_poll_at,
+                observation_status=observation_status,  # type: ignore[arg-type]
                 status=status,  # type: ignore[arg-type]
             ))
         return results

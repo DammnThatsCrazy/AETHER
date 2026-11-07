@@ -129,6 +129,7 @@ function health(overrides: Record<string, unknown>) {
     reconciliation_matched_rate: null,
     reconciliation_conflicts: 0,
     last_event_at: null,
+    observation_status: 'observed',
     status: 'healthy',
     computed_at: '2026-07-09T00:00:00.000Z',
     ...overrides,
@@ -193,6 +194,34 @@ describe('E2 · provider last-signal rendering (fresh vs unknown)', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('0.0%')).toBeInTheDocument());
+  });
+
+  it('renders configured-but-never-observed as unknown without zero-count cards', async () => {
+    mocks.fetchPaymentRailHealth.mockResolvedValue({
+      providers: [
+        health({
+          provider: 'privy',
+          status: 'unknown',
+          observation_status: 'never_observed',
+          sessions_observed_24h: 0,
+          sessions_completed_24h: 0,
+          sessions_failed_24h: 0,
+          sessions_unresolved: 0,
+          webhook_verified_24h: 0,
+          last_event_at: null,
+          reconciliation_matched_rate: null,
+        }),
+      ],
+      notConfigured: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('never observed')).toBeInTheDocument());
+    expect(
+      screen.getByText('Credentials are configured, but no provider signal has been observed yet.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Sessions 24h')).toBeNull();
+    expect(screen.queryByText('Matched rate')).toBeNull();
+    expect(screen.getAllByText('unknown').length).toBeGreaterThan(0);
   });
 });
 

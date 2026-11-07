@@ -3,7 +3,7 @@
  *
  * Mirrors the typed, versioned backend contract in
  * `services/api/connectors/integrations/providers/payment_rails/kyber_contract.py`
- * (contract_version "1.0.0"). Every response from
+ * (contract_version "1.2.0"). Every response from
  * `GET /v1/admin/kyber/payment-rails/health` and
  * `GET /v1/admin/kyber/payment-rails/{tenant_id}` is runtime-validated against
  * these schemas via the endpoints `wrap(...)` helper.
@@ -28,14 +28,38 @@ export const providerStatusSchema = z.enum([
 
 export type ProviderStatus = z.infer<typeof providerStatusSchema>;
 
+/** Whether provider truth has actually been observed, independent of health. */
+export const observationStatusSchema = z.enum([
+  'observed',
+  'never_observed',
+  'not_configured',
+]);
+
+export type ObservationStatus = z.infer<typeof observationStatusSchema>;
+
+/** Fleet coverage truth: configured tenants, not just observed tenants. */
+export const fleetObservationStatusSchema = z.enum([
+  'observed',
+  'partially_observed',
+  'never_observed',
+  'not_configured',
+  'unknown',
+]);
+
+export type FleetObservationStatus = z.infer<typeof fleetObservationStatusSchema>;
+
 // ── Fleet-level ───────────────────────────────────────────────────────────────
 
 export const providerFleetRowSchema = z
   .object({
     provider: z.string(),
     status: providerStatusSchema,
+    observation_status: fleetObservationStatusSchema,
     enabled: z.boolean(),
-    configured_tenants: z.number(),
+    // null = credential inventory unavailable; never a fabricated 0.
+    configured_tenants: z.number().nullable(),
+    observed_tenants: z.number(),
+    never_observed_tenants: z.number().nullable(),
     webhook_verified_24h: z.number(),
     webhook_rejected_24h: z.number(),
     signature_failures_24h: z.number(),
@@ -60,7 +84,11 @@ export const tenantFleetRowSchema = z
   .object({
     tenant_id: z.string(),
     status: providerStatusSchema,
-    providers_configured: z.number(),
+    observation_status: fleetObservationStatusSchema,
+    // null = credential inventory unavailable; configured coverage unknown.
+    providers_configured: z.number().nullable(),
+    providers_observed: z.number(),
+    providers_never_observed: z.number().nullable(),
     providers_degraded: z.number(),
     sessions_observed_24h: z.number(),
     sessions_unresolved: z.number(),
@@ -72,7 +100,9 @@ export type TenantFleetRow = z.infer<typeof tenantFleetRowSchema>;
 
 export const fleetTotalsSchema = z
   .object({
-    configured_tenants: z.number(),
+    configured_tenants: z.number().nullable(),
+    observed_tenants: z.number(),
+    configuration_inventory_available: z.boolean(),
     enabled_tenants: z.number(),
     providers_degraded: z.number(),
     sessions_observed_24h: z.number(),
@@ -142,6 +172,7 @@ export type TenantProviderAdapter = z.infer<typeof tenantProviderAdapterSchema>;
 export const tenantProviderHealthSchema = z
   .object({
     status: providerStatusSchema,
+    observation_status: observationStatusSchema,
     sessions_observed_24h: z.number(),
     sessions_completed_24h: z.number(),
     sessions_failed_24h: z.number(),
