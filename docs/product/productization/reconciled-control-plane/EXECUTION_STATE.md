@@ -138,6 +138,55 @@ caveat).
   (`8ecd55be`), and the canonical gate re-run on the final tree: **78 gates /
   0 failed at `8ecd55be`**, all PR #609 leaf checks green.
 
+## Post-734 Program A+B — authority reconciliation + durable activation
+
+**Landing branch:** `t3/control-plane-day1-convergence-spec` (stacked on the
+post-734 base). This slice does not turn the plane on; it makes the authority
+explicit before runtime convergence.
+
+| Deliverable | Evidence |
+|---|---|
+| Reconciled authority map: external/observed/no-interface/owned/forbidden areas, with a fail-closed integrity assertion | `services/api/connectors/managed_integrations/authority.py`; `tests/unit/reconciled_control/test_authority_map.py`; `GET /v1/admin/kyber/managed-integrations/authority` |
+| Durable readiness-gated activation `shadow→detect→plan→r0→r1→r2→fully_managed` + `emergency_frozen` | `activation.py`, `activation_repository.py`, alembic `20261029_rcp_activation_authority.py`; `test_activation_authority.py` |
+| Transitions `advance`/`freeze`/`resume`; one-step advance; freeze-from-anywhere; resume restores pre-freeze state; state+evidence commit atomically | same tests (39 targeted activation/authority/route cases) |
+| Flags as hard kill switches over `effective_state`, never grants | `effective_state()` + `tests/unit/reconciled_control/test_activation_authority.py` |
+| Read-only operator reads `GET /authority`, `GET /activation`, `GET /activation/transitions` | `routes.py`; `config/route_registry.yaml`; `test_routes_activation.py` |
+| Honest readiness record: implementation declared, runtime convergence unsatisfied, productionization 50%, Programs C–G explicit | `config/readiness/features/reconciled-control-plane.yaml`; `validate_readiness_model.py --strict` |
+| Spine row `pending` → `in_flight`; connection360 pending-authority declaration removed | `packages/shared/contracts/spine-registry.json`, `intelligence-projection-registry.json` |
+
+**Boundary.** No write/transition route (Program E/F), no runtime convergence
+in the A+B slice, no staging/production activation evidence (Programs F/G), and
+no production-readiness claim.
+
+---
+
+## Post-734 Program C — scheduler runtime convergence + SDK request intake
+
+**Landing branch:** `t3/control-plane-day1-convergence-spec` (stacked on the
+Program A+B slice). The scheduler now reads the durable activation decision
+instead of treating flags as operational authority; SDK manifest changes get
+an asynchronous RCP request path instead of bypassing the plane.
+
+| Deliverable | Evidence |
+|---|---|
+| Runtime capability law (`shadow` observe, `detect` reconcile, `plan` plan, `r0+` execute, `disabled`/`emergency_frozen` stop) | `activation.runtime_capabilities`; `test_activation_authority.py` |
+| Tenant/environment scope narrows the global activation; missing tenant row inherits it; one decision cached per pass | `RuntimeActivationResolver`; resolver scope tests |
+| Scheduler gates reconcile, plan and execute on the resolved decision; inactive rows are reported as `skipped_inactive` | `scheduler.py`; `test_scheduler.py` (shadow/detect/plan + default-flags-off cases) |
+| Resolver failure fails closed per row and never fabricates a reconcile/plan/execute | `scheduler.py`; `test_scheduler.py` resolver-error case; pass `errors` summary |
+| Flag ceiling still applies through `effective_state`; durable activation is the only grant | `activation.py`; existing flag-ceiling tests |
+| Direct `PUT /v1/config/sdk/manifest` refuses while RCP is enabled; legacy behavior remains when RCP is off | `sdk_config/routes.py`; route tests in `test_sdk_manifest_requests.py` |
+| `POST /v1/config/sdk/manifest/requests` records one planned `remote_manifest_change` ChangeSet + stage-zero `runtime_config` rollout, scoped to tenant-wide environment `all`; `GET .../requests/{id}` reads it | `sdk_config/rcp_requests.py`; `test_sdk_manifest_requests.py` |
+| Request path checks the `plan` capability before writing; missing observed state, missing capability and idempotency-key reuse fail closed | `sdk_config/rcp_requests.py`; service tests |
+| Request idempotency reuses one ChangeSet + rollout for the same `Idempotency-Key` and payload | `sdk_config/rcp_requests.py`; idempotency tests |
+
+**Boundary.** The request is not a publish: `SDKConfigService` still owns the
+actual manifest write and its `rollout_percentage`, request execution/rollout
+projection remains open, and Provider Runtime changes are not converged.
+Program C stays unsatisfied in the readiness record; no staging/production
+activation is claimed.
+
+---
+
 ## Consuming lane — SDK distribution layer (site installs)
 
 **Delivered on `feat/sdk-distribution-layer`.** The SDK distribution layer
@@ -155,12 +204,13 @@ own state changed — see the boundary immediately below.
 
 ### Honest boundaries (this lane)
 
-- **The spine row does not move.** `reconciled_control_plane` remains
-  `implementationState: "pending"`, `ownsCanonicalTruth: false`,
-  `graphMutationPolicy: "read_only"`, all 14 conformance items `open`. This
-  lane registers integrations through the plane's existing §16 admission; it
-  does not close a conformance item and must not be read as progress against
-  one.
+- **That lane did not move the spine row.** At its tip,
+  `reconciled_control_plane` remained `implementationState: "pending"`,
+  `ownsCanonicalTruth: false`, `graphMutationPolicy: "read_only"`, all 14
+  conformance items `open`. This lane registered integrations through the
+  plane's existing §16 admission; it did not close a conformance item. The
+  Post-734 Program A+B slice later moves the row to `in_flight` with only the
+  authority/non-ownership check verified.
 - **Observe and register only (CP-08).** The distribution layer never
   reconciles, plans, or mutates. The seam gate fails if
   `control_plane.py` reaches `actuators`/`executor`/`change_planning`/

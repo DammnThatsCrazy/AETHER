@@ -34,6 +34,9 @@ def _reset_rcp_stores():
     stores (managed_integrations.repository + change_sets_repository) and the
     Phase-3 engine stores (admission / simulation / source-authority) plus the
     Phase-4 rollout stores."""
+    from connectors.managed_integrations.activation_repository import (
+        reset_activation_stores,
+    )
     from connectors.managed_integrations.admission_repository import (
         reset_admission_record_stores,
     )
@@ -56,6 +59,7 @@ def _reset_rcp_stores():
         reset_source_authority_stores,
     )
 
+    reset_activation_stores()
     reset_managed_integration_in_memory_store()
     reset_change_set_in_memory_store()
     reset_execution_record_stores()
@@ -64,6 +68,7 @@ def _reset_rcp_stores():
     reset_source_authority_stores()
     reset_rollout_stores()
     yield
+    reset_activation_stores()
     reset_managed_integration_in_memory_store()
     reset_change_set_in_memory_store()
     reset_execution_record_stores()
@@ -110,4 +115,7 @@ def db_free(monkeypatch):
 
     monkeypatch.setattr(
         "connectors.managed_integrations.repository.get_pool", _no_pool
+    )
+    monkeypatch.setattr(
+        "connectors.managed_integrations.activation_repository.get_pool", _no_pool
     )

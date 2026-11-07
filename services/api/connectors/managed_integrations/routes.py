@@ -37,6 +37,26 @@ from connectors.managed_integrations.contracts import (
     MANAGED_INTEGRATION_KINDS,
     RECONCILE_RESULT_VALUES,
 )
+from connectors.managed_integrations.activation import (
+    ActivationScope,
+    get_activation_service,
+)
+from connectors.managed_integrations.activation_repository import (
+    get_activation_repository,
+)
+from connectors.managed_integrations.authority import (
+    CONTROL_PLANE_AUTHORITY_ASSIGNMENTS,
+    CONTROL_PLANE_AUTHORITY_OWNERS,
+    CONTROL_PLANE_AUTHORITY_ROLES,
+    RCP_FORBIDDEN_AUTHORITY_AREAS,
+    assert_authority_map_integrity,
+)
+from connectors.managed_integrations.contracts import (
+    CONTROL_PLANE_ACTIVATION_SCOPE_KINDS,
+    CONTROL_PLANE_ACTIVATION_STATES,
+    CONTROL_PLANE_ACTIVATION_TRANSITIONS,
+    CONTROL_PLANE_EFFECTIVE_STATES,
+)
 from connectors.managed_integrations.change_sets_repository import (
     get_change_set_repository,
 )
@@ -130,6 +150,172 @@ def _validate_change_set_status(value: Optional[str]) -> Optional[str]:
             f"statuses: {CHANGESET_STATUSES}"
         )
     return value
+
+
+def _activation_scope(
+    *,
+    scope_kind: Optional[str],
+    tenant_id: Optional[str],
+    environment_id: Optional[str],
+    region: Optional[str],
+) -> Optional[ActivationScope]:
+    """Resolve optional query filters into an activation scope.
+
+    ``None`` means "no single scope" (the list endpoint). Supplying a tenant or
+    environment without its pair, or narrowing a global scope, is a client
+    error — a partial scope cannot be honoured safely.
+    """
+    if scope_kind is None and tenant_id is None and environment_id is None:
+        return None
+    if scope_kind is None:
+        scope_kind = "tenant_environment"
+    if scope_kind not in CONTROL_PLANE_ACTIVATION_SCOPE_KINDS:
+        raise BadRequestError(
+            f"invalid activation scope_kind {scope_kind!r} — expected one of "
+            f"{CONTROL_PLANE_ACTIVATION_SCOPE_KINDS}"
+        )
+    if scope_kind == "tenant_environment" and not (tenant_id and environment_id):
+        raise BadRequestError(
+            "tenant_environment activation scope requires both tenant_id and "
+            "environment_id"
+        )
+    if scope_kind == "global" and (tenant_id is not None or environment_id is not None):
+        raise BadRequestError(
+            "global activation scope cannot be narrowed to a tenant/environment"
+        )
+    try:
+        return ActivationScope(
+            scope_kind=scope_kind,
+            tenant_id=tenant_id,
+            environment_id=environment_id,
+            region=region or "global",
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+
+
+# The authority map is read-only evidence of who owns each fact. It is served
+# from the same operator router so Program A's one-owner rule is inspectable at
+# runtime and cannot become test-only code.
+@admin_router.get("/authority")
+async def get_authority_map(request: Request):
+    """Canonical RCP authority assignments (owner + permitted interface).
+
+    ``forbidden`` areas (graph mutation) and no-interface areas (canonical
+    identity) are returned explicitly: their absence from the RCP's interface
+    is part of the contract, not an omission.
+    """
+    _require_operator(request)
+    assert_authority_map_integrity()
+    return APIResponse(
+        data={
+            "assignments": [
+                {
+                    "area": assignment.area,
+                    "owner": assignment.owner,
+                    "rcp_role": assignment.rcp_role,
+                    "interface": list(assignment.interface),
+                    "note": assignment.note,
+                }
+                for assignment in CONTROL_PLANE_AUTHORITY_ASSIGNMENTS
+            ],
+            "owners_vocabulary": list(CONTROL_PLANE_AUTHORITY_OWNERS),
+            "roles_vocabulary": list(CONTROL_PLANE_AUTHORITY_ROLES),
+            "forbidden_areas": list(RCP_FORBIDDEN_AUTHORITY_AREAS),
+        }
+    ).to_dict()
+
+
+# Activation routes are read-only here on purpose: the transition authority is
+# the governed service (``activation.ControlPlaneActivationService``); a later
+# operator command surface drives it through the command plane. Literal paths
+# MUST stay declared before the /{managed_integration_id} capture route below.
+@admin_router.get("/activation")
+async def list_activation_states(
+    request: Request,
+    scope_kind: Optional[str] = Query(default=None),
+    tenant_id: Optional[str] = Query(default=None),
+    environment_id: Optional[str] = Query(default=None),
+    region: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """Durable control-plane activation states + derived effective states.
+
+    ``state`` is the durable operational authority; ``effective_state`` applies
+    hard environment kill switches and can only be lower. The default (no row)
+    for a scope is ``shadow`` — a plane that has never been activated is not
+    implicitly live. No mutation happens here.
+    """
+    _require_operator(request)
+    scope = _activation_scope(
+        scope_kind=scope_kind,
+        tenant_id=tenant_id,
+        environment_id=environment_id,
+        region=region,
+    )
+    service = get_activation_service()
+    if scope is not None:
+        states = [await service.get(scope)]
+    else:
+        states = await service.list(
+            scope_kind=scope_kind,
+            tenant_id=tenant_id,
+            environment_id=environment_id,
+            region=region,
+            limit=limit,
+            offset=offset,
+        )
+    return APIResponse(
+        data={
+            "activation_states": [state.model_dump(mode="json") for state in states],
+            "count": len(states),
+            "activation_states_vocabulary": list(CONTROL_PLANE_ACTIVATION_STATES),
+            "effective_states_vocabulary": list(CONTROL_PLANE_EFFECTIVE_STATES),
+            "transitions_vocabulary": list(CONTROL_PLANE_ACTIVATION_TRANSITIONS),
+        }
+    ).to_dict()
+
+
+@admin_router.get("/activation/transitions")
+async def list_activation_transitions(
+    request: Request,
+    scope_kind: Optional[str] = Query(default=None),
+    tenant_id: Optional[str] = Query(default=None),
+    environment_id: Optional[str] = Query(default=None),
+    region: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """Append-only activation transition evidence for one scope.
+
+    A scope must be supplied: transition histories are never returned as a
+    fleet-wide blend.
+    """
+    _require_operator(request)
+    scope = _activation_scope(
+        scope_kind=scope_kind,
+        tenant_id=tenant_id,
+        environment_id=environment_id,
+        region=region,
+    )
+    if scope is None:
+        raise BadRequestError(
+            "activation transitions require a scope (scope_kind, and "
+            "tenant_id/environment_id when tenant_environment)"
+        )
+    rows = await get_activation_repository().list_transitions(
+        activation_id=scope.activation_id, limit=limit, offset=offset
+    )
+    return APIResponse(
+        data={
+            "activation_id": scope.activation_id,
+            "transitions": [
+                {**row, "created_at": row.get("created_at")} for row in rows
+            ],
+            "count": len(rows),
+        }
+    ).to_dict()
 
 
 # NOTE: the literal ``/change-sets`` routes MUST stay declared before the

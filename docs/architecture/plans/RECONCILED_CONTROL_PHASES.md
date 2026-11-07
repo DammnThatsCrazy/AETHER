@@ -190,7 +190,7 @@ capability declaration" caveat closes here).
 | Fleet upgrade controller composition: release registry ↔ artifact manifest ↔ fleet version inventory ↔ lifecycle ↔ compatibility matrix ↔ tenant update policy ↔ upgrade planner → rollout/rollback/evidence | §29 | ✅ implemented (planner composition; rollout/rollback/evidence ride the Phase-2 executor + §40 delivery facts) |
 | Tenant update channels operationalized over delivery rings (pinned/security_auto/patch_auto/compatible_auto/managed_stable; **never** equate `managed_stable` with uncontrolled `latest`) | §28–29 | ✅ implemented |
 | Platform-specific upgrade-behavior policy table (fully-managed vs host/builder-mediated vs prohibited) | §30 | ✅ implemented (11-row §30 table mirrored; host-mediated rows resolve to the `action` path — no hidden promise; nothing in §30 is prohibited, so none is invented) |
-| Kyber console: capability vocabulary entry for the reconciled-control domain + `kyber_routes` registry declarations + workforce grant surfacing | §21, §3.2 | ✅ implemented (`kyber.reconciled_control.read` + evidence-read role-template grants + 6 route declarations; closes the Phase-0 "no route-registry capability declaration" caveat) |
+| Kyber console: capability vocabulary entry for the reconciled-control domain + `kyber_routes` registry declarations + workforce grant surfacing | §21, §3.2 | ✅ implemented (`kyber.reconciled_control.read` + evidence-read role-template grants; Program A adds the authority read, Program B adds 2 activation reads — 9 declarations total; closes the Phase-0 "no route-registry capability declaration" caveat) |
 | Tests: ring ordering/gating, health-gate pause/rollback, canary advance, update-channel→ring resolution, fleet-controller planning, console vocabulary, flag-OFF parity | — | ✅ targeted tests pass |
 
 ### Phase-4 boundary
@@ -198,6 +198,70 @@ capability declaration" caveat closes here).
 - **Tenant production activation is not assumed.** Rings above 0% deliver to
   tenants only under tenant update policy + approvals (Phase 2 engine, §21);
   turning rings on for real traffic sits behind the §41+ review gate.
+
+---
+
+## Program A+B — reconciled authority + durable activation (landed)
+
+**Shape:** the Post-734 assessment found a real engine behind an implicit,
+flag-only activation story. This slice makes the authority explicit before any
+runtime convergence: one reconciled authority map (A) and a durable,
+readiness-gated production activation authority (B), plus an honest readiness
+record. It does **not** turn the plane on.
+
+| Deliverable | Spec anchor | Status |
+|---|---|---|
+| Reconciled authority map: every RCP area assigned to external / observed / no-interface / owned / forbidden, with an integrity assertion that fails on gaps or double ownership | §6–§9, §15, §21, CP-03/CP-04 | ✅ implemented (`authority.py`) |
+| Durable activation states: `shadow→detect→plan→r0→r1→r2→fully_managed` + `emergency_frozen`, global or tenant/environment/region scope | §41+ production-activation boundary | ✅ implemented |
+| Governed transitions `advance` / `freeze` / `resume`; one-step advance; freeze from any state; resume restores the frozen-from state | §41+ | ✅ implemented |
+| Readiness gate: `advance`/`resume` require a ready readiness-authority snapshot; missing/not-ready denies; freeze never waits | §41+ | ✅ implemented |
+| Environment flags as hard kill switches over effective state (never grants); durable state can only be raised by a governed transition | §41+ | ✅ implemented |
+| Additive `rcp_control_plane_activation_states` + `rcp_control_plane_activation_transitions` tables, CAS on revision, append-only evidence, storage policies | §12.13 evidence discipline | ✅ implemented |
+| Read-only operator reads `GET /authority`, `GET /activation` and `GET /activation/transitions` (operator-gated, fail-closed scope validation) | §21 | ✅ implemented |
+| Readiness record with explicit remaining work (Programs C–G) and no staging/production activation claim | readiness model | ✅ implemented (`config/readiness/features/reconciled-control-plane.yaml`) |
+| Spine registry row moves `pending` → `in_flight` (authority/non-ownership verified; remaining conformance open), connection360's dangling pending authority removed | ADR-011 | ✅ implemented (`packages/shared/contracts/spine-registry.json`, `intelligence-projection-registry.json`) |
+| Tests: state law, readiness denial, freeze/resume, flag ceilings, scope isolation, CAS, route validation, TS/Python parity | — | ✅ targeted tests pass |
+
+### Program A+B boundary
+
+- **No write/transition route.** The activation service is the authority; the
+  operator command surface is Program E/F work. Reads only in this slice.
+- **No runtime convergence in A+B.** The reconciler and scheduler still read
+  flags directly in A+B; the first Program C slice below changes the scheduler.
+- **No activation claim.** Durable rows default to `shadow`, flags remain OFF,
+  and staging/production evidence is `NOT_ATTEMPTED`. Programs C–G stay listed
+  in the readiness record.
+
+---
+
+## Program C — runtime convergence (first slice landed)
+
+**Shape:** the scheduler is the first runtime engine to consume the durable
+activation authority. This slice does not yet make SDK manifest publishing or
+Provider Runtime changes flow through `DesiredState` → `ChangeSet` → `Rollout`;
+that remains open Program C work.
+
+| Deliverable | Spec anchor | Status |
+|---|---|---|
+| Runtime capability law: `shadow` observes, `detect` reconciles, `plan` persists ChangeSets, `r0+` executes; `disabled`/`emergency_frozen` stop the loop | §41+ runtime convergence | ✅ implemented (`activation.runtime_capabilities`) |
+| Scope resolution: a tenant/environment activation may narrow but never exceed the global activation; a missing tenant row inherits the global row; one resolver cache per scheduler pass | §41+ scope isolation, runtime convergence | ✅ implemented (`RuntimeActivationResolver`) |
+| Scheduler consumes the effective decision before reconcile/plan/execute and reports `skipped_inactive` rather than silently doing nothing | §32/§39/§41+ | ✅ implemented (`scheduler.py`) |
+| Async SDK manifest request intake: direct PUT refuses while RCP is enabled; `POST /v1/config/sdk/manifest/requests` records a planned `remote_manifest_change` ChangeSet + stage-zero `runtime_config` rollout, and a tenant-scoped GET reads it | §41+ requested configuration change | ✅ implemented (`sdk_config/rcp_requests.py`) |
+| Fail-closed activation lookup: a resolver failure is recorded per row and no reconcile/plan/execute occurs for that row | §12.14 / §41+ | ✅ implemented |
+| Tests: capability monotonicity, scope narrowing/inheritance, freeze/disabled stops, scheduler shadow/detect/plan behavior, default flags-off inertness, resolver-error fail-closed | — | ✅ targeted tests pass |
+
+### Program C boundary
+
+- **SDK config is still a parallel authority.** The RCP-enabled request path
+  now records a plan and stage-zero rollout, but `SDKConfigService` still owns
+  the actual publish and its `rollout_percentage`. Request execution and
+  projecting RCP rollout state onto the delivered manifest are open.
+- **Provider Runtime is not converged.** The existing adapter seam remains
+  declarative.
+- **The gate is not an activation.** Durable rows default to `shadow`, flags
+  remain OFF, and no staging/production activation is claimed.
+- **Program C remains listed as unsatisfied** in the readiness record until the
+  SDK/Provider Runtime authority flow is converged.
 
 ---
 
@@ -217,13 +281,14 @@ observed-state vocabulary does.
 | `scripts/validate_sdk_control_plane_seam.py` — pins the install-state vocabulary, the fields read off a described install, the single SDK version authority, and the one-way dependency | — | ✅ registered in `repo_doctor` |
 | Tests: CP-12 mapping per install state, failed-is-degraded-not-missing, age reported not thresholded, flag-OFF writes nothing, refused identity, swallowed failure | — | ✅ targeted tests pass |
 
-### What this lane does **not** change
+### What this lane did **not** change
 
-- **The spine row does not move.** `reconciled_control_plane` stays
-  `implementationState: "pending"`, `ownsCanonicalTruth: false`,
-  `graphMutationPolicy: "read_only"`, all 14 conformance items `open`. A
-  consumer registering integrations is not the plane reaching a conformance
-  milestone.
+- **That lane did not move the spine row.** At its tip,
+  `reconciled_control_plane` stayed `implementationState: "pending"`,
+  `ownsCanonicalTruth: false`, `graphMutationPolicy: "read_only"`, all 14
+  conformance items `open`. The later Post-734 Program A+B slice moves it to
+  `in_flight` (authority/non-ownership verified only); a consumer registering
+  integrations did not itself reach a conformance milestone.
 - **No new authority.** The distribution layer observes and registers; it never
   reconciles, plans, or mutates (CP-08). The seam gate fails if it reaches the
   plane's mutation path.

@@ -33,6 +33,12 @@ from connectors.managed_integrations.contracts import (  # noqa: E402
     CHANGESET_STATUSES,
     CONTINUOUS_LIFECYCLE_ACTIONS,
     CONTROL_FINDING_KINDS,
+    CONTROL_PLANE_ACTIVATION_ADVANCE_ORDER,
+    CONTROL_PLANE_ACTIVATION_ROLES,
+    CONTROL_PLANE_ACTIVATION_SCOPE_KINDS,
+    CONTROL_PLANE_ACTIVATION_STATES,
+    CONTROL_PLANE_ACTIVATION_TRANSITIONS,
+    CONTROL_PLANE_EFFECTIVE_STATES,
     DISCOVERY_DATA_CLASSES,
     DRIFT_TAXONOMY_TYPES,
     EVIDENCE_CONFIDENCE_VALUES,
@@ -50,6 +56,15 @@ from connectors.managed_integrations.contracts import (  # noqa: E402
     SCHEMA_MAPPING_AUTO_PROMOTE_GATES,
     SIMULATION_RESULT_VALUES,
     VERIFY_OUTCOMES,
+)
+from connectors.managed_integrations.authority import (  # noqa: E402
+    CONTROL_PLANE_AUTHORITY_OWNERS,
+    CONTROL_PLANE_AUTHORITY_ROLES,
+    RCP_EXTERNAL_AUTHORITY_AREAS,
+    RCP_FORBIDDEN_AUTHORITY_AREAS,
+    RCP_NO_INTERFACE_AUTHORITY_AREAS,
+    RCP_OBSERVED_AUTHORITY_AREAS,
+    RCP_OWNED_AUTHORITY_AREAS,
 )
 
 TS_PATH = REPO_ROOT / "packages" / "shared" / "managed-integrations.ts"
@@ -229,6 +244,84 @@ def test_schema_mapping_auto_promote_gates_parity():
     assert ts == list(SCHEMA_MAPPING_AUTO_PROMOTE_GATES), (
         f"auto-promote-gate drift: TS={ts} "
         f"PY={list(SCHEMA_MAPPING_AUTO_PROMOTE_GATES)}"
+    )
+
+
+def test_control_plane_authority_owners_parity():
+    assert _const_array("controlPlaneAuthorityOwners") == list(
+        CONTROL_PLANE_AUTHORITY_OWNERS
+    )
+
+
+def test_control_plane_authority_roles_parity():
+    assert _const_array("controlPlaneAuthorityRoles") == list(
+        CONTROL_PLANE_AUTHORITY_ROLES
+    )
+
+
+def test_rcp_observed_authority_areas_parity():
+    assert _const_array("rcpObservedAuthorityAreas") == list(
+        RCP_OBSERVED_AUTHORITY_AREAS
+    )
+
+
+def test_rcp_no_interface_authority_areas_parity():
+    assert _const_array("rcpNoInterfaceAuthorityAreas") == list(
+        RCP_NO_INTERFACE_AUTHORITY_AREAS
+    )
+
+
+def test_rcp_owned_authority_areas_parity():
+    assert _const_array("rcpOwnedAuthorityAreas") == list(
+        RCP_OWNED_AUTHORITY_AREAS
+    )
+
+
+def test_rcp_forbidden_authority_areas_parity():
+    assert _const_array("rcpForbiddenAuthorityAreas") == list(
+        RCP_FORBIDDEN_AUTHORITY_AREAS
+    )
+
+
+def test_control_plane_external_areas_are_the_observed_plus_no_interface_set():
+    assert set(RCP_EXTERNAL_AUTHORITY_AREAS) == set(
+        RCP_OBSERVED_AUTHORITY_AREAS
+    ) | set(RCP_NO_INTERFACE_AUTHORITY_AREAS)
+
+
+def test_control_plane_activation_states_parity():
+    assert _const_array("controlPlaneActivationStates") == list(
+        CONTROL_PLANE_ACTIVATION_STATES
+    )
+
+
+def test_control_plane_activation_advance_order_parity():
+    assert _const_array("controlPlaneActivationAdvanceOrder") == list(
+        CONTROL_PLANE_ACTIVATION_ADVANCE_ORDER
+    )
+
+
+def test_control_plane_activation_transitions_parity():
+    assert _const_array("controlPlaneActivationTransitions") == list(
+        CONTROL_PLANE_ACTIVATION_TRANSITIONS
+    )
+
+
+def test_control_plane_effective_states_parity():
+    assert _const_array("controlPlaneEffectiveStates") == list(
+        CONTROL_PLANE_EFFECTIVE_STATES
+    )
+
+
+def test_control_plane_activation_scope_kinds_parity():
+    assert _const_array("controlPlaneActivationScopeKinds") == list(
+        CONTROL_PLANE_ACTIVATION_SCOPE_KINDS
+    )
+
+
+def test_control_plane_activation_roles_parity():
+    assert _const_array("controlPlaneActivationRoles") == list(
+        CONTROL_PLANE_ACTIVATION_ROLES
     )
 
 

@@ -4,6 +4,11 @@ Turns the Phase-0 reconcile engine (``reconciler.reconcile``), the Phase-1
 planner (``change_planning.build_plan``) and the Phase-2 governed executor
 (``executor.run_changeset``) into one continuous, flag-gated loop:
 
+* one pass resolves the durable activation authority for each integration's
+  tenant/environment scope and acts only within its runtime capabilities —
+  ``shadow`` observes, ``detect`` reconciles, ``plan`` may persist a ChangeSet,
+  and ``r0+`` may execute. Flags remain hard kill switches inside
+  ``effective_state``; the scheduler never reads them as a grant;
 * one pass sweeps the registered managed integrations, skipping any whose
   ``last_reconcile_at`` sits inside the §32 freshness window (300 s);
 * a stale integration is reconciled against evidence supplied through the
@@ -18,10 +23,12 @@ planner (``change_planning.build_plan``) and the Phase-2 governed executor
 * a persisted plan runs through the §34 executor only when the §39 risk
   engine's automation authority allows it (``risk.automation_allowed``).
 
-Boundaries (Phase 3):
+Boundaries (Phase 3 + Program C slice):
 
-* nothing auto-executes unless ``flags.enabled()`` AND
-  ``flags.scheduler_enabled()`` are both true; the module is importable with
+* the durable activation authority is the runtime gate: a row is reconciled
+  only at ``detect`` or above, planned only at ``plan`` or above, and executed
+  only at ``r0`` or above. Environment flags remain hard kill switches inside
+  ``effective_state`` and gate the worker itself; the module is importable with
   all flags OFF, does nothing at import time, and never enables itself;
 * execution additionally requires the §39 risk decision and the §34
   executor's §21 token gates; the scheduler itself never grants approvals and
@@ -38,17 +45,28 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, Protocol
 
 from shared.temporal.instant import coerce_utc_lenient
 
 if TYPE_CHECKING:
+    from connectors.managed_integrations.activation import (
+        RuntimeActivationDecision,
+    )
     from connectors.managed_integrations.contracts import (
         DesiredStateSpec,
         ObservedStateSnapshot,
     )
 
 __all__ = ["run_scheduler_pass", "build_reconcile_scheduler_coro"]
+
+
+class _ActivationResolverLike(Protocol):
+    """The runtime activation surface a scheduler pass needs."""
+
+    async def resolve(
+        self, *, tenant_id: str, environment_id: str
+    ) -> RuntimeActivationDecision: ...
 
 # Actor recorded on every executor transition the scheduler drives.
 _SCHEDULER_ACTOR = "reconcile-scheduler"
@@ -171,15 +189,26 @@ async def run_scheduler_pass(
             ],
         ]
     ] = None,
+    activation_resolver: Optional[_ActivationResolverLike] = None,
 ) -> dict[str, Any]:
     """Run one continuous-reconcile sweep over registered integrations (§32/§39).
 
-    Each registration row is either skipped (last reconcile inside the
+    Each registration row first resolves the effective activation state for
+    its tenant/environment scope. A ``shadow`` row is observed only and never
+    reconciled; ``detect`` reconciles and persists the run; ``plan`` may also
+    persist a ChangeSet; execution additionally requires ``r0`` or above.
+    ``disabled`` and ``emergency_frozen`` skip the row entirely. The resolved
+    decision is held for the whole pass so one sweep never acts at two
+    authority levels.
+
+    Each active registration row is either skipped (last reconcile inside the
     freshness window) or reconciled, its run persisted to ``reconcile_runs``
     and its row stamped via ``mark_reconciled`` so the window advances.
     Actionable drift is planned and persisted as a ``planned`` ChangeSet when
-    the planner returns a candidate; the plan executes only when
-    ``risk.automation_allowed`` and the executor's §21 token gates pass.
+    the activation decision grants planning and the planner returns a
+    candidate; the plan executes only when execution is granted,
+    ``risk.automation_allowed`` is true and the executor's §21 token gates
+    pass.
 
     ``evidence_loader`` (optional) is awaited per stale integration as
     ``loader(row, now)`` and returns ``(DesiredStateSpec,
@@ -191,13 +220,15 @@ async def run_scheduler_pass(
     ``registry`` is the §36 actuator registry handed to the executor (the
     executor's default — no admitted authority — fails closed into
     ``blocked`` + ActionRequired). ``tenant_filter`` scopes the sweep to one
-    tenant. The sweep covers one page of the registration list (limit 200);
-    pagination is left to the caller's cadence.
+    tenant. ``activation_resolver`` is the runtime authority seam (the durable
+    resolver by default; tests may inject a static decision). The sweep covers
+    one page of the registration list (limit 200); pagination is left to the
+    caller's cadence.
 
     Returns the pass summary with keys ``integrations_scanned``,
-    ``skipped_fresh``, ``reconcile_results`` (by managed integration),
-    ``plans_created``, ``execution_outcomes`` and ``errors`` — always an
-    honest report, never fabricated success.
+    ``skipped_inactive``, ``skipped_fresh``, ``reconcile_results`` (by managed
+    integration), ``plans_created``, ``execution_outcomes`` and ``errors`` —
+    always an honest report, never fabricated success.
     """
     from connectors.managed_integrations.change_planning import build_plan, with_status
     from connectors.managed_integrations.change_sets_repository import (
@@ -221,12 +252,20 @@ async def run_scheduler_pass(
     instant = _as_utc(now or _utc_now())
     summary: dict[str, Any] = {
         "integrations_scanned": 0,
+        "skipped_inactive": 0,
         "skipped_fresh": 0,
         "reconcile_results": {},
         "plans_created": [],
         "execution_outcomes": [],
         "errors": [],
     }
+
+    if activation_resolver is None:
+        from connectors.managed_integrations.activation import (
+            RuntimeActivationResolver,
+        )
+
+        activation_resolver = RuntimeActivationResolver()
 
     mi_repo = get_managed_integration_repository()
     run_repo = get_reconcile_run_repository()
@@ -237,6 +276,18 @@ async def run_scheduler_pass(
         mi = str(row["managed_integration_id"])
         tenant_id = str(row["tenant_id"])
         environment_id = str(row["environment_id"])
+        try:
+            decision = await activation_resolver.resolve(
+                tenant_id=tenant_id, environment_id=environment_id
+            )
+        except Exception as exc:  # noqa: BLE001 - fail closed for this row
+            summary["errors"].append(
+                f"{mi}: activation resolution failed: {type(exc).__name__}: {exc}"
+            )
+            continue
+        if not decision.can("detect"):
+            summary["skipped_inactive"] += 1
+            continue
         if _is_fresh(
             instant, row.get("last_reconcile_at"), DEFAULT_FRESHNESS_WINDOW_SECONDS
         ):
@@ -284,6 +335,9 @@ async def run_scheduler_pass(
 
             if view.result != "actionable_drift":
                 continue
+            if not decision.can("plan"):
+                # ``detect`` may classify drift but cannot create a ChangeSet.
+                continue
 
             # ── plan the drift (§32 step 12, §35 guards) ──────────────────
             candidate = build_plan(
@@ -309,6 +363,9 @@ async def run_scheduler_pass(
             if not planned.risk.automation_allowed:
                 # §39: no automation authority for this risk class — the plan
                 # rests at ``planned`` for the operator surface; no execution.
+                continue
+            if not decision.can("execute"):
+                # ``plan`` may persist the candidate, never apply it.
                 continue
 
             # ── govern execution (§34/§39/§21) ─────────────────────────────
@@ -379,6 +436,12 @@ async def _scheduler_loop(
                 logger.warning(
                     "reconcile scheduler pass completed with %s error(s)",
                     len(summary["errors"]),
+                )
+            elif summary.get("skipped_inactive"):
+                logger.info(
+                    "reconcile scheduler pass: %s integration(s) below the "
+                    "runtime activation gate",
+                    summary["skipped_inactive"],
                 )
             elif summary.get("plans_created") or summary.get("execution_outcomes"):
                 logger.info(

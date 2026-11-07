@@ -49,7 +49,9 @@ must reconcile — never fork — each of them:
    context_capsule_semantics) and deliberately leaves two spines
    (`journey_continuity`, `reconciled_control_plane`) **pending**, declared
    per-projection via `pendingAuthority {kind:"spine"}` with the comment
-   "until the spine plane formalizes them." (As filed this ADR counted five
+   "until the spine plane formalizes them." (After the 2026-10-29 Post-734
+   Program A+B slice, `reconciled_control_plane` is `in_flight`;
+   `journey_continuity` remains pending.) (As filed this ADR counted five
    pending spines; the 2026-09-05 re-cut onto `origin/main` re-formalized
    `graph_history_replay`, `grouping_membership`, and
    `context_capsule_semantics` to `implemented` once their authorities —
@@ -169,10 +171,10 @@ conformance gap is open.
 ## Consequences
 
 **Positive.** One governing doctrine replaces three overlapping spine meanings;
-the registry's pending projection spines (`journey_continuity`,
-`reconciled_control_plane` — as of the 2026-09-05 re-cut; the other three
+the registry's pending projection spines (`journey_continuity` — as of the 2026-09-05 re-cut; the other three
 filed-as-pending projection spines were re-formalized to `implemented` once
-their authorities landed) gain a home to be formalized in
+their authorities landed, and `reconciled_control_plane` moved to `in_flight`
+in the 2026-10-29 Post-734 Program A+B slice) gain a home to be formalized in
 (`SPINE_REGISTRY_STATUS.md`); new spines attach through governed ports instead
 of bespoke integrations; implementation becomes order-independent; the whole
 kernel is additive and reversible.
