@@ -74,8 +74,12 @@ Consent and compensation. Policy appends `verify_consent_before_delivery` for
 marketing and identity classes, but nothing calls a consent owner. The consent
 store (`ConsentRepository`) is keyed by end-user, and a suggestion's subject is
 an entity, so there is no defined mapping from a suggestion to the record that
-would prove consent. Failing closed would stop all `notification` class
-deliveries, which is a behavior change that needs the consent owner's contract.
+would prove consent. Delivery today goes only to the tenant's own staff
+notification channels (`adapters/notification_adapter.py`), so the obligation is
+latent: no path delivers to an end user. Failing closed on the consent-sensitive
+classes would stop staff alerts of those classes, and enforcing it properly needs
+the consent owner's contract before any end-user-facing delivery or Access Kit
+action exists.
 There is also no compensation path. Until both exist, no Access Kit action
 operation is declared.
 
