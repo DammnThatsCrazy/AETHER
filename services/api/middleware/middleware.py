@@ -89,42 +89,37 @@ class _SkipMetering(Exception):
     """Internal control flow: this capability is audited but never metered."""
 
 
-_access_credential_limiter = None
-
-
 async def _access_credential_denial(request: Request, context: Any, registry: Any):
     """Return a denied RateLimitResult when this credential exceeds its operation cap.
 
-    The cap follows the authenticated route, not a client-supplied label: any call
-    to a named Access Kit route is counted, whatever surface header it sends. The
-    bucket is keyed on the credential the authenticator actually validated
-    (``request.state.validated_credential``), never on raw request headers, so
-    garbage or rotated headers cannot mint new buckets. If that is unavailable the
-    key falls back to the authenticated principal, never to client input.
+    Uses the existing burst limiter (``registry.rate_limiter.check_scoped``) so the
+    cap shares its Redis/in-memory machinery. It follows the authenticated route,
+    not a client-supplied label: any call to a named Access Kit route is counted,
+    whatever surface header it sends. The bucket is keyed on the credential the
+    authenticator actually validated (``request.state.validated_credential``),
+    never on raw request headers; if that is unavailable it falls back to the
+    authenticated principal, never to client input.
     """
-    global _access_credential_limiter
     capability_id = _ACCESS_KIT_CAPABILITIES.get(
         (request.method.upper(), getattr(request.state, "access_route_template", None))
     )
-    if not capability_id:
+    limiter = getattr(registry, "rate_limiter", None)
+    if not capability_id or limiter is None or not hasattr(limiter, "check_scoped"):
         return None
-    from shared.rate_limit.access_capability_limit import (
-        AccessCredentialLimiter,
-        credential_fingerprint,
-    )
-    if _access_credential_limiter is None:
-        _access_credential_limiter = AccessCredentialLimiter()
-    validated = getattr(request.state, "validated_credential", "") or ""
+    limit = settings.rate_limit.access_kit_credential_rpm
     principal = "|".join((
         str(getattr(context, "user_id", "") or ""),
         str(getattr(context, "credential_class", "") or ""),
     ))
     try:
-        result = await _access_credential_limiter.check(
-            context.tenant_id,
-            credential_fingerprint(validated, principal),
-            capability_id,
-            redis=getattr(getattr(registry, "rate_limiter", None), "_redis", None),
+        result = await limiter.check_scoped(
+            limiter.credential_scope(
+                context.tenant_id,
+                getattr(request.state, "validated_credential", "") or "",
+                principal,
+                capability_id,
+            ),
+            limit,
         )
     except Exception as exc:  # noqa: BLE001 - the cap must never take reads down
         logger.warning(f"Access credential limiter error: {exc}")
