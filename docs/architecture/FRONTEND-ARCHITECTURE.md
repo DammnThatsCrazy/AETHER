@@ -46,7 +46,7 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
   "apps/aether-web/src/": "sha256:87842f57556958270797f201f0a41e9b9090b89c37692bb6c65783393e8eccbd"
-  "apps/kyber-web/src/": "sha256:db64c45f2431a7b45787c72a909ff59beaa35e355765ba2a1e96552678434bea"
+  "apps/kyber-web/src/": "sha256:855adc3dbeaf666c5a31d23f8bac0e2f60d26cd1802f2d2783de4df37e43f295"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
 

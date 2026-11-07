@@ -71,8 +71,8 @@ reviewed_source_commits:
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
 source_hashes:
-  "packages/shared/": "sha256:dabdc14a22b4472e79632a7c0ae15bf1df95662767fd666d2dd227847d9b2569"
-  "scripts/generate_feature_surface_manifest.py": "sha256:e657ca3cae7a8e9326a1a940580c4ca915a1b3d39f8409f2d8479ae857bd2d1d"
+  "packages/shared/": "sha256:58c8f03edf57b75fd04844c38b490ad7ca43cbef91c859e1b40c9c54e1ac7215"
+  "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:951e8928e5f352e55612edad6b7c79c2faae10dacffa6b5ab1c5f2c048c0d0ff"
   "services/api/actions/agent/deployment_routes.py": "sha256:66ca43046074af1fe520936680c0f5205eddf06f6f8c6937eca829acd3ae89c6"
   "services/api/actions/agent/execution360_provider.py": "sha256:6bc37dd7458752cbe051759fbecba1e7e5b286e544c14b8719c2932772bb4139"
