@@ -32,13 +32,14 @@ function Metric({ label, value }: { readonly label: string; readonly value: unkn
     <Card>
       <CardContent>
         <div className="text-xs text-text-muted font-mono">{label}</div>
-        <div className="mt-1 text-2xl font-semibold text-text-primary">{String(value ?? 0)}</div>
+        <div className="mt-1 text-2xl font-semibold text-text-primary">{formatCount(value)}</div>
       </CardContent>
     </Card>
   );
 }
 
-function statusLabel(status: string): string {
+function statusLabel(status: string | null | undefined): string {
+  if (!status) return '—';
   return status.replace(/_/g, ' ');
 }
 
@@ -74,6 +75,18 @@ function formatRate(rate: unknown): string {
 function formatBool(value: unknown): string {
   if (value === null || value === undefined) return '—';
   return value ? 'yes' : 'no';
+}
+
+function formatCount(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  return String(value);
+}
+
+function observationTone(status: string): string {
+  if (status === 'never_observed' || status === 'unknown') return 'text-warning';
+  if (status === 'partially_observed') return 'text-warning';
+  if (status === 'observed') return 'text-success';
+  return 'text-text-muted';
 }
 
 interface DiagnosticsRowProps {
@@ -144,6 +157,7 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
           const provider = entry.provider;
           const adapter = entry.adapter;
           const health = entry.health;
+          const neverObserved = health.observation_status === 'never_observed';
           return (
             <Card key={provider}>
               <CardHeader>
@@ -157,20 +171,29 @@ function TenantDiagnosticsDrawer({ tenantId, onClose }: TenantDrawerProps) {
               </CardHeader>
               <CardContent className="text-xs font-mono space-y-1">
                 <DiagnosticsRow label="Adapter status" value={statusLabel(adapter.status)} />
+                <DiagnosticsRow label="Observation" value={statusLabel(health.observation_status)} tone={neverObserved ? 'warning' : 'success'} />
                 <DiagnosticsRow label="Environment" value={adapter.environment ?? '—'} />
                 <DiagnosticsRow label="Webhook configured" value={formatBool(adapter.webhook_configured)} />
                 <DiagnosticsRow label="Polling configured" value={formatBool(adapter.polling_configured)} />
-                <DiagnosticsRow label="Sessions 24h" value={String(health.sessions_observed_24h)} />
-                <DiagnosticsRow label="Completed 24h" value={String(health.sessions_completed_24h)} tone="success" />
-                <DiagnosticsRow label="Failed 24h" value={String(health.sessions_failed_24h)} tone="danger" />
-                <DiagnosticsRow
-                  label="Webhooks 24h"
-                  value={`${String(health.webhook_verified_24h)} ok / ${String(health.webhook_rejected_24h)} rejected`}
-                />
-                <DiagnosticsRow label="Unresolved" value={String(health.sessions_unresolved)} tone={health.sessions_unresolved > 0 ? 'warning' : 'default'} />
-                <DiagnosticsRow label="Matched rate" value={formatRate(health.reconciliation_matched_rate)} />
-                <DiagnosticsRow label="Conflicts" value={String(health.reconciliation_conflicts)} tone={health.reconciliation_conflicts > 0 ? 'danger' : 'default'} />
-                <DiagnosticsRow label="Last event" value={formatTs(health.last_event_at, timeCtx)} />
+                {neverObserved ? (
+                  <div className="text-text-muted py-1">
+                    No provider signal observed yet; local activity counts are not meaningful.
+                  </div>
+                ) : (
+                  <>
+                    <DiagnosticsRow label="Sessions 24h" value={String(health.sessions_observed_24h)} />
+                    <DiagnosticsRow label="Completed 24h" value={String(health.sessions_completed_24h)} tone="success" />
+                    <DiagnosticsRow label="Failed 24h" value={String(health.sessions_failed_24h)} tone="danger" />
+                    <DiagnosticsRow
+                      label="Webhooks 24h"
+                      value={`${String(health.webhook_verified_24h)} ok / ${String(health.webhook_rejected_24h)} rejected`}
+                    />
+                    <DiagnosticsRow label="Unresolved" value={String(health.sessions_unresolved)} tone={health.sessions_unresolved > 0 ? 'warning' : 'default'} />
+                    <DiagnosticsRow label="Matched rate" value={formatRate(health.reconciliation_matched_rate)} />
+                    <DiagnosticsRow label="Conflicts" value={String(health.reconciliation_conflicts)} tone={health.reconciliation_conflicts > 0 ? 'danger' : 'default'} />
+                    <DiagnosticsRow label="Last event" value={formatTs(health.last_event_at, timeCtx)} />
+                  </>
+                )}
               </CardContent>
             </Card>
           );
@@ -218,12 +241,18 @@ export function PaymentRailsPage() {
       title="Payment Rails"
       subtitle={`Fleet-wide, cross-tenant payment rail health. ${OBSERVABILITY_COPY}`}
     >
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Metric label="Configured tenants" value={totals?.configured_tenants} />
+        <Metric label="Observed tenants" value={totals?.observed_tenants} />
         <Metric label="Sessions observed 24h" value={totals?.sessions_observed_24h} />
         <Metric label="Unresolved sessions" value={totals?.sessions_unresolved} />
         <Metric label="Reconciliation conflicts" value={totals?.reconciliation_conflicts} />
       </div>
+      {totals && !totals.configuration_inventory_available && (
+        <div className="text-[10px] text-warning font-mono">
+          Credential inventory unavailable — configured-tenant coverage is unknown, not zero.
+        </div>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Per-provider fleet health (24h)</CardTitle></CardHeader>
@@ -240,7 +269,10 @@ export function PaymentRailsPage() {
                   <tr className="border-b border-border-default text-text-muted">
                     <th className="py-2 px-2 text-left">Provider</th>
                     <th className="py-2 px-2 text-left">Status</th>
-                    <th className="py-2 px-2 text-right">Tenants</th>
+                    <th className="py-2 px-2 text-left">Observation</th>
+                    <th className="py-2 px-2 text-right">Configured</th>
+                    <th className="py-2 px-2 text-right">Observed</th>
+                    <th className="py-2 px-2 text-right">Never observed</th>
                     <th className="py-2 px-2 text-right">Webhooks ok</th>
                     <th className="py-2 px-2 text-right">Webhooks rejected</th>
                     <th className="py-2 px-2 text-right">Observed</th>
@@ -261,7 +293,10 @@ export function PaymentRailsPage() {
                         </span>
                       </td>
                       <td className="py-2 px-2"><HealthBadge status={row.status} /></td>
-                      <td className="py-2 px-2 text-right">{row.configured_tenants}</td>
+                      <td className={`py-2 px-2 ${observationTone(row.observation_status)}`}>{statusLabel(row.observation_status)}</td>
+                      <td className="py-2 px-2 text-right">{formatCount(row.configured_tenants)}</td>
+                      <td className="py-2 px-2 text-right">{formatCount(row.observed_tenants)}</td>
+                      <td className={`py-2 px-2 text-right ${row.never_observed_tenants ? 'text-warning' : ''}`}>{formatCount(row.never_observed_tenants)}</td>
                       <td className="py-2 px-2 text-right text-success">{row.webhook_verified_24h}</td>
                       <td className="py-2 px-2 text-right text-warning">{row.webhook_rejected_24h}</td>
                       <td className="py-2 px-2 text-right">{row.sessions_observed_24h}</td>
@@ -294,9 +329,12 @@ export function PaymentRailsPage() {
                   <tr className="border-b border-border-default text-text-muted">
                     <th className="py-2 px-2 text-left">Tenant</th>
                     <th className="py-2 px-2 text-left">Status</th>
-                    <th className="py-2 px-2 text-right">Providers</th>
-                    <th className="py-2 px-2 text-right">Degraded</th>
+                    <th className="py-2 px-2 text-left">Observation</th>
+                    <th className="py-2 px-2 text-right">Configured</th>
                     <th className="py-2 px-2 text-right">Observed</th>
+                    <th className="py-2 px-2 text-right">Never observed</th>
+                    <th className="py-2 px-2 text-right">Degraded</th>
+                    <th className="py-2 px-2 text-right">Sessions</th>
                     <th className="py-2 px-2 text-right">Unresolved</th>
                     <th className="py-2 px-2 text-right">Conflicts</th>
                   </tr>
@@ -310,7 +348,10 @@ export function PaymentRailsPage() {
                     >
                       <td className="py-2 px-2 font-semibold text-text-primary">{row.tenant_id}</td>
                       <td className="py-2 px-2"><HealthBadge status={row.status} /></td>
-                      <td className="py-2 px-2 text-right">{row.providers_configured}</td>
+                      <td className={`py-2 px-2 ${observationTone(row.observation_status)}`}>{statusLabel(row.observation_status)}</td>
+                      <td className="py-2 px-2 text-right">{formatCount(row.providers_configured)}</td>
+                      <td className="py-2 px-2 text-right">{formatCount(row.providers_observed)}</td>
+                      <td className={`py-2 px-2 text-right ${row.providers_never_observed ? 'text-warning' : ''}`}>{formatCount(row.providers_never_observed)}</td>
                       <td className="py-2 px-2 text-right text-warning">{row.providers_degraded}</td>
                       <td className="py-2 px-2 text-right">{row.sessions_observed_24h}</td>
                       <td className="py-2 px-2 text-right">{row.sessions_unresolved}</td>

@@ -54,6 +54,7 @@ import {
   formatMatchedRate,
   formatNativeAmount,
   humanizeSeconds,
+  observationStatusLabel,
   providerLabel,
 } from './payment-rails-shared';
 import type { ProviderHealthStatus } from './payment-rails-shared';
@@ -114,6 +115,8 @@ function ProviderHealthCard({ provider, health, syncing, syncDisabled, onSync }:
   const timeCtx = useTimeContext();
   const status = health?.status ?? 'not_configured';
   const configured = health?.configured ?? false;
+  const observationStatus = health?.observation_status ?? (configured ? 'never_observed' : 'not_configured');
+  const neverObserved = configured && observationStatus === 'never_observed';
 
   return (
     <Card>
@@ -124,18 +127,31 @@ function ProviderHealthCard({ provider, health, syncing, syncDisabled, onSync }:
         </div>
         {configured ? (
           <>
-            <HealthStat label="Sessions 24h" value={observedCount(health?.sessions_observed_24h, timeCtx)} />
-            <HealthStat label="Completed 24h" value={observedCount(health?.sessions_completed_24h, timeCtx)} tone="success" />
-            <HealthStat label="Failed 24h" value={observedCount(health?.sessions_failed_24h, timeCtx)} tone="danger" />
             <HealthStat
-              label="Webhooks 24h"
-              value={`${observedCount(health?.webhook_verified_24h, timeCtx)} ok / ${observedCount(health?.webhook_rejected_24h, timeCtx)} rejected`}
-              tone={health?.webhook_rejected_24h != null && health.webhook_rejected_24h > 0 ? 'warning' : 'default'}
+              label="Observation"
+              value={observationStatusLabel(observationStatus)}
+              tone={neverObserved ? 'warning' : 'success'}
             />
-            <HealthStat label="Unresolved" value={observedCount(health?.sessions_unresolved, timeCtx)} tone={health?.sessions_unresolved != null && health.sessions_unresolved > 0 ? 'warning' : 'default'} />
-            <HealthStat label="Conflicts" value={observedCount(health?.reconciliation_conflicts, timeCtx)} tone={health?.reconciliation_conflicts != null && health.reconciliation_conflicts > 0 ? 'danger' : 'default'} />
-            <HealthStat label="Matched rate" value={formatMatchedRate(health?.reconciliation_matched_rate)} />
-            <HealthStat label="Last event" value={formatDateTime(health?.last_event_at, timeCtx)} />
+            {neverObserved ? (
+              <p className="text-xs text-text-muted">
+                Credentials are configured, but no provider signal has been observed yet.
+              </p>
+            ) : (
+              <>
+                <HealthStat label="Sessions 24h" value={observedCount(health?.sessions_observed_24h, timeCtx)} />
+                <HealthStat label="Completed 24h" value={observedCount(health?.sessions_completed_24h, timeCtx)} tone="success" />
+                <HealthStat label="Failed 24h" value={observedCount(health?.sessions_failed_24h, timeCtx)} tone="danger" />
+                <HealthStat
+                  label="Webhooks 24h"
+                  value={`${observedCount(health?.webhook_verified_24h, timeCtx)} ok / ${observedCount(health?.webhook_rejected_24h, timeCtx)} rejected`}
+                  tone={health?.webhook_rejected_24h != null && health.webhook_rejected_24h > 0 ? 'warning' : 'default'}
+                />
+                <HealthStat label="Unresolved" value={observedCount(health?.sessions_unresolved, timeCtx)} tone={health?.sessions_unresolved != null && health.sessions_unresolved > 0 ? 'warning' : 'default'} />
+                <HealthStat label="Conflicts" value={observedCount(health?.reconciliation_conflicts, timeCtx)} tone={health?.reconciliation_conflicts != null && health.reconciliation_conflicts > 0 ? 'danger' : 'default'} />
+                <HealthStat label="Matched rate" value={formatMatchedRate(health?.reconciliation_matched_rate)} />
+                <HealthStat label="Last event" value={formatDateTime(health?.last_event_at, timeCtx)} />
+              </>
+            )}
             <Button
               variant="secondary"
               size="sm"
@@ -635,6 +651,8 @@ function SlotBadge({ slot }: { readonly slot: CredentialSlotState }) {
 
 function ProviderDiagnosticsCard({ entry }: { readonly entry: TenantProviderDiagnostics }) {
   const { adapter, health } = entry;
+  const timeCtx = useTimeContext();
+  const neverObserved = health.observation_status === 'never_observed';
   return (
     <Card>
       <CardContent className="space-y-2">
@@ -642,6 +660,11 @@ function ProviderDiagnosticsCard({ entry }: { readonly entry: TenantProviderDiag
           <ProviderBadge provider={entry.provider as PaymentRailProviderType} />
           <ProviderHealthBadge status={health.status as ProviderHealthStatus} />
         </div>
+        <HealthStat
+          label="Observation"
+          value={observationStatusLabel(health.observation_status)}
+          tone={neverObserved ? 'warning' : 'success'}
+        />
         <HealthStat label="Environment" value={adapter.environment ?? '—'} />
         <HealthStat
           label="Webhook endpoint"
@@ -655,6 +678,19 @@ function ProviderDiagnosticsCard({ entry }: { readonly entry: TenantProviderDiag
         />
         <HealthStat label="Cursor age" value={humanizeSeconds(health.polling_cursor_age_seconds)} />
         <HealthStat label="Probe" value={health.connection_probe_result ?? '—'} />
+        {neverObserved ? (
+          <p className="text-xs text-text-muted">
+            No provider signal observed yet; local activity counts are not meaningful.
+          </p>
+        ) : (
+          <>
+            <HealthStat label="Sessions 24h" value={formatCount(health.sessions_observed_24h, timeCtx)} />
+            <HealthStat label="Completed 24h" value={formatCount(health.sessions_completed_24h, timeCtx)} tone="success" />
+            <HealthStat label="Failed 24h" value={formatCount(health.sessions_failed_24h, timeCtx)} tone="danger" />
+            <HealthStat label="Unresolved" value={formatCount(health.sessions_unresolved, timeCtx)} tone={health.sessions_unresolved > 0 ? 'warning' : 'default'} />
+            <HealthStat label="Last event" value={formatDateTime(health.last_event_at, timeCtx)} />
+          </>
+        )}
         {adapter.credential_slots.length > 0 && (
           <div className="pt-1 mt-1 border-t border-border-subtle space-y-1">
             <div className="text-[10px] text-text-muted font-mono">Credential slots</div>

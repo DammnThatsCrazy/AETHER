@@ -16,11 +16,15 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-CONTRACT_VERSION = "1.0.0"
+CONTRACT_VERSION = "1.2.0"
 
 # Provider/health status vocabulary — the operator console renders each distinctly.
 ProviderStatus = Literal[
     "healthy", "degraded", "error", "not_configured", "disabled", "unknown"
+]
+ObservationStatus = Literal["observed", "never_observed", "not_configured"]
+FleetObservationStatus = Literal[
+    "observed", "partially_observed", "never_observed", "not_configured", "unknown"
 ]
 
 
@@ -29,8 +33,13 @@ ProviderStatus = Literal[
 class ProviderFleetRow(BaseModel):
     provider: str
     status: ProviderStatus
+    observation_status: FleetObservationStatus
     enabled: bool
-    configured_tenants: int
+    # None = the credential inventory could not be read; never a fabricated 0.
+    configured_tenants: Optional[int] = None
+    observed_tenants: int
+    # None = credential inventory unavailable (coverage cannot be computed).
+    never_observed_tenants: Optional[int] = None
     webhook_verified_24h: int
     webhook_rejected_24h: int
     signature_failures_24h: int
@@ -50,7 +59,11 @@ class ProviderFleetRow(BaseModel):
 class TenantFleetRow(BaseModel):
     tenant_id: str
     status: ProviderStatus
-    providers_configured: int
+    observation_status: FleetObservationStatus
+    # None = credential inventory unavailable (configured coverage unknown).
+    providers_configured: Optional[int] = None
+    providers_observed: int
+    providers_never_observed: Optional[int] = None
     providers_degraded: int
     sessions_observed_24h: int
     sessions_unresolved: int
@@ -58,7 +71,10 @@ class TenantFleetRow(BaseModel):
 
 
 class FleetTotals(BaseModel):
-    configured_tenants: int
+    # None = credential inventory unavailable; never a fabricated 0.
+    configured_tenants: Optional[int] = None
+    observed_tenants: int
+    configuration_inventory_available: bool
     enabled_tenants: int
     providers_degraded: int
     sessions_observed_24h: int
@@ -111,6 +127,7 @@ class TenantProviderAdapter(BaseModel):
 
 class TenantProviderHealth(BaseModel):
     status: ProviderStatus
+    observation_status: ObservationStatus
     sessions_observed_24h: int
     sessions_completed_24h: int
     sessions_failed_24h: int
@@ -155,6 +172,8 @@ class TenantDiagnosticsResponse(BaseModel):
 __all__ = [
     "CONTRACT_VERSION",
     "ProviderStatus",
+    "ObservationStatus",
+    "FleetObservationStatus",
     "ProviderFleetRow",
     "TenantFleetRow",
     "FleetTotals",

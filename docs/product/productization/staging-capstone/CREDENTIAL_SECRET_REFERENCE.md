@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "docs/operations/SECRETS-MANAGEMENT.md": "sha256:ccf7080c9c4c2c9ba95b7256339674e0fdb31e12ed0b8dfd6fc203209f677d7a"
-  "services/api/shared/certification/registry.py": "sha256:fd03f0130f4b54e5a0f061b01c15f02050027faa794aff7c4b96326630bdf620"
+  "services/api/shared/certification/registry.py": "sha256:b0dc79cd4c3af7688f1b5b8400900e66ad1cbb474d8f94327882e623942d1085"
 ---
 
 # Credential & Secret Reference

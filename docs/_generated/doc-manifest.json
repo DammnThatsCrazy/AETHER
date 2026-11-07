@@ -4521,6 +4521,42 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/operations/readiness/FINANCIAL_CAPABILITY_REGISTRY.md",
+      "title": "Financial Capability Registry",
+      "slug": "readiness/financial-capability-registry",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/operations/readiness/FINANCIAL_OBSERVABILITY_BASELINE.md",
+      "title": "Financial Observability Baseline Manifest",
+      "slug": "readiness/financial-observability-baseline",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/operations/readiness/LEAN_PRODUCTION_READINESS_DOSSIER.md",
       "title": "Lean Production Readiness Dossier",
       "slug": "readiness/lean-production-readiness-dossier",

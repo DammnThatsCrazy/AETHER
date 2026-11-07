@@ -197,7 +197,8 @@ export const paymentRailHealthSchema = z.object({
   reconciliation_conflicts: z.number(),
   last_event_at: z.string().nullish(),
   last_poll_at: z.string().nullish(),
-  status: z.enum(['healthy', 'degraded', 'not_configured', 'error']),
+  observation_status: z.enum(['observed', 'never_observed', 'not_configured']),
+  status: z.enum(['healthy', 'degraded', 'not_configured', 'error', 'unknown']),
   computed_at: z.string(),
 }).passthrough();
 
@@ -264,6 +265,7 @@ export type TenantProviderAdapter = z.infer<typeof tenantProviderAdapterSchema>;
 
 export const tenantProviderDiagnosticsHealthSchema = z.object({
   status: providerDiagnosticsStatusSchema,
+  observation_status: z.enum(['observed', 'never_observed', 'not_configured']),
   sessions_observed_24h: z.number(),
   sessions_completed_24h: z.number(),
   sessions_failed_24h: z.number(),

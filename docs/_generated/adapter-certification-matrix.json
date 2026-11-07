@@ -15,13 +15,16 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "cursor",
+      "permissions": [],
       "provider": "braze",
       "required_credentials": [
         "api_key"
       ],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:braze"
@@ -29,6 +32,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -45,13 +49,16 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "customerio",
       "required_credentials": [
         "webhook_signing_secret"
       ],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:customerio"
@@ -59,6 +66,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -77,14 +85,17 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "cursor",
+      "permissions": [],
       "provider": "hubspot",
       "required_credentials": [
         "api_key",
         "webhook_signing_secret"
       ],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:hubspot"
@@ -92,6 +103,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -110,14 +122,17 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "cursor",
+      "permissions": [],
       "provider": "iterable",
       "required_credentials": [
         "api_key",
         "webhook_signing_secret"
       ],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:iterable"
@@ -125,6 +140,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -148,11 +164,14 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "cursor",
+      "permissions": [],
       "provider": "klaviyo",
       "required_credentials": [],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:klaviyo"
@@ -160,6 +179,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -174,11 +194,14 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "mailchimp",
       "required_credentials": [],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:mailchimp"
@@ -186,6 +209,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -202,11 +226,14 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "postmark",
       "required_credentials": [],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:postmark"
@@ -214,6 +241,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -230,13 +258,16 @@
         "suppression_observe",
         "webhook_ingest"
       ],
+      "deployment_profiles": [],
       "domain": "communications",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "sendgrid",
       "required_credentials": [
         "webhook_signing_secret"
       ],
+      "required_data_rights": [],
       "required_endpoints": [],
       "secret_ref_names": [
         "connector:{tenant}:sendgrid"
@@ -244,6 +275,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [],
       "unsupported": [
         "send",
         "suppression_write",
@@ -260,18 +292,30 @@
         "position",
         "reference_data"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "drift",
       "required_credentials": [
         "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_price_observation_recorded"
+      ],
       "unsupported": []
     },
     "derivatives:dydx": {
@@ -286,18 +330,41 @@
         "realtime_account_stream",
         "reference_data"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "dydx",
       "required_credentials": [
         "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_order_observed",
+        "derivatives_order_updated_observed",
+        "derivatives_position_adl_observed",
+        "derivatives_position_closed_observed",
+        "derivatives_position_increased_observed",
+        "derivatives_position_liquidated_observed",
+        "derivatives_position_opened_observed",
+        "derivatives_position_reduced_observed",
+        "derivatives_position_settled_observed",
+        "derivatives_price_observation_recorded"
+      ],
       "unsupported": []
     },
     "derivatives:gmx": {
@@ -310,18 +377,30 @@
         "position",
         "reference_data"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "gmx",
       "required_credentials": [
         "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_price_observation_recorded"
+      ],
       "unsupported": []
     },
     "derivatives:hyperliquid": {
@@ -337,18 +416,40 @@
         "realtime_account_stream",
         "reference_data"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "cursor",
+      "permissions": [],
       "provider": "hyperliquid",
       "required_credentials": [
         "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "websocket",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_position_adl_observed",
+        "derivatives_position_closed_observed",
+        "derivatives_position_increased_observed",
+        "derivatives_position_liquidated_observed",
+        "derivatives_position_opened_observed",
+        "derivatives_position_reduced_observed",
+        "derivatives_position_settled_observed",
+        "derivatives_price_observation_recorded"
+      ],
       "unsupported": []
     },
     "interop:axelar": {
@@ -364,11 +465,18 @@
         "message_observation",
         "payload_decoding"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "axelar",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "per_network_json_rpc"
       ],
@@ -376,6 +484,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": []
     },
     "interop:chainlink_ccip": {
@@ -391,11 +500,18 @@
         "payload_decoding",
         "retry_tracking"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "chainlink_ccip",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "per_network_json_rpc"
       ],
@@ -403,6 +519,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": []
     },
     "interop:debridge": {
@@ -417,11 +534,18 @@
         "reorg_recovery",
         "settlement_observation"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "debridge",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "per_network_json_rpc"
       ],
@@ -429,6 +553,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": []
     },
     "interop:hyperlane": {
@@ -442,11 +567,18 @@
         "payload_decoding",
         "reorg_recovery"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "hyperlane",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "per_network_json_rpc"
       ],
@@ -454,6 +586,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": []
     },
     "interop:ibc": {
@@ -468,11 +601,18 @@
         "message_observation",
         "settlement_observation"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "ibc",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "per_network_json_rpc"
       ],
@@ -480,6 +620,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": []
     },
     "interop:layerzero": {
@@ -492,11 +633,18 @@
         "message_observation",
         "payload_decoding"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "layerzero",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "per_network_json_rpc"
       ],
@@ -504,6 +652,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": []
     },
     "interop:wormhole": {
@@ -518,11 +667,18 @@
         "message_observation",
         "payload_decoding"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "wormhole",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "per_network_json_rpc"
       ],
@@ -530,6 +686,7 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": []
     },
     "payments:bridge": {
@@ -542,12 +699,19 @@
         "settlement",
         "webhook"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "payments",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "bridge",
       "required_credentials": [
         "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [
@@ -556,6 +720,11 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
       "unsupported": []
     },
     "payments:coinbase": {
@@ -567,12 +736,19 @@
         "polling",
         "webhook"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "payments",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "coinbase",
       "required_credentials": [
         "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [
@@ -581,6 +757,11 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
       "unsupported": []
     },
     "payments:moonpay": {
@@ -592,12 +773,19 @@
         "polling",
         "webhook"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "payments",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "moonpay",
       "required_credentials": [
         "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [
@@ -606,6 +794,11 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
       "unsupported": []
     },
     "payments:privy": {
@@ -617,12 +810,19 @@
         "fiat_onramp",
         "webhook"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "payments",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "privy",
       "required_credentials": [
         "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [
@@ -631,6 +831,11 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
       "unsupported": []
     },
     "payments:stripe_onramp": {
@@ -641,12 +846,19 @@
         "crypto_onramp",
         "webhook"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "payments",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "stripe_onramp",
       "required_credentials": [
         "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
       ],
       "required_endpoints": [],
       "secret_ref_names": [
@@ -655,6 +867,11 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
       "unsupported": []
     },
     "prediction_market:kalshi": {
@@ -665,16 +882,24 @@
         "market_payload_normalization",
         "observation_persistence"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "prediction_market",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "kalshi",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": [
         "live_market_polling",
         "order_execution"
@@ -688,16 +913,24 @@
         "market_payload_normalization",
         "observation_persistence"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "prediction_market",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "polymarket",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [],
       "secret_ref_names": [],
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [],
       "unsupported": [
         "live_market_polling",
         "order_execution"
@@ -710,11 +943,18 @@
         "finality_confirmation",
         "receipt_observation"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "stablecoin_chain",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "evm",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "json_rpc"
       ],
@@ -722,6 +962,24 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [
+        "bridge_burn",
+        "bridge_deposit",
+        "bridge_mint",
+        "bridge_release",
+        "burn",
+        "collateral_deposit",
+        "collateral_withdrawal",
+        "fee",
+        "liquidity_addition",
+        "liquidity_removal",
+        "mint",
+        "reward",
+        "swap",
+        "transfer",
+        "treasury_transfer",
+        "unknown_stablecoin_movement"
+      ],
       "unsupported": []
     },
     "stablecoin_chain:svm": {
@@ -731,11 +989,18 @@
         "finality_confirmation",
         "transaction_observation"
       ],
+      "deployment_profiles": [
+        "staging"
+      ],
       "domain": "stablecoin_chain",
       "first_release": true,
       "pagination_model": "none",
+      "permissions": [],
       "provider": "svm",
       "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
       "required_endpoints": [
         "json_rpc"
       ],
@@ -743,6 +1008,24 @@
       "state": "credential_waiting",
       "state_rank": 20,
       "streaming_model": "none",
+      "supported_event_types": [
+        "bridge_burn",
+        "bridge_deposit",
+        "bridge_mint",
+        "bridge_release",
+        "burn",
+        "collateral_deposit",
+        "collateral_withdrawal",
+        "fee",
+        "liquidity_addition",
+        "liquidity_removal",
+        "mint",
+        "reward",
+        "swap",
+        "transfer",
+        "treasury_transfer",
+        "unknown_stablecoin_movement"
+      ],
       "unsupported": []
     }
   },
