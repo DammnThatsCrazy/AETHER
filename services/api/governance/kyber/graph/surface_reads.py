@@ -68,6 +68,8 @@ async def _call(handler: Callable[..., Awaitable[Any]], tenant_id: str, **argume
         if name == "request" or name in arguments:
             continue
         default = parameter.default
+        if default is inspect.Parameter.empty:
+            raise TypeError(f"{handler.__name__} needs argument {name!r} supplied")
         if isinstance(default, Depends):
             raise TypeError(f"{handler.__name__} needs dependency {name!r} supplied")
         if isinstance(default, Param):

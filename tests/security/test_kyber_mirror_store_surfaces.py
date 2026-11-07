@@ -301,6 +301,9 @@ async def test_call_fills_query_defaults_unwraps_data_and_rejects_unset_markers(
     async def needs_query(request: Any, tenantId: str = Query(...)) -> None:
         return None
 
-    for handler_with_marker in (needs_dependency, needs_query):
+    async def needs_path_value(request: Any, group_id: str) -> None:
+        return None
+
+    for handler_with_marker in (needs_dependency, needs_query, needs_path_value):
         with pytest.raises(TypeError):
             await _call(handler_with_marker, TENANT)
