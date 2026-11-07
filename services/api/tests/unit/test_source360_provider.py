@@ -42,6 +42,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
     ProjectionSection,
     ProjectionSubject,
 )
+from shared.intelligence_projections.errors import ProjectionError
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
 )
@@ -207,7 +208,7 @@ class FakeIdentityLineageReader:
     async def read(self, tenant_id: str, subject_kind: str, subject_id: str):
         self.calls.append((tenant_id, subject_kind, subject_id))
         slot = Identity360Slot(
-            id="source_identifier_lineage",
+            id="identifier_inventory",
             state=self.state,
             content={
                 "sourceIdentities": [
@@ -368,7 +369,7 @@ async def test_identity_subject_projects_canonical_source_lineage_without_provid
     assert source.record_calls == []
     assert _section(result, "summary").state == "available"
     summary = _section(result, "summary").content
-    assert summary["sourceIdentityAuthority"] == "identity360.source_identifier_lineage"
+    assert summary["sourceIdentityAuthority"] == "identity360.identifier_inventory"
     assert summary["sourceIdentities"] == [
         {
             "id": "source-identity-1",
@@ -386,23 +387,24 @@ async def test_identity_subject_projects_canonical_source_lineage_without_provid
     assert evidence[0]["id"] == "source-identity-1"
     assert evidence[0]["source"] == "identity_source_identities"
     assert len(result.claims) == 1
-    assert result.claims[0].domainSlotIds == ["source_identifier_lineage"]
+    assert result.claims[0].domainSlotIds == ["identifier_inventory"]
     assert "must-not-render" not in json.dumps(result.model_dump(mode="json"))
 
-    frame = compose_experience360_frame(
-        Experience360FrameRequest(
-            surfaceId="identity360",
-            tenantId=TENANT,
-            subject=ProjectionSubject(kind=subject_kind, id=subject_id),
-            requestedSlotIds=["source_identifier_lineage"],
-            includeEvidence=True,
-        ),
-        [result],
-        frame_policy=Experience360PolicyDisposition(state="allowed"),
-    )
-    lineage_slot = frame.slots[0]
-    assert lineage_slot.state == "available"
-    assert lineage_slot.evidenceRefs[0].source == "identity_source_identities"
+    # The current 360 contract binds source360 only to social360 and support360
+    # (source subjects). A frame for identity360 must refuse a source360 result
+    # instead of attaching it to an identity slot.
+    with pytest.raises(ProjectionError, match="not bound to a requested 360 slot"):
+        compose_experience360_frame(
+            Experience360FrameRequest(
+                surfaceId="identity360",
+                tenantId=TENANT,
+                subject=ProjectionSubject(kind=subject_kind, id=subject_id),
+                requestedSlotIds=["identifier_inventory"],
+                includeEvidence=True,
+            ),
+            [result],
+            frame_policy=Experience360PolicyDisposition(state="allowed"),
+        )
 
 
 @pytest.mark.asyncio
@@ -424,7 +426,7 @@ async def test_identity_source_lineage_temporal_query_remains_unknown() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent360_source_evidence_binding_executes_source360_for_exact_agent() -> None:
+async def test_agent360_evidence_slot_does_not_execute_source360_under_the_current_contract() -> None:
     source = FakeSource()
     identity_reader = FakeIdentityLineageReader()
     source_provider = Source360Provider(source, identity_lineage_reader=identity_reader)
@@ -438,7 +440,7 @@ async def test_agent360_source_evidence_binding_executes_source360_for_exact_age
                 evaluatedAt="2026-10-18T12:02:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "source_evidence_lineage": Experience360PolicyDisposition(state="allowed")
+                    "evidence_trace": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -472,7 +474,7 @@ async def test_agent360_source_evidence_binding_executes_source360_for_exact_age
             surfaceId="agent360",
             tenantId=TENANT,
             subject=ProjectionSubject(kind="agent", id="agent-source-1"),
-            requestedSlotIds=["source_evidence_lineage"],
+            requestedSlotIds=["evidence_trace"],
             includeEvidence=True,
         ),
         policy_evaluator=AllowPolicy(),
@@ -480,15 +482,11 @@ async def test_agent360_source_evidence_binding_executes_source360_for_exact_age
         generated_at="2026-10-18T12:03:00Z",
     )
 
-    assert (
-        "source360",
-        "agent",
-        ("coverage", "evidence"),
-    ) in projection_calls
-    assert identity_reader.calls == [(TENANT, "agent", "agent-source-1")]
-    slot = frame.slots[0]
-    assert {ref.id for ref in slot.evidenceRefs} == {"source-identity-1"}
-    assert any(item.sectionId == "evidence" for item in slot.provenance)
+    # Agent360's evidence slot is not bound to source360 in the current contract,
+    # so building the frame must not execute source360 or read identity lineage.
+    assert all(call[0] != "source360" for call in projection_calls)
+    assert identity_reader.calls == []
+    assert {slot.id for slot in frame.slots} == {"evidence_trace"}
 
 
 @pytest.mark.asyncio

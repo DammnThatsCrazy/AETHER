@@ -184,6 +184,7 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "maintenance": frozenset(
         {
             "billing_overage_cron",
+            "access_reconciliation",
             "notification_sla",
             "retention_sweep",
             "delivery_worker",

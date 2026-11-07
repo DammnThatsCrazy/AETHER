@@ -99,7 +99,15 @@ def _get_identity_repo(
     cache: CacheClient = Depends(get_cache),
 ) -> IdentityRepository:
     global _identity_repo
-    if _identity_repo is None:
+    # Reuse the repository only while it wraps the injected graph and cache. In a
+    # running app those are process singletons, so this is one instance; when a
+    # caller injects different ones (tests, an app built with other dependencies)
+    # they must not be silently ignored in favor of whichever came first.
+    if (
+        _identity_repo is None
+        or getattr(_identity_repo, "graph", None) is not graph
+        or getattr(_identity_repo, "cache", None) is not cache
+    ):
         _identity_repo = IdentityRepository(graph, cache)
     return _identity_repo
 

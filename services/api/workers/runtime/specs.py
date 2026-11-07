@@ -49,6 +49,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return run_monthly_overage_cron()
 
+    def _access_reconciliation() -> Coroutine[Any, Any, None]:
+        from billing.billing.access_reconciliation import run_access_reconciliation_cron
+
+        return run_access_reconciliation_cron()
+
     def _notification_sla() -> Coroutine[Any, Any, None]:
         from journeys.notification_intelligence.lifecycle import start_sla_worker
 
@@ -499,6 +504,10 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="billing_overage_cron",
             factory=_overage_cron,
+        ),
+        WorkerSpec(
+            name="access_reconciliation",
+            factory=_access_reconciliation,
         ),
         WorkerSpec(
             name="notification_sla",

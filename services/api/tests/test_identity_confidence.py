@@ -57,11 +57,20 @@ def test_fingerprint_only_blocked():
 
 
 def test_fingerprint_plus_user_id_not_blocked():
+    # user_id is consent-gated, so the corroborated link needs consent to score.
     score, tier, codes = _score(
-        [IdentitySignalType.DEVICE_FINGERPRINT, IdentitySignalType.USER_ID]
+        [IdentitySignalType.DEVICE_FINGERPRINT, IdentitySignalType.USER_ID],
+        consent={"purposes": {"analytics": True}},
     )
     assert tier == ConfidenceTier.DETERMINISTIC
     assert REASON_FINGERPRINT_ONLY_BLOCKED not in codes
+
+
+def test_user_id_without_consent_is_blocked():
+    score, tier, codes = _score([IdentitySignalType.USER_ID], consent=None)
+    assert tier == ConfidenceTier.BLOCKED
+    assert score == 0.0
+    assert REASON_CONSENT_BLOCKS_LINK in codes
 
 
 # ── Consent gating ─────────────────────────────────────────────────────────────
@@ -95,13 +104,14 @@ def test_consent_denied_flag_blocks():
 
 
 def test_mixed_sensitive_nonsensitive_without_consent():
-    # user_id alone should still score (not consent-gated)
+    # external_id is not consent-gated, so it still scores on its own.
     score, tier, codes = _score(
-        [IdentitySignalType.USER_ID, IdentitySignalType.EMAIL_HASH],
+        [IdentitySignalType.EXTERNAL_ID, IdentitySignalType.EMAIL_HASH],
         consent=None,
     )
-    # email_hash is removed, user_id remains → DETERMINISTIC
+    # email_hash is removed, external_id remains → DETERMINISTIC
     assert tier == ConfidenceTier.DETERMINISTIC
+    assert REASON_CONSENT_BLOCKS_LINK in codes
 
 
 # ── Revoked alias ──────────────────────────────────────────────────────────────
@@ -127,7 +137,9 @@ def test_revoked_plus_other_signal_not_blocked():
 # ── Tier assignment ────────────────────────────────────────────────────────────
 
 def test_user_id_deterministic():
-    score, tier, codes = _score([IdentitySignalType.USER_ID])
+    score, tier, codes = _score(
+        [IdentitySignalType.USER_ID], consent={"purposes": {"analytics": True}}
+    )
     assert tier == ConfidenceTier.DETERMINISTIC
     assert score == 1.0
 
@@ -188,13 +200,16 @@ def test_consent_required_signals_set():
     assert IdentitySignalType.EMAIL_HASH in CONSENT_REQUIRED_SIGNALS
     assert IdentitySignalType.PHONE_HASH in CONSENT_REQUIRED_SIGNALS
     assert IdentitySignalType.DEVICE_FINGERPRINT in CONSENT_REQUIRED_SIGNALS
-    assert IdentitySignalType.USER_ID not in CONSENT_REQUIRED_SIGNALS
+    # SDK user IDs link across platforms, which is an identity operation needing consent.
+    assert IdentitySignalType.USER_ID in CONSENT_REQUIRED_SIGNALS
 
 
 # ── Reason codes present ───────────────────────────────────────────────────────
 
 def test_reason_codes_present_for_user_id():
-    _, _, codes = _score([IdentitySignalType.USER_ID])
+    _, _, codes = _score(
+        [IdentitySignalType.USER_ID], consent={"purposes": {"analytics": True}}
+    )
     assert REASON_SAME_USER_ID in codes
 
 

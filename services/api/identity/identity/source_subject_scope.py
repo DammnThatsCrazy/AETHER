@@ -47,7 +47,7 @@ class RepositorySourceSubjectScopeReader:
                 tenant_id,
                 "source",
                 source_identity_id,
-                requested_slot_ids={"resolved_subject_identity"},
+                requested_slot_ids={"match_evidence"},
             )
         except Exception:  # noqa: BLE001 - identity authority is fail-closed
             return SourceSubjectScopeRead(
@@ -57,16 +57,22 @@ class RepositorySourceSubjectScopeReader:
                 reason="source_identity_authority_unavailable",
             )
 
-        slot = result.slot("resolved_subject_identity")
-        if slot.state != "available":
+        slot = result.slot("match_evidence")
+        # The slot can be degraded by unrelated evidence reads (decisions, edges,
+        # aliases) while the exact join below is still verified, so only an
+        # unknown slot stops here; the join verdict itself is checked next.
+        if slot.state == "unknown":
             return SourceSubjectScopeRead(
                 tenant_id,
                 source_identity_id,
-                "unknown" if slot.state == "unknown" else "degraded",
+                "unknown",
                 reason=slot.reason or "source_identity_binding_unresolved",
             )
-        canonical_entity = slot.content.get("canonicalEntity")
-        resolution = slot.content.get("resolution")
+        # Identity360 sets ``state == "resolved"`` only after it has read the source
+        # identity, found it resolved with a linked entity, and verified the entity
+        # join for this tenant; otherwise the subject resolution stays unknown.
+        resolution = slot.content.get("subjectResolution")
+        canonical_entity = resolution.get("canonicalEntity") if isinstance(resolution, dict) else None
         canonical_entity_id = (
             canonical_entity.get("id") if isinstance(canonical_entity, dict) else None
         )
@@ -78,7 +84,6 @@ class RepositorySourceSubjectScopeReader:
             or not canonical_entity_id
             or not isinstance(resolution, dict)
             or resolution.get("state") != "resolved"
-            or resolution.get("exactIdMatch") is not True
         ):
             return SourceSubjectScopeRead(
                 tenant_id,

@@ -119,7 +119,10 @@ async def test_journey_commerce_evidence_preserves_exact_source_payment_facts(
     class FakeJourneyRepository:
         async def get_current(self, tenant_id: str, journey_id: str):
             assert (tenant_id, journey_id) == ("tenant-a", "journey-1")
-            return {"journey_version_id": "version-1"}
+            return {
+                "tenant_id": "tenant-a", "journey_id": "journey-1",
+                "is_current": True, "journey_version_id": "version-1",
+            }
 
     class FakeJourneyStepRepository:
         async def list_by_version(
@@ -129,6 +132,9 @@ async def test_journey_commerce_evidence_preserves_exact_source_payment_facts(
             assert cursor is None
             return [
                 {
+                    "tenant_id": "tenant-a", "journey_id": "journey-1",
+                    "journey_version_id": "version-1",
+                    "step_id": "step-1", "activity_id": "activity-1",
                     "step_position": "1",
                     "evidence_summary": {
                         "commerce_order_ref": "order:exact-1",
@@ -292,7 +298,10 @@ def test_compatible_payment_enrichment_emits_one_source_fact() -> None:
 async def test_missing_exact_commerce_record_is_reported_as_partial(monkeypatch) -> None:
     class FakeJourneyRepository:
         async def get_current(self, tenant_id: str, journey_id: str):
-            return {"journey_version_id": "version-1"}
+            return {
+                "tenant_id": "tenant-a", "journey_id": "journey-1",
+                "is_current": True, "journey_version_id": "version-1",
+            }
 
     class FakeJourneyStepRepository:
         async def list_by_version(
@@ -300,6 +309,9 @@ async def test_missing_exact_commerce_record_is_reported_as_partial(monkeypatch)
         ):
             return [
                 {
+                    "tenant_id": "tenant-a", "journey_id": "journey-1",
+                    "journey_version_id": "version-1",
+                    "step_id": "step-1", "activity_id": "activity-1",
                     "step_position": "1",
                     "evidence_summary": {"commerce_order_ref": "order:unrecorded"},
                 }

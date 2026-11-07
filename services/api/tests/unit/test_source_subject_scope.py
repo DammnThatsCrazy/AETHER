@@ -7,7 +7,11 @@ import pytest
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from identity.identity.identity360_provider import Identity360Provider, IdentityRecordRead
+from identity.identity.identity360_provider import (
+    Identity360Provider,
+    IdentityBatchRead,
+    IdentityRecordRead,
+)
 from identity.identity.source_subject_scope import RepositorySourceSubjectScopeReader
 
 
@@ -29,6 +33,19 @@ class _IdentitySource:
         if source_identity_id != "source-1":
             return IdentityRecordRead(record=None)
         return IdentityRecordRead(record=self.source)
+
+    async def _empty_batch(self, *args, **kwargs):
+        return IdentityBatchRead()
+
+    # The match_evidence slot also reads recorded decisions, edges, aliases, and
+    # verification; this source has none, which must not unverify the join.
+    identity_edges_for_entity = _empty_batch
+    aliases_for_entity = _empty_batch
+    decisions_for_entity = _empty_batch
+    verification_for_entity = _empty_batch
+    source_claims = _empty_batch
+    source_identities_for_entity = _empty_batch
+    conflicts_for_entity = _empty_batch
 
     async def canonical_entity(self, tenant_id: str, entity_id: str):
         self.calls.append("entity")

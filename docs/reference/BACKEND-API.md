@@ -27,18 +27,18 @@ reviewed_source_commits:
 source_hashes:
   "services/api/actions/": "sha256:adafaf5797f3a85e109c5cb3492441cba040f98c334318a63a28b432d71072a7"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:795ae9152aab257f4f54a096c261f9cc5cb79e3b177876ba5a5095062d42f8a8"
-  "services/api/connectors/": "sha256:2ac8c75b183daa4a3db734aadc7331a36072feb002134ad87cb88f3fd17c258b"
+  "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
+  "services/api/connectors/": "sha256:1fdc7860bf0625cc46677b2a227b9d2820cf35fc5e4d406d8ba8f5797103879f"
   "services/api/governance/": "sha256:b287f008d8982cb66b93e37f5654a5cbcd808c6fcee3d811ed81bb1e9bcab7ca"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
-  "services/api/identity/": "sha256:a7f1dce493471a067cf90946257aeeffc9e62627cb505302086849b9d2bd0673"
+  "services/api/identity/": "sha256:d4def8830d93d598443b92351bbe0731c9611af49ee04703a95ed951f5f42d12"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
   "services/api/intelligence/": "sha256:d2b2ec031cd365fc60a4015b76f635fc1cde1e0a22bd0d6ce2bb4f246e9fc79f"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:2cda7691064a59d0a77c36cc550cd2999271bfae55c386ebe0203a5e25ae3e54"
-  "services/api/workers/": "sha256:4952004c3f8a8649acbbd5d872982b5943c8f860a1efa6c9b5d467082127278c"
+  "services/api/workers/": "sha256:a6c6b55338c45947832201ac3cfa3d006fa3f6ef029501bf29856755eae0b3b1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
