@@ -367,6 +367,14 @@ Run from the working tree at `50bb9ec10` plus these edits, using
 
 ## 7. Next slice
 
-The next step is W1 per the approved sequence. This baseline does not authorize
+W1 (financial capability registry) and the fleet configured-vs-observed truth
+slice are complete: the registry gate passes with 20 records across five
+domains and zero production-eligible records, and the Kyber fleet contract now
+distinguishes configured, observed, never-observed, and unknown coverage
+without fabricating zeros.
+
+The next repository-controlled slice is the card-linked commercial controls
+(W3 in this baseline's sequence): a distinct service-catalog entry, plan
+entitlement resolver, and durable usage meter. This baseline does not authorize
 enabling any flag, connecting a provider, or claiming staging/production
 readiness.
