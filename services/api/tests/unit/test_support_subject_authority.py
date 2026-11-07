@@ -239,9 +239,9 @@ async def test_mapped_case_slots_preserve_exact_policy_isolation(kind, slot, rea
     ("source_event_id", None), ("source_occurred_at", "invalid"),
     ("source_occurred_at", OBSERVED.replace(tzinfo=None)),
     ("connection_verified_at", None), ("connection_verified_at", "invalid"),
-    ("connection_verified_at", (OBSERVED + timedelta(days=1)).isoformat()),
+    ("connection_verified_at", "2999-01-01T00:00:00+00:00"),
     ("evidence_refs", []), ("evidence_refs", [{"id": "forged"}]),
-    ("received_at", (OBSERVED + timedelta(days=1)).isoformat()),
+    ("received_at", "2999-01-01T00:00:00+00:00"),
 ])
 async def test_reader_rechecks_mapping_before_any_sibling_read(field, value):
     cases, _, _, _, record = await make_binding()
