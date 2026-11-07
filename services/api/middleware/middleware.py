@@ -1513,6 +1513,13 @@ def _matched_route_template(app: FastAPI, scope: dict) -> Optional[str]:
     return None
 
 
+def _remember_credential(request: Any, credential: str) -> None:
+    """Note which credential the authenticator validated, for per-credential caps."""
+    state = getattr(request, "state", None)
+    if state is not None:
+        state.validated_credential = credential
+
+
 async def _authenticate_async(
     request: Request,
     jwt_handler: JWTHandler,
@@ -1528,7 +1535,7 @@ async def _authenticate_async(
     api_key = request.headers.get("X-API-Key")
     if api_key:
         ctx = await api_key_validator.validate_async(api_key)
-        request.state.validated_credential = api_key
+        _remember_credential(request, api_key)
         return ctx
 
     # Additive: trust-plane credential classes (sessions / ingest / service).
@@ -1554,25 +1561,25 @@ async def _authenticate_async(
             ):
                 raise UnauthorizedError("MCP OAuth token is not valid for this route")
             ctx = await _resolve_mcp_oauth_token(token)
-            request.state.validated_credential = token
+            _remember_credential(request, token)
             return ctx
         if _token_declares_mcp_audience(token):
             raise UnauthorizedError("MCP OAuth token requires the hosted MCP service")
         # Try API key first (SDK pattern); fall back to JWT (SSO/user pattern)
         try:
             ctx = await api_key_validator.validate_async(token)
-            request.state.validated_credential = token
+            _remember_credential(request, token)
             return ctx
         except Exception:
             pass
         # A session token may also arrive via Bearer.
         sess_ctx = await _resolve_session_token(token)
         if sess_ctx is not None:
-            request.state.validated_credential = token
+            _remember_credential(request, token)
             return sess_ctx
         payload = jwt_handler.decode(token)
         ctx = jwt_handler.extract_context(payload)
-        request.state.validated_credential = token
+        _remember_credential(request, token)
         return ctx
 
     raise UnauthorizedError("Missing API key or Bearer token")
@@ -1642,7 +1649,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if token:
             ctx = await _resolve_session_token(token)
             if ctx is not None:
-                request.state.validated_credential = token
+                _remember_credential(request, token)
                 return ctx
 
     if getattr(tp, "public_ingest_identifier_enabled", False):
@@ -1650,7 +1657,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if ident:
             ctx = await _resolve_public_ingest(ident)
             if ctx is not None:
-                request.state.validated_credential = ident
+                _remember_credential(request, ident)
                 return ctx
 
     if getattr(tp, "service_credentials_enabled", False):
@@ -1658,7 +1665,7 @@ async def _resolve_trust_plane_context(request: Request) -> Optional[TenantConte
         if cred:
             ctx = await _resolve_service_credential(cred)
             if ctx is not None:
-                request.state.validated_credential = cred
+                _remember_credential(request, cred)
                 return ctx
 
     return None

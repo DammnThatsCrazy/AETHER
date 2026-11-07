@@ -68,3 +68,39 @@ async def test_truncation_and_billable_events_are_disclosed():
     )
     assert report["truncated"] is True
     assert report["billable_events_seen"] == 1
+
+
+async def test_reconciliation_route_requires_admin_and_is_tenant_scoped(monkeypatch):
+    from types import SimpleNamespace
+
+    import pytest
+    from starlette.requests import Request
+
+    from billing.billing import access_reconciliation, routes
+    from shared.common.common import ForbiddenError
+
+    seen = {}
+
+    async def fake(tenant_id, start, end, **_):
+        seen["args"] = (tenant_id, start, end)
+        return {"tenant_id": tenant_id, "consistent": True}
+
+    monkeypatch.setattr(access_reconciliation, "reconcile_access_interactions", fake)
+
+    def request_for(permissions, role=None):
+        request = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b""})
+        tenant = SimpleNamespace(tenant_id="t-1", permissions=permissions)
+
+        def require_permission(name):
+            if name not in permissions:
+                raise ForbiddenError(f"Missing permission: {name}")
+
+        tenant.require_permission = require_permission
+        request.state.tenant = tenant
+        return request
+
+    with pytest.raises(ForbiddenError):
+        await routes.get_access_kit_reconciliation(request_for(["read"]), START, END)
+    body = await routes.get_access_kit_reconciliation(request_for(["read", "admin"]), START, END)
+    assert seen["args"] == ("t-1", START, END)
+    assert body["data"]["consistent"] is True
