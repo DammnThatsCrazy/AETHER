@@ -4907,6 +4907,186 @@
       }
     },
     {
+      "feature_id": "reconciled-control-plane",
+      "title": "Reconciled Control Plane",
+      "owning_system": "aether",
+      "scope": {
+        "id": "reconciled-control-plane-v1",
+        "version": 1,
+        "title": "Reconciled Control Plane V1",
+        "target": "staging-proof-then-staged-production-activation",
+        "included": [
+          "contracts-and-schemas",
+          "core-activation-law",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation",
+          "runtime-convergence"
+        ],
+        "excluded": [
+          "authoritative-writes-to-customer-systems-without-ChangeSet-gates"
+        ],
+        "deferred": [
+          "operator-command-write-surface"
+        ]
+      },
+      "repository_ceiling": {
+        "type": "CODE_COMPLETE",
+        "achieved": true,
+        "remaining_after_ceiling": [],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "IMPLEMENTED",
+        "completion_percent": 80.0,
+        "denominator": "in-scope repository controls for the Program A+B plus first Program C slice",
+        "remaining_work": [
+          "Program C \u2014 execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime",
+          "Program D \u2014 recovery, continuity and interruption reconciliation",
+          "Program E \u2014 operator command surface for governed transitions",
+          "Program F \u2014 security/scale review and credentialed staging proof",
+          "Program G \u2014 staged production activation with rollback evidence"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 50.0,
+        "denominator": "in-scope productionization controls for the Program A+B plus first Program C slice",
+        "remaining_work": [
+          "Define activation metrics/alerts and operator runbook",
+          "Add credentialed staging proof for activation transitions and rollback"
+        ]
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": [
+          {
+            "feature_id": "kyber-operator-console",
+            "state": "SATISFIED"
+          }
+        ]
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/architecture/RECONCILED_CONTROL_PLANE.md",
+        "dashboards": [],
+        "alerts": [],
+        "present": false
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "Activation law is unit-tested against the in-memory seam and parity-checked across TS/Python twins.",
+          "Scope, CAS and readiness gates are fail-closed."
+        ],
+        "evidence_gaps": [
+          "No credentialed staging/production evidence.",
+          "The Postgres transition path is migration- and parity-checked, but no live local database test exercised concurrent CAS writers.",
+          "The scheduler consumes effective activation and SDK manifest requests are planned through RCP, but request execution/rollout projection and Provider Runtime changes still bypass RCP (remaining Program C)."
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "IMPLEMENTED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation completion 80% (< 100% of in-scope repository controls for the Program A+B plus first Program C slice)",
+            "open repository work: Program C \u2014 execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D \u2014 recovery, continuity and interruption reconciliation; Program E \u2014 operator command surface for governed transitions; Program F \u2014 security/scale review and credentialed staging proof; Program G \u2014 staged production activation with rollback evidence"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "IMPLEMENTED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation completion 80% (< 100% of in-scope repository controls for the Program A+B plus first Program C slice)",
+            "open repository work: Program C \u2014 execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D \u2014 recovery, continuity and interruption reconciliation; Program E \u2014 operator command surface for governed transitions; Program F \u2014 security/scale review and credentialed staging proof; Program G \u2014 staged production activation with rollback evidence"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "migration_derived": false,
+        "note": "New record for the Post-734 program; not migrated from production_status.py."
+      }
+    },
+    {
       "feature_id": "scale-readiness",
       "title": "Scale Readiness",
       "owning_system": "aether",

@@ -39,7 +39,7 @@ reviewed_source_commits:
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
 source_hashes:
-  "config/storage_policies.yaml": "sha256:dd0170e28a9e22f6169ece57f2a05063d18f4b7a7e369dda182bbb5ef4f383e3"
+  "config/storage_policies.yaml": "sha256:4a44084cac17fff5155b4fc04bf4e36fc3fee1bae95fba683b8cdb55ada9b066"
   "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
   "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"

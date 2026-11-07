@@ -366,3 +366,8 @@ Each step is its own PR on `Development` and states what it makes deletable.
    and a shared semantic core.
 8. Bind a class to frontend apps and shared packages, then re-measure with
    `--report` on both validators.
+
+
+## Backend reachability update
+
+`connectors.managed_integrations.rollout_repository` is now reachable; it was removed from the unreachable allowlist.

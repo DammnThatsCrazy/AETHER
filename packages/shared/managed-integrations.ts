@@ -932,3 +932,177 @@ export interface RolloutView {
   last_transition_at?: string | null;
   completed_at?: string | null;
 }
+
+// ── Production activation authority ──────────────────────────────────────────
+
+/** Durable control-plane activation states. `state` is the stored authority;
+ * `effective_state` (below) is what hard environment kill switches permit. */
+export const controlPlaneActivationStates = [
+  'shadow',
+  'detect',
+  'plan',
+  'r0',
+  'r1',
+  'r2',
+  'fully_managed',
+  'emergency_frozen',
+] as const;
+export type ControlPlaneActivationState =
+  (typeof controlPlaneActivationStates)[number];
+
+/** Ordered advance path; `emergency_frozen` is the out-of-band override. */
+export const controlPlaneActivationAdvanceOrder = [
+  'shadow',
+  'detect',
+  'plan',
+  'r0',
+  'r1',
+  'r2',
+  'fully_managed',
+] as const;
+export type ControlPlaneActivationAdvanceState =
+  (typeof controlPlaneActivationAdvanceOrder)[number];
+
+/** Governed activation transitions. `freeze` is always allowed; `advance` and
+ * `resume` require a readiness-authority snapshot with `ready: true`. */
+export const controlPlaneActivationTransitions = [
+  'advance',
+  'freeze',
+  'resume',
+] as const;
+export type ControlPlaneActivationTransition =
+  (typeof controlPlaneActivationTransitions)[number];
+
+/** Effective states add `disabled` (master kill switch) and can only be lower
+ * than the durable state. Turning flags on never grants activation. */
+export const controlPlaneEffectiveStates = [
+  'disabled',
+  'shadow',
+  'detect',
+  'plan',
+  'r0',
+  'r1',
+  'r2',
+  'fully_managed',
+  'emergency_frozen',
+] as const;
+export type ControlPlaneEffectiveState =
+  (typeof controlPlaneEffectiveStates)[number];
+
+export const controlPlaneActivationScopeKinds = [
+  'global',
+  'tenant_environment',
+] as const;
+export type ControlPlaneActivationScopeKind =
+  (typeof controlPlaneActivationScopeKinds)[number];
+
+export const controlPlaneActivationRoles = [
+  'operator',
+  'readiness',
+  'system',
+] as const;
+export type ControlPlaneActivationRole =
+  (typeof controlPlaneActivationRoles)[number];
+
+/** Readiness-authority snapshot supplied for advance/resume. The control plane
+ * never decides readiness itself; a missing or not-ready snapshot denies. */
+export interface ControlPlaneActivationReadinessView {
+  ready: boolean;
+  controls: Record<string, boolean>;
+  blockers: string[];
+  evidence_ref?: string | null;
+}
+
+/** Durable activation state plus derived effective state/blockers. */
+export interface ControlPlaneActivationView {
+  activation_id: string;
+  scope_kind: ControlPlaneActivationScopeKind;
+  tenant_id?: string | null;
+  environment_id?: string | null;
+  region: string;
+  state: ControlPlaneActivationState;
+  previous_state?: ControlPlaneActivationState | null;
+  frozen_from_state?: ControlPlaneActivationAdvanceState | null;
+  revision: number;
+  readiness_ref?: string | null;
+  readiness_ready: boolean;
+  reason?: string | null;
+  updated_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  effective_state: ControlPlaneEffectiveState;
+  effective_blockers: string[];
+}
+
+/** Append-only activation transition evidence row. */
+export interface ControlPlaneActivationTransitionView {
+  transition_id: string;
+  activation_id: string;
+  from_state: ControlPlaneActivationState;
+  to_state: ControlPlaneActivationState;
+  transition: ControlPlaneActivationTransition;
+  readiness_ref?: string | null;
+  readiness_ready: boolean;
+  reason?: string | null;
+  actor?: string | null;
+  created_at?: string | null;
+}
+
+// ── Reconciled authority map (Program A) ─────────────────────────────────────
+
+/** Canonical owners of the authorities around the control plane. */
+export const controlPlaneAuthorityOwners = [
+  'provider_runtime',
+  'rights_authority',
+  'contract_governance',
+  'sdk_distribution',
+  'graph_mutation_gateway',
+  'ingestion',
+  'identity',
+  'readiness',
+  'reconciled_control_plane',
+] as const;
+export type ControlPlaneAuthorityOwner =
+  (typeof controlPlaneAuthorityOwners)[number];
+
+/** The RCP's permitted interface to an authority: own, observe, or none. */
+export const controlPlaneAuthorityRoles = ['own', 'observe', 'none'] as const;
+export type ControlPlaneAuthorityRole =
+  (typeof controlPlaneAuthorityRoles)[number];
+
+/** External authority areas the RCP observes but never owns. */
+export const rcpObservedAuthorityAreas = [
+  'provider_credentials',
+  'source_rights',
+  'schema_semantics',
+  'sdk_artifacts',
+  'release_readiness',
+  'durable_ingestion',
+] as const;
+
+/** External areas with no RCP interface at all. */
+export const rcpNoInterfaceAuthorityAreas = [
+  'canonical_identity',
+  'graph_mutation',
+] as const;
+
+/** The RCP's own authority areas. */
+export const rcpOwnedAuthorityAreas = [
+  'operational_convergence',
+  'change_planning_and_orchestration',
+  'rollout_coordination',
+  'control_evidence_correlation',
+  'control_plane_activation',
+] as const;
+
+/** Areas the RCP must never claim. */
+export const rcpForbiddenAuthorityAreas = ['graph_mutation'] as const;
+
+/** One canonical owner + the RCP's permitted interface to it. */
+export interface ControlPlaneAuthorityAssignment {
+  area: string;
+  owner: ControlPlaneAuthorityOwner;
+  rcp_role: ControlPlaneAuthorityRole;
+  interface: string[];
+  note?: string | null;
+}

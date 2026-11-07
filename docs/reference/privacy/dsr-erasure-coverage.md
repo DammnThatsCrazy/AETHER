@@ -9,7 +9,7 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "config/storage_policies.yaml": "sha256:dd0170e28a9e22f6169ece57f2a05063d18f4b7a7e369dda182bbb5ef4f383e3"
+  "config/storage_policies.yaml": "sha256:4a44084cac17fff5155b4fc04bf4e36fc3fee1bae95fba683b8cdb55ada9b066"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
   "services/api/governance/consent/erasure_jobs.py": "sha256:e7209845abf90683109a52f895142862b5c8a421f80bf427cb4a90c4143c9a96"
   "services/api/governance/consent/erasure_planes.py": "sha256:dd529398d1e0d3b60bb8c61bf6371aa241ef63bdaa57738993ab823c8b57cf9e"

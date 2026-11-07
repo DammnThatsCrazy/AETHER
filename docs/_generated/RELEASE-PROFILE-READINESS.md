@@ -6,7 +6,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 | Profile | Disposition | Required | Impl | Prod | Activation | Env evidence | Deps | Ownership |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Local development | BLOCKED_BY_CODE | 32 | 84.4% | n/a | 46.9% | 100% | 100% | 100% |
+| Local development | BLOCKED_BY_CODE | 33 | 81.8% | n/a | 48.5% | 100% | 100% | 97% |
 | Staging | READY_TO_ACTIVATE | 24 | 100% | 100% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
 | Production | BLOCKED_BY_CODE | 23 | 43.5% | 100% | 65.2% | 0% | 100% | 100% |
@@ -39,6 +39,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `profile-360`: TECHNICALLY_RELEASE_ELIGIBLE
 - `provider-certification-plane`: TECHNICALLY_RELEASE_ELIGIBLE
 - `push-notification-delivery`: TECHNICALLY_RELEASE_ELIGIBLE
+- `reconciled-control-plane`: BLOCKED_BY_CODE
 - `scale-readiness`: TECHNICALLY_RELEASE_ELIGIBLE
 - `sdks`: TECHNICALLY_RELEASE_ELIGIBLE
 - `security-compliance`: TECHNICALLY_RELEASE_ELIGIBLE
@@ -60,6 +61,8 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
+- reconciled-control-plane: implementation completion 80% (< 100% of in-scope repository controls for the Program A+B plus first Program C slice)
+- reconciled-control-plane: open repository work: Program C — execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D — recovery, continuity and interruption reconciliation; Program E — operator command surface for governed transitions; Program F — security/scale review and credentialed staging proof; Program G — staged production activation with rollback evidence
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
@@ -104,6 +107,8 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
+- reconciled-control-plane: implementation completion 80% (< 100% of in-scope repository controls for the Program A+B plus first Program C slice)
+- reconciled-control-plane: open repository work: Program C — execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D — recovery, continuity and interruption reconciliation; Program E — operator command surface for governed transitions; Program F — security/scale review and credentialed staging proof; Program G — staged production activation with rollback evidence
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening

@@ -110,7 +110,7 @@ route classified in `config/route_registry.yaml`.
 | risk360 | risk_360 | `/v1/risk-overlays` (flag-gated OFF), `/v1/capability-risk`; CIS gateway | graph, comparison_workbench | flag-gated today |
 | fraud360 | risk_360 | `/v1/fraud`, `/v1/fraud/networks`; `services/api/intelligence/fraud/`, `fraud_networks/` | graph | — |
 | source360 | operational_workbench | `/v1/imports`, `/v1/kyber/imports`, `/v1/providers`; UPR; `services/api/journeys/traffic/classifier.py` | campaign360 | — |
-| connection360 | operational_workbench | `/v1/integrations/connectors`, `/v1/provider-connections`, `/v1/client-sync`; `provider_runtime` connections/credentials/health | (**new surface `connection360` added in P0**) | spine `reconciled_control_plane` (harness rollup PR #529 merged; spine not yet formalized) |
+| connection360 | operational_workbench | `/v1/integrations/connectors`, `/v1/provider-connections`, `/v1/client-sync`; `provider_runtime` connections/credentials/health | (**new surface `connection360` added in P0**) | spine `reconciled_control_plane` (`in_flight` as of the Post-734 Program A+B slice; formerly a pending authority) |
 | support360 | operational_workbench | `services/api/journeys/support360/`; canonical case lifecycle plus case-linked, body-suppressed communication metadata using exact tenant, provider connection, and source case keys | support360 | callbacks, participants, SLA, journeys, agent assignment, risk, value, outcome, source-history completeness, freshness |
 | infrastructure360 | infrastructure_360 | **`implemented`** (S4) — 19th projection; `Infrastructure360Provider` in `services/api/graph/infrastructure/` (read-only, `graphMutationPolicy: read_only`, no write path); `GET /v1/infrastructure/{subject_kind}/{subject_id}` + `/health` (classified in `config/route_registry.yaml`); reads `infrastructure_facts`/`infrastructure_state`/`deployments` authorities over the `infrastructure_model` spine | infrastructure360 | — (zero pending; `converged`, `docs/architecture/blueprints/infrastructure360.md`) |
 | memory360 | context_360 | shared frame route; tenant memory records, semantic graph, consent decisions, and evidence | profile360 | complete source links, current policy evaluation, and freshness |
@@ -120,9 +120,10 @@ real coordinates (routes → `legacyBindings`, surfaces → `surfaceIds`, metric
 → `metricRefs`). Nine projections are currently marked `implemented`; the
 other fifteen remain `in_flight`, including `agent360`, `execution360`, and
 `workflow360`.
-Two unformalized spines (`journey_continuity` and
-`reconciled_control_plane`) remain declared pending authorities for
-`episode360` and `connection360`. The 18 product-surface contract rows are
+One unformalized spine (`journey_continuity`) remains a declared pending
+authority for `episode360`. `reconciled_control_plane` is now an `in_flight`
+spine with a real registry row, so `connection360`'s hard dependency resolves
+directly and its earlier pending-authority declaration was removed. The 18 product-surface contract rows are
 source-aligned and still have unbound required subject/slot combinations.
 These are the current follow-up pieces; they are not considered closed by the
 catalog or generic frame route. Earlier vertical slices such as

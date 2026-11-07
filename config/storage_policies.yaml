@@ -8317,6 +8317,48 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # ---------------------------------------------------------------------------
+  # Reconciled Control Plane (Program B) — durable production activation
+  # authority. One state row per global or tenant/environment/region scope, and
+  # append-only advance/freeze/resume transition evidence. Internal operator
+  # metadata: no consent data, never materialized/externalized. Environment
+  # flags are kill switches and are not stored here.
+  # ---------------------------------------------------------------------------
+
+  - resource_type: rcp_control_plane_activation_states
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: rcp_control_plane_activation_transitions
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: status_component_daily
     # Public status history: per-component daily health-sample counts folded
     # in by API processes (services/api/ingestion/gateway/status_history.py). Platform-global

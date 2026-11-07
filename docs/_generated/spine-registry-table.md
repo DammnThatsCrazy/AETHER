@@ -56,7 +56,7 @@ Canonical Aether spine registry (Spine Composition Kernel, ADR-011). Every spine
 | `model_governance` | ML / model contracts | intelligence_projection | composition_authority | implemented | read_only | — | 14 open |
 | `platform_authority` | Platform Authority | governance_contract | runtime_authority | implemented | read_only | — | 14 open |
 | `projection_plane` | 360 projections | intelligence_projection | composition_authority | in_flight | read_only | `campaign360`, `cluster360`, `comparison_workbench`, `connection360`, `economic360`, `geo`, `graph`, `journeys`, `outcome360`, `product_intelligence`, `profile360`, `temporal_observatory`, `timeline` | 14 open |
-| `reconciled_control_plane` | reconciled_control_plane (pending projection spine) | decision_action | runtime_authority | pending | read_only | `connection360` | 14 open |
+| `reconciled_control_plane` | reconciled_control_plane (in-flight runtime authority) | decision_action | runtime_authority | in_flight | read_only | `connection360` | 1 verified / 13 open |
 | `relationship_fidelity` | Relational Intelligence / Relationship Fidelity | relationship_graph | truth_authority | implemented | canonical_gateway_only | `graph` | 14 open |
 | `rights_irrl` | Rights / IRRL runtime | governance_contract | truth_authority | in_flight | canonical_gateway_only | — | 14 open |
 | `spine_composition_kernel` | Spine Composition Kernel (program capability) | governance_contract | program_capability | in_flight | read_only | — | — |

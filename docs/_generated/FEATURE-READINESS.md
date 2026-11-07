@@ -32,6 +32,7 @@ Each feature is measured across independent dimensions. Implementation completio
 | Profile 360 | profile-360-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
 | Provider Certification Plane | provider-certification-plane-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | LIVE_DATA_WAITING | MODERATE |
 | Push Notification Delivery | push-notification-delivery-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | CREDENTIAL_WAITING | MODERATE |
+| Reconciled Control Plane | reconciled-control-plane-v1 v1 | 80% | 50% | CODE_COMPLETE | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Scale Readiness | scale-readiness-v1 v1 | 100% | 100% | VERIFIED | ✅ | INFRASTRUCTURE_WAITING | MODERATE |
 | Client SDKs | sdks-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Security & Compliance | security-compliance-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
@@ -351,6 +352,18 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Confidence:** MODERATE — gap: no live provider rehearsal yet (accounts required)
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
 - **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+
+## Reconciled Control Plane (`reconciled-control-plane`)
+
+- **Scope:** reconciled-control-plane-v1 v1 — staging-proof-then-staged-production-activation
+- **Implementation:** IMPLEMENTED · 80% of in-scope repository controls for the Program A+B plus first Program C slice
+- **Productionization:** 50% of in-scope productionization controls for the Program A+B plus first Program C slice
+- **Repository ceiling:** CODE_COMPLETE (achieved: yes)
+- **Activation:** NO_EXTERNAL_BLOCKER
+- **Remaining repository work:** Program C — execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D — recovery, continuity and interruption reconciliation; Program E — operator command surface for governed transitions; Program F — security/scale review and credentialed staging proof; Program G — staged production activation with rollback evidence
+- **Confidence:** MODERATE — gap: No credentialed staging/production evidence.
+- **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=NOT_IN_PROFILE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Scale Readiness (`scale-readiness`)
 

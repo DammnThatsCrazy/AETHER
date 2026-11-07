@@ -571,14 +571,7 @@ export const intelligenceProjectionDefinitions: Record<
     },
     deprecatedReason: null,
     successorId: null,
-    pendingAuthority: [
-      {
-        id: 'reconciled_control_plane',
-        kind: 'spine',
-        reason: 'harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority',
-        resolvesInProjection: 'connection360'
-      }
-    ],
+    pendingAuthority: [],
     pendingReference: []
   },
   economic360: {
@@ -1708,14 +1701,6 @@ export const projectionDependencyGraph: Record<
 export const pendingAuthorities: Partial<
   Record<IntelligenceProjectionId, readonly PendingResolution[]>
 > = {
-  connection360: [
-    {
-      id: 'reconciled_control_plane',
-      kind: 'spine',
-      reason: 'harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority',
-      resolvesInProjection: 'connection360'
-    }
-  ],
   episode360: [
     {
       id: 'journey_continuity',

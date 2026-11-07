@@ -16,7 +16,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:5ba2d5d39c56b0deaadedae28449db78644b365b0504ecc3fed01b673b414b81"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:9e89e42e4b20e1f5125715a30ac1682be037317d784358e46f448e87c55a4f54"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
   "services/api/actions/agent/": "sha256:212bfda1e8619a72a9b9275f03fc6f89144ee78b88ff07591b8911cf1f803574"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"

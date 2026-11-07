@@ -32,7 +32,7 @@ source_hashes:
   "config/readiness/features/interoperability-intelligence.yaml": "sha256:99f3bd9c8f300ddaf4acddc0f8fa1ca1398c40a85714f23ea838c9990b0b2293"
   "config/readiness/features/payment-rail-observability.yaml": "sha256:35f8b2e23e1f314c1019e034ecea6e4c18505b5b30f4dd306c5b7dd9c5aea608"
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
-  "config/storage_policies.yaml": "sha256:dd0170e28a9e22f6169ece57f2a05063d18f4b7a7e369dda182bbb5ef4f383e3"
+  "config/storage_policies.yaml": "sha256:4a44084cac17fff5155b4fc04bf4e36fc3fee1bae95fba683b8cdb55ada9b066"
   "docs/_generated/adapter-certification-matrix.json": "sha256:30c99f26bb77d405851ce92caa915c358988e140e290808a21d538f594fdc7de"
   "services/api/config/settings.py": "sha256:abde25ae3783e080355d11c81bafcfdff643240934ea50a0859e4fabdfb97441"
   "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
