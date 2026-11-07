@@ -15,7 +15,7 @@ source_hashes:
   "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
-  "services/api/journeys/comms/repository.py": "sha256:40708d0baed19cdaed65102938ab27af782859213cef991ca7b823eed941d028"
+  "services/api/journeys/comms/repository.py": "sha256:ce8230d0d3f362eb838f12d97c37346dd10f8c98ec29e07d6c1029c90d74de5d"
   "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
   "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
   "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
@@ -179,8 +179,10 @@ engagement while remaining recorded as facts.
 Communication360 target evidence is narrower than this correlation hierarchy:
 only explicit `In-Reply-To` references with exact provider account and thread
 scope resolve to a unique evidence-backed Silver target no later than the reply.
-Lifecycle observations of one message count as one target, anchored to its
-earliest observation; only distinct messages are ambiguous.
+Consistent lifecycle observations of one message count as one target, anchored
+to its earliest observation. Conflicting direction or sender, or a repeated
+origin state (sent, received, replied), remain ambiguous, and more than 100 facts
+for one message ID is an incomplete read.
 The reply's own message ID remains separate from its target. Missing scope,
 invalid, ambiguous or incomplete reads remain unknown; association does not prove
 causal response, sender identity, actor authority or complete provider history.

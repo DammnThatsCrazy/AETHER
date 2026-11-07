@@ -131,6 +131,31 @@ _FACT_COLUMNS: tuple[str, ...] = (
 _JSON_COLUMNS = {"payload", "provenance"}
 
 
+_REPLY_TARGET_FACT_BOUND = 100
+_REPLY_TARGET_ORIGIN_STATES = frozenset({"sent", "received", "replied"})
+
+
+def _distinct_reply_targets(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Time-ordered facts -> one row per message claim; a repeated origin is its own claim."""
+    targets: list[dict[str, Any]] = []
+    seen_claims: set[tuple[Any, ...]] = set()
+    seen_origins: set[tuple[Any, ...]] = set()
+    for row in rows:
+        claim = (
+            row.get("message_id") or row.get("canonical_activity_key") or row.get("fact_id"),
+            row.get("direction"),
+            row.get("sender_identity_binding_id"),
+            row.get("sender_entity_id"),
+        )
+        origin = row.get("communication_state") in _REPLY_TARGET_ORIGIN_STATES
+        if claim not in seen_claims or (origin and claim in seen_origins):
+            targets.append(row)
+        seen_claims.add(claim)
+        if origin:
+            seen_origins.add(claim)
+    return targets
+
+
 class CommsFactsRepository:
     """Durable storage over silver_comms_facts."""
 
@@ -220,8 +245,9 @@ class CommsFactsRepository:
     ) -> tuple[list[dict[str, Any]], bool]:
         """Read exact provider reply targets, one earliest observation per message.
 
-        Lifecycle facts of one message are not separate targets; completeness is
-        bounded to detecting more than one distinct message."""
+        Consistent lifecycle facts of one message are not separate targets. Facts
+        conflicting on direction or sender, or repeating an origin state, stay
+        separate so the caller fails closed. A read over the fact bound is incomplete."""
         if not all((tenant_id, provider, provider_account_id, external_thread_id, external_message_id)):
             return [], True
         cap = min(max(int(limit), 1), 2)
@@ -237,30 +263,23 @@ class CommsFactsRepository:
 
         pool = await self._pool()
         if pool is None:
-            earliest: dict[str, dict[str, Any]] = {}
-            for row in sorted(
+            fetched = sorted(
                 (row for row in _local_facts.values() if matches(row)),
                 key=lambda row: (str(row.get("occurred_at")), str(row.get("fact_id"))),
-            ):
-                identity = row.get("message_id") or row.get("canonical_activity_key") or row.get("fact_id")
-                earliest.setdefault(str(identity), row)
-            rows = list(earliest.values())
-            return rows[:cap], len(rows) <= cap
-        async with pool.acquire() as conn:
-            records = await conn.fetch(
-                """SELECT DISTINCT ON (
-                       COALESCE(NULLIF(message_id, ''), NULLIF(canonical_activity_key, ''), fact_id::text)
-                   ) * FROM silver_comms_facts
-                   WHERE tenant_id = $1 AND provider = $2 AND provider_account_id = $3
-                     AND external_thread_id = $4 AND external_message_id = $5
-                   ORDER BY COALESCE(NULLIF(message_id, ''), NULLIF(canonical_activity_key, ''), fact_id::text),
-                            occurred_at ASC, fact_id ASC
-                   LIMIT $6""",
-                tenant_id, provider, provider_account_id, external_thread_id,
-                external_message_id, cap + 1,
-            )
-        fetched = [dict(row) for row in records]
-        return fetched[:cap], len(fetched) <= cap
+            )[:_REPLY_TARGET_FACT_BOUND + 1]
+        else:
+            async with pool.acquire() as conn:
+                records = await conn.fetch(
+                    """SELECT * FROM silver_comms_facts
+                       WHERE tenant_id = $1 AND provider = $2 AND provider_account_id = $3
+                         AND external_thread_id = $4 AND external_message_id = $5
+                       ORDER BY occurred_at ASC, fact_id ASC LIMIT $6""",
+                    tenant_id, provider, provider_account_id, external_thread_id,
+                    external_message_id, _REPLY_TARGET_FACT_BOUND + 1,
+                )
+            fetched = [dict(row) for row in records]
+        targets = _distinct_reply_targets(fetched[:_REPLY_TARGET_FACT_BOUND])
+        return targets[:cap], len(targets) <= cap and len(fetched) <= _REPLY_TARGET_FACT_BOUND
 
     # ── Read: Profile360 ─────────────────────────────────────────────────────
 
