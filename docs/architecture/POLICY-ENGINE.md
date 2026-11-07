@@ -19,7 +19,7 @@ OODA approval flows — it never bypasses them.
 
 | Policy key | Behavior |
 |---|---|
-| `action.dispatch` | Block dispatch unless the decision is `approved`. |
+| `action.dispatch` | Require tenant `dispatch` permission and an approved decision; persist context bound to one dispatch, authenticated principal, selected action, target, elevation/approval, and association. |
 | `action.elevated_dispatch` | Block elevated/critical dispatch when `approval_id` is missing. |
 | `cross_tenant.access` | Block tenant access to another tenant's records. |
 | `kyber.operator_access` | Block operator tenant access without assigned role or break-glass. |

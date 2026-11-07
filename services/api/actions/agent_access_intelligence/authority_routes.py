@@ -57,6 +57,7 @@ class CapabilityAuthorizationGrant(BaseModel):
         default=None,
         description="Authorize every capability on one server (its observed name or URL).",
     )
+    resource_uri: Optional[str] = Field(default=None, description="Authorize reading exactly one observed MCP resource URI.")
     starts_at: Optional[str] = None
     ends_at: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -93,6 +94,7 @@ async def grant_authorization(
         agent_id=body.agent_id,
         capability_id=body.capability_id,
         server_key=body.server_key,
+        resource_uri=body.resource_uri,
         starts_at=body.starts_at,
         ends_at=body.ends_at,
         metadata=body.metadata,

@@ -42,6 +42,56 @@ AGENT_ID = "agent-outcomes-1"
 
 
 @pytest.mark.asyncio
+async def test_outcome_truth_prediction_lookup_requires_exact_tenant_and_label_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import shared.backend_interpretation.stores as truth_stores
+
+    backing = InMemoryStore("profile360-exact-prediction-outcomes")
+    monkeypatch.setattr(truth_stores, "_kv", lambda _name: backing)
+    store = OutcomeTruthStore()
+
+    def record(outcome_id: str, tenant_id: str, version: str) -> OutcomeTruthRecord:
+        return OutcomeTruthRecord(
+            outcome_id=outcome_id,
+            tenant_id=tenant_id,
+            definition_ref="goal_achieved",
+            subject=EntityRef(kind="user", id="profile-1"),
+            state="final",
+            prediction_id="ppout-exact-1",
+            prediction_label_contract_version=version,
+            observed_at="2026-10-30T12:00:00Z",
+            evidence_refs=[EvidenceRef(id=f"event-{outcome_id}", type="event", source="silver_outcome_facts")],
+        )
+
+    await store.upsert(record("outcome-exact", TENANT, "profile-outcome-labels.v1"))
+    await store.upsert(record("outcome-wrong-version", TENANT, "profile-outcome-labels.v2"))
+    await store.upsert(record("outcome-wrong-tenant", "tenant-other", "profile-outcome-labels.v1"))
+
+    rows, truncated, invalid = await store.list_for_prediction(
+        TENANT, "ppout-exact-1", "profile-outcome-labels.v1", limit=10
+    )
+
+    assert [row.outcome_id for row in rows] == ["outcome-exact"]
+    assert truncated is False
+    assert invalid is False
+
+    await backing.set(f"{TENANT}:outcome-malformed", {
+        "outcome_id": "outcome-malformed",
+        "tenant_id": TENANT,
+        "definition_ref": "goal_achieved",
+        "state": "not-a-state",
+        "prediction_id": "ppout-exact-1",
+        "prediction_label_contract_version": "profile-outcome-labels.v1",
+    })
+    rows, _truncated, invalid = await store.list_for_prediction(
+        TENANT, "ppout-exact-1", "profile-outcome-labels.v1", limit=10
+    )
+    assert [row.outcome_id for row in rows] == ["outcome-exact"]
+    assert invalid is True
+
+
+@pytest.mark.asyncio
 async def test_agent360_business_outcomes_reads_exact_agent_truth_with_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

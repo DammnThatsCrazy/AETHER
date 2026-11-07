@@ -33,6 +33,8 @@ def _make_mapper():
 
 
 TENANT = "test-tenant"
+# Settlement state comes only from the server commerce registry, never a public SDK event.
+SERVER_OBSERVED = {"source_authority": "x402_commerce"}
 AGENT = "agent-xyz"
 
 
@@ -75,7 +77,7 @@ async def test_x402_payment_settled_writes_settlement():
     # Now settle it
     result = await mapper.handle_event(
         "x402_payment_settled",
-        {
+        {"metadata": SERVER_OBSERVED, 
             "settlement_event_id": "se-002",
             "payment_intent_id": "pi-002",
             "agent_id": AGENT,
@@ -103,7 +105,7 @@ async def test_x402_payment_failed_writes_failure():
     )
     await mapper.handle_event(
         "x402_payment_failed",
-        {"settlement_event_id": "se-003", "payment_intent_id": "pi-003",
+        {"metadata": SERVER_OBSERVED, "settlement_event_id": "se-003", "payment_intent_id": "pi-003",
          "agent_id": AGENT, "amount": "1.00", "currency": "USDC",
          "failure_reason": "insufficient_funds"},
         TENANT,
@@ -125,7 +127,7 @@ async def test_x402_receipt_verified_updates_settlement():
     )
     await mapper.handle_event(
         "x402_payment_settled",
-        {"settlement_event_id": "se-004", "payment_intent_id": "pi-004",
+        {"metadata": SERVER_OBSERVED, "settlement_event_id": "se-004", "payment_intent_id": "pi-004",
          "agent_id": AGENT, "amount": "2.00", "currency": "USDC"},
         TENANT,
     )
@@ -149,13 +151,13 @@ async def test_x402_refund_writes_reversal():
     )
     await mapper.handle_event(
         "x402_payment_settled",
-        {"settlement_event_id": "se-005", "payment_intent_id": "pi-005",
+        {"metadata": SERVER_OBSERVED, "settlement_event_id": "se-005", "payment_intent_id": "pi-005",
          "agent_id": AGENT, "amount": "7.00", "currency": "USDC"},
         TENANT,
     )
     await mapper.handle_event(
         "x402_refund_or_reversal",
-        {"settlement_event_id": "se-005r", "payment_intent_id": "pi-005",
+        {"metadata": SERVER_OBSERVED, "settlement_event_id": "se-005r", "payment_intent_id": "pi-005",
          "agent_id": AGENT, "amount": "7.00", "currency": "USDC"},
         TENANT,
     )
@@ -205,3 +207,19 @@ async def test_mapper_tenant_isolation():
     rows_b = await PaymentIntentRepository().list_for_agent(AGENT, "tenant-iso-b")
     assert all(r["tenant_id"] == "tenant-iso-a" for r in rows_a)
     assert all(r["tenant_id"] == "tenant-iso-b" for r in rows_b)
+
+
+@pytest.mark.asyncio
+async def test_a_settlement_without_server_authority_is_deferred_and_writes_nothing():
+    mapper = _make_mapper()
+    result = await mapper.handle_event(
+        "x402_payment_settled",
+        {"settlement_event_id": "se-sdk", "payment_intent_id": "pi-sdk", "agent_id": AGENT,
+         "amount": "3.00", "currency": "USDC"},
+        TENANT,
+    )
+    assert result == {
+        "status": "deferred", "reason": "source_authority_required", "event_type": "x402_payment_settled",
+    }
+    assert await SettlementEventRepository().list_for_intent("pi-sdk", TENANT) == []
+

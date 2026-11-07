@@ -14,7 +14,7 @@ source_hashes:
   "services/api/governance/governance/routes.py": "sha256:ca87bb59cf8c61661b53d0294d6cee4f5093beb28ae32aca79cbea7a62b708f1"
   "services/api/governance/reliability/service.py": "sha256:71fe39c503316a915a02f154dececd6385e7e07ed074ddea7ddb24915551d20c"
   "services/api/governance/security/access_control.py": "sha256:3e5f52376cae80e8e109bc580939800220dde88abe18e3efea46c5f643d000ef"
-  "services/api/governance/security/policy_engine.py": "sha256:1ac65aa8233ac33ab77f342858579fd7d1fd5388dc2408d3e482bfa0e936e01b"
+  "services/api/governance/security/policy_engine.py": "sha256:7e99aaf425a75d1698e7c6e4824dffb797d1810c4ec55fb3cdb63ce5d0182d51"
 ---
 
 # Security, Compliance & Governance Controls
@@ -48,6 +48,18 @@ government buyers run a security review against demonstrable controls. It answer
 | Audit export governance | [AUDIT-EXPORTS.md](./AUDIT-EXPORTS.md) | Implemented |
 | Integration security | [INTEGRATION-SECURITY.md](./INTEGRATION-SECURITY.md) | Implemented |
 | Governance evidence packs | [GOVERNANCE-EVIDENCE-PACKS.md](./GOVERNANCE-EVIDENCE-PACKS.md) | Implemented |
+
+The `action.dispatch` policy record captures the tenant dispatch-permission
+check, approved-decision gate, actor, tenant, dispatch ID, selected action,
+target, elevation and approval context, association record, and evaluation time.
+It is persisted with the dispatch and revalidated by downstream projections; it
+does not establish event-time authority, connector execution, or an external effect.
+
+`capability.invoke` decisions persist a context containing the exact Agent,
+capability, grant reference, inventory observation, and evaluation result.
+Agent360 exposes bounded tenant-scoped evaluations with their timestamps. These
+are prior policy evaluations; they are not linked to observed tool calls and do
+not prove current authority.
 
 ## Architecture
 

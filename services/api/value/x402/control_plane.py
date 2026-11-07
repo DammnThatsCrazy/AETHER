@@ -20,6 +20,7 @@ from .approvals import get_approval_service
 from .commerce_models import (
     AccessGrant,
     ApprovalPriority,
+    ApprovalPermissionReceipt,
     ApprovalRequest,
     ApprovalStatus,
     Entitlement,
@@ -284,6 +285,7 @@ class X402ControlPlane:
         decided_by: str,
         reason: str,
         is_override: bool = False,
+        permission_receipt: Optional[ApprovalPermissionReceipt] = None,
     ) -> ApprovalRequest:
         """Apply an approval decision. On approve, create PaymentAuthorization."""
         from .commerce_models import ApprovalDecision
@@ -295,6 +297,7 @@ class X402ControlPlane:
             decided_by=decided_by,
             reason=reason,
             is_override=is_override,
+            permission_receipt=permission_receipt,
         )
         if not approval.last_decision_id:
             raise ControlPlaneError(
@@ -311,6 +314,8 @@ class X402ControlPlane:
             decided_by=decided_by,
             reason=reason,
             is_override=is_override,
+            decided_at=approval.decided_at,
+            permission_receipt=permission_receipt,
         )
         await self._mutations.write_approval_decision(approval, decision_obj)
         return approval

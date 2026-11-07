@@ -9,8 +9,6 @@ since_version: "0.1.0"
 source_files:
   - services/api/connectors/managed_integrations/
   - services/api/ingestion/sdk_distribution/control_plane.py
-  - services/api/ingestion/sdk_config/rcp_requests.py
-  - services/api/ingestion/sdk_config/routes.py
   - scripts/validate_sdk_control_plane_seam.py
   - services/api/governance/kyber/access/
   - services/api/alembic/versions/20260906_rcp_managed_integrations.py
@@ -22,9 +20,7 @@ source_files:
   - services/api/alembic/versions/20260906_rcp_source_authority.py
   - services/api/alembic/versions/20260906_rcp_rollouts.py
   - services/api/alembic/versions/20260906_rcp_fleet_update.py
-  - services/api/alembic/versions/20261029_rcp_activation_authority.py
   - config/route_registry.yaml
-  - config/readiness/features/reconciled-control-plane.yaml
   - services/api/main.py
   - services/api/config/settings.py
   - packages/shared/managed-integrations.ts
@@ -34,9 +30,8 @@ reviewed_source_commits:
   - commit: "482948261"
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "config/readiness/features/reconciled-control-plane.yaml": "sha256:df1166bc83b7ebd09b9bcd773ad47073d2cc76fbcbd00c82c882ee12e48d3886"
-  "config/route_registry.yaml": "sha256:b15e5c0586c642f865aa76d7fb6c3223a0e5c58bec2bf6e8bb258b9595d08e2c"
-  "packages/shared/managed-integrations.ts": "sha256:2dda9d93a55a544dcf79b22f810d78003a49ac9593a0ccaedba243d53af1533d"
+  "config/route_registry.yaml": "sha256:14a61060d62f60c3905c59be7fbe947b6d0c7adae72752f7b7834b100f561b8f"
+  "packages/shared/managed-integrations.ts": "sha256:1277aae12c27f222f7358c793d71bfa0a8e34c07354de88bb48dff5126a55b25"
   "scripts/validate_sdk_control_plane_seam.py": "sha256:321dbeec981f9542054e4be9c70f804414b027befeeb11d5eef4342f6c25f3af"
   "services/api/alembic/versions/20260906_rcp_admission.py": "sha256:ac836b9f4fc08cb325444f9447689efc05031157e0b52d7dc2402d04b7514a1e"
   "services/api/alembic/versions/20260906_rcp_change_sets.py": "sha256:173adc0310aabe04f976646217d35c24871597fd4a2e8c6aa23703afae14e988"
@@ -47,14 +42,11 @@ source_hashes:
   "services/api/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:e691acb7903a9758863e19c409d6e03847f40402191b557b39d68e7aa6f0d324"
   "services/api/alembic/versions/20260906_rcp_simulation.py": "sha256:86f635d8f06d758f8fc42b09a7ac4f853f8983483eff275e9f1190fe5c8dbaf4"
   "services/api/alembic/versions/20260906_rcp_source_authority.py": "sha256:2d01381af9228c26b5ed4c24c3ff9cc84af6d08717e771460c9a086491cca760"
-  "services/api/alembic/versions/20261029_rcp_activation_authority.py": "sha256:67e9a98402880edf42acd4016c9f44c6b2d191e00deb9c81bfb54ad126284ca0"
-  "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
-  "services/api/connectors/managed_integrations/": "sha256:55602f3bb1eaff46db6420d0c7081aeddc3a2908155041fed50c8262f91678fd"
+  "services/api/config/settings.py": "sha256:abde25ae3783e080355d11c81bafcfdff643240934ea50a0859e4fabdfb97441"
+  "services/api/connectors/managed_integrations/": "sha256:fe2306749156ff6b2969d6de41359213b1715e645f7514295e5f7c19566239cf"
   "services/api/governance/kyber/access/": "sha256:23b63f5b1882f5b966c9e23f638fdcd140e4271c38241e58ecfbfb5d53f76e25"
-  "services/api/ingestion/sdk_config/rcp_requests.py": "sha256:5aebb5643bf6836162cb93cf3ada32e99f47ca01245c69873d0e42b5ff83f009"
-  "services/api/ingestion/sdk_config/routes.py": "sha256:40a928dcd90e6ded018b51b61475423c07f79593c5ee56bc273be0def7c7915f"
   "services/api/ingestion/sdk_distribution/control_plane.py": "sha256:d49325a1264f40d124a17722f1742b6a08a8342cd93b9ff0b3d0bcf22b73d17b"
-  "services/api/main.py": "sha256:fca84921a91cae1332efdd3da2218d211d3a960dd232470b9ea808536a3aa9e2"
+  "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)
@@ -73,81 +65,6 @@ deliberately does **not** do. Phase-by-phase sequencing and evidence live in
 [`docs/architecture/plans/RECONCILED_CONTROL_PHASES.md`](plans/RECONCILED_CONTROL_PHASES.md)
 and
 [`docs/product/productization/reconciled-control-plane/EXECUTION_STATE.md`](../product/productization/reconciled-control-plane/EXECUTION_STATE.md).
-
-## Program A+B — production activation authority
-
-The §0–40 lane proved the engine but left activation as an environment
-variable: the plane was default OFF, and "on" meant four flags agreed. That is
-not a production control surface. Programs A and B replace the implicit switch
-with an explicit, reconciled authority.
-
-**Program A — one authority map.** `authority.py` assigns every RCP area to
-exactly one role: an external authority (identity, consent, provider runtime,
-release registry), an observed/read-only authority, a no-interface area, an
-RCP-owned area, or an explicitly forbidden mutation (`graph_mutation`,
-`canonical_identity`). `assert_authority_map_integrity()` fails if an area is
-unassigned, double-owned, or claims an interface it must not have. The map is
-the machine-readable answer to "who owns this fact?", so future convergence work
-cannot quietly widen the plane's authority.
-
-**Program B — durable activation.** The durable state lives in
-`rcp_control_plane_activation_states`, one row per global or
-tenant/environment/region scope, with append-only transition evidence in
-`rcp_control_plane_activation_transitions`:
-
-```text
-shadow -> detect -> plan -> r0 -> r1 -> r2 -> fully_managed
-                    \________ emergency_frozen ________/
-                              (freeze from any state; resume restores)
-```
-
-- **One step at a time.** There is no "advance to X" call; `advance` moves
-  exactly one state, and `fully_managed` is terminal.
-- **Readiness is an external decision.** `advance` and `resume` require a
-  readiness-authority snapshot with evaluated controls whose `ready` is true
-  and whose blockers are empty. A missing, control-less, not-ready or
-  blocker-carrying snapshot denies. `freeze` is always allowed and requires a
-  reason — safety never waits for readiness.
-- **Flags are kill switches, never grants.** The master switch off yields
-  effective `disabled`; reconciler off caps at `shadow`; scheduler off caps at
-  `plan`. They can only lower the effective state. Turning flags on cannot
-  activate the plane; only a governed transition can raise the durable state.
-- **Concurrency is governed.** Transitions compare-and-set on `revision`; a
-  stale writer gets a conflict instead of overwriting a newer authority. The
-  state write and its append-only evidence commit in one transaction; both
-  carry the readiness reference, actor and reason.
-- **Scopes are isolated.** Global and tenant/environment scopes are distinct
-  rows; the operator read surface validates that a partial or narrowed scope
-  fails closed rather than blending tenants.
-
-The operator surface remains read-only: `GET /authority` exposes the Program A
-assignment map, and `GET /activation` + `GET /activation/transitions` expose
-durable and effective state plus evidence. A write route is deliberately absent
-— Program E/F adds the governed command surface.
-
-The first Program C slice closes the scheduler side of runtime convergence. Each
-scheduler pass resolves the effective activation decision for the integration's
-tenant/environment scope: `shadow` observes only, `detect` reconciles, `plan`
-may persist a ChangeSet, and `r0`+ may execute; `disabled` and
-`emergency_frozen` stop the loop. A tenant/environment row may narrow the
-global row but never exceed it. The decision is cached for one pass so a
-mid-sweep transition cannot make one sweep act at two authority levels.
-
-The second C slice adds asynchronous SDK manifest request intake. While the
-plane is enabled, the legacy synchronous `PUT /v1/config/sdk/manifest` refuses;
-an admin instead calls `POST /v1/config/sdk/manifest/requests`. That request
-records a planned ChangeSet for one `remote_manifest_change` and a stage-zero
-`runtime_config` rollout (`olympus_internal`, 0%, `gate:simulation`), scoped to
-the tenant-wide SDK config environment token `all`. `GET
-/v1/config/sdk/manifest/requests/{id}` reads the durable plan/rollout state. The
-request is deliberately not a publish: `SDKConfigService` remains the delivery
-store, no manifest changes, and projecting rollout state onto the manifest's
-`rollout_percentage` is still open Program C work. Provider Runtime convergence
-is also still open. The plane therefore remains inert by default: no durable
-row means `shadow`, and the default flags keep even that shadow inactive. The
-readiness record (`config/readiness/features/reconciled-control-plane.yaml`)
-states this boundary explicitly (implementation `IMPLEMENTED`, runtime
-convergence still unsatisfied, staging/production activation not claimed).
 
 ## Governing spec
 
@@ -175,7 +92,7 @@ by tests only until a §41+ review lifts the boundary.
 | The lane is | The lane is not |
 |---|---|
 | Plan → approve → execute → progressively deliver change over managed integrations, through typed actuators on governed paths | Production activation: no switch is flipped; the scheduler is idle until its master switch + kill-switch turn on behind the §41+ review |
-| Operator-only review surface (read-only GETs: authority, activation, integrations, change-sets, approvals, action-required) | A tenant console: the `reconciled_control` domain carries no tenant grant (Phase-0 governance decision, unchanged) |
+| Operator-only review surface (read-only GETs: integrations, change-sets, approvals, action-required) | A tenant console: the `reconciled_control` domain carries no tenant grant (Phase-0 governance decision, unchanged) |
 | Actuators / executor / rollout engine / fleet planner — exercised by tests only | Autonomous tenant delivery: rings above 0% reach tenants only under tenant update policy + approvals; the fleet controller composes plans and never self-executes |
 | Additive durable tables + contract twins (Data-Exchange pattern) | New event family, renumbered planes, parallel manifest service, new collection authority, or any SDK behavior change |
 
@@ -183,12 +100,9 @@ by tests only until a §41+ review lifts the boundary.
 
 ```
 packages/shared/managed-integrations.ts            TS contract twin (canonical const arrays + interfaces)
-services/api/connectors/
+services/api/services/
   managed_integrations/
     contracts.py         Python mirror (tuples + pydantic view models)
-    authority.py         reconciled authority assignment map (Program A)
-    activation.py        durable production activation law (Program B) + runtime capability gate (Program C)
-    activation_repository.py  activation states + transition evidence (CAS)
     flags.py             function-local OFF-by-default flag reads
     availability.py      CP-12 typed-availability helpers (never fabricate)
     desired_policy.py    desired-state assembly from release-channel policy (§28)
@@ -200,10 +114,10 @@ services/api/connectors/
     admission.py         §16 admission lifecycle (no forced exit)
     simulation.py        §37 compare-paths shadow plane (never mutates canonical state)
     source_authority.py  §19 authority rules + observation-equivalence keys
-    scheduler.py         activation-gated periodic reconcile+plan+execute loop (rides `maintenance`)
+    scheduler.py         flag-gated periodic reconcile+plan+execute loop (rides `maintenance`)
     rollout.py           §12.8 rollout engine: rings, stage/percentage law, pause/resume
     *_repository.py      one module-local store per engine (in-memory mirror of the tables)
-    routes.py            read-only operator router (9 GETs, operator-gated)
+    routes.py            read-only operator router (6 GETs, operator-gated)
   kyber/access/
     capabilities.py      `kyber.reconciled_control.read` (D4 evidence vocabulary)
     roles.py             `_READ_EVIDENCE` template grant (rides with kyber.audit.read)
@@ -211,13 +125,11 @@ services/api/connectors/
   main.py                flag-gated router mount (default OFF)
   alembic/versions/      20260906_rcp_{managed_integrations,change_sets,execution,
                          admission,simulation,schema_mapping,source_authority,
-                         rollouts,fleet_update}.py and
-                         20261029_rcp_activation_authority.py — additive tables
+                         rollouts,fleet_update}.py — additive tables
                          (schema_mapping and fleet_update tables remain; the engines
                          that wrote them were removed as never wired)
-config/route_registry.yaml     nine kyber_routes declarations (D4, action_class 0)
+config/route_registry.yaml     six kyber_routes declarations (D4, action_class 0)
 config/storage_policies.yaml   17-field rows for every RCP table
-config/readiness/features/reconciled-control-plane.yaml  Program A+B readiness record
 tests/contracts/test_managed_integrations_parity.py   twin parity gate
 tests/unit/reconciled_control/   vocab + engine + console + flag-OFF parity tests
 services/api/tests/managed_integrations/   repo round-trip tests
@@ -238,7 +150,7 @@ provider-runtime admin routes use.
 is a first-class Kyber console capability (domain `reconciled_control`, action
 read, scope `all_tenants_aggregate`, disclosure D4 event evidence), rides the
 `_READ_EVIDENCE` role-template grant beside `kyber.audit.read` (the
-operator-derived-records precedent), and backs nine `kyber_routes` declarations
+operator-derived-records precedent), and backs six `kyber_routes` declarations
 over the operator GET surface. The declarations are ADD-authority only; they
 engage denial when the routes are mounted **and**
 `KYBER_BACKEND_AUTHZ_ENFORCED` is on (default OFF in local/dev, default ON for
@@ -337,9 +249,6 @@ registered. Tenancy is enforced in repository SQL.
 7. Unknowns are never coerced: an unmapped §30 behavior, an unknown drift
    type, or missing evidence resolves to `review`/`unknown`/`not_observable`
    — never to a fabricated token.
-8. Durable activation is the only grant. Environment flags may lower the
-   effective state or disable the plane, never raise it; `effective_state` is
-   what the runtime is permitted to do.
 
 ## SDK site installs as managed integrations
 

@@ -6,7 +6,7 @@ visibility: I
 audience: [ops, dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/connectors/integrations/connectors/klaviyo.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/alembic/versions/20260703_comms_intelligence.py]
+source_files: [services/api/connectors/integrations/connectors/klaviyo.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/alembic/versions/20260703_comms_intelligence.py, services/api/journeys/comms/repository.py, services/api/journeys/communication360/observations.py]
 reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the 360 PR Communication360 repository diff: atomic participant-roster writes and bounded exact-reference reads are additive; provider backfill cursor, dedupe, and replay procedure are unchanged."
@@ -14,9 +14,11 @@ source_hashes:
   "services/api/alembic/versions/20260703_comms_intelligence.py": "sha256:651ee8f17a6e86e00d49d09cdbc0041d525682817851af1368576984c27fec76"
   "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
-  "services/api/journeys/communication360/contracts.py": "sha256:f826cef4a2425cd8b8ad5beafb914794cbb45bd6db9e1dab3bc7d19fb9befa9f"
-  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
-  "services/api/journeys/communication360/repository.py": "sha256:e04eb5071d50f46e28ea795be1ebbb8d98006fb5ce186e962e18c55682f59f89"
+  "services/api/journeys/comms/repository.py": "sha256:ce8230d0d3f362eb838f12d97c37346dd10f8c98ec29e07d6c1029c90d74de5d"
+  "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
+  "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
+  "services/api/journeys/communication360/repository.py": "sha256:acd4fe9dd547ff1092511e4571910085494ba818c03d7d8efa2fe1576867b989"
 ---
 
 # Communications Backfill & Replay Runbook
@@ -47,6 +49,21 @@ source_hashes:
    `{"enabled": false}`); the cursor persists, so re-enabling resumes.
 
 ## Replay (Bronze → Silver)
+
+Qualifying Silver writes now atomically persist a provider-thread observation
+in `communication360_facts` with exact tenant/provider/account/thread/message
+scope, Silver fact ID and evidence. On replay, observations derive from the
+persisted first-write Silver row, never replacement source/account claims.
+Replaying old Silver records can materialize these observations; records without
+the required scope remain unlinked. A canonical observation failure rolls back
+the PostgreSQL Silver write, so replay must retry both. This does not backfill
+canonical Conversation membership or establish complete provider history.
+
+Explicit `In-Reply-To` target and correlation-method metadata persist in the
+Silver payload, separately from the reply's own provider message ID. Replay does
+not infer missing references or account/thread scope in older records. Such
+records remain unresolved in Communication360; cursor and dedupe procedures are
+unchanged, and a resolved association does not prove complete provider history.
 
 Bronze is durable before acknowledgement, so any Silver-side incident is
 recoverable by replaying the Bronze range through the dispatcher:
@@ -87,9 +104,13 @@ then writes role facts only after every participant resolves through an exact
 tenant/provider/account identity mapping. A Bronze-to-Silver replay does not
 replace that identity-bound roster writer. If roster authoring fails after the
 Bronze write, resolve the mapping issue and retry the same signed event; the
-roster facts are idempotent. Provider conversation IDs remain source claims,
-so this path does not establish canonical Conversation membership or complete
-message coverage.
+roster facts are idempotent. Explicit authenticated `membership` assertions now
+atomically persist the canonical Conversation, exact provider/account/thread
+membership and participant roles. Conflicting reassignment fails closed. Source
+thread IDs alone and ordinary Silver replay do not create membership; older
+events need an explicit signed membership assertion, not inferred links. Bounded
+latest-roster evidence does not establish historical membership, complete
+message coverage or freshness.
 
 ## Rollback
 

@@ -247,6 +247,10 @@ class OutcomeTruthRecord(ContractSpineModel):
     policy_version: Optional[str] = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     source_event_ids: list[str] = Field(default_factory=list)
+    prediction_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    prediction_label_contract_version: Optional[str] = Field(
+        default=None, min_length=1, max_length=128
+    )
     observed_at: Optional[str] = None
     updated_at: str = Field(default_factory=utc_now_iso)
     superseded_by: Optional[str] = None

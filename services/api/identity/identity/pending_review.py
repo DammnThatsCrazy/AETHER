@@ -66,6 +66,11 @@ class _PendingIdentityReviewStore(BaseRepository):
         return result is not None
 
 
+#: Review entry kinds. ``agent_continuity_candidate``: one agent ref reported
+#: by several validated deployments (WO-013); review context only, no merge.
+ENTRY_TYPES = frozenset({"late_binding_candidate", "agent_continuity_candidate"})
+
+
 class PendingIdentityReviewRepository:
     """Persist unresolved SDK-to-import candidate decisions idempotently.
 
@@ -99,7 +104,10 @@ class PendingIdentityReviewRepository:
         candidate_source_identity_ids: list[str],
         reason_codes: list[str],
         evidence: list[dict[str, Any]],
+        entry_type: str = "late_binding_candidate",
     ) -> dict[str, Any]:
+        if entry_type not in ENTRY_TYPES:
+            raise ValueError(f"unknown pending review entry type {entry_type!r}")
         candidates = sorted({str(value) for value in candidate_source_identity_ids if value})
         if not tenant_id or not identify_source_identity_id or not candidates:
             raise ValueError("tenant, identify source, and candidate references are required")
@@ -144,7 +152,7 @@ class PendingIdentityReviewRepository:
         row = {
             "id": record_id,
             "tenant_id": tenant_id,
-            "entry_type": "late_binding_candidate",
+            "entry_type": entry_type,
             "identify_source_identity_id": identify_source_identity_id,
             "candidate_source_identity_ids": candidates,
             "reason_codes": safe_reasons,
@@ -158,7 +166,9 @@ class PendingIdentityReviewRepository:
         }
         return await self._store.insert(record_id, row)
 
-    async def list_for_review(self, tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_for_review(
+        self, tenant_id: str, limit: int = 50, *, entry_type: str = "late_binding_candidate",
+    ) -> list[dict[str, Any]]:
         """Return tenant-owned candidates whose disposition still needs attention.
 
         An approval can outlive the request that started it. Keep its durable
@@ -166,7 +176,7 @@ class PendingIdentityReviewRepository:
         in-flight decision from one that can be safely retried.
         """
         rows = await self._store.find_many(
-            filters={"tenant_id": tenant_id, "entry_type": "late_binding_candidate"},
+            filters={"tenant_id": tenant_id, "entry_type": entry_type},
             limit=limit,
             sort_by="created_at",
             sort_order="desc",
@@ -177,13 +187,29 @@ class PendingIdentityReviewRepository:
             if row.get("tenant_id") == tenant_id and row.get("status") in reviewable
         ]
 
+    async def list_agent_continuity(self, tenant_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        """Open and reviewer-decided agent continuity items for one tenant."""
+        rows = await self._store.find_many(
+            filters={"tenant_id": tenant_id, "entry_type": "agent_continuity_candidate"},
+            limit=limit, sort_by="created_at", sort_order="desc",
+        )
+        return [row for row in rows if row.get("tenant_id") == tenant_id
+                and row.get("status") in {"open", *AGENT_CONTINUITY_DECISIONS}]
+
     async def list_open(self, tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
         """Backward-compatible name for the tenant review queue query."""
         return await self.list_for_review(tenant_id, limit=limit)
 
-    async def get(self, tenant_id: str, record_id: str) -> dict[str, Any] | None:
+    async def get(
+        self, tenant_id: str, record_id: str, *, entry_type: str = "late_binding_candidate",
+    ) -> dict[str, Any] | None:
+        """One tenant item of ``entry_type``. The default keeps every existing
+        caller -- including approve/merge -- on late-binding candidates only, so
+        an agent continuity item can never be approved into a merge."""
         row = await self._store.find_by_id(record_id)
         if not row or row.get("tenant_id") != tenant_id:
+            return None
+        if row.get("entry_type", "late_binding_candidate") != entry_type:
             return None
         return row
 
@@ -255,6 +281,52 @@ class PendingIdentityReviewRepository:
             expected_status=expected_status,
             patch=patch,
         )
+
+    async def decide_agent_continuity(
+        self,
+        *,
+        tenant_id: str,
+        record_id: str,
+        decision: str,
+        decided_by: str,
+    ) -> dict[str, Any] | None:
+        """Record a reviewer's decision on one open agent continuity item.
+
+        ``confirmed`` means the reviewer judged the deployments to report one
+        logical agent; ``rejected`` means distinct agents. The record is review
+        context only: nothing is merged, bound or relinked, and
+        ``merge_performed`` is always False. Returns the stored row, or None
+        when the item is missing, of another kind, or no longer open (the
+        transition is compare-and-set, so concurrent decisions cannot both win).
+        """
+        if decision not in AGENT_CONTINUITY_DECISIONS:
+            raise ValueError(f"unknown agent continuity decision {decision!r}")
+        row = await self.get(tenant_id, record_id, entry_type="agent_continuity_candidate")
+        if row is None or row.get("status") != "open":
+            return None
+        reason = f"agent_continuity_{decision}"
+        applied = await self._store.compare_and_set_status(
+            tenant_id=tenant_id,
+            record_id=record_id,
+            expected_status="open",
+            patch={
+                "status": decision,
+                "reason_codes": sorted({*(row.get("reason_codes") or []), reason}),
+                "decision": {
+                    "decision": decision,
+                    "decided_by": str(decided_by or "")[:256],
+                    "decided_at": utc_now().isoformat(),
+                    "merge_performed": False,
+                },
+            },
+        )
+        if not applied:
+            return None
+        return await self.get(tenant_id, record_id, entry_type="agent_continuity_candidate")
+
+
+#: Reviewer outcomes for ``agent_continuity_candidate`` items. Neither merges.
+AGENT_CONTINUITY_DECISIONS = frozenset({"confirmed", "rejected"})
 
 
 __all__ = ["PendingIdentityReviewRepository"]

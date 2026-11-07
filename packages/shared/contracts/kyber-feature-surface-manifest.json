@@ -504,6 +504,9 @@
         "policy",
         "health",
         "recomputeOptions"
+      ],
+      "mirror_params": [
+        "syndicate_id"
       ]
     },
     {
@@ -520,6 +523,9 @@
         "policy",
         "health",
         "recomputeOptions"
+      ],
+      "mirror_params": [
+        "entity_id"
       ]
     },
     {
@@ -536,6 +542,9 @@
         "policy",
         "health",
         "recomputeOptions"
+      ],
+      "mirror_params": [
+        "entity_id"
       ]
     },
     {
@@ -568,6 +577,10 @@
         "policy",
         "health",
         "recomputeOptions"
+      ],
+      "mirror_params": [
+        "campaign_id",
+        "message_id"
       ]
     },
     {
@@ -600,6 +613,9 @@
         "policy",
         "health",
         "recomputeOptions"
+      ],
+      "mirror_params": [
+        "profile_id"
       ]
     },
     {
@@ -632,6 +648,10 @@
         "policy",
         "health",
         "recomputeOptions"
+      ],
+      "mirror_params": [
+        "profile_id",
+        "episode_id"
       ]
     },
     {

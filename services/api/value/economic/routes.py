@@ -38,13 +38,27 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from identity.profile.economic import AgentProfile360EconomicComposer
-from shared.common.common import APIResponse, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, log_event, metrics
 from shared.observability import trace_request, emit_latency
 
 logger = get_logger("aether.service.economic")
 
 router = APIRouter(tags=["Economic Intelligence"])
+
+
+@router.post("/v1/economic/attribution-runs/{run_id}/model-validation")
+async def validate_attribution_model_run(request: Request, run_id: str):
+    """Record exact run/config lineage; this does not approve or calibrate a model."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from value.economic.attribution_model_validation import validate_attribution_run_model
+
+    try:
+        decision = await validate_attribution_run_model(tenant.tenant_id, run_id)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=decision).to_dict()
 
 
 # ── Response Models ──────────────────────────────────────────────────
@@ -84,11 +98,66 @@ class CampaignEconomicResponse(BaseModel):
     roas: Optional[float] = None
     cac: Optional[EconomicAmountResponse] = None
     conversions: Optional[int] = None
+
+
     acquired_customers: Optional[int] = None
     attribution_model: Optional[str] = None
     attribution_confidence: Optional[float] = None
     influenced_wallet_connects: Optional[int] = None
     influenced_protocol_deposits: Optional[EconomicAmountResponse] = None
+
+
+class ValueModelApprovalBody(BaseModel):
+    decision: str = Field(pattern=r"^(approved|rejected)$")
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+@router.post("/v1/economic/attribution-runs/{run_id}/model-approval")
+async def decide_attribution_model_approval(run_id: str, body: ValueModelApprovalBody, request: Request):
+    """Record an authenticated tenant-admin decision for an exact validated run."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    actor_id = getattr(tenant, "user_id", None)
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("authenticated tenant administrator required")
+    from value.economic.attribution_model_validation import decide_value_model_approval
+    try:
+        result = await decide_value_model_approval(
+            tenant.tenant_id, run_id, body.decision, actor_id=actor_id, reason=body.reason,
+            authorization_evidence={
+                "action": "value.model_approval",
+                "permission": "admin",
+                "decision": "allow",
+                "actor_id": actor_id,
+                "evaluated_at": datetime.now(timezone.utc),
+            },
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=result).to_dict()
+
+
+@router.post("/v1/economic/attribution-runs/{run_id}/confidence-evaluation")
+async def evaluate_attribution_confidence(run_id: str, request: Request):
+    """Persist bounded temporal eligibility evidence for this exact run."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    actor_id = getattr(tenant, "user_id", None)
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("authenticated tenant writer required")
+    from value.economic.value_confidence_evaluation import evaluate_attribution_run
+    try:
+        result = await evaluate_attribution_run(
+            tenant.tenant_id, run_id, actor_id=actor_id,
+            authorization_evidence={"action": "value.model_evaluation", "permission": "write",
+                                    "decision": "allow", "actor_id": actor_id,
+                                    "evaluated_at": datetime.now(timezone.utc)},
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=result).to_dict()
 
 
 class TenantEconomicOverviewResponse(BaseModel):

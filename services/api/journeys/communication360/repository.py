@@ -85,7 +85,9 @@ class Communication360FactsRepository:
             )
         return row
 
-    async def upsert_many(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def upsert_many(
+        self, rows: list[dict[str, Any]], *, connection: Any = None,
+    ) -> list[dict[str, Any]]:
         """Insert a related fact batch atomically with per-row replay keys.
 
         Participant rosters are validated and resolved as a whole before this
@@ -102,8 +104,8 @@ class Communication360FactsRepository:
         if not prepared:
             return []
 
-        pool = await self._pool()
-        if pool is None:
+        pool = await self._pool() if connection is None else None
+        if pool is None and connection is None:
             stored: list[dict[str, Any]] = []
             for row in prepared:
                 key = f"{row.get('tenant_id')}:{row.get('idempotency_key')}"
@@ -120,6 +122,11 @@ class Communication360FactsRepository:
             VALUES ({placeholders})
             ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
         """
+        if connection is not None:
+            for row in prepared:
+                values = [_bind_fact_column(column, row[column]) for column in columns]
+                await connection.execute(sql, *values)
+            return prepared
         async with pool.acquire() as conn:
             async with conn.transaction():
                 for row in prepared:
@@ -128,6 +135,142 @@ class Communication360FactsRepository:
         return prepared
 
     # ── Read ─────────────────────────────────────────────────────────────────
+
+    async def upsert_membership_roster(
+        self, conversation: dict[str, Any], membership: dict[str, Any],
+        roster: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Atomically bind one provider scope once; conflicting reassignment fails."""
+        from shared.common.common import BadRequestError
+        from journeys.communication360.membership import payload_of, valid_conversation, valid_membership
+
+        tenant_id = membership["tenant_id"]
+        if not valid_membership(membership, tenant_id) or not valid_conversation(conversation, tenant_id):
+            raise BadRequestError("invalid authenticated conversation membership")
+        key = membership["idempotency_key"]
+
+        def check(existing: Optional[dict[str, Any]]) -> None:
+            if existing is not None and (
+                not valid_membership(existing, tenant_id)
+                or payload_of(existing).get("conversation_id")
+                != payload_of(membership).get("conversation_id")
+            ):
+                raise BadRequestError("provider thread already belongs to another canonical Conversation")
+
+        pool = await self._pool()
+        if pool is None:
+            check(_local_facts.get(f"{tenant_id}:{key}"))
+            return await self.upsert_many([conversation, membership, *roster])
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"{tenant_id}:{key}",
+                )
+                existing = await conn.fetchrow(
+                    "SELECT * FROM communication360_facts WHERE tenant_id = $1 AND idempotency_key = $2",
+                    tenant_id, key,
+                )
+                check(dict(existing) if existing is not None else None)
+                batch = [conversation, membership, *roster]
+                await self.upsert_many(batch, connection=conn)
+                keys = [row["idempotency_key"] for row in batch]
+                persisted = await conn.fetch(
+                    "SELECT * FROM communication360_facts WHERE tenant_id = $1 "
+                    "AND idempotency_key = ANY($2::text[])", tenant_id, keys,
+                )
+                by_key = {row["idempotency_key"]: dict(row) for row in persisted}
+                if len(persisted) != len(keys) or set(by_key) != set(keys) or any(
+                    row.get("tenant_id") != tenant_id for row in by_key.values()
+                ):
+                    raise BadRequestError("membership batch persisted read-back incomplete")
+                check(by_key[key])
+                return [by_key[batch_key] for batch_key in keys]
+
+    async def conversation_context(
+        self, tenant_id: str, scopes: list[tuple[str, str, str]], *, limit: int = 500,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Exact provider-scope membership, roster, observation and Conversation read."""
+        from journeys.communication360.membership import payload_of, membership_scope, valid_membership
+
+        if not isinstance(tenant_id, str) or not tenant_id or tenant_id != tenant_id.strip():
+            return [], False
+        if not scopes or len(scopes) > 50 or not 1 <= limit <= 500:
+            return [], not scopes
+        if any(len(scope) != 3 or any(
+            not isinstance(value, str) or not value or value != value.strip()
+            or any(char.isspace() for char in value) for value in scope
+        ) for scope in scopes):
+            return [], False
+        exact_scopes = set(scopes)
+
+        def matches(row: dict[str, Any]) -> bool:
+            payload = payload_of(row)
+            scope = (
+                payload.get("provider"), payload.get("provider_account_id"),
+                payload.get("provider_conversation_id") if row.get("kind") == "participant_binding"
+                else payload.get("external_thread_id"),
+            )
+            return row.get("tenant_id") == tenant_id and scope in exact_scopes and row.get("kind") in {
+                "participant_binding", "conversation_membership", "provider_thread",
+            }
+
+        pool = await self._pool()
+        if pool is None:
+            rows = [row for row in _local_facts.values() if matches(row)]
+        else:
+            encoded_scopes = json.dumps([
+                dict(zip(("provider", "account", "thread"), scope)) for scope in scopes
+            ])
+            async with pool.acquire() as conn:
+                records = await conn.fetch(
+                    """
+                    SELECT facts.* FROM communication360_facts facts
+                    WHERE tenant_id = $1
+                      AND kind IN ('participant_binding', 'conversation_membership', 'provider_thread')
+                      AND EXISTS (
+                        SELECT 1 FROM jsonb_to_recordset($2::jsonb)
+                          AS scope(provider text, account text, thread text)
+                        WHERE payload->>'provider' = scope.provider
+                          AND payload->>'provider_account_id' = scope.account
+                          AND CASE WHEN kind = 'participant_binding'
+                              THEN payload->>'provider_conversation_id'
+                              ELSE payload->>'external_thread_id' END = scope.thread
+                      )
+                    ORDER BY occurred_at, fact_id LIMIT $3
+                    """, tenant_id, encoded_scopes, limit + 1,
+                )
+            rows = [dict(record) for record in records]
+        if len(rows) > limit or any(not matches(row) for row in rows):
+            return [], False
+        memberships = [row for row in rows if row.get("kind") == "conversation_membership"]
+        if any(not valid_membership(row, tenant_id) for row in memberships) or len({
+            membership_scope(row) for row in memberships
+        }) != len(memberships):
+            return [], False
+        conversation_ids = sorted({payload_of(row)["conversation_id"] for row in memberships})
+        if not conversation_ids:
+            return rows, True
+        if pool is None:
+            conversations = [row for row in _local_facts.values() if row.get("tenant_id") == tenant_id
+                             and row.get("kind") == "conversation"
+                             and payload_of(row).get("conversation_id") in conversation_ids]
+        else:
+            async with pool.acquire() as conn:
+                records = await conn.fetch(
+                    """SELECT * FROM communication360_facts WHERE tenant_id = $1
+                    AND kind = 'conversation' AND payload->>'conversation_id' = ANY($2::text[])
+                    ORDER BY occurred_at, fact_id LIMIT $3""", tenant_id, conversation_ids, limit + 1,
+                )
+            conversations = [dict(record) for record in records]
+        if len(rows) + len(conversations) > limit or len(conversations) != len(conversation_ids):
+            return [], False
+        from journeys.communication360.membership import valid_conversation
+
+        if any(not valid_conversation(row, tenant_id) for row in conversations):
+            return [], False
+        if {payload_of(row).get("conversation_id") for row in conversations} != set(conversation_ids):
+            return [], False
+        return [*rows, *conversations], True
 
     async def query(
         self,
@@ -293,10 +436,10 @@ class Communication360FactsRepository:
         received_before: Any = None,
         limit: int = 200,
     ) -> tuple[list[dict[str, Any]], bool]:
-        """Read facts carrying one exact typed journey or episode reference.
+        """Read facts carrying one exact typed journey, episode, or source reference.
 
         The relationship is admitted only through the canonical JSONB
-        ``journey_id(s)`` / ``episode_id(s)`` fields. This does not match
+        ``journey_id(s)`` / ``episode_id(s)`` / ``source_id(s)`` fields. This does not match
         arbitrary strings or search payload text. Returned ``complete`` only
         describes this bounded exact-reference query; it is not a claim that a
         communication authority has recorded every real-world conversation.
@@ -306,11 +449,29 @@ class Communication360FactsRepository:
         field_names = {
             "episode": ("episode_id", "episode_ids"),
             "journey": ("journey_id", "journey_ids"),
+            "source": ("source_id", "source_ids"),
+            "campaign": ("campaign_id", "campaign_ids"),
+            "agent": ("entity_id", "entity_ids"),
+            "entity": ("entity_id", "entity_ids"),
+            "profile": ("profile_id", "profile_ids"),
+            "message": ("message_id", "message_ids"),
+            "thread": ("conversation_id", "conversation_ids"),
         }.get(reference_kind)
-        if not exact_tenant or not exact_id or field_names is None:
-            return [], True
+        if (not exact_tenant or not exact_id or field_names is None
+                or exact_tenant != tenant_id or exact_id != reference_id):
+            return [], False
         bounded_limit = min(max(int(limit), 1), 500)
         singular, plural = field_names
+        extra_fields = {
+            "agent": ("agent_id", "actor_id", "actor_entity_id", "agent_entity_id"),
+            "entity": (
+                "actor_id", "actor_entity_id", "participant_id", "participant_ids",
+                "participant_entity_id", "participant_entity_ids", "sender_entity_id",
+                "sender_entity_ids", "recipient_entity_id", "recipient_entity_ids",
+            ),
+            "thread": ("canonical_conversation_id",),
+        }.get(reference_kind, ())
+        reference_fields = (singular, plural, *extra_fields)
 
         def _timestamp(value: Any) -> Optional[datetime]:
             if isinstance(value, datetime):
@@ -344,10 +505,14 @@ class Communication360FactsRepository:
                     return False
             if not isinstance(payload, dict):
                 return False
-            values = payload.get(plural)
-            exact_match = payload.get(singular) == exact_id or (
-                isinstance(values, list) and exact_id in values
+            exact_match = any(
+                (isinstance(payload.get(field), list) and exact_id in payload[field])
+                if field.endswith("_ids") else
+                (isinstance(payload.get(field), str) and payload[field] == exact_id)
+                for field in reference_fields
             )
+            if reference_kind in {"agent", "entity"}:
+                exact_match = exact_match or any(row.get(field) == exact_id for field in extra_fields)
             if not exact_match:
                 return False
             occurred_at = _timestamp(row.get("occurred_at"))
@@ -379,7 +544,15 @@ class Communication360FactsRepository:
 
         conditions = [
             "tenant_id = $1",
-            f"(payload->>'{singular}' = $2 OR COALESCE(payload->'{plural}', '[]'::jsonb) ? $2)",
+            "(" + " OR ".join(
+                (f"(jsonb_typeof(payload->'{field}') = 'array' AND payload->'{field}' ? $2)"
+                 if field.endswith("_ids") else
+                 f"(jsonb_typeof(payload->'{field}') = 'string' AND payload->>'{field}' = $2)")
+                for field in reference_fields
+            ) + (
+                " OR agent_id = $2 OR actor_id = $2" if reference_kind == "agent"
+                else " OR actor_id = $2" if reference_kind == "entity" else ""
+            ) + ")",
         ]
         params: list[Any] = [exact_tenant, exact_id]
         if after is not None:

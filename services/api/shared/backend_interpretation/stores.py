@@ -27,6 +27,7 @@ from shared.backend_interpretation.primitives import (
     OutcomeContextRef,
     OutcomeTruthRecord,
     RelationshipFact,
+    OUTCOME_STATES,
 )
 from shared.store import DurableStore, get_store
 
@@ -245,6 +246,73 @@ class OutcomeTruthStore(BaseTruthStore):
                 logger.warning("Skipping non-outcome row in %s", self.store_name)
         return records
 
+    async def list_for_prediction(
+        self,
+        tenant_id: str,
+        prediction_id: str,
+        label_contract_version: str,
+        *,
+        limit: int,
+    ) -> tuple[list[OutcomeTruthRecord], bool, bool]:
+        """Return a bounded exact tenant/prediction/label-contract lookup.
+
+        The backing store has no secondary index for prediction associations.
+        Use its bounded tenant-key page and exact document filters; callers get
+        ``truncated`` when the tenant page has more rows to scan and
+        ``invalid_records`` when a matching document cannot be validated.
+        No subject or time correlation is used to fill missing references.
+        """
+        if not tenant_id or not prediction_id or not label_contract_version:
+            return [], False, True
+        bounded = min(max(int(limit), 1), 100)
+        page_size = 250
+        max_scanned = 5_000
+        cursor: Optional[str] = None
+        scanned = 0
+        truncated = False
+        docs: list[dict[str, Any]] = []
+        while scanned < max_scanned:
+            page_limit = min(page_size, max_scanned - scanned)
+            page, cursor, has_more = await self._store.find_page(
+                limit=page_limit,
+                cursor=cursor,
+                key_prefix=f"{tenant_id}:",
+                tenant_id=tenant_id,
+                prediction_id=prediction_id,
+                prediction_label_contract_version=label_contract_version,
+            )
+            docs.extend(page)
+            scanned += page_limit
+            # Two exact rows are enough to establish ambiguity. Do not read
+            # further records for an association that must be suppressed.
+            if len(docs) > 1:
+                truncated = False
+                break
+            if not has_more:
+                cursor = None
+                break
+            if scanned >= max_scanned:
+                truncated = True
+                break
+        records: list[OutcomeTruthRecord] = []
+        invalid_records = False
+        for doc in docs:
+            try:
+                record = OutcomeTruthRecord.model_validate(doc)
+            except Exception:  # noqa: BLE001 - malformed canonical rows fail closed
+                invalid_records = True
+                continue
+            if (
+                record.tenant_id != tenant_id
+                or record.prediction_id != prediction_id
+                or record.prediction_label_contract_version != label_contract_version
+                or record.state not in OUTCOME_STATES
+            ):
+                invalid_records = True
+                continue
+            records.append(record)
+        return records[:bounded], truncated or len(records) > bounded, invalid_records
+
 
 # ── Correlation registry (item 6) ────────────────────────────────────────────
 
@@ -426,6 +494,8 @@ class OutcomeTruthStoreReader:
                     achieved_at=row.achieved_at,
                     value=value,
                     evidence_refs=row.evidence_refs,
+                    prediction_id=row.prediction_id,
+                    prediction_label_contract_version=row.prediction_label_contract_version,
                     updated_at=row.updated_at,
                 )
             )

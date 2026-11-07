@@ -205,6 +205,7 @@ AUTHORITY_INDEX = frozenset(
         "support_case_context_events",
         "support_cases",
         "support_case_events",
+        "support_case_subjects",
         "sync_state",
         "temporal",
         "temporal_kernel",
@@ -288,6 +289,22 @@ _OUTPUT_SECTIONS = frozenset(
         "policy_boundary",
         "agent_spawned_agents",
         "agent_delegations",
+        "support_case_summary",
+        "support_conversation_history",
+        "support_callbacks",
+        "support_participants",
+        "support_sla",
+        "support_journey_links",
+        "support_agents",
+        "support_resolution",
+        "support_evidence_trace",
+        "thread_summary",
+        "message_inventory",
+        "participants",
+        "profile_links",
+        "journey_links",
+        "response_events",
+        "agent_authorship",
         "syndicates",
         "signal_summary",
         "source_inventory",
@@ -331,6 +348,22 @@ _OUTPUT_SECTIONS = frozenset(
         "social_contagion",
         "trust_edges",
         "failures",
+        # Agent behavioral intelligence (WO-110): derived, rebuildable
+        # behavior read-model sections composed into Agent 360.
+        "behavior",
+        "behavior_decisions",
+        "behavior_journey",
+        "behavior_influence",
+        "behavior_authority",
+        "behavior_value",
+        "behavior_risk",
+        "behavior_trust",
+        "behavior_market",
+        "behavior_observability",
+        # Delegation lineage from the derived principal <-> agent read model.
+        "lineage",
+        # Value 360 agent-mediated activity (WO-092).
+        "agent_mediated_activity",
     }
 )
 

@@ -53,10 +53,14 @@ from journeys.communication360.provider import (  # noqa: E402
     REASON_SILVER_SOURCE_UNAVAILABLE,
     REASON_SOURCE_READ_TRUNCATED,
     Communication360Provider,
+    _response_event_links,
     RepositoryProfileLinkReader,
     register_provider,
 )
-from journeys.communication360.reader import to_message  # noqa: E402
+from journeys.communication360.reader import SilverCommsSource, to_message  # noqa: E402
+from journeys.comms.repository import CommsFactsRepository, _FACT_COLUMNS  # noqa: E402
+from journeys.comms.projector import CommsProjector  # noqa: E402
+from journeys.comms.replies import normalize_inbound_reply  # noqa: E402
 from journeys.comms.contracts import CommunicationState, MessageCategory  # noqa: E402
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from identity.identity.source_subject_scope import SourceSubjectScopeRead  # noqa: E402
@@ -160,6 +164,19 @@ class FakeSource:
         if limit is not None:
             out = out[:limit]
         return out
+
+    async def reply_targets(
+        self, tenant_id, provider, provider_account_id, external_thread_id, external_message_id
+    ):
+        out = [
+            message for message in self._messages
+            if message.tenant_id == tenant_id
+            and message.provider == provider
+            and message.provider_account_id == provider_account_id
+            and message.external_thread_id == external_thread_id
+            and message.external_message_id == external_message_id
+        ]
+        return out[:2], len(out) <= 2
 
     async def available(self, tenant_id):
         return self._raises is None
@@ -1638,9 +1655,9 @@ async def test_source_subject_without_canonical_facts_is_missing_not_zero() -> N
 @pytest.mark.parametrize(
     ("subject_kind", "reference_key", "expected_slot_ids"),
     [
-        ("episode", "episode_id", ["communications"]),
-        ("journey", "journey_id", ["communications"]),
-        ("source", "source_id", []),
+        ("episode", "episode_id", ["communications", "evidence_trace"]),
+        ("journey", "journey_id", ["communications", "evidence_trace"]),
+        ("source", "source_id", ["evidence_trace"]),
     ],
 )
 async def test_non_message_subjects_use_exact_tenant_canonical_communication_facts(
@@ -3295,3 +3312,169 @@ async def test_typed_roster_read_surfaces_role_evidence_and_never_overstates_cov
         "provider-role-evidence-1",
         "provider-roster-evidence-1",
     }
+
+
+async def test_inbound_reply_producer_preserves_and_projects_exact_provider_target(monkeypatch) -> None:
+    normalized = normalize_inbound_reply(
+        TENANT_A,
+        {
+            "from": "person@example.test",
+            "message_id": "<provider-reply-1>",
+            "in_reply_to": "<provider-original-1>",
+            "provider_thread_id": "thread-1",
+            "provider_account_id": "account-1",
+            "received_at": "2026-09-03T11:00:00Z",
+        },
+        provider="provider-a",
+    )
+    assert normalized is not None
+    projected = CommsProjector().project(
+        {
+            "id": "reply-event-1",
+            "messageId": "reply-event-1",
+            "type": normalized["event_type"],
+            "tenantId": TENANT_A,
+            "timestamp": normalized["occurred_at"],
+            "properties": normalized["properties"],
+        }
+    )
+    assert projected is not None
+    repo = CommsFactsRepository()
+
+    async def no_pool():
+        return None
+
+    monkeypatch.setattr(repo, "_pool", no_pool)
+    stored_reply = await repo.upsert({field: value for field, value in projected.rows[0].items() if field in _FACT_COLUMNS})
+    reply = to_message(stored_reply)
+    assert reply.external_message_id == "provider-reply-1"
+    assert reply.reply_to_external_message_id == "provider-original-1"
+    assert reply.reply_correlation_method == "in_reply_to"
+
+    target = to_message(await repo.upsert(
+        {
+            "tenant_id": TENANT_A,
+            "fact_id": "target-fact",
+            "idempotency_key": "reply-target-provider-integration",
+            "message_id": "canonical-original-1",
+            "campaign_id": "camp_1",
+            "provider": "provider-a",
+            "provider_account_id": "account-1",
+            "external_message_id": "provider-original-1",
+            "external_thread_id": "thread-1",
+            "occurred_at": "2026-09-03T10:00:00Z",
+        }
+    ))
+    reply = reply.model_copy(update={"campaign_id": "camp_1"})
+    facts = [
+        _fact(
+            TENANT_A,
+            "reply-act-1",
+            actor_id=None,
+            occurred_at="2026-09-03T11:00:00Z",
+            payload={
+                "act_type": "reply",
+                "message_id": reply.message_id,
+                "campaign_id": "camp_1",
+            },
+        )
+    ]
+    class ReplySource(FakeSource):
+        async def reply_targets(self, *args):
+            return await SilverCommsSource(repo).reply_targets(*args)
+
+    provider = Communication360Provider(sources=ReplySource(messages=[target, reply], facts=facts))
+    request, context = await _make_context(ProviderRegistry())
+    result = await provider.project(request, context)
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    link = next(
+        item for item in interactions.content["responseEventLinks"]
+        if item["factId"] == "reply-act-1"
+    )
+    assert link["responseToMessageId"] == "canonical-original-1"
+    assert link["replyAssociationState"] == "provider_reported_reply_association"
+    assert link["causalStatus"] == "unverified"
+    claim = next(
+        claim for claim in result.claims
+        if claim.id == "communication_reply_target.reply-act-1"
+    )
+    assert claim.claimState is EpistemicStatus.OBSERVED
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["cross_tenant", "cross_provider", "cross_account", "cross_thread", "duplicate", "future", "malformed", "truncated", "mixed_scope", "missing_evidence", "self_reference", "invalid_row"],
+)
+async def test_reply_target_join_fails_closed_for_adversarial_references(case: str) -> None:
+    reply = _msg(TENANT_A, "reply-canonical", occurred_at="2026-09-03T11:00:00Z").model_copy(
+        update={
+            "provider": "provider-a",
+            "provider_account_id": "account-1",
+            "external_thread_id": "thread-1",
+            "external_message_id": "reply-provider-id",
+            "reply_to_external_message_id": "target-provider-id",
+            "reply_correlation_method": "in_reply_to",
+        }
+    )
+    target = _msg(
+        TENANT_A, "target-canonical", occurred_at="2026-09-03T10:00:00Z"
+    ).model_copy(
+        update={
+            "provider": "provider-a",
+            "provider_account_id": "account-1",
+            "external_thread_id": "thread-1",
+            "external_message_id": "target-provider-id",
+        }
+    )
+    targets = [target]
+    if case == "cross_tenant":
+        targets[0] = target.model_copy(update={"tenant_id": TENANT_B})
+    elif case == "cross_provider":
+        targets[0] = target.model_copy(update={"provider": "provider-b"})
+    elif case == "cross_account":
+        targets[0] = target.model_copy(update={"provider_account_id": "account-other"})
+    elif case == "mixed_scope":
+        targets.append(target.model_copy(update={"tenant_id": TENANT_B}))
+    elif case == "missing_evidence":
+        targets[0] = target.model_copy(update={"evidence_refs": []})
+    elif case == "self_reference":
+        reply = reply.model_copy(update={"external_message_id": "target-provider-id"})
+    elif case == "invalid_row":
+        targets.append(None)
+    elif case == "cross_thread":
+        targets[0] = target.model_copy(update={"external_thread_id": "thread-other"})
+    elif case == "duplicate":
+        targets.append(target.model_copy(update={"message_id": "target-duplicate"}))
+    elif case == "future":
+        targets[0] = target.model_copy(update={"occurred_at": "2026-09-03T12:00:00Z"})
+    elif case == "malformed":
+        reply = reply.model_copy(update={"reply_correlation_method": "provider_thread"})
+
+    class ReplySource(FakeSource):
+        async def reply_targets(self, tenant_id, provider, provider_account_id, external_thread_id, external_message_id):
+            if case == "truncated":
+                return targets, False
+            if case in {"mixed_scope", "invalid_row"}:
+                return targets, True
+            return await super().reply_targets(
+                tenant_id, provider, provider_account_id, external_thread_id, external_message_id
+            )
+
+    row = _fact(
+        TENANT_A,
+        "response-act-adversarial",
+        actor_id=None,
+        occurred_at="2026-09-03T11:00:00Z",
+        payload={"act_type": "reply", "message_id": reply.message_id},
+    )
+    request = _request()
+    links, _ = await _response_event_links(
+        request=request,
+        scope=type("Scope", (), {"participant_entity_id": None})(),
+        messages=[reply],
+        rows=[row],
+        source=ReplySource(messages=targets),
+    )
+    assert links[0].response_to_message_id is None
+    assert links[0].association_state == "unknown"

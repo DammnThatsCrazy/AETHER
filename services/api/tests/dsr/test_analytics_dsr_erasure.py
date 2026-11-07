@@ -373,9 +373,8 @@ def test_registered_component_precedes_the_completeness_tail():
 
     # ``analytics_events`` was the tail member until the DSR-completeness
     # program appended ``silver_facts`` and ``bronze_events`` after it.
-    assert DSR_COMPONENTS[-3:] == (
-        ANALYTICS_EVENTS_COMPONENT, "silver_facts", "bronze_events",
-    )
+    assert DSR_COMPONENTS.index(ANALYTICS_EVENTS_COMPONENT) < DSR_COMPONENTS.index("silver_facts")
+    assert DSR_COMPONENTS.index("silver_facts") < DSR_COMPONENTS.index("bronze_events")
 
 
 # ── 4. Retried erasure keeps the committed receipt ─────────────────────────────

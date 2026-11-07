@@ -59,6 +59,7 @@ from shared.logger.logger import get_logger, metrics
 from shared.privacy.consent_enforcement import ConsentDeniedError, require_consent
 
 from identity.profile.aggregator import Profile360Aggregator
+from actions.agent_lineage.service import ServiceSummaryReader
 from identity.profile.composer import ProfileComposer
 from identity.profile.intelligence import IntelligenceAggregator
 from identity.profile.resolver import ProfileResolver
@@ -92,6 +93,7 @@ def _get_composer(
             graph=graph,
             cache=cache,
             resolver=_resolver,
+            lineage_reader=ServiceSummaryReader(),
         )
     return _composer
 

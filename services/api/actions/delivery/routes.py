@@ -182,6 +182,8 @@ async def ingest_outcome(
         receipt_id=body.get("receipt_id"),
         outcome_type=outcome_type,
         raw_payload=body,
+        producer_provenance="caller_asserted",
+        signature_authority=None,
     )
     stored = await _outcome_repo.insert(event.id, event.model_dump())
     return JSONResponse(status_code=201, content=APIResponse(data=stored).to_dict())

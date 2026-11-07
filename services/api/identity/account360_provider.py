@@ -830,7 +830,7 @@ class RepositoryAccount360Source:
                     reason_codes=("account_contract_scope_mismatch",),
                     truncated=truncated,
                 )
-            contract_id = row.get("contract_profile_id") or row.get("id")
+            contract_id = row.get("contract_profile_id")
             if not isinstance(contract_id, str) or not contract_id.strip():
                 return AccountContractsRead(
                     "unknown",

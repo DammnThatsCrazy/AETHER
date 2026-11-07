@@ -6,9 +6,9 @@ source-authenticated typed role assertions, resolves each provider identity
 through the exact tenant/provider/account mapping, and persists the observed
 binding with event provenance and explicit roster coverage.
 
-Provider conversation IDs remain provider-thread claims here. This module does
-not create or infer a canonical Conversation, grant delegation authority, or
-derive roles from sender/recipient message endpoints.
+Provider conversation IDs remain provider-thread claims unless the signed
+roster includes an explicit canonical membership assertion. No path infers
+membership, grants delegation authority, or derives authorship from endpoints.
 """
 
 from __future__ import annotations
@@ -118,6 +118,18 @@ class ParticipantBindingWriter:
             label="participant roster completeness",
             required=roster.completeness_state in {"complete", "partial"},
         )
+        if roster.membership is not None:
+            _validated_evidence(
+                roster.membership.evidence_refs, provider=provider,
+                label="canonical conversation membership",
+            )
+        if roster.context_links is not None:
+            if roster.membership is None:
+                raise BadRequestError("communication context requires explicit canonical membership")
+            _validated_evidence(
+                roster.context_links.evidence_refs, provider=provider,
+                label="communication context links",
+            )
         if roster.completeness_state == "complete":
             if roster.expected_binding_count != len(roster.bindings):
                 raise BadRequestError(
@@ -265,6 +277,10 @@ class ParticipantBindingWriter:
                     "policy": policy,
                 }
             )
+            if roster.context_links is not None:
+                context = roster.context_links.model_dump(mode="json", exclude_none=True)
+                payload.update({key: value for key, value in context.items() if key != "evidence_refs"})
+                payload["context_link_evidence_refs"] = context["evidence_refs"]
             idempotency_digest = hashlib.sha256(
                 f"{roster_id}|{binding.binding_id}".encode("utf-8")
             ).hexdigest()
@@ -284,6 +300,17 @@ class ParticipantBindingWriter:
                     "payload": payload,
                 }
             )
+        if roster.membership is not None:
+            from journeys.communication360.membership import membership_rows
+
+            conversation, membership = membership_rows(
+                tenant_id=tenant_id, provider=provider, roster=roster,
+                template=rows[0],
+            )
+            for row in rows:
+                row["payload"]["canonical_conversation_id"] = roster.membership.conversation_id
+                row["payload"]["membership_fact_id"] = membership["fact_id"]
+            return await self._facts.upsert_membership_roster(conversation, membership, rows)
         return await self._facts.upsert_many(rows)
 
     async def _resolve_source_identity(

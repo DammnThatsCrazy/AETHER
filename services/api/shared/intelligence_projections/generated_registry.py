@@ -139,12 +139,12 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/agent360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity"),
-        "canonicalAuthorities": ("agent_access", "agent_entities", "agent_entity", "agent_executions", "delegations", "economic_facts", "entities", "evidence", "graph", "identity", "observations", "outcome_facts", "source_provenance"),
+        "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_entity", "agent_executions", "delegations", "economic_facts", "entities", "evidence", "graph", "identity", "observations", "outcome_facts", "resources", "social_observations", "source_provenance", "tools"),
         "hardDependencies": ("agentic_runtime_access", "contract_spine", "identity_resolution", "temporal_kernel"),
         "projectionDependencies": ("profile360",),
         "optionalProjectionDependencies": ("economic360", "outcome360"),
         "inputRefs": ("EntityRef", "EvidenceRef", "GraphResult", "PageRequest", "TimeRangeFilter"),
-        "outputSections": ("evidence", "interactions", "outcomes", "policy_boundary", "state", "summary", "timeline"),
+        "outputSections": ("behavior", "behavior_authority", "behavior_decisions", "behavior_influence", "behavior_journey", "behavior_market", "behavior_observability", "behavior_risk", "behavior_trust", "behavior_value", "evidence", "interactions", "lineage", "outcomes", "policy_boundary", "state", "summary", "timeline"),
         "supportedTemporalModes": ("as_of", "relative", "window"),
         "surfaceIds": ("profile360",),
         "capabilityKeys": ("agent360.explore", "agent360.read"),
@@ -199,7 +199,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/campaign360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "population", "source"),
-        "canonicalAuthorities": ("attribution_credits", "campaign_facts", "campaign_population_link_events", "campaign_touchpoints", "canonical_conversions", "communication", "economic", "events", "evidence", "journeys", "outcomes", "population", "population_definitions", "source_provenance", "spend_records", "targeting_leakage_findings", "touchpoints"),
+        "canonicalAuthorities": ("attribution_credits", "campaign_facts", "campaign_population_link_events", "campaign_touchpoints", "canonical_conversions", "cluster_definitions", "cluster_membership", "cohort_membership", "communication", "economic", "events", "evidence", "journeys", "observations", "outcomes", "population", "population_definitions", "relationship_facts", "risk_outputs", "source_facts", "source_provenance", "spend_records", "targeting_leakage_findings", "touchpoints"),
         "hardDependencies": ("attribution_architecture", "contract_spine", "measurement_outcome_contract"),
         "projectionDependencies": ("communication360", "economic360", "episode360", "outcome360", "population360"),
         "optionalProjectionDependencies": [],
@@ -378,13 +378,13 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationState": "implemented",
         "implementationBlueprint": "docs/architecture/blueprints/communication360.md",
         "ownsCanonicalTruth": False,
-        "subjectKinds": ("agent", "campaign", "entity", "episode", "journey", "source"),
+        "subjectKinds": ("agent", "campaign", "entity", "episode", "journey", "message", "profile", "source", "thread"),
         "canonicalAuthorities": ("campaign_touchpoints", "communication", "communication_facts", "consent_policy_decisions", "delegations", "entities", "entity_registry", "evidence", "identity", "journeys", "outcomes", "risk_assessments", "risk_outputs", "risk_signals"),
         "hardDependencies": ("contract_spine", "temporal_kernel"),
         "projectionDependencies": ("episode360", "outcome360", "profile360", "relationship360"),
         "optionalProjectionDependencies": [],
         "inputRefs": ("EntityRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "RelationshipRef", "TimeRangeFilter"),
-        "outputSections": ("evidence", "interactions", "outcomes", "state", "summary", "timeline"),
+        "outputSections": ("agent_authorship", "campaign_links", "evidence", "evidence_trace", "interactions", "journey_links", "message_inventory", "outcomes", "participants", "policy_state", "profile_links", "response_events", "risk_flags", "state", "summary", "thread_summary", "timeline"),
         "supportedTemporalModes": ("as_of", "relative", "window"),
         "surfaceIds": ("profile360", "timeline"),
         "capabilityKeys": ("communication360.explore", "communication360.read"),
@@ -499,12 +499,12 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/economic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("account", "agent", "campaign", "cluster", "conversion", "entity", "episode", "journey", "profile", "source"),
-        "canonicalAuthorities": ("ai_execution_facts", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_activity", "canonical_conversions", "commerce", "commerce_order_payment_ledger", "currency_value_normalization", "economic_facts", "entity_registry", "evidence", "graph", "identity_clusters_v2", "journey_steps", "outcome_facts", "payments", "revenue_adjustments"),
+        "canonicalAuthorities": ("ai_execution_facts", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_activity", "canonical_conversions", "commerce", "commerce_order_payment_ledger", "currency_value_normalization", "economic_facts", "entity_registry", "evidence", "graph", "identity_clusters_v2", "journey_steps", "model_governance", "outcome_facts", "payments", "revenue_adjustments"),
         "hardDependencies": ("measurement_outcome_contract", "temporal_kernel"),
         "projectionDependencies": ("outcome360", "profile360", "relationship360"),
         "optionalProjectionDependencies": [],
         "inputRefs": ("EntityRef", "EvidenceRef", "FilterExpression", "GraphResult", "PageRequest", "TimeRangeFilter"),
-        "outputSections": ("evidence", "findings", "outcomes", "state", "summary"),
+        "outputSections": ("agent_mediated_activity", "evidence", "findings", "outcomes", "state", "summary"),
         "supportedTemporalModes": ("compare", "relative", "window"),
         "surfaceIds": ("campaign360", "economic360", "product_intelligence"),
         "capabilityKeys": ("economic360.explore", "economic360.read"),
@@ -559,7 +559,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/episode360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal"),
+        "canonicalAuthorities": ("actions", "agent_executions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "delegations", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "journeys", "outcome_facts", "risk_signals", "silver_semantic_observations", "temporal", "touchpoints"),
         "hardDependencies": ("contract_spine", "journey_continuity", "temporal_kernel"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
@@ -626,7 +626,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/execution360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity", "episode", "execution", "workflow_run"),
-        "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "economic_facts", "entity_registry", "episode_facts", "events", "evidence", "execution_facts", "graph", "identity", "outcome_facts", "resources", "risk_assessments", "risk_signals", "temporal_kernel", "tools"),
+        "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "economic_facts", "entity_registry", "episode_facts", "events", "evidence", "execution_facts", "graph", "identity", "outcome_facts", "resources", "risk_assessments", "risk_signals", "source_provenance", "temporal_kernel", "tools"),
         "hardDependencies": ("agentic_runtime_access", "temporal_kernel"),
         "projectionDependencies": ("agent360", "episode360", "outcome360", "temporal360"),
         "optionalProjectionDependencies": [],
@@ -746,7 +746,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/geographic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "population", "source"),
-        "canonicalAuthorities": ("campaign_facts", "context_capsules", "economic_facts", "entity_graph", "geo_observations", "geo_temporal_timezone_assertions", "gold_temporal_heatmap", "identity", "journeys", "locations", "risk_signals", "temporal"),
+        "canonicalAuthorities": ("campaign_facts", "context_capsules", "economic_facts", "entity_graph", "geo_observations", "geo_temporal_timezone_assertions", "gold_temporal_heatmap", "identity", "journeys", "locations", "risk_outputs", "risk_signals", "temporal"),
         "hardDependencies": ("context_capsule_semantics", "temporal_kernel"),
         "projectionDependencies": ("profile360", "temporal360"),
         "optionalProjectionDependencies": [],
@@ -1046,7 +1046,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/profile360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("agent_access", "agent_executions", "analytics_events", "cohort_membership", "communication_facts", "consent_policy_decisions", "entity_registry", "episode_facts", "evidence", "graph", "identity", "identity_source_identities", "journeys", "model_artifact_registry", "observations", "population_definitions", "profile_prediction_outputs", "relationship_facts", "temporal"),
+        "canonicalAuthorities": ("agent_access", "agent_executions", "analytics_events", "cohort_membership", "communication_facts", "consent_policy_decisions", "entity_registry", "episode_facts", "evidence", "graph", "identity", "identity_source_identities", "journeys", "model_artifact_registry", "model_governance", "observations", "outcome_facts", "population_definitions", "profile_prediction_outputs", "relationship_facts", "temporal"),
         "hardDependencies": ("contract_spine", "evidence_provenance", "identity_resolution", "temporal_kernel"),
         "projectionDependencies": [],
         "optionalProjectionDependencies": ("relationship360", "risk360"),
@@ -1165,8 +1165,8 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationState": "implemented",
         "implementationBlueprint": "docs/architecture/blueprints/risk360.md",
         "ownsCanonicalTruth": False,
-        "subjectKinds": ("agent", "cluster", "contagion_path", "entity", "population", "relationship", "source", "support_case"),
-        "canonicalAuthorities": ("bronze_sdk_events", "cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "observations", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "support_cases", "transfers"),
+        "subjectKinds": ("agent", "cluster", "contagion_path", "conversation", "entity", "population", "relationship", "source", "support_case", "ticket"),
+        "canonicalAuthorities": ("actions", "bronze_sdk_events", "cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "observations", "provider_connections", "relationship_facts", "risk_assessments", "risk_intervention_records", "risk_outputs", "risk_signals", "social_relationship_evidence_events", "source_provenance", "support_case_subjects", "support_cases", "transfers"),
         "hardDependencies": ("computation_substrate", "evidence_provenance", "model_governance"),
         "projectionDependencies": ("cluster360", "economic360", "profile360"),
         "optionalProjectionDependencies": [],
@@ -1226,7 +1226,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "event", "observation", "signal", "source", "stream"),
-        "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "observations", "risk_outputs", "source_provenance", "source_schema"),
+        "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "ingestion_health", "observations", "risk_outputs", "silver_semantic_observations", "source_facts", "source_provenance", "source_schema"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -1405,13 +1405,13 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationState": "in_flight",
         "implementationBlueprint": "docs/architecture/blueprints/support360.md",
         "ownsCanonicalTruth": False,
-        "subjectKinds": ("callback", "entity", "support_case"),
-        "canonicalAuthorities": ("agent_entities", "communication_facts", "evidence", "identity", "journeys", "provider_connections", "support_callback_events", "support_callbacks", "support_case_agent_assignment_events", "support_case_context_events", "support_case_events", "support_cases"),
+        "subjectKinds": ("agent", "callback", "conversation", "entity", "episode", "source", "support_case", "ticket"),
+        "canonicalAuthorities": ("agent_entities", "communication_facts", "episode_facts", "evidence", "identity", "journeys", "measurement_contract", "provider_connections", "support_callback_events", "support_callbacks", "support_case_agent_assignment_events", "support_case_context_events", "support_case_events", "support_case_subjects", "support_cases"),
         "hardDependencies": ("contract_spine", "temporal_kernel"),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
         "inputRefs": ("EntityRef", "EvidenceRef", "PageRequest", "TimeRangeFilter"),
-        "outputSections": ("evidence", "interactions", "outcomes", "state", "summary", "timeline"),
+        "outputSections": ("evidence", "interactions", "outcomes", "state", "summary", "support_agents", "support_callbacks", "support_case_summary", "support_conversation_history", "support_evidence_trace", "support_journey_links", "support_participants", "support_resolution", "support_sla", "timeline"),
         "supportedTemporalModes": ("window",),
         "surfaceIds": ("support360",),
         "capabilityKeys": ("support360.explore", "support360.read"),
@@ -1526,7 +1526,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("automation", "run", "trigger", "workflow", "workflow_run"),
-        "canonicalAuthorities": ("agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "graph_edges", "identity", "outcome_facts", "risk_assessments", "workflow_definition_revisions"),
+        "canonicalAuthorities": ("actions", "agent_access", "agent_entities", "agent_executions", "ai_execution_facts", "commerce", "events", "evidence", "execution_facts", "graph_edges", "identity", "outcome_facts", "resources", "risk_assessments", "tools", "workflow_definition_revisions"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -2029,12 +2029,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "optional"
             },
             {
-                "authorityGapReason": "active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy",
                 "canonicalAuthorityRefs": ("actions", "agent_access", "resources", "tools"),
-                "description": "Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent; action and resource authorization remains unknown.",
+                "description": "Observed capability reach, bounded server-owned MCP tools/call results, and receipt-backed observed reads of exact public HTTPS MCP resources; returned content is established only when complete. Mutation, external effects, standing authorization, historical replay, freshness, and producer coverage remain unknown.",
                 "id": "capabilities",
                 "implementationCrosswalk": ("actions_tools_resources",),
-                "partialImplementationReason": "current_active_grant_join_is_bounded_to_2000_records_and_does_not_replay_historical_authority",
+                "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant, and invocation-time policy decision. Separate server-owned MCP resources/read receipts bind exact tenant, agent, execution, resource ID and URI, authenticated initiating principal, dedicated resource-read grant, invocation-time policy decision, and timestamps; returned content is observed only when complete and digest-validated. Initialization failures, caller observations, worker callbacks, and ambiguous or mismatched evidence cannot establish a read. Credentialed or private MCP endpoints are unsupported. Mutation, external effects, standing authorization, historical replay, freshness, and complete producer coverage remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "agent360",
@@ -2043,8 +2042,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "state")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions", "resources", "tools")
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("communication_facts", "observations"),
@@ -2179,13 +2177,18 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined",
                 "canonicalAuthorityRefs": ("agent_entities", "identity", "relationship_facts", "risk_outputs", "social_observations"),
                 "description": "Required Agent 360 blueprint slot: risk summary.",
                 "id": "risk_summary",
                 "implementationCrosswalk": ("risk_and_contagion",),
-                "partialImplementationReason": "Canonical Risk360 evidence requires resolved Agent identity and an affirmative current analytics receipt. The nested read proceeds only after the frame runtime forwards the exact allowed risk_summary slot decision and the bound risk360.read capability. Agent-specific freshness, historical replay, unbound identity and social authority joins, and causal contagion remain unknown.",
+                "partialImplementationReason": "The Agent360 supporting path resolves exact tenant canonical Agent identity before policy-authorized Risk360 and Social360 reads. Social risk-context edges require consent and shared risk-signal evidence and are correlated context only. Agent-specific freshness, historical replay, social observation coverage, and causal contagion remain unknown.",
                 "projectionBindings": [
+                    {
+                        "projectionId": "agent360",
+                        "role": "supporting",
+                        "subjectKinds": ("agent", "entity"),
+                        "sectionIds": ("state",)
+                    },
                     {
                         "projectionId": "risk360",
                         "role": "primary",
@@ -2193,8 +2196,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "findings")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("agent_entities", "identity", "social_observations")
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("graph", "relationship_facts", "temporal"),
@@ -2320,11 +2322,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Campaign 360",
         "domainSlots": [
             {
-                "authorityGapReason": "General campaign risk outputs are not joined by this targeting leakage finding provider.",
                 "canonicalAuthorityRefs": ("risk_outputs", "source_provenance", "targeting_leakage_findings"),
-                "description": "Tenant-scoped targeting leakage findings backed by source observation and eligibility-snapshot evidence; broader risk and source anomalies stay unknown.",
+                "description": "Tenant-scoped targeting leakage findings backed by source observation and eligibility-snapshot evidence, alongside exact campaign Risk360 assessment output; producer coverage and source anomalies stay unknown.",
                 "id": "anomalies",
-                "partialImplementationReason": "Exact targeting leakage findings are joined with a bounded evidence chain; general risk outputs and source anomalies remain unknown.",
+                "partialImplementationReason": "Exact targeting leakage findings and bounded exact-tenant campaign Risk360 assessments are read as separate dimensions with their own evidence. Campaign-specific risk production, complete risk and source-anomaly coverage, history, policy, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "campaign360",
@@ -2333,8 +2334,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("anomalies",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("risk_outputs",)
+                "requirement": "required"
             },
             {
                 "id": "attribution",
@@ -2365,11 +2365,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Explicit population links do not establish cohort, cluster or syndicate membership or relationship topology.",
                 "canonicalAuthorityRefs": ("campaign_facts", "campaign_population_link_events", "cluster_definitions", "cluster_membership", "cohort_membership", "population_definitions", "relationship_facts"),
-                "description": "Explicit tenant operator campaign-to-population association events validated against exact canonical campaign and population records.",
+                "description": "Explicit campaign-to-population associations with current versioned cluster definitions and consent-scoped membership evidence where exact tenant records resolve.",
                 "id": "cohorts_syndicates",
-                "partialImplementationReason": "Exact bounded operator association state is available; derived memberships, syndicates, historical replay and freshness remain unknown.",
+                "partialImplementationReason": "Explicit links can resolve current exact cluster definition revisions and bounded consent-scoped cluster or cohort memberships backed by live graph ledger replay. A separate policy-authorized read can expose current evidence-backed FOLLOWS edges between consented linked members. Population and roster coverage, other relationship predicates, syndicates, historical membership and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "campaign360",
@@ -2378,8 +2377,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("outcomes",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("cluster_definitions", "cluster_membership", "cohort_membership", "relationship_facts")
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("attribution_credits", "canonical_conversions", "measurement_contract", "outcome_facts"),
@@ -2452,11 +2450,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "Canonical observations and source facts are not joined to the exact touchpoint-linked campaign event rows.",
                 "canonicalAuthorityRefs": ("events", "observations", "source_facts"),
                 "description": "Tenant-scoped signal and source observations associated with the campaign.",
                 "id": "signal_sources",
-                "partialImplementationReason": "Exact campaign touchpoint event references are joined to tenant-scoped canonical events; broader observation and source-fact authorities, complete event coverage, and a freshness SLA remain unresolved.",
+                "partialImplementationReason": "Exact campaign touchpoint event references join tenant-scoped canonical events, matching gateway-admitted SDK Bronze observations, and verified current touchpoint classification revisions as source facts. Broader observation and source-fact producers, complete event coverage, and a freshness SLA remain unresolved.",
                 "projectionBindings": [
                     {
                         "projectionId": "campaign360",
@@ -2465,15 +2462,13 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("state",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("observations", "source_facts")
+                "requirement": "required"
             },
             {
-                "authorityGapReason": "Touchpoint classification revisions do not classify the campaign registry source or every asserting source.",
                 "canonicalAuthorityRefs": ("campaign_touchpoints", "source_facts", "source_provenance"),
                 "description": "Canonical classification of the source that asserted or synchronized campaign evidence.",
                 "id": "source_classification",
-                "partialImplementationReason": "Only classified tenant campaign touchpoints on the requested page are joined; campaign registry provenance remains unknown.",
+                "partialImplementationReason": "Exact current tenant touchpoint classification revisions are read and verified against the touchpoint classification pointer, class, classifier version, and time. Only classified touchpoints on the requested page are joined; campaign registry provenance and other asserting sources remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "campaign360",
@@ -2482,8 +2477,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "state")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("source_facts",)
+                "requirement": "required"
             },
             {
                 "id": "touchpoints",
@@ -2807,8 +2801,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent",),
-                        "sectionIds": ("evidence", "interactions")
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("agent_authorship",)
                     }
                 ],
                 "requirement": "required"
@@ -2822,8 +2816,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("campaign",),
-                        "sectionIds": ("evidence", "state")
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("campaign_links",)
                     }
                 ]
             },
@@ -2836,8 +2830,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign"),
-                        "sectionIds": ("evidence",)
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("evidence_trace",)
                     }
                 ]
             },
@@ -2850,8 +2844,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign", "episode", "journey", "source"),
-                        "sectionIds": ("evidence", "summary")
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("journey_links",)
                     }
                 ],
                 "requirement": "required"
@@ -2859,28 +2853,28 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             {
                 "id": "message_inventory",
                 "requirement": "required",
-                "description": "Bounded observed message entries with message evidence.",
+                "description": "Bounded observed messages with evidence, including exact source-linked Silver facts revalidated against durable provider-thread observations.",
                 "canonicalAuthorityRefs": ("communication_facts", "evidence"),
                 "projectionBindings": [
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign"),
-                        "sectionIds": ("evidence", "timeline")
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("message_inventory",)
                     }
                 ]
             },
             {
                 "canonicalAuthorityRefs": ("communication_facts", "entities", "evidence", "identity"),
-                "description": "Typed, source-authenticated participant role bindings joined through exact tenant-owned provider identity mappings; canonical conversation membership remains unresolved.",
+                "description": "Bounded latest authenticated participant rosters joined to explicit canonical Conversation membership and exact tenant-owned identity evidence.",
                 "id": "participants",
-                "partialImplementationReason": "participant_roles_are_observed_from_signed_provider_rosters_and_exact_tenant_identity_mappings_but_canonical_conversation_membership_and_full_message_coverage_are_unresolved; provider_delegation_refs_are_not_canonical_grants",
+                "partialImplementationReason": "Complete means bounded roster evidence with exact Conversation membership, provider/account/thread, actor, event, timestamps and identity joins. Conflicting or partial latest rosters fail closed. Source authentication does not independently prove upstream authorship, historical membership, current authority, full message coverage or freshness.",
                 "projectionBindings": [
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign"),
-                        "sectionIds": ("interactions",)
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("participants",)
                     }
                 ],
                 "requirement": "required"
@@ -2895,8 +2889,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign", "episode", "journey", "source"),
-                        "sectionIds": ("summary",)
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("policy_state",)
                     }
                 ],
                 "requirement": "required"
@@ -2910,23 +2904,23 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign", "episode", "journey", "source"),
-                        "sectionIds": ("evidence", "summary")
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("profile_links",)
                     }
                 ],
                 "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("communication", "communication_facts", "evidence", "identity"),
-                "description": "Response-like canonical communication acts joined to exact tenant-scoped message and authenticated sender identity where available.",
+                "description": "Response-like canonical acts and durable Silver replies with exact provider-reported In-Reply-To target associations, independent of actor identity or causal outcomes.",
                 "id": "response_events",
-                "partialImplementationReason": "Only bounded exact act-to-message and sender joins are observed. Reply target, causal response outcome, complete message history, and source freshness remain unknown.",
+                "partialImplementationReason": "Bounded exact act-to-message and sender joins, or durable Silver replies without synthetic acts, support observed provider-reported reply associations only for explicit In-Reply-To references with a unique evidence-backed target in the exact tenant, provider, provider account and thread, occurring no later than the reply. Exact source-linked messages require a bounded canonical observation-to-Silver rejoin. Missing, malformed, mismatched, ambiguous or truncated reads remain unknown. Reply association does not establish actor identity or authority, causal response outcome, complete message history or source freshness.",
                 "projectionBindings": [
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign"),
-                        "sectionIds": ("interactions",)
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("response_events",)
                     }
                 ],
                 "requirement": "required"
@@ -2940,25 +2934,26 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "source"),
-                        "sectionIds": ("evidence", "summary")
+                        "subjectKinds": ("agent", "profile", "source"),
+                        "sectionIds": ("risk_flags",)
                     }
                 ],
                 "requirement": "required"
             },
             {
-                "id": "thread_summary",
-                "requirement": "required",
-                "description": "Partial thread counts and canonical thread facts; message-thread composition is incomplete.",
                 "canonicalAuthorityRefs": ("communication_facts",),
+                "description": "Bounded provider/account/thread message composition with explicit authenticated canonical Conversation membership; full upstream history remains unknown.",
+                "id": "thread_summary",
+                "partialImplementationReason": "Exact persisted authenticated membership joins canonical Conversation IDs to provider account and external thread scope. Message IDs, canonical Conversation IDs, resolved profiles and explicit episode/journey references are never inferred aliases. Historical membership replay, upstream history completeness, freshness, identity and authority remain unproven.",
                 "projectionBindings": [
                     {
                         "projectionId": "communication360",
                         "role": "primary",
-                        "subjectKinds": ("agent", "campaign"),
-                        "sectionIds": ("interactions", "summary")
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "message", "profile", "source", "thread"),
+                        "sectionIds": ("thread_summary",)
                     }
-                ]
+                ],
+                "requirement": "required"
             }
         ],
         "freshnessPolicy": {
@@ -3184,7 +3179,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("episode_facts", "episode_journey_authority_records", "evidence", "silver_semantic_observations", "temporal"),
                 "description": "Typed episode observation references joined by exact tenant, source namespace, observation ID, source event, association time, and semantic Silver evidence within bounded temporal context.",
                 "id": "timeline",
-                "partialImplementationReason": "Only explicitly authored typed observation references are resolved against exact semantic Silver event, namespace, timestamp, and evidence fields. EpisodeEngine can produce the exact typed link when its caller supplies a semantic observation authority marker, but no live semantic-to-episode association caller is connected. Legacy Silver rows without authenticated source namespace remain unknown; broader activity/session completeness, source freshness, and policy remain unverified.",
+                "partialImplementationReason": "The live validated-event semantic consumer routes qualifying classified observations with a supported resolved subject type, authenticated source namespace, timezone-aware occurrence time, and evidence through EpisodeEngine into tenant/subject-scoped semantic observation streams. Exact typed links are revalidated against canonical semantic Silver event, namespace, timestamp, and evidence fields. Legacy or unsupported observations remain unlinked; broader activity/session completeness, source freshness, policy, historical completeness, and continuity remain unverified.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -3342,12 +3337,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "exact_subject_authority_join_not_implemented",
                 "canonicalAuthorityRefs": ("ai_execution_facts", "evidence", "source_provenance"),
-                "description": "Required Execution 360 blueprint slot: evidence trace.",
+                "description": "Exact execution and invocation evidence, plus bounded Bronze ingress provenance for admitted external telemetry events.",
                 "id": "evidence_trace",
                 "implementationCrosswalk": ("evidence_and_lineage",),
-                "partialImplementationReason": "Exact workflow_run execution references include matching invocation evidence; source provenance joins, source telemetry, complete workflow step coverage, and a freshness threshold remain unknown.",
+                "partialImplementationReason": "Exact workflow_run execution references include matching invocation evidence. Admitted external telemetry joins unique same-tenant Bronze event/type/time envelopes for ingress provenance only; registered source identity, external execution receipts, complete source coverage, workflow step coverage, historical replay, and a freshness threshold remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "execution360",
@@ -3356,8 +3350,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("source_provenance",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("agent_executions", "ai_execution_facts", "execution_facts"),
@@ -3454,10 +3447,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("actions", "resources", "tools"),
-                "description": "Tenant-scoped CALLED_TOOL lifecycle edges joined to admitted executions and canonical agent identity; source completeness and external receipt remain unknown.",
+                "description": "Tenant-scoped CALLED_TOOL lifecycle observations and separately validated server-owned MCP invocation receipts joined to admitted executions and canonical agent identity; general external effects and producer coverage remain unknown.",
                 "id": "tool_calls",
                 "implementationCrosswalk": ("action_tool_resource_trace",),
-                "partialImplementationReason": "Exact lifecycle edges are exposed, but source completeness, authorization outcome, and external execution receipt remain unknown.",
+                "partialImplementationReason": "Exact lifecycle edges remain observations. Bounded server-owned MCP invocation receipts expose tool results with exact execution, agent, principal, tool, resource, grant, policy and time bindings, without requiring a lifecycle edge. General external effects, mutations, historical policy replay, freshness and complete producer coverage remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "execution360",
@@ -3761,10 +3754,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("attribution_credits", "attribution_runs", "journeys"),
+                "canonicalAuthorityRefs": ("attribution_credits", "attribution_runs", "canonical_conversions", "journeys", "touchpoints"),
                 "description": "Active completed attribution credits linked through a same-tenant run for the exact current JourneyVersion.",
                 "id": "attribution",
-                "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined; inactive and historical runs, conversion and touchpoint resolution, policy, freshness, and causal validity remain unknown.",
+                "partialImplementationReason": "Only active completed credits from exact same-tenant attribution runs for the current journey version are joined. Recorded conversion and touchpoint IDs resolve only to eligible current exact-tenant rows when their event times do not follow run completion; missing or conflicting rows stay unknown. Inactive and historical runs, subject state at run time, policy, freshness, complete coverage, and causal validity remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -3893,11 +3886,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "A non-executable recommendation record does not join the canonical action execution authority.",
                 "canonicalAuthorityRefs": ("actions", "episode_journey_authority_records", "journeys"),
                 "description": "Exact current-journey-version non-executable action intent records validated against canonical journey and step evidence.",
                 "id": "recommended_actions",
-                "partialImplementationReason": "Recorded current-version intents are visible; action policy re-evaluation, dispatch, outcomes, full recommendation inventory and freshness remain unknown.",
+                "partialImplementationReason": "Current-version intents and caller-associated dispatches join exact tenant action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the durable intent, job, receipt and resource-link chain, validating the requested payload, provider site, subject and policy context. Other providers lack independent resource verification. Verified business outcomes, complete recommendation and producer coverage, historical replay and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -3906,8 +3898,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "interactions", "summary")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("events", "evidence", "journeys"),
@@ -3982,7 +3973,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "communication_facts", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "identity", "journeys"),
+            "canonicalAuthorities": ("actions", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "communication_facts", "episode_facts", "episode_journey_authority_records", "events", "evidence", "graph", "identity", "journeys", "touchpoints"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -4187,11 +4178,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "Risk signals join only when exact subject evidence cites the location observation; causal location risk, history, detector coverage, and freshness remain unknown.",
                 "canonicalAuthorityRefs": ("locations", "risk_outputs", "risk_signals"),
                 "description": "Risk outputs linked to place with evidence.",
                 "id": "risk",
-                "partialImplementationReason": "Risk signals join only when exact subject evidence cites the location observation; causal location risk, history, detector coverage, and freshness remain unknown.",
+                "partialImplementationReason": "RiskSignals and canonical RiskAssessments join only when exact typed-subject evidence cites the location observation. Assessment output is separate from signal input; causal location risk, producer coverage, history, policy, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "geographic360",
@@ -4200,8 +4190,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("state",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("risk_outputs",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("geo_temporal_timezone_assertions", "locations", "temporal"),
@@ -4393,7 +4382,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("consent_policy_decisions", "evidence", "semantic_memory_records"),
                 "description": "Required memory360 slot: policy state.",
                 "id": "policy_state",
-                "partialImplementationReason": "Exact tenant and subject historical allow decisions are rendered with timestamped canonical consent-policy evidence. Current consent and policy are not evaluated, so present authorization remains unknown.",
+                "partialImplementationReason": "Exact tenant and subject historical allow decisions are rendered with timestamped canonical consent-policy evidence. Explicit nonempty required purposes stamped from that verified write-time decision are surfaced; legacy unstamped purposes remain unknown. Current consent and policy are not evaluated, so present authorization remains unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "memory360",
@@ -4638,11 +4627,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Model calibration and independent outcome verification are not joined to prediction outputs.",
                 "canonicalAuthorityRefs": ("analytics_events", "consent_policy_decisions", "identity_source_identities", "model_artifact_registry", "model_governance", "outcome_facts", "profile_prediction_outputs"),
                 "description": "Policy-admitted append-only future-state predictions for an exact canonical human entity, versioned state schema, active production artifact checksum, source event evidence, and bounded validity and freshness.",
                 "id": "likely_next_states",
-                "partialImplementationReason": "The writer and read path require exact future-state schema, production artifact version/checksum, policy decision, source events, validity interval, and a 24-hour freshness threshold; current serving outputs omit required fields and remain unknown. Separate revocation history, read-time consent re-evaluation, outcome verification, and model calibration remain unbound.",
+                "partialImplementationReason": "Exact prediction-linked canonical OutcomeTruthStore adjudications bind outcome_facts for profile-state-adjudication.v1 churn_observed and retention_observed labels, with policy, final-state, source-event, subject and validity-window checks. Artifact-scoped append-only model evaluations bind model_governance through exact tenant, artifact checksum, evaluator, versioned sample manifest and recomputed accuracy, Brier score and calibration-error metrics. Missing, conflicting, future or truncated evidence remains unknown. These bounded joins do not certify universal model calibration or applicability, historical identity, current consent, revocation history or complete producer coverage; modelCalibrationVerified remains false.",
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",
@@ -4651,8 +4639,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("likely_next_states",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("model_governance", "outcome_facts")
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("geo_observations", "temporal"),
@@ -4989,11 +4976,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
                 "canonicalAuthorityRefs": ("actions", "risk_intervention_records", "risk_outputs"),
                 "description": "Recorded risk interventions and results.",
                 "id": "interventions",
-                "partialImplementationReason": "Append-only exact-subject intervention decisions and reported outcomes are readable; actor authority, producer coverage, independent outcome verification, and freshness remain unknown.",
+                "partialImplementationReason": "Exact-subject intervention decisions join caller-associated dispatches and their persisted action-dispatch permission decisions. Jira dispatches can join credential-bound provider resource read-back through the exact tenant, intent, job, receipt, provider site, requested payload and subject chain. Other providers lack independent resource verification. Producer coverage, historical replay, independently verified intervention outcomes and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -5002,8 +4988,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence", "findings", "health")
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("risk_outputs", "source_provenance"),
@@ -5245,10 +5230,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("events", "observations"),
+                "canonicalAuthorityRefs": ("events", "observations", "silver_semantic_observations"),
                 "description": "Required signals360 slot: classification.",
                 "id": "classification",
-                "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown.",
+                "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated. A bounded current Silver semantic read may expose model-output metadata only when tenant, event ID, stamped namespace, event type, time, and source evidence match. Derived labels remain suppressed; source attribution, semantic correctness, policy, producer coverage, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "signals360",
@@ -5318,11 +5303,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "source_reliability_and_semantic_quality_authorities_not_joined",
                 "canonicalAuthorityRefs": ("ingestion_health", "observations", "source_schema"),
-                "description": "Exact SDK Bronze gateway acceptance for an event or observation; source reliability and semantic quality remain unknown.",
+                "description": "Exact SDK Bronze gateway acceptance and, for an authenticated site namespace, separately observed current site install-signal status; event and fleet health remain unknown.",
                 "id": "quality",
-                "partialImplementationReason": "gateway_acceptance_only_no_reliability_semantic_quality_or_freshness_sla",
+                "partialImplementationReason": "Gateway acceptance and exact tenant/site install-signal status are separate observations. Mobile and tenant-wide events have no installation-health join; event-time health, fleet completeness, source reliability, semantic quality, and a freshness SLA remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "signals360",
@@ -5331,8 +5315,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("quality",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("ingestion_health",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("risk_outputs",),
@@ -5364,11 +5347,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "This read is limited to authenticated Envelope-B metadata on one SDK event and does not join a tenant source registry or inventory.",
                 "canonicalAuthorityRefs": ("source_facts", "source_provenance"),
-                "description": "Authenticated source metadata for an exact SDK event or observation; fleet inventory remains unknown.",
+                "description": "Authenticated source metadata for an exact SDK event or observation, with an exact current tenant site registration fact when its server-stamped site namespace resolves; fleet inventory remains unknown.",
                 "id": "source_inventory",
-                "partialImplementationReason": "Only one exact SDK event or observation is described; the provider cannot enumerate sources or establish source reliability.",
+                "partialImplementationReason": "One exact SDK event or observation is described; authenticated site-scoped events may join the current canonical tenant site registry. Mobile and tenant-wide events, historical registration state, fleet inventory, and source reliability remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "signals360",
@@ -5377,8 +5359,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("source_inventory",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("source_facts",)
+                "requirement": "required"
             }
         ],
         "freshnessPolicy": {
@@ -5412,7 +5393,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "ingestion_health", "observations", "risk_outputs", "source_facts", "source_provenance", "source_schema"),
+            "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "ingestion_health", "observations", "risk_outputs", "silver_semantic_observations", "source_facts", "source_provenance", "source_schema"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -5742,7 +5723,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Support 360",
         "domainSlots": [
             {
-                "canonicalAuthorityRefs": ("agent_entities", "communication_facts", "support_case_agent_assignment_events", "support_cases"),
+                "canonicalAuthorityRefs": ("agent_entities", "communication_facts", "support_case_agent_assignment_events", "support_case_subjects", "support_cases"),
                 "description": "Validated support agent assignments and handoffs.",
                 "id": "agents",
                 "partialImplementationReason": "Append-only exact case assignment and handoff events resolve canonical Agent identities and assigning principals; upstream history, delegation authority, and freshness remain unknown.",
@@ -5750,14 +5731,14 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("support_case",),
-                        "sectionIds": ("evidence", "state")
+                        "subjectKinds": ("conversation", "support_case", "ticket"),
+                        "sectionIds": ("support_agents",)
                     }
                 ],
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("evidence", "provider_connections", "support_callback_events", "support_callbacks", "support_case_events", "support_cases"),
+                "canonicalAuthorityRefs": ("evidence", "provider_connections", "support_callback_events", "support_callbacks", "support_case_events", "support_case_subjects", "support_cases"),
                 "description": "Canonical callback schedule and execution records joined to the exact tenant, support case, provider connection, and retained callback events.",
                 "id": "callbacks",
                 "partialImplementationReason": "callback_schedule_and_execution_authority_is_tenant_case_connection_scoped_but_upstream_provider_origin_and_actor_attribution_are_unverified; source_history_completeness_and_freshness_remain_unknown",
@@ -5765,14 +5746,14 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("callback", "support_case"),
-                        "sectionIds": ("evidence", "state", "timeline")
+                        "subjectKinds": ("callback", "conversation", "support_case", "ticket"),
+                        "sectionIds": ("support_callbacks",)
                     }
                 ],
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("evidence", "provider_connections", "support_case_events", "support_cases"),
+                "canonicalAuthorityRefs": ("evidence", "provider_connections", "support_case_events", "support_case_subjects", "support_cases"),
                 "description": "Exact tenant-owned support case identity and observed lifecycle state from persisted source events.",
                 "id": "case_summary",
                 "partialImplementationReason": "persisted_case_events_do_not_prove_source_history_completeness_or_freshness_sla",
@@ -5780,14 +5761,14 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("support_case",),
-                        "sectionIds": ("evidence", "state", "summary")
+                        "subjectKinds": ("conversation", "support_case", "ticket"),
+                        "sectionIds": ("support_case_summary",)
                     }
                 ],
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("communication_facts", "evidence", "provider_connections", "support_case_events", "support_cases"),
+                "canonicalAuthorityRefs": ("communication_facts", "evidence", "provider_connections", "support_case_events", "support_case_subjects", "support_cases"),
                 "description": "Tenant scoped support communication metadata; bodies require separate content permission.",
                 "id": "conversation_history",
                 "partialImplementationReason": "Canonical support_case history joins only through the exact tenant, provider connection, and source case key; message bodies and participant identities stay suppressed without their separate authorities, source-history completeness is unverified, and no freshness SLA is available.",
@@ -5795,8 +5776,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("entity", "support_case"),
-                        "sectionIds": ("interactions",)
+                        "subjectKinds": ("conversation", "entity", "support_case", "ticket"),
+                        "sectionIds": ("support_conversation_history",)
                     }
                 ],
                 "requirement": "required"
@@ -5822,7 +5803,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("communication_facts", "evidence", "provider_connections", "support_case_events", "support_cases"),
+                "canonicalAuthorityRefs": ("communication_facts", "evidence", "provider_connections", "support_case_events", "support_case_subjects", "support_cases"),
                 "description": "Source references for exact support communication metadata or case lifecycle; message bodies are excluded.",
                 "id": "evidence_trace",
                 "partialImplementationReason": "source_history_completeness_and_freshness_sla_are_unverified",
@@ -5830,28 +5811,26 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("entity", "support_case"),
-                        "sectionIds": ("evidence", "state", "summary")
+                        "subjectKinds": ("conversation", "entity", "support_case", "ticket"),
+                        "sectionIds": ("support_evidence_trace",)
                     }
                 ],
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "Append-only support case journey-link events join current exact tenant journey records; source authorship, historical journey state, complete links, and freshness remain unknown.",
-                "canonicalAuthorityRefs": ("episode_facts", "journeys", "support_case_context_events", "support_cases"),
+                "canonicalAuthorityRefs": ("episode_facts", "journeys", "support_case_context_events", "support_case_subjects", "support_cases"),
                 "description": "Exact support case to journey relationships.",
                 "id": "journey_links",
-                "partialImplementationReason": "Append-only support case journey-link events join current exact tenant journey records; source authorship, historical journey state, complete links, and freshness remain unknown.",
+                "partialImplementationReason": "Append-only support case journey-link events join current exact tenant journey records. An EpisodeRecord is linked only when it names the same journey and cites the exact verified case context event; no live producer populates that relation today, and source authorship, historical state, complete population, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("support_case",),
-                        "sectionIds": ("evidence", "state")
+                        "subjectKinds": ("conversation", "support_case", "ticket"),
+                        "sectionIds": ("support_journey_links",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("episode_facts",)
+                "requirement": "required"
             },
             {
                 "id": "measured_outcomes",
@@ -5868,7 +5847,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("communication_facts", "identity", "provider_connections", "support_cases"),
+                "canonicalAuthorityRefs": ("communication_facts", "identity", "provider_connections", "support_case_subjects", "support_cases"),
                 "description": "Case participants with identity and content policy.",
                 "id": "participants",
                 "partialImplementationReason": "Participants require exact support-scoped communication thread and current provider account binding; identity linkage, source history, historical membership, and freshness may remain unknown.",
@@ -5876,14 +5855,14 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("support_case",),
-                        "sectionIds": ("evidence", "interactions")
+                        "subjectKinds": ("conversation", "support_case", "ticket"),
+                        "sectionIds": ("support_participants",)
                     }
                 ],
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("support_case_events", "support_cases"),
+                "canonicalAuthorityRefs": ("support_case_events", "support_case_subjects", "support_cases"),
                 "description": "Recorded support outcome and resolution state; lifecycle resolution alone does not prove the business outcome.",
                 "id": "resolution",
                 "partialImplementationReason": "exact_applied_case_lifecycle_event_and_provider_connection_evidence_support_resolved_or_closed_state; canonical_business_outcome_facts_remain_unavailable",
@@ -5891,23 +5870,23 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("support_case",),
-                        "sectionIds": ("outcomes", "state")
+                        "subjectKinds": ("conversation", "support_case", "ticket"),
+                        "sectionIds": ("support_resolution",)
                     }
                 ],
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("evidence", "risk_outputs", "risk_signals", "support_cases"),
-                "description": "Risk outputs associated with the exact support case.",
+                "canonicalAuthorityRefs": ("evidence", "provider_connections", "risk_outputs", "risk_signals", "support_case_subjects", "support_cases"),
+                "description": "Exact canonical case RiskAssessment and RiskSignal observations, with ticket/conversation scope admitted only through authenticated persisted subject mappings and current verified provider/account connections.",
                 "id": "risk",
                 "implementationCrosswalk": ("risk_and_contagion",),
-                "partialImplementationReason": "The tenant-owned support case and its exact risk assessment and signals are joined with canonical evidence; risk-history completeness, support-case freshness SLA, and business outcome remain unknown.",
+                "partialImplementationReason": "Mapped ticket/conversation reads validate exact tenant, subject, case, provider, connection, account, source event and temporal evidence before Risk reads. Claims retain the requested subject and policy boundary; invalid mappings and incomplete signal reads release no partial signal evidence. Historical mappings, upstream authenticity, risk/source history completeness, freshness, business outcomes and contagion remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
                         "role": "primary",
-                        "subjectKinds": ("support_case",),
+                        "subjectKinds": ("conversation", "support_case", "ticket"),
                         "sectionIds": ("evidence", "findings", "state", "summary")
                     }
                 ],
@@ -5928,21 +5907,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "Source-reported SLA contract and timer events are exact case and connection scoped; no canonical measurement-contract evaluation, breach inference, history completeness, or freshness SLA is claimed.",
-                "canonicalAuthorityRefs": ("measurement_contract", "support_case_context_events", "support_cases"),
-                "description": "Support service level contract and timer state.",
+                "canonicalAuthorityRefs": ("measurement_contract", "support_case_context_events", "support_case_subjects", "support_cases"),
+                "description": "Support service level contract, source timer state, and versioned explicit active elapsed timer comparison.",
                 "id": "sla",
-                "partialImplementationReason": "Source-reported SLA contract and timer events are exact case and connection scoped; no canonical measurement-contract evaluation, breach inference, history completeness, or freshness SLA is claimed.",
+                "partialImplementationReason": "Exact tenant-registered source policy revisions bind matching case timers and targets. Versioned active elapsed comparison requires complete bounded explicit start/pause/resume/stop events and retains sequence evidence; reported breaches are not measured results. Upstream authentication, historical applicability, source-history completeness, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("support_case",),
-                        "sectionIds": ("evidence", "state")
+                        "subjectKinds": ("conversation", "support_case", "ticket"),
+                        "sectionIds": ("support_sla",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("measurement_contract",)
+                "requirement": "required"
             },
             {
                 "id": "source_lineage_and_coverage",
@@ -5967,7 +5944,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "support360",
                         "role": "primary",
-                        "subjectKinds": ("entity",),
+                        "subjectKinds": ("agent", "entity", "episode", "source"),
                         "sectionIds": ("evidence", "interactions", "outcomes", "state", "summary", "timeline")
                     }
                 ]
@@ -6054,7 +6031,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("agent_entities", "agent_entity", "communication_facts", "episode_facts", "events", "evidence", "identity", "journeys", "measurement_contract", "outcome_facts", "provider_connections", "risk_outputs", "risk_signals", "source_coverage", "source_provenance", "support_callback_events", "support_callbacks", "support_case_agent_assignment_events", "support_case_context_events", "support_case_events", "support_cases"),
+            "canonicalAuthorities": ("agent_entities", "agent_entity", "communication_facts", "episode_facts", "events", "evidence", "identity", "journeys", "measurement_contract", "outcome_facts", "provider_connections", "risk_outputs", "risk_signals", "source_coverage", "source_provenance", "support_callback_events", "support_callbacks", "support_case_agent_assignment_events", "support_case_context_events", "support_case_events", "support_case_subjects", "support_cases"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -6109,11 +6086,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "authorityGapReason": "model_governance_calibration_and_validation_not_joined",
                 "canonicalAuthorityRefs": ("ai_execution_facts", "attribution_credits", "attribution_runs", "canonical_conversions", "model_governance"),
                 "description": "Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI.",
                 "id": "confidence",
-                "partialImplementationReason": "Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated.",
+                "partialImplementationReason": "Exact conversion/run/credit-linked model-reported confidence binds model_governance through durable exact tenant/run/config snapshot lineage and authenticated administrator approval or rejection with actor, permission and authorization-time provenance. A separately identified value-credit-temporal-eligibility.v1 evaluation rejoins bounded canonical credit, conversion and touchpoint samples and validates its manifest and temporal eligibility metric; it does not calibrate model-reported confidence. Missing, changed, conflicting, future or truncated evidence remains unknown. Confidence calibration remains unvalidated; independent attribution correctness, causal value, credit-weight validity, historical config immutability, applicability to realized value and complete producer coverage remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "economic360",
@@ -6122,8 +6098,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("model_governance",)
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("ai_execution_facts", "canonical_conversions", "entity_registry", "identity_clusters_v2"),
@@ -6404,11 +6379,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Workflow 360",
         "domainSlots": [
             {
-                "authorityGapReason": "Action and resource result authorities are not joined beyond the recorded execution to Tool call edge.",
                 "canonicalAuthorityRefs": ("actions", "agent_executions", "graph_edges", "resources", "tools"),
-                "description": "Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices.",
+                "description": "Exact tenant/run agent execution call edges joined to CALLED_TOOL graph edges and Tool vertices, with bounded receipt-backed observed reads of exact public HTTPS MCP resources.",
                 "id": "actions",
-                "partialImplementationReason": "Call edges are bounded to 200 execution rows and 10000 graph edges; authorization, completion, external effects, producer coverage, historical replay, and freshness remain unknown.",
+                "partialImplementationReason": "Server-owned public HTTPS MCP tools/call completion receipts bind exact tenant, agent, execution, workflow run where applicable, tool identity, authenticated initiating principal, invoke grant, and invocation-time policy decision. Separate server-owned MCP resources/read receipts are joined to exact admitted tenant, agent, execution, workflow run, resource ID and URI, authenticated initiating principal, dedicated resource-read grant, invocation-time policy decision, and timestamps; returned content is observed only when complete and digest-validated. Initialization failures, caller observations, worker callbacks, and ambiguous or mismatched evidence cannot establish a read. Credentialed or private MCP endpoints are unsupported. Mutation, external effects, standing authorization, historical replay, freshness, and complete producer coverage remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "workflow360",
@@ -6417,8 +6391,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("actions",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("actions", "resources", "tools")
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("agent_entities", "agent_executions", "ai_execution_facts", "commerce", "identity"),
@@ -6451,11 +6424,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "canonical_workflow_approval_authority_not_joined",
                 "canonicalAuthorityRefs": ("agent_access", "agent_executions", "commerce"),
                 "description": "Exact x402 approval requests and decisions referenced by tenant and run-linked AgentExecutions; workflow-wide approval coverage and authorization policy remain unknown.",
                 "id": "approvals",
-                "partialImplementationReason": "Only exact x402 approval decisions referenced by admitted run-linked AgentExecutions are joined; workflow-level approval coverage and authorization remain unknown.",
+                "partialImplementationReason": "Exact x402 approval decisions referenced by admitted run-linked AgentExecutions can carry the recorded human permission check and a matching request-time agent delegation decision with exact current grant, agent, action, resource and amount evidence. Workflow-wide coverage, historical policy replay, and current effective agent authorization remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "workflow360",
@@ -6464,8 +6436,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("approvals",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("agent_access",)
+                "requirement": "required"
             },
             {
                 "id": "evidence_trace",

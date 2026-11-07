@@ -339,6 +339,11 @@ out as a deliberate behavioral change rather than buried.
   enum**; it reuses `services/api/actions/agentic_observability/models.py::RiskLevel`.
 - **§9.5 declared-vs-observed drift.** B2 adds the declared side
   (`capability_declarations`); the drift **findings surface** is Phase C, §6b.
+- **MCP resource identity.** Resource declarations carry the exact observed
+  `resource_uri` and use the catalog's resource ID shape, including the literal URI in the
+  resource identity tuple. URI paths and opaque identifiers stay case-sensitive in both
+  catalog IDs and digests, matching the authority reader's exact URI comparison. A tool
+  declaration that omits `resource_uri` hashes only fields it actually asserts.
 
 ### B2 as built — three corrections worth recording
 
@@ -359,6 +364,11 @@ The digest and the declared row must be comparable, and two defects made them no
    opaque server names and `host:port` values are unchanged.
 3. `INSECURE_TRANSPORT` fired on `wss://`. MCP servers are commonly reached over WebSocket
    and `wss` **is** TLS, so `_TLS_SCHEMES` is `{https, wss}`; `ws` and `http` stay out.
+4. Adding `resource_uri` to the artifact identity tuple must preserve resource URI
+   semantics. Resource authority compares the exact observed URI, so lowercasing a URI in
+   an identity digest could collapse distinct case-sensitive paths. Declarations now carry
+   the URI and join through the catalog's exact resource ID; ordinary tool declarations
+   compare only their recorded `declared_fields` subset.
 
 Identity is computed from the **merged** record (new observation falling back to the stored
 row), not the incoming fact alone — otherwise a later observation that simply omits

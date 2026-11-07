@@ -187,6 +187,11 @@ state (`suppressed`/`precision_reduced` are typed, never silent), a geographic
 answer can be downgraded for a surface or a tenant without rewriting truth.
 `risk360`'s geographic dimension and `population360`'s regional cohorts consume
 this same vocabulary — a second geo registry is forbidden once this lands.
+The Location360 product risk slot reads RiskSignals and canonical
+RiskAssessments as separate current subject observations. Each positive join
+requires evidence citing the exact location source observation; assessment
+output does not imply that location caused the risk. Producer coverage,
+historical replay, policy, and freshness remain unknown.
 
 ## Definition of Done
 

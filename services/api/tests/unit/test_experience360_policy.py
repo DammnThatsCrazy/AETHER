@@ -97,3 +97,28 @@ def test_economic360_bindings_declare_ai_execution_fact_authority() -> None:
                     f"{surface['id']}.{slot['id']} exposes Economic360 output but omits "
                     "the AI execution cost read authority"
                 )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_journey_dispatch_policy_checks_actions_domain(monkeypatch, allowed):
+    actor = SimpleNamespace(actor_id="user-1", actor_type="tenant_user", tenant_id="tenant-1",
+                            roles=["tenant_viewer"], ip_address=None, user_agent=None)
+    calls = []
+
+    async def evaluate(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(allowed=allowed, policy_key="actions-policy")
+
+    monkeypatch.setattr("shared.intelligence_projections.policy.tenant_actor", lambda request: actor)
+    monkeypatch.setattr("shared.intelligence_projections.policy.access_control.evaluate", evaluate)
+    request = Experience360FrameRequest(surfaceId="journey360", tenantId="tenant-1",
+                                        subject={"kind": "journey", "id": "journey-1"})
+    result = await RequestAccessPolicyEvaluator(object()).evaluate_journey_dispatch_read(request)
+    assert result.state == ("allowed" if allowed else "denied")
+    assert calls[0]["domain"] == "actions" and calls[0]["action"] == "read"
+    assert calls[0]["target_tenant"] == "tenant-1" and calls[0]["resource_id"] == "journey-1"
+    actor.tenant_id = "other"
+    with pytest.raises(ValueError, match="scope mismatch"):
+        await RequestAccessPolicyEvaluator(object()).evaluate_journey_dispatch_read(request)
+    assert len(calls) == 1
