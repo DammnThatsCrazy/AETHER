@@ -12,6 +12,8 @@ import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+from shared.temporal.instant import MIN_INSTANT
 from uuid import UUID
 from uuid import uuid4
 
@@ -58,7 +60,7 @@ class ValueModelApprovalRepository(TypedTableRepository):
         if pool is None:
             rows = [r for r in self._rows if r.get("tenant_id") == tenant_id
                     and _uuid(r.get("attribution_run_id")) == _uuid(run_id)]
-            return max(rows, key=lambda r: _utc(r.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc), default=None)
+            return max(rows, key=lambda r: _utc(r.get("created_at")) or MIN_INSTANT, default=None)
         row = await pool.fetchrow(
             "SELECT * FROM value_model_approval_decisions WHERE tenant_id=$1 AND attribution_run_id=$2 ORDER BY created_at DESC, decision_id DESC LIMIT 1",
             tenant_id, UUID(str(run_id)),

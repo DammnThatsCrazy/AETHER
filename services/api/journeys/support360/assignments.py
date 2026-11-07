@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
+
+from shared.temporal.instant import MIN_INSTANT
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -497,8 +499,8 @@ class SupportAgentAssignmentRepository:
             ]
             rows.sort(
                 key=lambda row: (
-                    _as_datetime(row.get("effective_at")) or datetime.min.replace(tzinfo=timezone.utc),
-                    _as_datetime(row.get("received_at")) or datetime.min.replace(tzinfo=timezone.utc),
+                    _as_datetime(row.get("effective_at")) or MIN_INSTANT,
+                    _as_datetime(row.get("received_at")) or MIN_INSTANT,
                     str(row.get("assignment_event_id") or ""),
                 ),
                 reverse=True,

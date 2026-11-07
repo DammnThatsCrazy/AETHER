@@ -26,6 +26,7 @@ def register_durable_job_handlers(settings: Optional[Any] = None) -> None:
 
         settings = _settings
 
+    from actions.agent_lineage.jobs import register_agent_lineage_handlers
     from governance.consent.erasure_jobs import register_consent_erasure_handler
     from ingestion.export import register_export_handlers
     from ingestion.imports.commit import register_import_handlers
@@ -41,6 +42,7 @@ def register_durable_job_handlers(settings: Optional[Any] = None) -> None:
     register_source_classification_repair_handler()
     register_consent_erasure_handler()  # consent.erasure (durable DSR erasure)
     register_semantic_replay_handler()  # semantic.replay (flag-gated inside)
+    register_agent_lineage_handlers()  # agent_lineage.reconcile (rebuildable read model)
 
     if settings.provider_runtime.enabled:
         from connectors.provider_runtime.replay import register_provider_raw_replay_handler

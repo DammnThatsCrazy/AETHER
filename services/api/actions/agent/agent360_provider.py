@@ -91,7 +91,9 @@ _BEHAVIOR_AUTHORITIES: dict[str, list[str]] = {
     "behavior_authority": ["observations", "delegations"],
 }
 
-OUTPUT_SECTIONS: tuple[str, ...] = CORE_SECTIONS + tuple(BEHAVIOR_SECTIONS)
+# Delegation lineage from the derived principal <-> agent read model.
+LINEAGE_SECTION = "lineage"
+OUTPUT_SECTIONS: tuple[str, ...] = CORE_SECTIONS + tuple(BEHAVIOR_SECTIONS) + (LINEAGE_SECTION,)
 
 MAX_READ_LIMIT = 200
 DEFAULT_READ_LIMIT = 100
@@ -3250,6 +3252,7 @@ class Agent360Provider:
         )
         claims = [*claims, *behavior_claims]
         degraded_reasons.extend(behavior_reasons)
+        lineage_section = await self._lineage_section(request, context, tenant_id, agent_id)
         sections = [
             summary_section,
             state_section,
@@ -3259,6 +3262,7 @@ class Agent360Provider:
             outcomes_section,
             policy_boundary_section,
             *behavior_sections,
+            lineage_section,
         ]
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -3273,6 +3277,58 @@ class Agent360Provider:
             temporalMode=request.temporalMode or "window",
             lensIds=request.lensIds,
         )
+
+    async def _lineage_section(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        tenant_id: str,
+        agent_id: str,
+    ) -> ProjectionSection:
+        """Parent chain, descendant counts and principals from the lineage read model.
+
+        Same gates as the behavior sections, which read the same Silver facts. An
+        agent missing from the projection is ``unknown``: not projected yet says
+        nothing about whether it has a parent or descendants."""
+
+        def section(state: str, reason: Optional[str], **extra: Any) -> ProjectionSection:
+            return ProjectionSection(
+                id=LINEAGE_SECTION,
+                state=state,  # type: ignore[arg-type]
+                title="Delegation lineage",
+                content={"state": state, "reason": reason, **extra},
+                canonicalAuthorityRefs=["observations", "delegations"],
+            )
+
+        from config.settings import settings
+
+        telemetry = settings.external_agent_telemetry
+        if not (telemetry.enabled or telemetry.registry_enabled):
+            return section("not_applicable", "external agent telemetry is not enabled")
+        authorized = any(
+            auth.capabilityKey == BEHAVIOR_CAPABILITY
+            and auth.policyState == "allowed"
+            and auth.tenantId == tenant_id
+            and auth.targetProjectionId == self.projection_id
+            and auth.sourceSubject.kind == request.subject.kind
+            and auth.sourceSubject.id == request.subject.id
+            for auth in context.experience360ReadAuthorizations
+        )
+        if not authorized:
+            return section("suppressed", "agent lineage requires an agent:manage read authorization")
+        if request.timeRange is not None or request.asOf is not None or context.asOf is not None:
+            return section("unknown", "the lineage read model holds current state; time anchors are not applied")
+        from actions.agent_lineage.service import get_service
+
+        try:
+            detail = await (await get_service()).agent_detail(tenant_id, agent_id)
+        except Exception as exc:  # noqa: BLE001 - degrade this section only
+            return section("unknown", f"the lineage read model could not be read: {type(exc).__name__}")
+        disclosure = detail["disclosure"]
+        if detail["node"] is None:
+            return section("unknown", "this agent is not in the lineage projection yet", disclosure=disclosure)
+        state = "available" if disclosure["completeness"] == "complete" else "degraded"
+        return section(state, None, data=detail, disclosure=disclosure)
 
     async def _behavior_sections(
         self,

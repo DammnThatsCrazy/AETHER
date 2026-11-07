@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EVENT_FAMILY } from '@aether/shared';
 import type { AgentDeploymentContext } from '@aether/shared';
-import { AgentTelemetryClient, validateAgentDeploymentContext } from './agent-telemetry';
+import { AgentTelemetryClient, attestAgentEvent, validateAgentDeploymentContext } from './agent-telemetry';
 import { sendBatch } from './transport';
 
 vi.mock('./transport', () => ({
@@ -345,3 +345,23 @@ describe('agent behavior helpers', () => {
       .toThrow(TypeError);
   });
 });
+
+describe('attestAgentEvent', () => {
+  // PKCS8 wrapping of the seed 00..1f shared with services/api/tests/agent_lineage/test_attestation.py.
+  const seed = Buffer.from(Array.from({ length: 32 }, (_, index) => index));
+  const privateKey = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]);
+  const pem = `-----BEGIN PRIVATE KEY-----\n${privateKey.toString('base64')}\n-----END PRIVATE KEY-----\n`;
+
+  it('produces the same signature as the backend twin', () => {
+    expect(attestAgentEvent({
+      privateKey: pem,
+      deploymentId: 'dep-1',
+      agentId: 'orch',
+      id: 'ev-1',
+      type: 'agent_subagent_spawned',
+      timestamp: '2026-11-06T10:00:00.000Z',
+      properties: { parentAgentId: 'orch', childAgentId: 'worker' },
+    })).toBe('G68ByW+maN/LMs72HOrv9grBJrOq+Rt1xIEVR3zoYytFUekJggOQbpzDBZgkUcJA122fQkIevosoGYU8UAneCg==');
+  });
+});
+

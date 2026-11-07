@@ -299,7 +299,8 @@
         "behavior_risk",
         "behavior_trust",
         "behavior_market",
-        "behavior_observability"
+        "behavior_observability",
+        "lineage"
       ],
       "supportedTemporalModes": [
         "window",

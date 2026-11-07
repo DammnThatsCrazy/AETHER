@@ -360,6 +360,8 @@ _OUTPUT_SECTIONS = frozenset(
         "behavior_trust",
         "behavior_market",
         "behavior_observability",
+        # Delegation lineage from the derived principal <-> agent read model.
+        "lineage",
         # Value 360 agent-mediated activity (WO-092).
         "agent_mediated_activity",
     }

@@ -25,20 +25,20 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:195337b09819a77baacdcbdb805e1046da0d6fbfe97ca483888f8cb00afd47e2"
+  "services/api/actions/": "sha256:b42ef6d84d7b67ae136f2cbbd6320a925ab396c698323f996970d7f33780b485"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:e412a306b69dce92baca43442756a44d498acce22aa9b47055f9245489aeaed2"
-  "services/api/graph/": "sha256:0496c3579cd7e30c7ffad35cf494d0eb83cceff8db49181401a7ccba63c6a0de"
-  "services/api/identity/": "sha256:2c21c933b54bd945557bf072f6153a7ba5e79fbe1c66546eb4dfa852ce63cae4"
-  "services/api/ingestion/": "sha256:2c7d6daa14fa1594fc1711a1765312dd7125cd5c8f2999d9936a99e451ff561d"
-  "services/api/intelligence/": "sha256:39f963f2374dbd88b1f3c6fcb7719e56324f5aa9b8e77edcccb1626d04287786"
-  "services/api/journeys/": "sha256:7f210a06ccdeefe382656cbbea0122128ac78363ad0567963b867a924c5aaf8d"
+  "services/api/governance/": "sha256:b91e5fb5a651cc6398cc85a5ec489728abd459669a2791aabbf2e76013745008"
+  "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
+  "services/api/identity/": "sha256:a7f1dce493471a067cf90946257aeeffc9e62627cb505302086849b9d2bd0673"
+  "services/api/ingestion/": "sha256:c47ede5ce42d53c7bb04071199cf3c2a6114f8ce14aeaea95bddc89f1eb8f5b2"
+  "services/api/intelligence/": "sha256:6043d4aa00e80812a023732e0714dd8e03c46d5f53b4ea87350e4165328efb10"
+  "services/api/journeys/": "sha256:5050898b926b88b3cc81240e3fe62aed4781936b1608e0f4901d72727e7fc82d"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:4241c421c34c32b4249dce7d2444eaf0c54e25c650d1b9b8239eae1c9f10ba47"
-  "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
+  "services/api/value/": "sha256:477e9051b48eda2fb32b72e548afe8bf15a43ec856717596aab96cabce2e32a9"
+  "services/api/workers/": "sha256:4952004c3f8a8649acbbd5d872982b5943c8f860a1efa6c9b5d467082127278c"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -3918,7 +3918,26 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 
 ### Agent spawn lineage
 
-- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
+- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` (up to 32) — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
+
+### High-cardinality principal and agent lineage
+
+All routes need `agent:manage` and the deployment registry flag. Tenant scope comes from the authenticated context, never the path. Lists are cursor-paged (`page_size` up to 500) and bound to the scope that issued the cursor. Every aggregate carries a `disclosure` with `as_of`, `completeness` and truncation reasons. A count the evidence cannot support is `null`, never `0`, and a subject with no materialized lineage reports `completeness: unknown`.
+
+- `GET /v1/agent-lineage/principals/{id}/summary` — materialized counts for one principal: direct, indirect, probabilistic and unresolved agents, instances, runs, depth, verified and inferred links.
+- `GET /v1/agent-lineage/principals/{id}/agents` — lineage rows. Filters: `relationship`, `attribution_class`, `active_state`, `lineage_status`, `risk`, `cluster_id`, `deployment_id`, `operator_entity_id`, `authority_status`, `min_depth`, `max_depth`. An unknown filter value is a 400.
+- `GET /v1/agent-lineage/principals/{id}/clusters` — derived groupings, largest first, each stating its `bases`. `implies_common_control` is true only for an all-verified, non-weak grouping.
+- `GET /v1/agent-lineage/principals/{id}/tree` — one delegation level, each branch collapsed to its descendant count; `parent` expands a branch.
+- `GET /v1/agent-lineage/principals/{id}/risk` — Risk360 fan-out assessment. Scale is reported as context and cannot raise the level on its own; `triggered_signals` lists the behavioral evidence.
+- `GET /v1/agent-lineage/principals/{id}/restatements` — what corrections changed.
+- `POST /v1/agent-lineage/principals/{id}/export` — also needs `export` or `admin`. Enqueues the extraction as a job; `GET /v1/agent-lineage/exports/{job_id}` reports it. Each part holds at most 50,000 rows of evidence fields. A part with `rows_remaining: 1` continues with `after` set to its last agent id.
+- `GET /v1/agent-lineage/agents/{id}` — Agent360 lineage block: hierarchy, principals, ancestors, counts, effects, outcomes, evidence. `/counts`, `/descendants` (cursor) and `/ancestors` read parts of it.
+- `POST /v1/agent-lineage/reconcile` — enqueues the durable `agent_lineage.reconcile` job, which folds new evidence; `full=true` rebuilds and logs restatements. The `agent_lineage_reconcile_sweep` worker runs this hourly per tenant, with a daily full rebuild for facts arriving with old timestamps.
+- Deployment `attestation_public_key` (`POST`/`PATCH /v1/agent/deployments`) — needs `admin` and an authenticated user, and one key per agent. Events signed with its private key are recorded `attested`.
+- `PUT /v1/agent-lineage/agents/{id}/adjudication` — also needs `admin` and an authenticated user. Records a verdict (`confirmed_malicious` or `cleared`) with a reason and evidence. The next reconcile applies it.
+- `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/calibration` — `admin` and the Kyber telemetry flag. Precision and recall of candidate fan-out thresholds against adjudicated principals. Read-only; no threshold is recommended below 50 labels per class.
+- `POST /v1/agent-lineage/bindings` — records a tenant's declaration of a principal link. No evidence class is accepted: declarations are stored `TENANT_DECLARED` and resolve as inferred at most.
+- `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/principals/{id}/investigation` — `admin` and the Kyber telemetry flag. The operator's first screen in bounded reads, with `/agents`, `/tree` and `/tenants/{tenant}/agents/{id}` for drilldown.
 
 ### Agent behavior read models
 
@@ -4350,7 +4369,8 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
   (continuations, installations, client-sync), the semantic-intelligence
   plane (observations, sentiment, Gold aggregate state, review queue), and
   every other `DSR_COMPONENTS` entry (identity, graph, Profile 360, features,
-  exports, caches, replay, connectors, financial snapshots, Silver, Bronze) —
+  exports, caches, replay, connectors, financial snapshots, Silver, Bronze, the
+  derived agent lineage read model) —
   marking each `dsr_propagation` component with its own receipt.
 
 Provider readiness is truthful: without a credential a provider reports

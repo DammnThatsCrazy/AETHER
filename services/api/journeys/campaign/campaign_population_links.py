@@ -11,6 +11,8 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional, Protocol
+
+from shared.temporal.instant import MIN_INSTANT
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 from graph.operational_intelligence.models import EvidenceRef
@@ -336,8 +338,8 @@ def _iso(value: Any) -> Optional[str]:
 
 
 def _event_order(event: dict[str, Any]) -> tuple[datetime, datetime, str]:
-    effective = _as_datetime(event.get("effective_at")) or datetime.min.replace(tzinfo=timezone.utc)
-    recorded = _as_datetime(event.get("recorded_at")) or datetime.min.replace(tzinfo=timezone.utc)
+    effective = _as_datetime(event.get("effective_at")) or MIN_INSTANT
+    recorded = _as_datetime(event.get("recorded_at")) or MIN_INSTANT
     return effective, recorded, str(event.get("link_event_id") or "")
 
 

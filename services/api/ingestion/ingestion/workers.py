@@ -447,7 +447,7 @@ def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
     return envelope
 
 
-def _validated_agent_deployment_marker(payload: dict) -> dict[str, str] | None:
+def _validated_agent_deployment_marker(payload: dict) -> dict[str, Any] | None:
     """Return only a complete, bounded server-validated deployment identity."""
     marker = payload.get("validated_agent_deployment")
     if not isinstance(marker, dict):
@@ -471,7 +471,10 @@ def _validated_agent_deployment_marker(payload: dict) -> dict[str, str] | None:
     agent_id = identifier("agent_id", "agentId")
     if deployment_id is None or agent_id is None:
         return None
-    return {"deployment_id": deployment_id, "agent_id": agent_id}
+    validated = {"deployment_id": deployment_id, "agent_id": agent_id}
+    if marker.get("attested") is True:
+        validated["attested"] = True
+    return validated
 
 
 def _legacy_sdk_envelope(payload: dict) -> dict:

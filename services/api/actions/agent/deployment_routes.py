@@ -84,11 +84,30 @@ def _repo() -> AgentDeploymentRepository:
     return get_deployment_repository()
 
 
+async def _authorize_attestation_key(
+    request: Request, agent_id: str, public_key: str, deployment_id: Optional[str] = None,
+) -> None:
+    """A signing key turns an agent's reports into proof, so ``agent:manage`` is not enough.
+
+    It takes ``admin`` and a named user, and an agent has one key: otherwise anyone able
+    to create a deployment could name another agent and sign events as it.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    if not getattr(tenant, "user_id", None):
+        raise BadRequestError("Registering an attestation key requires an authenticated user")
+    for row in await _repo().list(tenant.tenant_id, agent_id=agent_id):
+        held = row.get("attestation_public_key")
+        if held and held != public_key and row.get("id") != deployment_id:
+            raise ConflictError("Another deployment of this agent holds a different attestation key")
+
+
 # ── Request models ────────────────────────────────────────────────────────────
 
 class DeploymentCreate(BaseModel):
     agent_id: str = Field(..., min_length=1, max_length=256)
     agent_source_namespace: Optional[str] = Field(default=None, max_length=64)
+    attestation_public_key: Optional[str] = Field(default=None, max_length=64)
     display_name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     external_platform: str
@@ -107,6 +126,7 @@ class DeploymentCreate(BaseModel):
 
 
 class DeploymentPatch(BaseModel):
+    attestation_public_key: Optional[str] = Field(default=None, max_length=64)
     display_name: Optional[str] = Field(default=None, min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     metadata: Optional[dict[str, Any]] = None
@@ -131,6 +151,8 @@ async def create_deployment(body: DeploymentCreate, request: Request):
     """Register an external agent deployment for the authenticated tenant."""
     _require_registry_enabled()
     tenant = _tenant(request)
+    if body.attestation_public_key:
+        await _authorize_attestation_key(request, body.agent_id, body.attestation_public_key)
     record = await _repo().create(
         tenant.tenant_id,
         body.model_dump(exclude_none=True),
@@ -187,6 +209,12 @@ async def bind_deployment_agent_identity(
     if not source_namespace or not source_agent_ref:
         raise BadRequestError(
             "Deployment requires agent_source_namespace and agent_id before identity binding"
+        )
+    # A binding makes this deployment's signed events speak as the canonical agent,
+    # so it carries the same gate as registering a key for that agent.
+    if deployment.get("attestation_public_key"):
+        await _authorize_attestation_key(
+            request, body.canonical_agent_entity_id, deployment["attestation_public_key"], deployment_id,
         )
 
     entity = await EntityRepository().find_by_id(body.canonical_agent_entity_id)
@@ -493,6 +521,11 @@ async def patch_deployment(deployment_id: str, body: DeploymentPatch, request: R
     """Update mutable deployment fields (audited)."""
     _require_registry_enabled()
     tenant = _tenant(request)
+    if body.attestation_public_key:
+        existing = await _repo().get(tenant.tenant_id, deployment_id)
+        await _authorize_attestation_key(
+            request, str(existing.get("agent_id")), body.attestation_public_key, deployment_id,
+        )
     changes = body.model_dump(exclude_none=True)
     if not changes:
         raise BadRequestError("No updatable fields provided")
@@ -587,7 +620,7 @@ async def deployment_activity(
 async def agent_spawn_lineage(
     root_agent_ref: str,
     request: Request,
-    max_depth: int = Query(default=8, ge=1, le=8),
+    max_depth: int = Query(default=8, ge=1, le=32),
 ):
     """Orchestrator -> sub-agent tree with per-agent tool/outcome rollups.
 
