@@ -29,7 +29,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:b9167474991b4df1cd1df33ba126c6d3213363eb8191ea26c143bb8b25b5b363"
-  "services/api/governance/": "sha256:18519f02339ae933ebde8c7d455c6fe783a645cd37b2c56d416e73ee5c3486b0"
+  "services/api/governance/": "sha256:b287f008d8982cb66b93e37f5654a5cbcd808c6fcee3d811ed81bb1e9bcab7ca"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
   "services/api/identity/": "sha256:a7f1dce493471a067cf90946257aeeffc9e62627cb505302086849b9d2bd0673"
   "services/api/ingestion/": "sha256:c47ede5ce42d53c7bb04071199cf3c2a6114f8ce14aeaea95bddc89f1eb8f5b2"
