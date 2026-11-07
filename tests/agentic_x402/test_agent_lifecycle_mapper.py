@@ -120,7 +120,7 @@ async def test_subagent_spawned_links_parent_to_child(monkeypatch):
         mapper = AgentLifecycleMapper(GraphClient(), DelegationRepository(), AgentExecutionRepository())
         await mapper.handle_event(
             "agent_subagent_spawned",
-            {"agent_id": PARENT_AGENT, "parent_agent_id": AGENT},
+            {"agent_id": PARENT_AGENT, "parent_agent_id": PARENT_AGENT, "child_agent_id": AGENT},
             TENANT,
         )
         parent_vid = f"{TENANT}:agent:{PARENT_AGENT}"

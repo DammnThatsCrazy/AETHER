@@ -22,7 +22,7 @@ source_hashes:
   "services/api/value/economic/attribution_model_validation.py": "sha256:d2ea75981effed3f2aaba070ddcf29c9156acbab9a285a6601cb045a48774719"
   "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
   "services/api/value/economic/routes.py": "sha256:06f9a6abcc075c506423253e071386eedcc3a7cb88589752e4bfd3cf60235ec7"
-  "services/api/value/economic/value_confidence_evaluation.py": "sha256:d468139ac13d462fab2bc62c003518e6040a3cdd8dbdb16af7eba2887b845f38"
+  "services/api/value/economic/value_confidence_evaluation.py": "sha256:f13f70a0f685487f0770981b77ddd2ac09beec99d55a602250f72a6c937a5d41"
 ---
 
 # Value360 attribution confidence evaluation
