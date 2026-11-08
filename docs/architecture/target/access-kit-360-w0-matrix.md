@@ -13,7 +13,7 @@ since_version: "0.1.0"
 Scope: the governed 360 frame read exposed as `experience360.frame.get` in the
 existing Access Kit. This is a composition project; it adds no service, registry,
 billing policy, or action tool. Evidence levels use the E0–E7 ladder from the
-work order; **the highest level reached here is E2/E3 (local focused + fixture)**.
+work order; **the highest level reached here is E4 (hosted `ci / verdict`); E5 to E7 need a live tenant and are not reached**.
 
 ## Operation ownership matrix
 
@@ -26,7 +26,7 @@ work order; **the highest level reached here is E2/E3 (local focused + fixture)*
 | Tenant binding | Body is `extra="forbid"`; no tenant field is accepted or forwarded |
 | Request | `surfaceId`, `subject{kind,id}`, optional `requestedSlotIds`, `asOf`, `includeEvidence` (adapter bounds all of them; sends none of `lensIds`, `page`, `purpose`, `timeRange`, `authorizationContextRef`) |
 | Response | Bare frame (no `{data}` envelope); adapter returns it unmodified |
-| Meter / limit | Per-tenant burst RPM only. No plan/ACU gate (`/v1/experience360/*` matches no `SERVICE_CATALOG` pattern) |
+| Meter / limit | Per-tenant burst RPM, plus a per-credential, per-capability cap (default 120 per minute, `ACCESS_KIT_CREDENTIAL_RPM`) on the same limiter. No plan/ACU gate (`/v1/experience360/*` matches no `SERVICE_CATALOG` pattern); usage is non-billable |
 | Retry | Pure read, single attempt in the adapter, no retry loop |
 | Transports | Node client, CLI, local MCP (`access_invoke_read`). Hosted MCP OAuth: **unsupported** (see gaps) |
 | Tests | `packages/access-kit/test/experience360.test.mjs`; `services/api/tests/unit/test_experience360_frames_http_contract.py` |
@@ -51,13 +51,13 @@ orchestrator wants it. A frame existing is not a claim that a surface is complet
 
 | Item | State |
 |---|---|
-| PR838 / PR839 | Merged into `origin/development` (`46cbb7141`). This branch is based on `50bb9ec10` (#837) and does not contain them. `routes.py` and `contracts.py` were reported byte-identical, so the adapter is believed compatible. Rebase onto `development` before opening a PR. |
+| PR838 / PR839 | Merged into `origin/development` (`46cbb7141`). The work was rebased onto `development` and landed as #851 (`74ae5fa7a`) and #852 (`35fc76390`). |
 | Hosted MCP OAuth | Fixed in `services/api/middleware/middleware.py`: `_READ_SEMANTIC_POST_ROUTES` (exactly `POST /v1/experience360/frames`) joins `_MCP_OAUTH_READ_ROUTES`. The service assertion already binds method and target. Fixture-tested only; no live hosted-MCP login run. |
 | POST permission | Fixed: the same set makes route policy require `read`, not `write`, for that route. Other POSTs still require `write`. |
 | Audit / usage IDs | Fixed: the route now has an `_ACCESS_KIT_CAPABILITIES` entry (`experience360.frame.read`) and is attributed as a read, so audit and usage IDs come back when the surface header is sent. Usage stays non-billable. |
 | Catalog table | The adapter's allowlist is hand-maintained, guarded by a drift test against `packages/shared/contracts/intelligence-projection-registry.json`. Generating it is a follow-up. |
 | Source-linked docs | `mcp-api-cli-access-kit.md` links this package and needs review and restamp. |
-| W1 triage | Closed on the rebased base (`af3f0af62`). The 4 failures seen on `46cbb7141` were reduced to 1 by upstream work: `test_experience360_agent_outcomes_frame` asserted section provenance only, but Outcome360 now emits a claim-kind provenance entry, so the test now asserts section and claim provenance separately. `test_usage_summary_itself_is_not_metered` failed because no exclusion existed; `billing.usage.summary.read` is now excluded from interaction metering. Hosted `ci / verdict` and the payment/spending-limit status were not checked. |
+| W1 triage | Closed on the rebased base (`af3f0af62`). The 4 failures seen on `46cbb7141` were reduced to 1 by upstream work: `test_experience360_agent_outcomes_frame` asserted section provenance only, but Outcome360 now emits a claim-kind provenance entry, so the test now asserts section and claim provenance separately. `test_usage_summary_itself_is_not_metered` failed because no exclusion existed; `billing.usage.summary.read` is now excluded from interaction metering. Hosted `ci / verdict` was green on #852; the payment/spending-limit status was not checked. |
 | W2 server gaps | Fixed (see above). Server request bounds added: at most 64 slots (each 1 to 128 characters), 16 lens IDs, 256-character subject ID, `purpose`, and `authorizationContextRef`, and a 64-character `asOf`. |
 | W3 | Deferred by the user until development is merged to staging. Not attempted. |
 | W4 | Closed with documented decisions in `access-kit-w4-limits-contract.md`: per-credential, per-capability cap (default 120 per minute, `ACCESS_KIT_CREDENTIAL_RPM`), read-only audit-versus-usage reconciliation, input bounds, single-attempt adapter, non-billable attribution. Frames are included on every plan and non-billable by decision (the service catalog is a priced registry); no spend budget applies while reads are non-billable. Reconciliation runs daily (`access_reconciliation` worker, `maintenance` role) and on demand (`GET /v1/billing/usage/access-reconciliation`). |
@@ -68,10 +68,10 @@ orchestrator wants it. A frame existing is not a claim that a surface is complet
 
 | Level | Status |
 |---|---|
-| E1 code present | Yes (working tree; not committed) |
+| E1 code present | Yes (merged to `development` in #851 and #852) |
 | E2 local focused | Access Kit `npm test`: 77 pass, 0 fail. API tests (Python 3.11): 343 pass, 0 fail in `-k "experience360 or economic360 or cross_360 or intelligence_projection or access_kit or middleware or route_polic or mcp"` |
 | E3 fixture integration | Mock-fetch parity across Node/CLI/MCP, with negative controls |
-| E4 hosted `ci / verdict` | Not run |
-| E5 staging | Not run |
+| E4 hosted `ci / verdict` | Passed on #852 (26 checks); the backend suite ran 12,989 passed, 0 failed, 0 errors, and `make verification-disposition` passed 42 of 42 |
+| E5 staging | Not run: `development` has not been merged to `staging`. Deferred by the user |
 | E6 real tenant / provider | Not run, unknown |
 | E7 release | Not run |
