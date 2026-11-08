@@ -11,8 +11,8 @@ since_version: "0.1.0"
 # Access Kit × 360 — W4 Limits and Metering Contract
 
 This records what limits cover Access Kit reads and the decisions taken for
-W4. The defaults below are the engineering decisions made to close W4; the billing
-owner can change any of them without touching the adapter, which declares no
+W4. The defaults below were decided to close W4 and approved by the billing owner
+(see the last section); the billing owner can change any of them without touching the adapter, which declares no
 limits of its own (the API decides on every request).
 
 ## Enforced
@@ -36,8 +36,13 @@ limits of its own (the API decides on every request).
 | Per-credential limit value | 120 per minute per (credential, capability), configurable. | A starting default under typical plan burst limits; set the env var to tune per deployment. |
 | Reconciliation cadence | Daily at 02:10 UTC over the previous UTC day (`maintenance` role worker `access_reconciliation`), plus the on-demand admin route. Findings are logged and counted, not stored. | A scheduler and an owner for the report are an operations decision. |
 
-## Still needs the billing owner
+## Billing owner approval
 
-Moving any of the decisions above: making frames billable, adding a priced catalog
-row with a tier map, or changing the default cap. Until then the adapter keeps its
-current behavior: single attempt, no retry on 429, bounded input.
+The billing owner approved these decisions on 2026-11-07: frames are non-billable
+and included on every plan, no spend budget applies, and the per-credential cap
+defaults to 120 per minute.
+
+A change to any of them needs the billing owner again: making frames billable,
+adding a priced catalog row with a tier map, or changing the default cap. Until
+then the adapter keeps its current behavior: single attempt, no retry on 429,
+bounded input.
