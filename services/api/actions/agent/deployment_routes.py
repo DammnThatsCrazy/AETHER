@@ -765,10 +765,16 @@ async def principal_agents(entity_id: str, request: Request):
     grants = [g for g in await DelegationRepository().find_many(
         filters={"tenant_id": tenant.tenant_id, "grantor_entity_id": entity_id}, limit=100)
         if g.get("tenant_id") == tenant.tenant_id and not g.get("revoked_at")]
-    facts, truncated = [], False
+    facts, truncated, seen = [], False, set()
     for ref in sorted({g["grantee_entity_id"] for g in grants if g.get("grantee_entity_id")})[:25]:
         agent_facts, was_truncated = await _behavior_facts(tenant.tenant_id, ref)
-        facts.extend(agent_facts)
+        # Each load includes spawned descendants' activity and the tenant's spawn
+        # edges, so a child granted alongside its parent would repeat; keep one.
+        for fact in agent_facts:
+            key = (fact.event_id, fact.event_type, fact.agent_ref, fact.child_agent_ref)
+            if key not in seen:
+                seen.add(key)
+                facts.append(fact)
         truncated = truncated or was_truncated
     data = profile360_agents(entity_id, facts, grants)
     data["source_truncated"] = truncated

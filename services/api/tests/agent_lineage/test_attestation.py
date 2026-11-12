@@ -158,8 +158,8 @@ def test_numbers_are_canonicalized_like_json_stringify():
 
     from actions.agent.attestation import _canonical_json, _js_number
 
-    assert [_js_number(v) for v in (0.000001, 1e-7, 1e21, 1.2345678901234568e20, 1.0, -0.0, float("nan"))] == [
-        "0.000001", "1e-7", "1e+21", "123456789012345680000", "1", "0", "null"]
+    assert [_js_number(v) for v in (0.000001, 1e-7, 1e21, 1.2345678901234568e20, 1.0, -0.0)] == [
+        "0.000001", "1e-7", "1e+21", "123456789012345680000", "1", "0"]
     wire = json.loads('{"toolName":"search","confidence":0.000001,"costMicros":123456789012345680000,"floor":1e-7}')
     assert _canonical_json(wire) == (
         '{"confidence":0.000001,"costMicros":123456789012345680000,"floor":1e-7,"toolName":"search"}')
@@ -192,3 +192,22 @@ def test_integers_a_js_number_cannot_hold_are_never_attested():
     with pytest.raises(ValueError):
         _payload(properties={"amount": 2**53 + 1})  # cannot verify under the 2**53 signature
     assert verify_attestation(public, signature, _payload(properties={"amount": 2**53}))
+
+
+
+def test_non_finite_floats_are_never_attested():
+    """1e400 parses as infinity; rendering it as null would let it replace a signed
+    null under the same signature while Silver keeps "inf". JSON.stringify never
+    emits it, so canonicalization refuses it (the event stays unattested)."""
+    import json
+
+    import pytest
+
+    from actions.agent.attestation import _canonical_json
+
+    for wire in ('{"amount":1e400}', '{"amount":-1e400}'):
+        with pytest.raises(ValueError):
+            _canonical_json(json.loads(wire))
+    with pytest.raises(ValueError):
+        _canonical_json({"x": float("nan")})
+    assert _canonical_json(json.loads('{"amount":null}')) == '{"amount":null}'

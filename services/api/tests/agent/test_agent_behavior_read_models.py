@@ -391,3 +391,28 @@ def test_root_journey_loads_descendant_activity():
 
     _, truncated = asyncio.run(load_behavior_facts("t", "orch", analytics=Wide()))
     assert truncated is True and behavior_read_model.MAX_JOURNEY_DESCENDANTS < 40
+
+
+
+@pytest.mark.asyncio
+async def test_principal_agents_counts_a_granted_child_once(_routes, monkeypatch):
+    """Fact loads include spawned descendants, so a principal granting both a parent
+    and its child must not feed the child's events into the aggregation twice."""
+    from intelligence.agent_behavior import read_models
+    from repositories.repos import DelegationRepository
+
+    await _persist(_events("GS-A"))
+    repo = DelegationRepository()
+    for ref in ("gsa-orch", "gsa-wkr-flights"):
+        await repo.grant(delegation_id=f"d-{ref}", tenant_id=T, grantor_entity_id="gsa-person-1",
+                         grantee_entity_id=ref, scope={"actions": ["task"]})
+    seen = {}
+    real = read_models.profile360_agents
+
+    def capture(entity_id, facts, grants):
+        seen["keys"] = [(f.event_id, f.event_type, f.agent_ref, f.child_agent_ref) for f in facts]
+        return real(entity_id, facts, grants)
+
+    monkeypatch.setattr(read_models, "profile360_agents", capture)
+    await agent_routes.principal_agents("gsa-person-1", _request())
+    assert seen["keys"] and len(seen["keys"]) == len(set(seen["keys"]))

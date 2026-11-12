@@ -64,7 +64,10 @@ def _js_number(value: float | int) -> str:
         return rendered
     number = float(value)
     if not math.isfinite(number):
-        return "null"
+        # A wire value like 1e400 parses as infinity; rendering it as null would
+        # let it replace a signed null under the same signature while Silver
+        # keeps "inf". JSON.stringify never emits it (it writes null), so refuse.
+        raise ValueError("non-finite number cannot be attested")
     if number == 0:
         return "0"
     sign = "-" if number < 0 else ""
