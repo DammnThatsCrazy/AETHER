@@ -37,6 +37,12 @@ on:
         type: boolean
         default: true
         required: false
+      identity_provider_proof:
+        description: "Live provider-connection identity proof: required, or deferred (skips only the provider steps and records the deferral; the run is not identity-continuity proof)"
+        type: choice
+        options: [required, deferred]
+        default: required
+        required: false
       backend_image_digest:
         description: Immutable backend image digest for the reviewed staging plan
         type: string
@@ -376,6 +382,7 @@ jobs:
       ACTION: ${{ inputs.action }}
       DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
       IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
+      IDENTITY_PROVIDER_PROOF: ${{ inputs.identity_provider_proof || 'required' }}
       BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
       STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
       ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -512,6 +519,7 @@ jobs:
               dispatch_and_wait staging-lifecycle.yml \
                 -f action=full-rehearsal -f deployment_lane=pilot \
                 -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+                -f identity_provider_proof="$IDENTITY_PROVIDER_PROOF" \
                 -f confirm_runtime_wake=true -f release_run_id="$RELEASE_RUN_ID" \
                 -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" \
                 -f intended_release_sha="$INTENDED_RELEASE_SHA" \

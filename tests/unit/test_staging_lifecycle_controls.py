@@ -2168,3 +2168,38 @@ def test_standalone_plan_wake_surfaces_the_apply_wake_inputs():
     assert 'plan_run_id=${PLAN_RUN_ID} plan_checksum=${checksum}' in run
     assert "GITHUB_STEP_SUMMARY" in run
     assert run.index("GITHUB_STEP_SUMMARY") > run.index('checksum="$(sha256sum reviewed.tfplan')
+
+
+def test_identity_provider_proof_deferral_is_opt_in_narrow_and_recorded() -> None:
+    """Deferring the live provider proof must be explicit (default required), skip
+    only the provider-connection steps, and leave evidence that the run is not
+    identity-continuity proof. The pilot wrapper must pass the choice through."""
+    for name in (LIFECYCLE, "pilot-staging.yml"):
+        doc = _workflow_yaml(name)
+        inputs = (doc.get(True) or doc["on"])["workflow_dispatch"]["inputs"]
+        assert inputs["identity_provider_proof"]["options"] == ["required", "deferred"], name
+        assert inputs["identity_provider_proof"]["default"] == "required", name
+
+    doc = _workflow_yaml(LIFECYCLE)
+    gated = "inputs.identity_provider_proof != 'deferred'"
+    preflight = {s.get("name"): s for s in _steps(doc, "preflight-rehearsal-inputs")}
+    assert gated in preflight["Validate identity provider inputs before wake planning"]["if"]
+    assert "deferred" in preflight["Record deferred identity provider proof"]["if"]
+
+    rehearse = {s.get("name"): s for s in _steps(doc, "rehearse")}
+    for step in ("Bootstrap run-scoped provider connection for identity reimport",
+                 "Run live identity continuity scenarios",
+                 "Collect and validate identity continuity staging proof pack"):
+        assert gated in rehearse[step]["if"], step
+    evidence = rehearse["Record deferred identity provider proof evidence"]
+    assert "deferred" in evidence["if"]
+    assert '"counts_as_identity_continuity_proof": False' in evidence["run"]
+    # Nothing else in the rehearsal may key off the deferral.
+    others = [n for n, s in rehearse.items() if "identity_provider_proof" in str(s.get("if", ""))]
+    assert sorted(others) == sorted([
+        "Record deferred identity provider proof evidence",
+        "Bootstrap run-scoped provider connection for identity reimport",
+        "Run live identity continuity scenarios",
+        "Collect and validate identity continuity staging proof pack",
+    ])
+    assert '-f identity_provider_proof="$IDENTITY_PROVIDER_PROOF"' in _workflow("pilot-staging.yml")
