@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from shared.temporal.instant import coerce_utc_lenient
 
 
 def parse_timestamp(value: Optional[str]) -> Optional[datetime]:
     """Parse an ISO 8601 timestamp to an aware UTC datetime, or None if invalid."""
     if not isinstance(value, str) or not value.strip():
         return None
-    try:
-        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    # A naive value is read as UTC; the temporal kernel owns that policy.
+    return coerce_utc_lenient(value.strip())
 
 
 # ---------------------------------------------------------------------------
