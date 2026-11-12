@@ -158,7 +158,6 @@ The following authored docs are expected to stay aligned with code changes:
 - `operations/MIGRATION-RUNBOOK.md`
 - `operations/MIGRATION-v7.md`
 - `operations/ML-TRAINING-GUIDE.md`
-- `operations/OPERATIONAL-INTELLIGENCE-AUDIT.md`
 - `operations/OPERATIONS-RUNBOOK.md`
 - `operations/OUTCOME-FEEDBACK-QUALITY.md`
 - `operations/PAYMENT-OPERATIONS.md`

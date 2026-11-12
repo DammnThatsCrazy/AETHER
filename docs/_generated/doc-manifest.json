@@ -3486,20 +3486,6 @@
       "canonical_owner": "ml@aether"
     },
     {
-      "path": "docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md",
-      "title": "Operational Intelligence — Stub vs. Production Audit",
-      "slug": "operations/operational-intelligence-audit",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "dev-senior",
-        "architect",
-        "ops"
-      ],
-      "status": "stable",
-      "since_version": "0.1.0"
-    },
-    {
       "path": "docs/operations/OPERATIONS-RUNBOOK.md",
       "title": "Operations Runbook",
       "slug": "operations/runbook",

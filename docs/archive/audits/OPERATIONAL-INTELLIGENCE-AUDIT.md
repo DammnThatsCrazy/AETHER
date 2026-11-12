@@ -1,26 +1,18 @@
 ---
-title: Operational Intelligence — Stub vs. Production Audit
-slug: operations/operational-intelligence-audit
-section: operations
+title: Operational Intelligence — Stub vs. Production Audit (archived)
+slug: archive/audits/operational-intelligence-audit
+section: reference
 visibility: I
-audience: [dev-senior, architect, ops]
-status: stable
+audience: [dev-senior, architect]
+status: experimental
 since_version: 0.1.0
-source_files: [services/api/governance/investigation/routes.py, services/api/governance/governance/routes.py, services/api/ingestion/events/routes.py, services/api/ingestion/events/worker.py, services/api/ingestion/realtime/channel_hub.py, services/api/repositories/repos.py, services/api/shared/events/events.py]
-reviewed_source_commits:
-  - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged.'}
-  - {'commit': 'f63d631', 'reason': 'Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required.'}
-source_hashes:
-  "services/api/governance/governance/routes.py": "sha256:ca87bb59cf8c61661b53d0294d6cee4f5093beb28ae32aca79cbea7a62b708f1"
-  "services/api/governance/investigation/routes.py": "sha256:10904ac8cea009ad26d205ccfdda5387f9ef4777ec55cfee734fe71ff7fbe37f"
-  "services/api/ingestion/events/routes.py": "sha256:7c5fb908eefa9ec1165637ef1cc9d432c3a97a0b0d8b0ca180c03ca64c3623f8"
-  "services/api/ingestion/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
-  "services/api/ingestion/realtime/channel_hub.py": "sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9"
-  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
-  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
+
+> **Archived 2026-11-12.** Point-in-time audit of PRs #107–#115 (2026-05-17).
+> It no longer tracks live sources, and its readiness statements are not
+> current. `scripts/production_status.py` is the canonical readiness scorecard.
 
 **Scope:** PRs #107–#115 — operational intelligence services (investigation, governance, event
 replay, realtime), shared contracts, and Kyber frontend hooks.
