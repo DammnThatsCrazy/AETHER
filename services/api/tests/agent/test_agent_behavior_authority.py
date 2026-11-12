@@ -147,3 +147,34 @@ def test_one_purchase_across_lifecycle_phases_counts_once():
     facts = _facts(("agent_transaction_settled", "agent-1", loose), ("agent_transaction_settled", "agent-1", loose))
     checks = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]["authority"]["data"]
     assert "daily_limit_exceeded" in checks[-1]["reasons"]
+
+
+def test_expired_or_revoked_grants_still_judge_the_actions_they_covered():
+    """Rebuilding a model after a grant lapses must not turn actions it covered into
+    unknown/no_recorded_grant; actions after revocation are outside the grant."""
+    import asyncio
+
+    from actions.agent.behavior_read_model import load_behavior_inputs
+    from repositories.repos import DelegationRepository, reset_in_memory_stores
+
+    reset_in_memory_stores()
+    repo = DelegationRepository()
+    grant = asyncio.run(repo.grant(
+        delegation_id="del-hist", tenant_id=T, grantor_entity_id="person-1", grantee_entity_id="agent-1",
+        scope=GRANT["scope"], starts_at="2026-10-01T00:00:00Z", ends_at="2026-10-30T00:00:00Z"))
+    assert asyncio.run(repo.active_for("agent-1", T)) == []  # lapsed relative to now
+
+    inputs = asyncio.run(load_behavior_inputs(T, "agent-1"))
+    assert [g["delegation_id"] for g in inputs.grants] == [grant["delegation_id"]]
+    assert check_action(act(at="2026-10-22T10:00:00Z"), inputs.grants).status == INSIDE
+    late = check_action(act(at="2026-10-31T10:00:00Z"), inputs.grants)
+    assert late.status == OUTSIDE and late.reasons[0] == "grant_not_active_at_action_time"
+
+    facts = _facts(("agent_transaction_initiated", "agent-1", {"amount": "5"}))  # 2026-10-22
+    assert decompose(facts[0], facts, grants=inputs.grants)["authorization_actor"]["value"] == "person-1"
+    expired_before = {**GRANT, "delegation_id": "del-old", "grantor_entity_id": "person-9",
+                      "starts_at": "2026-01-01T00:00:00Z", "ends_at": "2026-02-01T00:00:00Z"}
+    # A grant that had already expired at action time is not a candidate grantor.
+    assert decompose(facts[0], facts, grants=[*inputs.grants, expired_before])[
+        "authorization_actor"]["value"] == "person-1"
+    reset_in_memory_stores()

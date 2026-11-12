@@ -64,7 +64,9 @@ async def active_agents(limit: int = MAX_AGENTS_PER_PASS) -> list[tuple[str, str
 
 
 async def run_agent(tenant_id: str, agent_ref: str, window: tuple[str, str], report: PassReport) -> None:
-    from actions.agent.behavior_read_model import compose_behavior_read_model, load_behavior_inputs
+    from actions.agent.behavior_read_model import (
+        compose_behavior_read_model, load_behavior_inputs, load_window_facts,
+    )
     from intelligence.agent_behavior.model import build_behavior_model
     from intelligence.agent_behavior.snapshot_store import (
         BehaviorSnapshotRepository, drift_over_stored_windows, record_window,
@@ -77,12 +79,14 @@ async def run_agent(tenant_id: str, agent_ref: str, window: tuple[str, str], rep
         report.skipped_no_facts += 1
         return
     repo = BehaviorSnapshotRepository()
-    if inputs.truncated:
-        # The fact read is newest-first and capped, so it may not cover the
-        # window; recording it could overwrite a complete snapshot with less.
+    # The snapshot reads the requested window itself (paged), not the newest
+    # facts, so today's traffic cannot crowd yesterday out. A window still too
+    # large to read whole is skipped rather than overwrite a stored snapshot.
+    window_facts, window_truncated = await load_window_facts(tenant_id, agent_ref, window)
+    if window_truncated:
         report.skipped_truncated_snapshots += 1
     else:
-        await record_window(repo, tenant_id, agent_ref, inputs.facts, window)
+        await record_window(repo, tenant_id, agent_ref, window_facts, window)
         report.snapshots_recorded += 1
     drift = await drift_over_stored_windows(repo, tenant_id, agent_ref)
     if drift.get("status") == "drift_detected":
