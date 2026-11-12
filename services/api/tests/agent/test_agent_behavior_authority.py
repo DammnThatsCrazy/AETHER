@@ -251,3 +251,15 @@ def test_approval_timeline_compares_instants_not_strings():
     assert _granted_approval_ref(action, _approval_timeline([grant])) == "appr-1"
     deny = dataclasses.replace(deny, occurred_at="2026-10-22T10:00:00.050000Z")  # after the grant
     assert _granted_approval_ref(action, _approval_timeline([grant, deny])) is None
+
+
+def test_correlated_action_keeps_currency_from_an_earlier_phase():
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    facts = _facts(
+        ("agent_transaction_initiated", "agent-1", {"amount": "60.00", "currency": "USD", "actionId": "act-1"}),
+        ("agent_transaction_settled", "agent-1", {"amount": "60.00", "actionId": "act-1"}),
+    )
+    value = agent360_behavior(facts, "agent-1")["sections"]["value"]["data"]
+    assert [r["currency"] for r in value["actions"]] == ["USD"]
+    assert [(t["currency"], t["amount"]) for t in value["totals"]] == [("USD", "60.00")]

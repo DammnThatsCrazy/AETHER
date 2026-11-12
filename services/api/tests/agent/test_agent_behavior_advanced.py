@@ -255,3 +255,19 @@ def test_counterfactual_ranks_already_permitted_choices_too():
     assert "blocked-9" in env["opportunity"]["blocked"]
     cf = counterfactual_without_constraint(env, hist, model["preferences"])
     assert cf["likely_choice"] == "ok-9" and cf["changes_choice"] is False
+
+
+def test_failed_execution_with_a_pending_retry_is_not_failed():
+    fs = facts(
+        ("agent_execution_started", "buyer", {"decisionId": "d1", "actionId": "first"}),
+        ("agent_execution_failed", "buyer", {"decisionId": "d1", "actionId": "first"}),
+        ("agent_execution_started", "buyer", {"decisionId": "d1", "actionId": "retry"}),
+    )
+    assert project_decisions(fs)["decisions"][0]["disposition"]["disposition"] == "selected_action"
+    done = facts(*[e for e in (
+        ("agent_execution_started", "buyer", {"decisionId": "d2", "actionId": "first"}),
+        ("agent_execution_failed", "buyer", {"decisionId": "d2", "actionId": "first"}),
+        ("agent_execution_started", "buyer", {"decisionId": "d2", "actionId": "retry"}),
+        ("agent_execution_failed", "buyer", {"decisionId": "d2", "actionId": "retry"}),
+    )])
+    assert project_decisions(done)["decisions"][0]["disposition"]["disposition"] == "failed_execution"

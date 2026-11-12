@@ -119,9 +119,10 @@ def _economic_key(f: AgentFact) -> Optional[tuple[str, str]]:
     return None
 
 
-# References decompose() reads from an action; a correlated action keeps any of
-# them reported on an earlier phase when its most final phase omits them.
-_ATTRIBUTION_REFS = ("decision_ref", "objective_ref", "authorization_ref")
+# References decompose() reads from an action, plus the currency value totals
+# need; a correlated action keeps any reported on an earlier phase when its most
+# final phase omits them.
+_ATTRIBUTION_REFS = ("decision_ref", "objective_ref", "authorization_ref", "currency")
 
 
 def _distinct_actions(actions: list[AgentFact]) -> list[AgentFact]:

@@ -124,13 +124,20 @@ def action_disposition(group: list[AgentFact], opportunity: dict[str, Any]) -> d
     executed = [f for f in group if f.event_type in _EXECUTION]
     # Judge failure on terminal records only: a started or initiated record
     # followed by its failure is one failed execution, not a partial success.
-    terminal = [f for f in executed if f.event_type.endswith(("_succeeded", "_settled", "_failed", "_aborted"))]
+    is_terminal = lambda f: f.event_type.endswith(("_succeeded", "_settled", "_failed", "_aborted"))  # noqa: E731
+    terminal = [f for f in executed if is_terminal(f)]
     failed = [f for f in terminal if f.event_type.endswith(("_failed", "_aborted"))]
+    # An execution whose latest record (per actionId, else the decision's
+    # sequence) is not terminal is still pending, so the decision is not failed.
+    latest: dict[str, AgentFact] = {}
+    for f in sorted(executed, key=lambda f: (f.occurred_at, f.event_id)):
+        latest[f.action_ref or "_sequence"] = f
+    pending = any(not is_terminal(f) for f in latest.values())
     selected = [f for f in group if f.event_type == "agent_action_selected"]
     outcome = next((f.outcome for f in reversed(group) if f.outcome), None)
     if "agent_escalated_to_human" in types:
         kind, ev = "escalated", [f.event_id for f in group if f.event_type == "agent_escalated_to_human"]
-    elif failed and len(failed) == len(terminal):
+    elif failed and len(failed) == len(terminal) and not pending:
         kind, ev = "failed_execution", [f.event_id for f in failed]
     elif executed or selected:
         kind, ev = "selected_action", [f.event_id for f in (selected or executed)]
