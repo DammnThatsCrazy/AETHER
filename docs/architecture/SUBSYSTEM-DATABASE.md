@@ -57,7 +57,7 @@ source_hashes:
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
+  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/attribution_model_validation.py": "sha256:d2ea75981effed3f2aaba070ddcf29c9156acbab9a285a6601cb045a48774719"
@@ -210,6 +210,7 @@ does not claim that either has been applied.
 - `SettlementEventRepository.list_for_agent(agent_id, tenant_id)`
 - `SettlementEventRepository.list_for_intent(intent_id, tenant_id)`
 - `DelegationRepository.active_for(grantee_entity_id, tenant_id)`
+- `DelegationRepository.history_for(grantee_entity_id, tenant_id)` (every grant, including expired and revoked, for judging historical actions)
 
 `EntityRepository.find_many_for_tenant_entity_ids(tenant_id, entity_ids)` is a
 bounded exact lookup used to resolve Agent360 delegation parties. It filters

@@ -42,7 +42,46 @@ def _ts(value: str) -> Optional[datetime]:
 
 # --- Agent360 (WO-110, WO-111, WO-112) -----------------------------------------------
 
-def _observed_action(f: AgentFact):
+_AUTHORIZATION_STATUS = {
+    "agent_authorization_requested": "requested",
+    "agent_authorization_granted": "granted",
+    "agent_authorization_denied": "denied",
+}
+
+
+def _instant(value: str) -> Any:
+    from shared.temporal.instant import MIN_INSTANT, coerce_utc_lenient
+
+    # Silver timestamps mix whole and fractional seconds, so strings do not sort
+    # chronologically; compare parsed UTC instants (unparseable sorts first).
+    return coerce_utc_lenient(value) or MIN_INSTANT
+
+
+def _approval_timeline(facts: Iterable[AgentFact]) -> dict[str, list[tuple[Any, str, str]]]:
+    """``authorization_ref -> [(instant, event_id, status)]`` in time order."""
+    timeline: dict[str, list[tuple[Any, str, str]]] = {}
+    for f in facts:
+        status = _AUTHORIZATION_STATUS.get(f.event_type)
+        if status and f.authorization_ref:
+            timeline.setdefault(f.authorization_ref, []).append((_instant(f.occurred_at), f.event_id, status))
+    for entries in timeline.values():
+        entries.sort()
+    return timeline
+
+
+def _granted_approval_ref(f: AgentFact, timeline: dict[str, list[tuple[Any, str, str]]]) -> Optional[str]:
+    """The action's authorization reference only when that authorization's latest
+    status at the action's time is ``granted``. The same id is used for requested,
+    granted and denied, so the reference alone is not evidence of approval."""
+    ref = f.authorization_ref
+    if not ref:
+        return None
+    at = _instant(f.occurred_at)
+    at_or_before = [e for e in timeline.get(ref, []) if e[0] <= at]
+    return ref if at_or_before and at_or_before[-1][2] == "granted" else None
+
+
+def _observed_action(f: AgentFact, approval_ref: Optional[str] = None):
     from actions.delegation.authority_boundary import ObservedAction
 
     return ObservedAction(
@@ -50,8 +89,72 @@ def _observed_action(f: AgentFact):
         action=f.action_type or ("purchase" if f.event_type.startswith("agent_transaction_") else f.event_type),
         resource=f.resource_ref, amount=str(f.amount) if f.amount is not None else None,
         merchant=f.attr("merchant", "merchantId"), protocol=f.attr("protocol"), asset=f.currency,
-        human_approval_ref=f.authorization_ref,
+        human_approval_ref=approval_ref,
     )
+
+
+# Lifecycle phases of one economic action, least to most final. A failed or
+# aborted phase ranks lowest so a completed phase represents the action.
+_PHASE_RANK = {
+    "agent_transaction_failed": 0, "agent_execution_failed": 0, "agent_execution_aborted": 0,
+    "agent_transaction_initiated": 1, "agent_execution_started": 1,
+    "agent_transaction_authorized": 2,
+    "agent_execution_succeeded": 3, "agent_transaction_settled": 4,
+}
+
+
+def _economic_key(f: AgentFact) -> Optional[tuple[str, str]]:
+    """Explicit source correlation for one economic action across its phases.
+
+    A reported action id correlates phases on its own. An object reference names a
+    target (a product can be bought twice), so it correlates only together with
+    the same decision or task. Nothing is inferred from amount or timing, so
+    uncorrelated events stay distinct.
+    """
+    if f.action_ref:
+        return (f.agent_ref or "", f"action:{f.action_ref}")
+    scope = f.decision_ref or (f"task:{f.task_ref}" if f.task_ref else None)
+    if f.object_type and f.object_id and scope:
+        return (f.agent_ref or "", f"object:{f.object_type}:{f.object_id}|{scope}")
+    return None
+
+
+# References decompose() reads from an action, plus the currency value totals
+# need; a correlated action keeps any reported on an earlier phase when its most
+# final phase omits them.
+_ATTRIBUTION_REFS = ("decision_ref", "objective_ref", "authorization_ref", "currency")
+
+
+def _distinct_actions(actions: list[AgentFact]) -> list[AgentFact]:
+    """One representative per correlated action: its most final phase, carrying
+    attribution references reported only on earlier phases."""
+    import dataclasses
+
+    groups: dict[Any, list[AgentFact]] = {}
+    for f in actions:
+        groups.setdefault(_economic_key(f) or ("event", f.event_id), []).append(f)
+    chosen = []
+    for group in groups.values():
+        ordered = sorted(group, key=lambda f: (f.occurred_at, f.event_id))
+        best = max(group, key=lambda f: (_PHASE_RANK.get(f.event_type, 1), f.occurred_at, f.event_id))
+        missing = {name: next((getattr(f, name) for f in ordered if getattr(f, name)), None)
+                   for name in _ATTRIBUTION_REFS if not getattr(best, name)}
+        missing = {k: v for k, v in missing.items() if v}
+        chosen.append(dataclasses.replace(best, **missing) if missing else best)
+    return sorted(chosen, key=lambda f: (f.occurred_at, f.event_id))
+
+
+def _prior_spends(actions: list[AgentFact], observed: list[Any], index: int) -> list[Any]:
+    """Earlier spends for the boundary check, counting each correlated action once
+    and never the current action's own earlier phases."""
+    current = _economic_key(actions[index])
+    latest: dict[Any, Any] = {}
+    for f, o in zip(actions[:index], observed[:index]):
+        key = _economic_key(f)
+        if key is not None and key == current:
+            continue
+        latest[key or ("event", f.event_id)] = o
+    return list(latest.values())
 
 
 def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
@@ -75,12 +178,13 @@ def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
     mine = [f for f in facts if f.agent_ref == agent_ref]
     actions = [f for f in mine if f.amount is not None and (
         f.event_type.startswith("agent_transaction_") or f.event_type.startswith("agent_execution_"))]
-    observed = [_observed_action(f) for f in actions]
-    checks = [check_action(a, grants, observed[:i]).to_dict() | {"event_id": a.event_id}
+    approvals = _approval_timeline(facts)
+    observed = [_observed_action(f, _granted_approval_ref(f, approvals)) for f in actions]
+    checks = [check_action(a, grants, _prior_spends(actions, observed, i)).to_dict() | {"event_id": a.event_id}
               for i, a in enumerate(observed)]
     value = attribute(
         [{"event_id": f.event_id, "amount": str(f.amount), "currency": f.currency,
-          "roles": decompose(f, facts, grants=grants)} for f in actions],
+          "roles": decompose(f, facts, grants=grants)} for f in _distinct_actions(actions)],
         agent_refs={f.agent_ref for f in facts if f.agent_ref},
     )
     adversarial = adversarial_signals(mine, checks)

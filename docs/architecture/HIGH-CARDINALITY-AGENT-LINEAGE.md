@@ -172,8 +172,13 @@ all properties and lineage context, so it cannot be reused for another event and
 effect or delegation field can be added under it. An event that verifies is recorded
 `attested`, and an attested spawn from its parent is a deterministic hop. A missing or
 bad signature does not reject the event; it stays `deployment_verified`, which is not
-proof. A value that does not survive the JSON round trip the same way in both languages
-fails verification, which leaves the event unattested rather than wrongly attested.
+proof. The backend hashes properties with a byte-for-byte twin of the SDK's
+`JSON.stringify`-based canonical JSON (ECMAScript number formatting, UTF-16 key order), so
+`0.000001` signs and verifies as `0.000001`. An integer whose decimal text differs from
+its JavaScript number rendering (for example `9007199254740993`, which JavaScript writes
+as `9007199254740992`) cannot be verified, because the signature would not pin the exact
+amount Silver keeps; such an event, like any value that does not survive the round trip
+the same way in both languages, stays unattested rather than wrongly attested.
 
 ## Adjudication and calibration
 

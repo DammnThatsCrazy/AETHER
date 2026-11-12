@@ -92,9 +92,12 @@ def decompose(
     if approver:
         roles["authorization_actor"] = c.declared(approver, [auth[0].event_id])
     else:
+        from actions.delegation.authority_boundary import grant_active_at
+
         initiator = roles["initiating_actor"].value or agent
         grantors = sorted({g.get("grantor_entity_id") for g in grants
-                           if g.get("grantee_entity_id") in {agent, initiator} and g.get("grantor_entity_id")})
+                           if g.get("grantee_entity_id") in {agent, initiator} and g.get("grantor_entity_id")
+                           and grant_active_at(g, action.occurred_at) is not False})
         roles["authorization_actor"] = (
             c.Claim(grantors[0], c.RESOLVED, reason="grantor of a recorded delegation; grants authority, not intent")
             if len(grantors) == 1 else

@@ -66,6 +66,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           mkdir -p release-evidence
+          # A push that creates a branch reports an all-zero "before" SHA, which
+          # cannot be diffed; fall back to the parent like the default above.
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then BASE_SHA='HEAD^'; fi
           .venv/bin/python scripts/impact_graph.py --base "$BASE_SHA" > release-evidence/impact-graph.json
           .venv/bin/python - <<'PY' >> "$GITHUB_OUTPUT"
           import json

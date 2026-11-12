@@ -2980,6 +2980,15 @@ class DelegationRepository(BaseRepository):
         await self._invalidate_cache(record["grantee_entity_id"], record.get("tenant_id", ""))
         return updated
 
+    async def history_for(self, grantee_entity_id: str, tenant_id: str) -> list[dict]:
+        """Every delegation recorded for an entity in a tenant, including expired
+        and revoked ones, for judging historical actions against the grant that
+        applied at the time. Uncached; the caller evaluates each grant's window."""
+        return await self.find_many(
+            filters={"grantee_entity_id": grantee_entity_id, "tenant_id": tenant_id},
+            limit=200,
+        )
+
     async def active_for(self, grantee_entity_id: str, tenant_id: str) -> list[dict]:
         """Return every currently-active delegation for an entity scoped to tenant.
 

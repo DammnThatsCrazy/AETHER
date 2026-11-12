@@ -16,7 +16,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:9e89e42e4b20e1f5125715a30ac1682be037317d784358e46f448e87c55a4f54"
-  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
+  "services/api/actions/agent/deployment_routes.py": "sha256:9a64e8d722eebe50bd3b720afe70368b9f7edd6b458fd7b46ed1201dcd12b3c0"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -31,7 +31,7 @@ source_hashes:
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
-  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
+  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
   "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"

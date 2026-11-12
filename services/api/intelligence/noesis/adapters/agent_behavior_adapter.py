@@ -34,7 +34,9 @@ async def read_agent_behavior(tenant_id: str, agent_ref: str) -> dict[str, Any]:
     from repositories.repos import DelegationRepository
 
     facts, truncated = await _behavior_facts(tenant_id, agent_ref)
-    grants = await DelegationRepository().active_for(agent_ref, tenant_id)
+    # Same grant history as the HTTP behavior read model, so both surfaces judge
+    # historical actions against the grant that applied when they happened.
+    grants = await DelegationRepository().history_for(agent_ref, tenant_id)
     return agent360_behavior(
         facts, agent_ref, truncated=truncated, grants=grants,
         queued_reviews=await _agent_continuity_reviews(tenant_id, agent_ref),

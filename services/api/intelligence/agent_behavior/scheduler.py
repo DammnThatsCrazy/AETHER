@@ -13,9 +13,10 @@ telemetry plane validates against. Agent refs stay source-reported.
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from shared.logger.logger import get_logger, metrics
 
@@ -48,11 +49,40 @@ def last_complete_day(now: Optional[datetime] = None) -> tuple[str, str]:
     return start.strftime(fmt), end.strftime(fmt)
 
 
+# Where the next pass resumes. A process-local position is enough: a restart
+# only restarts the rotation, and every pass stays bounded.
+_rotation_after: Optional[tuple[str, str]] = None
+
+
+def fair_batch(pairs: Iterable[tuple[str, str]], limit: int,
+               after: Optional[tuple[str, str]] = None) -> list[tuple[str, str]]:
+    """Next bounded batch, resuming after ``after`` and interleaving tenants.
+
+    Tenants are taken round-robin so one tenant cannot fill the batch, and the
+    order is rotated to start after the previous pass's last pair, so every
+    active agent is visited within ceil(n / limit) passes."""
+    by_tenant: dict[str, list[str]] = defaultdict(list)
+    for tenant_id, agent_id in sorted(set(pairs)):
+        by_tenant[tenant_id].append(agent_id)
+    order: list[tuple[str, str]] = []
+    queues = [(t, list(agents)) for t, agents in sorted(by_tenant.items())]
+    while queues:
+        for tenant_id, agents in queues:
+            order.append((tenant_id, agents.pop(0)))
+        queues = [(t, a) for t, a in queues if a]
+    if after in order:
+        start = order.index(after) + 1
+        order = order[start:] + order[:start]
+    return order[:limit]
+
+
 async def active_agents(limit: int = MAX_AGENTS_PER_PASS) -> list[tuple[str, str]]:
-    """Distinct ``(tenant_id, agent_id)`` of active registered deployments.
+    """Next fair batch of distinct ``(tenant_id, agent_id)`` of active registered
+    deployments, advancing the rotation.
 
     A system-level enumeration (like retention sweeps); every later read is
     tenant-scoped."""
+    global _rotation_after
     from actions.agent.deployments import get_deployment_repository
 
     pairs = {
@@ -60,11 +90,16 @@ async def active_agents(limit: int = MAX_AGENTS_PER_PASS) -> list[tuple[str, str
         for r in await get_deployment_repository().list_all()
         if r.get("status") == "active" and r.get("tenant_id") and r.get("agent_id")
     }
-    return sorted(pairs)[:limit]
+    batch = fair_batch(pairs, limit, _rotation_after)
+    if batch:
+        _rotation_after = batch[-1]
+    return batch
 
 
 async def run_agent(tenant_id: str, agent_ref: str, window: tuple[str, str], report: PassReport) -> None:
-    from actions.agent.behavior_read_model import compose_behavior_read_model, load_behavior_inputs
+    from actions.agent.behavior_read_model import (
+        compose_behavior_read_model, load_behavior_inputs, load_window_facts,
+    )
     from intelligence.agent_behavior.model import build_behavior_model
     from intelligence.agent_behavior.snapshot_store import (
         BehaviorSnapshotRepository, drift_over_stored_windows, record_window,
@@ -77,12 +112,14 @@ async def run_agent(tenant_id: str, agent_ref: str, window: tuple[str, str], rep
         report.skipped_no_facts += 1
         return
     repo = BehaviorSnapshotRepository()
-    if inputs.truncated:
-        # The fact read is newest-first and capped, so it may not cover the
-        # window; recording it could overwrite a complete snapshot with less.
+    # The snapshot reads the requested window itself (paged), not the newest
+    # facts, so today's traffic cannot crowd yesterday out. A window still too
+    # large to read whole is skipped rather than overwrite a stored snapshot.
+    window_facts, window_truncated = await load_window_facts(tenant_id, agent_ref, window)
+    if window_truncated:
         report.skipped_truncated_snapshots += 1
     else:
-        await record_window(repo, tenant_id, agent_ref, inputs.facts, window)
+        await record_window(repo, tenant_id, agent_ref, window_facts, window)
         report.snapshots_recorded += 1
     drift = await drift_over_stored_windows(repo, tenant_id, agent_ref)
     if drift.get("status") == "drift_detected":

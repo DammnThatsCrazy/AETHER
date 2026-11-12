@@ -39,6 +39,12 @@ on:
         type: boolean
         default: true
         required: false
+      identity_provider_proof:
+        description: "Live provider-connection identity proof: required, or deferred (skips only the provider steps and records the deferral; the run is not identity-continuity proof)"
+        type: choice
+        options: [required, deferred]
+        default: required
+        required: false
       confirm_runtime_wake:
         description: "Explicitly authorize starting staging ECS services (required for apply-wake/full-rehearsal)"
         type: boolean
@@ -556,7 +562,14 @@ jobs:
           python-version: "3.11"
       - name: Install contract validation dependency
         run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Record deferred identity provider proof
+        if: inputs.identity_provider_proof == 'deferred'
+        run: |
+          set -euo pipefail
+          echo '::warning::identity provider proof is DEFERRED for this rehearsal: the provider-connection steps are skipped and this run is not identity-continuity proof'
+          echo '### Identity provider proof: deferred' >> "$GITHUB_STEP_SUMMARY"
       - name: Validate identity provider inputs before wake planning
+        if: inputs.identity_provider_proof != 'deferred'
         env:
           AETHER_STAGING_PROVIDER_IDENTITY: ${{ secrets.IDENTITY_STAGING_PROVIDER_IDENTITY }}
           AETHER_STAGING_PROVIDER_CONFIG_JSON: ${{ secrets.IDENTITY_STAGING_PROVIDER_CONFIG_JSON }}
@@ -2470,7 +2483,29 @@ jobs:
           print(f"failure/retry checks passed (malformed={status}, retry={first}/{second})")
           PY
 
+      - name: Record deferred identity provider proof evidence
+        if: inputs.identity_provider_proof == 'deferred'
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/rehearsal/identity-continuity-scenarios
+          python - <<'PY'
+          import json, os
+          path = ".artifacts/rehearsal/identity-continuity-scenarios/identity-provider-proof-deferred.json"
+          json.dump({
+              "identity_provider_proof": "deferred",
+              "skipped_steps": [
+                  "Bootstrap run-scoped provider connection for identity reimport",
+                  "Run live identity continuity scenarios",
+                  "Collect and validate identity continuity staging proof pack",
+              ],
+              "counts_as_identity_continuity_proof": False,
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "sha": os.environ["GITHUB_SHA"],
+          }, open(path, "w"), indent=2)
+          PY
+          echo '::warning::identity provider proof deferred; identity continuity scenarios and proof pack skipped'
       - name: Bootstrap run-scoped provider connection for identity reimport
+        if: inputs.identity_provider_proof != 'deferred'
         env:
           AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
           AETHER_STAGING_TENANT_WRITE_KEY: ${{ env.REHEARSAL_TENANT_API_KEY }}
@@ -2489,6 +2524,7 @@ jobs:
           python scripts/identity_staging_provider_bootstrap.py
 
       - name: Run live identity continuity scenarios
+        if: inputs.identity_provider_proof != 'deferred'
         env:
           AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
           AETHER_STAGING_SCENARIO_API_KEY: ${{ env.REHEARSAL_TENANT_API_KEY }}
@@ -2555,7 +2591,7 @@ jobs:
         run: pnpm --filter @aether/proof-reporting build
 
       - name: Collect and validate identity continuity staging proof pack
-        if: always() && steps.identity_ui_dependencies.outcome == 'success' && hashFiles('.artifacts/rehearsal/identity-continuity-capture.json') != ''
+        if: always() && inputs.identity_provider_proof != 'deferred' && steps.identity_ui_dependencies.outcome == 'success' && hashFiles('.artifacts/rehearsal/identity-continuity-capture.json') != ''
         run: |
           set -euo pipefail
           pnpm --filter @aether/proof-reporting proof-pack -- collect \

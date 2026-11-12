@@ -121,3 +121,145 @@ def test_influence_edges_and_guardrail():
         InfluenceEdge("x", "y", "influenced", "inferred", ("e",), implies_control=True)
     with pytest.raises(ValueError):
         InfluenceEdge("x", "y", "instructed", "observed", ())
+
+
+def test_one_purchase_across_lifecycle_phases_counts_once():
+    """initiated -> authorized -> settled of one $60 purchase is one spend: it must
+    not breach a $100 daily limit, and value counts the amount once. Phases are
+    correlated only by explicit references; uncorrelated events stay distinct."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    grant = {**GRANT, "scope": {**GRANT["scope"], "daily_limit": "100.00"}}
+    purchase = {"amount": "60.00", "currency": "USD", "actionType": "purchase", "merchant": "shop-1",
+                "resourceRef": "merchant:shop-1", "objectType": "order", "objectId": "o-1", "decisionId": "d-1"}
+    facts = _facts(*[(f"agent_transaction_{phase}", "agent-1", purchase)
+                     for phase in ("initiated", "authorized", "settled")])
+    sections = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]
+    checks = sections["authority"]["data"]
+    assert len(checks) == 3
+    assert not any("daily_limit_exceeded" in c["reasons"] for c in checks)
+    value = sections["value"]["data"]
+    assert [r["event_id"] for r in value["actions"]] == [facts[-1].event_id]  # the settled phase
+    assert [t["amount"] for t in value["totals"]] == ["60.00"]
+
+    # Without an explicit correlation reference two $60 purchases are two spends.
+    loose = {k: v for k, v in purchase.items() if k not in {"objectType", "objectId"}}
+    facts = _facts(("agent_transaction_settled", "agent-1", loose), ("agent_transaction_settled", "agent-1", loose))
+    checks = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]["authority"]["data"]
+    assert "daily_limit_exceeded" in checks[-1]["reasons"]
+
+
+def test_expired_or_revoked_grants_still_judge_the_actions_they_covered():
+    """Rebuilding a model after a grant lapses must not turn actions it covered into
+    unknown/no_recorded_grant; actions after revocation are outside the grant."""
+    import asyncio
+
+    from actions.agent.behavior_read_model import load_behavior_inputs
+    from repositories.repos import DelegationRepository, reset_in_memory_stores
+
+    reset_in_memory_stores()
+    repo = DelegationRepository()
+    grant = asyncio.run(repo.grant(
+        delegation_id="del-hist", tenant_id=T, grantor_entity_id="person-1", grantee_entity_id="agent-1",
+        scope=GRANT["scope"], starts_at="2026-10-01T00:00:00Z", ends_at="2026-10-30T00:00:00Z"))
+    assert asyncio.run(repo.active_for("agent-1", T)) == []  # lapsed relative to now
+
+    inputs = asyncio.run(load_behavior_inputs(T, "agent-1"))
+    assert [g["delegation_id"] for g in inputs.grants] == [grant["delegation_id"]]
+    assert check_action(act(at="2026-10-22T10:00:00Z"), inputs.grants).status == INSIDE
+    late = check_action(act(at="2026-10-31T10:00:00Z"), inputs.grants)
+    assert late.status == OUTSIDE and late.reasons[0] == "grant_not_active_at_action_time"
+
+    facts = _facts(("agent_transaction_initiated", "agent-1", {"amount": "5"}))  # 2026-10-22
+    assert decompose(facts[0], facts, grants=inputs.grants)["authorization_actor"]["value"] == "person-1"
+    expired_before = {**GRANT, "delegation_id": "del-old", "grantor_entity_id": "person-9",
+                      "starts_at": "2026-01-01T00:00:00Z", "ends_at": "2026-02-01T00:00:00Z"}
+    # A grant that had already expired at action time is not a candidate grantor.
+    assert decompose(facts[0], facts, grants=[*inputs.grants, expired_before])[
+        "authorization_actor"]["value"] == "person-1"
+    reset_in_memory_stores()
+
+
+def test_requested_or_denied_authorization_is_not_observed_approval():
+    """The same authorizationId names requested, granted and denied, so only a
+    grant at or before the action counts as human approval."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    big = {"amount": "90.00", "currency": "USD", "actionType": "purchase", "merchant": "shop-1",
+           "resourceRef": "merchant:shop-1", "authorizationId": "appr-1"}  # above the 80.00 threshold
+
+    def approval(*statuses):
+        facts = _facts(*[(f"agent_authorization_{s}", "agent-1", {"authorizationId": "appr-1"}) for s in statuses],
+                       ("agent_transaction_settled", "agent-1", big))
+        [check] = agent360_behavior(facts, "agent-1", grants=[GRANT])["sections"]["authority"]["data"]
+        return check
+
+    for statuses in (("requested",), ("requested", "denied"), ("granted", "denied")):
+        check = approval(*statuses)
+        assert check["human_approval_observed"] is False, statuses
+        assert "human_approval_required_not_observed" in check["reasons"], statuses
+    granted = approval("requested", "granted")
+    assert granted["human_approval_observed"] is True
+    assert "human_approval_required_not_observed" not in granted["reasons"]
+
+
+
+def test_repeat_purchases_of_one_product_stay_distinct():
+    """An object names a target, not a transaction: two purchases of one product
+    under different decisions are two spends, unless an actionId joins them."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    grant = {**GRANT, "scope": {**GRANT["scope"], "daily_limit": "100.00"}}
+    base = {"amount": "60.00", "currency": "USD", "actionType": "purchase", "merchant": "shop-1",
+            "resourceRef": "merchant:shop-1", "objectType": "product", "objectId": "sku-1"}
+    facts = _facts(("agent_transaction_settled", "agent-1", {**base, "decisionId": "d-1"}),
+                   ("agent_transaction_settled", "agent-1", {**base, "decisionId": "d-2"}))
+    sections = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]
+    assert "daily_limit_exceeded" in sections["authority"]["data"][-1]["reasons"]
+    assert [t["amount"] for t in sections["value"]["data"]["totals"]] == ["120.00"]
+
+
+def test_correlated_action_keeps_the_decision_link_from_an_earlier_phase():
+    """Settlement often omits decisionId; the single value row must keep the link
+    the initiation reported, so attribution does not fall back to unattributed."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    pay = {"amount": "60.00", "currency": "USD", "actionType": "purchase", "actionId": "act-1"}
+    facts = _facts(
+        ("agent_action_selected", "agent-1", {"decisionId": "d-1", "candidateId": "c-1"}),
+        ("agent_transaction_initiated", "agent-1", {**pay, "decisionId": "d-1"}),
+        ("agent_transaction_settled", "agent-1", pay),
+    )
+    [row] = agent360_behavior(facts, "agent-1")["sections"]["value"]["data"]["actions"]
+    assert row["event_id"] == facts[-1].event_id and row["class"] == "agent_selected_and_executed"
+
+
+def test_approval_timeline_compares_instants_not_strings():
+    """Silver mixes whole and fractional seconds; "...00Z" sorts after
+    "...00.100000Z" as text, which would hide a grant or reorder a denial."""
+    import dataclasses
+
+    from intelligence.agent_behavior.read_models import _approval_timeline, _granted_approval_ref
+
+    grant, deny, action = _facts(
+        ("agent_authorization_granted", "agent-1", {"authorizationId": "appr-1"}),
+        ("agent_authorization_denied", "agent-1", {"authorizationId": "appr-1"}),
+        ("agent_transaction_settled", "agent-1", {"amount": "90.00", "authorizationId": "appr-1"}),
+    )
+    grant = dataclasses.replace(grant, occurred_at="2026-10-22T10:00:00Z")
+    action = dataclasses.replace(action, occurred_at="2026-10-22T10:00:00.100000Z")
+    assert _granted_approval_ref(action, _approval_timeline([grant])) == "appr-1"
+    deny = dataclasses.replace(deny, occurred_at="2026-10-22T10:00:00.050000Z")  # after the grant
+    assert _granted_approval_ref(action, _approval_timeline([grant, deny])) is None
+
+
+def test_correlated_action_keeps_currency_from_an_earlier_phase():
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    facts = _facts(
+        ("agent_transaction_initiated", "agent-1", {"amount": "60.00", "currency": "USD", "actionId": "act-1"}),
+        ("agent_transaction_settled", "agent-1", {"amount": "60.00", "actionId": "act-1"}),
+    )
+    value = agent360_behavior(facts, "agent-1")["sections"]["value"]["data"]
+    assert [r["currency"] for r in value["actions"]] == ["USD"]
+    assert [(t["currency"], t["amount"]) for t in value["totals"]] == [("USD", "60.00")]

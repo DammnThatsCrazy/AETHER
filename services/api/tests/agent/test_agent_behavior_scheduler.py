@@ -112,24 +112,51 @@ def test_worker_is_registered_off_by_default_under_maintenance():
     assert spec_on.enabled() is True
 
 
+
 @pytest.mark.asyncio
-async def test_truncated_fact_read_never_overwrites_a_stored_window(monkeypatch):
-    """The fact read is newest-first and capped; a truncated read may miss the
-    window, so the pass must not replace a stored snapshot with it."""
+async def test_window_snapshot_is_not_crowded_out_by_newer_traffic():
+    """1,200 facts today must not hide yesterday's 30 from yesterday's snapshot:
+    the snapshot pages through the requested window instead of reading the newest 1,000."""
+    await _facts("01", "succeeded", n=30)
+    for i in range(1200):
+        r = AgentExecutionProjector().project({
+            "messageId": f"a1-02-{i:04d}", "type": "agent_tool_invocation_observed", "tenantId": T,
+            "timestamp": f"2026-11-02T{1 + i // 3600:02d}:{(i // 60) % 60:02d}:{i % 60:02d}Z",
+            "properties": {"agentId": "a1", "toolName": "t", "status": "failed"}})
+        await silver_writer.SilverFactWriter()._persist_generic(r.table, r.rows)
+    later = datetime(2026, 11, 2, 23, 0, tzinfo=timezone.utc)  # window is still 2026-11-01
+    report = await scheduler.run_once(later, agents=[(T, "a1")])
+    assert report.snapshots_recorded == 1 and report.skipped_truncated_snapshots == 0
+    [row] = await BehaviorSnapshotRepository().windows(T, "a1")
+    snap = row["snapshot"]
+    assert snap["window"] == ["2026-11-01T00:00:00Z", "2026-11-02T00:00:00Z"]
+    assert snap["rates"]["tool_success_rate"]["n"] == 30
+    assert snap["rates"]["tool_success_rate"]["value"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_window_too_large_to_read_whole_never_overwrites_a_stored_snapshot(monkeypatch):
     from actions.agent import behavior_read_model
 
-    await _facts("01", "succeeded")
+    await _facts("01", "succeeded", n=30)
     first = await scheduler.run_once(NOW, agents=[(T, "a1")])
     assert first.snapshots_recorded == 1
     before = await BehaviorSnapshotRepository().windows(T, "a1")
 
-    real = behavior_read_model.load_behavior_inputs
-
-    async def truncated(tenant_id, agent_ref):
-        inputs = await real(tenant_id, agent_ref)
-        return behavior_read_model.BehaviorInputs(facts=inputs.facts[:1], truncated=True, grants=inputs.grants)
-
-    monkeypatch.setattr(behavior_read_model, "load_behavior_inputs", truncated)
+    monkeypatch.setattr(behavior_read_model, "WINDOW_FACT_PAGE_LIMIT", 5)
+    monkeypatch.setattr(behavior_read_model, "WINDOW_FACT_MAX_PAGES", 2)
     again = await scheduler.run_once(NOW, agents=[(T, "a1")])
     assert again.snapshots_recorded == 0 and again.skipped_truncated_snapshots == 1
     assert await BehaviorSnapshotRepository().windows(T, "a1") == before
+
+
+def test_batches_rotate_through_every_agent_and_interleave_tenants():
+    pairs = [("t-a", f"a{i:02d}") for i in range(6)] + [("t-b", "b00"), ("t-c", "c00")]
+    first = scheduler.fair_batch(pairs, 3)
+    assert {t for t, _ in first} == {"t-a", "t-b", "t-c"}  # one tenant cannot fill a batch
+    seen, after = [], None
+    for _ in range(3):
+        batch = scheduler.fair_batch(pairs, 3, after)
+        seen += batch
+        after = batch[-1]
+    assert sorted(set(seen)) == sorted(pairs)  # every agent visited within ceil(8 / 3) passes
