@@ -54,6 +54,54 @@ def _observed_action(f: AgentFact):
     )
 
 
+# Lifecycle phases of one economic action, least to most final. A failed or
+# aborted phase ranks lowest so a completed phase represents the action.
+_PHASE_RANK = {
+    "agent_transaction_failed": 0, "agent_execution_failed": 0, "agent_execution_aborted": 0,
+    "agent_transaction_initiated": 1, "agent_execution_started": 1,
+    "agent_transaction_authorized": 2,
+    "agent_execution_succeeded": 3, "agent_transaction_settled": 4,
+}
+
+
+def _economic_key(f: AgentFact) -> Optional[tuple[str, str]]:
+    """Explicit source correlation for one economic action across its phases.
+
+    Only a reported action id or an explicit object type and id correlate phases;
+    nothing is inferred from amount or timing, so uncorrelated events stay distinct.
+    """
+    if f.action_ref:
+        return (f.agent_ref or "", f"action:{f.action_ref}")
+    if f.object_type and f.object_id:
+        return (f.agent_ref or "", f"object:{f.object_type}:{f.object_id}")
+    return None
+
+
+def _distinct_actions(actions: list[AgentFact]) -> list[AgentFact]:
+    """One representative per correlated action (its most final phase)."""
+    chosen: dict[Any, AgentFact] = {}
+    for f in actions:
+        key = _economic_key(f) or ("event", f.event_id)
+        best = chosen.get(key)
+        rank = (_PHASE_RANK.get(f.event_type, 1), f.occurred_at, f.event_id)
+        if best is None or rank > (_PHASE_RANK.get(best.event_type, 1), best.occurred_at, best.event_id):
+            chosen[key] = f
+    return sorted(chosen.values(), key=lambda f: (f.occurred_at, f.event_id))
+
+
+def _prior_spends(actions: list[AgentFact], observed: list[Any], index: int) -> list[Any]:
+    """Earlier spends for the boundary check, counting each correlated action once
+    and never the current action's own earlier phases."""
+    current = _economic_key(actions[index])
+    latest: dict[Any, Any] = {}
+    for f, o in zip(actions[:index], observed[:index]):
+        key = _economic_key(f)
+        if key is not None and key == current:
+            continue
+        latest[key or ("event", f.event_id)] = o
+    return list(latest.values())
+
+
 def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
                 grants: list[dict[str, Any]],
                 queued_reviews: Optional[list[dict[str, Any]]] = None) -> dict[str, dict[str, Any]]:
@@ -76,11 +124,11 @@ def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
     actions = [f for f in mine if f.amount is not None and (
         f.event_type.startswith("agent_transaction_") or f.event_type.startswith("agent_execution_"))]
     observed = [_observed_action(f) for f in actions]
-    checks = [check_action(a, grants, observed[:i]).to_dict() | {"event_id": a.event_id}
+    checks = [check_action(a, grants, _prior_spends(actions, observed, i)).to_dict() | {"event_id": a.event_id}
               for i, a in enumerate(observed)]
     value = attribute(
         [{"event_id": f.event_id, "amount": str(f.amount), "currency": f.currency,
-          "roles": decompose(f, facts, grants=grants)} for f in actions],
+          "roles": decompose(f, facts, grants=grants)} for f in _distinct_actions(actions)],
         agent_refs={f.agent_ref for f in facts if f.agent_ref},
     )
     adversarial = adversarial_signals(mine, checks)

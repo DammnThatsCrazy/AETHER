@@ -121,3 +121,29 @@ def test_influence_edges_and_guardrail():
         InfluenceEdge("x", "y", "influenced", "inferred", ("e",), implies_control=True)
     with pytest.raises(ValueError):
         InfluenceEdge("x", "y", "instructed", "observed", ())
+
+
+def test_one_purchase_across_lifecycle_phases_counts_once():
+    """initiated -> authorized -> settled of one $60 purchase is one spend: it must
+    not breach a $100 daily limit, and value counts the amount once. Phases are
+    correlated only by explicit references; uncorrelated events stay distinct."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    grant = {**GRANT, "scope": {**GRANT["scope"], "daily_limit": "100.00"}}
+    purchase = {"amount": "60.00", "currency": "USD", "actionType": "purchase", "merchant": "shop-1",
+                "resourceRef": "merchant:shop-1", "objectType": "order", "objectId": "o-1"}
+    facts = _facts(*[(f"agent_transaction_{phase}", "agent-1", purchase)
+                     for phase in ("initiated", "authorized", "settled")])
+    sections = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]
+    checks = sections["authority"]["data"]
+    assert len(checks) == 3
+    assert not any("daily_limit_exceeded" in c["reasons"] for c in checks)
+    value = sections["value"]["data"]
+    assert [r["event_id"] for r in value["actions"]] == [facts[-1].event_id]  # the settled phase
+    assert [t["amount"] for t in value["totals"]] == ["60.00"]
+
+    # Without an explicit correlation reference two $60 purchases are two spends.
+    loose = {k: v for k, v in purchase.items() if k not in {"objectType", "objectId"}}
+    facts = _facts(("agent_transaction_settled", "agent-1", loose), ("agent_transaction_settled", "agent-1", loose))
+    checks = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]["authority"]["data"]
+    assert "daily_limit_exceeded" in checks[-1]["reasons"]
