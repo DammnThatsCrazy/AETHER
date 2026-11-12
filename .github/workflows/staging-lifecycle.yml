@@ -626,6 +626,7 @@ jobs:
       - name: Verify the exact staging delivery principal and live ECR pull permissions
         env:
           EXPECTED_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
         run: |
           set -euo pipefail
           caller_json="$(aws sts get-caller-identity --output json)"
@@ -662,8 +663,11 @@ jobs:
             ecr:BatchCheckLayerAvailability ecr:BatchGetImage \
             ecr:DescribeImages ecr:GetDownloadUrlForLayer
           # Before delivery: check the revisions delivery will clone.
+          # Honour the requested identity-key mount shape, as terraform-promote
+          # does: first-time setup wakes with it false before the keys exist.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE" --revision family-latest
+            --lane "$DEPLOYMENT_LANE" --revision family-latest \
+            --identity-verification-secrets-enabled "${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}"
           python scripts/release/check_staging_runtime_iam.py \
             --live-ecs-cluster AETHER-staging \
             --expected-table-name AETHER-staging-cache \
@@ -1523,6 +1527,7 @@ jobs:
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           DELIVERY_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -1541,6 +1546,7 @@ jobs:
             -f delivery_mode=deploy \
             -f rehearsal_run_id="$GITHUB_RUN_ID" \
             -f source_run_id="$RELEASE_RUN_ID" \
+            -f identity_verification_secrets_enabled="${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}" \
             -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" 2>&1)"
           printf '%s\n' "$dispatch_output"
           delivery_run_id="$(printf '%s\n' "$dispatch_output" \
