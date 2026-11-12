@@ -123,3 +123,26 @@ def test_observability_and_sparse_agents():
     assert m["features"]["tool_success_rate"]["value"] is None
     assert m["preferences"] == []
     assert build_behavior_model([], "ghost")["what_it_usually_does"]["basis"] == "unknown"
+
+
+def test_capability_revocation_follows_occurrence_order_not_event_id():
+    """Event ids can be random UUIDs: a later revocation with a smaller id must still
+    revoke, and a later re-grant with a smaller id must restore the capability."""
+    import dataclasses
+
+    from intelligence.agent_behavior.model import capabilities
+
+    granted, revoked, regranted = facts(
+        ("agent_capability_granted", "a", {"capability": "pay"}),
+        ("agent_capability_revoked", "a", {"capability": "pay"}),
+        ("agent_capability_granted", "a", {"capability": "pay"}),
+    )
+    granted = dataclasses.replace(granted, event_id="ffff")
+    revoked = dataclasses.replace(revoked, event_id="0000")
+    regranted = dataclasses.replace(regranted, event_id="0000-a")
+
+    status = lambda fs: {c["capability"]: c["status"] for c in capabilities(fs)}["pay"]
+    assert status([granted, revoked]) == "revoked"
+    assert status([revoked, granted]) == "revoked"  # input order does not matter
+    assert status([granted, dataclasses.replace(revoked, event_id="zzzz")]) == "revoked"
+    assert status([granted, revoked, dataclasses.replace(regranted, event_id="00")]) == "declared_only"

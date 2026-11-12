@@ -36,10 +36,11 @@ async def load_behavior_facts(tenant_id: str, agent_ref: str, *, analytics: Any 
         from repositories.repos import AnalyticsRepository
 
         analytics = AnalyticsRepository(get_cache())
-    rows = await analytics.query_silver(
-        SILVER_TABLE, {"tenant_id": tenant_id, "agent_id": agent_ref}, limit=BEHAVIOR_FACT_LIMIT + 1,
+    # query_silver clamps its limit to 1,000, so asking it for LIMIT + 1 rows can
+    # never reveal truncation; the paged read reports whether more rows exist.
+    rows, _cursor, truncated = await analytics.query_silver_page(
+        SILVER_TABLE, {"tenant_id": tenant_id, "agent_id": agent_ref}, limit=BEHAVIOR_FACT_LIMIT,
     )
-    truncated = len(rows) > BEHAVIOR_FACT_LIMIT
     spawns = await analytics.query_silver(
         SILVER_TABLE, {"tenant_id": tenant_id, "source_event_type": "agent_subagent_spawned"},
         limit=BEHAVIOR_FACT_LIMIT,

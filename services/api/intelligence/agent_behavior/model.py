@@ -86,15 +86,22 @@ def observability_envelope(facts: list[AgentFact]) -> dict[str, Any]:
 def capabilities(facts: list[AgentFact]) -> list[dict[str, Any]]:
     caps: dict[str, dict[str, Any]] = {}
 
-    def add(name: str, basis: str, ev: str) -> None:
-        cap = caps.setdefault(name, {"capability": name, "declared": [], "demonstrated": [], "revoked": []})
+    def add(name: str, basis: str, ev: str) -> dict[str, Any]:
+        cap = caps.setdefault(name, {"capability": name, "declared": [], "demonstrated": [], "revoked": [],
+                                     "last_grant": None, "last_revoke": None})
         cap[basis].append(ev)
+        return cap
 
     for f in facts:
+        # Event ids can be random UUIDs, so grant vs revocation is decided by
+        # occurrence order (event id only breaks ties), never by id magnitude.
+        order = (f.occurred_at, f.event_id)
         if f.event_type == "agent_capability_granted":
-            add(f.attr("capability") or f.action_type or "unspecified", "declared", f.event_id)
+            cap = add(f.attr("capability") or f.action_type or "unspecified", "declared", f.event_id)
+            cap["last_grant"] = max(filter(None, (cap["last_grant"], order)))
         elif f.event_type == "agent_capability_revoked":
-            add(f.attr("capability") or f.action_type or "unspecified", "revoked", f.event_id)
+            cap = add(f.attr("capability") or f.action_type or "unspecified", "revoked", f.event_id)
+            cap["last_revoke"] = max(filter(None, (cap["last_revoke"], order)))
         declared_tools = f.attr("availableTools", "toolsAvailable")
         for tool in declared_tools if isinstance(declared_tools, list) else []:
             add(f"tool:{tool}", "declared", f.event_id)
@@ -104,7 +111,9 @@ def capabilities(facts: list[AgentFact]) -> list[dict[str, Any]]:
             add(f"action:{f.action_type}", "demonstrated", f.event_id)
     out = []
     for name, cap in sorted(caps.items()):
-        status = ("revoked" if cap["revoked"] and cap["revoked"][-1] > max(cap["declared"] + [""])
+        revoked = cap["last_revoke"] is not None and (
+            cap["last_grant"] is None or cap["last_revoke"] > cap["last_grant"])
+        status = ("revoked" if revoked
                   else "demonstrated" if cap["demonstrated"] else "declared_only")
         out.append({"capability": name, "status": status,
                     "basis": c.OBSERVED if cap["demonstrated"] else c.DECLARED,

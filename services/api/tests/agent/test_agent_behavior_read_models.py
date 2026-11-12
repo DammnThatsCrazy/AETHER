@@ -326,3 +326,27 @@ async def test_principal_agents_route_reconciles_without_merging(_routes):
     await repo.revoke("d-live", "gsa-person-1")
     revoked = (await agent_routes.principal_agents("gsa-person-1", _request()))["data"]
     assert revoked["agents"] == []
+
+
+def test_behavior_fact_load_reports_truncation_past_the_repository_cap():
+    """query_silver clamps limits to 1,000, so truncation must come from the paged
+    read's has-more flag rather than from asking for LIMIT + 1 rows."""
+    import asyncio
+
+    from actions.agent.behavior_read_model import BEHAVIOR_FACT_LIMIT, load_behavior_facts
+
+    class CappedAnalytics:
+        def __init__(self, total: int) -> None:
+            self.total = total
+
+        async def query_silver_page(self, table, filters, *, limit, cursor=None):
+            limit = min(limit, 1000)
+            return [], None, self.total > limit
+
+        async def query_silver(self, table, filters, *, limit=50):
+            return []
+
+    _, truncated = asyncio.run(load_behavior_facts("t", "a", analytics=CappedAnalytics(BEHAVIOR_FACT_LIMIT + 5)))
+    assert truncated is True
+    _, truncated = asyncio.run(load_behavior_facts("t", "a", analytics=CappedAnalytics(BEHAVIOR_FACT_LIMIT)))
+    assert truncated is False
