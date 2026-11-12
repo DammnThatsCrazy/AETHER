@@ -23,6 +23,7 @@ A delegation grants the requested capability iff:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
@@ -35,14 +36,18 @@ class DelegationDecision:
     delegation_id: Optional[str] = None
     reason: str = ""
     matched_scope: Optional[dict] = None
+    evaluated_at: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        decision = {
             "allowed": self.allowed,
             "delegation_id": self.delegation_id,
             "reason": self.reason,
             "matched_scope": self.matched_scope,
         }
+        if self.evaluated_at is not None:
+            decision["evaluated_at"] = self.evaluated_at
+        return decision
 
 
 class DelegationEngine:
@@ -86,8 +91,13 @@ class DelegationEngine:
     ) -> DelegationDecision:
         effective_tenant = tenant_id or self._tenant_id
         active = await self._repo.active_for(grantee_entity_id, effective_tenant)
+        evaluated_at = datetime.now(timezone.utc).isoformat()
         if not active:
-            return DelegationDecision(allowed=False, reason="no_active_delegation")
+            return DelegationDecision(
+                allowed=False,
+                reason="no_active_delegation",
+                evaluated_at=evaluated_at,
+            )
 
         for delegation in active:
             scope = delegation.get("scope") or {}
@@ -113,9 +123,11 @@ class DelegationEngine:
                 allowed=True,
                 delegation_id=delegation["delegation_id"],
                 matched_scope=scope,
+                evaluated_at=evaluated_at,
             )
 
         return DelegationDecision(
             allowed=False,
             reason="scope_mismatch",
+            evaluated_at=evaluated_at,
         )

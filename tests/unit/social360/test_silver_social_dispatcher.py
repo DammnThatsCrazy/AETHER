@@ -92,10 +92,9 @@ def test_social_types_are_not_dispatched_to_unrelated_projectors():
 # ── ownership registry alignment ────────────────────────────────────────────
 
 
-def test_registry_has_24_projectors_in_dispatcher_order():
+def test_registry_matches_dispatcher_projectors_in_order():
     dispatcher_names = [type(p).__name__ for p in _ALL_PROJECTORS]
-    assert len(dispatcher_names) == 24
-    assert len(_REGISTRY["projectors"]) == 24
+    assert len(dispatcher_names) == len(_REGISTRY["projectors"])
     assert _registry_names() == dispatcher_names
 
 

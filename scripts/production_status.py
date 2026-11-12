@@ -350,12 +350,18 @@ AREAS: list[Area] = [
         "tenant-scoped repositories, AgentProfile360Composer and Kyber operator "
         "observability are implemented and tested, with tenant isolation enforced "
         "(all repository reads require explicit tenant_id). "
-        "Not end-to-end: the backend lifecycle mappers (x402/lifecycle_mapper.py, "
-        "agent/lifecycle_mapper.py) are tested but no event consumer calls them, so "
-        "the tables only they write (payment_intents, settlement_events, "
-        "economic_resources, facilitators, agent_economic_identity, delegation "
-        "rows) stay empty in a running system; agent execution facts reach Silver "
-        "through the separate AgentExecutionProjector path.",
+        "Consumers are wired and unit-tested for authority rules: "
+        "project_sdk_lifecycle_observation (validated SDK events; x402 request and "
+        "intent stages only, recorded as observed), project_authoritative_x402_lifecycle "
+        "(server-owned commerce topics from a closed source registry) and "
+        "project_agent_execution_lifecycle (agent execution topics from the 'agents' "
+        "service only). Public-SDK settlement/terminal x402 claims and agent authority "
+        "events are deliberately NOT projected. Not proven end-to-end: no running "
+        "deployment has exercised these consumers, so which mapper-owned tables "
+        "(payment_intents, settlement_events, economic_resources, facilitators, "
+        "agent_economic_identity, delegation rows) actually populate is unverified; "
+        "agent execution facts also reach Silver through the separate "
+        "AgentExecutionProjector path.",
         [
             "packages/shared/events.ts",
             "packages/shared/agent.ts",
@@ -576,8 +582,8 @@ AREAS: list[Area] = [
         "run_certification executes offline checks (secret redaction, out-of-order, "
         "duplicate, idempotent replay, honest-status). build_capability_matrix resolves "
         "every provider's state FROM SOURCE (never assumed) into a deterministic, "
-        "byte-stable matrix. All 18 first-release providers (derivatives x4, interop x7, "
-        "payments x5, stablecoin-chain x2) currently resolve to CREDENTIAL_WAITING — "
+        "byte-stable matrix. Every first-release provider in the generated matrix "
+        "(docs/_generated/adapter-certification-matrix.json lists the domains and count) currently resolves to CREDENTIAL_WAITING — "
         "code-complete + infra-defined + credential-gated, NOT replay/sandbox/live "
         "validated. `make credentialless-certification-strict` fails if any first-release "
         "provider is below CREDENTIAL_WAITING or is SCAFFOLDED. Gap: the plane certifies "
@@ -804,8 +810,8 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "release-blocker",
-        "Economic domains have zero PARTNER_LIVE providers: all 18 first-release "
-        "providers resolve to CREDENTIAL_WAITING (code-complete, infra-defined, "
+        "Economic domains have zero PARTNER_LIVE providers: every first-release "
+        "provider in the certification matrix resolves to CREDENTIAL_WAITING (code-complete, infra-defined, "
         "credential-gated), none validated against a live endpoint",
         "provider certification plane",
         "Follow docs/product/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md: "
@@ -825,14 +831,14 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "x402 and agent lifecycle mappers are implemented and tested but no event "
-        "consumer calls them, so payment_intents, settlement_events, "
-        "economic_resources, facilitators, agent_economic_identity and the agent "
-        "delegation rows are never populated",
+        "x402 and agent lifecycle consumers are wired but have never run against a "
+        "deployment, so which mapper-owned tables populate (payment_intents, "
+        "settlement_events, economic_resources, facilitators, agent_economic_identity, "
+        "agent delegation rows) is unverified",
         "agentic_x402_productization",
-        "Add a graph-writer ConsumerSpec on the validated SDK event topic that "
-        "dispatches x402_* and agent lifecycle events to the two mappers, and decide "
-        "its overlap with the AgentExecutionProjector Silver path",
+        "Run the x402 and agent flows in staging, record which tables populate, and "
+        "decide the overlap between the agent lifecycle consumer and the "
+        "AgentExecutionProjector Silver path",
     ),
     Blocker(
         "pre-production-blocker",

@@ -1,0 +1,186 @@
+{
+  "spec": "docs/reference/sdks/manifest-signing.md",
+  "alg": "ecdsa-p256-sha256",
+  "test_secret": "aether-sdk-manifest-test-vector-secret",
+  "public_key_spki_b64url": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIh5MkSQM_1Ew0Fy6rYCbtjn7rEYFMwTkaUNJMOwP8mG2wC9slWgm0rKuSEHB0yGKTvlRZeCRUrXoXiDd9-CgbQ",
+  "other_public_key_spki_b64url": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqD9rQ0X8OzxeG4NJcsiTmSJxnubPcKWWpMvwOUx8xlYdAeosuIc_ldx0c8iVoh23rTNaj4G4KlBGtyFnjgvnEQ",
+  "canonical": [
+    {
+      "name": "empty_object",
+      "input_json": "{}",
+      "canonical": "{}"
+    },
+    {
+      "name": "empty_array",
+      "input_json": "[]",
+      "canonical": "[]"
+    },
+    {
+      "name": "scalars",
+      "input_json": "{\"t\":true,\"f\":false,\"n\":null,\"i\":0,\"neg\":-7,\"big\":9007199254740991}",
+      "canonical": "{\"big\":9007199254740991,\"f\":false,\"i\":0,\"n\":null,\"neg\":-7,\"t\":true}"
+    },
+    {
+      "name": "key_order",
+      "input_json": "{\"b\":1,\"a\":2,\"B\":3,\"_\":4,\"1\":5}",
+      "canonical": "{\"1\":5,\"B\":3,\"_\":4,\"a\":2,\"b\":1}"
+    },
+    {
+      "name": "nested",
+      "input_json": "{\"z\":{\"y\":[3,{\"x\":1,\"w\":[]}],\"a\":{}},\"a\":[[],[[]]]}",
+      "canonical": "{\"a\":[[],[[]]],\"z\":{\"a\":{},\"y\":[3,{\"w\":[],\"x\":1}]}}"
+    },
+    {
+      "name": "whitespace_is_insignificant",
+      "input_json": " { \"a\" : [ 1 , 2 ] , \"b\" : { } } ",
+      "canonical": "{\"a\":[1,2],\"b\":{}}"
+    },
+    {
+      "name": "string_escapes",
+      "input_json": "{\"s\":\"quote\\\" backslash\\\\ slash/ tab\\t nl\\n cr\\r bs\\b ff\\f\"}",
+      "canonical": "{\"s\":\"quote\\\" backslash\\\\ slash/ tab\\t nl\\n cr\\r bs\\b ff\\f\"}"
+    },
+    {
+      "name": "control_chars",
+      "input_json": "{\"s\":\"\\u0000\\u0001\\u001f\\u007f\"}",
+      "canonical": "{\"s\":\"\\u0000\\u0001\\u001f\"}"
+    },
+    {
+      "name": "unicode_literal",
+      "input_json": "{\"s\":\"é 日本語 \\u00e9 \\u65e5\"}",
+      "canonical": "{\"s\":\"é 日本語 é 日\"}"
+    },
+    {
+      "name": "astral_plane",
+      "input_json": "{\"s\":\"\\ud83d\\ude00 and 😀\"}",
+      "canonical": "{\"s\":\"😀 and 😀\"}"
+    },
+    {
+      "name": "line_separators",
+      "input_json": "{\"s\":\"\\u2028\\u2029\"}",
+      "canonical": "{\"s\":\"  \"}"
+    }
+  ],
+  "rejected_inputs": [
+    {
+      "name": "fractional_number",
+      "input_json": "{\"ratio\":0.5}"
+    },
+    {
+      "name": "negative_fractional_number",
+      "input_json": "{\"ratio\":-0.25}"
+    },
+    {
+      "name": "non_ascii_key",
+      "input_json": "{\"é\":1}"
+    },
+    {
+      "name": "integer_beyond_safe_range",
+      "input_json": "{\"n\":9007199254740993}"
+    }
+  ],
+  "manifests": [
+    {
+      "name": "valid_full_manifest",
+      "valid": true,
+      "why": "signed over every field",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "valid_empty_collections",
+      "valid": true,
+      "why": "empty features/endpoints/flags",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {}, \"endpoints\": {}, \"flags\": {}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"cP5SY5j39yBwcCnZbU6AvEmT2r77Kh6cP4DPA9sG5S0aNaiW2yD7PynVap8646mwfMrfYMHtRk9qE9Wxo7ct0A\"}"
+    },
+    {
+      "name": "tampered_rollout",
+      "valid": false,
+      "why": "rollout_percentage changed after signing",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 5, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "tampered_feature",
+      "valid": false,
+      "why": "a feature flipped after signing",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": false, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "tampered_endpoint",
+      "valid": false,
+      "why": "endpoint redirected after signing",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://evil.example.test\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "tampered_flag_value",
+      "valid": false,
+      "why": "nested flag value changed",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 61, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "tampered_manifest_version",
+      "valid": false,
+      "why": "version changed (replay of an older/newer manifest)",
+      "manifest_json": "{\"manifest_version\": \"43\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "downgraded_alg",
+      "valid": false,
+      "why": "signature_alg rewritten",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"none\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "unknown_alg",
+      "valid": false,
+      "why": "unsupported algorithm identifier",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"hmac-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "empty_signature",
+      "valid": false,
+      "why": "signature stripped",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"\"}"
+    },
+    {
+      "name": "short_signature",
+      "valid": false,
+      "why": "signature is not 64 bytes",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB\"}"
+    },
+    {
+      "name": "zero_signature",
+      "valid": false,
+      "why": "all-zero r||s",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}"
+    },
+    {
+      "name": "padded_signature",
+      "valid": false,
+      "why": "base64url must be unpadded",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q==\"}"
+    },
+    {
+      "name": "extra_unsigned_field",
+      "valid": false,
+      "why": "every field is signed, so an added field breaks the signature",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\", \"injected\": \"added after signing\"}"
+    },
+    {
+      "name": "missing_alg",
+      "valid": false,
+      "why": "signature_alg is required",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature\": \"gFxv-Td0eFsrnFiim8I2A7r2TeZ8bGjk6Pm8405w4lYZMKqk7ehHrcEb6JgarZSNqSJvPsY47cR2rorhOTZQ4Q\"}"
+    },
+    {
+      "name": "missing_signature",
+      "valid": false,
+      "why": "signature is required",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\"}"
+    },
+    {
+      "name": "signed_by_other_key",
+      "valid": false,
+      "why": "valid signature from a different key",
+      "manifest_json": "{\"manifest_version\": \"42\", \"min_sdk_version\": \"0.1.0-alpha.0\", \"schema_version\": \"7.0.0\", \"rollout_percentage\": 100, \"features\": {\"analytics\": true, \"web3\": false, \"session_replay\": true}, \"endpoints\": {\"events\": \"https://ingest.example.test/v1/batch\", \"config\": \"https://api.example.test\"}, \"flags\": {\"heartbeat_interval_seconds\": 60, \"banner\": \"Héllo 😀\", \"nested\": {\"on\": true, \"ids\": [1, 2, 3]}}, \"published_at\": \"2026-10-23T03:00:00+00:00\", \"source\": \"tenant_published\", \"publisher_id\": \"system\", \"signature_alg\": \"ecdsa-p256-sha256\", \"signature\": \"_58CW396igjxlPwZduWJZ9SBG8spjlcOPopUb8Wd4xXz25pl1vSC_URLcjS6PLxwNHWEmL5wtBdwYWiw9CL9dQ\"}"
+    }
+  ]
+}

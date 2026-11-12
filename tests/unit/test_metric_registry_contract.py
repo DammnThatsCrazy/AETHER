@@ -68,3 +68,27 @@ def test_generated_metrics_match_registry_field_for_field() -> None:
 def test_no_extra_generated_metrics() -> None:
     for name in GENERATED_METRICS:
         assert name in METRIC_REGISTRY, f"generated registry has unknown metric {name!r}"
+
+
+def test_metric_contract_generator_quotes_apostrophes_as_typescript_strings() -> None:
+    from scripts.generate_contracts import gen_measurement_ts
+
+    generated = gen_measurement_ts(
+        {
+            "contractVersion": "1",
+            "metrics": [
+                {
+                    "name": "agent_execution_cost",
+                    "version": "1",
+                    "unit": "usd",
+                    "description": "Observed operating cost of an agent's executions.",
+                    "lower": 0,
+                    "upper": None,
+                    "allowsProbability": False,
+                    "minSample": 1,
+                }
+            ],
+        }
+    )
+
+    assert 'description: "Observed operating cost of an agent\'s executions.",' in generated

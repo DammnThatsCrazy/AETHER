@@ -84,9 +84,12 @@ def main() -> int:
     _require("android", android, ["fun observe("], "observe() [§2.6]")
     _require("react-native", rn, ["observe("], "observe() [§2.6]")
 
-    # §2.9 — manifest signature verification on iOS + Android (fail-closed HMAC).
-    _require("ios", ios, ["verifyManifestSignature"], "manifest signature verification [§2.9]")
-    _require("android", android, ["verifyManifestSignature"], "manifest signature verification [§2.9]")
+    # §2.9 — manifest signature verification (fail-closed ES256) on web, iOS and
+    # Android. Spec: docs/reference/sdks/manifest-signing.md. Each verifier must
+    # check the pinned algorithm identifier and call the platform's ECDSA verify.
+    _require("web", web, ["verifyManifestSignature", "ecdsa-p256-sha256", "ECDSA"], "manifest signature verification [§2.9]")
+    _require("ios", ios, ["ManifestSignature", "ecdsa-p256-sha256", "isValidSignature"], "manifest signature verification [§2.9]")
+    _require("android", android, ["ManifestSignature", "ecdsa-p256-sha256", "SHA256withECDSA"], "manifest signature verification [§2.9]")
 
     # Temporal provenance emission — every SDK stamps timezone/clock provenance
     # on the event context at occurrence time (temporal kernel evidence:

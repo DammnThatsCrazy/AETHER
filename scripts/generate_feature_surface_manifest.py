@@ -36,6 +36,17 @@ MANIFEST = ROOT / "packages" / "shared" / "contracts" / "kyber-feature-surface-m
 
 _ROUTE_RE = re.compile(r'<Route\s+path="([^"]+)"')
 
+#: Identifiers a surface needs as mirror query parameters, because a store read has
+#: no answer without them. `SURFACE_READ_PARAMS` must agree; the parity gate checks.
+MIRROR_PARAMS: dict[str, list[str]] = {
+    "/relationships": ["entity_id"],
+    "/relationships/:entityId": ["entity_id"],
+    "/syndicates/:syndicateId": ["syndicate_id"],
+    "/journeys/:profileId": ["profile_id"],
+    "/episodes/:profileId/:episodeId": ["profile_id", "episode_id"],
+    "/communications/:campaignId/:messageId": ["campaign_id", "message_id"],
+}
+
 #: Surfaces with no operator mirror, and the reason. Every entry is a deliberate
 #: decision that a Kyber operator has nothing to gain from seeing the tenant's
 #: exact view — pre-auth pages, the tenant's own account/settings shell, or a
@@ -159,7 +170,7 @@ def build_entry(path: str) -> dict[str, Any]:
             "kyber_mirror_route": None,
             "minimum_disclosure": "D0",
         }
-    return {
+    entry: dict[str, Any] = {
         "feature_id": feature_id,
         "aether_route": path,
         "tenant_parity_required": True,
@@ -171,6 +182,9 @@ def build_entry(path: str) -> dict[str, Any]:
             "quality", "lineage", "policy", "health", "recomputeOptions",
         ],
     }
+    if path in MIRROR_PARAMS:
+        entry["mirror_params"] = MIRROR_PARAMS[path]
+    return entry
 
 
 def build_manifest() -> dict[str, Any]:

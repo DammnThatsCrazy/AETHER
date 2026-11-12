@@ -94,7 +94,12 @@ def _event_from_bronze(row: dict[str, Any]) -> Event:
     payload = row.get("payload") or {}
     if "event_type" not in payload and row.get("event_type"):
         payload = {**payload, "event_type": row["event_type"]}
-    return Event(topic=Topic.SDK_EVENTS_VALIDATED, tenant_id=row.get("tenant_id", ""), payload=payload)
+    return Event(
+        topic=Topic.SDK_EVENTS_VALIDATED,
+        tenant_id=row.get("tenant_id", ""),
+        source_service="semantic.replay",
+        payload=payload,
+    )
 
 
 class SemanticReplayRunner:

@@ -364,7 +364,11 @@ async def _drive_to_approved(tenant: str, *, content: bytes = CSV, mapping: list
     """create → upload → analyze → map → validate → approve (returns import_id)."""
     import ingestion.imports.service as svc
 
-    session = await svc.create_import(tenant)
+    from tests.fakes.import_rights import grant_import_source
+
+    session = await svc.create_import(
+        tenant, created_by="approver-1", source_id=await grant_import_source(tenant)
+    )
     import_id = session["id"]
     await svc.store_file(
         tenant, import_id, filename="batch.csv", content=content, content_type="text/csv"
@@ -373,7 +377,7 @@ async def _drive_to_approved(tenant: str, *, content: bytes = CSV, mapping: list
     await svc.set_mapping(tenant, import_id, mapping)
     result = await svc.validate_import(tenant, import_id)
     assert result["status"] in {"validated", "review_required"}
-    await svc.approve_import(tenant, import_id)
+    await svc.approve_import(tenant, import_id, approver="approver-1")
     return import_id
 
 

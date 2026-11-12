@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -39,6 +40,9 @@ def test_allows_within_scope():
     decision = _run(engine.evaluate("agent", "transfer", "wallet:abc", "50"))
     assert decision.allowed
     assert decision.delegation_id == "d1"
+    assert decision.evaluated_at is not None
+    assert datetime.fromisoformat(decision.evaluated_at).tzinfo is not None
+    assert decision.to_dict()["evaluated_at"] == decision.evaluated_at
 
 
 def test_rejects_over_amount():
@@ -74,6 +78,7 @@ def test_no_delegations_means_deny():
     decision = _run(engine.evaluate("agent", "transfer", "wallet:abc"))
     assert not decision.allowed
     assert decision.reason == "no_active_delegation"
+    assert decision.evaluated_at is not None
 
 
 def test_resource_glob():

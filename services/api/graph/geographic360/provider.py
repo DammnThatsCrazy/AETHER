@@ -50,6 +50,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
+from urllib.parse import quote
 
 # Lightweight plane imports — always importable.
 from graph.geographic360.capsule_semantics import (
@@ -63,6 +64,7 @@ from shared.intelligence_projections.contracts import (
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
+    ProjectionSubject,
 )
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
@@ -71,9 +73,14 @@ from shared.intelligence_projections.registry import ProviderRegistry
 from shared.geo.generated_taxonomy import (
     LOCATION_PRECISION_CLASSES,
 )
+from shared.contracts_models.epistemic import EpistemicStatus
 
 # Reused canonical primitives (never redefined here).
 from graph.operational_intelligence.models import EvidenceRef
+from graph.geographic360.related_authorities import (
+    GeographicRelatedAuthorityReader,
+    RepositoryGeographicRelatedAuthorityReader,
+)
 
 # Geographic360 subject kinds (registry subjectKinds).
 GEOGRAPHIC_SUBJECT_KINDS = ("entity", "population", "source")
@@ -85,7 +92,39 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "timeline",
     "evidence",
     "findings",
+    "normalization",
 )
+
+# Product-contract slots from SSOT §11.14. Keep this provider output aligned
+# with the 360 product catalog; registry changes remain centrally owned.
+LOCATION_REQUIRED_SLOT_IDS: tuple[str, ...] = (
+    "place_summary",
+    "geo_hierarchy",
+    "timezone",
+    "activity_density",
+    "journeys",
+    "campaigns",
+    "profiles",
+    "value",
+    "risk",
+    "normalization",
+    "evidence_trace",
+)
+
+_UNSUPPORTED_SLOT_REASONS = {
+    # LocationFact, geocoding, and context-capsule authorities do not persist
+    # a tenant-scoped timezone mapping. The temporal kernel validates zones,
+    # but validation alone is not a location-to-zone authority. Keep the
+    # required product slot explicitly unbound until such a join exists.
+    "timezone": "canonical_timezone_authority_not_joined",
+    "activity_density": "canonical_location_activity_aggregation_unavailable",
+    "journeys": "exact_location_journey_join_unavailable",
+    "campaigns": "exact_location_campaign_join_unavailable",
+    "profiles": "exact_location_profile_join_unavailable",
+    "value": "exact_location_value_join_unavailable",
+    "risk": "exact_location_risk_join_unavailable",
+    "normalization": "location_normalization_lineage_unavailable",
+}
 
 # The registry surface modes geographic360 supports — window/compare/relative
 # only, no knowledge-time ``as_of`` reconstruction (that belongs to the
@@ -107,6 +146,7 @@ RENDER_CAP_METRO = "metro"  # drop coordinate/cell/city/place; keep metro/region
 # Read bounds (honesty caps, not silent truncation — each cap surfaces when hit).
 LOCATION_HISTORY_CAP = 100  # timeline events listed
 EVIDENCE_CAP = 100          # evidence refs listed in the evidence section
+ACTIVITY_DENSITY_READ_LIMIT = 200
 
 # A primary/current location whose newest observation is older than this is stale.
 STALE_AFTER_DAYS = 180
@@ -178,6 +218,28 @@ def _age_days(value: str, now: datetime) -> float:
     return max(0.0, (now - _parse_utc_iso(value)).total_seconds() / 86400.0)
 
 
+def _freshness_for_timestamp(
+    value: Optional[str], *, valid_to: Optional[str] = None
+) -> tuple[str, Optional[str]]:
+    """Classify one source timestamp without hiding malformed/missing time."""
+    if not value:
+        return "unknown", "location_observation_timestamp_missing"
+    try:
+        now = datetime.now(timezone.utc)
+        age = _age_days(value, now)
+    except (TypeError, ValueError, OverflowError):
+        return "degraded", "location_observation_timestamp_unparseable"
+    if valid_to:
+        try:
+            if now > _parse_utc_iso(valid_to):
+                return "stale", "location_fact_past_valid_to"
+        except (TypeError, ValueError, OverflowError):
+            return "degraded", "location_fact_validity_unparseable"
+    if age > STALE_AFTER_DAYS:
+        return "stale", "location_observation_stale"
+    return "available", None
+
+
 def _worst_state(dims: list[dict[str, Any]]) -> str:
     """Most severe typed state among dimensions (available is best)."""
     return min(
@@ -220,6 +282,17 @@ class LocationRow:
     valid_to: Optional[str] = None
     provider: Optional[str] = None
     source_observation_id: Optional[str] = None
+    # Version of the canonical LocationFact payload. This is not a
+    # normalization-algorithm version; the distinction is surfaced by the
+    # normalization slot rather than overclaimed as transformation lineage.
+    schema_version: Optional[str] = None
+    # Source-owned evidence identifiers from LocationFact, kept distinct from
+    # the stable location-fact EvidenceRef synthesized for this projection.
+    source_evidence_refs: tuple[str, ...] = ()
+    normalization_version: Optional[str] = None
+    validation_version: Optional[str] = None
+    raw_record_ref: Optional[str] = None
+    normalization_timestamp: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -245,6 +318,132 @@ class GeographicView:
     posture: Optional[GeographicPosture]
     # None posture + reason => the plane has no location observation of the subject.
     missing_reason: Optional[str]
+
+
+@dataclass(frozen=True)
+class GeographicActivityDensityRead:
+    """Exact-tenant temporal activity metrics for one entity subject."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    scope_mismatch: bool = False
+    reason: Optional[str] = None
+
+
+class GeographicActivityDensityReader(Protocol):
+    """Optional exact-subject activity reader; it does not supply location truth."""
+
+    async def activity_density(
+        self, *, tenant_id: str, entity_id: str, limit: int
+    ) -> GeographicActivityDensityRead:
+        ...
+
+
+class GeographicTimezoneReader(Protocol):
+    """Exact source-asserted timezone lookup for one canonical location fact."""
+
+    async def timezone_for_location(
+        self,
+        *,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        location_id: str,
+        as_of: datetime,
+        historical: bool,
+    ) -> Any:
+        ...
+
+
+class RepositoryGeographicActivityDensityReader:
+    """Read bounded temporal activity bins from exact-tenant Gold metrics."""
+
+    async def activity_density(
+        self, *, tenant_id: str, entity_id: str, limit: int
+    ) -> GeographicActivityDensityRead:
+        if not tenant_id or not entity_id:
+            return GeographicActivityDensityRead(
+                (), False, False, reason="exact_tenant_entity_activity_scope_required"
+            )
+        try:
+            from repositories.lake import gold_temporal_heatmap
+
+            bounded_limit = min(max(int(limit), 1), ACTIVITY_DENSITY_READ_LIMIT)
+            source_rows = await gold_temporal_heatmap.get_metrics(
+                entity_id, tenant_id=tenant_id
+            )
+        except Exception:  # noqa: BLE001 - source internals stay private
+            return GeographicActivityDensityRead(
+                (), False, False, reason="temporal_activity_density_source_unavailable"
+            )
+
+        if not isinstance(source_rows, list):
+            return GeographicActivityDensityRead(
+                (), False, False, reason="temporal_activity_density_source_invalid"
+            )
+        complete = len(source_rows) < ACTIVITY_DENSITY_READ_LIMIT
+        scoped: list[dict[str, Any]] = []
+        scope_mismatch = False
+        for row in source_rows:
+            if not isinstance(row, dict):
+                scope_mismatch = True
+                continue
+            row_tenant = row.get("tenant_id")
+            if row_tenant in (None, ""):
+                # GoldRepository can return legacy rows alongside a tenant's
+                # records; these have no tenant authority and are excluded.
+                continue
+            if row_tenant != tenant_id or row.get("entity_id") != entity_id:
+                scope_mismatch = True
+                continue
+            scoped.append(row)
+        if len(scoped) > bounded_limit:
+            scoped = scoped[:bounded_limit]
+            complete = False
+        if scope_mismatch:
+            complete = False
+        return GeographicActivityDensityRead(
+            tuple(scoped),
+            True,
+            complete,
+            scope_mismatch=scope_mismatch,
+            reason=(
+                "temporal_activity_density_scope_incomplete"
+                if not complete
+                else None
+            ),
+        )
+
+
+class RepositoryGeographicTimezoneReader:
+    """Read exact timezone source assertions from ``geo_temporal_graph``."""
+
+    def __init__(self, authority: Optional[Any] = None) -> None:
+        self._authority = authority
+
+    async def timezone_for_location(
+        self,
+        *,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        location_id: str,
+        as_of: datetime,
+        historical: bool,
+    ) -> Any:
+        if self._authority is None:
+            from graph.geo.temporal_timezone import geo_temporal_timezone_authority
+
+            self._authority = geo_temporal_timezone_authority
+        return await self._authority.timezone_for_location(
+            tenant_id=tenant_id,
+            subject_kind=subject_kind,
+            subject_id=subject_id,
+            location_id=location_id,
+            as_of=as_of,
+            historical=historical,
+        )
 
 
 def _row_from_stored_fact(stored: dict) -> LocationRow:
@@ -280,6 +479,7 @@ def _row_from_stored_fact(stored: dict) -> LocationRow:
         # A country granularity whose name IS the country code (a capsule
         # observation resolved to country only) carries it as the country.
         country = region.get("name")
+    source_evidence_refs = stored.get("evidence_refs")
     return LocationRow(
         location_id=stored.get("location_id") or stored.get("id"),
         role=stored.get("role") or "observed_presence",
@@ -301,6 +501,20 @@ def _row_from_stored_fact(stored: dict) -> LocationRow:
         valid_to=stored.get("valid_to"),
         provider=stored.get("provider"),
         source_observation_id=stored.get("source_observation_id"),
+        schema_version=stored.get("schema_version"),
+        normalization_version=stored.get("normalization_version"),
+        validation_version=stored.get("validation_version"),
+        raw_record_ref=stored.get("raw_record_ref"),
+        normalization_timestamp=stored.get("normalization_timestamp"),
+        source_evidence_refs=(
+            tuple(
+                reference
+                for reference in source_evidence_refs
+                if isinstance(reference, str) and reference.strip()
+            )
+            if isinstance(source_evidence_refs, (list, tuple))
+            else ()
+        ),
     )
 
 
@@ -573,11 +787,36 @@ class Geographic360Provider:
         self,
         reader: Optional[Geographic360Reader] = None,
         *,
+        activity_reader: Optional[GeographicActivityDensityReader] = None,
+        timezone_reader: Optional[GeographicTimezoneReader] = None,
+        related_authority_reader: Optional[GeographicRelatedAuthorityReader] = None,
         render_cap: Optional[str] = RENDER_CAP_NONE,
     ) -> None:
+        use_default_reader = reader is None
         # Injected canonical reader (test seam); the default is the G4.5
         # store-backed reader over canonical location facts.
         self._reader = reader if reader is not None else GeographicLocationReader()
+        # Only the default production path receives the independent Gold
+        # activity reader. A test/custom location reader must inject its
+        # activity authority explicitly, preventing hidden cross-source reads.
+        self._activity_reader = activity_reader or (
+            RepositoryGeographicActivityDensityReader()
+            if use_default_reader
+            else None
+        )
+        # Like the activity join, timezone I/O is only implicit on the
+        # canonical default path. Custom location readers must inject their own
+        # timezone authority, so tests and alternate deployments cannot hide
+        # reads behind a canned location view.
+        self._timezone_reader = timezone_reader or (
+            RepositoryGeographicTimezoneReader() if use_default_reader else None
+        )
+        # Cross-domain required-slot joins are implicit only for the canonical
+        # location reader path. Custom readers must inject their own governed
+        # authorities so canned location fixtures cannot conceal database reads.
+        self._related_authority_reader = related_authority_reader or (
+            RepositoryGeographicRelatedAuthorityReader() if use_default_reader else None
+        )
         # Surface/tenant render cap — the exact→city→metro downgrade boundary.
         # Default: no extra cap (evidence-limited only). Never rewritten per
         # request; a coarser surface wires its own cap here.
@@ -601,18 +840,101 @@ class Geographic360Provider:
             else "window"
         )
 
-        view = await self._safe_view(tenant_id, subject.kind, subject.id)
+        if context.tenantId != tenant_id or context.projectionId != self.projection_id:
+            # ProjectionContext is part of the tenant authorization boundary.
+            # Do not perform a read when it has a different scope.
+            view = GeographicView(
+                kind=subject.kind,
+                id=subject.id,
+                posture=None,
+                missing_reason="the geographic request and projection context scope did not match",
+            )
+        else:
+            view = await self._safe_view(tenant_id, subject.kind, subject.id)
         posture = view.posture
         rows = _render_history(posture, self._cap) if posture is not None else []
+        activity_read = await self._safe_activity_density(
+            tenant_id=tenant_id,
+            subject_kind=subject.kind,
+            subject_id=subject.id,
+            posture=posture,
+            scope_valid=context.tenantId == tenant_id
+            and context.projectionId == self.projection_id,
+        )
+        activity_slot, activity_claim = _activity_density_projection(
+            request, posture=posture, rows=rows, read=activity_read
+        )
+        normalization_slot, normalization_claim = _normalization_lineage_projection(
+            view, subject=request.subject
+        )
+        timezone_read = await self._safe_timezone(
+            request=request,
+            view=view,
+            rows=rows,
+            scope_valid=(
+                context.tenantId == tenant_id
+                and context.projectionId == self.projection_id
+            ),
+        )
+        timezone_slot, timezone_claim = _timezone_slot_projection(
+            request=request,
+            rows=rows,
+            read=timezone_read,
+        )
+        related_slots = await self._safe_related_slots(
+            request=request,
+            view=view,
+            rows=rows,
+            scope_valid=(
+                context.tenantId == tenant_id
+                and context.projectionId == self.projection_id
+            ),
+        )
 
         sections = [
             self._summary_section(request, view, rows, surface_mode),
-            self._state_section(request, view, rows),
+            self._state_section(
+                request,
+                view,
+                rows,
+                activity_slot,
+                timezone_slot=timezone_slot,
+                normalization_slot=normalization_slot,
+                related_slots=related_slots,
+            ),
             self._timeline_section(request, view, rows),
             self._evidence_section(view),
             self._findings_section(request, view, rows),
+            ProjectionSection(
+                id="normalization",
+                state=(
+                    "degraded"
+                    if normalization_slot.get("state") == "degraded"
+                    else "unknown"
+                ),
+                title="Location normalization lineage",
+                content=(
+                    normalization_slot
+                    if normalization_slot.get("state") == "degraded"
+                    else None
+                ),
+                warnings=(
+                    [str(normalization_slot.get("reasonCode"))]
+                    if normalization_slot.get("reasonCode")
+                    else None
+                ),
+                canonicalAuthorityRefs=["locations"],
+            ),
         ]
-        claims = self._build_claims(request, view, rows)
+        claims = self._build_claims(
+            request,
+            view,
+            rows,
+            activity_claim=activity_claim,
+            normalization_claim=normalization_claim,
+        )
+        if timezone_claim is not None:
+            claims.append(timezone_claim)
 
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -656,6 +978,7 @@ class Geographic360Provider:
                     "primary": None,
                 },
                 warnings=warnings or None,
+                canonicalAuthorityRefs=["locations", "context_capsules"],
             )
 
         suppressed_count = sum(
@@ -705,6 +1028,8 @@ class Geographic360Provider:
                 "precision_class": finest_class,
                 "precision_cap": self._cap,
                 "primary": _row_content(primary) if primary is not None else None,
+                "primary_selection_basis": "canonical_role_priority_then_observation_time",
+                "current_presence_asserted": False,
                 "jurisdiction": _jurisdiction_content(rows),
                 "effective_temporal_mode": surface_mode,
                 "freshness": {
@@ -712,6 +1037,7 @@ class Geographic360Provider:
                 },
             },
             warnings=warnings or None,
+            canonicalAuthorityRefs=["locations", "context_capsules"],
         )
 
     def _state_section(
@@ -719,6 +1045,11 @@ class Geographic360Provider:
         request: ProjectionRequest,
         view: GeographicView,
         rows: list[LocationRow],
+        activity_density_slot: dict[str, Any],
+        *,
+        timezone_slot: Optional[dict[str, Any]] = None,
+        normalization_slot: Optional[dict[str, Any]] = None,
+        related_slots: Optional[dict[str, dict[str, Any]]] = None,
     ) -> ProjectionSection:
         """state — typed per-dimension state (unknown != empty != 0 != missing)."""
         posture = view.posture
@@ -834,25 +1165,42 @@ class Geographic360Provider:
                     "reason": "no location fact carries an observed timestamp",
                 })
             else:
-                stale = _age_days(latest_iso, datetime.now(timezone.utc)) > STALE_AFTER_DAYS
+                freshness_state, freshness_reason = _freshness_for_timestamp(latest_iso)
                 dims.append({
                     "id": "freshness",
-                    "state": "stale" if stale else "available",  # type: ignore[arg-type]
+                    "state": freshness_state,
                     "reason": (
                         f"most recent location observation is older than "
                         f"{STALE_AFTER_DAYS} days"
-                        if stale
-                        else None
+                        if freshness_state == "stale"
+                        else freshness_reason
                     ),
                 })
 
         worst = _worst_state(dims)
+        required_slots = _required_location_slots(
+            view,
+            rows,
+            activity_density_slot=activity_density_slot,
+            timezone_slot=timezone_slot,
+            normalization_slot=normalization_slot,
+            related_slots=related_slots,
+        )
+        authorities = ["locations", "context_capsules"]
+        if activity_density_slot.get("evidenceRefs"):
+            authorities.append("gold_temporal_heatmap")
+        authorities.append("geo_temporal_timezone_assertions")
+        for slot in (related_slots or {}).values():
+            for authority in slot.get("canonicalAuthorities", []):
+                if isinstance(authority, str) and authority not in authorities:
+                    authorities.append(authority)
         return ProjectionSection(
             id="state",
             state=worst,  # type: ignore[arg-type]
             title="Geographic state",
-            content={"dimensions": dims},
+            content={"dimensions": dims, "requiredSlots": required_slots},
             warnings=[d["reason"] for d in dims if d["reason"] is not None] or None,
+            canonicalAuthorityRefs=authorities,
         )
 
     def _timeline_section(
@@ -892,6 +1240,7 @@ class Geographic360Provider:
                 "valid_to": row.valid_to,
                 "provider": row.provider,
                 "source_observation_id": row.source_observation_id,
+                "source_evidence_refs": list(row.source_evidence_refs),
             })
         events.sort(key=lambda e: _iso_aware(e["at"]), reverse=True)
         if len(events) > LOCATION_HISTORY_CAP:
@@ -919,6 +1268,7 @@ class Geographic360Provider:
                 "events": events,
             },
             warnings=warnings or None,
+            canonicalAuthorityRefs=["locations", "context_capsules"],
         )
 
     def _evidence_section(
@@ -940,6 +1290,7 @@ class Geographic360Provider:
                 "evidence": [ref.model_dump(mode="json") for ref in refs],
             },
             warnings=[f"evidence list capped at {EVIDENCE_CAP}"] if truncated else None,
+            canonicalAuthorityRefs=["locations", "context_capsules"],
         )
 
     def _findings_section(
@@ -968,6 +1319,7 @@ class Geographic360Provider:
                     "findings": findings,
                     "evidence_count": 0,
                 },
+                canonicalAuthorityRefs=["locations", "context_capsules"],
             )
 
         suppressed = [row for row in posture.facts if row.precision_state == STATE_SUPPRESSED]
@@ -1023,8 +1375,9 @@ class Geographic360Provider:
             (row.observed_at for row in posture.facts if row.observed_at), default=None
         )
         if latest_iso is not None:
-            age = _age_days(latest_iso, datetime.now(timezone.utc))
-            if age > STALE_AFTER_DAYS:
+            freshness_state, _ = _freshness_for_timestamp(latest_iso)
+            if freshness_state == "stale":
+                age = _age_days(latest_iso, datetime.now(timezone.utc))
                 findings.append({
                     "code": "geographic360.stale_location",
                     "level": "warning",
@@ -1042,6 +1395,7 @@ class Geographic360Provider:
                 "findings": findings,
                 "evidence_count": len(_posture_evidence(posture)),
             },
+            canonicalAuthorityRefs=["locations", "context_capsules"],
         )
 
     # ── Claims ─────────────────────────────────────────────────────────────
@@ -1051,6 +1405,9 @@ class Geographic360Provider:
         request: ProjectionRequest,
         view: GeographicView,
         rows: list[LocationRow],
+        *,
+        activity_claim: Optional[ClaimEnvelope] = None,
+        normalization_claim: Optional[ClaimEnvelope] = None,
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: every claim is grounded)."""
         claims: list[ClaimEnvelope] = []
@@ -1074,6 +1431,32 @@ class Geographic360Provider:
         evidence = {ref.id: ref for ref in _posture_evidence(posture)}
         primary = _primary_row(rows)
 
+        timed_rows = [row for row in rows if row.observed_at or row.valid_from]
+        timed_evidence = [
+            evidence[f"location:{row.location_id}"]
+            for row in timed_rows
+            if f"location:{row.location_id}" in evidence
+        ]
+        if timed_evidence:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"profile_location_temporal.{subject.kind}.{subject.id}",
+                    kind="profile_location_temporal_evidence",
+                    subject=subject,
+                    evidenceRefs=timed_evidence,
+                    claims=[
+                        (
+                            f"Canonical location facts record {len(timed_evidence)} "
+                            "time-scoped observation(s) for this exact subject; recorded "
+                            "timestamps and validity bounds do not establish a continuous "
+                            "physical trajectory."
+                        )
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["location_temporal"],
+                )
+            )
+
         if primary is not None:
             ref = evidence.get(f"location:{primary.location_id}")
             label = _label(primary)
@@ -1085,13 +1468,15 @@ class Geographic360Provider:
                     evidenceRefs=[ref] if ref is not None else [],
                     claims=[
                         (
-                            f"{subject.kind} {subject.id} has a primary {primary.role} "
-                            f"location at {label or 'coarse region'} "
+                            f"canonical location fact {primary.location_id} records "
+                            f"a {primary.role} at {label or 'coarse region'} "
                             f"({primary.precision_class} precision, "
-                            f"{primary.precision_state})"
+                            f"{primary.precision_state}); this does not assert "
+                            "current physical presence"
                         ),
                         "rendered precision never exceeds the evidence shown",
                     ],
+                    domainSlotIds=["place_summary"],
                 )
             )
             if primary.jurisdiction_name:
@@ -1102,7 +1487,8 @@ class Geographic360Provider:
                         subject=subject,
                         evidenceRefs=[ref] if ref is not None else [],
                         claims=[
-                            f"{subject.id} falls under {primary.jurisdiction_name} "
+                            f"canonical location fact {primary.location_id} reports "
+                            f"jurisdiction {primary.jurisdiction_name} "
                             f"({primary.jurisdiction_kind or 'jurisdiction'})",
                         ],
                     )
@@ -1120,6 +1506,57 @@ class Geographic360Provider:
                     ],
                 )
             )
+        hierarchy_rows = [
+            row
+            for row in rows
+            if any(
+                (
+                    row.region_type,
+                    row.country_code,
+                    row.region_name,
+                    row.region_code,
+                    row.city,
+                    row.place_name,
+                )
+            )
+        ]
+        for row in hierarchy_rows:
+            ref = evidence.get(f"location:{row.location_id}")
+            if ref is None:
+                continue
+            label = _label(row)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"geography.hierarchy.{row.location_id}",
+                    kind="geographic_hierarchy",
+                    subject=subject,
+                    evidenceRefs=[ref],
+                    claims=[
+                        f"canonical location fact {row.location_id} records geographic "
+                        f"labels {label or 'at the recorded precision'}"
+                    ],
+                    domainSlotIds=["geo_hierarchy"],
+                )
+            )
+        evidence_refs = list(evidence.values())
+        if evidence_refs:
+            claims.append(
+                ClaimEnvelope(
+                    id="evidence.location_fact_trace",
+                    kind="geographic_evidence_trace",
+                    subject=subject,
+                    evidenceRefs=evidence_refs,
+                    claims=[
+                        f"the tenant-scoped geographic read returned {len(evidence_refs)} "
+                        "canonical location-fact evidence reference(s)"
+                    ],
+                    domainSlotIds=["evidence_trace"],
+                )
+            )
+        if activity_claim is not None:
+            claims.append(activity_claim)
+        if normalization_claim is not None:
+            claims.append(normalization_claim)
         return claims
 
     # ── Canonical read helper (defensive) ─────────────────────────────────
@@ -1132,9 +1569,19 @@ class Geographic360Provider:
     ) -> GeographicView:
         """A reader failure degrades the subject view, never raises."""
         try:
-            return await self._reader.view(
+            view = await self._reader.view(
                 tenant_id=tenant_id, subject_kind=subject_kind, subject_id=subject_id
             )
+            if not isinstance(view, GeographicView):
+                raise TypeError("geographic reader returned an invalid view")
+            if view.kind != subject_kind or view.id != subject_id:
+                raise ValueError("geographic reader returned a different subject")
+            if view.posture is not None and (
+                view.posture.subject_type != subject_kind
+                or view.posture.subject_id != subject_id
+            ):
+                raise ValueError("geographic reader posture is scoped to a different subject")
+            return view
         except Exception:  # noqa: BLE001 - backing authority unavailable -> degrade
             return GeographicView(
                 kind=subject_kind,
@@ -1142,6 +1589,171 @@ class Geographic360Provider:
                 posture=None,
                 missing_reason="the geographic read authority was unavailable",
             )
+
+    async def _safe_activity_density(
+        self,
+        *,
+        tenant_id: str,
+        subject_kind: str,
+        subject_id: str,
+        posture: Optional[GeographicPosture],
+        scope_valid: bool,
+    ) -> Optional[GeographicActivityDensityRead]:
+        """Read activity only for an exact entity with a canonical location fact."""
+        if (
+            not scope_valid
+            or subject_kind != "entity"
+            or posture is None
+            or posture.subject_type != subject_kind
+            or posture.subject_id != subject_id
+            or not posture.facts
+            or self._activity_reader is None
+        ):
+            return None
+        try:
+            read = await self._activity_reader.activity_density(
+                tenant_id=tenant_id,
+                entity_id=subject_id,
+                limit=ACTIVITY_DENSITY_READ_LIMIT,
+            )
+            if not isinstance(read, GeographicActivityDensityRead):
+                raise TypeError("activity density reader returned an invalid contract")
+            return read
+        except Exception:  # noqa: BLE001 - typed unknown instead of source detail
+            return GeographicActivityDensityRead(
+                (), False, False,
+                reason="temporal_activity_density_source_unavailable",
+            )
+
+    async def _safe_timezone(
+        self,
+        *,
+        request: ProjectionRequest,
+        view: GeographicView,
+        rows: list[LocationRow],
+        scope_valid: bool,
+    ) -> Any:
+        """Resolve an explicit zone only for the exact rendered location ID."""
+        posture = view.posture
+        if (
+            not scope_valid
+            or posture is None
+            or posture.subject_type != request.subject.kind
+            or posture.subject_id != request.subject.id
+            or self._timezone_reader is None
+        ):
+            return None
+        primary = _primary_row(rows)
+        if primary is None or primary.precision_state == STATE_SUPPRESSED:
+            return None
+        try:
+            anchor = (
+                datetime.fromisoformat(request.asOf.replace("Z", "+00:00"))
+                if request.asOf is not None
+                else datetime.now(timezone.utc)
+            )
+            if anchor.tzinfo is None:
+                return None
+            anchor = anchor.astimezone(timezone.utc)
+            read = await self._timezone_reader.timezone_for_location(
+                tenant_id=request.tenantId,
+                subject_kind=request.subject.kind,
+                subject_id=request.subject.id,
+                location_id=primary.location_id,
+                as_of=anchor,
+                historical=request.asOf is not None,
+            )
+            from graph.geo.temporal_timezone import TimezoneAssertionRead
+
+            if not isinstance(read, TimezoneAssertionRead):
+                raise TypeError("timezone authority returned an invalid contract")
+            return read
+        except Exception:  # noqa: BLE001 - source internals never escape projection
+            from graph.geo.temporal_timezone import TimezoneAssertionRead
+
+            return TimezoneAssertionRead(
+                "unknown",
+                "geo_temporal_timezone_authority_unavailable",
+                None,
+                (),
+                {"state": "unknown", "reasonCode": "geo_temporal_timezone_authority_unavailable"},
+            )
+
+    async def _safe_related_slots(
+        self,
+        *,
+        request: ProjectionRequest,
+        view: GeographicView,
+        rows: list[LocationRow],
+        scope_valid: bool,
+    ) -> dict[str, dict[str, Any]]:
+        """Read exact cross-authority links for one rendered canonical location."""
+        unknown_reasons = {
+            "campaigns": "exact_location_campaign_join_unavailable",
+            "journeys": "exact_location_journey_join_unavailable",
+            "profiles": "exact_location_profile_join_unavailable",
+            "risk": "exact_location_risk_join_unavailable",
+            "value": "exact_location_value_join_unavailable",
+        }
+        reader = self._related_authority_reader
+        posture = view.posture
+        primary = _primary_row(rows)
+        if (
+            not scope_valid
+            or posture is None
+            or posture.subject_type != request.subject.kind
+            or posture.subject_id != request.subject.id
+            or primary is None
+            or primary.precision_state == STATE_SUPPRESSED
+            or reader is None
+        ):
+            from graph.geographic360.related_authorities import _unknown
+
+            return {slot_id: _unknown(slot_id, reason) for slot_id, reason in unknown_reasons.items()}
+        if request.asOf is not None or request.timeRange is not None or request.temporalMode not in {
+            None,
+            "window",
+        }:
+            from graph.geographic360.related_authorities import _unknown
+
+            reason = (
+                "location_related_history_not_bitemporal"
+                if request.asOf is not None
+                else "location_related_window_or_comparison_coverage_unavailable"
+            )
+            return {slot_id: _unknown(slot_id, reason) for slot_id in unknown_reasons}
+        try:
+            anchor = None
+            if request.asOf is not None:
+                anchor = datetime.fromisoformat(request.asOf.replace("Z", "+00:00"))
+                if anchor.tzinfo is None or anchor.utcoffset() is None:
+                    raise ValueError("asOf must be timezone-aware")
+                anchor = anchor.astimezone(timezone.utc)
+            slots = await reader.related_slots(
+                tenant_id=request.tenantId,
+                subject_kind=request.subject.kind,
+                subject_id=request.subject.id,
+                source_observation_id=primary.source_observation_id,
+                as_of=anchor,
+            )
+            if not isinstance(slots, dict) or any(
+                key not in unknown_reasons or not isinstance(value, dict)
+                for key, value in slots.items()
+            ):
+                raise TypeError("related authority returned an invalid slot map")
+            from graph.geographic360.related_authorities import _unknown
+
+            return {
+                slot_id: slots.get(slot_id) or _unknown(slot_id, reason)
+                for slot_id, reason in unknown_reasons.items()
+            }
+        except Exception:  # noqa: BLE001 - each related authority remains fail-isolated
+            from graph.geographic360.related_authorities import _unknown
+
+            return {
+                slot_id: _unknown(slot_id, "location_related_authority_unavailable")
+                for slot_id in unknown_reasons
+            }
 
 
 # ── Content render helpers (shared by summary) ───────────────────────────────
@@ -1165,8 +1777,735 @@ def _row_content(row: LocationRow) -> dict[str, Any]:
         "coarse_cell": row.coarse_cell,
         "coordinate_present": row.coordinate_present,
         "observed_at": row.observed_at,
+        "valid_from": row.valid_from,
+        "valid_to": row.valid_to,
         "provider": row.provider,
+        "source_observation_id": row.source_observation_id,
+        "source_evidence_refs": list(row.source_evidence_refs),
     }
+
+
+def _activity_density_projection(
+    request: ProjectionRequest,
+    *,
+    posture: Optional[GeographicPosture],
+    rows: list[LocationRow],
+    read: Optional[GeographicActivityDensityRead],
+) -> tuple[dict[str, Any], Optional[ClaimEnvelope]]:
+    """Render exact-entity temporal bins as partial activity, never spatial density."""
+    policy = {
+        "state": "not_evaluated_by_projection_provider",
+        "reasonCode": "policy_disposition_is_owned_by_frame_runtime",
+    }
+    slot: dict[str, Any] = {
+        "state": "unknown",
+        "reasonCode": "canonical_location_activity_aggregation_unavailable",
+        "content": None,
+        "evidenceRefs": [],
+        "freshness": {"state": "unknown", "reasonCode": "no_exact_source_join"},
+        "policy": policy,
+    }
+    subject = request.subject
+    if (
+        subject.kind != "entity"
+        or posture is None
+        or posture.subject_type != "entity"
+        or posture.subject_id != subject.id
+        or not posture.facts
+        or read is None
+    ):
+        return slot, None
+    primary = _primary_row(rows)
+    if primary is None:
+        return slot, None
+    if not read.available:
+        slot["reasonCode"] = _safe_activity_reason(read.reason)
+        slot["freshness"] = {
+            "state": "unknown",
+            "reasonCode": "temporal_activity_density_source_unavailable",
+        }
+        return slot, None
+
+    tenant_id = request.tenantId
+    points: list[dict[str, Any]] = []
+    evidence_refs: list[EvidenceRef] = []
+    invalid_or_unscoped = read.scope_mismatch
+    location_link_missing = False
+    timestamps: list[str] = []
+    for row in read.rows:
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("entity_id") != subject.id
+        ):
+            invalid_or_unscoped = True
+            continue
+        location_link_basis = _exact_activity_location_reference(row, primary)
+        if location_link_basis is None:
+            location_link_missing = True
+            continue
+        row_id = _safe_activity_identifier(row.get("id"))
+        value = row.get("value") if isinstance(row.get("value"), dict) else {}
+        dimensions = row.get("dimensions") if isinstance(row.get("dimensions"), dict) else {}
+        day = value.get("day_of_week", dimensions.get("day_of_week"))
+        hour = value.get("hour_utc", dimensions.get("hour_utc"))
+        count = value.get("activity_count", dimensions.get("activity_count"))
+        day_value = _activity_weekday(day)
+        if (
+            row_id is None
+            or day_value is None
+            or isinstance(hour, bool)
+            or not isinstance(hour, int)
+            or not 0 <= hour <= 23
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or count < 0
+        ):
+            invalid_or_unscoped = True
+            continue
+        observed_at = _safe_activity_timestamp(
+            row.get("materialized_at") or row.get("computed_at")
+        )
+        if observed_at is not None:
+            timestamps.append(observed_at)
+        points.append(
+            {
+                "locationFactId": primary.location_id,
+                "locationReferenceBasis": location_link_basis,
+                "dayOfWeek": day_value,
+                "hourUtc": hour,
+                "activityCount": count,
+                "materializedAt": observed_at,
+            }
+        )
+        evidence_refs.append(
+            EvidenceRef(
+                id=row_id,
+                type="model_output",
+                source="gold_temporal_heatmap",
+                observedAt=observed_at,
+                uri=f"store://gold_temporal_heatmap/{quote(row_id, safe='')}",
+            )
+        )
+    if points:
+        evidence_refs.append(_row_evidence(primary))
+
+    if not points:
+        slot["reasonCode"] = (
+            "temporal_activity_density_rows_unusable"
+            if invalid_or_unscoped
+            else "temporal_activity_density_not_linked_to_exact_location_fact"
+            if location_link_missing or read.rows
+            else "temporal_activity_density_not_materialized"
+        )
+        return slot, None
+
+    latest = max(timestamps, default=None)
+    freshness_state, freshness_reason = _freshness_for_timestamp(latest)
+    if freshness_state == "stale":
+        slot_state = "stale"
+        reason_code = freshness_reason or "temporal_activity_density_stale"
+    else:
+        slot_state = "degraded"
+        reason_code = (
+            "temporal_activity_density_read_incomplete"
+            if invalid_or_unscoped or location_link_missing or not read.complete
+            else "temporal_activity_density_location_linked_coverage_partial"
+        )
+    slot = {
+        "state": slot_state,
+        "reasonCode": reason_code,
+        "content": {
+            "densityKind": "temporal_activity_by_utc_hour",
+            "scope": "exact_tenant_canonical_location_fact_reference",
+            "locationCorrelationState": "exact_canonical_location_fact_reference",
+            "spatialDensityAsserted": False,
+            "points": points,
+            "returnedPointCount": len(points),
+            "pointCountComplete": (
+                read.complete and not invalid_or_unscoped and not location_link_missing
+            ),
+            "locationFactId": primary.location_id,
+            "source": "gold_temporal_heatmap",
+        },
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+        "freshness": {
+            "state": freshness_state,
+            "reasonCode": freshness_reason,
+            "latestMaterializedAt": latest,
+        },
+        "policy": policy,
+    }
+    claim = ClaimEnvelope(
+        id="activity.temporal_density",
+        kind="entity_temporal_activity_density",
+        subject=subject,
+        evidenceRefs=evidence_refs,
+        claims=[
+            f"Tenant-scoped Gold temporal heatmap records explicitly reference canonical location fact {primary.location_id!r} and provide activity counts by UTC weekday and hour; this is not spatial density and no timezone is inferred."
+        ],
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["activity_density"],
+    )
+    return slot, claim
+
+
+def _exact_activity_location_reference(
+    row: dict[str, Any], primary: LocationRow
+) -> Optional[str]:
+    """Require an explicit location-fact or source-observation reference."""
+    dimensions = row.get("dimensions") if isinstance(row.get("dimensions"), dict) else {}
+    values = row.get("value") if isinstance(row.get("value"), dict) else {}
+    objects = (row, dimensions, values)
+    declared_location_ids = [
+        value
+        for source in objects
+        if (value := source.get("location_id")) is not None
+    ]
+    declared_observation_ids = [
+        value
+        for source in objects
+        if (value := source.get("source_observation_id")) is not None
+    ]
+    for value in declared_location_ids:
+        if _safe_activity_identifier(value) != primary.location_id:
+            return None
+    for value in declared_observation_ids:
+        if (
+            primary.source_observation_id is None
+            or _safe_activity_identifier(value) != primary.source_observation_id
+        ):
+            return None
+    if declared_location_ids:
+        return "location_id"
+    if declared_observation_ids:
+        return "source_observation_id"
+    return None
+
+
+def _safe_activity_identifier(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > 256 or any(ord(char) < 32 or ord(char) == 127 for char in text):
+        return None
+    return text
+
+
+def _activity_weekday(value: Any) -> Optional[str]:
+    weekdays = {
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+    }
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    return normalized if normalized in weekdays else None
+
+
+def _safe_activity_timestamp(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not value:
+        return None
+    parsed = coerce_utc_lenient(value)
+    return parsed.isoformat() if parsed is not None else None
+
+
+def _safe_activity_reason(value: Any) -> str:
+    safe = _safe_activity_identifier(value)
+    if safe is None or not safe.replace("_", "").replace(".", "").isalnum():
+        return "temporal_activity_density_source_unavailable"
+    return safe
+
+
+def _timezone_slot_projection(
+    *,
+    request: ProjectionRequest,
+    rows: list[LocationRow],
+    read: Any,
+) -> tuple[dict[str, Any], Optional[ClaimEnvelope]]:
+    """Render an explicit zone assertion and temporal conversion evidence."""
+    policy = {
+        "state": "not_evaluated_by_projection_provider",
+        "reasonCode": "policy_disposition_is_owned_by_frame_runtime",
+    }
+    if read is None:
+        return (
+            {
+                "state": "unknown",
+                "reasonCode": "canonical_timezone_authority_not_joined",
+                "content": None,
+                "evidenceRefs": [],
+                "freshness": {
+                    "state": "unknown",
+                    "reasonCode": "no_exact_source_join",
+                },
+                "policy": policy,
+            },
+            None,
+        )
+
+    primary = _primary_row(rows)
+    evidence_refs: list[EvidenceRef] = []
+    if primary is not None:
+        evidence_refs.append(_row_evidence(primary))
+    evidence_refs.extend(
+        ref for ref in read.evidence_refs if isinstance(ref, EvidenceRef)
+    )
+    unique_refs = {ref.id: ref for ref in evidence_refs}
+    slot = {
+        "state": read.state,
+        "reasonCode": read.reason_code,
+        "content": read.content,
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in unique_refs.values()],
+        "freshness": read.freshness,
+        "policy": policy,
+    }
+    content = read.content if isinstance(read.content, dict) else {}
+    zone_id = content.get("timezoneId")
+    if not isinstance(zone_id, str) or not zone_id or read.state == "conflicted":
+        return slot, None
+    claim_refs = list(unique_refs.values())
+    if not claim_refs:
+        return slot, None
+    conversion = content.get("conversion") if isinstance(content.get("conversion"), dict) else {}
+    instant = conversion.get("instant") or content.get("asOf")
+    claims = [
+        f"A source explicitly asserted IANA timezone {zone_id} for canonical location fact {primary.location_id if primary else 'unknown'}; the recorded observation and effective interval include {instant}."
+    ]
+    if isinstance(conversion.get("offsetMinutes"), int):
+        claims.append(
+            f"The temporal authority computes an offset of {conversion['offsetMinutes']} minutes at that instant using tzdb {conversion.get('tzdbVersion') or 'unknown'}."
+        )
+    claim = ClaimEnvelope(
+        id=f"timezone.location_fact.{request.subject.kind}.{request.subject.id}",
+        kind="source_asserted_geographic_timezone",
+        subject=request.subject,
+        evidenceRefs=claim_refs,
+        claims=claims,
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["timezone"],
+    )
+    return slot, claim
+
+
+def _required_location_slots(
+    view: GeographicView,
+    rows: list[LocationRow],
+    *,
+    activity_density_slot: Optional[dict[str, Any]] = None,
+    timezone_slot: Optional[dict[str, Any]] = None,
+    normalization_slot: Optional[dict[str, Any]] = None,
+    related_slots: Optional[dict[str, dict[str, Any]]] = None,
+) -> dict[str, dict[str, Any]]:
+    """Expose every SSOT-required slot with source-backed state and gaps."""
+    posture = view.posture
+    policy_boundary = {
+        "state": "not_evaluated_by_projection_provider",
+        "reasonCode": "policy_disposition_is_owned_by_frame_runtime",
+    }
+    slots: dict[str, dict[str, Any]] = {
+        slot_id: {
+            "state": "unknown",
+            "reasonCode": reason,
+            "content": None,
+            "evidenceRefs": [],
+            "freshness": {"state": "unknown", "reasonCode": "no_exact_source_join"},
+            "policy": policy_boundary,
+        }
+        for slot_id, reason in _UNSUPPORTED_SLOT_REASONS.items()
+    }
+    if timezone_slot is not None:
+        slots["timezone"] = timezone_slot
+
+    if posture is None:
+        missing_reason = view.missing_reason or "geographic_location_read_unavailable"
+        for slot_id in ("place_summary", "geo_hierarchy", "evidence_trace"):
+            slots[slot_id] = {
+                "state": "unknown",
+                "reasonCode": "canonical_location_read_unresolved",
+                "reason": missing_reason,
+                "content": None,
+                "evidenceRefs": [],
+                "freshness": {"state": "unknown", "reasonCode": "source_timestamp_unavailable"},
+                "policy": policy_boundary,
+            }
+        return {slot_id: slots[slot_id] for slot_id in LOCATION_REQUIRED_SLOT_IDS}
+
+    facts = posture.facts
+    all_refs = _posture_evidence(posture)
+    refs_by_location = {
+        row.location_id: _row_evidence(row)
+        for row in facts
+    }
+    if not facts:
+        for slot_id in ("place_summary", "geo_hierarchy", "evidence_trace"):
+            slots[slot_id] = {
+                "state": "empty",
+                "reasonCode": "canonical_location_read_empty",
+                "content": None,
+                "evidenceRefs": [],
+                "freshness": {"state": "unknown", "reasonCode": "no_location_facts"},
+                "policy": policy_boundary,
+            }
+        return {slot_id: slots[slot_id] for slot_id in LOCATION_REQUIRED_SLOT_IDS}
+
+    if activity_density_slot is not None:
+        slots["activity_density"] = activity_density_slot
+    if normalization_slot is not None:
+        slots["normalization"] = normalization_slot
+    for slot_id, slot in (related_slots or {}).items():
+        if slot_id in {"campaigns", "journeys", "profiles", "risk", "value"}:
+            slots[slot_id] = slot
+
+    primary = _primary_row(rows)
+    if primary is None:
+        slots["place_summary"] = {
+            "state": "suppressed",
+            "reasonCode": "location_fact_has_no_renderable_geography",
+            "content": None,
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in all_refs],
+            "freshness": {"state": "unknown", "reasonCode": "no_renderable_location_timestamp"},
+            "policy": policy_boundary,
+        }
+    else:
+        freshness_state, freshness_reason = _freshness_for_timestamp(
+            primary.observed_at or primary.valid_from,
+            valid_to=primary.valid_to,
+        )
+        if primary.precision_state == STATE_SUPPRESSED:
+            slot_state = "suppressed"
+            reason_code = "location_precision_suppressed"
+        elif freshness_state == "stale":
+            slot_state = "stale"
+            reason_code = freshness_reason or "location_observation_stale"
+        elif (
+            primary.precision_state == STATE_PRECISION_REDUCED
+            or freshness_state == "degraded"
+            or freshness_state == "unknown"
+        ):
+            slot_state = "degraded"
+            reason_code = (
+                freshness_reason
+                or "location_precision_reduced"
+                if primary.precision_state == STATE_PRECISION_REDUCED
+                else freshness_reason or "location_freshness_unresolved"
+            )
+        else:
+            slot_state = "available"
+            reason_code = None
+        primary_ref = refs_by_location.get(primary.location_id)
+        slots["place_summary"] = {
+            "state": slot_state,
+            "reasonCode": reason_code,
+            "content": {
+                **_row_content(primary),
+                "selectionBasis": "canonical_role_priority_then_observation_time",
+                "currentPresenceAsserted": False,
+            },
+            "evidenceRefs": (
+                [primary_ref.model_dump(mode="json")] if primary_ref is not None else []
+            ),
+            "freshness": {
+                "state": freshness_state,
+                "reasonCode": freshness_reason,
+                "observedAt": primary.observed_at,
+                "validFrom": primary.valid_from,
+                "validTo": primary.valid_to,
+            },
+            "policy": policy_boundary,
+        }
+
+    hierarchy_rows = [
+        row for row in rows
+        if any((row.region_type, row.country_code, row.region_name, row.region_code,
+                row.city, row.place_name))
+    ]
+    if not hierarchy_rows:
+        slots["geo_hierarchy"] = {
+            "state": "unknown",
+            "reasonCode": "canonical_geographic_hierarchy_unresolved",
+            "content": None,
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in all_refs],
+            "freshness": {"state": "unknown", "reasonCode": "no_resolved_hierarchy_timestamp"},
+            "policy": policy_boundary,
+        }
+    else:
+        hierarchy_evidence = [
+            refs_by_location[row.location_id]
+            for row in hierarchy_rows
+            if row.location_id in refs_by_location
+        ]
+        reduced = any(row.precision_state != STATE_FULL for row in hierarchy_rows)
+        hierarchy_freshness_states = [
+            _freshness_for_timestamp(
+                row.observed_at or row.valid_from,
+                valid_to=row.valid_to,
+            )[0]
+            for row in hierarchy_rows
+        ]
+        if all(state == "stale" for state in hierarchy_freshness_states):
+            hierarchy_freshness_state = "stale"
+            hierarchy_freshness_reason = "location_hierarchy_observations_stale"
+        elif any(state != "available" for state in hierarchy_freshness_states):
+            hierarchy_freshness_state = "degraded"
+            hierarchy_freshness_reason = "location_hierarchy_freshness_incomplete"
+        else:
+            hierarchy_freshness_state = "available"
+            hierarchy_freshness_reason = None
+        if hierarchy_freshness_state == "stale":
+            hierarchy_slot_state = "stale"
+        elif reduced or hierarchy_freshness_state == "degraded":
+            hierarchy_slot_state = "degraded"
+        else:
+            hierarchy_slot_state = "available"
+        slots["geo_hierarchy"] = {
+            "state": hierarchy_slot_state,
+            "reasonCode": (
+                "location_hierarchy_precision_reduced"
+                if reduced
+                else hierarchy_freshness_reason
+            ),
+            "content": [
+                {
+                    "locationId": row.location_id,
+                    "regionType": row.region_type,
+                    "countryCode": row.country_code,
+                    "regionName": row.region_name,
+                    "regionCode": row.region_code,
+                    "city": row.city,
+                    "placeName": row.place_name,
+                    "precisionClass": row.precision_class,
+                    "precisionState": row.precision_state,
+                    "observedAt": row.observed_at,
+                    "validFrom": row.valid_from,
+                    "validTo": row.valid_to,
+                    "sourceObservationId": row.source_observation_id,
+                    "sourceEvidenceRefs": list(row.source_evidence_refs),
+                }
+                for row in hierarchy_rows
+            ],
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in hierarchy_evidence],
+            "freshness": {
+                "state": hierarchy_freshness_state,
+                "reasonCode": hierarchy_freshness_reason,
+                "latestObservedAt": max(
+                    (row.observed_at for row in hierarchy_rows if row.observed_at),
+                    default=None,
+                ),
+            },
+            "policy": policy_boundary,
+        }
+
+    latest_evidence_time = max(
+        (row.observed_at for row in facts if row.observed_at), default=None
+    )
+    evidence_freshness_state, evidence_freshness_reason = _freshness_for_timestamp(
+        latest_evidence_time
+    )
+    slots["evidence_trace"] = {
+        "state": "available" if all_refs else "unknown",
+        "reasonCode": None if all_refs else "canonical_location_evidence_unavailable",
+        "content": {
+            "count": len(all_refs),
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in all_refs],
+            "sourceEvidenceRefs": [
+                {
+                    "locationId": row.location_id,
+                    "sourceObservationId": row.source_observation_id,
+                    "evidenceRefs": list(row.source_evidence_refs),
+                    "sourceProvider": row.provider,
+                }
+                for row in facts
+            ],
+        },
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in all_refs],
+        "freshness": {
+            "state": evidence_freshness_state if all_refs else "unknown",
+            "reasonCode": (
+                evidence_freshness_reason if all_refs else "canonical_location_evidence_unavailable"
+            ),
+            "latestObservedAt": latest_evidence_time,
+        },
+        "policy": policy_boundary,
+    }
+    return {slot_id: slots[slot_id] for slot_id in LOCATION_REQUIRED_SLOT_IDS}
+
+
+def _normalization_lineage_projection(
+    view: GeographicView,
+    *,
+    subject: ProjectionSubject,
+) -> tuple[dict[str, Any], Optional[ClaimEnvelope]]:
+    """Expose recorded source and transformation lineage without substitution.
+
+    LocationFact schema_version is never treated as a normalizer version.
+    Missing raw-record or validation lineage remains an explicit partial gap.
+    """
+    policy = {
+        "state": "not_evaluated_by_projection_provider",
+        "reasonCode": "policy_disposition_is_owned_by_frame_runtime",
+    }
+    unknown = {
+        "state": "unknown",
+        "reasonCode": "location_normalization_lineage_unavailable",
+        "content": None,
+        "evidenceRefs": [],
+        "freshness": {
+            "state": "unknown",
+            "reasonCode": "location_normalization_timestamp_unavailable",
+        },
+        "policy": policy,
+    }
+    posture = view.posture
+    if posture is None or not posture.facts:
+        return unknown, None
+
+    linked_rows: list[tuple[LocationRow, dict[str, Any]]] = []
+    for row in posture.facts:
+        source_observation_id = _safe_activity_identifier(row.source_observation_id)
+        source_provider = _safe_activity_identifier(row.provider)
+        normalization_version = _safe_activity_identifier(row.normalization_version)
+        validation_version = _safe_activity_identifier(row.validation_version)
+        raw_record_ref = _safe_activity_identifier(row.raw_record_ref)
+        normalization_timestamp = _safe_activity_timestamp(row.normalization_timestamp)
+        source_evidence_refs_all = [
+            safe_ref
+            for value in row.source_evidence_refs
+            if (safe_ref := _safe_activity_identifier(value)) is not None
+        ]
+        if not any(
+            (
+                source_observation_id,
+                source_evidence_refs_all,
+                normalization_version,
+                validation_version,
+                raw_record_ref,
+                normalization_timestamp,
+            )
+        ):
+            continue
+        entry = {
+            "locationFactId": _safe_activity_identifier(row.location_id),
+            "sourceLinkState": (
+                "linked" if source_observation_id or source_evidence_refs_all else "unknown"
+            ),
+            "sourceObservationId": source_observation_id,
+            "sourceProvider": source_provider,
+            "sourceEvidenceRefs": source_evidence_refs_all[:EVIDENCE_CAP],
+            "sourceEvidenceRefsTruncated": len(source_evidence_refs_all)
+            > EVIDENCE_CAP,
+            "locationFactSchemaVersion": _safe_activity_identifier(row.schema_version),
+            "sourceObservedAt": row.observed_at,
+        }
+        if normalization_version is not None:
+            entry["normalizationVersion"] = normalization_version
+        if validation_version is not None:
+            entry["validationVersion"] = validation_version
+        if raw_record_ref is not None:
+            entry["rawRecordRef"] = raw_record_ref
+        if normalization_timestamp is not None:
+            entry["normalizationTimestamp"] = normalization_timestamp
+        linked_rows.append(
+            (row, entry)
+        )
+
+    if not linked_rows:
+        return unknown, None
+
+    # Location facts are ordered oldest -> newest by the canonical reader.
+    # Keep the newest source-linked entries within the evidence cap and make
+    # any truncation visible in the slot content.
+    linked_rows.sort(key=lambda item: _iso_aware(item[0].observed_at or item[0].valid_from))
+    listed_rows = linked_rows[-EVIDENCE_CAP:]
+    entries = [entry for _, entry in listed_rows]
+    evidence_refs = [_row_evidence(row) for row, _ in listed_rows]
+    omitted_linked_count = len(linked_rows) - len(listed_rows)
+    omitted_source_linked_count = sum(
+        entry["sourceLinkState"] == "linked" for _, entry in linked_rows[:-EVIDENCE_CAP]
+    )
+    lineage_fields = (
+        "normalizationVersion",
+        "validationVersion",
+        "rawRecordRef",
+        "normalizationTimestamp",
+    )
+    unavailable_fields = [
+        field
+        for field in lineage_fields
+        if any(field not in entry for entry in entries)
+    ]
+    normalized_timestamps = [
+        value
+        for entry in entries
+        if isinstance((value := entry.get("normalizationTimestamp")), str)
+    ]
+    latest_normalized_at = max(normalized_timestamps, default=None)
+    normalization_freshness_state, normalization_freshness_reason = (
+        _freshness_for_timestamp(latest_normalized_at)
+        if latest_normalized_at is not None
+        else ("unknown", "location_normalization_timestamp_unavailable")
+    )
+    lineage_complete = not unavailable_fields and omitted_linked_count == 0
+    slot = {
+        "state": "available" if lineage_complete else "degraded",
+        "reasonCode": (
+            None
+            if lineage_complete
+            else "location_normalization_source_lineage_partial"
+            if any("normalizationVersion" in entry for entry in entries)
+            else "location_normalization_algorithm_lineage_unavailable"
+        ),
+        "content": {
+            "lineageCompleteness": "complete" if lineage_complete else "partial",
+            "lineageBasis": "canonical_location_fact_source_and_transformation_metadata",
+            "entries": entries,
+            "sourceLinkedFactCount": sum(
+                entry["sourceLinkState"] == "linked" for _, entry in linked_rows
+            ),
+            "lineageEntryCount": len(linked_rows),
+            "transformationVersionedFactCount": sum(
+                "normalizationVersion" in entry for entry in entries
+            ),
+            "rawRecordLinkedFactCount": sum(
+                "rawRecordRef" in entry for entry in entries
+            ),
+            "listedSourceLinkedFactCount": sum(
+                entry["sourceLinkState"] == "linked" for _, entry in listed_rows
+            ),
+            "omittedSourceLinkedFactCount": omitted_source_linked_count,
+            "omittedLineageEntryCount": omitted_linked_count,
+            "sourceLinkedFactListTruncated": omitted_source_linked_count > 0,
+            "lineageEntryListTruncated": omitted_linked_count > 0,
+            "unavailableLineageFields": unavailable_fields,
+        },
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+        "freshness": {
+            "state": normalization_freshness_state,
+            "reasonCode": normalization_freshness_reason,
+            **(
+                {"latestNormalizationAt": latest_normalized_at}
+                if latest_normalized_at is not None
+                else {}
+            ),
+        },
+        "policy": policy,
+    }
+    claim = None
+    if evidence_refs:
+        claim = ClaimEnvelope(
+            id="normalization.location_fact_lineage",
+            kind="geographic_normalization_lineage",
+            subject=subject,
+            evidenceRefs=evidence_refs,
+            claims=[
+                (
+                    "Canonical location facts expose their recorded transformation version and write timestamp; validation and raw-record lineage remain partial."
+                    if any("normalizationVersion" in entry for entry in entries)
+                    else "Canonical location facts expose source observation or evidence links, but no transformation version or normalization timestamp; normalization coverage is partial."
+                )
+            ],
+            domainSlotIds=["normalization"],
+        )
+    return slot, claim
 
 
 def _jurisdiction_content(rows: list[LocationRow]) -> Optional[dict[str, Any]]:
@@ -1208,6 +2547,7 @@ __all__ = [
     "GeographicPosture",
     "GeographicView",
     "LOCATION_HISTORY_CAP",
+    "LOCATION_REQUIRED_SLOT_IDS",
     "LocationRow",
     "OUTPUT_SECTIONS",
     "RENDER_CAP_CITY",

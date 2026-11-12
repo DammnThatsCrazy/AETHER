@@ -53,6 +53,10 @@ class CapabilityDeclarationRequest(BaseModel):
         description="Sanitized before storage — credentials/tokens in the URL are stripped.",
     )
     tool_name: Optional[str] = None
+    resource_uri: Optional[str] = Field(
+        default=None,
+        description="Exact MCP resource URI; path and opaque identifier case are significant.",
+    )
     protocol_version: Optional[str] = None
     capability_kind: Optional[str] = None
     notes: Optional[str] = None
@@ -79,6 +83,7 @@ async def declare_capability(body: CapabilityDeclarationRequest, request: Reques
         server_name=body.server_name,
         server_url=body.server_url,
         tool_name=body.tool_name,
+        resource_uri=body.resource_uri,
         protocol_version=body.protocol_version,
         capability_kind=body.capability_kind,
         notes=body.notes,

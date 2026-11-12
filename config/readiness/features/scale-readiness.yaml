@@ -19,17 +19,19 @@ scope:
   excluded: []
   deferred: []
 repository_ceiling:
-  type: RUNTIME_INTEGRATED
+  type: VERIFIED
   achieved: true
   remaining_after_ceiling:
   - Provision the required cloud backend (apply Terraform for the target profile).
-  remaining_is_repository_controlled: true
+  - Record the staging load baseline (make load-smoke against staging) in docs/operations/LOAD-BASELINES.md.
+  remaining_is_repository_controlled: false
   evidence:
   - tests/load/
   - scripts/load_smoke.py
   - docs/operations/LOAD-BASELINES.md
+  - services/api/tests/scale/test_ingest_concurrency.py
 implementation:
-  state: RUNTIME_INTEGRATED
+  state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
   controls:
   - id: contracts-and-schemas
@@ -51,9 +53,15 @@ implementation:
   - id: authorization-and-tenant-isolation
     description: authorization and tenant isolation
     weight: 20
-    satisfied: false
-  remaining_work:
-  - complete repository-controlled verification + hardening
+    satisfied: true
+    rationale: Isolation is proven while the system is loaded, not only at rest. Concurrent multi-tenant SDK batches
+      leave each tenant holding exactly its own events, and a reused event id in another tenant is neither a duplicate
+      nor visible across tenants; concurrent graph traversals and fraud evaluations never leak across tenants.
+    evidence:
+    - services/api/tests/scale/test_ingest_concurrency.py
+    - tests/load/test_graph_load.py
+    - tests/load/test_fraud_evaluation_load.py
+  remaining_work: []
 productionization:
   denominator: in-scope productionization controls (migration-derived)
   controls:
@@ -68,14 +76,28 @@ productionization:
   - id: reliability-idempotency-retry
     description: reliability idempotency retry
     weight: 25
-    satisfied: false
+    satisfied: true
+    rationale: The real ingestion handler is exercised with concurrent duplicate and overlapping batches (an event is
+      accepted and published exactly once, Bronze holds one row per event), a bus publish failure releases its claim so
+      a retry is accepted rather than stranded as a duplicate, and a claim-store outage degrades as declared (events fail
+      open, identify fails closed). Each test fails when its guarded behavior is removed.
+    evidence:
+    - services/api/tests/scale/test_ingest_concurrency.py
+    - tests/load/locustfile.py
   - id: ci-and-release-gates
     description: ci and release gates
     weight: 25
-    satisfied: false
-  remaining_work:
-  - reliability idempotency retry
-  - ci and release gates
+    satisfied: true
+    rationale: The load gate cannot silently lose coverage. Every exercised endpoint must carry a threshold and the gate
+      fails closed on an unreachable backend or no traffic (unit-tested), the synthetic baseline runs in the unit suite,
+      the new concurrency proofs run in the backend suite, and the staging lifecycle workflow runs the live smoke.
+    evidence:
+    - tests/unit/test_load_smoke_contract.py
+    - tests/unit/test_load_synthetic.py
+    - services/api/tests/scale/test_ingest_concurrency.py
+    - scripts/load_smoke.py
+    - .github/workflows/staging-lifecycle.yml
+  remaining_work: []
 activation:
   state: INFRASTRUCTURE_WAITING
   blockers:
@@ -128,11 +150,13 @@ business_readiness:
   applicable: false
   controls: []
 confidence:
-  level: LOW
+  level: MODERATE
   reasons:
   - 'repository evidence: tests/load/'
+  - 'repository evidence: services/api/tests/scale/test_ingest_concurrency.py'
   evidence_gaps:
   - credentialed environment execution not yet performed
+  - staging load baseline not yet recorded
 release_profiles:
   local:
     participation: required

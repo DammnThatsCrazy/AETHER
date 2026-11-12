@@ -16,8 +16,9 @@ ingestion / Silver / graph path, so runtime parity is preserved.
 Modules:
 
 * ``primitives`` — typed :class:`RelationshipFact`, :class:`EpisodeRecord` and
-  :class:`OutcomeTruthRecord` carriers (reusing canonical
-  :class:`EvidenceRef` / :class:`EntityRef` / :class:`CorrelationBlock`).
+  :class:`OutcomeTruthRecord` carriers (reusing canonical :class:`EvidenceRef`
+  / :class:`EntityRef` / :class:`CorrelationBlock`, with a distinct typed
+  :class:`OutcomeContextRef` for non-graph measurement contexts).
 * ``dedupe`` — Section-25 evidence dedupe (one canonical outcome, many
   evidence refs).
 * ``stores`` — durable truth stores for the primitive carriers, backed by
@@ -35,6 +36,8 @@ from __future__ import annotations
 
 from shared.backend_interpretation.primitives import (
     EpisodeRecord,
+    OutcomeContextRef,
+    OutcomeSubjectRef,
     OutcomeTruthRecord,
     RelationshipFact,
     ValidityWindow,
@@ -42,6 +45,8 @@ from shared.backend_interpretation.primitives import (
 
 __all__ = [
     "EpisodeRecord",
+    "OutcomeContextRef",
+    "OutcomeSubjectRef",
     "OutcomeTruthRecord",
     "RelationshipFact",
     "ValidityWindow",

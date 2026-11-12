@@ -37,10 +37,12 @@ public struct AetherConfig {
     public var privacy: PrivacyConfig = PrivacyConfig()
     public var batchSize: Int = 10
     public var flushInterval: TimeInterval = 5.0
-    /// Optional HMAC-SHA256 secret to verify the remote SDK manifest signature
-    /// before applying it (Truth Kernel §2.9). When set, unsigned/invalid
-    /// manifests are rejected and the last-known-good config is kept.
-    public var manifestVerificationKey: String? = nil
+    /// Optional base64url SPKI P-256 public key to verify the remote SDK manifest
+    /// signature before applying it (Truth Kernel §2.9; print it with
+    /// `python scripts/sdk_manifest_public_key.py`). When set, unsigned/invalid
+    /// manifests are rejected and the last-known-good config is kept. When unset,
+    /// manifests are applied without verification.
+    public var manifestPublicKey: String? = nil
     public var autoResumeJourney: Bool = true
     public var onJourneyResumed: ((_ resolvedAnonymousId: String, _ resolvedUserId: String?) -> Void)? = nil
     // Native identity -> subject-hints convergence (WS-C / Invariant #4).
@@ -279,6 +281,43 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case agent_grounding_observed
     case agent_guardrail_observed
     case agent_human_override_observed
+    case agent_objective_created
+    case agent_objective_started
+    case agent_objective_modified
+    case agent_objective_completed
+    case agent_objective_failed
+    case agent_objective_abandoned
+    case agent_information_retrieved
+    case agent_source_consulted
+    case agent_context_received
+    case agent_decision_started
+    case agent_candidate_considered
+    case agent_candidate_rejected
+    case agent_action_selected
+    case agent_decision_completed
+    case agent_authorization_requested
+    case agent_authorization_granted
+    case agent_authorization_denied
+    case agent_tool_retried
+    case agent_tool_switched
+    case agent_terminated
+    case agent_task_returned
+    case agent_execution_started
+    case agent_execution_succeeded
+    case agent_execution_failed
+    case agent_execution_aborted
+    case agent_quote_received
+    case agent_price_evaluated
+    case agent_transaction_initiated
+    case agent_transaction_authorized
+    case agent_transaction_settled
+    case agent_transaction_failed
+    case agent_message_generated
+    case agent_memory_created
+    case agent_memory_retrieved
+    case agent_memory_updated
+    case agent_memory_invalidated
+    case agent_memory_expired
     // reward
     case reward_action_queued
     case reward_proof_generated
@@ -719,6 +758,27 @@ public struct EventContext: Codable {
 
 // MARK: - Identity
 
+/// Single-use, short-lived token another device redeems to continue a journey.
+public struct JourneyHandoffToken {
+    public let token: String
+    public let handoffId: String
+    public let expiresAt: String
+}
+
+/// Server-verified link between two sessions. `linkBasis` is always `explicit_handoff` and the
+/// link never merges identities (`identityMerge` is `not_performed`).
+public struct JourneyHandoffLink {
+    public let handoffId: String
+    public let journeyId: String
+    public let linkBasis: String
+    public let identityMerge: String
+    public let fromSessionId: String
+    public let fromPlatform: String
+    public let toSessionId: String
+    public let toPlatform: String
+    public let redeemedAt: String
+}
+
 public struct WalletEntry {
     public var address: String
     public var vm: String       // evm | svm | bitcoin | movevm | near | tvm | cosmos
@@ -1008,6 +1068,43 @@ public final class Aether: NSObject {
         .agent_grounding_observed: "agent",
         .agent_guardrail_observed: "agent",
         .agent_human_override_observed: "agent",
+        .agent_objective_created: "agent",
+        .agent_objective_started: "agent",
+        .agent_objective_modified: "agent",
+        .agent_objective_completed: "agent",
+        .agent_objective_failed: "agent",
+        .agent_objective_abandoned: "agent",
+        .agent_information_retrieved: "agent",
+        .agent_source_consulted: "agent",
+        .agent_context_received: "agent",
+        .agent_decision_started: "agent",
+        .agent_candidate_considered: "agent",
+        .agent_candidate_rejected: "agent",
+        .agent_action_selected: "agent",
+        .agent_decision_completed: "agent",
+        .agent_authorization_requested: "agent",
+        .agent_authorization_granted: "agent",
+        .agent_authorization_denied: "agent",
+        .agent_tool_retried: "agent",
+        .agent_tool_switched: "agent",
+        .agent_terminated: "agent",
+        .agent_task_returned: "agent",
+        .agent_execution_started: "agent",
+        .agent_execution_succeeded: "agent",
+        .agent_execution_failed: "agent",
+        .agent_execution_aborted: "agent",
+        .agent_quote_received: "financial_activity",
+        .agent_price_evaluated: "financial_activity",
+        .agent_transaction_initiated: "financial_activity",
+        .agent_transaction_authorized: "financial_activity",
+        .agent_transaction_settled: "financial_activity",
+        .agent_transaction_failed: "financial_activity",
+        .agent_message_generated: "agent",
+        .agent_memory_created: "agent",
+        .agent_memory_retrieved: "agent",
+        .agent_memory_updated: "agent",
+        .agent_memory_invalidated: "agent",
+        .agent_memory_expired: "agent",
         // reward
         .reward_action_queued: "commerce",
         .reward_proof_generated: "commerce",
@@ -1424,7 +1521,7 @@ public final class Aether: NSObject {
             apiKey: config.apiKey,
             platform: "ios",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            manifestVerificationKey: config.manifestVerificationKey
+            manifestPublicKey: config.manifestPublicKey
         )
         hAgent.getDynamicState = { [weak self] in
             guard let self = self else { return (0, false, false, false) }
@@ -1563,6 +1660,102 @@ public final class Aether: NSObject {
     public func getCurrentJourney() -> [String: AnyCodable]? {
         guard let journeyId = currentJourneyId else { return nil }
         return ["journeyId": AnyCodable(journeyId), "journeyName": AnyCodable(currentJourneyName as Any)]
+    }
+
+    /// Ask the backend for a single-use handoff token for the current journey so another device
+    /// (for example the web app) can continue it. Completes with nil when there is no active journey
+    /// or the server refuses (consent, flag off, unauthorised app, offline). Hand the token over out of
+    /// band (link, QR code, deep link) as `aether_handoff=<token>`; it is shown once.
+    public func createJourneyHandoff(ttlSeconds: Int? = nil, completion: @escaping (JourneyHandoffToken?) -> Void) {
+        guard let journeyId = currentJourneyId else { completion(nil); return }
+        var body: [String: Any] = [
+            "journey_id": journeyId,
+            "session_id": sessionId,
+            "anonymous_id": anonymousId,
+            "platform": "ios",
+        ]
+        if let ttl = ttlSeconds { body["ttl_seconds"] = ttl }
+        postJourneyHandoff(path: "/sdk/journey-handoff", body: body) { data in
+            guard let data = data,
+                  let token = data["token"] as? String, !token.isEmpty,
+                  let handoffId = data["handoff_id"] as? String, !handoffId.isEmpty else {
+                completion(nil)
+                return
+            }
+            completion(JourneyHandoffToken(token: token, handoffId: handoffId, expiresAt: data["expires_at"] as? String ?? ""))
+        }
+    }
+
+    /// Redeem a handoff token on this device. On success the source journey continues here
+    /// (`journey_resumed` with `linkBasis = explicit_handoff`) and the verified link is returned. Every
+    /// failure (unknown, expired, already used, wrong app/tenant, no consent) completes with nil; the
+    /// server deliberately does not say which.
+    public func redeemJourneyHandoff(_ token: String, completion: @escaping (JourneyHandoffLink?) -> Void) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { completion(nil); return }
+        let body: [String: Any] = [
+            "token": trimmed,
+            "session_id": sessionId,
+            "anonymous_id": anonymousId,
+            "platform": "ios",
+        ]
+        postJourneyHandoff(path: "/sdk/journey-handoff/redeem", body: body) { [weak self] data in
+            guard let self = self,
+                  let data = data,
+                  (data["link_basis"] as? String) == "explicit_handoff",
+                  let journeyId = data["journey_id"] as? String, !journeyId.isEmpty else {
+                completion(nil)
+                return
+            }
+            let from = data["from"] as? [String: Any]
+            let to = data["to"] as? [String: Any]
+            let link = JourneyHandoffLink(
+                handoffId: data["handoff_id"] as? String ?? "",
+                journeyId: journeyId,
+                linkBasis: "explicit_handoff",
+                identityMerge: "not_performed",
+                fromSessionId: from?["session_id"] as? String ?? "",
+                fromPlatform: from?["platform"] as? String ?? "",
+                toSessionId: to?["session_id"] as? String ?? "",
+                toPlatform: to?["platform"] as? String ?? "",
+                redeemedAt: data["redeemed_at"] as? String ?? ""
+            )
+            self.currentJourneyId = journeyId
+            self.resumeJourney("handoff", properties: [
+                "journeyId": AnyCodable(journeyId),
+                "handoffId": AnyCodable(link.handoffId),
+                "linkBasis": AnyCodable(link.linkBasis),
+                "handoffFromPlatform": AnyCodable(link.fromPlatform),
+            ])
+            completion(link)
+        }
+    }
+
+    /// POST to a journey-handoff route; completes with the response `data` object, or nil on any failure.
+    private func postJourneyHandoff(path: String, body: [String: Any], completion: @escaping ([String: Any]?) -> Void) {
+        guard isInitialized, let config = config,
+              let url = URL(string: "\(config.endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))\(path)"),
+              let payload = try? JSONSerialization.data(withJSONObject: body) else {
+            completion(nil)
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
+        request.timeoutInterval = 10.0
+        request.httpBody = payload
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard error == nil, (200...299).contains(status), let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let result = json["data"] as? [String: Any] else {
+                completion(nil)
+                return
+            }
+            completion(result)
+        }.resume()
     }
 
     public func screenView(_ screenName: String, properties: [String: AnyCodable] = [:]) {

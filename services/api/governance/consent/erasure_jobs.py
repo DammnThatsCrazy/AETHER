@@ -60,15 +60,17 @@ keyed on ``user_id`` and the request's ``anonymous_id`` when present, recomputes
 other identities' session rollups that counted the subject's events, and drops
 the tenant's cached analytics query results.
 
-The ``web3_observations`` and ``x402_commerce`` components also erase exact
-tenant-scoped subject references from raw Web3 observations and x402 lifecycle
-records, while honoring their storage-policy legal holds.
+The ``web3_observations``, ``x402_commerce``, and
+``risk_poisoning_evidence`` components also erase exact tenant-scoped
+references from raw Web3 observations, x402 lifecycle records, and risk-owned
+poisoning evidence, while honoring their storage-policy legal holds.
 
-The entity-keyed stores add ``web3_observations`` and ``x402_commerce``: the
-first deletes raw tenant observations whose structured fields contain an exact
-subject reference; the second removes tenant commerce lifecycle rows that
-directly name the subject. Both run through isolated entity planes and return
-their own durable row receipts.
+The entity-keyed stores add ``web3_observations``,
+``x402_commerce``, ``risk_poisoning_evidence``,
+``risk_intervention_records``, and ``social_relationship_evidence_events``: these planes delete
+tenant rows with exact subject/source references, and x402 approval decisions
+are also removed when their approval is erased. Each plane returns its own row
+receipt.
 """
 
 from __future__ import annotations
@@ -100,6 +102,12 @@ MEASUREMENT_COMPONENT = "attribution_records"
 MOBILE_CONTINUATION_COMPONENT = "continuation_records"
 MOBILE_INSTALLATION_COMPONENT = "mobile_installations"
 MOBILE_CLIENT_SYNC_COMPONENT = "client_sync_records"
+
+# Cross-device journey handoff rows carry only anonymous IDs (source and
+# destination), no user_id, so they are located through the request's
+# ``anonymous_id``. A user-id-only request has nothing to look them up by; those
+# rows are bounded by the 90-day retention sweep (journey_handoff_sweep).
+JOURNEY_HANDOFF_COMPONENT = "journey_handoffs"
 
 # The operator (kyber) device-plane components (M8-E1). A data-subject erasure
 # that names an operator physically erases the device personal data: trusted
@@ -185,8 +193,10 @@ def _kyber_device_eraser(repo_cls: type) -> Any:
 # rows silently survived a DSR erasure that reported "completed". This handler
 # now erases the semantic plane and marks each component with its OWN real
 # erased-row receipt, derived from the privacy handler's per-table counts:
-#   semantic_observations → silver_semantic_observations + entity_mentions
-#                           + subject_links + claims + shadow_divergences
+#   semantic_observations → silver_semantic_observations + semantic memories
+#                           + context cards + embedding metadata
+#                           + workflow definitions + entity_mentions + subject_links + claims
+#                           + shadow_divergences
 #   sentiment_observations → silver_sentiment_observations
 #   semantic_gold_state    → gold_entity_semantic_state + gold_entity_sentiment_state
 #   semantic_review_queue  → semantic_review_queue
@@ -207,6 +217,10 @@ def _semantic_component_receipts(deleted: dict) -> dict[str, int]:
     return {
         SEMANTIC_OBSERVATIONS_COMPONENT: (
             _n("silver_semantic_observations")
+            + _n("semantic_memory_records")
+            + _n("semantic_context_cards")
+            + _n("semantic_embedding_metadata")
+            + _n("workflow_definition_revisions")
             + _n("silver_semantic_entity_mentions")
             + _n("silver_semantic_subject_links")
             + _n("silver_semantic_claims")
@@ -487,7 +501,14 @@ async def _run_completeness_planes(
         + planes.IDENTITY_COMPONENTS
         # Keep explicit names here as well as in ENTITY_PLANES so static
         # coverage proves both newly connected stores are job-owned.
-        + ("web3_observations", "x402_commerce")
+        + (
+            "web3_observations",
+            "x402_commerce",
+            "risk_poisoning_evidence",
+            "risk_intervention_records",
+            "social_relationship_evidence_events",
+            "agent_lineage_projection",
+        )
     ))
     try:
         subject = await planes.resolve_subject(tenant_id, user_id, anonymous_id)
@@ -867,6 +888,42 @@ def register_consent_erasure_handler() -> None:
                     logger.warning(
                         "failed to mark analytics DSR component %s failed",
                         ANALYTICS_EVENTS_COMPONENT,
+                        exc_info=True,
+                    )
+
+            # ── Journey handoff rows (anonymous-ID keyed) ────────────────────
+            try:
+                from repositories.journey_handoff_repo import get_journey_handoff_repository
+
+                handoff_anonymous_id = str(payload.get("anonymous_id") or "")
+                erased_handoffs = (
+                    await get_journey_handoff_repository().delete_by_anonymous_id(
+                        ctx.tenant_id, handoff_anonymous_id
+                    )
+                    if handoff_anonymous_id else 0
+                )
+                await dsr_propagation_service.mark_step(
+                    propagation_request_id,
+                    JOURNEY_HANDOFF_COMPONENT,
+                    "completed",
+                    tenant_id=ctx.tenant_id,
+                    records_impacted=int(erased_handoffs),
+                    audit_event_id=ctx.job_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — isolate this store
+                errors.append(f"{JOURNEY_HANDOFF_COMPONENT}: {exc}")
+                try:
+                    await dsr_propagation_service.mark_step(
+                        propagation_request_id,
+                        JOURNEY_HANDOFF_COMPONENT,
+                        "failed",
+                        tenant_id=ctx.tenant_id,
+                        audit_event_id=ctx.job_id,
+                    )
+                except Exception:  # noqa: BLE001 — never let marking abort
+                    logger.warning(
+                        "failed to mark DSR component %s failed",
+                        JOURNEY_HANDOFF_COMPONENT,
                         exc_info=True,
                     )
 

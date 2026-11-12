@@ -45,6 +45,7 @@ They have distinct owners and meanings:
 | `GET/POST /v1/capability-authorizations` and revoke | `CapabilityAuthorizationService` over the existing delegation store | Read grants or perform grant/revoke writes. Writes require `write`; do not duplicate delegation storage or lifecycle. |
 | `POST /v1/capability-policy/evaluate`, `GET /v1/capability-policy/decisions` | `PolicyEngine` and Agent Access Intelligence | Evaluation records a sensitive policy decision and audit event; it does not invoke the external capability or mutate a tenant resource. Decisions are tenant-scoped reads. |
 | `GET /v1/entities`, `GET /v1/entities/{entity_id}`, and `GET /v1/entities/{entity_id}/neighborhood` | Identity entity and entity-intelligence routes | Tenant-scoped reads (`read`). Explicit offset pages use durable entity-ID ordering. Neighborhood is a one-hop bounded graph projection with graph-family metering. Entity and graph mutations remain in their owner API and mutation gateway. |
+| `GET /v1/agent/agents/{agent_ref}/behavior` and `GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}` | `services/api/actions/agent/deployment_routes.py` over `intelligence.agent_behavior.read_models` | Tenant-scoped reads requiring `agent:manage`. Evidence-qualified Agent360 behavior read model and one reconstructed decision; another agent's or tenant's decision is not found. |
 | `GET /v1/me` | `services/api/tenancy/me/routes.py:get_my_profile` | Existing tenant-scoped caller account profile, plan, billing summary, API key count, and admin flag. Middleware requires `read`; client projection omits tenant/graph IDs, contact email, and Stripe customer ID. |
 | `POST /v1/auth/login` | `services/api/tenancy/auth/routes.py:login` | Existing email/password authentication. When human sessions are enabled it creates a durable session; otherwise it follows the legacy reusable API-key response. It is not a delegated CLI grant. |
 | `POST /v1/auth/sso/callback` | `services/api/tenancy/auth/routes.py:sso_callback` | Exchanges an already-issued Auth0 access token for a server session or legacy key. `session_required: true` refuses before token validation or membership effects unless human sessions are enabled, so the CLI cannot receive a reusable API key. The CLI obtains the Auth0 token using Device Authorization. Membership resolution selects one existing tenant association/invitation and exposes no chooser. |
@@ -78,7 +79,11 @@ not a new service route or data authority.
 | CLI | `aether entities list [--entity-type TYPE] [--limit N] [--offset N] [--json]` | Entity list, max 50; stable explicit-offset paging | Query, `read` |
 | CLI | `aether entities show ENTITY_ID [--json]` | Entity detail | Query, `read` |
 | CLI | `aether entities neighborhood ENTITY_ID [--limit N] [--json]` | One-hop graph projection, max 50 neighbors and 100 edges | Query, `read` |
-| CLI | `aether access operations list/show` and `aether access invoke` | Closed adapter read declaration and delegated API call | Discovery is local; invoke is query, `read` |
+| CLI | `aether agents behavior show AGENT_REF [--json]` | Agent behavior read model (`agents.behavior`) | Query, `agent:manage` |
+| CLI | `aether agents decisions show AGENT_REF DECISION_ID [--json]` | One reconstructed decision (`agents.decision`) | Query, `agent:manage` |
+| CLI | `aether experience360 frame get --surface S --subject-kind K --subject-id ID [--slots a,b] [--as-of T] [--no-evidence] [--json]` | `POST /v1/experience360/frames` (`experience360.frame.get`) | Query, `read`; one governed 360 frame |
+| MCP / Node | `access_invoke_read` with `experience360.frame.get`; `createAccessClient().experience360.frame(input)` | Same route | Query, `read`; no dedicated MCP tool |
+| CLI | `aether access operations list/show` and `aether access invoke` | Closed adapter read declaration and delegated API call | Discovery is local; invoke is query with the operation's declared `required_server_permission` (`read` unless stated) |
 | CLI | `aether account context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth login [--no-browser] [--json]` | Auth0 Device Authorization then `POST /v1/auth/sso/callback` with `session_required: true` | Human-session login; native OS credential store |
@@ -92,6 +97,7 @@ not a new service route or data authority.
 | MCP | `entities_get` | Entity detail | Read-only tool, `read` |
 | MCP | `entities_neighborhood`, `access_operations_list`, `access_invoke_read` | Named graph read and closed adapter read declaration/dispatch | Read-only tools; API retains authorization |
 | MCP | `account_context` | `/v1/me` safe projection | Read-only tool, `read` |
+| MCP | `agents_behavior`, `agents_decision` | Agent behavior read model and decision detail | Read-only tools, `agent:manage`; not advertised to delegated OAuth tokens |
 | Node ESM/TypeScript | `createAccessClient().operations.invoke(...)` and named entity/account/usage reads | Same closed REST adapters | Query, `read`; surface `access_sdk` |
 | CLI / MCP / Node | `continuations create/show`, `continuations_create/get`, `createAccessClient().continuations` | Existing `POST /v1/continuations` and `GET /v1/continuations/{id}` | Principal-scoped durable resource create (`write`) and bounded readback (`read`); API feature is opt-in |
 | CLI | `aether ingest EVENT_NAME ...` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
@@ -196,6 +202,49 @@ insufficient-evidence states. Combining these into a customer verdict would
 create a new readiness authority and could imply conclusions none of those
 endpoints own. Expose them later only as distinct named reads, or after an
 owning diagnostic/readiness contract exists.
+
+## Governed 360 frame read (`experience360.frame.get`)
+
+One bounded, read-only operation returns a governed 360 frame for a subject. It
+is a transport over `POST /v1/experience360/frames`. The 360 runtime owns slot
+authorization, joins, evidence, freshness, and partial or unknown results; the
+Access Kit returns the frame unmodified and never promotes a slot state.
+
+- **Authority.** Tenant and actor come from the credential. The body accepts no
+  tenant, actor, policy, or graph-query field, and the client rejects them before
+  any request. `read` suffices: the route is a read-semantic POST, so route
+  policy checks `read` instead of `write`.
+- **Bounds.** The client bounds the subject ID (1 to 256 characters), the slot
+  list (at most 32 from the chosen surface), and `as_of`, and never sends lens
+  IDs, `purpose`, paging, or `authorizationContextRef`. The server bounds those
+  fields too (at most 64 slots, 16 lens IDs, 256-character `purpose` and
+  `authorizationContextRef`), so a direct REST caller gets a 422 before any
+  provider read.
+- **Reading a frame.** Per-slot denial is HTTP 200 with a `suppressed` slot and no
+  `content`. `partial`, `unknown`, `degraded`, `stale`, and `conflicted` mean the
+  conclusion is not established. A catalog entry or an existing frame does not
+  mean its surface is complete.
+- **Errors.** 401, 403, 404, 409, 422, 429, and 5xx map to typed categories
+  without echoing server `detail`. For 429, `Retry-After` is surfaced. The
+  adapter makes one attempt and does not retry.
+- **Accounting.** The call is attributed as `experience360.frame.read` with audit
+  and usage IDs when the surface header is sent. It stays non-billable and has no
+  plan or ACU gate; only the per-tenant burst limit applies. No receipt ID is
+  created beyond those the API returns.
+- **Hosted MCP.** The route is on the delegated-token read allowlist. A live
+  hosted-MCP login has not been run.
+
+### Operator runbook
+
+| Symptom | First checks |
+|---|---|
+| 401 on hosted MCP | Service assertion binds method and target; confirm the call is `POST /v1/experience360/frames` and the token audience. |
+| 403 | Credential lacks `read`, or the tenant, membership, or credential is not active. |
+| Slots `suppressed` | Central policy denied the slot's authority domain for this role; not an outage. |
+| Frame `partial` or `degraded` | Read `reasonCodes`, `limitations`, and `degradation`; check the slot's provenance and freshness. |
+| 429 | Per-tenant burst limit; honor `Retry-After`. |
+| 422 | Input outside the bounds above, or an unknown surface, subject kind, or slot. |
+| 503 `360 frame unavailable` | Catalog or registry drift; run the projection contract validator. |
 
 ## Authentication and transport
 

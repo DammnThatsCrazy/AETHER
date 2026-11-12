@@ -270,5 +270,15 @@ async def test_outcome_ledger_aggregates_tenant_value(monkeypatch):
         assert summary["observed_value"] == 125.0
         by_type = (await routes.get_outcome_ledger_by_recommendation_type(request))["data"]["items"]
         assert by_type[0]["key"] == "retention"
+
+        full = (await routes.get_outcome_ledger(request))["data"]
+        assert full["completeness"] == {
+            "limit": 500,
+            "complete": True,
+            "truncated": {name: False for name in ("recommendations", "decisions", "actions", "outcomes", "feedback", "playbooks", "runs")},
+        }
+        capped = (await routes.get_outcome_ledger(request, limit=0))["data"]
+        assert capped["completeness"]["complete"] is False
+        assert capped["completeness"]["truncated"]["recommendations"] is True
     finally:
         _restore_decision_flags(routes, previous_flags)

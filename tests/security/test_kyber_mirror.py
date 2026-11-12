@@ -51,6 +51,7 @@ from governance.kyber.mirror import (  # noqa: E402
     set_gateway,
 )
 from governance.kyber.mirror.parity import MAX_REPORTED_DIVERGENCES  # noqa: E402
+from governance.kyber.mirror.service import SURFACE_READ_PARAMS  # noqa: E402
 
 # ── Refusals, matched by name at call time ───────────────────────────────────
 
@@ -351,8 +352,8 @@ def test_every_parity_required_manifest_surface_has_a_resolver(service):
     """Coverage that silently stops covering a surface is worse than none."""
     required = set(service.parity_required_ids())
     assert required, "the manifest declares no parity-required surfaces"
-    assert required == set(SURFACE_VERTEX_TYPES)
-    assert all(SURFACE_VERTEX_TYPES[feature_id] for feature_id in required)
+    assert required == set(SURFACE_VERTEX_TYPES) | set(SURFACE_READ_PARAMS)
+    assert all(SURFACE_VERTEX_TYPES[feature_id] for feature_id in SURFACE_VERTEX_TYPES)
 
 
 def test_a_surface_without_a_resolver_refuses_rather_than_rendering_empty(service):

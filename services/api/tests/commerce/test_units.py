@@ -7,7 +7,14 @@ from __future__ import annotations
 import logging
 import pytest
 
-logging.disable(logging.CRITICAL)
+
+@pytest.fixture(autouse=True)
+def _quiet_logging():
+    """Silence logging for these tests only; never leak the disable to other suites."""
+    previous = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(previous)
 
 
 @pytest.fixture(autouse=True)

@@ -19,9 +19,10 @@ Two refusals matter more than the happy path:
   ``scripts/generate_feature_surface_manifest.py``; repeating the reason at the
   point of refusal is what stops someone re-deciding it at 3am.
 
-Coverage lives in :data:`SURFACE_VERTEX_TYPES`. Every parity-required manifest
-surface must appear there, and nothing else may — a coverage map that silently
-stops covering something is worse than none, so both directions are gated.
+Coverage lives in :data:`SURFACE_VERTEX_TYPES` and the gateway's
+``SURFACE_READ_PARAMS``. Every parity-required manifest surface must appear in at
+least one, and nothing else may — a coverage map that silently stops covering
+something is worse than none, so both directions are gated.
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ from shared.common.common import BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 from shared.measurement.value_states import ValueState
 
+from ..graph.scoped_gateway import SURFACE_READ_PARAMS
 from .contracts import (
     DIAGNOSTIC_SECTIONS,
     MirrorEnvelope,
@@ -61,8 +63,12 @@ _MANIFEST_RELATIVE = Path("packages") / "shared" / "contracts" / "kyber-feature-
 #: reading several types cannot monopolise a read.
 SURFACE_READ_LIMIT = 200
 
+#: Largest mirror query parameter, which is always one identifier.
+MAX_PARAM_LENGTH = 128
+
 #: Which vertex types in the tenant's own graph each parity-required Aether
 #: surface reads. Grouped by product area, one entry per manifest ``feature_id``.
+#: A surface reading stores instead appears in the gateway's ``SURFACE_READ_PARAMS``.
 #:
 #: These are the *inputs* to a surface, not its rendering: the mirror reads them
 #: through the scoped gateway and renders nothing of its own. A wrong entry here
@@ -73,6 +79,13 @@ SURFACE_VERTEX_TYPES: dict[str, tuple[str, ...]] = {
     "users": ("User",),
     "users-id": ("User",),
     "clusters-clusterId": ("IdentityCluster",),
+    # `CLUSTER_VERTEX_TYPES` in the page's hook; its groups come through the gateway.
+    "syndicates": (
+        "IdentityCluster", "HouseholdCluster", "OrgCluster", "DeviceCluster",
+        "WalletCluster", "BehavioralCluster", "GeographicCluster", "EconomicSegment",
+        "EconomicCluster", "CampaignCohort", "JourneyCluster", "FraudNetworkCluster",
+        "RiskCluster", "DormantCohort", "ReactivatedCohort", "UnresolvedCluster",
+    ),
     # Explore is Aether's primary route over the canonical graph projection;
     # the internal mirror must reuse the same resolver, not recompute a view.
     "explore": ("Entity", "IdentityCluster"),
@@ -279,6 +292,8 @@ class TenantMirrorService:
         catches the same condition in CI, before an operator ever hits it.
         """
         types = SURFACE_VERTEX_TYPES.get(feature_id)
+        if not types and feature_id in SURFACE_READ_PARAMS:
+            return ()
         if not types:
             metrics.increment("kyber_mirror_refused_total", labels={"reason": "no_resolver"})
             raise NotFoundError(
@@ -293,6 +308,25 @@ class TenantMirrorService:
             )
         return types
 
+    @staticmethod
+    def surface_params(feature_id: str, supplied: Optional[dict[str, Any]]) -> dict[str, str]:
+        """The identifiers a surface needs, refusing a missing or undeclared one.
+
+        A detail surface asked without its identifier has no answer. Refusing is what
+        stops that reading to an operator as an empty tenant.
+        """
+        declared = SURFACE_READ_PARAMS.get(feature_id, ())
+        values = {str(key): str(value).strip() for key, value in (supplied or {}).items()}
+        unknown = sorted(set(values) - set(declared))
+        absent = [name for name in declared if not values.get(name)]
+        oversized = sorted(name for name, value in values.items() if len(value) > MAX_PARAM_LENGTH)
+        if unknown or absent or oversized:
+            raise BadRequestError(
+                f"Surface {feature_id!r} requires query parameters {list(declared)}",
+                details={"surface": feature_id, "missing": absent, "unknown": unknown, "oversized": oversized},
+            )
+        return values
+
     # ── Rendering ────────────────────────────────────────────────────────────
 
     async def render(
@@ -301,6 +335,7 @@ class TenantMirrorService:
         *,
         tenant_id: str,
         surface: str,
+        params: Optional[dict[str, Any]] = None,
     ) -> MirrorEnvelope:
         """The tenant-visible result for one surface, plus operator diagnostics.
 
@@ -312,6 +347,7 @@ class TenantMirrorService:
         entry = self.resolve(surface)
         feature_id = str(entry["feature_id"])
         types = self.vertex_types(feature_id)
+        surface_params = self.surface_params(feature_id, params)
         gateway = get_gateway()
 
         entities: dict[str, list[Any]] = {}
@@ -336,6 +372,19 @@ class TenantMirrorService:
             if rendered_tenant is None:
                 rendered_tenant = visible.get("tenant_id")
 
+        store_visible: dict[str, Any] = {}
+        unavailable: list[str] = []
+        if feature_id in SURFACE_READ_PARAMS:
+            result = await gateway.read_surface(
+                request, tenant_id=tenant_id, surface=feature_id, params=surface_params,
+            )
+            store_visible = dict(result.get("tenantVisible") or {})
+            unavailable = list(result.get("unavailable") or ())
+            reads[f"surface:{feature_id}"] = dict(result.get("operatorDiagnostics") or {})
+            truncated = truncated or bool(store_visible.get("truncated"))
+            if rendered_tenant is None:
+                rendered_tenant = store_visible.get("tenant_id")
+
         # `entity_counts` and `entity_count` are DELIBERATELY not here. They are
         # `len()` and `sum()` — computed by this package, not returned by the
         # gateway — and under truncation they count what this read *saw*, not
@@ -353,6 +402,9 @@ class TenantMirrorService:
             "entities": entities,
             "truncated": truncated,
         }
+        if store_visible:
+            tenant_visible["params"] = store_visible.get("params")
+            tenant_visible["sources"] = store_visible.get("sources")
 
         disclosure = _first(reads, "granted_disclosure")
         masked = bool(_first(reads, "identifiers_masked"))
@@ -378,8 +430,9 @@ class TenantMirrorService:
             # answer manufactures a divergence, and — worse — two different
             # tenant states that agree on the first SURFACE_READ_LIMIT rows
             # digest the same, so `customer_visible_parity` would report parity
-            # across a change it never saw.
-            parity_comparable=not masked and not truncated,
+            # across a change it never saw. A rendering missing a failed source is a
+            # prefix too.
+            parity_comparable=not masked and not truncated and not unavailable,
             tenantVisible=tenant_visible,
             operatorDiagnostics=diagnostics,
         )
@@ -391,6 +444,7 @@ class TenantMirrorService:
         tenant_id: str,
         surface: str,
         aether_payload: Any,
+        params: Optional[dict[str, Any]] = None,
     ) -> ParityComparison:
         """Compare Aether's tenant-visible payload against the mirror's.
 
@@ -400,10 +454,10 @@ class TenantMirrorService:
         tenant's graph under a purpose-bound scope — and it would make the
         comparison depend on Kyber's client rather than on the tenant's.
         """
-        envelope = await self.render(request, tenant_id=tenant_id, surface=surface)
+        envelope = await self.render(request, tenant_id=tenant_id, surface=surface, params=params)
         if not envelope.parity_comparable:
             raise BadRequestError(
-                "This rendering is masked and is not comparable against Aether",
+                "This rendering is masked, partial or truncated and is not comparable against Aether",
                 details={
                     "surface": envelope.surface_id,
                     "disclosure": envelope.disclosure,
@@ -584,6 +638,7 @@ __all__ = [
     "MIRROR_CAPABILITY",
     "MIRROR_MASKED_CAPABILITY",
     "SURFACE_READ_LIMIT",
+    "SURFACE_READ_PARAMS",
     "SURFACE_VERTEX_TYPES",
     "TenantMirrorService",
     "get_gateway",

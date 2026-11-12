@@ -1,11 +1,12 @@
 """Intelligence Projection Registry schema tests (P0.2, group 1).
 
 Loads the REAL ``packages/shared/contracts/intelligence-projection-registry.json``
-and asserts the structural invariants the validation core enforces: 19
+and asserts the structural invariants the validation core enforces: 20
 projections, unique lower_snake ids, every required per-entry field present,
-``ownsCanonicalTruth is False`` for all, exactly the seven 360 vertical slices
+``ownsCanonicalTruth is False`` for all, the nine 360 vertical slices marked
 ``implemented`` (outcome360 / economic360 / infrastructure360 / communication360 /
-temporal360 / population360 / geographic360) with the rest ``in_flight``,
+temporal360 / population360 / geographic360 / risk360 / fraud360) with the rest
+``in_flight``,
 consistent vocab enums, well-formed pending declarations,
 canonical authorities within AUTHORITY_INDEX, hard dependencies within
 SPINE_INDEX or declared pending, and well-formed projection-plane capability
@@ -56,7 +57,12 @@ _EXPECTED_IDS = frozenset(
         "fraud360",
         "source360",
         "connection360",
+        "support360",
         "infrastructure360",
+        "signals360",
+        "memory360",
+        "commerce360",
+        "workflow360",
     }
 )
 
@@ -168,9 +174,9 @@ def _entry(pid: str, **overrides: object) -> dict:
     return base
 
 
-def test_registry_has_19_projections() -> None:
+def test_registry_has_24_projections() -> None:
     projections = _projections()
-    assert len(projections) == 19
+    assert len(projections) == 24
     assert {p["id"] for p in projections} == _EXPECTED_IDS
 
 

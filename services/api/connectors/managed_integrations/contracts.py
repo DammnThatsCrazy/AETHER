@@ -1144,3 +1144,182 @@ class RolloutView(BaseModel):
                 f"unknown §40 rollout ring {self.current_stage!r} — expected "
                 f"one of {ROLLOUT_RINGS}"
             )
+
+
+# ── Post-734 Day-1 convergence — production activation authority ─────────────
+#
+# The §0–40 lane built the convergence *engine*; it did not make the plane a
+# production operating authority. Activation is therefore a first-class,
+# durable state — not an environment variable. The order below is the only
+# legal advance path (one step at a time, never skipped):
+#
+#   shadow -> detect -> plan -> r0 -> r1 -> r2 -> fully_managed
+#
+# `emergency_frozen` is reachable from every state and resumes to the state it
+# froze from. Environment flags are HARD KILL SWITCHES: they may only lower the
+# effective state (see ``activation.effective_state``), never raise it. A
+# durable state therefore cannot be granted by turning a flag on.
+CONTROL_PLANE_ACTIVATION_STATES: tuple[str, ...] = (
+    "shadow",
+    "detect",
+    "plan",
+    "r0",
+    "r1",
+    "r2",
+    "fully_managed",
+    "emergency_frozen",
+)
+
+# Ordered states (``emergency_frozen`` is the out-of-band override state).
+CONTROL_PLANE_ACTIVATION_ADVANCE_ORDER: tuple[str, ...] = (
+    "shadow",
+    "detect",
+    "plan",
+    "r0",
+    "r1",
+    "r2",
+    "fully_managed",
+)
+
+CONTROL_PLANE_ACTIVATION_TRANSITIONS: tuple[str, ...] = (
+    "advance",
+    "freeze",
+    "resume",
+)
+
+# Effective states include ``disabled``: the master kill switch is inclusive
+# state, never a fifth ring.
+CONTROL_PLANE_EFFECTIVE_STATES: tuple[str, ...] = (
+    "disabled",
+    "shadow",
+    "detect",
+    "plan",
+    "r0",
+    "r1",
+    "r2",
+    "fully_managed",
+    "emergency_frozen",
+)
+
+CONTROL_PLANE_ACTIVATION_SCOPE_KINDS: tuple[str, ...] = (
+    "global",
+    "tenant_environment",
+)
+
+CONTROL_PLANE_ACTIVATION_ROLES: tuple[str, ...] = (
+    "operator",
+    "readiness",
+    "system",
+)
+
+
+def is_control_plane_activation_state(value: str) -> bool:
+    return value in CONTROL_PLANE_ACTIVATION_STATES
+
+
+def is_control_plane_effective_state(value: str) -> bool:
+    return value in CONTROL_PLANE_EFFECTIVE_STATES
+
+
+def is_control_plane_activation_transition(value: str) -> bool:
+    return value in CONTROL_PLANE_ACTIVATION_TRANSITIONS
+
+
+class ControlPlaneActivationReadinessView(BaseModel):
+    """Readiness-authority snapshot supplied by the caller for a transition.
+
+    The Reconciled Control Plane never decides go/no-go itself: the readiness
+    authority supplies ``ready`` plus the controls it evaluated. ``ready=False``
+    or a missing snapshot denies advance/resume. Freeze is always allowed —
+    safety never waits for a readiness snapshot.
+    """
+
+    ready: bool
+    controls: dict[str, bool] = Field(default_factory=dict)
+    blockers: list[str] = Field(default_factory=list)
+    evidence_ref: Optional[str] = None
+
+
+class ControlPlaneActivationView(BaseModel):
+    """Durable control-plane activation state + derived effective state.
+
+    ``state`` is the stored authority. ``effective_state`` is what the runtime
+    may actually do after hard kill switches are applied. A mismatch between
+    the two is not a bug: it is the visible difference between declared intent
+    and permitted behavior.
+    """
+
+    activation_id: str = Field(..., min_length=1)
+    scope_kind: str = "global"
+    tenant_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    region: str = "global"
+    state: str = "shadow"
+    previous_state: Optional[str] = None
+    frozen_from_state: Optional[str] = None
+    revision: int = 0
+    readiness_ref: Optional[str] = None
+    readiness_ready: bool = False
+    reason: Optional[str] = None
+    updated_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    effective_state: str = "disabled"
+    effective_blockers: list[str] = Field(default_factory=list)
+
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+        if not is_control_plane_activation_state(self.state):
+            raise ValueError(
+                f"unknown control-plane activation state {self.state!r} — "
+                f"expected one of {CONTROL_PLANE_ACTIVATION_STATES}"
+            )
+        if self.scope_kind not in CONTROL_PLANE_ACTIVATION_SCOPE_KINDS:
+            raise ValueError(
+                f"unknown activation scope {self.scope_kind!r} — expected one "
+                f"of {CONTROL_PLANE_ACTIVATION_SCOPE_KINDS}"
+            )
+        if self.previous_state is not None and not is_control_plane_activation_state(
+            self.previous_state
+        ):
+            raise ValueError(
+                f"unknown previous_state {self.previous_state!r}"
+            )
+        if self.frozen_from_state is not None and not is_control_plane_activation_state(
+            self.frozen_from_state
+        ):
+            raise ValueError(
+                f"unknown frozen_from_state {self.frozen_from_state!r}"
+            )
+        if not is_control_plane_effective_state(self.effective_state):
+            raise ValueError(
+                f"unknown effective_state {self.effective_state!r} — expected "
+                f"one of {CONTROL_PLANE_EFFECTIVE_STATES}"
+            )
+
+
+class ControlPlaneActivationTransitionView(BaseModel):
+    """One append-only activation transition evidence row."""
+
+    transition_id: str = Field(..., min_length=1)
+    activation_id: str = Field(..., min_length=1)
+    from_state: str
+    to_state: str
+    transition: str
+    readiness_ref: Optional[str] = None
+    readiness_ready: bool = False
+    reason: Optional[str] = None
+    actor: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+        if not is_control_plane_activation_state(self.from_state):
+            raise ValueError(f"unknown from_state {self.from_state!r}")
+        if not is_control_plane_activation_state(self.to_state):
+            raise ValueError(f"unknown to_state {self.to_state!r}")
+        if not is_control_plane_activation_transition(self.transition):
+            raise ValueError(
+                f"unknown transition {self.transition!r} — expected one of "
+                f"{CONTROL_PLANE_ACTIVATION_TRANSITIONS}"
+            )

@@ -84,7 +84,7 @@ docs are checked by CI:
 - `docs/architecture/UNIFIED-ECONOMIC-GRAPH.md`
 - `docs/architecture/ECONOMIC-OBSERVABILITY.md`
 - `docs/product/KYBER-ECONOMIC-OBSERVABILITY.md`
-- `docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md`
+- `docs/archive/audits/OPERATIONAL-INTELLIGENCE-AUDIT.md`
 - `docs/operations/PRODUCTION-READINESS.md`
 
 Forbidden pattern: any doc listing "H2H, H2A, and A2A" without A2H.

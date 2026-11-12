@@ -81,6 +81,7 @@ export function AreaChart({
   color = 'var(--ae-blue)',
   height = 180,
   ariaLabel,
+  compare,
 }: {
   readonly values: readonly number[];
   readonly labels: readonly string[];
@@ -88,13 +89,18 @@ export function AreaChart({
   readonly color?: string;
   readonly height?: number;
   readonly ariaLabel: string;
+  /** Previous-period values aligned index by index; drawn dashed on the same scale. */
+  readonly compare?: readonly number[] | null;
 }) {
   const [hover, setHover] = useState<number | null>(null);
-  const max = Math.max(...values, 0);
+  const max = Math.max(...values, ...(compare ?? []), 0);
   const n = values.length;
   const x = (i: number) => (n <= 1 ? 50 : (i / (n - 1)) * 100);
   const y = (v: number) => (max <= 0 ? 92 : 92 - (v / max) * 82);
   const line = values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(2)} ${y(v).toFixed(2)}`).join(' ');
+  const previousLine = compare && compare.length > 1
+    ? compare.slice(0, n).map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(2)} ${y(v).toFixed(2)}`).join(' ')
+    : null;
   const area = `${line} L${x(n - 1).toFixed(2)} 100 L${x(0).toFixed(2)} 100 Z`;
   const tickEvery = Math.max(1, Math.ceil(n / 5));
 
@@ -115,6 +121,9 @@ export function AreaChart({
             <line key={g} x1="0" x2="100" y1={g} y2={g} style={{ stroke: 'var(--ae-edge-soft)' }} strokeWidth="1" vectorEffect="non-scaling-stroke" />
           ))}
           {n > 1 && <path d={area} style={{ fill: color, opacity: 0.1 }} />}
+          {previousLine && (
+            <path d={previousLine} fill="none" style={{ stroke: 'var(--ae-mute)' }} strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" data-testid="value-previous-series" />
+          )}
           {n > 1 && <path d={line} fill="none" style={{ stroke: color }} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />}
           {n === 1 && <circle cx="50" cy={y(values[0]!)} r="1.6" style={{ fill: color }} />}
           {hover !== null && (
@@ -131,6 +140,7 @@ export function AreaChart({
             }}
           >
             {labels[hover]} · {format(values[hover]!, hover)}
+            {compare?.[hover] !== undefined ? ` · previous ${format(compare[hover]!, hover)}` : ''}
           </span>
         )}
       </div>
@@ -226,6 +236,34 @@ export function StackBar({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Headline figure with the design's coloured top rule. `delta` is the
+ * comparison line (or the reason there is none); `sub` shows when not comparing.
+ */
+export function HeadlineTile({
+  label,
+  value,
+  rule,
+  sub,
+  delta,
+  testId,
+}: {
+  readonly label: string;
+  readonly value: ReactNode;
+  readonly rule: string;
+  readonly sub?: ReactNode;
+  readonly delta?: ReactNode;
+  readonly testId?: string;
+}) {
+  return (
+    <div className="ae-card flex min-w-0 flex-col gap-1 rounded-[20px] px-5 py-4" style={{ borderTop: `2px solid ${rule}` }} data-testid={testId}>
+      <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>{label}</span>
+      <span className="ae-mono truncate text-[26px] font-medium leading-tight tracking-[-0.4px]">{value}</span>
+      {delta ?? (sub !== undefined ? <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{sub}</span> : null)}
     </div>
   );
 }

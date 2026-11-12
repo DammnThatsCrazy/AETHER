@@ -38,6 +38,7 @@ from repositories.repos import reset_in_memory_stores  # noqa: E402
 
 from graph.geo.location_facts import location_fact_repo  # noqa: E402
 from graph.geographic360 import (  # noqa: E402
+    CAPSULE_LOCATION_NORMALIZATION_VERSION,
     CAPSULE_LOCATION_PROVIDER,
     SEMANTIC_ROLE,
     SOURCE_ROLE,
@@ -180,6 +181,7 @@ def test_capsule_location_fact_maps_labels_onto_a_canonical_fact():
     assert fact.role == "observed_presence"
     assert fact.precision_class == "coarse_cell"  # labels cap, never precise
     assert fact.provider == CAPSULE_LOCATION_PROVIDER
+    assert fact.normalization_version == CAPSULE_LOCATION_NORMALIZATION_VERSION
     assert fact.source_observation_id == "obs-full"
     assert fact.observed_at == obs.observed_at
 

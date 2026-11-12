@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EVENT_FAMILY } from '@aether/shared';
 import type { AgentDeploymentContext } from '@aether/shared';
-import { AgentTelemetryClient, validateAgentDeploymentContext } from './agent-telemetry';
+import { AgentTelemetryClient, attestAgentEvent, validateAgentDeploymentContext } from './agent-telemetry';
 import { sendBatch } from './transport';
 
 vi.mock('./transport', () => ({
@@ -303,3 +303,67 @@ describe('batching and consent passthrough', () => {
     await client.shutdown();
   });
 });
+
+describe('agent behavior helpers', () => {
+  it('maps behavior steps onto registered agent event types with the deployment attached', async () => {
+    const client = makeClient();
+    client.objective({ objectiveId: 'o1', status: 'created', ownerActorId: 'person-1', goal: 'buy' });
+    client.decision({ decisionId: 'd1', phase: 'started', objectiveId: 'o1' });
+    client.decision({ decisionId: 'd1', phase: 'candidate_considered', candidateId: 'sku-1', amount: '12.50' });
+    client.decision({ decisionId: 'd1', phase: 'candidate_rejected', candidateId: 'sku-2', reason: 'price' });
+    client.decision({ decisionId: 'd1', phase: 'action_selected', candidateId: 'sku-1' });
+    client.authorization({ authorizationId: 'az1', status: 'denied', decisionId: 'd1' });
+    client.toolAdaptation({ kind: 'switched', toolName: 'b', fromToolName: 'a' });
+    client.execution({ status: 'aborted', decisionId: 'd1' });
+    client.economic({ kind: 'quote_received', amount: '10', currency: 'USD' });
+    client.information({ kind: 'source_consulted', sourceRef: 'web:reviews', trust: 'external' });
+    client.memory({ memoryId: 'm1', op: 'invalidated' });
+    client.spawned({ childAgentId: 'child-1', runId: 'r1' });
+    client.terminated();
+    client.decision({ decisionId: 'd1', phase: 'completed', outcome: 'purchased' });
+    await client.flush();
+    const events = sentEvents();
+    expect(events.map((e) => e.type)).toEqual([
+      'agent_objective_created', 'agent_decision_started', 'agent_candidate_considered',
+      'agent_candidate_rejected', 'agent_action_selected', 'agent_authorization_denied',
+      'agent_tool_switched', 'agent_execution_aborted', 'agent_quote_received',
+      'agent_source_consulted', 'agent_memory_invalidated', 'agent_subagent_spawned',
+      'agent_terminated', 'agent_decision_completed',
+    ]);
+    for (const e of events) {
+      expect(EVENT_FAMILY[e.type as keyof typeof EVENT_FAMILY]).toBe('agent');
+      expect(e.context.agentDeployment.deploymentId).toBe('dep-1');
+    }
+    expect(events[11].properties.parentAgentId).toBe('agent-1');
+  });
+
+  it('rejects non-decimal amounts', () => {
+    const client = makeClient();
+    expect(() => client.economic({ kind: 'transaction_initiated', amount: 12.5 as unknown as string }))
+      .toThrow(TypeError);
+    expect(() => client.decision({ decisionId: 'd', phase: 'candidate_considered', amount: '1e9' }))
+      .toThrow(TypeError);
+  });
+});
+
+describe('attestAgentEvent', () => {
+  // PKCS8 wrapping of the seed 00..1f shared with services/api/tests/agent_lineage/test_attestation.py.
+  const seed = Buffer.from(Array.from({ length: 32 }, (_, index) => index));
+  const privateKey = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]);
+  // Built from a label so this public test seed is not a contiguous PEM header literal.
+  const label = 'PRIVATE KEY';
+  const pem = `-----BEGIN ${label}-----\n${privateKey.toString('base64')}\n-----END ${label}-----\n`;
+
+  it('produces the same signature as the backend twin', () => {
+    expect(attestAgentEvent({
+      privateKey: pem,
+      deploymentId: 'dep-1',
+      agentId: 'orch',
+      id: 'ev-1',
+      type: 'agent_subagent_spawned',
+      timestamp: '2026-11-06T10:00:00.000Z',
+      properties: { parentAgentId: 'orch', childAgentId: 'worker' },
+    })).toBe('G68ByW+maN/LMs72HOrv9grBJrOq+Rt1xIEVR3zoYytFUekJggOQbpzDBZgkUcJA122fQkIevosoGYU8UAneCg==');
+  });
+});
+

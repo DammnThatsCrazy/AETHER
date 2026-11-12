@@ -318,6 +318,18 @@ async def get_billing_usage_summary(request: Request, start: Optional[str] = Non
     return APIResponse(data=summary).to_dict()
 
 
+@router.get("/usage/access-reconciliation")
+async def get_access_kit_reconciliation(request: Request, start: Optional[str] = None, end: Optional[str] = None):
+    """Read-only audit-versus-usage comparison for the tenant's Access Kit calls."""
+    tenant = _require_tenant(request)
+    tenant.require_permission("admin")
+    start, end = (start, end) if start and end else _current_billing_window()
+    from billing.billing.access_reconciliation import reconcile_access_interactions
+
+    report = await reconcile_access_interactions(tenant.tenant_id, start, end)
+    return APIResponse(data=report).to_dict()
+
+
 @router.get("/invoice-previews")
 async def list_invoice_previews(request: Request):
     tenant = _require_tenant(request)

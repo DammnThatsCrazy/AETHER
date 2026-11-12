@@ -29,6 +29,7 @@ flowchart LR
   cluster360 --> computation_substrate
   cluster360 --> exploration_fabric
   cluster360 -.-> population360
+  commerce360 --> contract_spine
   communication360 --> contract_spine
   communication360 --> temporal_kernel
   communication360 -.-> episode360
@@ -65,6 +66,7 @@ flowchart LR
   infrastructure360 --> contract_spine
   infrastructure360 --> infrastructure_model
   infrastructure360 --> temporal_kernel
+  memory360 --> contract_spine
   outcome360 --> measurement_outcome_contract
   outcome360 --> temporal_kernel
   outcome360 -.-> temporal360
@@ -77,6 +79,7 @@ flowchart LR
   profile360 --> evidence_provenance
   profile360 --> identity_resolution
   profile360 --> temporal_kernel
+  profile360 -.-o relationship360
   profile360 -.-o risk360
   relationship360 --> identity_resolution
   relationship360 --> relationship_fidelity
@@ -93,19 +96,22 @@ flowchart LR
   risk360 -.-> cluster360
   risk360 -.-> economic360
   risk360 -.-> profile360
+  signals360 --> contract_spine
   social360 --> relationship_fidelity
   social360 --> temporal_kernel
   social360 --> upr
   social360 -.-> profile360
   social360 -.-> relationship360
   source360 --> upr
+  support360 --> contract_spine
+  support360 --> temporal_kernel
   temporal360 --> contract_spine
   temporal360 --> graph_history_replay
+  workflow360 --> contract_spine
 ```
 
 ## Pending resolutions
 
 | Projection | Kind | Id | Reason | Resolves in projection |
 |---|---|---|---|---|
-| `connection360` | authority | `reconciled_control_plane` | harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority | `connection360` |
 | `episode360` | authority | `journey_continuity` | journey continuity plane not yet formalized | `episode360` |

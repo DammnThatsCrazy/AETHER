@@ -154,6 +154,12 @@ def test_real_registry_inventory_has_zero_errors() -> None:
     assert errors == [], [v.message for v in errors]
 
 
+def test_agent_and_workflow_projection_inventory_includes_resource_authority() -> None:
+    projections = {item["id"]: item for item in _real_registry()["projections"]}
+    for projection_id in ("agent360", "workflow360"):
+        assert "resources" in projections[projection_id]["canonicalAuthorities"]
+
+
 def test_real_registry_routes_resolve_independently() -> None:
     """Every legacy route resolves against route_registry.yaml OR backend source.
 
@@ -252,3 +258,29 @@ def test_deprecated_requires_deprecated_reason() -> None:
     assert any(
         v.rule == "inventory" and "deprecatedReason" in v.message for v in violations
     )
+
+
+def test_profile_prediction_authorities_have_canonical_provider_bindings() -> None:
+    registry = json.loads(_REGISTRY_JSON.read_text(encoding="utf-8"))
+    projection = next(item for item in registry["projections"] if item["id"] == "profile360")
+    surface = next(item for item in registry["productSurfaces"] if item["id"] == "profile360")
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "likely_next_states")
+    authorities = {"model_governance", "outcome_facts"}
+    assert authorities <= set(projection["canonicalAuthorities"])
+    assert authorities <= set(slot["canonicalAuthorityRefs"])
+    assert authorities.isdisjoint(slot.get("unboundCanonicalAuthorityRefs", []))
+    assert "profile-state-adjudication.v1" in slot["partialImplementationReason"]
+    assert "modelCalibrationVerified remains false" in slot["partialImplementationReason"]
+
+
+def test_value_confidence_binds_governance_without_claiming_calibration() -> None:
+    registry = json.loads(_REGISTRY_JSON.read_text(encoding="utf-8"))
+    projection = next(item for item in registry["projections"] if item["id"] == "economic360")
+    surface = next(item for item in registry["productSurfaces"] if item["id"] == "value360")
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "confidence")
+    assert "model_governance" in projection["canonicalAuthorities"]
+    assert "model_governance" in slot["canonicalAuthorityRefs"]
+    assert "model_governance" not in slot.get("unboundCanonicalAuthorityRefs", [])
+    assert "not a calibrated estimate" in slot["description"]
+    assert "Confidence calibration remains unvalidated" in slot["partialImplementationReason"]
+    assert "value-credit-temporal-eligibility.v1" in slot["partialImplementationReason"]

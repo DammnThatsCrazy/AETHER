@@ -6,12 +6,21 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/x402/commerce_routes.py]
+source_files:
+  - services/api/value/x402/commerce_routes.py
+  - services/api/value/x402/commerce_models.py
+  - services/api/value/x402/approvals.py
+  - services/api/value/x402/commerce_store.py
+  - services/api/actions/agent/user_agents.py
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/api/value/x402/commerce_routes.py": "sha256:73a9f03a50f3a43b6d17cc2f9e118aec853f6a5d6d2a3c29c1348f66d94d00c4"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
+  "services/api/value/x402/approvals.py": "sha256:a91ab84affb2e46db240f218f428dd342539327abc1ce3e896cbc2a7ca523fd3"
+  "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
+  "services/api/value/x402/commerce_routes.py": "sha256:e9cbbefee1efb189141bace31cd793b551089e7263924046fc7846cbc51a55a8"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
 ---
 # Agentic Commerce — Approval Model
 
@@ -98,3 +107,27 @@ Returned by `GET /v1/approvals/{id}/evidence`:
 - Payment requirement (challenge)
 
 Used by Kyber Review → Commerce Approvals tab for operator inspection before decision.
+
+## Agent execution approval linkage
+
+An x402 approval can be bound to one exact agent run with an `execution_id` and
+`execution_action`. `POST /v1/x402/approval/request` accepts the action and the
+server creates the execution ID. The approver must review the exact agent,
+action, resource, and approved amount shown by the request. For a bound
+approval, the decision route records the authenticated tenant user as the
+decision actor; caller-supplied actor text is not accepted as attribution.
+Execution-bound decisions also retain the server-recorded `commerce:approve`
+check with the tenant, execution, approval, authenticated principal, and check
+time. Workflow360 may expose that receipt with the decision evidence; it does
+not establish effective agent access or replay historical policy inputs.
+
+Each decision is retained as a typed commerce decision record and the approval
+keeps a pointer to its latest decision. `POST /v1/agents/{agent_id}/execute`
+with `approval_id` rechecks tenant, agent, action, resource, amount, current
+approval status, and the exact latest decision before it records the run. A
+revoked or mismatched approval is rejected. The subsequent delegation check
+uses the request tenant and records that tenant with its decision. This linkage currently covers the
+x402 commerce approval path; it does not make every agent action approval-bound
+or prove that an external action occurred. The endpoint records admission and
+run bookkeeping only; it does not invoke an agent tool or resource operation,
+so the run row is not an invocation receipt.

@@ -6,12 +6,18 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/repositories/repos.py, services/api/value/x402/economic_mutations.py, services/api/value/x402/lifecycle_mapper.py, services/api/value/x402/provenance.py, services/api/workers/profile360_workers/workers.py]
+source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent/user_agents.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/repositories/repos.py, services/api/repositories/commerce_repos.py, services/api/value/x402/commerce_models.py, services/api/value/x402/commerce_store.py, services/api/value/x402/economic_mutations.py, services/api/value/x402/lifecycle_mapper.py, services/api/value/x402/provenance.py, services/api/workers/profile360_workers/workers.py]
 canonical_owner: platform@aether
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR repository diff: AgentExecution now stores workflow and approval references and supports create-only inserts. The external agent graph projection and authority boundaries documented here are unchanged."
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
-  "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
+  "packages/shared/graph-contract.ts": "sha256:49dee41404e17e9b43087caff7a60ba03ad33899e27d3b90681fa62e1aa276ce"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -20,11 +26,15 @@ source_hashes:
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
-  "services/api/shared/graph/graph.py": "sha256:64b26a20675cf95e9954605e2ab381181d637f3c89493e6ca9523dd893522e3a"
-  "services/api/shared/graph/relationship_layers.py": "sha256:0d36b34a5c4496e15afa03da596d019d70492fb607184a87e737bd9f949cb2b0"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
+  "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
+  "services/api/shared/graph/graph.py": "sha256:010d6407208f45456dd4c4b61d99482c5e792ff8b74a953d71c3b619ffd6aa6b"
+  "services/api/shared/graph/relationship_layers.py": "sha256:2f8fc236ca4134d81ca597883a31cfa1889380b484891ec21a41c574d090d17f"
+  "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/lifecycle_mapper.py": "sha256:77066a174bdf8e3feed32e1a7b81feb321983975b5cd9e6116a4fa5a588c473e"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
@@ -173,6 +183,20 @@ source-reported inputs. A matching grant is not proof of execution. Without a
 server-owned execution receipt, occurrence remains `source_reported` and
 unverified. Canonical `DELEGATES`, `GRANTED_BY` and `GRANTED_TO` links remain
 projected from the delegation authority record, independently of run telemetry.
+
+Spawn and delegation facts from agents without a validated deployment also
+project one bounded `SPAWNED_SUBAGENT` or `DELEGATED_TO` edge per
+(parent, child) through the mutation gateway, citing the first supporting
+source event. The edge source is always the reporting agent; a payload that
+names a different parent emits no edge. These are source-reported lineage
+edges, not control or identity claims.
+
+For an AETHER-owned run that supplies an execution-bound x402 approval, the
+server execution record carries the exact approval and latest decision IDs.
+Execution360 joins those IDs to tenant-scoped commerce decision history using
+the exact run ID. The joined decision is evidence of recorded commerce
+authorization only; it is not a universal agent-action grant or proof that the
+external action completed.
 
 Graph writes use a store-backed outbox and the canonical `GraphMutationGateway`.
 Kyber reconcile/repair can restore source-to-outbox coverage and replay dead

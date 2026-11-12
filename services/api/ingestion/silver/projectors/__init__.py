@@ -1,6 +1,7 @@
 """Silver projectors — one projector per fact domain."""
 from .base import BaseProjector, ProjectionResult
 from .exposure_projector import ExposureProjector
+from .commerce_flow_projector import CommerceFlowProjector
 from .outcome_projector import OutcomeProjector
 from .revenue_projector import RevenueProjector
 from .friction_projector import FrictionProjector

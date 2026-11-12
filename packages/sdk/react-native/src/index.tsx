@@ -114,7 +114,12 @@ export function AetherProvider({
     // RNFeatureFlags, sampling/endpoints stored for JS-emitted events). This is
     // the single owner; it previously fetched here and in HealthAgent and
     // discarded both. Unconditional: manifest is SDK config, not user data.
-    void fetchAndApplyManifest(endpoint, config.apiKey);
+    const manifestKey = config.manifestPublicKey;
+    void fetchAndApplyManifest(
+      endpoint,
+      config.apiKey,
+      manifestKey ? (manifest) => Aether.verifyManifest(manifest, manifestKey) : undefined,
+    );
 
     // Cache fingerprint ID
     Aether.getFingerprint().catch(() => {});

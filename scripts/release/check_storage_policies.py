@@ -28,6 +28,7 @@ Usage: python scripts/release/check_storage_policies.py
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import sys
@@ -78,11 +79,12 @@ def _strings_from_node(node: ast.AST) -> list[str]:
 def alembic_table_names(root: Path) -> set[str]:
     """Tables created by alembic migrations.
 
-    Covers both literal ``CREATE TABLE IF NOT EXISTS <name>`` DDL and the
-    loop-style migrations that render ``CREATE TABLE IF NOT EXISTS {table}``
-    from a ``TABLES = [...]`` / ``_TABLES = {...}`` constant: any assignment
-    whose target name contains "table" contributes its string list items /
-    dict keys, filtered to valid table-name shapes.
+    Covers literal ``CREATE TABLE IF NOT EXISTS <name>`` DDL, literal
+    ``op.create_table("<name>", ...)`` calls, and the loop-style migrations
+    that render ``CREATE TABLE IF NOT EXISTS {table}`` from a
+    ``TABLES = [...]`` / ``_TABLES = {...}`` constant: any assignment whose
+    target name contains "table" contributes its string list items / dict
+    keys, filtered to valid table-name shapes.
     """
     names: set[str] = set()
     versions = root / _BACKEND_REL / "alembic" / "versions"
@@ -91,6 +93,18 @@ def alembic_table_names(root: Path) -> set[str]:
         names.update(_CREATE_RE.findall(text))
         tree = ast.parse(text)
         for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and node.args:
+                callee = node.func
+                callee_name = callee.attr if isinstance(callee, ast.Attribute) else getattr(callee, "id", "")
+                first = node.args[0]
+                if (
+                    callee_name == "create_table"
+                    and isinstance(first, ast.Constant)
+                    and isinstance(first.value, str)
+                    and _TABLE_NAME_RE.match(first.value)
+                ):
+                    names.add(first.value)
+                continue
             if not isinstance(node, ast.Assign):
                 continue
             for target in node.targets:
@@ -99,6 +113,22 @@ def alembic_table_names(root: Path) -> set[str]:
                         if _TABLE_NAME_RE.match(value):
                             names.add(value)
     return names
+
+
+UNCOVERED_BASELINE = Path("scripts") / "allowlists" / "storage_policy_uncovered.json"
+
+
+def uncovered_baseline(root: Path) -> set[str]:
+    """Persistent tables that predate this check and still have no storage policy.
+
+    Shrink-only, like the other ``scripts/allowlists`` files: a NEW table without
+    a policy fails the gate, and an entry that gains a policy (or stops being a
+    persistent resource) must be removed from the baseline.
+    """
+    path = root / UNCOVERED_BASELINE
+    if not path.exists():
+        return set()
+    return set(json.loads(path.read_text(encoding="utf-8")))
 
 
 def persistent_resource_inventory(root: Path | None = None) -> set[str]:
@@ -157,12 +187,21 @@ def check() -> int:
               f"persistent-resource inventory derived ({len(inventory)} types)",
               "persistent-resource inventory came back empty — extractor broken")
 
-    missing_policies = sorted(inventory - seen)
+    baseline = uncovered_baseline(repo_root())
+    missing_policies = sorted(inventory - seen - baseline)
     if missing_policies:
         for name in missing_policies:
             r.fail(f"{name}: persistent resource type has NO storage policy")
     else:
         r.ok("every persistent resource type has a storage policy")
+
+    for name in sorted(baseline):
+        if name not in inventory:
+            r.fail(f"{name}: baseline entry is not a persistent resource — REMOVE it (shrink-only)")
+        elif name in seen:
+            r.fail(f"{name}: baseline entry now has a storage policy — REMOVE it (shrink-only)")
+    if baseline and not any(n not in inventory or n in seen for n in baseline):
+        r.ok(f"{len(baseline)} pre-existing uncovered tables baselined (shrink-only)")
 
     unknown_policies = sorted(seen - inventory)
     if unknown_policies:

@@ -45,8 +45,8 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:ab6add1ae6ce35670de79264631eaac84057f0b315163d94abaa43371774e893"
-  "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
+  "apps/aether-web/src/": "sha256:781f496ff51d8654ec92af812c4237d8b8e66c0a2057401d42bfca25484ab8e8"
+  "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
 
@@ -147,6 +147,7 @@ the root.
   page shows the non-billable Access Kit interaction count without an included
   quota or price bar.
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
+- **Governed 360 frame slots** — `ExperienceFramePanel` reads one frame from `POST /v1/experience360/frames` through `restClient` and renders each slot's state, requirement, reason codes, limitations, evidence-reference count, and policy disposition exactly as the server sent them. Unknown state words are shown verbatim, and slot `content` is never rendered (`features/experience-frame/`). It is mounted as the Campaign 360 "Frame" tab (surface `campaign360`, subject kind `campaign`). There is no Kyber twin: the route is bound to the authenticated tenant.
 - **Continue-on-phone** — continuation creation, recent mobile activity, and resume surfaces backed by the `/v1/continuations` and `/v1/client-sync` planes (`features/continuation/`)
 
 **Kyber (internal operator console) contains:**
@@ -322,6 +323,9 @@ The intelligence graph is the primary analysis surface. Entity profiles are avai
 ```
 /explore                         → primary Aether graph workspace
 /explore?focus={entity_id}       → graph workspace centered on entity + 1-hop neighbors
+/explore?entity={entity_id}      → network view scoped to an object (hops 1–4 or all)
+/explore?view=trace              → journey-scoped trace: flow, globe and replay
+/explore?view=advanced           → the full graph explorer (canvas, lenses, query builder, snapshots)
 /graph[?query]                   → legacy redirect to /explore, preserving query and hash
 /profile/{entity_id}             → full-screen Profile360 for selected entity
 /profile/{entity_id}/{tab}       → Profile360 at a specific tab
@@ -344,11 +348,12 @@ The authenticated shell (`components/app-shell.tsx`) is the Stone/Graphite
 glass shell from the Claude Design handoff: a collapsible rail (240px expanded,
 72px icon rail, overlay below 760px; the pin choice is remembered per browser)
 grouped as Home and Graph; Profiles (`/users`), Agents (`/agent-access`),
-Campaigns (`/campaigns`), Geography (`/geo`); Value (`/value-review`); and
-Connectors (`/settings/integrations`) and Settings (`/settings`). Connectors and
-the identity entries stay capability-gated. Syndicates, Relationships,
-Communications, Journeys, Episodes, Signals and Risk are listed as not ready
-(non-links) until their read models exist. Settings carries an amber dot only
+Syndicates (`/syndicates`), Relationships (`/relationships`), Campaigns
+(`/campaigns`), Communications (`/communications`), Journeys (`/journeys`),
+Episodes (`/episodes`), Geography (`/geo`); Signals (`/signals`), Value
+(`/value-review`), Risk (`/risk`); and Connectors (`/settings/integrations`) and
+Settings (`/settings`). Connectors and the identity entries stay
+capability-gated. Settings carries an amber dot only
 when `/v1/tenant-integrations` reports an enabled connection whose sync status
 failed. Pages not yet rebuilt to the new design render inside the shell's glass
 frame (`ae-legacy`); the design tokens live in `styles/glass.css` and follow the
@@ -384,43 +389,70 @@ rather than in progress. The previous guided page remains at
 `/activation/guided`, and the operator implementation checklist at
 `/onboarding/implementation`.
 
-Home (`pages/home/home-page.tsx`) shows 24-hour event, people and session
-counts, imported campaigns, connection health with brand marks, the graph
-readiness stages, the event-type mix, and attention items derived from the
-activation record, failing syncs and failed readiness checks. Each section shows
-an explicit empty or unavailable state rather than illustrative data.
-Explore (Graph) composes the shared context bar, time rail, and collapsed Noesis
-context strip around the existing server-backed graph canvas, loading/error/empty
-states, table/path modes, and inspector. Above the explorer, the design's
-workspace draws GraphPage's own graph read (passed up through `onGraphData`, no
-second request) as a left-to-right flow (sources → people and devices → agents
-and wallets → organizations, top objects per lane with the remainder counted)
-and a globe dot map of located objects; objects without a location are counted
-as not reported, never placed. Value, Activity, Authority, Risk and Time lenses
-and the replay scrubber enable only when the read carries the fields they need
-(value, relationships, delegation/approval links, risk scores, timestamps) and
-otherwise say what is missing. The lens dock reports availability from the
-generated lens/projection registries; it remains non-executing until the graph
-query seam accepts canonical lens identifiers, so a visible lens never implies a
-filter was applied. Selecting a real graph node synchronizes the shared
-GraphContext focus and URL, and entity nodes can open the existing Profile360
-route. The Noesis strip links to the existing Noesis surface rather than
-synthesizing recommendations.
+Home (`pages/home/home-page.tsx`) follows the Aether Home frame's section
+order: a Lens / Time / Perspective / Scope bar (only Time is live; it sets the
+economic window), a query bar that is disabled and says query interpretation is
+not available, a "since you last visited" line (the last visit is kept per
+workspace in the browser), six KPI tiles, the insight card, the campaign table,
+a Relationships / Risk / Needs attention story row, three collapsible rollups
+and four domain tiles. Revenue and blended ROAS come from
+`GET /v1/economic/overview?window=` (ROAS only when spend is above zero); Orders,
+New users, Average order and Repeat purchase are marked not reported, and no tile
+shows a prior-period change because the route has none. The insight card shows
+graph readiness stages, the event-type mix, current graph totals and an
+activity timeline built from real timestamps; growth series and representative
+journeys are empty-stated because no workspace-level read exists. Campaign rows
+name the provider and show spend and ROAS only when a row carries them. The
+Relationships card reads the capability-graph summary, the Risk card capability
+risk findings. Each section shows an explicit empty or unavailable state rather
+than illustrative data. The outcome ledger, decision intelligence feed,
+playbooks and model routing panels are not on Home; they live in Value's "Loop
+and decisions" section.
+Explore (Graph) opens on the Explore frame's network view, built from one graph
+read (the same hook and request key GraphPage uses): a toolbar with search, an
+object scope (`?entity=`), All / Human / Agent, hops (1–4 or all, active when
+scoped) and per-type count chips; a grid of principal cards listing the agents,
+wallets, applications and handles each owns or uses, with links between cards
+labelled by relation (an amount appears only when the edge reports one); an
+inspector with the selected object's direct connections; and a path strip from
+the scope to the selection. `?view=trace` keeps the flow, globe (with arcs
+between linked places) and replay, scoped to two hops around `?entity=`.
+`?view=advanced` holds the full explorer: the shared context bar, time rail and
+collapsed Noesis context strip around the server-backed graph canvas,
+table/path modes and inspector. In the trace view, the left-to-right flow
+(sources → people and devices → agents and wallets → organizations, top objects
+per lane with the remainder counted) and the globe dot map draw only located
+objects; objects without a location are counted as not reported, never placed.
+Value, Activity, Authority, Risk and Time lenses and the replay scrubber enable
+only when the read carries the fields they need (value, relationships,
+delegation/approval links, risk scores, timestamps) and otherwise say what is
+missing. The lens dock reports availability from the generated lens/projection
+registries; it remains non-executing until the graph query seam accepts
+canonical lens identifiers, so a visible lens never implies a filter was
+applied. Selecting a real graph node synchronizes the shared GraphContext focus
+and URL, and entity nodes can open the existing Profile360 route. The Noesis
+strip links to the existing Noesis surface rather than synthesizing
+recommendations.
 
 The remaining nav pages follow the same design rules as Home: every figure comes
 from an existing read, loading, empty and unavailable states are distinct, and
 design elements without a backing read are omitted or empty-stated.
 
-- **Profiles** (`/users`) lists real profiles (search, sort, List /
+- **Profiles** (`/users`) lists real profiles from `GET /v1/entities` (search filters the tenant's list,
+  since there is no entity search route; sort, List /
   Relationship Map / Activity via `?view=`); a row expands in place with its
   graph relationships, and `?profile=<id>` opens with that profile expanded.
   **Profile 360** (`/users/:id`) has an identity hero and Overview, Timeline,
   Journeys, Agents, Network and Identity tabs (`?tab=`; legacy `relationships`
-  and `graph` map to Network), with every earlier signal tab kept under "More
-  signals". Both render their own `GlassPage` (frameless routes).
+  and `graph` map to Network), with every earlier signal tab kept in a "More"
+  menu beside the tabs (same `?tab=` values). The Network edge table resolves
+  the other end of both edge contracts (`from_/to_entity_id` and
+  `source_/target_entity_id`) and never lists the profile itself. Both render
+  their own `GlassPage` (frameless routes).
 - **Campaigns** (`/campaigns`, `/campaign-intelligence`) shows campaign cards,
   platform KPIs, and Active / Paused / Ended / All / Review / Attribution /
-  Exploration views (`?view=`). **Campaign 360** (`/campaigns/:id`) keeps its
+  Exploration views (`?view=`); review items carry Confirm and Ignore actions
+  (`POST /v1/mapping-review/{id}/resolve|ignore`). **Campaign 360** (`/campaigns/:id`) keeps its
   `?tab=` sections and adds KPI-driven breakdowns from attribution
   `dimension_rollups` and a Sources tab. **Geography** (`/geo`) draws geo
   summary children on a dot map (lat/lon when present, else ISO2 or country
@@ -428,16 +460,71 @@ design elements without a backing read are omitted or empty-stated.
   anomaly lenses. These routes are frameless.
 - **Value** (`/value-review`) has Overview, Sources, Campaigns, Customers and
   Outcomes tabs over value-created events, the outcome ledger and campaign
-  overviews; only Campaigns has a 7/30/90-day window because only that read
-  accepts one. Agents value is empty-stated until value is attributed to agents.
-- **Agents** (`/agent-access`) is a read-only directory with an open-agent view
-  (Overview, Authority, Exposure, Lifecycle); the selected agent and view live
-  in the URL.
+  overviews. A page-wide window of the last 7/30/90 local calendar days,
+  today included (`?window=`), bounds the value-created read (`start`/`end`)
+  and the campaign overviews, and the daily chart buckets by calendar day.
+  Compare previous (`?compare=1`) reads the prior window of equal length for
+  the four headline tiles; the money baseline is drawn only when the previous
+  period has priced events. Agents value is empty-stated until value is attributed to agents.
+  Amounts are summed only within one currency (the one most events use);
+  events in other currencies are counted, not added, and the page says so.
+  Campaign and outcome-ledger reads that hit their limit are labelled partial.
+  The Outcomes tab ends with a "Loop and decisions" section: the outcome ledger
+  (value variant), the decision intelligence feed with playbooks, and model
+  routing when that harness is enabled. Settings → Billing links here.
+- **Agents** (`/agent-access`) is a read-only directory: the list ends after
+  the agent network and the selected-agent card, as in the design. Tenant-wide
+  findings, inventory and authorizations open at
+  `?view=all&tab=findings|inventory|authorizations`, and an open-agent view
+  (Overview, Authority, Exposure, Lifecycle) opens per agent; the selected
+  agent and view live in the URL. Timestamps render as relative time or
+  formatted dates, never raw ISO strings.
 - **Settings** groups the existing `/settings/*` sections into the design's
   Workspace, Connections & Data, Members & Access, Billing & Usage, Security &
   Governance and Personal groups; groups without their own route open at
-  `/settings?section=<group>` and show read-only data or link to the existing
-  pages, marking unbuilt controls as not available yet.
+  `/settings?section=<group>` and show data or link to the existing pages,
+  marking unbuilt controls as not available yet. Members & Access has People
+  and Invitations tabs (role change, remove, invite, revoke; a new invite
+  token is shown once); Workspace edits the name and timezone; Security lists
+  sessions with sign-out; Billing & Usage shows API limits, and a peak
+  requests-per-minute the backend has not measured yet reads as not measured.
+
+The design pages added after those (all frameless, each with distinct loading,
+empty and unavailable states) are built only on reads that already exist:
+
+- **Signals** (`/signals`, `?tab=inbox|types|rules|history|digest`) is the
+  notification inbox on a timeline; Acknowledge archives the inbox row.
+  "+ New rule" creates an alert rule; existing rules are read-only (the backend
+  has no update or delete) and the digest shows
+  the stored notification preference. Watchlist and snooze are not built.
+- **Risk** (`/risk`, `?view=overview|register&severity=`) combines agent
+  capability risk findings, investigation cases (status transitions persist;
+  cases carry no severity, so they show as not rated) and the Data Quality
+  overview. No posture score is computed.
+- **Syndicates** (`/syndicates[/:syndicateId]`) lists rule-defined population
+  groups (opened in place, created with "+ New syndicate") and discovered
+  graph clusters (opened in Cluster 360), with an overlap view computed from
+  member reads that keeps the search and tabs.
+- **Relationships** (`/relationships[/:entityId]`) centres on a chosen entity
+  and draws graph traverse results (1–3 hops), relationship types, formation
+  history and a path explorer (graph path read, up to 6 hops).
+- **Communications** (`/communications`,
+  `/communications/:campaignId/:messageId`) indexes provider messages from
+  communications campaigns (bounded fan-out, disclosed when capped or failed)
+  and opens a message with the governed comms funnel, population, journeys and
+  conversions, which the backend reports per campaign.
+- **Journeys** (`/journeys[/:profileId]`) and **Episodes**
+  (`/episodes[/:profileId/:episodeId]`) read the compiled per-profile journey;
+  there is no tenant-wide journey list or aggregate-paths read yet, so the
+  Journeys index reads the journeys of the first 24 listed profiles (six at a
+  time, sharing the detail page's cache, and says when it is capped or a read
+  failed) and shows them as a card grid. Recent / Active / Converting /
+  Interrupted tabs (`?tab=`) and state chips (`?state=`) use only states the
+  journey reports (open, converted) plus "active" for an open journey with a
+  step in the last 24 hours; interruption is not reported yet, and the tab says
+  so. Aggregate Paths is empty-stated. Episodes are
+  derived on the page (a gap of 30 minutes starts a new one), which both pages
+  state.
 
 Activation joins its server-owned lifecycle state with the typed tenant
 readiness snapshot to show the current stage, next permitted action, graph
@@ -472,6 +559,15 @@ Kyber additionally exposes `/agent-telemetry` (external agent telemetry fleet
 diagnostics; gated by the `enableExternalAgentTelemetry` feature flag),
 `/payment-rails` (payment rail fleet health; gated by `enablePaymentRails`),
 and `/ai-efficiency` (AI efficiency fleet health; gated by `enableAiEfficiency`), and `/targeting` (targeting fleet health, leakage queue, recompute controls; gated by `enableTargetingIntelligence`).
+
+The Kyber `/payment-rails` tables separate **configured** from **observed**
+coverage. A tenant is configured for a provider only when every required
+credential slot is active; configured tenants with no webhook, session,
+reconciliation, or successful-poll evidence render as `never_observed` and
+`unknown`, never as a healthy zero. When the cross-tenant credential inventory
+is unavailable the contract reports `configured_tenants: null` and
+`configuration_inventory_available: false`, and the UI shows "unknown", never
+`0`.
 
 Kyber's `/payment-rails` page also hosts a **Card-linked Payment Rails**
 diagnostics section (`pages/payment-rails/card-linked-diagnostics-section.tsx`;
@@ -640,6 +736,13 @@ execution receipt the UI marks occurrence source-reported and unverified. A
 source outage is shown as unavailable rather than as missing coverage. Public
 catalog records remain platform-scoped and are not loaded into the tenant graph
 view.
+
+The Agent 360 behavior panel renders the backend behavior read model from
+`GET /v1/agent/agents/{agent_ref}/behavior` without recomputing it: usual
+outcome, tool, authority-denial and failure-recovery rates with their sample
+sizes and intervals, recent reconstructed decisions, and what Aether cannot
+see. A rate without enough evidence says so, an agent with no facts shows an
+empty state, and a capped read is flagged.
 
 ---
 

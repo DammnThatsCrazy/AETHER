@@ -6,23 +6,33 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/value/x402/provenance.py]
+source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent/user_agents.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/repositories/commerce_repos.py, services/api/value/x402/commerce_models.py, services/api/value/x402/commerce_store.py, services/api/value/x402/provenance.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR repository diff: AgentExecution now records exact workflow-run and approval references and can claim an execution ID without overwriting it. This is backend execution metadata, not a new event topic."
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
-  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
+  "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/ingestion/validation.py": "sha256:0b5528935209e6b9a75c0c58ece7cde8e5097ed13b5e199d3d76853ace69b2ee"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/ingestion/ingestion/validation.py": "sha256:901b4ba1e11ce1afe89563da6f33b5af296ed7b80e429ae1d0241168d13ee0ca"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
+  "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
+  "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 
@@ -126,8 +136,10 @@ Ingestion validation (`services/api/ingestion/ingestion/validation.py`) stages e
 
 The server SDK emits source-asserted events for agent task starts/completions/
 failures, tool invocations, policy evaluations, and delegated tasks. Ingestion
-accepts these events only with an active deployment identity validated against
-the authenticated tenant. The backend registry identity is authoritative;
+accepts these events, `agent_subagent_spawned`, and the 37 agent behavior
+taxonomy types (objectives, decisions, authorization, execution, economic,
+information and memory references) only with an active deployment identity
+validated against the authenticated tenant. The backend registry identity is authoritative;
 SDK-supplied agent identity and delegation targets remain source references.
 Silver preserves the event timeline and run explanation reports which evidence
 was not observed. Graph projection links bounded action and policy-decision
@@ -146,3 +158,32 @@ amount limit at the source-reported event time as `within_scope`,
 source-asserted. This grant-policy evaluation does not prove external execution;
 without a server-owned receipt occurrence remains source-reported and
 unverified.
+
+Communications connector ingress can request the consent authority's durable
+receipt ID as part of validation. The receipt is passed to the projector only
+when the evaluated consent decision allows the event; the connector bridge
+keeps that receipt separate from provider-reported identity and consent fields.
+
+When AETHER's own execution endpoint creates an `agent_executions` row, it
+records the authenticated initiating principal separately from the target
+agent and stores the server-recorded delegation decision, evaluated tenant,
+and constraints. A
+rejected attempt is still an execution-denial record; this local policy record
+does not assert that an external tool or business action occurred. The route
+performs admission and bookkeeping only; it does not invoke a tool or resource
+operation, and its row or later worker callback is not an invocation receipt.
+
+The row can retain exact workflow-run, invocation, and approval references.
+It can also retain a caller-reported workflow definition ID, revision, and
+digest after the server checks one exact tenant run link, an active registered
+revision, and a step naming the Agent. This is execution-row metadata, not a
+new event topic or evidence that a declared trigger or step ran. The execution
+path can claim a new ID without overwriting an existing record; those
+references remain correlation evidence until their own authorities are joined
+and verified.
+
+When that run uses an execution-bound x402 approval, the server-owned execution
+row and its start event also carry the exact `approval_id` and
+`approval_decision_id`. The decision history remains in the commerce approval
+authority and is joined by exact tenant and execution ID for Execution360. This
+is not universal action authority and does not verify external execution.

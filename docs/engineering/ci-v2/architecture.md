@@ -48,7 +48,7 @@ cutover; see the retirement ledger.
 ## Running it locally
 
 ```bash
-python scripts/ci_select.py --base origin/Development      # what would run
+python scripts/ci_select.py --base origin/development      # what would run
 python -m pytest tests/unit/test_ci_select.py              # selector table tests
 ```
 

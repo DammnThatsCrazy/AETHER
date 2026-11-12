@@ -102,6 +102,100 @@ def _fleet_cursor_age_by_provider(
     return {provider: max(ages) for provider, ages in ages_by_provider.items()}
 
 
+def _observed_tenants_by_provider(
+    sessions: list[dict],
+    events: list[dict],
+    reconciliations: list[dict],
+    accounts: list[dict],
+) -> dict[str, set[str]]:
+    """Tenants with at least one real provider observation, per provider.
+
+    Evidence is a session, a verified provider event, a reconciliation record, or
+    a successful poll recorded on the durable provider account. Credentials alone
+    and rejected webhooks are not observation evidence.
+    """
+    observed: dict[str, set[str]] = defaultdict(set)
+    for row in sessions:
+        tenant_id = row.get("tenant_id")
+        provider = row.get("provider")
+        if tenant_id and provider in ADAPTERS:
+            observed[provider].add(tenant_id)
+    for row in events:
+        tenant_id = row.get("tenant_id")
+        provider = row.get("provider")
+        if tenant_id and provider in ADAPTERS and row.get("received_at"):
+            observed[provider].add(tenant_id)
+    for row in reconciliations:
+        tenant_id = row.get("tenant_id")
+        provider = row.get("provider")
+        if tenant_id and provider in ADAPTERS:
+            observed[provider].add(tenant_id)
+    for account in accounts:
+        tenant_id = account.get("tenant_id")
+        provider = account.get("provider")
+        if (
+            tenant_id
+            and provider in ADAPTERS
+            and ADAPTERS[provider].polling_supported
+            and account.get("last_poll_at")
+            and account.get("provider_poll_health") == "ok"
+        ):
+            observed[provider].add(tenant_id)
+    return observed
+
+
+def _fleet_observation_status(
+    configured: Optional[set[str]],
+    observed: set[str],
+    *,
+    inventory_available: bool,
+) -> str:
+    """Coverage status for configured tenants, independent of health.
+
+    ``unknown`` means the credential inventory could not be read, so a confident
+    ``not_configured``/``never_observed`` answer would be a fabricated claim.
+    """
+    if not inventory_available:
+        return "unknown"
+    configured = configured or set()
+    if not configured:
+        return "not_configured"
+    observed_configured = configured & observed
+    if not observed_configured:
+        return "never_observed"
+    if configured <= observed:
+        return "observed"
+    return "partially_observed"
+
+
+def _fleet_health_status(
+    *,
+    enabled: bool,
+    configured_count: Optional[int],
+    observed_count: int,
+    observation_status: str,
+    webhook_verified_24h: int,
+    webhook_rejected_24h: int,
+    conflicts: int,
+) -> str:
+    """Health status that never upgrades missing observation to healthy."""
+    if not enabled:
+        return "disabled"
+    if configured_count == 0:
+        return "not_configured"
+    if webhook_rejected_24h > 0 and webhook_verified_24h == 0:
+        return "error"
+    if observation_status == "never_observed":
+        return "unknown"
+    if conflicts > 0 or webhook_rejected_24h > 0:
+        return "degraded"
+    if observation_status == "partially_observed":
+        return "degraded"
+    if observed_count == 0:
+        return "unknown"
+    return "healthy"
+
+
 def _emit_fleet_gauges(
     totals: "FleetTotals",
     providers: list["ProviderFleetRow"],
@@ -117,6 +211,8 @@ def _emit_fleet_gauges(
     fabricated 0. ``kyber_fleet_worker_heartbeat`` / ``..._cycle_seconds`` are
     simply not emitted when no supervisor was observed; the backlog/cursor
     gauges are real zeros (the ledgers are always readable) and always emitted.
+    Configured-tenant coverage follows the same rule: it is absent when the
+    credential inventory is unreadable, while observed coverage is a real count.
     """
     if worker_heartbeat is not None:
         metrics.gauge("kyber_fleet_worker_heartbeat", 1.0 if worker_heartbeat else 0.0)
@@ -128,17 +224,43 @@ def _emit_fleet_gauges(
     metrics.gauge("kyber_fleet_canonical_backlog", float(totals.canonical_backlog))
     metrics.gauge("kyber_fleet_dead_lettered", float(totals.dead_lettered))
     metrics.gauge("kyber_fleet_providers_degraded", float(totals.providers_degraded))
+    metrics.gauge("kyber_fleet_observed_tenants", float(totals.observed_tenants))
+    metrics.gauge(
+        "kyber_fleet_configuration_inventory_available",
+        1.0 if totals.configuration_inventory_available else 0.0,
+    )
+    # Configured coverage is absent (not zero) when the inventory is unreadable.
+    if totals.configured_tenants is not None:
+        metrics.gauge("kyber_fleet_configured_tenants", float(totals.configured_tenants))
     if totals.oldest_incomplete_receipt_age_seconds is not None:
         metrics.gauge(
             "kyber_fleet_oldest_incomplete_receipt_seconds",
             totals.oldest_incomplete_receipt_age_seconds,
         )
     for row in providers:
+        labels = {"provider": row.provider}
+        if row.configured_tenants is not None:
+            metrics.gauge(
+                "kyber_fleet_provider_configured_tenants",
+                float(row.configured_tenants),
+                labels=labels,
+            )
+        metrics.gauge(
+            "kyber_fleet_provider_observed_tenants",
+            float(row.observed_tenants),
+            labels=labels,
+        )
+        if row.never_observed_tenants is not None:
+            metrics.gauge(
+                "kyber_fleet_provider_never_observed_tenants",
+                float(row.never_observed_tenants),
+                labels=labels,
+            )
         if row.polling_cursor_age_seconds is not None:
             metrics.gauge(
                 "kyber_fleet_provider_cursor_age_seconds",
                 row.polling_cursor_age_seconds,
-                labels={"provider": row.provider},
+                labels=labels,
             )
 
 
@@ -216,7 +338,74 @@ async def build_fleet_health(
     # provider-account ledgers (the stalest observed ``last_poll_at``).
     cursor_age_by_provider = _fleet_cursor_age_by_provider(accounts, now)
 
-    tenants_observed = sorted({s.get("tenant_id") for s in sessions if s.get("tenant_id")})
+    observed_by_provider = _observed_tenants_by_provider(
+        sessions, all_events, reconciliations, accounts
+    )
+    observed_tenant_ids = {
+        tenant_id
+        for tenants in observed_by_provider.values()
+        for tenant_id in tenants
+    }
+
+    # Authoritative configured-tenant inventory. Credentials alone are not
+    # observation evidence, but configured-never-observed tenants must still be
+    # represented. When the authority is disabled (local legacy vault) or
+    # unreadable, coverage is unknown (None), never a fabricated zero.
+    inventory_available = False
+    configured_by_provider: dict[str, set[str]] = {}
+    try:
+        from connectors.integrations.providers.payment_rails.base import (
+            _credential_authority_enabled,
+        )
+        from connectors.providers.credentials.operator_view import (
+            collect_payment_rail_configured_tenants,
+        )
+
+        if _credential_authority_enabled():
+            configured_by_provider = await collect_payment_rail_configured_tenants(ADAPTERS)
+            inventory_available = True
+    except Exception:  # noqa: BLE001 — coverage becomes unknown, never a fake zero
+        configured_by_provider = {}
+        inventory_available = False
+        metrics.increment("kyber_fleet_credential_inventory_failures")
+
+    configured_by_tenant: dict[str, set[str]] = defaultdict(set)
+    for provider, tenant_ids in configured_by_provider.items():
+        for tenant_id in tenant_ids:
+            configured_by_tenant[tenant_id].add(provider)
+    observed_by_tenant: dict[str, set[str]] = defaultdict(set)
+    for provider, tenant_ids in observed_by_provider.items():
+        for tenant_id in tenant_ids:
+            observed_by_tenant[tenant_id].add(provider)
+
+    rejected_by_tenant_provider: dict[tuple[str, str], int] = defaultdict(int)
+    verified_by_tenant_provider: dict[tuple[str, str], int] = defaultdict(int)
+    conflicts_by_tenant_provider: dict[tuple[str, str], int] = defaultdict(int)
+    for audit in audits:
+        if (
+            audit.get("action") == "webhook_rejected"
+            and (audit.get("occurred_at") or "") >= cutoff
+            and audit.get("tenant_id")
+            and audit.get("provider") in ADAPTERS
+        ):
+            key = (audit["tenant_id"], audit["provider"])
+            rejected_by_tenant_provider[key] += 1
+    for event in all_events:
+        if (
+            (event.get("received_at") or "") >= cutoff
+            and event.get("tenant_id")
+            and event.get("provider") in ADAPTERS
+        ):
+            key = (event["tenant_id"], event["provider"])
+            verified_by_tenant_provider[key] += 1
+    for record in reconciliations:
+        if (
+            record.get("state") == "conflict"
+            and record.get("tenant_id")
+            and record.get("provider") in ADAPTERS
+        ):
+            key = (record["tenant_id"], record["provider"])
+            conflicts_by_tenant_provider[key] += 1
 
     providers: list[ProviderFleetRow] = []
     degraded_providers = 0
@@ -237,24 +426,35 @@ async def build_fleet_health(
         )
         matched = sum(1 for r in p_recons if r.get("state") == "matched")
         conflicts = sum(1 for r in p_recons if r.get("state") == "conflict")
-        configured_tenants = len({s.get("tenant_id") for s in p_sessions if s.get("tenant_id")})
 
-        if not enabled:
-            status = "disabled"
-        elif configured_tenants == 0:
-            status = "not_configured"
-        elif rejected_24h > 0 and verified_24h == 0:
-            status = "error"
-        elif conflicts > 0 or rejected_24h > 0:
-            status = "degraded"
-        else:
-            status = "healthy"
+        p_observed = observed_by_provider.get(name, set())
+        p_configured = configured_by_provider.get(name) if inventory_available else None
+        configured_count = len(p_configured) if p_configured is not None else None
+        observed_count = len(p_observed)
+        never_observed = (
+            len(p_configured - p_observed) if p_configured is not None else None
+        )
+        observation_status = _fleet_observation_status(
+            p_configured, p_observed, inventory_available=inventory_available
+        )
+        status = _fleet_health_status(
+            enabled=enabled,
+            configured_count=configured_count,
+            observed_count=observed_count,
+            observation_status=observation_status,
+            webhook_verified_24h=verified_24h,
+            webhook_rejected_24h=rejected_24h,
+            conflicts=conflicts,
+        )
         if status in ("degraded", "error"):
             degraded_providers += 1
 
         providers.append(ProviderFleetRow(
-            provider=name, status=status, enabled=enabled,
-            configured_tenants=configured_tenants,
+            provider=name, status=status, observation_status=observation_status,
+            enabled=enabled,
+            configured_tenants=configured_count,
+            observed_tenants=observed_count,
+            never_observed_tenants=never_observed,
             webhook_verified_24h=verified_24h, webhook_rejected_24h=rejected_24h,
             signature_failures_24h=rejected_24h,
             sessions_observed_24h=len(recent),
@@ -276,28 +476,92 @@ async def build_fleet_health(
             provider_probe_status=None,
         ))
 
-    # Per-tenant fleet rows.
+    # Per-tenant fleet rows. Configured-never-observed tenants are included even
+    # when they have no sessions/events; only observed evidence drives counters.
     tenant_rows: list[TenantFleetRow] = []
     by_tenant: dict[str, list[dict]] = defaultdict(list)
     for s in sessions:
         if s.get("tenant_id"):
             by_tenant[s["tenant_id"]].append(s)
-    for tenant_id, t_sessions in sorted(by_tenant.items()):
+    all_tenant_ids = set(by_tenant) | set(observed_by_tenant) | set(configured_by_tenant)
+    for tenant_id in sorted(all_tenant_ids):
+        t_sessions = by_tenant.get(tenant_id, [])
         t_recent = [s for s in t_sessions if (s.get("created_at") or "") >= cutoff]
         t_recons = [r for r in reconciliations if r.get("tenant_id") == tenant_id]
         conflicts = sum(1 for r in t_recons if r.get("state") == "conflict")
-        t_providers = {s.get("provider") for s in t_sessions if s.get("provider")}
-        t_rejected = sum(
-            1 for a in audits
-            if a.get("tenant_id") == tenant_id and a.get("action") == "webhook_rejected"
-            and (a.get("occurred_at") or "") >= cutoff
+        t_observed = observed_by_tenant.get(tenant_id, set())
+        t_configured = (
+            configured_by_tenant.get(tenant_id, set()) if inventory_available else None
         )
-        degraded = conflicts > 0 or t_rejected > 0
+        t_configured_count = len(t_configured) if t_configured is not None else None
+        t_never_observed = (
+            len(t_configured - t_observed) if t_configured is not None else None
+        )
+        t_observation_status = _fleet_observation_status(
+            t_configured, t_observed, inventory_available=inventory_available
+        )
+        t_rejected = sum(
+            count for (tenant, provider), count in rejected_by_tenant_provider.items()
+            if tenant == tenant_id
+        )
+        t_verified = sum(
+            count for (tenant, provider), count in verified_by_tenant_provider.items()
+            if tenant == tenant_id
+        )
+        t_degraded_providers = 0
+        for provider in ADAPTERS:
+            p_configured = (
+                (1 if provider in t_configured else 0)
+                if t_configured is not None else None
+            )
+            p_observed = provider in t_observed
+            if not p_observed and p_configured == 0:
+                continue
+            p_status = _fleet_health_status(
+                enabled=provider_enabled(provider),
+                configured_count=p_configured,
+                observed_count=1 if p_observed else 0,
+                observation_status=_fleet_observation_status(
+                    {provider} if p_configured else set(),
+                    t_observed,
+                    inventory_available=inventory_available,
+                ),
+                webhook_verified_24h=verified_by_tenant_provider.get(
+                    (tenant_id, provider), 0
+                ),
+                webhook_rejected_24h=rejected_by_tenant_provider.get(
+                    (tenant_id, provider), 0
+                ),
+                conflicts=conflicts_by_tenant_provider.get((tenant_id, provider), 0),
+            )
+            if p_status in ("degraded", "error"):
+                t_degraded_providers += 1
+
+        if t_configured_count == 0:
+            status = "not_configured"
+        elif t_rejected > 0 and t_verified == 0:
+            status = "error"
+        elif t_observation_status == "never_observed":
+            status = "unknown"
+        elif (
+            conflicts > 0
+            or t_rejected > 0
+            or t_observation_status == "partially_observed"
+        ):
+            status = "degraded"
+        elif t_observed:
+            status = "healthy"
+        else:
+            status = "unknown"
+
         tenant_rows.append(TenantFleetRow(
             tenant_id=tenant_id,
-            status="degraded" if degraded else "healthy",
-            providers_configured=len(t_providers),
-            providers_degraded=(1 if degraded else 0),
+            status=status,
+            observation_status=t_observation_status,
+            providers_configured=t_configured_count,
+            providers_observed=len(t_observed),
+            providers_never_observed=t_never_observed,
+            providers_degraded=t_degraded_providers,
             sessions_observed_24h=len(t_recent),
             sessions_unresolved=sum(
                 1 for s in t_sessions if s.get("status") in ("unresolved", "pending")
@@ -311,11 +575,26 @@ async def build_fleet_health(
 
     all_recons = reconciliations
     matched_all = sum(1 for r in all_recons if r.get("state") == "matched")
-    any_enabled = any(provider_enabled(n) for n in ADAPTERS)
+    configured_tenant_ids = set(configured_by_tenant)
+    enabled_tenant_ids = {
+        tenant_id
+        for provider, tenant_ids in configured_by_provider.items()
+        if provider_enabled(provider)
+        for tenant_id in tenant_ids
+    } | {
+        tenant_id
+        for provider, tenant_ids in observed_by_provider.items()
+        if provider_enabled(provider)
+        for tenant_id in tenant_ids
+    }
 
     totals = FleetTotals(
-        configured_tenants=len(tenants_observed),
-        enabled_tenants=len(tenants_observed) if any_enabled else 0,
+        configured_tenants=(
+            len(configured_tenant_ids) if inventory_available else None
+        ),
+        observed_tenants=len(observed_tenant_ids),
+        configuration_inventory_available=inventory_available,
+        enabled_tenants=len(enabled_tenant_ids),
         providers_degraded=degraded_providers,
         sessions_observed_24h=sum(p.sessions_observed_24h for p in providers),
         sessions_completed_24h=sum(p.sessions_completed_24h for p in providers),
@@ -347,7 +626,7 @@ async def build_fleet_health(
     )
 
     return FleetHealthResponse(
-        tenants_observed=len(tenants_observed),
+        tenants_observed=len(observed_tenant_ids),
         totals=totals, providers=providers, tenants=tenant_rows,
     )
 
@@ -406,6 +685,7 @@ async def build_tenant_diagnostics(
         poll_health = account.get("provider_poll_health")
         health = TenantProviderHealth(
             status=h.status,
+            observation_status=h.observation_status,
             sessions_observed_24h=h.sessions_observed_24h,
             sessions_completed_24h=h.sessions_completed_24h,
             sessions_failed_24h=h.sessions_failed_24h,

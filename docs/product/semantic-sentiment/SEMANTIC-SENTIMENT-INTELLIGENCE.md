@@ -7,6 +7,7 @@ audience: [dev-senior, architect, ops]
 status: experimental
 since_version: "0.1.0"
 source_files:
+  - services/api/intelligence/semantic_intelligence/consumer.py
   - services/api/intelligence/semantic_intelligence/models.py
   - services/api/intelligence/semantic_intelligence/engine.py
   - services/api/intelligence/semantic_intelligence/routes.py
@@ -15,9 +16,10 @@ canonical_owner: platform-intelligence@aether
 estimated_read_minutes: 8
 source_hashes:
   "packages/shared/semantic-sentiment.ts": "sha256:85333759d1977c54a8655e634b30a1ee90a644c0a6fe357f1bfc6132a2b0cda0"
-  "services/api/intelligence/semantic_intelligence/engine.py": "sha256:e900f05e6bf78a126f7de31165fe2289e5e20904fab2131c01c0d68830d26d6a"
-  "services/api/intelligence/semantic_intelligence/models.py": "sha256:1b92bc04ddd1cd7e94ec09044012491c0bfcf11fcf7e8a738ad985cb5e4db28e"
-  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:d9d17f23ae914259fb94e3e2748fbefc3baa193e7984616a34238abc1ecbf6e4"
+  "services/api/intelligence/semantic_intelligence/consumer.py": "sha256:0ac721222ae13b050d2e439a23716762a6765bc5c6be56b40ce34c88b507e3db"
+  "services/api/intelligence/semantic_intelligence/engine.py": "sha256:bc9108433ee39c3e19eb0a25733c2adba758ba385cdbd69d9efadf6cc1f926b6"
+  "services/api/intelligence/semantic_intelligence/models.py": "sha256:ab92fd86b05450401286413d7b153e24bc4eb830f2de434a5b08032cbad85e9b"
+  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:ef8111c1a47c24b70b05b9ffc99439c05b6ad7e6d43c44c5c27149848bd590d5"
 ---
 
 # Semantic-Sentiment Intelligence Plane
@@ -30,11 +32,21 @@ The implementation extends the existing `SemanticContextEnvelope` primitives wit
 
 Runtime flow:
 
-1. Tenant-scoped API input reaches `/v1/semantic/observations`.
+1. Validated SDK events enter the semantic worker; tenant-scoped manual input can also reach `/v1/semantic/observations`.
 2. The deterministic local classifier normalizes text and extracts subject, topics, stance, intent, speech act, evidence references, model metadata, taxonomy version, stable hash, and idempotency key.
 3. Target-specific sentiment is emitted only when the event contains expressive evidence and a resolved target subject.
 4. Observations are tenant-scoped in the semantic-sentiment repository and can be read through observation, timeline, entity state, and sentiment endpoints.
 5. Kyber operator routes expose fleet health and review-queue status behind an explicit operator-scope guard.
+
+The validated-event consumer also preserves the backend resolver's subject type
+and, under `AETHER_BACKEND_EPISODE_ENGINE_ENABLED`, forwards qualifying classified
+observations into tenant/subject-scoped `semantic_observation_stream` episodes.
+Supported subject types, authenticated source namespaces, aware occurrence times,
+and evidence are mandatory. EpisodeEngine and Episode360 revalidate exact typed
+canonical Silver links; event redelivery reuses the observation and link rather
+than duplicating them. Unsupported, untyped, quarantined, or namespace-less inputs
+do not produce links. This does not establish complete activity/session coverage,
+policy applicability, freshness, historical completeness, or continuity.
 
 This slice is intentionally provider-agnostic and deterministic for local CI. Hosted model providers can be added behind the same contract without changing API response shape.
 
@@ -72,7 +84,10 @@ disabled provider that abstains — never a silent keyword fallback):
 - Sentiment requires `target_subject_ref`.
 - Campaign associations require canonical `camp_*` IDs.
 - Every observation carries tenant scope, evidence, model ID, model version, taxonomy version, schema version, status, confidence, stable hash, and idempotency key.
-- Kyber operations require operator scope.
+- For validated SDK events, the worker carries the backend-stamped identity namespace into the semantic observation and its idempotency hash. Manual and legacy rows have no trusted namespace. A source event ID alone does not establish a typed Episode360 observation reference.
+- Every tenant route acts as the authenticated tenant. An `x-tenant-id` header or the `local_tenant` default is honored only in local development; elsewhere a request with no authenticated tenant is refused (401), so a caller can never choose whose data a request reads or writes.
+- Reads need the `read` permission and writes the `write` permission, and a tenant, organization, membership or credential that is not in the `active` state is refused (403). These checks run in the handlers as well as in the route policy.
+- Kyber operations require operator scope: the canonical Kyber operator gate (workforce session or the configured operator grant), not a tenant role. A customer admin is refused (403) and an unauthenticated caller gets 401.
 - Unsupported or empty content is represented as an abstention, not as fake zero insight.
 
 ## APIs

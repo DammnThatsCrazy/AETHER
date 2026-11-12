@@ -303,6 +303,13 @@ async def get_journey_transitions(journey_id: str, request: Request):
         if t:
             transition_counts[t] = transition_counts.get(t, 0) + 1
 
+    link_basis_counts: dict[str, int] = {}
+    for step in steps:
+        evidence = step.get("transition_evidence")
+        basis = evidence.get("link_basis") if isinstance(evidence, dict) else None
+        if basis:
+            link_basis_counts[basis] = link_basis_counts.get(basis, 0) + 1
+
     family_counts: dict[str, int] = {}
     for step in steps:
         f = step.get("activity_family", "unknown")
@@ -311,6 +318,7 @@ async def get_journey_transitions(journey_id: str, request: Request):
     return APIResponse(
         data={
             "transitions": transition_counts,
+            "link_basis": link_basis_counts,
             "families": family_counts,
             "total_steps": len(steps),
             "has_web3": bool(journey.get("web3_activity_ids")),

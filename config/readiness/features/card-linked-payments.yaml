@@ -5,7 +5,10 @@ feature_id: card-linked-payments
 title: Card-Linked Payment Rails
 owning_system: aether
 summary: 'Card-linked observation plane: a seeded program catalog, an ingestion service with PII/region/consent
-  gates and idempotent flow upserts, a registered Silver projector, best-effort graph projection.'
+  gates and idempotent flow upserts, a registered Silver projector, best-effort graph projection, Kyber and
+  Profile360 read surfaces, and periodic Gold materialization through the payment-rail sync worker. Runtime
+  wiring, persistence and tenant isolation are present but not reflected in the migration-derived readiness
+  score; a distinct service-catalog entitlement and durable usage meter remain unwired (Section 6 W3).'
 scope:
   id: card-linked-payments-v1
   version: 1
@@ -21,9 +24,9 @@ scope:
   deferred: []
 repository_ceiling:
   type: CODE_COMPLETE
-  achieved: true
+  achieved: false
   remaining_after_ceiling:
-  - Insert provider credentials into the credential platform; run credentials-preflight.
+  - Add a distinct card-linked service-catalog entry, plan entitlement resolver and durable usage meter (Section 6 W3).
   remaining_is_repository_controlled: true
   evidence:
   - services/api/value/card_linked_payments/
@@ -54,8 +57,8 @@ implementation:
     weight: 20
     satisfied: false
   remaining_work:
-  - complete runtime integration
-  - complete repository-controlled verification
+  - wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3)
+  - reconcile readiness controls with implemented persistence and tenant-isolation tests
 productionization:
   denominator: in-scope productionization controls (migration-derived)
   controls:

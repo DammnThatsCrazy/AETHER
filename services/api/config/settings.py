@@ -135,6 +135,10 @@ class RateLimitConfig:
     """
     pricing_option: str = _env("PRICING_OPTION", "B")
     quota_flush_interval_s: int = _env_int("QUOTA_FLUSH_INTERVAL_S", 60)
+    # Requests per minute one credential may make to one Access Kit operation,
+    # under the tenant burst pool. 0 disables the cap. Proposal pending
+    # billing-owner approval (docs/architecture/target/access-kit-w4-limits-contract.md).
+    access_kit_credential_rpm: int = _env_int("ACCESS_KIT_CREDENTIAL_RPM", 120)
     # Deprecated: legacy 3-tier RPM limits. Removed in step 03.
     free_rpm: int = 60
     pro_rpm: int = 600
@@ -1523,6 +1527,13 @@ class ExternalAgentTelemetryConfig:
     catalog_poll_interval_seconds: int = max(
         900, _env_int("AETHER_AGENT_MARKETPLACE_CATALOG_POLL_SECONDS", 21_600)
     )
+    #: Scheduled agent behavior job: records each deployment agent's last complete
+    #: UTC day snapshot, compares stored windows, and persists Risk360 assessments
+    #: from agent behavior evidence. Derived caches only; default OFF.
+    behavior_jobs_enabled: bool = _env_bool("AETHER_AGENT_BEHAVIOR_JOBS_ENABLED", False)
+    behavior_jobs_interval_seconds: int = max(
+        900, _env_int("AETHER_AGENT_BEHAVIOR_JOBS_INTERVAL_SECONDS", 21_600)
+    )
 
 
 @dataclass(frozen=True)
@@ -1796,6 +1807,15 @@ class StablecoinDomainConfig:
 
 
 @dataclass(frozen=True)
+class PredictionMarketConfig:
+    """Prediction-market observation rollout flags. Observation-only — Aether
+    never places orders. All flags default False (fail-closed)."""
+    ingestion_enabled: bool = _env_bool("AETHER_PREDICTION_MARKET_INGESTION_ENABLED", False)
+    polymarket_enabled: bool = _env_bool("AETHER_PROVIDER_POLYMARKET_ENABLED", False)
+    kalshi_enabled: bool = _env_bool("AETHER_PROVIDER_KALSHI_ENABLED", False)
+
+
+@dataclass(frozen=True)
 class DerivativesIntelligenceConfig:
     """Derivatives Intelligence rollout flags. Observation-only domain —
     no execution capability exists behind any flag. All default False."""
@@ -1997,6 +2017,8 @@ class IdentityContinuityConfig:
     explainability_enabled: bool = _env_bool("IDENTITY_EXPLAINABILITY_ENABLED", False)
     activation_dashboard_enabled: bool = _env_bool("TENANT_IDENTITY_ACTIVATION_DASHBOARD_ENABLED", False)
     agent_resolution_enabled: bool = _env_bool("AGENT_IDENTITY_RESOLUTION_ENABLED", False)
+    # Server-issued cross-device journey handoff tokens (mobile -> web).
+    journey_handoff_enabled: bool = _env_bool("JOURNEY_HANDOFF_ENABLED", False)
 
 
 @dataclass(frozen=True)
@@ -2170,6 +2192,7 @@ class Settings:
     # and the universal asset registry (financial-normalization WP2/WP3).
     stablecoin: StablecoinDomainConfig = field(default_factory=StablecoinDomainConfig)
     derivatives: DerivativesIntelligenceConfig = field(default_factory=DerivativesIntelligenceConfig)
+    prediction_markets: PredictionMarketConfig = field(default_factory=PredictionMarketConfig)
     interop: InteropIntelligenceConfig = field(default_factory=InteropIntelligenceConfig)
     assets: UniversalAssetRegistryConfig = field(default_factory=UniversalAssetRegistryConfig)
     valuation: ValuationConfig = field(default_factory=ValuationConfig)

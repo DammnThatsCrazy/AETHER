@@ -19,6 +19,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from shared.certification.capability_records import (
+    FINANCIAL_DOMAIN_SURFACES,
+    events_for_operations,
+)
 from shared.certification.descriptor import AdapterCertificationDescriptor
 from shared.certification.readiness import (
     CredentialReadiness,
@@ -71,6 +75,19 @@ _STABLECOIN_OBSERVERS: dict[str, tuple[str, str, tuple[str, ...]]] = {
 # not an honest absence. Healthy builds keep this empty; certification gates
 # fail when it is not.
 _IMPORT_ERRORS: dict[str, str] = {}
+
+
+def _financial_contract(
+    domain: str, *, operations: Any = (), event_types: bool = True
+) -> dict[str, Any]:
+    """Evidence fields shared by every financial adapter in a domain."""
+    return {
+        "supported_event_types": (
+            list(events_for_operations(domain, operations)) if event_types else []
+        ),
+        "required_data_rights": ["tenant_lake"],
+        "deployment_profiles": ["staging"],
+    }
 
 
 def _record_import_error(key: str, exc: Exception) -> None:
@@ -134,6 +151,7 @@ def _resolve_interop() -> list[AdapterCertificationDescriptor]:
                 implementation_state=state,
                 fixture_schema_version="1" if provider_id == "layerzero_v2" else "0",
                 first_release=True,
+                **_financial_contract("interop", event_types=False),
             )
         )
     return descriptors
@@ -206,6 +224,12 @@ def _resolve_derivatives() -> list[AdapterCertificationDescriptor]:
                 streaming_model=spec["streaming_model"],
                 implementation_state=state,
                 first_release=True,
+                **_financial_contract(
+                    "derivatives",
+                    operations=capabilities,
+                    event_types=bool(capabilities)
+                    and state != CredentialReadiness.SCAFFOLDED,
+                ),
             )
         )
     return descriptors
@@ -245,6 +269,7 @@ def _resolve_payments() -> list[AdapterCertificationDescriptor]:
                     pagination_model="none",
                     implementation_state=state,
                     first_release=True,
+                    **_financial_contract("payments", operations=capabilities),
                 )
             )
         else:  # pragma: no cover - adapters present in this repo
@@ -255,6 +280,7 @@ def _resolve_payments() -> list[AdapterCertificationDescriptor]:
                     adapter=f"{cls}(unresolved)",
                     implementation_state=CredentialReadiness.SCAFFOLDED,
                     first_release=True,
+                    **_financial_contract("payments", event_types=False),
                 )
             )
     return descriptors
@@ -285,6 +311,56 @@ def _resolve_stablecoin_chain() -> list[AdapterCertificationDescriptor]:
                 streaming_model="none",
                 implementation_state=state,
                 first_release=True,
+                **_financial_contract(
+                    "stablecoin_chain",
+                    operations=capabilities,
+                    event_types=state != CredentialReadiness.SCAFFOLDED,
+                ),
+            )
+        )
+    return descriptors
+
+
+def _resolve_prediction_markets() -> list[AdapterCertificationDescriptor]:
+    """Prediction-market ingestion is caller-submitted payload normalization plus
+    an immutable observation store. There is no live venue polling, so it is
+    credential-waiting only in the sense of being code-complete and flag-gated;
+    live fetch and venue validation are explicitly unsupported."""
+    specs = {
+        "polymarket": ("normalize_polymarket_market", "Polymarket Gamma market payloads"),
+        "kalshi": ("normalize_kalshi_market", "Kalshi market payloads"),
+    }
+    descriptors: list[AdapterCertificationDescriptor] = []
+    for token, (func, _doc) in specs.items():
+        normalizer = _import("value.prediction_markets.normalizers", func)
+        repo = _import(
+            "value.prediction_markets.repository", "PredictionMarketObservationRepository"
+        )
+        if normalizer is not None and repo is not None:
+            state = ReadinessDimensions.derive(
+                code_complete=True, infra_defined=True, credential_required=False
+            ).state
+            adapter_name = func
+        else:  # pragma: no cover
+            state = CredentialReadiness.SCAFFOLDED
+            adapter_name = f"{func}(unresolved)"
+        descriptors.append(
+            AdapterCertificationDescriptor(
+                provider=token,
+                domain="prediction_market",
+                adapter=adapter_name,
+                adapter_version="0.1.0",
+                supported_operations=[
+                    "market_payload_normalization",
+                    "observation_persistence",
+                    "as_of_read",
+                ],
+                unsupported_operations=["live_market_polling", "order_execution"],
+                pagination_model="none",
+                streaming_model="none",
+                implementation_state=state,
+                first_release=True,
+                **_financial_contract("prediction_market", event_types=False),
             )
         )
     return descriptors
@@ -322,13 +398,15 @@ def _resolve_communications() -> list[AdapterCertificationDescriptor]:
         ]
 
 
-_RESOLVERS = (
+_FINANCIAL_RESOLVERS = (
     _resolve_payments,
     _resolve_interop,
     _resolve_derivatives,
     _resolve_stablecoin_chain,
-    _resolve_communications,
+    _resolve_prediction_markets,
 )
+
+_RESOLVERS = _FINANCIAL_RESOLVERS + (_resolve_communications,)
 
 
 def iter_first_release_descriptors() -> list[AdapterCertificationDescriptor]:
@@ -337,6 +415,18 @@ def iter_first_release_descriptors() -> list[AdapterCertificationDescriptor]:
     descriptors: list[AdapterCertificationDescriptor] = []
     for resolver in _RESOLVERS:
         descriptors.extend(resolver())
+    descriptors.sort(key=lambda d: (d.domain, d.provider))
+    return descriptors
+
+
+def iter_financial_descriptors() -> list[AdapterCertificationDescriptor]:
+    """First-release descriptors whose adapter domain is a financial surface."""
+    descriptors: list[AdapterCertificationDescriptor] = []
+    for resolver in _FINANCIAL_RESOLVERS:
+        descriptors.extend(resolver())
+    unknown = sorted({d.domain for d in descriptors} - set(FINANCIAL_DOMAIN_SURFACES))
+    if unknown:  # pragma: no cover - fail closed if a financial resolver is added
+        raise RuntimeError(f"financial adapter domains missing surfaces: {unknown}")
     descriptors.sort(key=lambda d: (d.domain, d.provider))
     return descriptors
 
@@ -376,6 +466,10 @@ def build_capability_matrix() -> dict:
             "first_release": d.first_release,
             "capabilities": sorted(d.supported_operations),
             "unsupported": sorted(d.unsupported_operations),
+            "supported_event_types": sorted(d.supported_event_types),
+            "permissions": sorted(d.permissions),
+            "required_data_rights": sorted(d.required_data_rights),
+            "deployment_profiles": sorted(d.deployment_profiles),
             "required_credentials": sorted(d.required_credentials),
             "required_endpoints": sorted(d.required_endpoints),
             "secret_ref_names": sorted(d.secret_ref_names),
@@ -403,6 +497,7 @@ def build_capability_matrix() -> dict:
 
 __all__ = [
     "iter_first_release_descriptors",
+    "iter_financial_descriptors",
     "build_capability_matrix",
     "import_errors",
 ]

@@ -396,6 +396,103 @@ class ConversionRepository:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
 
+    async def list_by_account(
+        self,
+        tenant_id: str,
+        account_id: str,
+        *,
+        after_occurred: Optional[datetime] = None,
+        before_occurred: Optional[datetime] = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Read conversions by their explicit tenant/account reference."""
+        return await self._list_by_exact_subject(
+            tenant_id,
+            account_id,
+            column="account_id",
+            after_occurred=after_occurred,
+            before_occurred=before_occurred,
+            limit=limit,
+        )
+
+    async def list_by_agent(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        *,
+        after_occurred: Optional[datetime] = None,
+        before_occurred: Optional[datetime] = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Read conversions by their explicit tenant/agent reference."""
+        return await self._list_by_exact_subject(
+            tenant_id,
+            agent_id,
+            column="agent_id",
+            after_occurred=after_occurred,
+            before_occurred=before_occurred,
+            limit=limit,
+        )
+
+    async def _list_by_exact_subject(
+        self,
+        tenant_id: str,
+        subject_id: str,
+        *,
+        column: str,
+        after_occurred: Optional[datetime],
+        before_occurred: Optional[datetime],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        if column not in {"account_id", "agent_id"}:
+            raise ValueError("unsupported conversion subject column")
+        if not tenant_id or not subject_id or limit < 1:
+            raise ValueError("tenant, subject and positive limit are required")
+        pool = await self._pool()
+        if pool is None:
+            rows = []
+            for row in _local_store.values():
+                if row.get("tenant_id") != tenant_id or row.get(column) != subject_id:
+                    continue
+                occurred = _parse_ts(row.get("occurred_at"))
+                if (after_occurred or before_occurred) and occurred is None:
+                    continue
+                if occurred is not None and (
+                    (after_occurred is not None and occurred <= after_occurred)
+                    or (before_occurred is not None and occurred >= before_occurred)
+                ):
+                    continue
+                rows.append(row)
+            rows.sort(
+                key=lambda row: (
+                    _parse_ts(row.get("occurred_at")) or datetime.min.replace(tzinfo=timezone.utc),
+                    str(row.get("conversion_id", "")),
+                )
+            )
+            return rows[:limit]
+
+        conditions = ["tenant_id = $1", f"{column} = $2"]
+        params: list[Any] = [tenant_id, subject_id]
+        next_param = 3
+        if after_occurred is not None:
+            conditions.append(f"occurred_at > ${next_param}")
+            params.append(after_occurred)
+            next_param += 1
+        if before_occurred is not None:
+            conditions.append(f"occurred_at < ${next_param}")
+            params.append(before_occurred)
+            next_param += 1
+        params.append(limit)
+        sql = f"""
+            SELECT * FROM canonical_conversions
+            WHERE {" AND ".join(conditions)}
+            ORDER BY occurred_at ASC, conversion_id ASC
+            LIMIT ${next_param}
+        """
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+            return [dict(row) for row in rows]
+
     async def list_by_erasure_identity(
         self,
         tenant_id: str,

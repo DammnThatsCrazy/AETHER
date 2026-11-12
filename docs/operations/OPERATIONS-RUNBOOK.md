@@ -35,9 +35,12 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -45,22 +48,22 @@ source_hashes:
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/actions/delivery/adapters/webhook.py": "sha256:e3ecc854d8b57fa74ba2a88b0867a81e40ce3f2a1a08dc675dd525085c3bc7f5"
-  "services/api/actions/delivery/outcome_processor.py": "sha256:41f3f3623ba08361567fe7b17b13b6f39592358b5b0384ff9df52a66d305e79e"
+  "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
-  "services/api/connectors/provider_runtime/": "sha256:7b305b72716ad006af0d0b7ab8f65899f65e6daca49f5b93c28b5b7094233d10"
+  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
+  "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
-  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
-  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
+  "services/api/workers/runtime/roles.py": "sha256:9dc895c61c99ce3bcf81c979bc4b195a2e230822233ab178159a48379f6d4f0b"
+  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -177,6 +180,7 @@ All extraction mesh keys use prefix `aether:exbudget:`:
 | `ENABLE_EXTRACTION_DEFENSE` | `false` | ML Serving |
 | `PRICING_OPTION` | `B` | Backend (A/B/C — Market Entry / Ideal / Premium) |
 | `QUOTA_FLUSH_INTERVAL_S` | `60` | Backend (Redis → `tenant_usage` flush cadence) |
+| `ACCESS_KIT_CREDENTIAL_RPM` | `120` | Backend (requests per minute one credential may make to one Access Kit operation, under the tenant burst limit; `0` disables) |
 
 ---
 
@@ -632,6 +636,17 @@ callback have no per-connection secret yet, so they answer 404 until
 `INBOUND_JIRA_WEBHOOK_ENABLED` / `INBOUND_TELEGRAM_CALLBACK_ENABLED` is set to
 `true`.
 
+The manual `POST /v1/delivery/outcomes/ingest` path records outcomes with
+`producer_provenance="caller_asserted"` and no signature authority; the
+caller-provided outcome is not signature-verified evidence. For inbox
+callbacks, a valid provider signature alone does not establish trusted outcome
+provenance. `verified_callback` is recorded only when the callback also binds
+to exactly one canonical stored receipt and job with matching tenant, intent,
+provider, and external ID. Missing, conflicting, or ambiguous binding
+candidates are rejected as `unbound_delivery`; a legacy callback binding that
+does not satisfy the complete receipt/job checks can retain its routing
+behavior but its outcome remains caller-asserted.
+
 ### Before deploying
 
 List webhook jobs still to be sent and active webhook channels that carry no
@@ -697,6 +712,7 @@ Two additional routers mount conditionally in `main.py` (all default OFF):
 AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true  → mounts services/api/actions/agent/deployment_routes at /v1/agent/deployments
 KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED=true    → mounts Kyber diagnostics at /v1/admin/kyber/agent-telemetry
 AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED=true  → starts the public xAI catalog observer and mounts its read route
+AETHER_AGENT_BEHAVIOR_JOBS_ENABLED=true         → the maintenance role records daily agent behavior snapshots, drift and Risk360 evidence
 ```
 
 Enable by setting the flags and restarting; the deployment registry persists
@@ -812,6 +828,21 @@ See the [provider outbox rollout](../architecture/blueprints/universal-connector
 and
 `docs/architecture/UNIVERSAL-PROVIDER-RUNTIME.md` for the full runtime guide.
 
+Experience360 `Source360Provider` and `Connection360Provider` read existing
+tenant-scoped UPR state through projection interfaces. They do not use the UPR
+enable flags, dispatch provider work, or write connection/sync state. If their
+frame slots are unknown or degraded, inspect the canonical source/connection
+records and projection evidence; enabling connector execution does not repair
+missing lineage.
+
+The API also mounts authenticated Workflow360 definition registration under
+`/v1/workflows/definitions` and Social360 evidence assertion writes under
+`/v1/social360/evidence`. A definition read is an exact tenant revision read,
+not proof of an executed run. A social evidence write validates its cited
+entity, event, path, and risk records and remains a source assertion. If a 360
+frame is unknown or degraded, inspect the owning authority and its evidence
+and coverage state before treating the value as an operational incident.
+
 ### Provider raw-retention rights gate
 
 Raw provider payloads are retained only after the canonical Effective Rights
@@ -911,9 +942,26 @@ AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED=true    → scheduler kill-switch; t
 
 Both default OFF. Pass-to-pass sleep is
 `AETHER_RECONCILED_CONTROL_SCHEDULER_INTERVAL_SECONDS` (default 300s, mirrors
-the §32 freshness window). Architecture + flag semantics:
-`docs/architecture/RECONCILED_CONTROL_PLANE.md`; production activation sits
-behind the §41+ blueprint review — no deploy flips these today.
+the §32 freshness window). Each pass also resolves the durable activation
+decision for the integration's tenant/environment scope: `shadow` observes
+only, `detect` reconciles, `plan` may persist a ChangeSet, `r0` and above may
+execute, and `disabled`/`emergency_frozen` stop the runtime loop. A tenant row
+may narrow the global activation but never exceed it. The scheduler reports
+`skipped_inactive` rows rather than inventing work. Architecture + flag
+semantics: `docs/architecture/RECONCILED_CONTROL_PLANE.md`; production
+activation sits behind the §41+ blueprint review — no deploy flips these today.
+
+### SDK manifest requests while the control plane is enabled
+
+When `AETHER_RECONCILED_CONTROL_PLANE_ENABLED=true`, the legacy synchronous
+`PUT /v1/config/sdk/manifest` refuses with a conflict. An admin requests the
+change through `POST /v1/config/sdk/manifest/requests` (optional
+`Idempotency-Key`); the response is `202` with the ChangeSet/rollout ids and
+`manifest_published: false`. `GET /v1/config/sdk/manifest/requests/{id}` reads
+the tenant-scoped request state. The request needs the effective `plan`
+capability; `shadow`/`detect`/`disabled` refuse it. It records a stage-zero
+rollout and does **not** publish or advance a manifest — request execution and
+rollout projection remain Program C work.
 
 **Scheduler role:** `reconciled_control_scheduler` rides the existing
 **`maintenance`** role (exact precedent: the UPR/provider loops above — a

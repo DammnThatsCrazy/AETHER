@@ -339,6 +339,47 @@ class TouchpointRepository:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
 
+    async def list_by_source_event(
+        self,
+        tenant_id: str,
+        source_event_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return exact tenant-scoped campaign touchpoints for one source event."""
+        if not tenant_id or not source_event_id:
+            return []
+        bounded_limit = min(max(int(limit), 1), 1001)
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row
+                for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("source_event_id") == source_event_id
+            ]
+            rows.sort(
+                key=lambda row: (
+                    row.get("occurred_at", ""),
+                    row.get("touchpoint_id", ""),
+                )
+            )
+            return rows[:bounded_limit]
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM silver_campaign_touchpoint_facts
+                WHERE tenant_id = $1 AND source_event_id = $2
+                ORDER BY occurred_at ASC, touchpoint_id ASC
+                LIMIT $3
+                """,
+                tenant_id,
+                source_event_id,
+                bounded_limit,
+            )
+            return [dict(row) for row in rows]
+
     async def population_summary(
         self,
         tenant_id: str,
@@ -722,6 +763,33 @@ class TouchpointRepository:
                 ORDER BY classified_at ASC, classification_id ASC
                 """,
                 tenant_id, _uuid_or_none(touchpoint_id),
+            )
+            return [dict(row) for row in rows]
+
+    async def classification_revision(
+        self, tenant_id: str, touchpoint_id: str, classification_id: str
+    ) -> list[dict[str, Any]]:
+        """Read at most two revisions by their exact tenant, touchpoint, and ID."""
+        if not all((tenant_id, touchpoint_id, classification_id)):
+            return []
+        pool = await self._pool()
+        if pool is None:
+            return [
+                dict(rev) for rev in _local_revisions
+                if rev.get("tenant_id") == tenant_id
+                and str(rev.get("touchpoint_id")) == touchpoint_id
+                and str(rev.get("classification_id")) == classification_id
+            ][:2]
+        touchpoint_uuid = _uuid_or_none(touchpoint_id)
+        classification_uuid = _uuid_or_none(classification_id)
+        if touchpoint_uuid is None or classification_uuid is None:
+            return []
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT * FROM touchpoint_source_classification_revisions
+                WHERE tenant_id=$1 AND touchpoint_id=$2 AND classification_id=$3
+                LIMIT 2""",
+                tenant_id, touchpoint_uuid, classification_uuid,
             )
             return [dict(row) for row in rows]
 

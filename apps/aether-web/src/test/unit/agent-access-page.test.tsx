@@ -370,24 +370,38 @@ beforeEach(() => {
 });
 
 describe('Agent Access page', () => {
-  it('renders the inventory, findings and authorizations for an observed tenant', async () => {
+  it('ends the list after the directory and the selected agent, like the design', async () => {
+    renderPage();
+
+    expect(await screen.findByTestId('agent-network')).toBeInTheDocument();
+    expect(await screen.findByTestId('agent-summary')).toBeInTheDocument();
+    // Tenant-wide inventory, findings and authorizations live under "All findings".
+    expect(screen.queryByText('Inventory')).toBeNull();
+    expect(screen.queryByText('What to look at first')).toBeNull();
+    expect(screen.queryByText('What is authorized')).toBeNull();
+    expect(screen.queryByText('Observed capabilities')).toBeNull();
+    expect(within(screen.getByTestId('agents-counters')).getByText('All findings →')).toBeInTheDocument();
+  });
+
+  it('renders the inventory, findings and authorizations for an observed tenant under All findings', async () => {
     renderPage();
 
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument(),
     );
-    await waitFor(() =>
-      expect(within(stat('agents-observed')).getByText('2')).toBeInTheDocument(),
-    );
-    expect(within(stat('capabilities-observed')).getByText('4')).toBeInTheDocument();
+    await userEvent.click(await screen.findByText('All findings →'));
+    expect(await screen.findByTestId('agent-access-all')).toBeInTheDocument();
 
     await waitFor(() =>
       expect(screen.getByText('Findings, highest risk first')).toBeInTheDocument(),
     );
     expect(screen.getByText('credentials_in_server_url')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('agent-access-tab-inventory'));
     await waitFor(() =>
-      expect(screen.getByText('Capability authorizations')).toBeInTheDocument(),
+      expect(within(stat('agents-observed')).getByText('2')).toBeInTheDocument(),
     );
+    expect(within(stat('capabilities-observed')).getByText('4')).toBeInTheDocument();
 
     // The catalog list is page-bounded and the API reports no total, so the page
     // says so instead of letting the row count read as an inventory size.
@@ -401,11 +415,34 @@ describe('Agent Access page', () => {
       .getAllByText('Unknown')
       .filter(node => node.closest('[data-unknown="true"]') !== null);
     expect(unknownCells.length).toBeGreaterThanOrEqual(2);
+
+    await userEvent.click(screen.getByTestId('agent-access-tab-authorizations'));
+    await waitFor(() =>
+      expect(screen.getByText('Capability authorizations')).toBeInTheDocument(),
+    );
+    // Timestamps read as dates, never as raw ISO strings.
+    expect(screen.queryByText('2026-06-01T00:00:00Z')).toBeNull();
+    const starts = document.querySelector('time[datetime="2026-06-01T00:00:00Z"]');
+    expect(starts).not.toBeNull();
+    expect(starts?.textContent).toMatch(/2026/);
+    expect(screen.getByText('No end date')).toBeInTheDocument();
+  });
+
+  it('keeps tenant-wide views reachable from a shared link', async () => {
+    renderPage('/agent-access?view=all&tab=authorizations');
+    expect(await screen.findByText('Capability authorizations')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    expect(await screen.findByTestId('agent-network')).toBeInTheDocument();
   });
 
   it('renders a null count as Unknown WITH its reason, and never as 0', async () => {
     serve({ ...HAPPY_ROUTES, '/v1/capability-graph/summary': UNKNOWN_SUMMARY });
     renderPage();
+
+    // The list says the totals are unknown (no counters drawn) and leads to the reasons.
+    const unknownPill = await screen.findByTestId('agents-totals-unknown');
+    expect(within(screen.getByTestId('agents-counters')).queryByText(/agents$/)).toBeNull();
+    await userEvent.click(unknownPill);
 
     await waitFor(() =>
       expect(screen.getByText('Access totals are UNKNOWN, not zero')).toBeInTheDocument(),
@@ -437,7 +474,7 @@ describe('Agent Access page', () => {
 
   it('labels a truncated/sampled findings response as partial rather than a total', async () => {
     serve({ ...HAPPY_ROUTES, '/v1/capability-risk/findings': TRUNCATED_FINDINGS });
-    renderPage();
+    renderPage('/agent-access?view=all');
 
     await waitFor(() =>
       expect(screen.getByText('This scan did not cover everything')).toBeInTheDocument(),

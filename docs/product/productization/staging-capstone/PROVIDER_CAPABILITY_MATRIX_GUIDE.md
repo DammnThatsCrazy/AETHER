@@ -6,12 +6,21 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/certification/registry.py, services/api/shared/certification/readiness.py, services/api/shared/certification/descriptor.py]
+source_files:
+  - services/api/shared/certification/registry.py
+  - services/api/shared/certification/readiness.py
+  - services/api/shared/certification/descriptor.py
+  - services/api/shared/certification/capability_records.py
+  - docs/_generated/adapter-certification-matrix.json
+  - docs/_generated/financial-capability-matrix.json
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/shared/certification/descriptor.py": "sha256:c7f2d05f4799b1a6d7a4ab1ca125117049180b595eafa0267e01c9d656df4ac7"
+  "docs/_generated/adapter-certification-matrix.json": "sha256:30c99f26bb77d405851ce92caa915c358988e140e290808a21d538f594fdc7de"
+  "docs/_generated/financial-capability-matrix.json": "sha256:9fe22542e9acddb2d8af224de1666086d25e8d7b0cbf2bf4ac7dc2f53b72bb27"
+  "services/api/shared/certification/capability_records.py": "sha256:f1aa839e3b693dae77e44816c3fac6c21b8207f3c2a980957621dcd34701ed1b"
+  "services/api/shared/certification/descriptor.py": "sha256:9b4a90d83b4304d4cf5be2a98df1db3abd971841b91565bc10cd4f17b0c0a198"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
-  "services/api/shared/certification/registry.py": "sha256:f0d9c01a6f3b2341afca6901db34c4361a444742eb9e403593f669a493a67abc"
+  "services/api/shared/certification/registry.py": "sha256:b0dc79cd4c3af7688f1b5b8400900e66ad1cbb474d8f94327882e623942d1085"
 ---
 
 # Provider Capability Matrix Guide
@@ -47,11 +56,28 @@ operations, required credentials/endpoints, pagination/streaming model, and its
 `shared/certification/registry.py` resolves every provider's state **from
 source** on every call — no hand-typed states, byte-stable output.
 
+## Financial capability records
+
+The adapter matrix is provider-centric. W1 adds a financial-domain projection:
+`shared/certification/capability_records.py` emits one
+`FinancialCapabilityRecord` per provider/domain, bound to its release domain,
+service classification, route prefixes, owner path, canonical event vocabulary,
+required data rights, and deployment profiles. Its generated artifact is
+`docs/_generated/financial-capability-matrix.json`, and
+`scripts/validate_financial_capability_registry.py` fails closed on unknown
+events, rights, profiles, routes, or any production claim not supported by the
+release surface and `partner_live` readiness. `supported_event_types` is
+derived from each adapter's declared operations, so snapshot-only derivatives
+capabilities do not claim position lifecycle events. See
+`docs/operations/readiness/FINANCIAL_CAPABILITY_REGISTRY.md`.
+
 ## Reading a provider entry
 
 Keys are `<domain>:<provider>`. Each entry carries `state`, `state_rank`,
-`capabilities`, `required_credentials`, `required_endpoints`, `secret_ref_names`,
-`pagination_model`, and `streaming_model`.
+`capabilities`, `supported_event_types`, `permissions`,
+`required_data_rights`, `deployment_profiles`, `required_credentials`,
+`required_endpoints`, `secret_ref_names`, `pagination_model`, and
+`streaming_model`.
 
 ### Readiness states (low → high)
 
@@ -94,11 +120,16 @@ absence, and certification gates fail on it.
 
 ## Current first-release scope (all `credential_waiting`)
 
-26 providers, none live: communications (braze, customerio, hubspot, iterable,
+No first-release provider is live: communications (braze, customerio, hubspot, iterable,
 klaviyo, mailchimp, postmark, sendgrid), derivatives (drift, dydx, gmx,
 hyperliquid), interop (axelar, chainlink_ccip, debridge, hyperlane, ibc,
 layerzero, wormhole), payments (bridge, coinbase, moonpay, privy,
-stripe_onramp), stablecoin_chain (evm, svm). `credential_waiting` is **not**
+stripe_onramp), prediction_market (kalshi, polymarket), stablecoin_chain (evm,
+svm). The generated matrix (`docs/_generated/adapter-certification-matrix.json`)
+is authoritative for the count and per-provider state. The prediction_market
+entries are code-complete and flag-gated but take
+caller-submitted payloads only: `live_market_polling` and `order_execution` are
+declared unsupported. `credential_waiting` is **not**
 production-ready — see `CREDENTIAL_WAITING_PROMOTION_GUIDE.md`. Within
 communications, Klaviyo is the pull reference (campaign/flow/message sync,
 incremental pull, historical backfill, reconciliation); Braze, HubSpot, and

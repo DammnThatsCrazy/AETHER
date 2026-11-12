@@ -362,3 +362,73 @@ def test_client_supplied_source_claims_are_ignored():
 ])
 def test_sdk_source_provider_only_accepts_known_platforms(platform, expected):
     assert oe.sdk_source_provider(platform) == expected
+
+
+# ── High-cardinality lineage context blocks (optional, additive) ─────────────
+
+def test_lineage_context_blocks_default_absent_and_old_envelopes_validate():
+    env = _envelope()
+    assert env.actor_context is None and env.authority_context is None
+    assert env.execution_context is None and env.protocol_context is None
+    dumped = env.to_bronze_additive()
+    for name in ("actor_context", "authority_context", "execution_context", "protocol_context"):
+        assert name not in dumped
+    assert UniversalObservationEnvelope(**dumped).actor_context is None
+
+
+def test_lineage_context_blocks_round_trip_and_keep_source_vs_canonical():
+    from shared.observation.envelope import (
+        ActorContextBlock,
+        AuthorityContextBlock,
+        ExecutionContextBlock,
+        ProtocolContextBlock,
+    )
+
+    base = _envelope().to_bronze_additive()
+    base["actor_context"] = ActorContextBlock(
+        executor="agent-97234",
+        reported_principal_ref="beneficiary-x",
+        reported_principal_namespace="provider:acme",
+    ).model_dump(mode="json", exclude_none=True)
+    base["authority_context"] = AuthorityContextBlock(
+        authority_type="delegation", authority_ref="deleg_1"
+    ).model_dump(mode="json", exclude_none=True)
+    base["execution_context"] = ExecutionContextBlock(
+        trace_id="trace-1", control_mode="AGENT_DELEGATED_TO_AGENT", delegation_depth=3
+    ).model_dump(mode="json", exclude_none=True)
+    base["protocol_context"] = ProtocolContextBlock(protocol="mcp").model_dump(
+        mode="json", exclude_none=True
+    )
+    env = UniversalObservationEnvelope(**base)
+    # A claimed principal is never promoted to canonical truth by the model.
+    assert env.actor_context.reported_principal_ref == "beneficiary-x"
+    assert env.actor_context.canonical_principal_entity_id is None
+    # A trace id is never promoted to a run id by the model.
+    assert env.execution_context.trace_id == "trace-1"
+    assert env.execution_context.canonical_run_id is None
+    assert env.execution_context.source_run_id is None
+    assert UniversalObservationEnvelope(**env.to_bronze_additive()) == env
+
+
+@pytest.mark.parametrize(
+    ("field", "block"),
+    [
+        ("execution_context", {"control_mode": "FULLY_AUTONOMOUS"}),
+        ("execution_context", {"execution_verification_state": "trust_me"}),
+        ("authority_context", {"authority_type": "vibes"}),
+        ("authority_context", {"authority_resolution_status": "maybe"}),
+        ("actor_context", {"principal_resolution_status": "certain"}),
+    ],
+)
+def test_lineage_context_vocabularies_enforced(field, block):
+    payload = _envelope().to_bronze_additive()
+    payload[field] = block
+    with pytest.raises(ValidationError):
+        UniversalObservationEnvelope(**payload)
+
+
+def test_lineage_context_blocks_reject_unknown_fields():
+    payload = _envelope().to_bronze_additive()
+    payload["actor_context"] = {"actor_id": "collapsed"}
+    with pytest.raises(ValidationError):
+        UniversalObservationEnvelope(**payload)

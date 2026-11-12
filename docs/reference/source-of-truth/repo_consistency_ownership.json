@@ -346,17 +346,22 @@
       "id": "reconciled_control_plane",
       "name": "reconciled control plane changed",
       "source_globs": [
-        "services/api/**/services/managed_integrations/**",
-        "services/api/**/alembic/versions/20260906_rcp_managed_integrations.py",
+        "services/api/connectors/managed_integrations/**",
+        "services/api/alembic/versions/*rcp*.py",
         "packages/shared/managed-integrations.ts",
-        "services/api/**/services/security/contracts.py",
-        "services/api/**/services/security/access_control.py",
-        "packages/shared/security-governance.ts"
+        "services/api/governance/kyber/access/contracts.py",
+        "services/api/governance/kyber/access/access_control.py",
+        "packages/shared/security-governance.ts",
+        "config/readiness/features/reconciled-control-plane.yaml"
       ],
       "required_changed_globs": [
         "packages/shared/managed-integrations.ts",
         "packages/shared/security-governance.ts",
-        "services/api/**/services/managed_integrations/**",
+        "services/api/connectors/managed_integrations/**",
+        "config/route_registry.yaml",
+        "config/storage_policies.yaml",
+        "config/readiness/features/reconciled-control-plane.yaml",
+        "config/readiness/scope_locks.yaml",
         "docs/architecture/RECONCILED_CONTROL_PLANE.md",
         "docs/architecture/plans/RECONCILED_CONTROL_PHASES.md",
         "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
@@ -853,6 +858,30 @@
         "python -m pytest tests/unit/test_debt_retirement_ledger.py -q"
       ],
       "remediation": "Update the ledger's unit test or the technical-debt retirement page with the change, then run python scripts/validate_debt_retirement_ledger.py."
+    },
+    {
+      "id": "financial_capability_registry",
+      "name": "financial capability records, event vocabularies, or their generator/validator changed",
+      "source_globs": [
+        "services/api/shared/certification/capability_records.py",
+        "services/api/shared/certification/descriptor.py",
+        "services/api/shared/certification/registry.py",
+        "services/api/connectors/integrations/providers/payment_rails/base.py",
+        "scripts/validate_financial_capability_registry.py",
+        "scripts/docs_extract/extract_financial_capability.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/reference/source-of-truth/**",
+        "docs/operations/readiness/**",
+        "tests/unit/test_financial_capability_registry.py"
+      ],
+      "required_commands": [
+        "python scripts/validate_financial_capability_registry.py",
+        "python scripts/docs_extract/run_all.py",
+        "python -m pytest tests/unit/test_financial_capability_registry.py -q"
+      ],
+      "remediation": "Regenerate the financial capability matrix, review the readiness narrative and source-linked docs, and keep every record bound to a real release domain, route surface, event vocabulary, data right, and deployment profile."
     },
     {
       "id": "environment_capability_registry",

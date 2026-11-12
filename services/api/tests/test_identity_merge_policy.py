@@ -26,7 +26,9 @@ def _ctx(**kwargs) -> MergePolicyContext:
         tenant_id=TENANT,
         source_tenant_id=TENANT,
         matching_signal_types=[],
-        consent_snapshot=None,
+        # user_id is consent-gated, so the default fixture carries identity consent;
+        # tests of the no-consent path pass consent_snapshot=None explicitly.
+        consent_snapshot={"purposes": {"analytics": True}},
         revoked_signal_types=[],
         has_conflict=False,
         existing_entity_ids=[],

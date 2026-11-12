@@ -212,7 +212,17 @@ abandonJourney(reason?, properties?)
 checkpointJourney(stepIdOrName, properties?)
 getCurrentJourney()
 onJourneyResumed(callback)
+createJourneyHandoff(opts?)      // client SDKs: mint a single-use token for the current journey
+redeemJourneyHandoff(token)      // client SDKs: continue a journey from a token
 ```
+
+`createJourneyHandoff` / `redeemJourneyHandoff` call `POST /sdk/journey-handoff` and
+`POST /sdk/journey-handoff/redeem` (backend flag `JOURNEY_HANDOFF_ENABLED`, default off). The
+backend owns the token: it is single use, expires in at most 15 minutes, and is bound to the
+tenant and app. Both return `null` on every failure, without saying why. A redemption is an
+`explicit_handoff` link; it never merges identities. The web SDK also offers
+`redeemJourneyHandoffFromUrl()` (reads and removes `aether_handoff` from the address bar).
+The server SDK has no sessions and does not expose these.
 
 These APIs emit the canonical `journey_*` event family. Existing legacy `track` calls
 with journey lifecycle names remain accepted during migration, but new SDK behavior must

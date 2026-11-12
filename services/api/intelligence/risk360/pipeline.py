@@ -444,11 +444,11 @@ async def persist_assessment(
     All repositories are injectable (defaults construct the auto-created local
     JSONB stores / in-memory computation substrate).
     """
-    from intelligence.computation.repositories import ComputedResultsRepository  # noqa: PLC0415
+    from intelligence.computation.repositories import get_computation_repository  # noqa: PLC0415
 
     signal_repo = signal_repo or RiskSignalRepository()
     assessment_repo = assessment_repo or RiskAssessmentRepository()
-    runs_repo = runs_repo or ComputedResultsRepository()
+    runs_repo = runs_repo or get_computation_repository()
 
     assessment = result.assessment
     run = result.run
@@ -476,6 +476,7 @@ async def persist_assessment(
                 "subject_id": assessment.subject_id,
                 "claim_state": assessment.claim_state.value,
                 "dimensions": assessment.dimensions,
+                "supersedes_run_id": run.supersedes_run_id,
             },
         }
     )

@@ -5,6 +5,7 @@ import {
   accessOperationIds,
   invokeAccessOperation,
   listAccessOperations,
+  SERVER_PERMISSIONS,
 } from './access-operations.mjs';
 import { interactionSchema } from './interaction-schema.mjs';
 
@@ -12,7 +13,7 @@ const operationDescriptor = z.object({
   id: z.string(),
   description: z.string(),
   operation: z.literal('query'),
-  required_server_permission: z.literal('read'),
+  required_server_permission: z.enum(SERVER_PERMISSIONS),
   api: z.string(),
   owner: z.string(),
   cli: z.string(),
@@ -27,6 +28,8 @@ function errorResult(error) {
       message: error.message,
       ...(Number.isInteger(error.status) ? { status: error.status } : {}),
       ...(error.code ? { code: error.code } : {}),
+      ...(error.category ? { category: error.category } : {}),
+      ...(Number.isInteger(error.retryAfterSeconds) ? { retry_after_seconds: error.retryAfterSeconds } : {}),
       ...(error.requestId ? { request_id: error.requestId } : {}),
       ...(error.apiRequestId ? { api_request_id: error.apiRequestId } : {}),
       ...(error.interaction ? { interaction: error.interaction } : {}),
@@ -65,7 +68,7 @@ export function registerAccessOperationTools(server, env = process.env) {
     'access_invoke_read',
     {
       title: 'Invoke a supported Access Kit read',
-      description: 'Invoke one closed-list read operation through its owning Aether tenant API. Operation metadata is adapter support only; it does not grant access. The server resolves tenant and actor, checks read permission, and returns the authoritative result and interaction references.',
+      description: 'Invoke one closed-list read operation through its owning Aether tenant API. Operation metadata is adapter support only; it does not grant access. The server resolves tenant and actor, checks the operation’s declared required_server_permission, and returns the authoritative result and interaction references.',
       inputSchema: z.object({
         operation_id: z.enum(accessOperationIds),
         input: z.record(z.string(), z.unknown()).optional(),

@@ -19,7 +19,7 @@ LAYER_DOCS = [
     "docs/architecture/UNIFIED-ECONOMIC-GRAPH.md",
     "docs/architecture/ECONOMIC-OBSERVABILITY.md",
     "docs/product/KYBER-ECONOMIC-OBSERVABILITY.md",
-    "docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md",
+    "docs/archive/audits/OPERATIONAL-INTELLIGENCE-AUDIT.md",
     "docs/operations/PRODUCTION-READINESS.md",
     "docs/product/productization/aether_productization_audit.md",
 ]
@@ -74,10 +74,10 @@ def test_production_readiness_doc_has_all_four_layers() -> None:
 
 
 def test_operational_intelligence_audit_has_a2h() -> None:
-    """docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md must reference A2H layer."""
-    content = _read("docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md")
-    assert content, "docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md not found"
-    assert "A2H" in content, "A2H missing from docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md"
+    """docs/archive/audits/OPERATIONAL-INTELLIGENCE-AUDIT.md must reference A2H layer."""
+    content = _read("docs/archive/audits/OPERATIONAL-INTELLIGENCE-AUDIT.md")
+    assert content, "docs/archive/audits/OPERATIONAL-INTELLIGENCE-AUDIT.md not found"
+    assert "A2H" in content, "A2H missing from docs/archive/audits/OPERATIONAL-INTELLIGENCE-AUDIT.md"
 
 
 def test_graph_contract_source_of_truth_exists() -> None:

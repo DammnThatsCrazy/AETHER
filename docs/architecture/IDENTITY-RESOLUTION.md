@@ -31,16 +31,16 @@ reviewed_source_commits:
     reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:1b372150e8ae9b7e46d60336bacf35dcca6f895ce9a0999bb97d0f9784378fe7"
+  "services/api/identity/identity/": "sha256:a27c51da33dee6ac53fb4dbbb5df46db175d354a47c882f8d9069a3a184f9a83"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
-  "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
+  "services/api/identity/profile/composer.py": "sha256:7e042b4b53ff4926fcacbfa236ab0c997d9e9576654b16a2cc32cf25f9d8e6a1"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/repositories/repos.py": "sha256:b04198fb815dddda6440da3a85cc50fa2d233cd29c4c9902b1fc5e65da10a525"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
@@ -84,6 +84,45 @@ validated event; V2 writes Bronze plus its outbox row transactionally and the
 relay publishes it. The worker registers a source identity before invoking the
 resolver, and retries use stable tenant/event/policy identities. It publishes
 `IDENTITY_RESOLVED` only after an accepted canonical decision.
+
+### Identity360 read boundary
+
+The product-facing Identity360 provider
+(`services/api/identity/identity/identity360_provider.py`) is a bounded,
+read-only view over the entity registry and canonical identity repositories.
+It accepts exact tenant-owned entity, agent, or source-identity IDs; it does
+not resolve arbitrary identifiers, expose raw identifier values or hashes,
+evaluate identity, or write graph state. Repository results are rechecked
+against tenant and requested-subject scope. Missing or incomplete joins remain
+unknown, degraded, or truncated, so Identity360 does not replace the resolver
+or turn an absent read into a negative identity decision.
+
+When the `wallets` slot is requested, Identity360 reads bounded, exact
+tenant/entity links from the canonical `entity_wallets` registry and separately
+joins `wallet_ownership_verified` evidence for that same entity. A recorded
+link establishes an association, while verification proves control only at its
+recorded time; neither establishes current control or complete wallet
+ownership. The response distinguishes linked wallets from historical proofs,
+reports read coverage and truncation, and exposes opaque evidence references
+without wallet addresses, wallet identifiers, or identifier hashes. No rows in
+these authorities leaves wallet presence unknown rather than empty.
+
+The `devices_sessions` slot exposes identifier-type metadata only
+(`device_id`, `installation_id`, or `session_id`) from exact tenant-scoped
+source-identity records, with an evidence reference for each observation.
+Raw identifier values and hashes are omitted. This is not a device or session
+inventory: inventory completeness and freshness remain unknown until dedicated
+device/session authorities are joined.
+
+The current `identifier_inventory`, `namespace_map`, and `aliases` paths also
+require record-level evidence before returning a row. For `namespace_map`, the
+provider takes the exact `source_system_id` already stored on a tenant- and
+evidence-validated source identity and looks up that exact key in the loaded
+provider runtime registry. It does not infer a provider from a namespace
+prefix or connection. Returned provider metadata is allowlisted; missing keys
+remain unknown, and the slot stays partial because the provider registry has
+no freshness watermark. Missing or conflicting identity rows remain unknown
+or degraded, not evidence that an identifier or alias does not exist.
 
 The batch backend stamps `context.identity_namespace` from the authenticated
 site binding. The SDK cannot select its own namespace. This lets profile and
@@ -134,6 +173,30 @@ namespace/reference and canonical entity. Missing, ambiguous, stale, or
 cross-tenant bindings remain unresolved. This does not alter the identity
 resolver's automatic merge policy: `agent_id` and deployment/platform signals
 remain excluded from merge scoring, and a binding is not merge evidence.
+
+Agent behavior identity primitives live beside the resolver.
+`identity/identity/actor_ref.py` derives a deterministic, tenant- and
+namespace-scoped `ActorRef` from existing identifier types without resolving
+it. `identity/identity/agent_identity.py` classifies an agent as
+`known_agent`, `probable_agent`, `unknown_automated_actor` or `unknown_actor`;
+separates configuration versions and runtime instances from the logical agent;
+and produces non-merge-eligible `agent_id` claims plus continuity review items
+for the resolver. The identity ingestion worker registers each agent observed
+through a validated deployment as an unresolved `agent` source identity in the
+namespace `<identity namespace>:agent:deployment:<deployment_id>`, using the
+registry agent id rather than the payload's. It never resolves that record to a
+person; agent refs without a validated deployment create no identity record.
+The worker re-reads the deployment registry (active status, registry agent id)
+and builds the namespace from the tenant, not from client context. When the
+same agent id is registered under another deployment, it queues an
+`agent_continuity_candidate` pending review. `PendingIdentityReviewRepository`
+returns only `late_binding_candidate` items by default, so the existing
+approve/merge routes cannot load an agent continuity item. A reviewer decides one through
+`POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm|reject`
+(`agent:manage`). The decision records the reviewer, reason and time with
+`merge_performed: false`; it touches no source identity and resolves nothing. Agent 360 shows decided items as `continuity_decisions` (basis `reviewer_asserted`); no identity claim or binding is derived from them. Continuity and termination count only from facts with a
+validated deployment, and an inferred continuity is never a fact until
+reviewed.
 
 ```
 SDK event
@@ -530,6 +593,46 @@ aether.identify('user-123', {
 // the backend resolves both to the same identity cluster.
 ```
 
+## Cross-device journey handoff (mobile to web)
+
+The legacy stitcher infers a handoff from consecutive events that change
+session or device type; that is an inference and stays labelled as one. A
+server-owned path is available behind `JOURNEY_HANDOFF_ENABLED` (default off):
+
+1. The source device calls `POST /sdk/journey-handoff` with its journey, session
+   and anonymous ID. The server returns a single-use token (30-900 s TTL, default
+   600 s). Only its SHA-256 is stored (`journey_handoffs`).
+2. The destination calls `POST /sdk/journey-handoff/redeem`. Redemption is one
+   atomic conditional update bound to tenant and app namespace; expired,
+   already-used, wrong-scope and unknown tokens all return the same 404.
+3. A redemption yields a link with `link_basis: "explicit_handoff"` and
+   `identity_merge: "not_performed"`. It proves one party held both sessions at
+   that moment. It does not merge identities, assert a user ID, or select a
+   profile; resolution still decides that from its own evidence.
+
+Identity-link consent is required at both ends (fail closed). The source
+subject's consent is re-evaluated at redemption, because redeeming creates an
+explicit link carrying its identifiers; if it has lapsed the response is the
+same 404 as an unknown token and the token is left unspent (it expires on its
+own). The routes are classified in `config/route_registry.yaml`, and a
+site-bound publishable key may call exactly the issue and redeem POSTs (the
+tenant read is not reachable with one). `GET /sdk/journey-handoff/journeys/{journey_id}`
+(`read`) lists the handoffs for a journey; a token past `expires_at` that was
+never redeemed is reported as `expired`. Rows hold both anonymous IDs, so they are
+retained 90 days (`journey_handoff_sweep`, maintenance role, runs even when the flag is
+off) and erased by anonymous ID through the `journey_handoffs` DSR component. SDK client
+methods exist on web, React Native, iOS and Android (`createJourneyHandoff` /
+`redeemJourneyHandoff`).
+
+**Journey projection.** When the measurement compiler builds a journey it looks up
+redeemed handoffs for the sessions involved. A step whose previous and current
+session are exactly a redeemed (source, destination) pair gets
+`transition_evidence.link_basis = "explicit_handoff"` (with the `handoff_id` and
+`identity_merge: "not_performed"`); every other cross-device or platform-change hop
+is labelled `"inferred"`. `GET /v1/journeys/{id}/transitions` returns the counts as
+`link_basis`. The label appears the next time the journey is compiled; redeeming a
+handoff does not itself trigger a rebuild. A failed lookup leaves hops inferred.
+
 ## Agent Identity Resolution
 
 v8.0 extends the identity graph to autonomous AI agents and smart contracts.
@@ -543,6 +646,15 @@ v8.0 extends the identity graph to autonomous AI agents and smart contracts.
 **Cross-layer resolution (H2A edges)** — Human-to-Agent (`H2A`) edges trace attribution from agent actions back to the human users who launched them. When an agent performs an on-chain action or records a decision, the resolution consumer follows the `LAUNCHED_BY` edge to attribute the activity to the owning `IdentityCluster`. This enables end-to-end auditability across the human-agent boundary.
 
 **CONTRACT vertex** — Smart contracts deployed by agents receive a `CONTRACT` vertex linked to the deploying agent via a `DEPLOYED` edge (`AGENT → CONTRACT`). Contract vertices store `address`, `chain_id`, `bytecode_hash`, and `deployer_agent_id`, enabling full provenance from contract back to human owner through the agent layer.
+
+**Experience 360 identity reads.** The mounted 360 frame runtime calls the
+read-only `Identity360Provider` for `entity`, `agent`, and `source` subjects.
+It returns resolved subject identity, source-identifier lineage, relationship
+identity context, and identity evidence from tenant-scoped identity authorities.
+Source identifiers remain source references until a canonical tenant binding
+resolves them. Actor attribution and delegation slots are separate: an owner
+field or source-reported actor ID alone does not establish who performed an
+action or whether it was authorized.
 
 ## Decision evidence & source precedence
 

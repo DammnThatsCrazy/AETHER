@@ -26,6 +26,8 @@ from shared.auth.auth import Permissions
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger, metrics
 from journeys.comms.contracts import COMMUNICATION_EVENT_TYPES
+from journeys.communication360.contracts import ParticipantRosterAssertion
+from journeys.communication360.participant_writer import ParticipantBindingAuthoringContext
 from journeys.comms.click_token import (
     correlation_evidence_from_token,
     issue_click_token,
@@ -44,6 +46,7 @@ class CommsWebhookEvent(BaseModel):
     occurred_at: Optional[str] = None
     external_id: Optional[str] = None
     properties: dict[str, Any] = Field(default_factory=dict)
+    participant_roster: Optional[ParticipantRosterAssertion] = None
 
 
 class CommsWebhookBody(BaseModel):
@@ -66,6 +69,7 @@ async def generic_comms_webhook(request: Request, body: CommsWebhookBody) -> dic
     signature = request.headers.get("X-Aether-Signature")
     timestamp = request.headers.get("X-Aether-Timestamp")
     secret = getattr(tenant, "webhook_secret", None)
+    signature_verified = False
     if secret:
         from governance.security.integration_security import verify_signature
         raw = await request.body()
@@ -75,6 +79,13 @@ async def generic_comms_webhook(request: Request, body: CommsWebhookBody) -> dic
                 labels={"tenant_id": tenant.tenant_id},
             )
             raise BadRequestError("invalid webhook signature")
+        signature_verified = True
+
+    typed_roster_events = [event for event in body.events if event.participant_roster is not None]
+    if typed_roster_events and not signature_verified:
+        raise BadRequestError(
+            "participant roster assertions require a configured valid tenant webhook signature"
+        )
 
     unknown = [e.event_type for e in body.events
                if e.event_type not in COMMUNICATION_EVENT_TYPES]
@@ -83,16 +94,50 @@ async def generic_comms_webhook(request: Request, body: CommsWebhookBody) -> dic
             f"unknown communication event type(s): {sorted(set(unknown))[:5]}"
         )
 
-    normalized = [
-        {
+    for event in typed_roster_events:
+        roster = event.participant_roster
+        assert roster is not None
+        provider = str(body.provider or "").strip()
+        event_provider = str(event.properties.get("provider") or provider).strip()
+        provider_account_id = str(event.properties.get("provider_account_id") or "").strip()
+        if not event.external_id or not event.external_id.strip():
+            raise BadRequestError("participant roster events require external_id")
+        if not event.occurred_at or not event.occurred_at.strip():
+            raise BadRequestError("participant roster events require occurred_at")
+        if not provider or event_provider != provider:
+            raise BadRequestError("participant roster provider namespace must match the webhook provider")
+        if not provider_account_id or provider_account_id != roster.provider_account_id:
+            raise BadRequestError(
+                "participant roster provider account must match the communication event account"
+            )
+
+    normalized = []
+    for e in body.events:
+        item = {
             "event_type": e.event_type,
             "source": body.provider,
             "external_id": e.external_id,
             "occurred_at": e.occurred_at,
             "properties": {**e.properties, "provider": e.properties.get("provider") or body.provider},
         }
-        for e in body.events
-    ]
+        if e.participant_roster is not None:
+            item["participant_roster"] = e.participant_roster.model_dump(
+                mode="json", exclude_none=True
+            )
+            # This authority context is constructed after the request HMAC is
+            # verified. It is never copied from caller-supplied JSON.
+            item["participant_roster_authoring"] = {
+                "actor_id": (
+                    tenant.user_id
+                    if isinstance(getattr(tenant, "user_id", None), str)
+                    and tenant.user_id.strip()
+                    else f"service:comms-webhook:{tenant.tenant_id}"
+                ),
+                "credential_class": str(getattr(tenant, "credential_class", "legacy")),
+                "signature_verified": True,
+                "authentication_method": "tenant_webhook_hmac",
+            }
+        normalized.append(item)
     from journeys.comms.ingest import ingest_normalized_events
     counts = await ingest_normalized_events(tenant.tenant_id, normalized)
     return APIResponse(data={"accepted": True, **counts}).to_dict()

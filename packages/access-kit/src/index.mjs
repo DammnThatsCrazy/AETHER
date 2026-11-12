@@ -49,7 +49,16 @@ export function createAccessClient({ apiUrl, apiKey, sessionToken } = {}) {
       overview: () => invoke('agent_access.observed.overview'),
       get: (capabilityId) => invoke('agent_access.observed.get', { capability_id: capabilityId }),
     }),
+    agents: Object.freeze({
+      behavior: (agentRef) => invoke('agents.behavior', { agent_ref: agentRef }),
+      decision: (agentRef, decisionId) => invoke('agents.decision', {
+        agent_ref: agentRef, decision_id: decisionId,
+      }),
+    }),
     usage: Object.freeze({ summary: () => invoke('usage.summary') }),
+    experience360: Object.freeze({
+      frame: (input) => invoke('experience360.frame.get', input),
+    }),
     continuations: Object.freeze({
       create: async (input) => {
         const result = await createContinuation(input, env, { sourceClient: 'agent' });

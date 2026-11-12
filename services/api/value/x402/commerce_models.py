@@ -12,9 +12,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def _now_iso() -> str:
@@ -213,6 +213,12 @@ class ApprovalRequest(BaseModel):
     resource_id: str
     requester_id: str
     requester_type: str = "agent"
+    # Optional exact linkage to an agent execution that requested this
+    # commerce approval. This is a canonical identifier claim supplied by the
+    # server-side caller and is checked again before the execution is recorded.
+    execution_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    execution_action: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    last_decision_id: Optional[str] = None
     amount_usd: float
     asset_symbol: str
     chain: str
@@ -232,16 +238,60 @@ class ApprovalRequest(BaseModel):
     decision_reason: Optional[str] = None
     is_override: bool = False
 
+    @model_validator(mode="after")
+    def exact_execution_reference_is_complete(self) -> "ApprovalRequest":
+        if (self.execution_id is None) != (self.execution_action is None):
+            raise ValueError("execution_id and execution_action must be supplied together")
+        return self
+
+
+class ApprovalPermissionReceipt(BaseModel):
+    """Authenticated request-time permission check for an execution approval."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    receipt_id: str
+    tenant_id: str
+    approval_id: str
+    execution_id: str
+    principal_id: str
+    permission: Literal["commerce:approve"] = "commerce:approve"
+    checked_at: str
+
 
 class ApprovalDecision(BaseModel):
     decision_id: str = Field(default_factory=lambda: _new_id("apd"))
     approval_id: str
     tenant_id: str
+    execution_id: Optional[str] = None
     action: str  # approve|reject|escalate|revoke
     decided_by: str
     reason: str
     is_override: bool = False
     decided_at: str = Field(default_factory=_now_iso)
+    permission_receipt: Optional[ApprovalPermissionReceipt] = None
+
+    @model_validator(mode="after")
+    def permission_receipt_matches_decision(self) -> "ApprovalDecision":
+        receipt = self.permission_receipt
+        if receipt is None:
+            return self
+        if (
+            not receipt.receipt_id or not self.execution_id
+            or receipt.tenant_id != self.tenant_id
+            or receipt.approval_id != self.approval_id
+            or receipt.execution_id != self.execution_id
+            or receipt.principal_id != self.decided_by
+        ):
+            raise ValueError("permission receipt does not match approval decision")
+        try:
+            checked = datetime.fromisoformat(receipt.checked_at.replace("Z", "+00:00"))
+            decided = datetime.fromisoformat(self.decided_at.replace("Z", "+00:00"))
+            if checked.utcoffset() is None or decided.utcoffset() is None or checked > decided:
+                raise ValueError("invalid permission receipt time")
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid permission receipt time") from exc
+        return self
 
 
 # ─── Payment Authorization ────────────────────────────────────────────

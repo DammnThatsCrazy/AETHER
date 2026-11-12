@@ -5,8 +5,11 @@ feature_id: agentic-x402
 title: Agentic x402
 owning_system: aether
 summary: 'x402 lifecycle (14 events + legacy normalization) and agent lifecycle (19 events + legacy normalization):
-  SDK emitters, shared contracts, tenant-scoped repositories and backend lifecycle mappers are implemented and
-  tested, but no event consumer calls the mappers yet.'
+  SDK emitters, shared contracts, tenant-scoped repositories and lifecycle mappers are implemented and tested.
+  The x402-lifecycle-projection graph worker consumes server-owned commerce topics, the ingestion worker
+  projects validated SDK lifecycle observations, and the agent execution consumer applies source-authority
+  rules pinned by tests. Deployment runtime population and overlap with the AgentExecutionProjector Silver
+  path remain unverified.'
 scope:
   id: agentic-x402-v1
   version: 1
@@ -22,16 +25,18 @@ scope:
   deferred: []
 repository_ceiling:
   type: VERIFIED
-  achieved: false
+  achieved: true
   remaining_after_ceiling:
-  - Wire the x402 and agent lifecycle mappers to an event consumer (a graph-writer ConsumerSpec on the validated SDK event topic) and decide its overlap with the AgentExecutionProjector Silver path.
-  remaining_is_repository_controlled: true
+  - Exercise the wired consumers in a running deployment and record which mapper-owned tables populate.
+  remaining_is_repository_controlled: false
   evidence:
   - packages/shared/events.ts
   - packages/shared/agent.ts
   - packages/shared/x402-lifecycle.ts
+  - services/api/workers/runtime/consumer_specs.py
+  - services/api/tests/agentic_x402/test_lifecycle_consumers.py
 implementation:
-  state: IMPLEMENTED
+  state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
   controls:
   - id: contracts-and-schemas
@@ -45,7 +50,7 @@ implementation:
   - id: runtime-wiring
     description: runtime wiring
     weight: 20
-    satisfied: false
+    satisfied: true
   - id: persistence-and-migrations
     description: persistence and migrations
     weight: 20
@@ -54,8 +59,7 @@ implementation:
     description: authorization and tenant isolation
     weight: 20
     satisfied: true
-  remaining_work:
-  - wire the x402 and agent lifecycle mappers to an event consumer
+  remaining_work: []
 productionization:
   denominator: in-scope productionization controls (migration-derived)
   controls:
@@ -77,8 +81,22 @@ productionization:
     satisfied: true
   remaining_work: []
 activation:
-  state: NO_EXTERNAL_BLOCKER
-  blockers: []
+  state: ENVIRONMENT_VALIDATION_PENDING
+  blockers:
+  - type: ENVIRONMENT_VALIDATION_PENDING
+    description: The wired x402 and agent lifecycle consumers have not run in a deployment;
+      which mapper-owned tables populate is unverified.
+    owner: platform-ops
+    required_action: Run x402 and agent flows in staging, record which mapper-owned tables
+      populate, and decide overlap with the AgentExecutionProjector Silver path.
+    source_code_change_expected: false
+    affected_environments:
+    - staging
+    - pilot
+    affected_release_profiles:
+    - staging
+    - pilot
+    evidence_required: staging consumer run trace and populated-table inventory
 dependencies:
   hard: []
   soft: []
@@ -113,6 +131,7 @@ confidence:
   level: MODERATE
   reasons:
   - 'repository evidence: packages/shared/events.ts'
+  - consumer registration and source-authority rules covered by 8 passing lifecycle consumer tests
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

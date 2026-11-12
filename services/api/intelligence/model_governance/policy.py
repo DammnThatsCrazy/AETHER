@@ -15,7 +15,13 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
+
+_CONSENT_REGISTRY = (
+    Path(__file__).resolve().parents[4]
+    / "packages" / "shared" / "contracts" / "consent-registry.json"
+)
 
 # Models that always fail closed if the registry is unavailable (sensitive).
 _FALLBACK_FAIL_CLOSED = frozenset({"bytecode_risk", "trust_score", "identity_resolution"})
@@ -26,6 +32,23 @@ def _entry(model_id: str):
         from common.model_registry import get_model
         return get_model(model_id)
     except Exception:  # pragma: no cover - registry ships with the repo in prod
+        return None
+
+
+def consent_policy_version() -> Optional[str]:
+    """Return the version of the consent contract used by policy decisions.
+
+    A decision without a policy version cannot prove which consent contract
+    evaluated an inference, so callers that persist derived outputs fail
+    closed when this value is unavailable.
+    """
+    try:
+        import json
+
+        payload = json.loads(_CONSENT_REGISTRY.read_text(encoding="utf-8"))
+        version = payload.get("schemaVersion")
+        return version.strip() if isinstance(version, str) and version.strip() else None
+    except Exception:  # noqa: BLE001 - missing contract version stays unknown
         return None
 
 

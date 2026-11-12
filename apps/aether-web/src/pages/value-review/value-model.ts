@@ -28,15 +28,19 @@ export function str(value: unknown): string | null {
   return text === '' ? null : text;
 }
 
-/** Compact currency for chart labels: $1.2M, $12.4k, $830. */
-export function compactMoney(value: number | null): string {
+/**
+ * Compact currency for chart labels: $1.2M, $12.4k, $830. A non-USD currency
+ * code is shown as a prefix (EUR 12.4k) rather than a dollar sign.
+ */
+export function compactMoney(value: number | null, currency: string | null = null): string {
   if (value === null) return '—';
   const abs = Math.abs(value);
   const sign = value < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 10_000) return `${sign}$${Math.round(abs / 1_000)}k`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
-  return `${sign}$${Math.round(abs).toLocaleString('en-US')}`;
+  const unit = currency && currency !== 'USD' ? `${currency} ` : '$';
+  if (abs >= 1_000_000) return `${sign}${unit}${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 10_000) return `${sign}${unit}${Math.round(abs / 1_000)}k`;
+  if (abs >= 1_000) return `${sign}${unit}${(abs / 1_000).toFixed(1)}k`;
+  return `${sign}${unit}${Math.round(abs).toLocaleString('en-US')}`;
 }
 
 export function pct(value: number | null, digits = 0): string {
@@ -128,7 +132,9 @@ export interface DayPoint {
   readonly events: number;
 }
 
-/** Daily totals across the span the events actually cover (gaps filled with real zero-event days). */
+export const SERIES_MAX_DAYS = 400;
+
+/** Daily totals across the span the events actually cover (gaps filled with real zero-event days), capped to the most recent SERIES_MAX_DAYS. */
 export function dailySeries(events: readonly ValueEvent[]): DayPoint[] {
   const dated = events.filter((e): e is ValueEvent & { occurredAt: Date } => e.occurredAt !== null);
   if (dated.length === 0) return [];
@@ -145,10 +151,13 @@ export function dailySeries(events: readonly ValueEvent[]): DayPoint[] {
     if (event.occurredAt > max) max = event.occurredAt;
   }
   const out: DayPoint[] = [];
-  const cursor = new Date(min.getFullYear(), min.getMonth(), min.getDate());
   const end = new Date(max.getFullYear(), max.getMonth(), max.getDate());
-  // Bound the walk so a stray decade-old timestamp cannot build a huge array.
-  for (let i = 0; cursor <= end && i < 400; i += 1) {
+  // Bound the walk to the most recent SERIES_MAX_DAYS so a stray decade-old
+  // timestamp can neither build a huge array nor push current days out.
+  const earliest = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (SERIES_MAX_DAYS - 1));
+  const first = new Date(min.getFullYear(), min.getMonth(), min.getDate());
+  const cursor = first < earliest ? earliest : first;
+  for (let i = 0; cursor <= end && i < SERIES_MAX_DAYS; i += 1) {
     const key = dayKey(cursor);
     const bucket = byDay.get(key);
     out.push({ day: key, total: bucket?.total ?? 0, events: bucket?.events ?? 0 });
@@ -287,10 +296,111 @@ export function treemap(items: ReadonlyArray<{ key: string; value: number }>): T
 export const WINDOWS = [7, 30, 90] as const;
 export type WindowDays = (typeof WINDOWS)[number];
 
-export function windowRange(days: number, now: Date = new Date()): { time_start: string; time_end: string } {
-  const end = new Date(now.getTime());
-  const start = new Date(now.getTime() - days * 86_400_000);
-  return { time_start: start.toISOString(), time_end: end.toISOString() };
+/** `date` moved by `n` local calendar days (DST-safe: keeps the wall-clock time). */
+function addDays(date: Date, n: number): Date {
+  const out = new Date(date.getTime());
+  out.setDate(out.getDate() + n);
+  return out;
+}
+
+/** A half-open period [start, end) of `days` whole local calendar days. */
+export interface ValueWindow {
+  readonly days: number;
+  readonly start: Date;
+  readonly end: Date;
+}
+
+/**
+ * The `days` local calendar days ending with the anchor's day (so today is
+ * included and every bucket is a real calendar day), and the immediately
+ * preceding window of equal length (its end is the current window's start, so
+ * no event is in both).
+ */
+export function valueWindows(days: number, anchor: Date): { current: ValueWindow; previous: ValueWindow } {
+  const today = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  const end = addDays(today, 1);
+  const start = addDays(end, -days);
+  return { current: { days, start, end }, previous: { days, start: addDays(start, -days), end: start } };
+}
+
+/** "Sep 24 – Oct 23", first to last calendar day (years added only when the window crosses one or is not this year). */
+export function rangeLabel(window: ValueWindow, now: Date = new Date()): string {
+  const last = addDays(window.end, -1);
+  const sameYear = window.start.getFullYear() === last.getFullYear() && last.getFullYear() === now.getFullYear();
+  const opts: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' };
+  return `${window.start.toLocaleDateString('en-US', opts)} – ${last.toLocaleDateString('en-US', opts)}`;
+}
+
+/**
+ * One bucket per local calendar day of the window, in order, so two windows of
+ * equal length line up index by index. Events outside the window are ignored.
+ */
+export function windowSeries(events: readonly ValueEvent[], window: ValueWindow): DayPoint[] {
+  const out = Array.from({ length: window.days }, (_, i) => ({ day: dayKey(addDays(window.start, i)), total: 0, events: 0 }));
+  const index = new Map(out.map((point, i) => [point.day, i]));
+  const from = window.start.getTime();
+  const to = window.end.getTime();
+  for (const event of events) {
+    const at = event.occurredAt?.getTime();
+    if (at === undefined || at < from || at >= to) continue;
+    const bucket = out[index.get(dayKey(event.occurredAt!)) ?? -1];
+    if (!bucket) continue;
+    bucket.events += 1;
+    bucket.total += event.amount ?? 0;
+  }
+  return out;
+}
+
+/** Value types that are revenue kept or grown, as opposed to costs and losses avoided. */
+export const REVENUE_VALUE_TYPES: ReadonlySet<string> = new Set(['retained_revenue', 'expansion_revenue']);
+
+export interface Headline {
+  /** Sum of priced events (one currency); null when no event carried an amount. */
+  readonly value: number | null;
+  /** Sum of priced retained/expansion revenue events; null when none carried an amount. */
+  readonly revenue: number | null;
+  readonly events: number;
+  readonly priced: number;
+  /** Value per priced event; null when no event carried an amount. */
+  readonly average: number | null;
+}
+
+/** Headline figures from one window's single-currency read. */
+export function headline(read: OneCurrencyRead): Headline {
+  let value = 0;
+  let revenue = 0;
+  let priced = 0;
+  let pricedRevenue = 0;
+  for (const e of read.events) {
+    if (e.amount === null) continue;
+    priced += 1;
+    value += e.amount;
+    if (REVENUE_VALUE_TYPES.has(e.valueType)) {
+      pricedRevenue += 1;
+      revenue += e.amount;
+    }
+  }
+  return {
+    value: priced ? value : null,
+    revenue: pricedRevenue ? revenue : null,
+    events: read.events.length,
+    priced,
+    average: priced ? value / priced : null,
+  };
+}
+
+export type Delta =
+  | { readonly kind: 'change'; readonly ratio: number }
+  | { readonly kind: 'new' }
+  | { readonly kind: 'unavailable'; readonly reason: string };
+
+/** Relative change from the previous figure; never divides by zero or compares a missing figure. */
+export function compareFigures(current: number | null, previous: number | null): Delta {
+  if (current === null && previous === null) return { kind: 'unavailable', reason: 'no amounts in either period' };
+  if (current === null) return { kind: 'unavailable', reason: 'no amounts this period' };
+  if (previous === null) return { kind: 'unavailable', reason: 'no amounts in the previous period' };
+  if (previous === 0) return current === 0 ? { kind: 'change', ratio: 0 } : { kind: 'new' };
+  return { kind: 'change', ratio: (current - previous) / Math.abs(previous) };
 }
 
 export interface CampaignValue {
@@ -321,4 +431,36 @@ export function parseCampaignOverview(payload: unknown): NonNullable<CampaignVal
     converted: num(d['converted_count']),
     observed: num(d['observed_count']),
   };
+}
+
+export interface OneCurrencyRead {
+  /** Events with amounts kept only in `currency`; amounts in other currencies become null. */
+  readonly events: ValueEvent[];
+  /** The currency the amounts are in (null when events carry no currency code). */
+  readonly currency: string | null;
+  /** Priced events whose amount was set aside because it is in another currency. */
+  readonly setAside: number;
+  readonly otherCurrencies: string[];
+}
+
+/**
+ * Value events carry an optional, unrestricted currency and there is no
+ * exchange-rate source here, so amounts are only ever summed within one
+ * currency: the one most priced events use. Events in other currencies are
+ * still counted, never added to that total.
+ */
+export function inOneCurrency(events: readonly ValueEvent[]): OneCurrencyRead {
+  const code = (e: ValueEvent) => (e.currency ? e.currency.toUpperCase() : null);
+  const counts = new Map<string | null, number>();
+  for (const e of events) if (e.amount !== null) counts.set(code(e), (counts.get(code(e)) ?? 0) + 1);
+  if (counts.size <= 1) return { events: [...events], currency: counts.size ? [...counts.keys()][0]! : null, setAside: 0, otherCurrencies: [] };
+  const [currency] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
+  let setAside = 0;
+  const kept = events.map(e => {
+    if (e.amount === null || code(e) === currency) return e;
+    setAside += 1;
+    return { ...e, amount: null };
+  });
+  const otherCurrencies = [...counts.keys()].filter(k => k !== currency).map(k => k ?? 'unspecified');
+  return { events: kept, currency, setAside, otherCurrencies };
 }

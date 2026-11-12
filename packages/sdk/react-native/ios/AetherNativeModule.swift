@@ -29,6 +29,9 @@ class AetherNativeModule: RCTEventEmitter {
         }
 
         aetherConfig.debug = config["debug"] as? Bool ?? false
+        // Base64url P-256 public key; the native health agent then verifies the
+        // manifests it fetches (fail-closed). Absent => applied unverified.
+        aetherConfig.manifestPublicKey = config["manifestPublicKey"] as? String
         aetherConfig.endpoint = resolveEndpoint
         aetherConfig.onJourneyResumed = { [weak self] anonymousId, userId in
             DispatchQueue.main.async {
@@ -163,6 +166,24 @@ class AetherNativeModule: RCTEventEmitter {
         ])
     }
 
+    /// Verify a remote-config manifest (JSON text, `signature` included) against a
+    /// base64url P-256 public key with the shared ES256 verifier. Hermes has no
+    /// WebCrypto, so the JS manifest path delegates here. Resolves false on any
+    /// error (fail closed).
+    @objc
+    func verifyManifest(
+        _ manifestJson: String,
+        publicKey: String,
+        resolver resolve: RCTPromiseResolveBlock,
+        rejecter reject: RCTPromiseRejectBlock
+    ) {
+        guard let manifest = (try? JSONSerialization.jsonObject(with: Data(manifestJson.utf8))) as? [String: Any] else {
+            resolve(false)
+            return
+        }
+        resolve(ManifestSignature.verify(manifest, publicKey: publicKey))
+    }
+
     @objc
     func reset() {
         Aether.shared.reset()
@@ -233,6 +254,41 @@ class AetherNativeModule: RCTEventEmitter {
                 return
             }
             resolve(Aether.shared.getFirstTouchAttributionJSON() ?? NSNull())
+        }
+    }
+
+    /// Resolves `{ token, handoffId, expiresAt }`, or NSNull when no handoff could be created.
+    @objc
+    func createJourneyHandoff(_ ttlSeconds: NSNumber, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        let ttl = ttlSeconds.intValue > 0 ? ttlSeconds.intValue : nil
+        Aether.shared.createJourneyHandoff(ttlSeconds: ttl) { token in
+            guard let token = token else {
+                resolve(NSNull())
+                return
+            }
+            resolve(["token": token.token, "handoffId": token.handoffId, "expiresAt": token.expiresAt])
+        }
+    }
+
+    /// Resolves the verified `explicit_handoff` link, or NSNull for every failure.
+    @objc
+    func redeemJourneyHandoff(_ token: String, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        Aether.shared.redeemJourneyHandoff(token) { link in
+            guard let link = link else {
+                resolve(NSNull())
+                return
+            }
+            resolve([
+                "handoffId": link.handoffId,
+                "journeyId": link.journeyId,
+                "linkBasis": link.linkBasis,
+                "identityMerge": link.identityMerge,
+                "fromSessionId": link.fromSessionId,
+                "fromPlatform": link.fromPlatform,
+                "toSessionId": link.toSessionId,
+                "toPlatform": link.toPlatform,
+                "redeemedAt": link.redeemedAt,
+            ])
         }
     }
 

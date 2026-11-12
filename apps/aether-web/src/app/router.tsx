@@ -29,6 +29,16 @@ const UsagePlanPage = lazy(() => import('@aether-app/pages/usage-plan').then(m =
 const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ default: m.MePage })));
 const NotificationCenterPage = lazy(() => import('@aether-app/pages/notifications/notification-center-page').then(m => ({ default: m.NotificationCenterPage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
+const SignalsPage = lazy(() => import('@aether-app/pages/signals').then(m => ({ default: m.SignalsPage })));
+const RiskPage = lazy(() => import('@aether-app/pages/risk').then(m => ({ default: m.RiskPage })));
+const SyndicatesPage = lazy(() => import('@aether-app/pages/syndicates').then(m => ({ default: m.SyndicatesPage })));
+const RelationshipsPage = lazy(() => import('@aether-app/pages/relationships').then(m => ({ default: m.RelationshipsPage })));
+const CommunicationsPage = lazy(() => import('@aether-app/pages/communications').then(m => ({ default: m.CommunicationsPage })));
+const CommunicationDetailPage = lazy(() => import('@aether-app/pages/communications').then(m => ({ default: m.CommunicationDetailPage })));
+const JourneysPage = lazy(() => import('@aether-app/pages/journeys').then(m => ({ default: m.JourneysPage })));
+const JourneyDetailPage = lazy(() => import('@aether-app/pages/journeys').then(m => ({ default: m.JourneyDetailPage })));
+const EpisodesPage = lazy(() => import('@aether-app/pages/episodes').then(m => ({ default: m.EpisodesPage })));
+const EpisodeDetailPage = lazy(() => import('@aether-app/pages/episodes').then(m => ({ default: m.EpisodeDetailPage })));
 const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));
 // Canonical workspace onboarding (Workspace → Sources → SDKs and keys → Graph),
 // rendered full screen at /activation. It drives the same activation, connect
@@ -176,6 +186,18 @@ export function AppRouter() {
                 <Route path="/usage-plan" element={<PageSuspense><UsagePlanPage /></PageSuspense>} />
                 <Route path="/me" element={<PageSuspense><MePage /></PageSuspense>} />
                 <Route path="/geo" element={<PageSuspense frameless><GeoPage /></PageSuspense>} />
+                <Route path="/signals" element={<PageSuspense frameless><SignalsPage /></PageSuspense>} />
+                <Route path="/risk" element={<PageSuspense frameless><RiskPage /></PageSuspense>} />
+                <Route path="/syndicates" element={<PageSuspense frameless><SyndicatesPage /></PageSuspense>} />
+                <Route path="/syndicates/:syndicateId" element={<PageSuspense frameless><SyndicatesPage /></PageSuspense>} />
+                <Route path="/relationships" element={<PageSuspense frameless><RelationshipsPage /></PageSuspense>} />
+                <Route path="/relationships/:entityId" element={<PageSuspense frameless><RelationshipsPage /></PageSuspense>} />
+                <Route path="/communications" element={<PageSuspense frameless><CommunicationsPage /></PageSuspense>} />
+                <Route path="/communications/:campaignId/:messageId" element={<PageSuspense frameless><CommunicationDetailPage /></PageSuspense>} />
+                <Route path="/journeys" element={<PageSuspense frameless><JourneysPage /></PageSuspense>} />
+                <Route path="/journeys/:profileId" element={<PageSuspense frameless><JourneyDetailPage /></PageSuspense>} />
+                <Route path="/episodes" element={<PageSuspense frameless><EpisodesPage /></PageSuspense>} />
+                <Route path="/episodes/:profileId/:episodeId" element={<PageSuspense frameless><EpisodeDetailPage /></PageSuspense>} />
                 <Route path="/geo/:level/:geoId" element={<PageSuspense frameless><GeoPage /></PageSuspense>} />
                 <Route path="/audit-exports" element={<PageSuspense><AuditExportsPage /></PageSuspense>} />
                 <Route path="/value-review" element={<PageSuspense><ValueReviewPage /></PageSuspense>} />

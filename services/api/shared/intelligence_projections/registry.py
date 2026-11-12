@@ -33,6 +33,7 @@ from shared.intelligence_projections.contracts import (
     ProjectionContext,
     ProjectionDependencyState,
     ProjectionRequest,
+    ProjectionReadAuthorization,
     ProjectionResult,
 )
 from shared.intelligence_projections.errors import (
@@ -221,6 +222,10 @@ class ProviderRegistry:
         self,
         projection_id: str,
         request: ProjectionRequest,
+        *,
+        experience360_read_authorizations: Optional[
+            list[ProjectionReadAuthorization]
+        ] = None,
     ) -> ProjectionContext:
         """Compute the runtime context for a projection request.
 
@@ -254,6 +259,7 @@ class ProviderRegistry:
             registryState=definition["implementationState"],
             dependencyState=dependency_state,
             warnings=warnings,
+            experience360ReadAuthorizations=(experience360_read_authorizations or []),
         )
 
     def _dependency_state(
@@ -294,6 +300,10 @@ class ProviderRegistry:
         self,
         projection_id: str,
         request: ProjectionRequest,
+        *,
+        experience360_read_authorizations: Optional[
+            list[ProjectionReadAuthorization]
+        ] = None,
     ) -> ProjectionResult:
         """Run one projection, fail-isolating the provider.
 
@@ -304,7 +314,11 @@ class ProviderRegistry:
         provider's normal result is returned as-is.
         """
         provider = self.require(projection_id)
-        context = await self.build_context(projection_id, request)
+        context = await self.build_context(
+            projection_id,
+            request,
+            experience360_read_authorizations=experience360_read_authorizations,
+        )
         try:
             result = await provider.project(request, context)
         except ProjectionError as exc:

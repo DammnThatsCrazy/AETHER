@@ -9,6 +9,9 @@ stateless MCP HTTP service for bounded customer operations:
   neighborhood through the identity and graph authorities.
 - Discover the adapter's closed read-operation list and invoke a named read
   through the owning API. This list does not report tenant authorization.
+- Read the evidence-qualified Agent360 behavior read model for one agent, or
+  one reconstructed agent decision, through the agent behavior routes. These
+  two operations declare `required_server_permission: agent:manage`.
 - Read a minimal tenant account context through the existing `/v1/me` route.
 - Read the non-billable Access Kit interaction count through the existing
   billing usage authority.
@@ -56,6 +59,7 @@ Supply only the credential required by the command being used:
 |---|---|
 | `aether agents capabilities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
 | `aether entities ...`, `aether access invoke ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
+| `aether agents behavior show`, `aether agents decisions show` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `agent:manage` permission |
 | `aether continuations create` | A tenant API key or saved/revocable session with `write` permission and an enabled continuation API |
 | `aether continuations show` | The same credential class with `read` permission and an enabled continuation API |
 | `aether access operations list/show` | No credential; these describe adapter support only |
@@ -141,6 +145,8 @@ inject them from the remote host's secret manager.
 aether agents capabilities overview
 aether agents capabilities list --provider example --limit 25 --json
 aether agents capabilities show cap_0123456789abcdef01234567 --json
+aether agents behavior show agent_123 --json
+aether agents decisions show agent_123 decision_456 --json
 aether entities list --entity-type organization --limit 25 --json
 aether entities list --limit 25 --offset 25 --json
 aether entities show entity_123 --json
@@ -150,6 +156,7 @@ aether continuations show cont_0123456789abcdef0123456789abcdef --json
 aether access operations list --json
 aether access operations show entities.neighborhood --json
 aether access invoke entities.neighborhood --input-json '{"entity_id":"entity_123","limit":25}' --json
+aether experience360 frame get --surface agent360 --subject-kind agent --subject-id agent_123 --slots identity,tool_usage --json
 aether account context --json
 aether usage summary --json
 aether auth context --json
@@ -159,6 +166,45 @@ aether auth sessions list --limit 20 --json
 aether auth sessions revoke SESSION_ID --json
 ```
 
+## Governed 360 frame read (`experience360.frame.get`)
+
+One bounded read maps to the existing authenticated `POST /v1/experience360/frames`
+route (a read; POST carries the structured body). Input is `surface`, `subject`
+(`kind`, `id`), optional `requested_slots` (1-32 unique slot IDs of that surface),
+optional RFC 3339 `as_of`, and optional `include_evidence`. The surface, its
+subject kinds, and its slot IDs are checked against a pinned snapshot of the 360
+catalog (`src/experience360-catalog.mjs`, guarded by a drift test) before any
+request; unknown fields, tenant/actor/policy/lens/paging/query fields, and
+oversized values are rejected locally. Tenant and actor come only from the
+credential, and the server authorizes every call.
+
+```sh
+aether experience360 frame get --surface agent360 --subject-kind agent --subject-id agent_123 --json
+aether access invoke experience360.frame.get --input-json '{"surface":"agent360","subject":{"kind":"agent","id":"agent_123"}}' --json
+```
+
+```js
+const frame = await access.experience360.frame({
+  surface: 'agent360',
+  subject: { kind: 'agent', id: 'agent_123' },
+  requested_slots: ['identity', 'tool_usage'],
+});
+```
+
+MCP hosts call it through `access_invoke_read` with `operation_id`
+`experience360.frame.get`; there is no separate tool. `data` is the server's
+frame, unmodified: slot states (for example `available`, `degraded`, `unknown`,
+`suppressed`), evidence references, limitations, policy dispositions, and
+degradation are never promoted or rewritten, and a frame that does not match
+the requested surface and subject is rejected as a contract error. Audit and
+usage references appear in `interaction.references` only when the API returns
+them in response headers. The call is made once and is never retried.
+Failures keep the HTTP status and add a non-sensitive `category`
+(`unauthenticated`, `forbidden`, `not_found`, `conflict`, `invalid_request`,
+`rate_limited`, `server_error`) and, for HTTP 429, `retry_after_seconds` when
+the server sends a valid `Retry-After`. A frame existing for a surface does not
+mean every slot is backed; check each slot's `state`.
+
 The list API is capped at 100 rows per call. Filters and pagination are passed
 to the existing tenant-scoped REST routes. Results describe observed external
 agent access; they are not grants, Aether tools, or execution permissions.
@@ -167,6 +213,26 @@ string, and accepts only safe non-negative observation counts. Overview counts
 and grouping maps are validated; maps expose at most 50 bounded keys with
 non-negative integer values, and the `sampled` flag is set when local
 projection truncates a map.
+
+## Agent behavior reads
+
+`agents behavior show AGENT_REF` (operation `agents.behavior`, MCP
+`agents_behavior`) calls `GET /v1/agent/agents/{agent_ref}/behavior`.
+`agents decisions show AGENT_REF DECISION_ID` (operation `agents.decision`, MCP
+`agents_decision`) calls
+`GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}`. Both are reads,
+owned by `agent_behavior`, and the API requires `agent:manage`; operation
+metadata reports that as `required_server_permission` (every other operation
+declares `read`). Agent refs and decision IDs are 1 through 256 characters and
+inputs are strict.
+
+The read models are backend-owned. Every section states `available`,
+`partial`, or `unavailable` with its evidence and reason, and the client
+passes them through unaltered after checking the envelope (matching agent ref;
+a decision must belong to the requested agent). Inferred behavior is never a
+verified fact and a source-reported agent ref is not an identity resolution.
+The MCP tools are not advertised to delegated read-only OAuth tokens, which
+cannot carry `agent:manage`.
 
 ## Tenant entity reads
 
@@ -399,7 +465,8 @@ assertion before validating an MCP-audience token. Setting an Access Kit
 surface header on public REST cannot make that token usable there. API keys
 and Aether sessions continue through their existing paths.
 The tools are bounded to the declared read operations, entity pages and
-neighborhood, account context, and observed third-party agent inventory.
+neighborhood, account context, observed third-party agent inventory, and (for
+API key and session callers with `agent:manage`) agent behavior reads.
 No caller-supplied tenant ID is accepted.
 
 `observe` appears in the remote tool list only when that MCP request also

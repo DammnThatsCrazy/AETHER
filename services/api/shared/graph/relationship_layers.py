@@ -341,6 +341,12 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
 
     # ── A2A — agentic observability: MCP, inbox, x402, external accounts ──
     EdgeType.AGENT_ACTED_ON_BEHALF_OF: RelationshipLayer.A2A,
+    # High-cardinality lineage: identity hierarchy (definition → deployment →
+    # instance) is agent-internal; principal/supervision edges cross H2A.
+    EdgeType.DEPLOYED_AS: RelationshipLayer.A2A,
+    EdgeType.INSTANTIATED_AS: RelationshipLayer.A2A,
+    EdgeType.PRINCIPAL_OF: RelationshipLayer.H2A,
+    EdgeType.SUPERVISES: RelationshipLayer.H2A,
     EdgeType.AGENT_CONNECTED_VIA_MCP: RelationshipLayer.A2A,
     EdgeType.AGENT_GENERATED_TRADE_INTENT: RelationshipLayer.A2A,
     EdgeType.AGENT_HAS_INBOX: RelationshipLayer.A2A,

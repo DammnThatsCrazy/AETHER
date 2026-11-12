@@ -3205,14 +3205,14 @@
     },
     {
       "id": "reconciled_control_plane",
-      "displayName": "reconciled_control_plane (pending projection spine)",
-      "description": "Pending projection-plane spine: owns the reconciled operator control-plane rollup over provider runtime and credential readiness so connection360 and Kyber see one reconciled activation/control state. Declared pending by connection360 after the harness control-plane rollup (PR #529) merged.",
+      "displayName": "reconciled_control_plane (in-flight runtime authority)",
+      "description": "In-flight runtime authority for the reconciled operator control plane. Implements operational convergence, bounded change planning, rollout coordination, evidence correlation and durable readiness-gated control-plane activation over managed integrations; all flags remain OFF and production activation is not claimed. Programs C-G (runtime convergence, recovery, operator command surface, security/scale proof, staged activation) remain.",
       "plane": "decision_action",
       "spineKind": "runtime_authority",
-      "implementationState": "pending",
+      "implementationState": "in_flight",
       "ownsCanonicalTruth": false,
-      "authorityDeclaration": "Intended authority over the reconciled control-plane view — joining provider runtime, credential readiness, and activation state into one operator-visible rollup.",
-      "nonOwnershipStatement": "Does not own provider runtime, credential, or activation state; upr and tenant_readiness own those and reconciled_control_plane joins them without becoming a parallel control store.",
+      "authorityDeclaration": "Owns operational convergence, bounded change planning, rollout coordination, control-evidence correlation and its own durable control-plane activation authority. Reads external authority decisions; never replaces them.",
+      "nonOwnershipStatement": "Does not own provider runtime or credentials, source rights, schema/semantic mapping, SDK artifacts, release readiness, durable ingestion, canonical identity, or graph mutation; those remain with their existing authorities. The control plane observes their state or calls their governed interfaces and is read-only over graph state.",
       "canonicalContractRefs": [
         {
           "registry": "packages/shared/contracts/readiness-vocabulary.json",
@@ -3276,7 +3276,7 @@
         "replaySupported": false
       },
       "conformance": {
-        "authority_non_ownership_statement": "open",
+        "authority_non_ownership_statement": "verified",
         "canonical_contract_registration": "open",
         "port_adapter_declaration": "open",
         "dependency_dag_validation": "open",
@@ -3291,14 +3291,7 @@
         "migration_recompute_rollback_compatibility": "open",
         "positive_negative_replay_isolation_golden_tests": "open"
       },
-      "unresolvedRefs": [
-        {
-          "ref": "reconciled control-plane authority",
-          "kind": "spine",
-          "reason": "harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority (connection360 declares it pendingAuthority)",
-          "resolvesIn": "Spine P0 phase 4 derivation of the projection SPINE_INDEX from this registry"
-        }
-      ],
+      "unresolvedRefs": [],
       "legacyBindings": {
         "aliases": [
           "reconciled_control_plane",
@@ -3306,12 +3299,15 @@
           "control_plane_rollup"
         ],
         "services": [
-          "services/api/connectors/provider_runtime",
-          "services/api/tenancy/activation"
+          "services/api/connectors/managed_integrations",
+          "services/api/connectors/managed_integrations/authority.py",
+          "services/api/connectors/managed_integrations/activation.py",
+          "docs/architecture/RECONCILED_CONTROL_PLANE.md",
+          "docs/architecture/plans/RECONCILED_CONTROL_PHASES.md"
         ],
-        "migrationMode": "net_new"
+        "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": null
+      "implementationBlueprint": "docs/architecture/plans/RECONCILED_CONTROL_PHASES.md"
     },
     {
       "id": "spine_composition_kernel",

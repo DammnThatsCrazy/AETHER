@@ -25,20 +25,20 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:d43501fd20dc2010654eaef70a37ddf86aed6c018a20e9a9148f4bf8d1f1bb44"
+  "services/api/actions/": "sha256:25884e55b6c5445cccda3fb4fe9233af3cbd7cfba22476995f09531166463ab0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
-  "services/api/connectors/": "sha256:de063914d18133748b4ebb6e3e3e4b02161c739ae7996bccb87fe6188a9bca97"
-  "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
-  "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
-  "services/api/identity/": "sha256:4a96035d9625725df833799f19f36e4137e9ba2dab121bb9eb78e7e5833fc79a"
-  "services/api/ingestion/": "sha256:94973da02b8255278b43b93cd68c2e86d99c37c534dd81742c95187a27aa8361"
-  "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
-  "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
+  "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
+  "services/api/connectors/": "sha256:a928f782d01f2b695684f82b53c8da66674cc936d256cacf8570662484f4b3bd"
+  "services/api/governance/": "sha256:b287f008d8982cb66b93e37f5654a5cbcd808c6fcee3d811ed81bb1e9bcab7ca"
+  "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
+  "services/api/identity/": "sha256:d4def8830d93d598443b92351bbe0731c9611af49ee04703a95ed951f5f42d12"
+  "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
+  "services/api/intelligence/": "sha256:63cbeab6be7a4871620e87b0076df2d60e5b6433fdf7837174aa206b30d041ab"
+  "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:fe86fc00610841af79232a37540d9027778742c64d4cc820dfaac888018a88b6"
-  "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
+  "services/api/value/": "sha256:eb87da79cedcc23243a3cef2f57dd36bbb2af91ec729827f9d6478d2a646e4d3"
+  "services/api/workers/": "sha256:a6c6b55338c45947832201ac3cfa3d006fa3f6ef029501bf29856755eae0b3b1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -323,6 +323,13 @@ dimension. The API returns durable audit and usage IDs in
 `mcp_http`, and `access_sdk`; it does not grant permission or choose a tenant.
 The package's operation list describes adapter support, not a tenant grant.
 
+`/v1/capability-declarations` records the tenant's asserted capability identity for
+comparison with the observed catalog. Tool declarations join by the exact tenant,
+provider, server and tool tuple. MCP resource declarations include the exact
+`resource_uri` and join to the matching observed resource ID; URI path and opaque
+identifier case is significant. The digest compares only the fields the declaration
+actually asserts and does not verify publisher identity.
+
 ### Contact & enterprise inquiries (`/v1/contact/*`)
 
 | Endpoint | Method | Auth | Purpose |
@@ -357,6 +364,7 @@ are returned in customer or operator responses.
 | `/v1/billing/entitlements` | GET | API key | Caller-safe tenant entitlements |
 | `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
 | `/v1/billing/usage/summary` | GET | API key | Caller tenant usage dimensions, including non-billable visibility meters |
+| `/v1/billing/usage/access-reconciliation` | GET | API key (`admin`) | Read-only comparison of the caller tenant's Access Kit audit rows against its non-billable usage events for a requested or current billing window; reports unmatched request IDs, billable events seen, and truncation |
 | `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
 | `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review; optional `start`/`end` window, `truncated` flags a bounded read |
 | `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
@@ -1363,6 +1371,7 @@ Three service groups are available when Intelligence Graph feature flags are ena
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| POST | `/v1/commerce/intents` | Record an explicit declaration against an exact tenant-owned product or offer; requires `commerce:write` and an authenticated human principal; immutable/idempotent revisions retain actor, effective/observed time, and evidence |
 | POST | `/v1/commerce/payments` | Record payment + create `PAYS` edge in graph |
 | POST | `/v1/commerce/hires` | Record agent hire + create `HIRED` edge |
 | GET | `/v1/commerce/fees/report` | Fee elimination report over the caller's tenant's payments only |
@@ -1426,6 +1435,7 @@ applied because the action's graph mutations do not share a transaction.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/x402/capture` | Ingest captured x402 payment |
+| POST | `/v1/x402/approval/request` | Request a commerce approval; optional `execution_action` binds it to a server-generated execution ID returned in the approval record |
 | GET | `/v1/x402/graph` | Economic graph snapshot |
 | GET | `/v1/x402/agent/{id}` | Agent x402 history |
 | POST | `/v1/x402/graph/snapshot` | Trigger graph snapshot rebuild |
@@ -1450,12 +1460,24 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/agent/register` | Register agent in the Intelligence Graph |
+| POST | `/v1/agents/{agent_id}/executions/{execution_id}/resources/read` | Read one explicitly enabled, observed MCP resource URI under a distinct active `read_resource` grant. Requires authenticated write/dispatch permission and a running tenant-owned execution. Persist an immutable receipt only after the remote attempt; successful contents must match the requested URI exactly. Resource mutations and independent effects are unsupported. |
+| POST | `/v1/ml/model-governance/profile-evaluations` | Authenticated tenant-admin evaluation of an exact model artifact over closed prediction horizons and canonical adjudicated outcomes. Records dataset manifest, sample references, split, window, policy provenance and computed accuracy, Brier score and calibration error; not a calibration certification. |
+| GET | `/v1/ml/model-governance/profile-evaluations/{evaluation_id}` | Tenant-admin read of the exact persisted Profile evaluation. |
+| POST | `/v1/economic/attribution-runs/{run_id}/model-approval` | Authenticated tenant-admin approval or rejection bound to the completed run, model config and lineage decision. Does not establish calibration or attribution correctness. |
+| POST | `/v1/agents/{agent_id}/execute` | Admit and record run bookkeeping after delegation checks; optional `approval_id` requires a current tenant-scoped x402 approval whose agent, action, resource, amount, and latest immutable decision match exactly. This route does not invoke a tool/resource operation or create an invocation receipt. |
+| POST | `/v1/agents/{agent_id}/executions/{execution_id}/tools/{tool_name}/invoke` | Require authenticated principal, write and dispatch permissions, tenant-owned running execution, enabled exact observed MCP tool and active invoke grant. Perform public HTTPS MCP initialization and `tools/call` through DNS-pinned transport with redirects disabled. Persist immutable scoped completion receipts; durable claims prevent duplicate calls. Private/credentialed endpoints and resource mutations are unsupported; exact resource reads use the separate endpoint above. |
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
 | GET | `/v1/agent/{id}/graph` | Agent's graph neighborhood within the caller's tenant (404 unless the agent's vertex belongs to it) |
 | GET | `/v1/agent/{id}/trust` | Agent trust score + history (404 unless the agent's vertex belongs to the caller's tenant) |
 | POST | `/v1/agent/{id}/a2h` | Record agent-to-human interaction (notification, recommendation, delivery, escalation) |
+
+The Silver ingestion worker supplies the server-owned Profile adjudication
+policy version. The durable outcome recorder rechecks persisted prediction
+inference-policy evidence and exact tenant, subject, event, contract and time
+bindings; caller-supplied adjudication state cannot establish an observed claim.
+Persisted evaluation reads decode metric and sample-reference JSONB together.
 
 ### Diagnostics Service (Platform Operators Only)
 
@@ -1822,10 +1844,13 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 | GET | `/v1/profile/{entity_id}/economic/warnings` | Missing, stale and contradicting dimensions for the entity (profile service) |
 | GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
 | GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
+| POST | `/v1/economic/attribution-runs/{run_id}/model-validation` | Record a tenant-scoped check of a completed run's configuration lineage against the current model configuration; requires `write` |
+| POST | `/v1/economic/attribution-runs/{run_id}/model-approval` | Record an append-only approval or rejection with authenticated actor and admin authorization evidence for the exact completed run, configuration and lineage decision; requires `admin`. Approval is not calibration. |
+| POST | `/v1/economic/attribution-runs/{run_id}/confidence-evaluation` | Persist a bounded, reproducible evaluation of canonical credit touchpoint temporal eligibility for an exact completed run and validated configuration; requires an authenticated principal and `write`. This does not calibrate confidence or validate causal credit weights. |
 
 **Query params:** entity endpoints accept `?window=realtime|24h|7d|30d|90d|lifetime` (default `lifetime`; tenant overview defaults to `30d`).
 
-**Permissions:** `read` for all economic endpoints
+**Permissions:** `read` for economic reads; `write` for model-lineage checks and temporal eligibility evaluations; `admin` for run-bound model approval. These records do not calibrate confidence, prove historic configuration immutability, or validate realized value.
 
 ---
 
@@ -1840,6 +1865,28 @@ Python). Nine 360s are implemented native providers (`outcome360`,
 `temporal360`, `population360`, `geographic360`); the rest are `in_flight`.
 `implementationState` is repo metadata, **not** readiness. `infrastructure360`
 was the first projection to expose a classified public route, and
+Communications360 response-event evidence includes bounded provider-reported
+reply associations for explicit `In-Reply-To` references, resolved to a unique
+evidence-backed Silver target in the exact tenant/provider/account/thread scope
+and no later than the reply. Incomplete or invalid reads remain unknown. This
+adds no endpoint and establishes neither identity/authority nor causal response
+outcomes, complete message history or freshness.
+
+The Silver writer also persists an exact provider-thread observation in the same
+database transaction. Communication360 composes bounded provider/account/thread
+message groups and resolves source-subject inventories through exact canonical
+source references and Silver fact rejoins. Durable Silver replies require no
+synthetic act to expose the same bounded reply association. Incomplete or
+ambiguous inventory reads are withheld; upstream completeness remains unknown.
+Explicit authenticated webhook roster membership separately joins canonical
+Conversations to provider/account/thread scope atomically with participant
+roles. External thread IDs are never canonical Conversation aliases. All eleven
+Communications360 product slots use isolated namesake sections, with exact
+message/thread/profile routing and explicit episode/journey references. Risk
+supports only exact agent/source/profile authority paths. Historical membership,
+freshness, upstream authorship and causal outcomes remain unsupported. No new
+endpoint or migration is added.
+
 `communication360` follows the same read-only route template (every route a GET,
 tenant-scoped from the authenticated tenant, capability-gated on
 `infrastructure360.read` / `communication360.read`); `risk360` and `fraud360`
@@ -1873,10 +1920,651 @@ no write path) under its own prefix, capability-gated on `risk360.read` /
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/risk360/{subject_kind}/{subject_id}` | Run the risk360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `cluster` \| `population`); 404 for an unserved kind, 503 when the provider is unregistered |
+| GET | `/v1/risk360/{subject_kind}/{subject_id}` | Run the risk360 projection for the requesting tenant (`subject_kind` ∈ `agent` \| `cluster` \| `contagion_path` \| `entity` \| `population` \| `relationship` \| `source` \| `support_case`); 404 for an unserved kind, 503 when the provider is unregistered |
 | GET | `/v1/risk360/health` | Plane probe: risk360 provider registered + contract-compatible (`availability()` only) |
 | GET | `/v1/fraud360/{subject_kind}/{subject_id}` | Run the fraud360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `agent`); 404 for an unserved kind, 503 when the provider is unregistered |
 | GET | `/v1/fraud360/health` | Plane probe: fraud360 provider registered + contract-compatible (`availability()` only) |
+
+#### Product Experience 360 frames
+
+The product catalog contains 18 distinct 360 surfaces. The shared frame route
+composes their declared slots from tenant-scoped projection and direct surface
+providers; it does not create a separate truth store or write graph state.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/experience360/frames` | Compose a product 360 frame; tenant scope comes from authenticated request state and policy runs before provider reads |
+| GET | `/v1/experience360/catalog` | Return all catalogued surfaces and technical-provider registration state |
+
+The following authority writes feed partial 360 projections. They use the
+authenticated tenant and actor rather than caller-supplied identity:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/workflows/definitions` | Register an immutable Workflow360 definition revision with typed trigger and step configuration; write authorization required |
+| GET | `/v1/workflows/definitions/{workflow_id}` | Read the latest exact-tenant revision; incomplete or unavailable authority reads return 503 |
+| POST | `/v1/social360/evidence/trust-edges` | Record an operator trust assertion against exact canonical entity and event evidence; admin permission required |
+| POST | `/v1/social360/evidence/contagion` | Record source-asserted transmission evidence against an exact observed path and linked risk signals; write permission required |
+
+Workflow definitions do not certify run execution. Social assertions do not
+mutate graph relationships or prove contagion. Their frame reads retain
+source, policy, evidence, completeness, and freshness limitations.
+Workflow360 frame reads may select a historical definition only for an exact
+workflow ID and point-in-time `asOf` anchor from a complete bounded revision
+history. The HTTP definition route above returns the latest revision.
+
+The current definition frame summary includes the backend-stamped
+`registeredByActorRef` and reports `registrarIdentityState`,
+`registrarIdentityReason`, `registeredByCanonicalHumanEntityId`, and
+`registrarIdentityEvidenceRefs`. The canonical Human ID is present only when
+one active tenant `USER_ID` alias and identity evidence resolve the registrar.
+Historical `asOf` frames leave that identity unknown; registration does not
+identify a workflow run initiator or approver.
+
+`POST /v1/agents/{agent_id}/execute` may include
+`workflow_definition_id`, `workflow_definition_revision`, and
+`workflow_definition_digest` together with an exact execution ID. The server
+requires a same-tenant AI invocation run link, a complete bounded as-of
+definition read, matching active revision/digest, and an Agent step before it
+persists the caller-reported association. Workflow360 run frames revalidate
+those records and show a degraded `workflow_summary` with the definition
+record and execution evidence. Trigger, step, and external-effect execution
+remain unknown; historical run-definition replay is unavailable.
+
+With the approval slot policy allowed, Workflow360 can also join an approved
+execution's recorded human permission check and agent delegation decision to
+the matching current tenant grant and exact agent, action, resource, and amount.
+The join does not establish current authorization or external execution.
+
+Workflow360 actions may additionally show the linked execution's recorded
+executor result and an exact current resource named by its approved request,
+after the actions slot is allowed. Tool results and resource operations remain
+unknown. Resource evidence excludes oversized reads, incomplete identifiers,
+future evaluations, and conflicting resolved associations; repeated identical
+evidence is deduplicated.
+
+The same endpoint accepts one `journey_action_reference` or
+`risk_action_reference`. The server validates the exact tenant, current journey
+intent or approved risk decision, action, and resource before recording the
+caller association on the lifecycle request. Slot-authorized Journey360 and
+Risk360 reads can show the recorded request with evidence; it does not prove
+dispatch or an external effect. Journey360 and Risk360 dispatch reads also
+require the persisted tenant `action.dispatch` policy decision for the exact
+dispatch, actor, selected action, target, elevation/approval context, and
+association; this records the application permission and approved-decision
+checks, not event-time authority, connector execution, or an external effect.
+For execution-bound x402 approvals, the decision also records the authenticated
+human's request-time `commerce:approve` check.
+
+An idempotent dispatch replay must supply the same association reference and
+match the persisted tenant, action, canonical action decision, selected action,
+and recommendation tuple. The replay uses the original stored association rather
+than asserting that its Journey intent or Risk decision is still current.
+Before authorization persistence, the reservation is `authorization_pending`.
+An atomic `authorizing` claim serializes retries of that reservation; policy
+evaluation or policy/audit persistence failures restore the pending state without
+calling the connector. A successful retry retains the original dispatch identity.
+Completed dispatches replay without another connector call.
+
+Journey360 and Risk360 dispatch reads also join bounded delivery evidence along
+the canonical `action_dispatches` → deterministic `DeliveryIntent` →
+`DeliveryJob` → `ProviderReceipt` → external-resource-link chain. Connector
+delivery is reported only when the exact tenant, dispatch, job, receipt,
+provider, external ID, and temporal links agree. Missing provider evidence is
+reported as unknown; ambiguous, malformed, cross-tenant, or incomplete reads
+fail closed. The intelligence dispatch receipt endpoint and its receipts do
+not substitute for this worker evidence chain.
+
+The tenant-facing `/v1/delivery/outcomes/ingest` endpoint records
+`producer_provenance: caller_asserted` and clears caller-supplied signature
+authority. Such events are not treated as verified callbacks by the projection
+reader. Callback events enter the verified evidence set only after signature
+verification and exact binding to the tenant, provider receipt, and external
+resource. Connector receipts and verified callbacks alone leave `externalEffect`
+as `not_independently_verified`. Separately, Jira delivery can produce a durable,
+credential-bound issue read-back matching the requested key, project, and title.
+The reader requires exact tenant, subject, dispatch, policy, receipt, provider-site,
+payload-digest, and temporal bindings before reporting
+`provider_resource_readback_verified`. Other providers remain unsupported for
+this verification; issue existence does not prove a business outcome or complete
+execution coverage.
+
+Communication360 Agent authorship requires an exact tenant-owned canonical
+Agent author binding with provider scope, event-time role validity, and trusted
+source evidence. Historical authorship remains unknown until participant-role
+replay is available, and provider conversation scope does not establish
+canonical Conversation membership.
+
+Frame responses retain slot state, evidence/provenance, freshness, quality,
+policy, and actor/authority metadata where canonical sources support them.
+Unsupported subject/provider paths and unavailable evidence remain explicit
+`unknown`, `missing`, or `degraded` states; the route does not imply that every
+catalog slot is complete. The 18-entry product catalog is crosswalked to the
+checked-in `docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md`;
+that file is the backend acceptance contract, while the supplemental
+architectural blueprint provides context without expanding the 18-surface
+scope. All 18 contracts now have source-aligned metadata and required-slot IDs.
+Source alignment does not certify provider conformance or runtime completion.
+The registry contains 24 technical projections; 9 are marked `implemented` and
+15 remain `in_flight`. All 24 register at application startup, and registration
+does not promote implementation status.
+
+The current provider paths add bounded evidence to required surface slots
+without claiming surface completion. Account360's `members` slot treats
+tenant-scoped `MEMBER_OF` graph edges as candidates, requires exact live
+graph-mutation-ledger evidence, and joins the exact tenant member entity; the
+bounded scans do not establish complete roster coverage or freshness.
+Account360 contract evidence requires an explicit `contract_profile_id` from
+the exact tenant and account billing record; a generic repository `id` is not
+treated as contract identity. Contract obligation, history, and freshness
+coverage remain partial.
+Account360's `profiles` slot follows
+tenant-scoped `MEMBER_OF` edges to exact entity-registry members and requests
+each member's Profile360 frame under that member's own policy; incomplete
+membership coverage remains degraded, and denied profile slots are omitted.
+Profile360's required `risk_summary` slot reuses Risk360 assessment and evidence
+only for exact tenant, subject-kind, and subject-ID matches on entity and Agent
+subjects. Its Profile-specific freshness threshold remains unknown, so the slot
+stays degraded while the other required Profile slots remain independently
+evaluated.
+Profile360's required `value_summary` slot reuses Economic360 summary and
+evidence only for exact tenant, subject-kind, and subject-ID matches on
+canonical entity and Agent subjects. Outcome360 does not yet support exact
+entity/profile subjects for attributed outcomes, and Profile-specific freshness
+remains unknown, so the slot stays degraded.
+Profile360's required `relationships` slot reads exact entity-subject graph
+ledger evidence through Relationship360 after slot policy evaluation. Profile
+aliases, account-member relationships, graph completeness, and Profile-specific
+freshness are not inferred, so that slot remains degraded or unknown.
+Profile360's required `location_temporal` slot reuses Geographic360 location
+evidence and timeline only for an exact tenant entity subject. Recorded
+timestamps and validity bounds are preserved without claiming a continuous
+physical trajectory; profile alias resolution, cross-surface completeness,
+historical point-in-time reconstruction, and Profile-specific freshness remain
+unknown, so the slot stays degraded.
+Profile360 `likely_next_states` rechecks the recorded inference decision and,
+for session models, the exact current identity binding before returning a
+prediction. It reads outcome truth only through the exact tenant, prediction
+ID, and `profile-outcome-labels.v1` contract. A unique same-subject fact whose
+observed time and any recorded achieved time fall within the prediction
+validity interval and no later than the request anchor is returned under
+`reportedOutcomeAssociations` with its evidence references. This read requires an independent outcomes-domain
+policy decision; permission for the Profile slot alone does not authorize it.
+The association is reported evidence, not an evaluation of predicted-state
+success or correctness; ambiguous, invalid, future, and truncated reads do not
+return linked facts and report incomplete coverage. This
+read does not re-evaluate current consent or establish historical identity,
+model calibration, complete outcome coverage, or outcome verification.
+Separately, `profile-state-adjudication.v1` supports policy-authorized canonical
+churn/retention adjudications and exact-artifact evaluations over closed prediction
+horizons. The provider validates the evaluator, sample contract, final state and
+source-event evidence and recomputes evaluation metrics from the admitted sample
+manifest before exposing them. These paths bind the slot's `outcome_facts` and
+`model_governance` references; `modelCalibrationVerified` remains false and
+applicability remains unknown.
+Agent360's `evidence_trace` joins agentic compatibility rows to canonical
+Bronze only when tenant, agent, source-row ID, event ID, schema version, event
+type, and timestamp match exactly. Historical rows without the reciprocal link
+remain unresolved; Rights source identity, source trust, and a freshness SLA
+remain unknown.
+Agent360's required `owner_delegator` slot resolves a configured
+`owner_entity_id` through the bounded tenant-scoped canonical entity lookup and
+joins it to the resolved canonical Agent only when the tenant graph contains an
+exact `OWNS` or `OWNS_AGENT` edge. The 2,000-edge scan reports truncation and
+scope uncertainty. Claims cite graph-edge, configuration, and identity
+evidence; a stored edge does not establish legal or effective ownership,
+historical validity, freshness, or action authorization.
+Account360's required `communications` slot now consumes Communication360
+evidence, interactions, and timeline for exact tenant-owned entity subjects
+whose communication endpoints have matching tenant identity bindings. It does
+not expand through account/workspace aliases or membership edges. Slot policy
+can suppress content, claims, and evidence references; source freshness and
+historical consent coverage remain unknown.
+Journey360's required `communications` slot now consumes Communication360
+evidence and interactions only for tenant-scoped canonical facts whose typed
+`journey_id` or `journey_ids` contains the exact requested journey ID. Message
+endpoints and free-text mentions do not qualify. Message-spine coverage,
+completeness, freshness evaluation, and historical replay remain unknown, so
+the slot stays partial.
+Value360's `confidence` slot receives Economic360 attribution evidence only
+when both a model confidence score and model type/version lineage are present.
+The score is identified as model-reported, with calibration and application to
+realized value or ROI unvalidated; model-governance calibration evidence remains
+unbound.
+Value360's `financial_risk` slot now requires one direct Economic360 fact claim
+and one assessed Risk360 economic, payment, or transaction dimension claim for
+the same tenant and exact subject. Generic RiskSignals do not satisfy the risk
+side. The join is current-read only; historical or explicitly ranged requests remain
+unknown because the latest risk assessment cannot prove a coordinated
+snapshot. Current results remain degraded while freshness thresholds and
+complete source coverage are unknown.
+The Value360 binding requests only Risk360's `financial_risk` section, which
+contains evidence-backed scored financial dimensions and their assessment
+lineage; general findings, poisoning evidence, policy flags, and social
+propagation are not forwarded into the slot.
+Execution360's `approval_chain` joins x402 approval requests and decisions to
+admitted execution IDs and exact lifecycle approval references. Stored action or
+resource conflicts degrade the slot and suppress the affected request and linked
+decision evidence. The join covers x402 commerce only; effective authorization,
+other approval authorities, historical linkage, and freshness thresholds remain
+unknown.
+Execution360 also records the authenticated initiating principal separately
+from the acting agent. It resolves a principal to a canonical Human only through
+an exact tenant-scoped active `USER_ID` alias and active surviving identity
+subject, retaining both evidence references. Missing or ambiguous identity
+evidence stays unknown; this identity link does not establish action
+authorization or delegation authority.
+Execution360's `authority_check` also surfaces a recorded delegation-engine
+decision only when `policy_log.delegation_check` joins to the same tenant-owned
+execution row and the exact requested action and resource are present. The
+claim cites lifecycle evidence for that row. An exact persisted evaluation
+timestamp is exposed when present; legacy missing timestamps remain unknown.
+Conflicting persisted execution and policy delegation references suppress the
+decision and degrade the authority scope. Current or standing authority, other
+authority sources, and a freshness threshold remain unknown.
+Execution360's required `latency_cost` slot now joins canonical AI invocation
+facts only when tenant, execution `action_id`, and canonical Agent match an
+admitted execution. Invocation latency and evidence are preserved; known
+selected costs are grouped by currency, and amounts with unknown or invalid
+cost basis are not exposed. The read is bounded and does not supply total
+execution, provider, or tool cost; temporal replay, other cost authorities, and
+a freshness threshold remain unavailable. Server lifecycle duration stays
+separate from invocation latency.
+Risk360's `poisoning_evidence` reads versioned tenant-scoped detector records
+for the exact subject, including lifecycle and evidence references. It exposes
+metadata only and does not independently verify source poisoning; detector
+coverage, population completeness, source identity, and freshness remain
+unknown.
+Risk360's required `policy_flags` slot reads exact tenant-and-Agent
+`obs_agent_risk_signals` records as reported observations with evidence. It
+does not present them as evaluated decisions: policy evaluation is unattested,
+the model-governance policy version is absent, and non-Agent, historical, and
+complete-coverage behavior remains unknown. `anomaly_events` admits exact
+typed-subject Gold alerts with an explicit RiskSignal event reference and,
+for `bronze_sdk_events`, a bounded tenant event-record join. It returns
+metadata and evidence references without payload; detector coverage, cause,
+severity, complete event coverage, and freshness remain unknown.
+Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
+findings with their targeting-observation and eligibility-snapshot evidence;
+it separately reads bounded canonical Risk360 assessments for the exact tenant
+and campaign subject, preserving assessment claim state and evidence. Campaign
+risk producer coverage, source anomalies, history, policy, and freshness remain
+unknown.
+Campaign360 `cohorts_syndicates` can return bounded current FOLLOWS edges
+between verified members of an explicitly linked population after slot policy
+and analytics consent for both endpoints. The result preserves graph and
+relationship evidence; complete topology, other predicates and history remain
+unknown.
+Location360's `risk` slot now also reads bounded canonical RiskAssessments for
+the exact typed subject only when timestamped event evidence cites the exact
+location source observation. It keeps RiskSignals separate; cause, producer
+coverage, history, policy, and freshness remain unknown. Journey360's `stages`
+slot exposes only explicit `journey_role` markers from the exact current journey
+version's steps, with stage taxonomy and completeness unknown. Location360's
+`normalization` slot exposes canonical location-fact source/evidence links but
+leaves normalization version, transformation time, and timezone unknown. These
+bindings preserve partial or unknown states and do not promote the technical
+providers' `in_flight` registry status.
+
+Additional partial paths expose Identity360 `devices_sessions` identifier-type
+metadata from exact tenant-scoped source-identity records, with per-observation
+evidence references and no raw values or hashes; a dedicated device/session
+inventory and its completeness/freshness authority remain unjoined. Execution360
+`risk_events` joins bounded canonical RiskSignals and RiskAssessment snapshots
+to exact execution subject IDs admitted from tenant server lifecycle records.
+Producer and snapshot history coverage, causality, and freshness remain
+unknown. Social360 `propagation` returns bounded tenant-scoped FOLLOWS paths
+only after endpoint consent, predicate eligibility, path timing, and evidence
+checks; it includes no component measurements and does not establish contagion
+or full path completeness. Episode360 `communications` binds only communication
+facts carrying the exact episode ID; the complete message spine and conversation
+membership are not joined. These additions remain partial provider paths and do
+not complete their respective 360 surfaces.
+
+Execution360 `tool_calls` also exposes bounded server-owned MCP invocation
+receipts independently of `CALLED_TOOL` lifecycle edges. Receipt-backed results
+require exact execution, agent, initiating principal, tool, resource, grant,
+operation-time policy and timestamp validation. Canonical receipt evidence is
+included in interactions and evidence; lifecycle observations remain separate.
+External effects, mutations, historical replay, freshness and full producer
+coverage remain unknown.
+
+The 2026-10-23 provider wave adds Episode360 `timeline` resolution for exact
+episode-recorded observation IDs against tenant-scoped active semantic Silver
+rows, Campaign360 `signal_sources` joins from exact touchpoint references to
+tenant-scoped canonical event metadata, and Memory360 `policy_state` evidence
+for historical write-time allow decisions. The joins preserve evidence and
+unknown or partial states. Semantic SDK rows now carry a backend-stamped
+source namespace. When an EpisodeEngine caller explicitly supplies a semantic
+Silver observation ID and authority marker, the engine attempts an exact
+tenant, namespace, status, timestamp, and event-evidence link after persisting
+the episode. The live validated-event consumer now supplies this association for
+qualifying classified observations with a supported resolved subject type,
+authenticated source namespace, aware occurrence time, and evidence, grouped in
+tenant/subject-scoped `semantic_observation_stream` episodes. Full activity and
+session coverage, historical completeness, continuity, policy, and freshness
+remain unresolved; Campaign360 now joins exact gateway-admitted SDK Bronze observations
+when tenant, event ID, type, and event time match the touchpoint-linked
+canonical event. Exact current touchpoint classification revisions join by
+tenant, touchpoint, revision ID, class, classifier version, and time. Campaign
+registry source, broader source producers, event completeness, and freshness
+remain unknown; Memory360 does not evaluate current consent or policy. Its record
+producer stamps explicitly required purposes from the verified write-time
+decision, and exact reads suppress a stamped record if that decision no longer
+matches. The Memory360 memory item and historical policy decision now expose
+the verified write-time purpose list; legacy unstamped purposes remain unknown.
+These provider
+changes add no HTTP routes and do not complete any surface.
+
+Episode360 `touchpoints` now resolves only explicitly recorded
+`journey_touchpoint_ids` from tenant-scoped episode rows to canonical
+tenant-scoped touchpoint records with evidence. Legacy references, complete
+link inventory, policy, freshness, and attribution links remain unknown.
+Journey360 `episodes` also joins only tenant-scoped EpisodeRecords that
+explicitly persist the exact `journey_id`, with record/source evidence. Legacy
+or unlinked records, association completeness, store freshness, policy, and
+historical replay remain unknown; a missing link does not establish absence.
+Risk360 `anomaly_events` remains partial: an exact Gold alert with matching
+RiskSignal evidence can resolve one explicitly referenced Bronze SDK record,
+but generic signals and assessment dimensions are not typed anomaly events or
+automatic detector output. Memory360 `cards` and `embeddings_meta` remain unknown because the
+repository has no canonical context-card or embedding-metadata records;
+optional vector references and semantic pointers do not provide that authority.
+These gaps need tenant-scoped source records with evidence and policy/freshness
+semantics before providers can connect them.
+
+Execution360's evidence section now reads unique same-tenant Bronze records
+for admitted external Silver telemetry event IDs. It rechecks event type and
+time against the stored observation envelope and returns sanitized ingress
+provenance with the Bronze evidence reference. Source identity, external
+execution receipts, complete coverage, historical replay, and freshness remain
+unknown. Support360's case journey slot can also join an EpisodeRecord that
+both names the exact journey and cites the verified case journey-link event;
+shared journey ID alone is insufficient. This is a partial current-store read
+with no live producer of that episode relation and no population guarantee.
+Neither addition creates an HTTP route or completes a 360 surface.
+
+Signals360 `quality` now exposes a separate exact tenant/site installation
+status when an accepted SDK event carries the authenticated server-stamped site
+namespace. `source_inventory` also joins the exact current tenant site registry
+record as a source fact, without claiming historical site status or fleet
+coverage. It preserves installation evidence while leaving event-time and
+fleet health, mobile installation linkage, and freshness unknown.
+A follow-up slice adds partial Signals360 `classification` evidence for exact
+gateway-accepted SDK event types and registry families; source attribution,
+semantic classification, policy, and freshness remain unknown. Workflow360 now
+resolves execution initiator and approval decider identities only through
+unique active tenant USER_ID aliases, and joins exact x402 approval records
+referenced by admitted run-linked AgentExecutions. AgentExecution stores the
+workflow run and invocation references only when a unique tenant-scoped AI
+invocation has `action_id` equal to the stable execution ID; the provider checks
+the exact tenant, run, action, and agent links before admitting a step. Workflow
+definition-to-run linkage, complete actor and step coverage, workflow-wide
+approval authority, policy, and freshness remain unknown. Workflow360 `triggers` exposes allowlisted
+event metadata only for exact tenant analytics events referenced by admitted
+run-linked AgentExecutions; event rows returned with an unavailable or unread
+source state are suppressed. The stored reference does not prove event
+causality or complete trigger coverage. Episode360 `agent_handoffs` remains
+unknown because episode records and observations have no canonical execution or
+handoff reference. The frame route preserves these slot limitations and adds
+no new endpoint.
+
+The next provider slice adds three partial required-slot paths without new
+routes or surface completion. Communications360 `policy_state` evaluates the
+canonical current-consent authority only for exact tenant, recipient-entity,
+and purpose pairs supported by communication identity and evidence; historical
+write-time outcomes remain separate, while non-consent policy, durable current
+decision evidence, complete recipient coverage, and freshness remain unknown.
+Communications360 `risk_flags` also requires an exact canonical Agent identity
+and a current analytics-consent receipt before reading that Agent's RiskSignals;
+missing, ambiguous, malformed, receipt-less, or denied decisions block the
+read, and consent-authority errors degrade the slot. Message-edge transfer,
+complete coverage, composite Risk360 output, and freshness remain unknown.
+Risk360 `propagation_paths` exposes bounded current FOLLOWS graph paths only
+after analytics consent, endpoint, tenant, relationship-evidence, and observed-
+time checks; the evidence records path context and does not establish risk
+propagation or social contagion. `social_contagion` remains unknown because a
+causal detector/evidence authority is not connected. Value360 `reconciliation`
+keeps subject economic records and exact order-linked commerce facts separate,
+and resolves settlement-to-payment references only through an explicit
+provider payment ID and the same commerce order. Cross-source economic matching,
+non-USD commerce normalization, reconciled totals, amount equality, and
+settlement finality remain unavailable.
+
+Profile360 `syndicates` verifies bounded exact tenant/entity membership
+candidates against tenant-owned populations explicitly opted in to Syndicates,
+then checks the exact current `MEMBER_OF` graph-ledger aggregate. Positive
+claims cite the live edge-add mutation ID. Historical or bounded reads return
+unknown; roster completeness and freshness remain unknown. Commerce360
+`availability_price` exposes lifecycle and provenance for exact product/offer
+catalog revisions only. Inventory availability, current offer price, and
+freshness remain unknown. Location360 `timezone` remains unknown because no
+exact tenant-scoped geographic timezone mapping is connected; coordinates,
+place labels, and source-clock timezone values are not used to infer one.
+
+The current 2026-10-23 provider wave adds partial Identity360
+`identifier_inventory`, `namespace_map`, and `aliases` rows with record-level
+evidence. `namespace_map` resolves only the exact recorded `source_system_id`
+against the loaded provider runtime registry, returning allowlisted metadata;
+registry freshness remains unknown. Social360's `syndicates` slot now binds
+explicitly opted-in membership to an exact tenant entity and current
+`MEMBER_OF` graph mutation ledger edge; roster completeness, historical
+membership, and freshness remain unknown. Value360's `attribution_credits` slot now rejoins each credit's
+conversion and touchpoint IDs to tenant-scoped canonical records and checks
+campaign consistency. Historical attribution remains unavailable, touchpoint
+lookups are capped, and the underlying credit query remains unbounded.
+
+Agent360 and Execution360 actor metadata now includes typed actor and
+represented-subject IDs, authority edge IDs, independent driver scores,
+confidence, and explanation. Agent-driven attribution requires an exact
+canonical server execution actor claim; authenticated initiators and
+source-reported actor telemetry alone do not establish the action driver.
+Agent360 also exposes a typed two-edge delegation observation only for one
+complete, continuous path with exact records and canonical party evidence.
+It does not infer transitive authority or an effective authorization decision.
+The Agent360 capability profile also exposes exact recorded invoke action and
+resource scopes with delegation evidence on a complete grant read. Ambiguous
+dual-target grants are rejected. It also exposes bounded persisted
+`capability.invoke` evaluations linked to exact tenant, Agent, capability, grant,
+result, and evaluation time. These records describe prior policy evaluations,
+not current authorization or actual tool invocations. The separate authenticated
+tool invocation endpoint now produces server-owned MCP completion receipts.
+Agent360 capabilities and Workflow360 actions admit those receipts only with
+exact tenant, agent, execution, tool, grant, policy and workflow scope and valid
+invocation timing. Failed initialization cannot become a tool invocation claim;
+observations and executor callbacks cannot produce these receipts. This binds
+supported invoke actions. The separate resource-read endpoint uses the configured
+`resource_uris` allowlist, exact observed resource identity, a distinct active
+`read_resource` grant, and MCP `resources/list` followed by `resources/read`.
+Registration persists that allowlist; updates advance the agent policy version.
+Only attempted reads with exact requested-URI contents can report successful
+resource-read evidence. Ambiguous receipts fail closed. Resource mutations,
+standing authorization, independent external effects and complete producer
+coverage remain unknown. Neither surface nor
+the full 18-surface contract is complete.
+The `resources` registry reference is bound for this exact observed read path,
+not for general resource operations. Resource inventory pagination is bounded;
+repeated cursors, duplicate matching URIs and malformed or overflowing listings
+fail closed before the read.
+MCP initialization, tool calls, and resource listing/reads accept JSON or SSE
+responses only when exactly one JSON-RPC response matches the request ID.
+Valid resource-read grants remain separate from invoke-grant coverage.
+
+Journey360 and Risk360 can also include an associated agent execution's
+recorded delegation decision when its tenant, grant reference, status and decision time
+match the execution record. The execute endpoint supplies the request tenant to
+the delegation engine and records that scope; older records without it stay unknown.
+Associated lifecycle requests must not predate the Journey intent's occurrence
+or the Risk decision's observation and effective time, or their recording time.
+Agent360 and Execution360 likewise suppress recorded decision claims without
+matching tenant scope.
+The decision describes that request-time check;
+current authorization, worker dispatch and external effects remain unverified.
+Separately authorized Journey360 dispatch evidence requires the associated intent
+to have occurred and been recorded by dispatch time. This recorded lifecycle
+state does not establish an external effect or complete dispatch coverage.
+Risk360 can separately read associated dispatch lifecycle records after an
+actions-domain policy decision. The join requires an exact entity recommendation
+and an approved intervention observed, recorded, and effective by dispatch time.
+It also requires the persisted tenant action-dispatch policy decision to be
+allowed for this exact dispatch, tenant, authenticated principal, selected
+action, target, elevation/approval context, and association record, with policy
+evaluation no later than the recorded dispatch attempt (or creation for older
+records without an attempt timestamp). Future or reversed dispatch times fail closed.
+The Risk decision must also be recorded, observed, and effective by the
+authorization evaluation time.
+Current-decision validation rejects out-of-scope or future-observed or recorded
+history, and invalid decisions cannot yield a complete empty dispatch read.
+The persisted dispatch check records the tenant dispatch permission and approved
+decision gate; it does not establish event-time authority, connector execution,
+or an external effect.
+
+The latest provider slice adds Agent360 `risk_summary`, Execution360
+`risk_events`, and Value360 `ltv` evidence without adding routes. Agent360 no
+longer reads raw `obs_agent_risk_signals`; its canonical Risk360 reader checks
+exact canonical Agent scope, current analytics consent with a receipt, and
+Risk360 claim/evidence scope and exposes the exact canonical Agent identity
+join only for admitted risk output. A slot-authorized Social360 read may add
+consent-gated, evidence-linked risk-context correlations involving that Agent;
+it does not establish contagion or causality. The
+product frame's separate Risk360 binding is
+subject to the normal slot gate. The frame runtime passes a request-scoped
+authorization envelope to Agent360 only when `risk_summary` was requested and
+allowed, bound to Risk360, and the projection declares `risk360.read`. The
+envelope binds the exact tenant, subject, slot, consumer, target, capability,
+and evaluated policy decision. An independent actor-granted `risk360.read`
+authority is not yet represented. Agent-specific freshness, historical replay,
+and contagion remain unknown.
+Execution360's `risk_events` now also reads bounded RiskAssessment snapshots
+through exact tenant/execution subject lookups alongside canonical RiskSignals.
+History and producer coverage, freshness, and causality remain unknown.
+Value360's `ltv`
+slot reports only evidenced confirmed/adjusted canonical conversion net-value
+observations by native currency and occurred-at scope. The scalar LTV amount
+stays null because lifetime completeness, outcome attribution, and freshness
+are unproved; missing net values degrade coverage and absent rows do not mean
+zero.
+
+Value360 `web2_value` and `web3_value` now classify exact order-linked completed
+payment facts without computing totals. Web2 requires an explicit supported
+card, ACH, wire, SEPA, or bank-transfer rail. Web3 requires an explicit crypto
+flow or on-chain rail, complete native amount/asset/chain evidence, and an
+exact transaction-hash EvidenceRef. Stripe PaymentIntent methods remain
+unclassified when the source method list is ambiguous; Stripe crypto-onramp
+joins require an exact order reference plus valid source amount and currency.
+Wallet identity, non-USD normalization, coverage, policy, and freshness remain
+unknown.
+
+The same 2026-10-23 projection wave binds Social360 `influence_paths` to a
+bounded `influence` section. It joins tenant-scoped directed FOLLOWS paths to
+persisted per-hop RelationshipFidelity measurements only when all vector
+evidence IDs match the exact graph edge's relationship-fact evidence; path
+completeness, freshness, actual influence, trust, and causal contagion remain
+unknown. Workflow360 `triggers` resolves allowlisted event metadata only for
+exact tenant events referenced by run-linked AgentExecutions. That stored
+reference does not prove event causation or complete trigger coverage. The
+changes add no HTTP routes and leave both projections partial. Execution360
+also accepts `workflow_run` subjects for exact tenant-scoped AgentExecution
+references whose stored invocation IDs match AI facts with the same run,
+action, and agent. It does not prove workflow-wide step coverage or completion,
+and source telemetry remains unlinked without a canonical run crosswalk.
+
+The latest provider slice adds four partial joins and no HTTP routes.
+Signals360 `campaign_links` exposes an event/observation link only after an
+exact tenant/source-event campaign touchpoint resolves to a canonical campaign
+for the same tenant. Episode360 `conversion_events` follows exact outcome IDs
+stored on tenant episode records and admits only registered conversion
+definitions with canonical evidence. Workflow360 `outcomes` follows exact
+outcome IDs from tenant/run AI invocation facts through the canonical outcome
+store and describes reference association without claiming workflow causality.
+Identity360 `namespace_map` resolves only the exact recorded `source_system_id`
+to allowlisted provider runtime metadata. Each remains partial: incomplete
+source coverage, policy, freshness, or historical behavior stays unknown.
+
+### Support case lifecycle evidence ingress
+
+`POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under
+the authenticated tenant and requires `write` permission. The caller must name
+an exact tenant-owned, verified provider connection. The request includes the
+connection ID, source case ID, source event ID, event type, and timezone-aware
+occurrence time; arbitrary payload, title, description, and message-body fields
+are rejected. `support_case_created` must establish a case before later events.
+The response reports the accepted lifecycle state as an observed source claim;
+it does not assert that the support system's account, customer, or resolution
+semantics have been independently verified. Missing verified connection is
+403; missing case or invalid lifecycle transition is 409. Support360 reads the
+resulting tenant-scoped case and event evidence as a partial provider path.
+For canonical support-case subjects, Support360 exposes `resolutionState` as
+observed only when the applied resolved/closed event's occurrence time matches
+the authoritative case timestamp and both exact provider-event and connection
+evidence are present. The slot remains degraded because business outcome facts,
+complete case history, and a freshness threshold are unavailable.
+For canonical cases, Support360 also reads communication metadata only through
+the exact tenant, provider connection, and source case key on the canonical
+case. It suppresses message bodies and unresolved participant IDs, preserves
+case/connection/lifecycle/fact evidence, and reports current-store read
+completeness separately from unknown source-history completeness and freshness.
+The `risk` frame slot now routes to Risk360 after slot policy. Risk360 proves
+the exact tenant-owned case before reading case-keyed RiskAssessment and
+RiskSignal records and preserves both risk and case evidence. Missing, expired,
+or ambiguous case identity suppresses the risk reads. Risk history, signal
+coverage, freshness, business outcome, and case contagion remain unknown.
+Callback, SLA timer, journey-link, and agent-assignment records have bounded
+case-scoped joins; their upstream authorship, history completeness, and
+freshness remain unknown.
+
+The nine Support-owned required frame slots select distinct `support_<slot_id>`
+sections before reads. A permitted resolution slot does not fetch denied sibling
+authorities. Lifecycle scope must match the tenant, case, and connection;
+case-linked communications must additionally match the provider identity.
+Risk remains independently policy-gated through Risk360.
+
+`POST /v1/support/cases/subjects/ingest` requires tenant `write` permission and
+an authenticated principal. Its `connection_id` and typed `binding` name an
+existing canonical case, matching source case, provider account and source
+subject, explicit `ticket` or `conversation` kind, source event, and aware
+occurrence time. The connection must be verified and the account selected.
+The response returns a generated canonical `subject_id`; exact immutable replay
+returns the original mapping, while conflicts return 409. All nine Support-owned
+frame slots now route these subjects through the validated persisted case join.
+Mapped conversations expose case context, not conversation-exclusive messages.
+The separately policy-gated Risk slot also accepts these persisted ticket and
+conversation subjects. Risk360 rechecks the exact mapping, current verified
+connection, selected account and canonical case before reading case-keyed risk.
+Claims remain bound to the requested subject. Invalid mappings suppress all
+Risk reads and join evidence; incomplete signal reads expose no partial signal
+evidence. Historical mapped reads, freshness, source-history completeness and
+business outcomes remain unverified.
+
+The caller must send one of `support_case_created`, `support_case_updated`,
+`support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or
+`support_case_closed`. The source case and event identifiers remain scoped to
+the verified connection; they are not canonical customer or account identity.
+
+`POST /v1/support/cases/callbacks/ingest` records one typed callback schedule
+or lifecycle event for an exact canonical support case. It requires tenant
+`write` permission, a verified provider connection bound to the case, a
+connection-scoped callback ID, an idempotent source event ID, and timezone-aware
+timestamps. The lifecycle is limited to scheduled, rescheduled, attempted,
+completed, failed, and cancelled; stale events are retained without regressing
+current state. The endpoint does not verify a provider signature or establish
+writer actor identity. Support360 reads bounded case callback/event evidence;
+source-history completeness and freshness remain unknown.
+
+`POST /v1/support/cases/{case_id}/sla/contracts` lets a tenant ADMIN register
+one immutable source SLA policy revision and target duration for a canonical
+case on a verified provider connection. Support360 binds it to a source timer
+only when the tenant, case, connection, provider, source SLA and policy IDs,
+policy version, timer kind, and target duration agree. The response and frame
+carry the contract ID and evidence. New contracts select `active_elapsed_v1`;
+legacy contracts without a method version remain source-reported-only. An explicit
+`support_sla_timer_stopped` event completes a reproducible start/pause/resume/stop
+sequence. Support360 compares active elapsed time with the registered target,
+excluding pauses and retaining all sequence event IDs. Incomplete reads, mixed
+policy revisions, ambiguous ordering, target conflicts, and future timestamps
+suppress measurement. Reported met/breached/cancelled events are not measured
+results. Registration and this local calculation do not establish upstream
+authenticity, historical applicability, complete source history, or freshness.
 
 
 ---
@@ -3128,6 +3816,16 @@ Proactive AI-driven suggestions for operators and tenants — surfaces actionabl
 | POST | `/v1/suggestions/{suggestion_id}/execute` | Execute the suggested action directly |
 | POST | `/v1/suggestions/{suggestion_id}/deliver` | Deliver via notification channel |
 | POST | `/v1/suggestions/{suggestion_id}/outcome` | Record observed outcome after execution |
+| POST | `/v1/suggestions/{suggestion_id}/compensate` | Record a request to reverse an executed, delivered, or failed suggestion (requires `admin`); marks `effect_state` and emits an event, it does not undo anything itself |
+
+Lifecycle guarantees on these routes:
+
+- The reviewer recorded on approve, reject, suppress, and execute is the authenticated principal. A client-supplied `actor_id` is ignored.
+- `expires_at` must be an ISO 8601 timestamp. Approve, execute, and deliver on a past-due suggestion move it to `expired` and return 400.
+- `POST /v1/suggestions` accepts an optional `idempotency_key` (1-128 characters). The same key from the same principal with the same content returns the original suggestion; the same key with different content returns 409. Without a key every call creates a new suggestion.
+- `audience` is `tenant_staff` (default) or `end_user`. End-user suggestions require `consent_subject_id` and are delivered only when the consent owner reports a grant for the purpose; otherwise delivery is held, audited, and `effect_state` is `blocked_consent`.
+- `effect_state` reports what is known about the effect: `none`, `pending_receipt`, `confirmed`, `unverified`, `blocked_consent`, `failed`, or `compensation_requested`.
+- State transitions are compare-and-set on status. Of two concurrent approvals, one succeeds and the other gets 409 or 400.
 
 ### Kyber Admin Routes (`/v1/admin/kyber/suggestions`)
 
@@ -3228,6 +3926,55 @@ Kyber operator routes require admin permission and an explicit tenant scope for 
 - `GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check?tenant_id=...&limit=...` — bounded read-only check of known tenant deployment, Silver, delegation, and economic references against supported graph vertices/edges. Reports `consistent`, `inconsistent`, or `partial`, with missing/extra/mismatched/unresolved/unauthorized findings and truncation/coverage. It is `best_effort_non_snapshot`, does not mutate or drain the outbox, and does not certify all graph contents.
 
 Run-explanation evidence separates `delegation_resolution` (canonical record/party binding), `delegation_authorization` (event-time scope result), and `execution_occurrence`. Canonical grant data may support `within_scope`, `out_of_scope`, or `indeterminate`; action, resource, and event time are source-asserted. Target party binding uses source `delegatedToNamespace` (`delegated_to_namespace` in Silver); missing/invalid namespace remains unresolved and does not fall back to the actor namespace. Without a server-owned external execution receipt, occurrence remains `source_reported` and `verified=false`. A grant match is not proof the reported action occurred.
+
+### Agent spawn lineage
+
+- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` (up to 32) — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
+
+### High-cardinality principal and agent lineage
+
+All routes need `agent:manage` and the deployment registry flag. Tenant scope comes from the authenticated context, never the path. Lists are cursor-paged (`page_size` up to 500) and bound to the scope that issued the cursor. Every aggregate carries a `disclosure` with `as_of`, `completeness` and truncation reasons. A count the evidence cannot support is `null`, never `0`, and a subject with no materialized lineage reports `completeness: unknown`.
+
+- `GET /v1/agent-lineage/principals/{id}/summary` — materialized counts for one principal: direct, indirect, probabilistic and unresolved agents, instances, runs, depth, verified and inferred links.
+- `GET /v1/agent-lineage/principals/{id}/agents` — lineage rows. Filters: `relationship`, `attribution_class`, `active_state`, `lineage_status`, `risk`, `cluster_id`, `deployment_id`, `operator_entity_id`, `authority_status`, `min_depth`, `max_depth`. An unknown filter value is a 400.
+- `GET /v1/agent-lineage/principals/{id}/clusters` — derived groupings, largest first, each stating its `bases`. `implies_common_control` is true only for an all-verified, non-weak grouping.
+- `GET /v1/agent-lineage/principals/{id}/tree` — one delegation level, each branch collapsed to its descendant count; `parent` expands a branch.
+- `GET /v1/agent-lineage/principals/{id}/risk` — Risk360 fan-out assessment. Scale is reported as context and cannot raise the level on its own; `triggered_signals` lists the behavioral evidence.
+- `GET /v1/agent-lineage/principals/{id}/restatements` — what corrections changed.
+- `POST /v1/agent-lineage/principals/{id}/export` — also needs `export` or `admin`. Enqueues the extraction as a job; `GET /v1/agent-lineage/exports/{job_id}` reports it. Each part holds at most 50,000 rows of evidence fields. A part with `rows_remaining: 1` continues with `after` set to its last agent id.
+- `GET /v1/agent-lineage/agents/{id}` — Agent360 lineage block: hierarchy, principals, ancestors, counts, effects, outcomes, evidence. `/counts`, `/descendants` (cursor) and `/ancestors` read parts of it.
+- `POST /v1/agent-lineage/reconcile` — enqueues the durable `agent_lineage.reconcile` job, which folds new evidence; `full=true` rebuilds and logs restatements. The `agent_lineage_reconcile_sweep` worker runs this hourly per tenant, with a daily full rebuild for facts arriving with old timestamps.
+- Deployment `attestation_public_key` (`POST`/`PATCH /v1/agent/deployments`) — needs `admin` and an authenticated user, and one key per agent. Events signed with its private key are recorded `attested`.
+- `PUT /v1/agent-lineage/agents/{id}/adjudication` — also needs `admin` and an authenticated user. Records a verdict (`confirmed_malicious` or `cleared`) with a reason and evidence. The next reconcile applies it.
+- `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/calibration` — `admin` and the Kyber telemetry flag. Precision and recall of candidate fan-out thresholds against adjudicated principals. Read-only; no threshold is recommended below 50 labels per class.
+- `POST /v1/agent-lineage/bindings` — records a tenant's declaration of a principal link. No evidence class is accepted: declarations are stored `TENANT_DECLARED` and resolve as inferred at most.
+- `GET /v1/admin/kyber/agent-lineage/tenants/{tenant}/principals/{id}/investigation` — `admin` and the Kyber telemetry flag. The operator's first screen in bounded reads, with `/agents`, `/tree` and `/tenants/{tenant}/agents/{id}` for drilldown.
+
+### Agent behavior read models
+
+- `GET /v1/agent/agents/{agent_ref}/behavior` — `agent:manage`, registry flag. Agent360 behavior read model rebuilt from the agent's Silver facts: usual tools and dispositions, features with sample sizes and confidence intervals, capabilities and competencies, preferences (only over observed, permitted alternatives), failure resolution, journey, influence graph and an observability envelope listing what Aether cannot see. It also composes owner-supplied sections: `identity` (recognition state, continuity, non-merge-eligible resolver claims, derived review items, queued `agent_continuity_candidate` reviews, and `continuity_decisions` recording reviewer confirm/reject as `reviewer_asserted` with `merge_performed: false`), `authority` (each value-moving action checked against the agent's active grants: `inside`, `outside` or `unknown`), `value` (agent-selected/executed/influenced totals per currency, `reported` until a rail confirms), `risk` (Risk360 signals, not findings), `trust` (kept separate from reputation) and `market` (per-merchant agent compatibility). Each section reports `available`, `partial` (the 1,000-fact read was capped) or `unavailable` with a reason. Agent refs are source-reported; this is not an identity resolution.
+- `POST /v1/agent/agents/{agent_ref}/behavior/snapshots` — `agent:manage`, registry flag. Body `{window_start, window_end}`. Computes the behavior snapshot for facts inside the window and stores it in `agent_behavior_snapshots` (a rebuildable cache; the same window recomputes to the same row). `GET /v1/agent/agents/{agent_ref}/behavior/drift` compares the two most recent stored windows and returns `insufficient_windows` until two exist; drift requires interval-separated change.
+- `GET /v1/agent/agents/{agent_ref}/behavior/calibration` — registry flag, tenant-scoped. Forward interval coverage over the agent's stored snapshot windows: does window *i*'s interval contain window *i+1*'s observed rate. Needs 20 window pairs per rate before it reports a status; `calibrated` is always `false` because no labelled outcomes are used. Derived and rebuildable, writes nothing.
+- Value 360 (`economic360`) adds an `agent_mediated_activity` section: not applicable to non-agent subjects; for a canonical Agent it uses the tenant-admin identity binding, reports totals per currency as `reported` until confirmed, and is `unknown` without a binding.
+- `GET /v1/agent/agents/principals/{entity_id}/agents` — `agent:manage`, registry flag. Agents acting for one person, linked only by an active recorded delegation grant from that person or a declared beneficiary on the agent's own facts, with usual disposition, decision count and human-agent coupling (approval latency, escalations, overrides). Never an identity merge (`identity_merge: not_performed`); at most 25 agents, with `source_truncated` when a fact read was capped.
+- `GET /v1/agent/agents/{agent_ref}/decisions/{decision_id}` — `agent:manage`, registry flag. One reconstructed DecisionEnvelope (open or closed, with missing parts listed), its evidence-association attribution, the nine responsibility roles, and a counterfactual labelled `counterfactual — not observed`. Returns 404 when the decision is not the named agent's or belongs to another tenant.
+- `POST /v1/agent/agents/{agent_ref}/continuity-reviews/{review_id}/confirm` and `.../reject` — `agent:manage`, registry flag. Records a reviewer decision on one open `agent_continuity_candidate` item that touches this agent's source identities: `confirmed` (the deployments report one logical agent) or `rejected` (distinct agents). Review context only: nothing is merged, bound or relinked, and the response always carries `merge_performed: false` and `authority: "none"`. Decided items leave the queue shown in Agent 360. Repeating the same decision is idempotent, and the opposite decision returns 409. Another tenant's item, another agent's item, or an unknown id returns 404. The late-binding approve and merge routes cannot load these items.
+
+### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
+
+- `POST /sdk/journey-handoff` — SDK key (a site-bound publishable key may call it). Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID. Identifiers are trimmed; blank ones are a 422.
+- `POST /sdk/journey-handoff/redeem` — SDK key (a site-bound publishable key may call it). Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Consent is checked for the destination and re-checked for the token's source subject; every failure, including a revoked source, returns the same 404 and leaves the token unspent.
+- `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`; not reachable with a publishable key. Handoffs recorded for one journey; an unredeemed token past `expires_at` reads as `expired`.
+
+`GET /v1/journeys/{id}/transitions` now also returns `link_basis` counts (`explicit_handoff` vs `inferred`) for cross-device hops.
+
+Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handoff_sweep`, maintenance role) and erased by anonymous ID through the `journey_handoffs` DSR component.
+
+### Fleet hypotheses (flag `FEATURE_FRAUD_NETWORKS`)
+
+- `POST /v1/fraud/fleet-hypotheses/build` — `fraud:evaluate`. Builds an evidence-graded common-operator hypothesis for an orchestrator; with `AETHER_FRAUD360_ENABLED` it also mirrors it into Fraud360 (response `fraud360`).
+- `GET /v1/fraud/fleet-hypotheses` and `GET /v1/fraud/fleet-hypotheses/{id}` — `fraud:read`.
+- `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status. Written atomically against the record's `revision`, so concurrent reviews are all kept in `review_history`.
 
 ## Agentic Observability Layer
 
@@ -3547,7 +4294,7 @@ server-controlled durable endpoint ids; tenant ownership is resolved from the
 
 ## Semantic-Sentiment Intelligence APIs
 
-The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope.
+The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope (the canonical Kyber operator gate, so a customer admin is refused); the route policy classifies by HTTP method, so the declared capability, disclosure and action class of `POST /v1/kyber/semantic/review-queue/{item_id}/resolve` are enforced at the boundary. Review-queue items raised from a source event are idempotent per tenant, queue, subject and event, so a redelivered event does not create a second operator work item. Tenant routes act as the authenticated tenant only: the `x-tenant-id` header is honored in local development alone, `read`/`write` permissions are checked, and a tenant that is not serving is refused.
 
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
 
@@ -3597,6 +4344,13 @@ Comms webhook endpoint management (tenant-admin; ADR-C11):
 
 Communications tenant surface (`/v1/comms/*`):
 
+- `POST /v1/comms/webhook` — accepts tenant-scoped communication events. A
+  typed optional `participant_roster` is accepted only with a configured,
+  verified tenant webhook HMAC; the server supplies authoring context and the
+  writer requires exact tenant/provider/account identity mappings plus
+  source-role evidence. HMAC authenticates the source, not participant identity
+  or role. Provider conversation IDs remain source claims until canonical
+  Conversation membership and message coverage are joined.
 - `GET /v1/comms/entitlement` — the tenant's comms plan entitlement, current
   connection usage, and quota state (`allowed` / `quota_approaching` /
   `quota_reached` / `upgrade_required`).
@@ -3627,7 +4381,8 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
   (continuations, installations, client-sync), the semantic-intelligence
   plane (observations, sentiment, Gold aggregate state, review queue), and
   every other `DSR_COMPONENTS` entry (identity, graph, Profile 360, features,
-  exports, caches, replay, connectors, financial snapshots, Silver, Bronze) —
+  exports, caches, replay, connectors, financial snapshots, Silver, Bronze, the
+  derived agent lineage read model) —
   marking each `dsr_propagation` component with its own receipt.
 
 Provider readiness is truthful: without a credential a provider reports
@@ -4603,6 +5358,16 @@ enforcement is on.
 | GET | `/v1/admin/kyber/managed-integrations/change-sets/{changeset_id}` | One ChangeSet detail | Status history, risk, approvals evidence |
 | GET | `/v1/admin/kyber/managed-integrations/approvals` | Approval records | §21 role-gated review queue |
 | GET | `/v1/admin/kyber/managed-integrations/action-required` | ActionRequired items | §12.14 exceptions awaiting an operator decision |
+
+## Prediction-market observation
+
+Mounted only when `AETHER_PREDICTION_MARKET_INGESTION_ENABLED` is set; each venue also needs its own flag (`AETHER_PROVIDER_POLYMARKET_ENABLED` / `AETHER_PROVIDER_KALSHI_ENABLED`). Observation-only: Aether never places orders. Callers submit venue payloads; Aether does not poll the venues, and a venue-reported resolution is stored as reported and is never evidence of settlement.
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| POST | `/v1/prediction-markets/observations/normalize` | `write` | Validate a Polymarket or Kalshi market payload and return the canonical observation (`Decimal` outcome prices in [0, 1] as strings). Stores nothing (`persisted: false`). `404` when ingestion or the venue is disabled; `422` for an invalid payload |
+| POST | `/v1/prediction-markets/observations` | `write` | Normalize and store the observation, tenant-scoped and immutable. Identical content is idempotent (`created: false`); a changed quote is a new row |
+| GET | `/v1/prediction-markets/markets/{venue}/{market_ref}` | `read` | Latest stored observation for the tenant, with server-assigned `received_at`. Optional `as_of` (timezone-aware ISO-8601) returns the latest observation received at or before that instant. `404` when none exists |
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
 

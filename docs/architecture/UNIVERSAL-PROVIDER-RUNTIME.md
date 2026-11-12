@@ -18,12 +18,15 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR main.py diff: it mounts Social360 evidence and Workflow definition routers. Universal Provider Runtime connection, credential, and webhook mounts are unchanged."
 source_hashes:
-  "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
-  "services/api/connectors/provider_runtime/": "sha256:7b305b72716ad006af0d0b7ab8f65899f65e6daca49f5b93c28b5b7094233d10"
-  "services/api/connectors/providers/": "sha256:086060aa67b187df1b1ea59ab1d556fd0bca1df379b3162447117f3ecbff7aeb"
+  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
+  "services/api/connectors/providers/": "sha256:99c4564cb3100b0cb0b2b3e58d602a2c638665a5b2dd829efae4737239457349"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
-  "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
+  "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
   "services/api/shared/integration_contracts/": "sha256:c0bc85bcebb1c5a7b4f2fcdd57dce8d3137c07d0db1be200da8c296a295e63a6"
   "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
@@ -51,6 +54,16 @@ The layer map:
 | Runtime service | `services/api/connectors/provider_runtime/` | Registry → orchestrator → pipeline → engines → API; registers, certifies, and executes plugins |
 | Plugin modules | `services/api/connectors/providers/*/` | One package per provider capability (reference: `services/api/connectors/providers/shopify/`) |
 | Legacy compat | `services/api/connectors/provider_runtime/legacy.py` (`LegacyConnectorPlugin`) | Exposes every existing `BaseConnector` as a plugin with zero code changes |
+
+### Intelligence Projection consumers
+
+`Source360Provider` and `Connection360Provider` read tenant-scoped UPR source,
+connection, credential-presence, and sync-run state for Experience360 frames.
+They are read-only Intelligence Projection providers, separate from the UPR
+`ProviderPlugin` registry and its certification lifecycle. They do not invoke
+connectors, create source events, mutate connection state, or change the UPR
+feature flags. A 360 frame can therefore report unknown or degraded provider
+context without enabling connector execution.
 
 ## Components
 
@@ -291,6 +304,12 @@ opaque refs scoped to tenant, provider identity, and connection. Persisted
 legacy tenant/provider refs remain resolvable for existing connections, but
 new writes do not reuse or rewrite them. This credential boundary does not
 grant raw-data retention rights.
+
+Operator fleet views may enumerate credential-version **presence and lifecycle
+state** across tenants (provider, tenant, environment, slot, state) to
+distinguish configured-but-never-observed sources. Such inventory reads return
+only safe metadata — never secret material, masked values, or connection
+payloads — and are operator-gated.
 
 ## Feature flag & wiring
 

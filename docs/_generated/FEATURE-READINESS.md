@@ -6,10 +6,10 @@ Each feature is measured across independent dimensions. Implementation completio
 
 | Feature | Scope | Impl % | Prod % | Ceiling | Achieved | Activation | Confidence |
 |---|---|--:|--:|---|:--:|---|---|
-| Agentic x402 | agentic-x402-v1 v1 | 80% | 100% | VERIFIED | — | NO_EXTERNAL_BLOCKER | MODERATE |
+| Agentic x402 | agentic-x402-v1 v1 | 100% | 100% | VERIFIED | ✅ | ENVIRONMENT_VALIDATION_PENDING | MODERATE |
 | Backend API | backend-api-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Campaign Intelligence | campaign-intelligence-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
-| Card-Linked Payment Rails | card-linked-payments-v1 v1 | 60% | 25% | CODE_COMPLETE | ✅ | CREDENTIAL_WAITING | LOW |
+| Card-Linked Payment Rails | card-linked-payments-v1 v1 | 60% | 25% | CODE_COMPLETE | — | CREDENTIAL_WAITING | LOW |
 | CI & Test Gates | ci-tests-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | BYOK Connectors | connectors-byok-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | CREDENTIAL_WAITING | MODERATE |
 | Customer Frontend | customer-frontend-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
@@ -32,10 +32,11 @@ Each feature is measured across independent dimensions. Implementation completio
 | Profile 360 | profile-360-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
 | Provider Certification Plane | provider-certification-plane-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | LIVE_DATA_WAITING | MODERATE |
 | Push Notification Delivery | push-notification-delivery-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | CREDENTIAL_WAITING | MODERATE |
-| Scale Readiness | scale-readiness-v1 v1 | 80% | 50% | RUNTIME_INTEGRATED | ✅ | INFRASTRUCTURE_WAITING | LOW |
+| Reconciled Control Plane | reconciled-control-plane-v1 v1 | 80% | 50% | CODE_COMPLETE | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
+| Scale Readiness | scale-readiness-v1 v1 | 100% | 100% | VERIFIED | ✅ | INFRASTRUCTURE_WAITING | MODERATE |
 | Client SDKs | sdks-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Security & Compliance | security-compliance-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
-| Semantic Intelligence | semantic-intelligence-v1 v1 | 60% | 25% | CODE_COMPLETE | ✅ | CREDENTIAL_WAITING | LOW |
+| Semantic Intelligence | semantic-intelligence-v1 v1 | 100% | 100% | VERIFIED | ✅ | CREDENTIAL_WAITING | MODERATE |
 | Smart Contracts & Rewards | smart-contracts-rewards-v1 v1 | 100% | 100% | RELEASE_TURNKEY | ✅ | AUDIT_WAITING | MODERATE |
 | Stablecoin Intelligence | stablecoin-intelligence-v1 v1 | 80% | 50% | RUNTIME_INTEGRATED | ✅ | LIVE_DATA_WAITING | LOW |
 | Tenant Import Engine | tenant-import-engine-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
@@ -43,14 +44,14 @@ Each feature is measured across independent dimensions. Implementation completio
 ## Agentic x402 (`agentic-x402`)
 
 - **Scope:** agentic-x402-v1 v1 — observation-pilot
-- **Implementation:** IMPLEMENTED · 80% of in-scope repository controls (migration-derived)
+- **Implementation:** VERIFIED · 100% of in-scope repository controls (migration-derived)
 - **Productionization:** 100% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** VERIFIED (achieved: no)
-- **Activation:** NO_EXTERNAL_BLOCKER
-- **Remaining repository work:** wire the x402 and agent lifecycle mappers to an event consumer
+- **Repository ceiling:** VERIFIED (achieved: yes)
+- **Activation:** ENVIRONMENT_VALIDATION_PENDING
+- **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Backend API (`backend-api`)
 
@@ -81,9 +82,9 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Scope:** card-linked-payments-v1 v1 — observation-pilot
 - **Implementation:** IMPLEMENTED · 60% of in-scope repository controls (migration-derived)
 - **Productionization:** 25% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** CODE_COMPLETE (achieved: yes)
+- **Repository ceiling:** CODE_COMPLETE (achieved: no)
 - **Activation:** CREDENTIAL_WAITING
-- **Remaining repository work:** complete runtime integration; complete repository-controlled verification
+- **Remaining repository work:** wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
 - **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
@@ -352,17 +353,29 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
 - **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
 
+## Reconciled Control Plane (`reconciled-control-plane`)
+
+- **Scope:** reconciled-control-plane-v1 v1 — staging-proof-then-staged-production-activation
+- **Implementation:** IMPLEMENTED · 80% of in-scope repository controls for the Program A+B plus first Program C slice
+- **Productionization:** 50% of in-scope productionization controls for the Program A+B plus first Program C slice
+- **Repository ceiling:** CODE_COMPLETE (achieved: yes)
+- **Activation:** NO_EXTERNAL_BLOCKER
+- **Remaining repository work:** Program C — execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D — recovery, continuity and interruption reconciliation; Program E — operator command surface for governed transitions; Program F — security/scale review and credentialed staging proof; Program G — staged production activation with rollback evidence
+- **Confidence:** MODERATE — gap: No credentialed staging/production evidence.
+- **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=NOT_IN_PROFILE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+
 ## Scale Readiness (`scale-readiness`)
 
 - **Scope:** scale-readiness-v1 v1 — founding-tenant-production
-- **Implementation:** RUNTIME_INTEGRATED · 80% of in-scope repository controls (migration-derived)
-- **Productionization:** 50% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** RUNTIME_INTEGRATED (achieved: yes)
+- **Implementation:** VERIFIED · 100% of in-scope repository controls (migration-derived)
+- **Productionization:** 100% of in-scope productionization controls (migration-derived)
+- **Repository ceiling:** VERIFIED (achieved: yes)
 - **Activation:** INFRASTRUCTURE_WAITING
-- **Remaining repository work:** complete repository-controlled verification + hardening
-- **Confidence:** LOW — gap: credentialed environment execution not yet performed
+- **Remaining repository work:** None
+- **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED, scale=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Client SDKs (`sdks`)
 
@@ -391,14 +404,14 @@ Each feature is measured across independent dimensions. Implementation completio
 ## Semantic Intelligence (`semantic-intelligence`)
 
 - **Scope:** semantic-intelligence-v1 v1 — founding-tenant-production
-- **Implementation:** IMPLEMENTED · 60% of in-scope repository controls (migration-derived)
-- **Productionization:** 25% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** CODE_COMPLETE (achieved: yes)
+- **Implementation:** VERIFIED · 100% of in-scope repository controls (migration-derived)
+- **Productionization:** 100% of in-scope productionization controls (migration-derived)
+- **Repository ceiling:** VERIFIED (achieved: yes)
 - **Activation:** CREDENTIAL_WAITING
-- **Remaining repository work:** complete runtime integration; complete repository-controlled verification
-- **Confidence:** LOW — gap: credentialed environment execution not yet performed
+- **Remaining repository work:** None
+- **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Smart Contracts & Rewards (`smart-contracts-rewards`)
 

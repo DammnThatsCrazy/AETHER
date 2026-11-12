@@ -819,6 +819,86 @@ class BaseRepository(ABC):
         logger.info(f"TENANT UPSERT {self.table_name} id={record_id}")
         return data
 
+    async def insert_if_absent(self, record_id: str, data: dict, tenant_id: str) -> bool:
+        """Create a tenant-owned row only if ``record_id`` does not exist yet.
+
+        Returns ``False`` (writing nothing) when any row already holds the id,
+        whoever owns it, so a caller that lost a create race re-reads instead of
+        replacing the winner. JSONB-mode tables only.
+        """
+        if not tenant_id or data.get("tenant_id") != tenant_id:
+            raise ValueError("tenant-scoped insert requires matching tenant data")
+        if not self._jsonb_mode:
+            raise NotImplementedError("insert_if_absent supports JSONB-mode tables only")
+        now = utc_now().isoformat()
+        data["id"] = record_id
+        data["created_at"] = data.get("created_at") or now
+        data["updated_at"] = now
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            if record_id in self._store:
+                return False
+            self._store[record_id] = data
+            logger.info(f"INSERT IF ABSENT {self.table_name} id={record_id} (in-memory)")
+            return True
+
+        await self._ensure_table()
+        status = await pool.execute(
+            f"INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at) "
+            f"VALUES ($1, $2::jsonb, $3, NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+            record_id, json.dumps(data, default=str), tenant_id,
+        )
+        inserted = not _no_rows(status)
+        logger.info(f"INSERT IF ABSENT {self.table_name} id={record_id} inserted={inserted}")
+        return inserted
+
+    async def replace_if_matches(
+        self, record_id: str, data: dict, tenant_id: str, expected: dict[str, Any]
+    ) -> bool:
+        """Atomically replace a tenant-owned row only if it still matches ``expected``.
+
+        ``expected`` is a subset of the stored record (for example
+        ``{"revision": 3}``); the replace is skipped, and ``False`` returned, when
+        the row is missing, owned by another tenant, or no longer contains every
+        expected key/value. Two writers that read the same row therefore cannot
+        both win: the loser sees ``False`` and re-reads. Unlike
+        ``insert_tenant_scoped`` this never rewrites the stored ``created_at``
+        (the caller's ``data`` carries it), only ``updated_at``.
+
+        JSONB-mode tables only; the match is a single ``data @> expected``
+        predicate inside the UPDATE, so it is atomic in PostgreSQL. The
+        in-memory adapter has no await between the check and the write.
+        """
+        if not tenant_id or data.get("tenant_id") != tenant_id:
+            raise ValueError("tenant-scoped replace requires matching tenant data")
+        if not self._jsonb_mode:
+            raise NotImplementedError("replace_if_matches supports JSONB-mode tables only")
+        data["id"] = record_id
+        data["updated_at"] = utc_now().isoformat()
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            existing = self._store.get(record_id)
+            if existing is None or existing.get("tenant_id") != tenant_id:
+                return False
+            if any(existing.get(key) != value for key, value in expected.items()):
+                return False
+            self._store[record_id] = data
+            logger.info(f"CONDITIONAL REPLACE {self.table_name} id={record_id} (in-memory)")
+            return True
+
+        await self._ensure_table()
+        status = await pool.execute(
+            f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() "
+            f"WHERE id = $2 AND tenant_id = $3 AND data @> $4::jsonb",
+            json.dumps(data, default=str), record_id, tenant_id,
+            json.dumps(expected, default=str),
+        )
+        replaced = not _no_rows(status)
+        logger.info(f"CONDITIONAL REPLACE {self.table_name} id={record_id} replaced={replaced}")
+        return replaced
+
     async def update(self, record_id: str, data: dict) -> dict:
         """Merge ``data`` into ``record_id``; only the owning tenant's row changes.
 
@@ -2494,6 +2574,50 @@ class EntityRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
+    async def find_many_for_tenant_entity_ids(
+        self,
+        tenant_id: str,
+        entity_ids: set[str] | list[str] | tuple[str, ...],
+    ) -> tuple[list[dict], bool]:
+        """Resolve a bounded set of canonical entity IDs within one tenant.
+
+        The returned truncation flag is conservative: more rows than requested IDs
+        indicates duplicate entity identifiers or an unexpected repository shape, so
+        callers must not select one row as canonical.
+        """
+        if not tenant_id:
+            raise ValueError("find_many_for_tenant_entity_ids requires a tenant_id")
+        requested = sorted(
+            {value.strip() for value in entity_ids if isinstance(value, str) and value.strip()}
+        )
+        if not requested:
+            return [], False
+
+        limit = len(requested) + 1
+        requested_set = set(requested)
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [
+                row
+                for row in self._store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("entity_id") in requested_set
+            ]
+            rows.sort(key=lambda row: str(row.get("entity_id", "")))
+            return rows[:limit], len(rows) > len(requested)
+
+        await self._ensure_table()
+        rows = await pool.fetch(
+            "SELECT data FROM entities "
+            "WHERE tenant_id = $1 AND data->>'entity_id' = ANY($2::text[]) "
+            "ORDER BY id ASC LIMIT $3",
+            tenant_id,
+            requested,
+            limit,
+        )
+        records = [json.loads(row["data"]) for row in rows]
+        return records, len(records) > len(requested)
+
     async def list_by_tenant(
         self, tenant_id: str, entity_type: Optional[str] = None, limit: int = 100,
         *, offset: int = 0, stable_order: bool = False,
@@ -2640,21 +2764,30 @@ class AgentConfigRepository(BaseRepository):
         tools: Optional[list] = None,
         constraints: Optional[dict] = None,
         risk_tolerance: str = "medium",
+        resource_uris: Optional[list[str]] = None,
+        asserted_by_entity_id: Optional[str] = None,
     ) -> dict:
         return await self.insert(agent_id, {
+            "asserted_by_entity_id": asserted_by_entity_id,
             "agent_id": agent_id,
             "owner_entity_id": owner_entity_id,
             "tenant_id": tenant_id,
             "model": model,
             "tools": tools or [],
+            "resource_uris": resource_uris or [],
             "constraints": constraints or {},
             "risk_tolerance": risk_tolerance,
             "policy_version": 1,
         })
 
-    async def list_for_owner(self, owner_entity_id: str) -> list[dict]:
+    async def list_for_owner(
+        self, owner_entity_id: str, *, limit: int = 200, tenant_id: Optional[str] = None
+    ) -> list[dict]:
+        filters = {"owner_entity_id": owner_entity_id}
+        if tenant_id is not None:
+            filters["tenant_id"] = tenant_id
         return await self.find_many(
-            filters={"owner_entity_id": owner_entity_id}, limit=200,
+            filters=filters, limit=min(max(1, limit), 201),
         )
 
 
@@ -2680,12 +2813,29 @@ class AgentExecutionRepository(BaseRepository):
         error: Optional[dict] = None,
         started_at: Optional[str] = None,
         ended_at: Optional[str] = None,
+        initiating_principal_user_id: Optional[str] = None,
+        workflow_run_id: Optional[str] = None,
+        workflow_run_invocation_ids: Optional[list[str]] = None,
+        workflow_definition_link: Optional[dict] = None,
+        approval_id: Optional[str] = None,
+        approval_decision_id: Optional[str] = None,
+        action_association: Optional[dict] = None,
+        create_only: bool = False,
     ) -> dict:
         now = utc_now().isoformat()
-        return await self.insert(execution_id, {
+        record = {
             "execution_id": execution_id,
             "agent_id": agent_id,
             "tenant_id": tenant_id,
+            "initiating_principal_user_id": initiating_principal_user_id,
+            "workflow_run_id": workflow_run_id,
+            "workflow_run_invocation_ids": list(workflow_run_invocation_ids or []),
+            "workflow_definition_link": dict(workflow_definition_link) if workflow_definition_link else None,
+            "approval_id": approval_id,
+            "approval_decision_id": approval_decision_id,
+            "action_association_kind": action_association.get("kind") if action_association else None,
+            "action_association_record_id": action_association.get("record_id") if action_association else None,
+            "action_association": dict(action_association) if action_association else None,
             "delegation_id": delegation_id,
             "triggered_by_event_id": triggered_by_event_id,
             "status": status,
@@ -2697,7 +2847,42 @@ class AgentExecutionRepository(BaseRepository):
             "error": error,
             "started_at": started_at or now,
             "ended_at": ended_at,
-        })
+        }
+        if create_only:
+            return await self._insert_once(execution_id, record)
+        return await self.insert(execution_id, record)
+
+    async def _insert_once(self, record_id: str, data: dict) -> dict:
+        """Atomically claim an approved execution ID without overwriting it."""
+        now = utc_now().isoformat()
+        data["id"] = record_id
+        data["created_at"] = now
+        data["updated_at"] = now
+        tenant_id = _row_tenant(data)
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            if record_id in self._store:
+                raise ConflictError()
+            self._store[record_id] = data
+            logger.info(f"INSERT {self.table_name} id={record_id} (in-memory)")
+            return data
+
+        await self._ensure_table()
+        if not self._jsonb_mode:
+            raise RuntimeError("agent_executions must use the JSONB repository schema")
+        status = await pool.execute(
+            f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING""",
+            record_id,
+            json.dumps(data, default=str),
+            tenant_id,
+        )
+        if _no_rows(status):
+            raise ConflictError()
+        logger.info(f"INSERT {self.table_name} id={record_id}")
+        return data
 
     async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 50) -> list[dict]:
         return await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
@@ -2765,8 +2950,10 @@ class DelegationRepository(BaseRepository):
         starts_at: Optional[str] = None,
         ends_at: Optional[str] = None,
         metadata: Optional[dict] = None,
+        asserted_by_entity_id: Optional[str] = None,
     ) -> dict:
         record = await self.insert(delegation_id, {
+            "asserted_by_entity_id": asserted_by_entity_id,
             "delegation_id": delegation_id,
             "tenant_id": tenant_id,
             "grantor_entity_id": grantor_entity_id,

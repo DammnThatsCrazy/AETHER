@@ -27,6 +27,7 @@ from .models import (
     CapabilityInstallation,
     CapabilityKind,
     capability_id_for,
+    resource_id_for,
     clamp_capability_ids,
     clamp_dedup_ids,
     clamp_event_ids,
@@ -127,6 +128,7 @@ def _fact_fields(row: dict[str, Any]) -> dict[str, Any]:
         "occurred_at": _clean(row.get("occurred_at")) or _clean(row.get("timestamp")),
         "provider": pick("provider", "provider"),
         "tool_name": pick("tool_name", "toolName"),
+        "resource_uri": pick("resource_uri", "resourceUri"),
         "server_name": pick("server_name", "serverName"),
         "server_url": _sanitize_server_url(pick("server_url", "serverUrl")),
         "protocol_version": pick("protocol_version", "protocolVersion"),
@@ -143,6 +145,8 @@ def _derive_kind(f: dict[str, Any]) -> CapabilityKind:
     tool = f.get("tool_name")
     server = _server_key(f)
     event = (f.get("event_name") or "").lower()
+    if f.get("resource_uri") and server:
+        return CapabilityKind.RESOURCE
     if tool and server:
         return CapabilityKind.MCP_TOOL
     if tool:
@@ -157,7 +161,7 @@ def _derive_kind(f: dict[str, Any]) -> CapabilityKind:
 def _should_record(f: dict[str, Any], kind: CapabilityKind) -> bool:
     """Only inventory rows that identify an external capability. Generic agent-lifecycle
     events (e.g. ``agent_task_started``) with no provider/server/tool are not capabilities."""
-    if f.get("tool_name") or f.get("server_name") or f.get("server_url"):
+    if f.get("tool_name") or f.get("resource_uri") or f.get("server_name") or f.get("server_url"):
         return True
     return kind == CapabilityKind.ACCOUNT and bool(f.get("provider"))
 
@@ -228,7 +232,8 @@ class CapabilityCatalogService:
 
     async def _upsert_capability(self, f: dict[str, Any], kind: CapabilityKind) -> str:
         tenant_id = f["tenant_id"]
-        cap_id = capability_id_for(tenant_id, f.get("provider"), _server_key(f), f.get("tool_name"))
+        cap_id = (resource_id_for(tenant_id, f.get("provider"), _server_key(f), f.get("resource_uri"))
+                  if f.get("resource_uri") else capability_id_for(tenant_id, f.get("provider"), _server_key(f), f.get("tool_name")))
         existing = await self._catalog.find_by_id(cap_id)
         sid = f.get("source_event_id")
         # Dedup over a bounded window kept SEPARATE from the small display sample, so the
@@ -254,6 +259,7 @@ class CapabilityCatalogService:
             "server_name": f.get("server_name") or (existing or {}).get("server_name"),
             "server_url": f.get("server_url") or (existing or {}).get("server_url"),
             "tool_name": f.get("tool_name") or (existing or {}).get("tool_name"),
+            "resource_uri": f.get("resource_uri") or (existing or {}).get("resource_uri"),
             "protocol_version": f.get("protocol_version")
             or (existing or {}).get("protocol_version"),
         }
@@ -266,6 +272,7 @@ class CapabilityCatalogService:
             server_name=merged["server_name"],
             server_url=merged["server_url"],
             tool_name=merged["tool_name"],
+            resource_uri=merged["resource_uri"],
             protocol_version=merged["protocol_version"],
             latest_risk_level=f.get("risk_level") or (existing or {}).get("latest_risk_level"),
             publisher_ref=publisher_ref_for(merged["server_url"], merged["provider"]),

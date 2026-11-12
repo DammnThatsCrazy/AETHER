@@ -26,6 +26,19 @@ flipped in the phase-6 gate.
 
 ## What it is
 
+### Support mapped-subject scope (2026-11-06)
+
+The separately policy-gated Support360 risk slot accepts canonical support
+cases and persisted `ticket` / `conversation` subjects. Before any risk read,
+Risk360 validates the exact authenticated tenant, canonical mapping, current
+verified provider connection, selected account, source scope and canonical case.
+Claims preserve their state and confidence while targeting the requested alias;
+the evidence trace carries the exact subject/case join. Invalid or ambiguous
+mappings suppress all Risk reads and binding evidence, and incomplete signal
+reads release no partial signal evidence. Historical mapped reads fail closed.
+This establishes bounded case-risk observations, not upstream authenticity,
+complete risk history, freshness, causal effects or business outcomes.
+
 Risk360 is Aether's **evaluative 360** — a universal contextual risk-assessment
 projection over canonical Aether truth, for subjects of kind `entity`,
 `relationship`, `cluster`, or `population`. It answers "what could be materially

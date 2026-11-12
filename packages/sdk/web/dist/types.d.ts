@@ -175,6 +175,13 @@ export interface AdvancedConfig {
     retry?: RetryConfig;
     /** Custom HTTP headers for API requests */
     customHeaders?: Record<string, string>;
+    /**
+     * Base64url SPKI P-256 public key for verifying signed remote-config manifests
+     * (`python scripts/sdk_manifest_public_key.py`). When set, unsigned or invalid
+     * manifests are rejected and the last known-good config is kept. When unset,
+     * manifests are applied without verification.
+     */
+    manifestPublicKey?: string;
 }
 export interface RetryConfig {
     maxRetries?: number;
@@ -446,6 +453,34 @@ export interface JourneyPayload {
     referrerAttribution?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     [key: string]: unknown;
+}
+/** A single-use, short-lived token the destination device redeems to continue a journey. */
+export interface JourneyHandoffToken {
+    token: string;
+    handoffId: string;
+    expiresAt: string;
+}
+/**
+ * Server-verified link between two sessions. `linkBasis` is always `explicit_handoff`:
+ * possession of the token proves one party held both sessions. It never merges
+ * identities (`identityMerge` is `not_performed`).
+ */
+export interface JourneyHandoffLink {
+    handoffId: string;
+    journeyId: string;
+    linkBasis: 'explicit_handoff';
+    identityMerge: 'not_performed';
+    from: {
+        sessionId: string;
+        anonymousId: string;
+        platform: string;
+    };
+    to: {
+        sessionId: string;
+        anonymousId: string;
+        platform: string;
+    };
+    redeemedAt: string;
 }
 export interface CurrentJourney extends JourneyPayload {
     journeyId: string;

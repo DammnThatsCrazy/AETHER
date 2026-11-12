@@ -20,17 +20,18 @@ scope:
   excluded: []
   deferred: []
 repository_ceiling:
-  type: CODE_COMPLETE
+  type: VERIFIED
   achieved: true
   remaining_after_ceiling:
   - Insert provider credentials into the credential platform; run credentials-preflight.
-  remaining_is_repository_controlled: true
+  remaining_is_repository_controlled: false
   evidence:
   - services/api/intelligence/semantic_intelligence/
   - services/api/intelligence/semantic_intelligence/providers.py
   - services/api/intelligence/semantic_intelligence/replay.py
+  - services/api/tests/semantic_intelligence/
 implementation:
-  state: IMPLEMENTED
+  state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
   controls:
   - id: contracts-and-schemas
@@ -48,14 +49,40 @@ implementation:
   - id: persistence-and-migrations
     description: persistence and migrations
     weight: 20
-    satisfied: false
+    satisfied: true
+    rationale: Every table the semantic code reads or writes is created by a migration, each creating migration defines
+      a tenant_id column, and each table has a declared storage policy (semantic_memory_records had none and was
+      invisible to the policy-coverage gate, which now discovers literal op.create_table calls). The durable store,
+      Silver primary-key and Gold version-upsert behavior are exercised against the repository layer.
+    evidence:
+    - services/api/tests/semantic_intelligence/test_semantic_persistence_parity.py
+    - services/api/tests/semantic_intelligence/test_semantic_durable_store.py
+    - services/api/tests/semantic_intelligence/test_silver_fact_primary_key.py
+    - services/api/tests/semantic_intelligence/test_gold_version_upsert.py
+    - config/storage_policies.yaml
+    - tests/unit/test_storage_descriptors.py
   - id: authorization-and-tenant-isolation
     description: authorization and tenant isolation
     weight: 20
-    satisfied: false
-  remaining_work:
-  - complete runtime integration
-  - complete repository-controlled verification
+    satisfied: true
+    rationale: The HTTP surface is proven with the real TenantContext. The authenticated tenant always wins over a
+      supplied header (and an unauthenticated request is refused outside local development), a credential needs the
+      right permission, a tenant that is not serving is refused, tenant B cannot read or control tenant A by id or
+      through any listing, overlay or rollup, and customers are refused the operator surface. An operator holding the
+      configured legacy operator grant is admitted; admission of a Kyber workforce session on these routes is NOT
+      claimed here, because the workforce access context is resolved only by routes that declare a Kyber access
+      dependency and these routes do not (the same platform-wide gap as the other routes guarded only by the operator
+      gate). The route policy now classifies by method, so the declared capability, disclosure and action class of the
+      review-queue resolve route are enforced at the boundary. Store, projector and privacy paths are tenant-isolated
+      and fail closed.
+    evidence:
+    - services/api/tests/semantic_intelligence/test_semantic_routes_authz.py
+    - tests/security/test_kyber_gate_migration.py
+    - services/api/tests/semantic_intelligence/test_semantic_durable_store.py
+    - services/api/tests/semantic_intelligence/test_semantic_graph_projector.py
+    - services/api/tests/semantic_intelligence/test_semantic_privacy.py
+    - services/api/tests/dsr/test_semantic_dsr_erasure.py
+  remaining_work: []
 productionization:
   denominator: in-scope productionization controls (migration-derived)
   controls:
@@ -66,19 +93,44 @@ productionization:
   - id: observability-metrics-logs
     description: observability metrics logs
     weight: 25
-    satisfied: false
+    satisfied: true
+    rationale: Classification, abstention, quarantine, review-queue depth and replay-job activity each emit a contracted
+      series (counter, latency histogram or gauge), and a namespace-discipline test fails if any series outside the
+      contract appears. Domain events carry identifiers and versions, never raw content.
+    evidence:
+    - services/api/tests/semantic_intelligence/test_semantic_metrics.py
+    - services/api/tests/semantic_intelligence/test_semantic_events.py
   - id: reliability-idempotency-retry
     description: reliability idempotency retry
     weight: 25
-    satisfied: false
+    satisfied: true
+    rationale: A redelivered or concurrently redelivered event yields one observation and, when subject resolution
+      routes it to review, one review-queue item (the item id is derived from tenant, queue, subject and source
+      event, so the enqueue is idempotent); the same event id in two tenants stays independent; replay, recompute and graph projection are idempotent; a replay interrupted mid-run
+      resumes from its cursor on retry; event-emission and shadow-mode failures never break the write path; provider
+      and erasure/revocation failures fail closed.
+    evidence:
+    - services/api/tests/semantic_intelligence/test_semantic_consumer_redelivery.py
+    - services/api/tests/semantic_intelligence/test_semantic_replay.py
+    - services/api/tests/semantic_intelligence/test_semantic_replay_jobs.py
+    - services/api/tests/semantic_intelligence/test_semantic_graph_projector.py
+    - services/api/tests/semantic_intelligence/test_semantic_durable_store.py
+    - services/api/tests/semantic_intelligence/test_semantic_shadow_mode.py
+    - services/api/tests/semantic_intelligence/test_semantic_privacy.py
   - id: ci-and-release-gates
     description: ci and release gates
     weight: 25
-    satisfied: false
-  remaining_work:
-  - observability metrics logs
-  - reliability idempotency retry
-  - ci and release gates
+    satisfied: true
+    rationale: Classifier quality is gated by a golden-pinned evaluation (accuracy, per-stance recall and abstention
+      floors), table and policy coverage is gated by the storage-policy release gate, and the semantic tests (including
+      the classifier evaluation) run in the registered backend-semantic suite, which the verification router selects
+      for any change under the semantic service or its tests.
+    evidence:
+    - services/api/tests/evaluation/test_semantic_classifier_eval.py
+    - scripts/release/check_storage_policies.py
+    - config/test_suites.yaml
+    - services/api/tests/semantic_intelligence/
+  remaining_work: []
 activation:
   state: CREDENTIAL_WAITING
   blockers:
@@ -132,11 +184,13 @@ business_readiness:
   applicable: false
   controls: []
 confidence:
-  level: LOW
+  level: MODERATE
   reasons:
   - 'repository evidence: services/api/intelligence/semantic_intelligence/'
+  - 'repository evidence: services/api/tests/semantic_intelligence/'
   evidence_gaps:
   - credentialed environment execution not yet performed
+  - provider credentials not yet inserted; credentials-preflight not yet run
 release_profiles:
   local:
     participation: required

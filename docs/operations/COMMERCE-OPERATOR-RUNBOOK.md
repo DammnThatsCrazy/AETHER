@@ -9,6 +9,8 @@ since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
   - services/api/value/x402/provenance.py
+  - services/api/actions/agent/user_agents.py
+  - services/api/alembic/versions/20261022_execution_approval_decisions.py
   - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/authority.py
   - services/api/actions/agent_marketplace/graph_state_check.py
@@ -16,12 +18,17 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1188c4b27db58ba73a9009a29a2a42a68ad595c5c04cf8a854688cdd3cc42092"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
+  "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 # Commerce Operator Runbook
@@ -132,7 +139,20 @@ timeline shows a missing, unavailable, or unmatched economic record.
    unmatched. For graph evidence, use the independent Kyber state check in the
    Operations Runbook; it reports graph drift without repairing it.
 
-## 6. Override review
+## 6. Agent execution approval linkage
+
+For an approval request bound to an agent execution, inspect the exact agent,
+action, resource, and amount before deciding. The authenticated tenant user is
+recorded as the decision actor. After approval, provide that approval ID to the
+agent execution request; the backend checks the exact run binding and latest
+decision again. Revoked, mismatched, or already-used execution IDs are rejected.
+The decision history is retained in the tenant-scoped commerce decision store.
+This check covers the x402-linked run only; it does not establish that an
+external payment or business action took place. The agent execution endpoint
+only records admission and bookkeeping; it does not invoke a tool or resource
+operation, and the run record is not an invocation receipt.
+
+## 7. Override review
 
 **Symptom:** `COMMERCE_APPROVAL_OVERRIDE` audit entry surfaces.
 

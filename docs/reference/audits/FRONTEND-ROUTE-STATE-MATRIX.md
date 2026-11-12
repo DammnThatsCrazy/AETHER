@@ -57,6 +57,18 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/me` | tenant profile and measured usage | no | A | A | A | A | I | `me-data-truth.test.tsx` |
 | `/geo` | geographic summary | no | A | A | A | A | I | `geo-data-truth.test.tsx` |
 | `/geo/:level/:geoId` | geographic drilldown | no | A | A | A | A | I | `geo-data-truth.test.tsx` |
+| `/signals` | notification inbox, alert rules, digest preferences | no | A | A | A | A | I | `signals-page.test.tsx` |
+| `/risk` | agent capability findings, investigations, data quality | no | A | A | A | A | I | `risk-page.test.tsx` |
+| `/syndicates` | population groups and discovered graph clusters | no | A | A | A | A | I | `syndicates-page.test.tsx` |
+| `/syndicates/:syndicateId` | population group, rules and members | no | I | A | A | A | I | `syndicates-page.test.tsx` |
+| `/relationships` | graph traverse and path reads | no | A | A | A | A | I | `relationships-page.test.tsx` |
+| `/relationships/:entityId` | graph traverse and path reads around an entity | no | I | A | A | A | I | `relationships-page.test.tsx` |
+| `/communications` | campaign messages and communications health | no | A | A | A | A | I | `communications-page.test.tsx` |
+| `/communications/:campaignId/:messageId` | message detail, governed comms funnel, population, journeys, conversions | no | A | A | A | A | I | `communications-page.test.tsx` |
+| `/journeys` | profiles and compiled profile journeys | no | A | A | A | A | I | `journeys-page.test.tsx` |
+| `/journeys/:profileId` | compiled profile journey and attribution credits | no | A | A | A | A | I | `journeys-page.test.tsx` |
+| `/episodes` | profiles and compiled profile journeys | no | A | A | A | A | I | `episodes-page.test.tsx` |
+| `/episodes/:profileId/:episodeId` | compiled profile journey (derived episode) | no | I | A | A | A | I | `episodes-page.test.tsx` |
 | `/audit-exports` | audit export history | no | I | A | A | — | I | parameterized route-state family |
 | `/value-review` | tenant value review | no | A | A | A | A | I | route-state family and `value-review-page.test.tsx` |
 | `/security` | policy, audit, retention, DSR | no | I | A | A | — | I | parameterized route-state family |
@@ -171,6 +183,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/derivatives/ops` | derivatives adapter fleet | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/interoperability/ops` | interoperability providers | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/delivery` | delivery operations | no | I | A | — | — | I | `kyber-noncritical-empty-routes.test.tsx` |
+| `/agent-lineage` | principal and fleet lineage investigation | no | I | — | A | A | A | `agent-lineage-page.test.tsx` |
 | `/agent-telemetry` | agent fleet and telemetry | yes | A | A | A | A | A | `agent-telemetry-page.test.tsx` |
 | `/agent-access` | agent access control | yes | A | A | A | A | I | `agent-access-page.test.tsx` |
 | `/payment-rails` | payment provider and tenant fleet | yes | A | A | A | A | A | `payment-rails-page.test.tsx` |
@@ -181,15 +194,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 152 data-bearing route patterns above: 65 Aether and
-87 Kyber routes.
+The denominator is the 165 data-bearing route patterns above: 77 Aether and
+88 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 26 / 152 (17.1%) | tracked for every route |
-| Empty-state assertions | 138 / 152 (90.8%) | at least 90% overall |
-| Error/unavailable assertions | 118 / 152 (77.6%) | 100% of critical routes |
-| Populated-state assertions | 52 / 152 (34.2%) | tracked for every route |
+| Explicit loading-state assertions | 35 / 165 (21.2%) | tracked for every route |
+| Empty-state assertions | 150 / 165 (90.9%) | at least 90% overall |
+| Error/unavailable assertions | 131 / 165 (79.4%) | 100% of critical routes |
+| Populated-state assertions | 65 / 165 (39.4%) | tracked for every route |
 | Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

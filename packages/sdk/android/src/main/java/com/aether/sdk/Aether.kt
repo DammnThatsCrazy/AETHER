@@ -49,11 +49,13 @@ data class AetherConfig(
     val modules: ModuleConfig = ModuleConfig(),
     val privacy: PrivacyConfig = PrivacyConfig(),
     /**
-     * Optional HMAC-SHA256 secret to verify the remote SDK manifest signature
-     * before applying it (Truth Kernel §2.9). When set, unsigned/invalid
-     * manifests are rejected and the last-known-good config is kept.
+     * Optional base64url SPKI P-256 public key to verify the remote SDK manifest
+     * signature before applying it (Truth Kernel §2.9; print it with
+     * `python scripts/sdk_manifest_public_key.py`). When set, unsigned/invalid
+     * manifests are rejected and the last-known-good config is kept. When unset,
+     * manifests are applied without verification.
      */
-    val manifestVerificationKey: String? = null,
+    val manifestPublicKey: String? = null,
     val autoResumeJourney: Boolean = true,
     val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null,
     // Native identity -> subject-hints convergence (WS-C / Invariant #4).
@@ -148,6 +150,29 @@ data class CanonicalConsentReceipt(
 // =============================================================================
 // IDENTITY
 // =============================================================================
+
+/** Single-use, short-lived token another device redeems to continue a journey. */
+data class JourneyHandoffToken(
+    val token: String,
+    val handoffId: String,
+    val expiresAt: String,
+)
+
+/**
+ * Server-verified link between two sessions. [linkBasis] is always `explicit_handoff` and
+ * the link never merges identities ([identityMerge] is `not_performed`).
+ */
+data class JourneyHandoffLink(
+    val handoffId: String,
+    val journeyId: String,
+    val linkBasis: String,
+    val identityMerge: String,
+    val fromSessionId: String,
+    val fromPlatform: String,
+    val toSessionId: String,
+    val toPlatform: String,
+    val redeemedAt: String,
+)
 
 data class WalletEntry(
     val address: String,
@@ -399,6 +424,43 @@ object Aether : DefaultLifecycleObserver {
         "agent_grounding_observed" to "agent",
         "agent_guardrail_observed" to "agent",
         "agent_human_override_observed" to "agent",
+        "agent_objective_created" to "agent",
+        "agent_objective_started" to "agent",
+        "agent_objective_modified" to "agent",
+        "agent_objective_completed" to "agent",
+        "agent_objective_failed" to "agent",
+        "agent_objective_abandoned" to "agent",
+        "agent_information_retrieved" to "agent",
+        "agent_source_consulted" to "agent",
+        "agent_context_received" to "agent",
+        "agent_decision_started" to "agent",
+        "agent_candidate_considered" to "agent",
+        "agent_candidate_rejected" to "agent",
+        "agent_action_selected" to "agent",
+        "agent_decision_completed" to "agent",
+        "agent_authorization_requested" to "agent",
+        "agent_authorization_granted" to "agent",
+        "agent_authorization_denied" to "agent",
+        "agent_tool_retried" to "agent",
+        "agent_tool_switched" to "agent",
+        "agent_terminated" to "agent",
+        "agent_task_returned" to "agent",
+        "agent_execution_started" to "agent",
+        "agent_execution_succeeded" to "agent",
+        "agent_execution_failed" to "agent",
+        "agent_execution_aborted" to "agent",
+        "agent_quote_received" to "financial_activity",
+        "agent_price_evaluated" to "financial_activity",
+        "agent_transaction_initiated" to "financial_activity",
+        "agent_transaction_authorized" to "financial_activity",
+        "agent_transaction_settled" to "financial_activity",
+        "agent_transaction_failed" to "financial_activity",
+        "agent_message_generated" to "agent",
+        "agent_memory_created" to "agent",
+        "agent_memory_retrieved" to "agent",
+        "agent_memory_updated" to "agent",
+        "agent_memory_invalidated" to "agent",
+        "agent_memory_expired" to "agent",
         // reward
         "reward_action_queued" to "commerce",
         "reward_proof_generated" to "commerce",
@@ -803,7 +865,7 @@ object Aether : DefaultLifecycleObserver {
             platform = "android",
             appVersion = try { application.packageManager.getPackageInfo(application.packageName, 0).versionName ?: "" } catch (_: Exception) { "" },
             prefs = prefs,
-            manifestVerificationKey = config.manifestVerificationKey
+            manifestPublicKey = config.manifestPublicKey
         )
         hAgent.getDynamicState = {
             Triple(
@@ -905,6 +967,100 @@ object Aether : DefaultLifecycleObserver {
     }
 
     fun getCurrentJourney(): Map<String, Any?>? = currentJourneyId?.let { mapOf("journeyId" to it, "journeyName" to currentJourneyName) }
+
+    /**
+     * Ask the backend for a single-use handoff token for the current journey so another device
+     * (for example the web app) can continue it. Returns null when there is no active journey or
+     * the server refuses (consent, flag off, unauthorised app, offline). Hand the token over out of
+     * band (link, QR code, deep link) as `aether_handoff=<token>`; it is shown once.
+     */
+    suspend fun createJourneyHandoff(ttlSeconds: Int? = null): JourneyHandoffToken? {
+        val journeyId = currentJourneyId ?: return null
+        val body = JSONObject().apply {
+            put("journey_id", journeyId)
+            put("session_id", sessionId)
+            put("anonymous_id", anonymousId)
+            put("platform", "android")
+            if (ttlSeconds != null) put("ttl_seconds", ttlSeconds)
+        }
+        val data = postJourneyHandoff("/sdk/journey-handoff", body) ?: return null
+        val token = data.optString("token")
+        val handoffId = data.optString("handoff_id")
+        if (token.isBlank() || handoffId.isBlank()) return null
+        return JourneyHandoffToken(token, handoffId, data.optString("expires_at"))
+    }
+
+    /**
+     * Redeem a handoff token on this device. On success the source journey continues here
+     * (`journey_resumed` with `linkBasis = explicit_handoff`) and the verified link is returned. Every
+     * failure (unknown, expired, already used, wrong app/tenant, no consent) returns null; the server
+     * deliberately does not say which.
+     */
+    suspend fun redeemJourneyHandoff(token: String): JourneyHandoffLink? {
+        if (token.isBlank()) return null
+        val body = JSONObject().apply {
+            put("token", token)
+            put("session_id", sessionId)
+            put("anonymous_id", anonymousId)
+            put("platform", "android")
+        }
+        val data = postJourneyHandoff("/sdk/journey-handoff/redeem", body) ?: return null
+        if (data.optString("link_basis") != "explicit_handoff") return null
+        val journeyId = data.optString("journey_id")
+        if (journeyId.isBlank()) return null
+        val from = data.optJSONObject("from")
+        val to = data.optJSONObject("to")
+        val link = JourneyHandoffLink(
+            handoffId = data.optString("handoff_id"),
+            journeyId = journeyId,
+            linkBasis = "explicit_handoff",
+            identityMerge = "not_performed",
+            fromSessionId = from?.optString("session_id") ?: "",
+            fromPlatform = from?.optString("platform") ?: "",
+            toSessionId = to?.optString("session_id") ?: "",
+            toPlatform = to?.optString("platform") ?: "",
+            redeemedAt = data.optString("redeemed_at"),
+        )
+        currentJourneyId = journeyId
+        resumeJourney(
+            "handoff",
+            mapOf(
+                "journeyId" to journeyId,
+                "handoffId" to link.handoffId,
+                "linkBasis" to link.linkBasis,
+                "handoffFromPlatform" to link.fromPlatform,
+            ),
+        )
+        return link
+    }
+
+    /** POST to a journey-handoff route and return the `data` object, or null on any failure. */
+    private suspend fun postJourneyHandoff(path: String, body: JSONObject): JSONObject? {
+        val cfg = config ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val connection = URL("${cfg.endpoint.trimEnd('/')}$path")
+                    .openConnection() as HttpURLConnection
+                try {
+                    connection.requestMethod = "POST"
+                    connection.doOutput = true
+                    connection.connectTimeout = 10000
+                    connection.readTimeout = 10000
+                    connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("X-Aether-SDK", "android")
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    if (connection.responseCode !in 200..299) return@withContext null
+                    val text = connection.inputStream.bufferedReader().use { it.readText() }
+                    JSONObject(text).optJSONObject("data")
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 
     fun screenView(screenName: String, properties: Map<String, Any?> = emptyMap()) {
         screenCount++

@@ -112,6 +112,14 @@ Construction requires a validated `AgentDeploymentContext`; every event gets
 | `delegatedTask({delegationId, delegatedToAgentId})` | `agent_delegated_task`; both IDs remain source references |
 | `outcomeRecorded({paymentIntentId?, settlementEventId?, ...})` | `agent_outcome_recorded`; optional payment IDs are caller-reported references |
 | `riskSignal(...)` | `agent_risk_signal_observed` |
+| `objective({status})` | `agent_objective_created` / `_started` / `_modified` / `_completed` / `_failed` / `_abandoned` |
+| `decision({phase})` | `agent_decision_started`, `agent_candidate_considered`, `agent_candidate_rejected`, `agent_action_selected`, `agent_decision_completed` |
+| `authorization({status})` | `agent_authorization_requested` / `_granted` / `_denied` |
+| `toolAdaptation({kind})` | `agent_tool_retried` / `agent_tool_switched` |
+| `execution({status})` | `agent_execution_started` / `_succeeded` / `_failed` / `_aborted` |
+| `economic({kind})` | `agent_quote_received`, `agent_price_evaluated`, `agent_transaction_*`; amounts are decimal strings and stay agent-reported |
+| `information({kind})` / `memory({op})` | `agent_information_retrieved`, `agent_source_consulted`, `agent_context_received`, `agent_memory_*`; references only, never content |
+| `spawned(...)` / `terminated()` | `agent_subagent_spawned` (parent is the deployment's agent) / `agent_terminated` |
 
 Payment and settlement references resolve only to exact tenant-scoped records
 whose provenance comes from the server-owned x402 commerce event registry.
@@ -123,7 +131,16 @@ does not identity-match the deployment to either party or evaluate grant
 scope. These links express correlation; they do not establish causality,
 grant-scope authorization, or payment finality.
 
-Python (`packages/sdk/python/aether_agentic`): `build_deployment_context(...)`
+Scheduled behavior jobs (`AETHER_AGENT_BEHAVIOR_JOBS_ENABLED`, interval
+`AETHER_AGENT_BEHAVIOR_JOBS_INTERVAL_SECONDS`, default off) run under the
+`maintenance` worker role: stored daily behavior snapshots, drift between stored
+windows and Risk360 assessments from agent behavior evidence, for agents of
+active registered deployments.
+A pass never records a window snapshot from a truncated fact read (the read is
+newest-first and capped, so it may not cover the window); it counts
+`skipped_truncated_snapshots` instead of overwriting a stored snapshot.
+
+Python (`packages/sdk/python/aether_agentic`): `build_behavior_event(...)` emits the same behavior types (deployment required, content keys and float amounts rejected); `build_deployment_context(...)`
 plus an optional `deployment=` parameter on all envelope builders; emits the
 same camelCase `agentDeployment` wire shape. `execution_by_aether` remains
 hard-`False`.
@@ -303,6 +320,40 @@ SDK: `packages/sdk/server/src/agent-telemetry.test.ts` covers task, tool,
 policy, delegation, and outcome references. Frontend: Agent 360 evidence and
 graph presentation tests cover source labels, coverage gaps, and evidence
 authority.
+
+## Sub-agent spawn lineage
+
+`agent_subagent_spawned` events carry `parentAgentId`, `childAgentId`, an
+optional `rootAgentId` and `parentRunId`. Silver stores them as
+`parent_agent_ref`, `child_agent_ref`, `root_agent_ref` and `parent_run_id` on
+`silver_agent_execution_facts` (migration `20261022_agent_spawn_lineage`), and
+the lifecycle mapper writes the `SPAWNED_SUBAGENT` edge and a delegation row
+from the parent to the **child** (earlier code read the child from
+`parent_agent_id`, which produced self edges for SDK-shaped payloads).
+
+`GET /v1/agent/agents/{root_agent_ref}/lineage` (`agent:manage`, registry flag)
+returns the orchestrator tree with per-agent run, tool-call and outcome
+rollups. It is tenant-scoped, cycle-safe, and bounded (depth 8, 100 agents);
+bounds that apply are listed in `truncated`. The Silver reads behind it are
+capped too (1,000 spawn facts per tenant, 200 facts per agent, newest first);
+a cap that bites is reported in `source_truncation` and the response's
+`source_status` is `incomplete`, never `empty`, so unrelated tenant activity
+cannot silently evict the requested topology. Every node and edge is
+`source_reported` and the response states `attribution: "none"`: the tree shows
+which agent references spawned which, never who controls them. Silver stores
+the event type as `source_event_type`; the readers accept `event_name` only for
+locally held rows.
+
+Spawn and delegation facts reported by an agent without a validated
+deployment also project one bounded `SPAWNED_SUBAGENT` / `DELEGATED_TO`
+graph edge per (parent, child) through the mutation gateway. The edge source
+is always the reporting agent; a payload naming a different parent emits no
+edge. At ingestion, `agent_subagent_spawned` and every agent behavior taxonomy
+type (objectives, decisions, authority, execution, economic, memory) require a
+validated deployment context. Behavior read models over these facts are
+`GET /v1/agent/agents/{agent_ref}/behavior` and
+`/decisions/{decision_id}`; see the
+[agent behavior architecture map](../../architecture/agent-behavior/00-current-architecture-map.md).
 
 ## Known limitations / non-goals
 

@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:991a765d1ae398cdabb9da8c5ee571e1b28aba196b2243872aee175871fd90ab"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:d0c3891f8bfe89be4551207efdc6ed0b96c67e9303fc090b5c2499a4f3e8eac3"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
+  "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
+  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
 ---
 
 # Aether iOS SDK v0.1.0-alpha.0 — Integration Guide
@@ -256,6 +256,15 @@ if Aether.shared.isFeatureEnabled("dark-mode") {
 let limit = Aether.shared.getFeatureValue("upload-limit", default: 10)
 ```
 
+## Journey handoff
+
+`createJourneyHandoff(ttlSeconds:completion:)` completes with a single-use `JourneyHandoffToken` for the
+current journey (or `nil`); pass it to another device as `aether_handoff=<token>`.
+`redeemJourneyHandoff(_:completion:)` continues a journey from one and completes with a
+`JourneyHandoffLink` (or `nil`). Every failure completes `nil` without saying why. A redemption is an
+`explicit_handoff` link and never merges identities. Requires backend `JOURNEY_HANDOFF_ENABLED` and
+identity-link consent at both ends.
+
 ## Deep Link Attribution
 
 The SDK captures **12 ad platform click IDs** and all UTM parameters from deep links, storing them as campaign context that is included in every subsequent event via `buildContext()`.
@@ -336,7 +345,7 @@ struct AetherConfig {
     var privacy: PrivacyConfig = PrivacyConfig()
     var batchSize: Int = 10                      // Events per batch
     var flushInterval: TimeInterval = 5.0        // Seconds between flushes
-    var manifestVerificationKey: String? = nil   // HMAC-SHA256 manifest signature key
+    var manifestPublicKey: String? = nil         // base64url P-256 key; verifies manifest signatures
     var autoResumeJourney: Bool = true           // Call /sdk/identity/resolve on init
     var onJourneyResumed:                        // Fires once when a prior session is matched
         ((_ resolvedAnonymousId: String,
@@ -440,8 +449,9 @@ The health agent starts automatically after `initialize()`. It:
 - Fetches the remote manifest from `/v1/config/sdk/manifest` every 5 minutes
 - Both are fire-and-forget; gated on analytics consent in GDPR mode (it starts
   when `analytics` is granted post-init)
-- When `manifestVerificationKey` is set, unsigned or invalid manifest
+- When `manifestPublicKey` is set, unsigned or invalid manifest
   signatures are rejected and the last-known-good config is kept
+  (see `docs/reference/sdks/manifest-signing.md`)
 - Applies the verified manifest natively: `rollout_percentage` gates event
   sampling and `features` merge into feature-flag resolution (previously the
   manifest was fetched and verified but never applied)
@@ -473,6 +483,8 @@ explicit source namespace; missing or invalid namespace remains unresolved and
 does not inherit the actor's namespace. Consent and
 active tenant deployment validation still apply. Other wrapper/type-exposed
 events are not publicly SDK-emittable under the current registry contract.
+
+Separately, the 37 agent behavior taxonomy types added for agent behavioral intelligence (objectives, decisions, candidates, authorization, tool retry/switch, execution, quotes and transactions, information and memory references) are `sdkEmitable` for the server agent SDK. Ingestion accepts them, and `agent_subagent_spawned`, only with a validated deployment context; see the [external agent telemetry plane](source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md).
 
 ## x402 Lifecycle Emitters
 
@@ -516,7 +528,7 @@ Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdemp
 
 ## Agentic Observability Event Types
 
-47 event types are present in SDK-facing type or wrapper surfaces for passive observation of external agentic activity. Consent-map registration controls consent handling, not public ingestion eligibility; only the seven agent events listed under the lifecycle emitters are currently marked `sdkEmitable` in the canonical event registry. The source registry's acceptance boundary and trust classes govern `POST /v1/batch`; wrapper exposure alone does not.
+47 event types are present in SDK-facing type or wrapper surfaces for passive observation of external agentic activity. Consent-map registration controls consent handling, not public ingestion eligibility; only the seven agent events listed under the lifecycle emitters are `sdkEmitable` for public SDK use; the agent behavior taxonomy types are `sdkEmitable` only for server agent SDKs with a validated deployment context. The source registry's acceptance boundary and trust classes govern `POST /v1/batch`; wrapper exposure alone does not.
 
 **Consent purpose:** `"agent"` for agentic observation events and `"commerce"` for x402 protocol observation events, with five exceptions: the Robinhood-style trading-state observations `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, and `agent_performance_snapshot_observed` are consent-gated on the explicit opt-in purpose `financial_activity` (grant it via `grantConsent(categories: ["financial_activity"])`; it is never included in `grantAll()`).
 

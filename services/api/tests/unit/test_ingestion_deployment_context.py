@@ -200,3 +200,63 @@ def test_canonical_entity_id_stripped_from_normalized_payload():
     assert props["plan"] == "pro"
     assert "canonical_entity_id" not in normalized["context"].get("provenance", {})
     assert normalized["context"]["provenance"]["source"] == "sdk"
+
+
+@pytest.mark.parametrize("spine_enabled", [False, True])
+def test_server_validated_agent_deployment_survives_bus_to_silver_envelope(
+    monkeypatch, spine_enabled
+):
+    from ingestion.ingestion import workers
+    from ingestion.silver.projectors.agent_execution_projector import AgentExecutionProjector
+
+    monkeypatch.setattr(
+        workers, "normalization_spine_enabled", lambda: spine_enabled
+    )
+    payload = {
+        "tenant_id": "tenant-a",
+        "event_id": "event-agent-1",
+        "event_type": "agent_task_completed",
+        "event_family": "agent",
+        "timestamp": "2026-10-18T12:00:00Z",
+        "properties": {"agentId": "sdk-agent-spoofed", "taskId": "task-1"},
+        "context": {"agentDeployment": {"deploymentId": "sdk-deployment-spoofed"}},
+        "validated_agent_deployment": {
+            "deployment_id": " deployment-7 ",
+            "agent_id": " canonical-agent-7 ",
+        },
+    }
+
+    envelope = workers._bus_payload_to_sdk_envelope(payload)
+
+    assert envelope["validated_agent_deployment"] == {
+        "deployment_id": "deployment-7",
+        "agent_id": "canonical-agent-7",
+    }
+    # Preserve the source assertion as context, separate from the server's
+    # tenant-scoped deployment decision.
+    assert envelope["context"]["agentDeployment"] == {
+        "deploymentId": "sdk-deployment-spoofed"
+    }
+    projected = AgentExecutionProjector().project(envelope)
+    assert projected is not None
+    assert projected.rows[0]["deployment_id"] == "deployment-7"
+    assert projected.rows[0]["agent_id"] == "canonical-agent-7"
+
+
+def test_malformed_server_agent_deployment_marker_is_not_promoted_to_silver():
+    from ingestion.ingestion.workers import _bus_payload_to_sdk_envelope
+
+    envelope = _bus_payload_to_sdk_envelope(
+        {
+            "tenant_id": "tenant-a",
+            "event_id": "event-agent-2",
+            "event_type": "agent_task_completed",
+            "properties": {"agentId": "sdk-agent-2"},
+            "validated_agent_deployment": {
+                "deployment_id": "deployment-8",
+                "agent_id": "invalid\nagent",
+            },
+        }
+    )
+
+    assert "validated_agent_deployment" not in envelope

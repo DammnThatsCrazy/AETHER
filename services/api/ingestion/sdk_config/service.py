@@ -4,8 +4,13 @@ Aether Service — SDK Remote Config & Auto-Update
 Provides signed manifest delivery, staged rollout orchestration, and rollback support.
 
 Security model:
-  - Manifests are signed with HMAC-SHA256 using the SDK_CONFIG_SECRET env var.
-  - SDKs verify the signature before applying any manifest.
+  - Manifests are signed with ECDSA P-256 (ES256) over a canonical JSON form; see
+    manifest_signing.py and docs/reference/sdks/manifest-signing.md.
+  - The signing key is derived deterministically from the SDK_CONFIG_SECRET env
+    var, which never leaves the server. SDKs hold only the public key
+    (scripts/sdk_manifest_public_key.py) and verify before applying a manifest.
+  - Manifests are signed when delivered, so a rotated secret or an older stored
+    version is never served with a stale signature.
   - Rollout gating uses a deterministic hash of (tenant_id + sdk_id) % 100 so
     the same SDK instance always gets the same rollout decision.
 
@@ -22,16 +27,16 @@ Staged rollouts:
 from __future__ import annotations
 
 import hashlib
-import hmac
-import json
 import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from shared.common.common import BadRequestError
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
+from ingestion.sdk_config import manifest_signing
 from repositories.sdk_repos import SDKManifestStateRepository, SDKManifestVersionRepository
 
 logger = get_logger("aether.service.sdk_config")
@@ -57,25 +62,10 @@ class SDKManifest:
     published_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
-    signature: str = ""                       # HMAC-SHA256 over canonical payload
+    signature: str = ""                       # base64url raw r||s, set by SDKConfigService._signed
     source: str = "tenant_published"
     publisher_id: str = "system"
-
-    def canonical_payload(self) -> str:
-        """Deterministic JSON string used for HMAC signing (excludes signature field)."""
-        data = {
-            "manifest_version": self.manifest_version,
-            "min_sdk_version": self.min_sdk_version,
-            "schema_version": self.schema_version,
-            "rollout_percentage": self.rollout_percentage,
-            "features": self.features,
-            "endpoints": self.endpoints,
-            "flags": self.flags,
-            "published_at": self.published_at,
-            "source": self.source,
-            "publisher_id": self.publisher_id,
-        }
-        return json.dumps(data, sort_keys=True)
+    signature_alg: str = manifest_signing.SIGNATURE_ALG  # signed, so it cannot be downgraded
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -98,6 +88,7 @@ class SDKConfigService:
         self._secret = os.getenv(_CONFIG_SECRET_ENV, "default-dev-secret-change-in-production")
         if os.getenv("AETHER_ENV", "local").lower() != "local" and self._secret == "default-dev-secret-change-in-production":
             raise RuntimeError(f"{_CONFIG_SECRET_ENV} must be a non-default secret outside local development")
+        self._signing_key = manifest_signing.derive_private_key(self._secret)
         self._versions = SDKManifestVersionRepository()
         self._states = SDKManifestStateRepository()
 
@@ -145,7 +136,7 @@ class SDKConfigService:
             "aether_sdk_manifest_requests_total",
             labels={"tenant_id": tenant_id, "sdk_version": sdk_version or "unknown"},
         )
-        return manifest
+        return self._signed(manifest)
 
     async def get_active_manifest(self, tenant_id: str) -> Optional[SDKManifest]:
         """
@@ -159,11 +150,11 @@ class SDKConfigService:
         current_raw = await self._load_active(tenant_id)
         if current_raw is None:
             return None
-        return SDKManifest(**{
+        return self._signed(SDKManifest(**{
             k: current_raw[k]
             for k in SDKManifest.__dataclass_fields__
             if k in current_raw
-        })
+        }))
 
     # ── Manifest Publishing ───────────────────────────────────────────────
 
@@ -199,7 +190,7 @@ class SDKConfigService:
             endpoints=endpoints,
             flags=flags,
         )
-        manifest.signature = self._sign(manifest.canonical_payload())
+        manifest = self._signed(manifest)  # also rejects values that cannot be signed
 
         durable = {**manifest.to_dict(), "tenant_id": tenant_id, "deployment_state": "active"}
         await self._versions.create_version(durable)
@@ -274,7 +265,7 @@ class SDKConfigService:
             "sdk_config.manifest_rolled_back",
             extra={"tenant_id": tenant_id, "restored_version": manifest.manifest_version},
         )
-        return manifest
+        return self._signed(manifest)
 
     # ── Rollout Status ────────────────────────────────────────────────────
 
@@ -293,21 +284,24 @@ class SDKConfigService:
             "current_published_at": current_raw.get("published_at") if current_raw else None,
         }
 
-    # ── Signature Verification ────────────────────────────────────────────
+    # ── Signing ───────────────────────────────────────────────────────────
 
-    def verify_signature(self, canonical_payload: str, signature: str) -> bool:
-        """Verify a manifest signature. Used by SDK-side verification logic."""
-        expected = self._sign(canonical_payload)
-        return hmac.compare_digest(expected, signature)
+    def public_key(self) -> str:
+        """Base64url SPKI public key to configure in client SDKs."""
+        return manifest_signing.public_key_spki_b64url(self._signing_key)
 
-    # ── Internal Helpers ──────────────────────────────────────────────────
+    def verify_manifest(self, manifest: SDKManifest) -> bool:
+        """Verify a manifest against this service's public key (reference verifier)."""
+        return manifest_signing.verify(self.public_key(), manifest.to_dict())
 
-    def _sign(self, payload: str) -> str:
-        return hmac.new(
-            self._secret.encode("utf-8"),
-            payload.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
+    def _signed(self, manifest: SDKManifest) -> SDKManifest:
+        """Return the manifest with a fresh signature over its current contents."""
+        manifest.signature_alg = manifest_signing.SIGNATURE_ALG
+        try:
+            manifest.signature = manifest_signing.sign(self._signing_key, manifest.to_dict())
+        except manifest_signing.ManifestSigningError as exc:
+            raise BadRequestError(f"manifest cannot be signed: {exc}") from exc
+        return manifest
 
     async def _load_active(self, tenant_id: str) -> Optional[dict[str, Any]]:
         state = await self._states.get(tenant_id)

@@ -76,26 +76,69 @@ class AdjustmentRepository:
         self,
         tenant_id: str,
         conversion_id: str,
+        *,
+        limit: Optional[int] = None,
+        after: Optional[datetime] = None,
+        before: Optional[datetime] = None,
     ) -> list[dict[str, Any]]:
-        """Return all adjustments for a conversion ordered by occurred_at."""
+        """Return exact conversion adjustments in stable event order.
+
+        A bounded caller may request one extra row to detect truncation.
+        Existing ledger callers omit ``limit`` to read the complete history.
+        """
+        if limit is not None and limit < 1:
+            raise ValueError("limit must be positive")
+        if after is not None and (after.tzinfo is None or after.utcoffset() is None):
+            raise ValueError("after must include a timezone")
+        if before is not None and (before.tzinfo is None or before.utcoffset() is None):
+            raise ValueError("before must include a timezone")
+        if after is not None and before is not None and before <= after:
+            raise ValueError("event-time window must be increasing")
         pool = await self._pool()
         if pool is None:
             rows = [
                 r for r in _local_store.values()
                 if r.get("tenant_id") == tenant_id and r.get("conversion_id") == conversion_id
             ]
-            rows.sort(key=lambda r: r.get("occurred_at", ""))
-            return rows
+            if after is not None or before is not None:
+                from shared.temporal.instant import try_parse_instant
+
+                bounded_rows: list[tuple[datetime, dict[str, Any]]] = []
+                for row in rows:
+                    raw_occurred_at = row.get("occurred_at")
+                    if isinstance(raw_occurred_at, datetime):
+                        occurred_at = raw_occurred_at
+                    elif isinstance(raw_occurred_at, str):
+                        occurred_at, _ = try_parse_instant(raw_occurred_at)
+                    else:
+                        occurred_at = None
+                    if occurred_at is None or occurred_at.tzinfo is None or occurred_at.utcoffset() is None:
+                        raise ValueError("revenue adjustment event time is invalid")
+                    if after is not None and occurred_at <= after:
+                        continue
+                    if before is not None and occurred_at >= before:
+                        continue
+                    bounded_rows.append((occurred_at, row))
+                bounded_rows.sort(key=lambda item: (item[0], str(item[1].get("adjustment_id") or "")))
+                rows = [row for _, row in bounded_rows]
+            else:
+                rows.sort(key=lambda r: (str(r.get("occurred_at") or ""), str(r.get("adjustment_id") or "")))
+            return rows if limit is None else rows[:limit]
 
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT * FROM revenue_adjustments
-                WHERE tenant_id = $1 AND conversion_id = $2
-                ORDER BY occurred_at ASC
-                """,
-                tenant_id, conversion_id,
+            query = (
+                "SELECT * FROM revenue_adjustments "
+                "WHERE tenant_id = $1 AND conversion_id = $2 "
+                "AND ($3::timestamptz IS NULL OR occurred_at > $3::timestamptz) "
+                "AND ($4::timestamptz IS NULL OR occurred_at < $4::timestamptz) "
+                "ORDER BY occurred_at ASC, adjustment_id ASC"
             )
+            if limit is None:
+                rows = await conn.fetch(query, tenant_id, conversion_id, after, before)
+            else:
+                rows = await conn.fetch(
+                    query + " LIMIT $5", tenant_id, conversion_id, after, before, limit
+                )
             return [dict(r) for r in rows]
 
     async def net_adjustment(self, tenant_id: str, conversion_id: str) -> Decimal:

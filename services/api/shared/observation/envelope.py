@@ -31,6 +31,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from shared.agent_lineage import models as _lineage_models
+from shared.agent_lineage import vocabulary as _lineage_vocab
 from shared.integration_contracts.source_relationship import SOURCE_RELATIONSHIPS
 
 # --- Curated vocabularies (mirrors of observation-envelope-registry.json) -----
@@ -298,6 +300,74 @@ class RightsReferenceBlock(BaseModel):
         return self
 
 
+class ActorContextBlock(_lineage_models.ActorContext):
+    """Optional actor roles (principal/initiator/executor/operator/beneficiary/
+    counterparty/controller) — never collapsed into one actor id.
+
+    ``reported_principal_ref`` is a source claim; ``canonical_principal_entity_id``
+    is set only by canonical resolution and is never copied from the claim.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("principal_resolution_status")
+    @classmethod
+    def _resolution_status_known(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_member(v, _lineage_vocab.PRINCIPAL_RESOLUTION_STATUSES, "principal_resolution_status")
+
+
+class AuthorityContextBlock(_lineage_models.AuthorityContext):
+    """Optional authority reference block. References + resolution status only;
+    extends (never replaces) the delegation / Agent Access authority machinery."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("authority_type")
+    @classmethod
+    def _authority_type_known(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_member(v, _lineage_vocab.AUTHORITY_TYPES, "authority_type")
+
+    @field_validator("authority_resolution_status")
+    @classmethod
+    def _authority_status_known(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_member(v, _lineage_vocab.AUTHORITY_RESOLUTION_STATUSES, "authority_resolution_status")
+
+
+class ExecutionContextBlock(_lineage_models.ExecutionContext):
+    """Optional execution identity. Source and canonical run ids are both kept;
+    a trace id is never promoted to a run id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("control_mode")
+    @classmethod
+    def _control_mode_known(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_member(v, _lineage_vocab.CONTROL_MODES, "control_mode")
+
+    @field_validator("execution_verification_state")
+    @classmethod
+    def _verification_state_known(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_member(
+            v, _lineage_vocab.EXECUTION_VERIFICATION_STATES, "execution_verification_state"
+        )
+
+
+class ProtocolContextBlock(_lineage_models.ProtocolContext):
+    """Optional protocol-agnostic evidence about how the agent appeared."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class UniversalObservationEnvelope(BaseModel):
     """Canonical observation after adapters, before the gateway.
 
@@ -330,6 +400,13 @@ class UniversalObservationEnvelope(BaseModel):
     quality: Optional[QualityBlock] = None
     lineage: Optional[LineageBlock] = None
     rights: Optional[RightsReferenceBlock] = None
+
+    # High-cardinality agent lineage (optional, additive: existing producers
+    # omit these and are unaffected).
+    actor_context: Optional[ActorContextBlock] = None
+    authority_context: Optional[AuthorityContextBlock] = None
+    execution_context: Optional[ExecutionContextBlock] = None
+    protocol_context: Optional[ProtocolContextBlock] = None
 
     def to_bronze_additive(self) -> dict:
         """JSON-safe additive persistence dict (excludes unset optionals)."""

@@ -350,6 +350,8 @@ async def test_persist_supersedes_prior_run_on_identical_evidence():
     # But each run is its own substrate row; the later run supersedes the prior.
     assert second.run.run_id != first.run.run_id
     assert second.run.supersedes_run_id == first.run.run_id
+    second_run_row = await runs_repo.get_run("ten_1", second.run.run_id)
+    assert second_run_row["data"]["supersedes_run_id"] == first.run.run_id
     # The assessment row now points at the latest run.
     row = await assessment_repo.get_scoped("ten_1", first.assessment.assessment_id)
     assert row["run_id"] == second.run.run_id

@@ -11,12 +11,12 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
+  "packages/sdk/web/src/index.ts": "sha256:1ea4b4df56cacf5fd355f5f6edca6dca9eeafac7b5ab4a2341abd7ca18bc152a"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
+  "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
+  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
 ---
 
 # Aether Web SDK v0.1.0-alpha.0 — Integration Guide
@@ -203,6 +203,29 @@ aether.init({
   },
 });
 ```
+
+### Continuing a journey from another device (handoff)
+
+A mobile app (or another web session) can hand its current journey to this page with a
+server-issued, single-use token. On the source device call `createJourneyHandoff()` and pass the
+token along as `?aether_handoff=<token>` (link, QR code or deep link). On the destination:
+
+```typescript
+// On a landing page: reads and removes ?aether_handoff=…, then redeems it.
+const link = await aether.redeemJourneyHandoffFromUrl();
+// or explicitly: await aether.redeemJourneyHandoff(token);
+
+if (link) {
+  // link.linkBasis === 'explicit_handoff', link.identityMerge === 'not_performed'
+  // The source journey continues here (journey_resumed carries the handoff id).
+}
+```
+
+`createJourneyHandoff({ ttlSeconds? })` resolves `{ token, handoffId, expiresAt }` or `null`;
+redeem resolves a `JourneyHandoffLink` or `null`. Both return `null` on every failure (no active
+journey, flag off, no identity-link consent at either end, unknown/expired/used token) and the
+server does not say which. A handoff proves the same party held both sessions; it never merges
+identities. Requires backend `JOURNEY_HANDOFF_ENABLED`.
 
 The same `ResolvedIdentity` shape is re-exported from the Aether SDK so
 React Native and the Web SDK can share types.
@@ -564,6 +587,8 @@ interface AetherConfig {
     maxQueueSize?: number;                 // Max queued events (default: 100)
     retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
     customHeaders?: Record<string, string>;
+    manifestPublicKey?: string;            // base64url P-256 key; verifies signed remote-config manifests
+                                           // (unsigned/invalid manifests are rejected, last-known-good kept)
   };
 }
 ```
@@ -672,6 +697,8 @@ explicit source namespace; missing or invalid namespace remains unresolved and
 does not inherit the actor's namespace. Consent and
 active tenant deployment validation still apply. Other wrapper/type-exposed
 events are not publicly SDK-emittable under the current registry contract.
+
+Separately, the 37 agent behavior taxonomy types added for agent behavioral intelligence (objectives, decisions, candidates, authorization, tool retry/switch, execution, quotes and transactions, information and memory references) are `sdkEmitable` for the server agent SDK. Ingestion accepts them, and `agent_subagent_spawned`, only with a validated deployment context; see the [external agent telemetry plane](source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md).
 
 ### x402 payment lifecycle events (`commerce` consent)
 

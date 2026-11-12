@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "scripts/financial_credential_readiness.py": "sha256:c808670fc96db51e2da716797ce096042e209bbbdf7eaa5a79e3202d3d68c027"
-  "services/api/shared/certification/registry.py": "sha256:f0d9c01a6f3b2341afca6901db34c4361a444742eb9e403593f669a493a67abc"
+  "services/api/shared/certification/registry.py": "sha256:b0dc79cd4c3af7688f1b5b8400900e66ad1cbb474d8f94327882e623942d1085"
 ---
 
 # Financial Credential-Readiness Runbook
@@ -28,6 +28,12 @@ The certification is `credentialless`: it READS the source-resolved capability
 matrix (`shared.certification`) and runs the offline certification checks — no
 network, no credentials, no provider calls, no state mutation. It is safe to run
 anywhere, including CI.
+
+The same source-resolved descriptors also feed the typed financial capability
+registry (W1). That registry binds provider evidence to release, route, event,
+rights, and deployment surfaces; see
+`docs/operations/readiness/FINANCIAL_CAPABILITY_REGISTRY.md`. This runbook
+remains the credential-readiness operator surface.
 
 ## Commands
 

@@ -19,6 +19,8 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - Legacy-tag and blueprint-adaptation notes in `docs/operations/releases/tag-policy.md` and `docs/reference/source-of-truth/repo-truth.md`.
 - Reconciled Control Plane seam: a site install is observed as a managed integration and admitted through the §16 lifecycle, so an install the loader could not bring up reconciles as drift instead of as nothing to reconcile.
 
+- Scale-readiness verification: concurrency proofs on the real SDK ingestion handler (`services/api/tests/scale`) show tenant isolation, exactly-once acceptance of duplicate and overlapping batches, claim release so retries are accepted after a bus failure, and the declared claim-store-outage degradation. `scale-readiness` moves to `VERIFIED` (activation stays `INFRASTRUCTURE_WAITING`: staging is not provisioned and no staging load baseline is recorded).
+
 ### Changed
 
 - Loader URL and API origin are canonicalized (`https://cdn.aether.network/v1.js`, `https://api.aether.io`) and enforced by a domain gate. The two origins remain deliberately separate.
@@ -26,16 +28,23 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - `loader_version` is the version the control plane reconciles against, the same field the distribution layer derives `drift_status` from.
 - The first external SDK release target is `0.1.0-alpha.0` (publish workflow hint, staging and production release flags, SDK readiness docs), matching the single pre-1.0 platform version.
 - The `economic360` projection now displays as `Value 360` in the projection registry, generated artifacts and both web apps; its id is unchanged.
+- Reconciled Control Plane Program A+B: an explicit authority map (external/observed/no-interface/owned/forbidden areas, fail-closed integrity assertion) and a durable readiness-gated activation authority (`shadow→detect→plan→r0→r1→r2→fully_managed` + `emergency_frozen`, CAS + atomic evidence) land behind read-only `/authority`, `/activation` and `/activation/transitions` operator reads. All control-plane flags remain default OFF and no production activation is claimed.
+- Reconciled Control Plane Program C (first slices): the scheduler now derives runtime capabilities from the effective activation decision (`shadow` observes, `detect` reconciles, `plan` may persist a ChangeSet, `r0+` may execute, `disabled`/`emergency_frozen` stop the loop), inherits the global state for tenant scopes without a row, and never lets a tenant exceed global. While the plane is enabled, direct SDK manifest publishing is refused and admins instead request the change through `POST /v1/config/sdk/manifest/requests`, which records a planned ChangeSet plus a stage-zero rollout; a tenant-scoped GET reads the request. The request does not publish a manifest yet. SDK request execution/rollout projection and Provider Runtime convergence remain open Program C work.
+- The `reconciled_control_plane` spine moves `pending` → `in_flight` (authority/non-ownership verified; remaining checks open), and `connection360`'s stale pending-authority declaration is removed.
 
 ### Fixed
 
+- SDK manifest signatures now work end to end. The backend signs each delivered manifest with ES256 (ECDSA P-256) over a canonical JSON form, derived from `SDK_CONFIG_SECRET` so clients only need a public key; web, iOS and Android verify it with `manifestPublicKey` (print it with `scripts/sdk_manifest_public_key.py`). Previously the backend signed one payload with a server secret while the web and native clients verified two different, incompatible payloads with a client-held HMAC key, so no client could verify a real manifest. Specification and shared test vectors: `docs/reference/sdks/manifest-signing.md`, `tests/fixtures/sdk/manifest-signing-vectors.json`.
+- The iOS and Android SDKs read the remote manifest from the top level of the response instead of the `data` envelope the backend returns, so they never applied one. They now unwrap the envelope.
+- The web SDK no longer skips manifest verification when WebCrypto is unavailable; with a public key configured it now fails closed.
+- React Native advertised `manifestSignatureVerification: true` with no verification path. It now forwards `manifestPublicKey` to the native SDKs and verifies the JS manifest path through a new native `verifyManifest` method (Hermes has no WebCrypto), failing closed; `sdk-parity.json` gains an explicit `unsupported` status for recorded gaps.
 - `bump_version.py` now writes and checks the root `VERSION` file and rejects numeric prerelease identifiers with leading zeroes.
 - The React Native podspec pins `AetherSDK` to the current minor for 0.x versions instead of the major.
 - `Web3TransactionProjector` handles `wallet` and `transaction`, and the projector ownership registry now declares them, so `validate_projector_ownership.py` passes.
 - The ingestion worker `*_total` counters are in the canonical meter list, so `validate_meter_names.py` passes.
 - `bump_version.py` validated SDK/native version constants it never rewrote, so a platform bump failed the check and named a command that could not fix it. The remediation now names the SDK release script for those surfaces, and `bump-sdk-version.sh` plus the release workflow carry the loader and backend constants.
 
-Note: the Reconciled Control Plane spine remains `pending` with all 14 conformance items open; nothing in this entry moves it, and every control-plane capability stays flag-gated off (`AETHER_RECONCILED_CONTROL_*`).
+Note: the earlier `pending` note for the Reconciled Control Plane is superseded by the Program A+B entry above: the spine is now `in_flight` with the authority/non-ownership check verified, and every control-plane capability remains flag-gated off (`AETHER_RECONCILED_CONTROL_*`).
 
 ## [0.1.0-alpha.0] - 2026-09-09
 

@@ -35,6 +35,7 @@ source_files:
   - config/staging_secret_preflight_trust_policy.json
   - config/staging_plan_iam_policy.yaml
   - config/staging_plan_trust_policy.json
+  - config/staging_lifecycle_trust_policy.json
   - config/staging_plan_reconcile_iam_policy.json
   - config/staging_plan_reconcile_trust_policy.json
   - config/staging_apply_iam_policy.yaml
@@ -64,6 +65,7 @@ source_hashes:
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
+  "config/staging_lifecycle_trust_policy.json": "sha256:9623d3b8d39575a1bf00b5cc0ba2e14159e5fc821dfbfa84e26a108ba91fd5d6"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
   "config/staging_plan_reconcile_trust_policy.json": "sha256:4d413822419f32fb1cd82b99f8cabbda1b66a72c02f819d65b0213d15b14001a"
@@ -192,7 +194,27 @@ repository-secret write access with a disposable GitHub secret, then verifies
 that secret was removed. The preflight's `iam:SimulatePrincipalPolicy` call
 runs under `AetherStagingDeploy` and is covered by the application-delivery and
 apply-state-backend contracts; it is intentionally absent from the
-`AetherStagingLifecycle` policy. The checked-in
+`AetherStagingLifecycle` policy.
+
+`AetherStagingDeploy` is managed outside Terraform, so its trust policy is
+mirrored in `config/staging_application_delivery_trust_policy.json` and pinned
+by a unit test. The immutable build job in `deploy.yml` has no environment, so
+on a push to `staging` it presents the branch subject
+`repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging`; the role must trust that
+subject (alongside `main`, `environment:staging` and
+`environment:staging-terraform`) or the build stops at "Configure AWS
+credentials" with `AssumeRoleWithWebIdentity` denied. Change the live role and
+the manifest together.
+`AetherStagingLifecycle` is also managed outside Terraform; its trust policy is
+mirrored in `config/staging_lifecycle_trust_policy.json`, and a unit test derives
+the required subjects from every workflow job that assumes the role. Lifecycle
+dispatches must come from merged `staging`, so the environment-less
+`select-profile`, `wake-apply` and `sleep` jobs present
+`repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging`; the scheduled TTL guard
+presents `ref:refs/heads/main`; the rehearsal and delivery jobs present
+`environment:staging`. A live role missing the staging branch subject fails every
+lifecycle run at "Verify lifecycle role assumption before dispatch" while the
+TTL guard keeps passing. The checked-in
 IAM manifests are validated against the workflow action inventory so adding a
 new lifecycle AWS call without its least-privilege grant fails CI before a
 rehearsal can start. AWS evaluates several lifecycle namespace/read APIs against

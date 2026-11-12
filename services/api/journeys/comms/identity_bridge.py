@@ -80,21 +80,33 @@ class ProviderIdentityRepository(BaseRepository):
             # Preserve first_seen; advance last_seen; never regress a resolved
             # mapping back to provisional on a later bare observation.
             payload["first_seen_at"] = existing.get("first_seen_at", payload["first_seen_at"])
-            if existing.get("resolution_status") == "resolved" and \
-                    payload["resolution_status"] == "provisional":
-                payload["resolution_status"] = "resolved"
-                payload["canonical_entity_id"] = (
-                    payload.get("canonical_entity_id") or existing.get("canonical_entity_id")
-                )
+            if existing.get("resolution_status") == "resolved":
+                # A fresh observation can refresh source identifiers, but it
+                # cannot erase the proof that made this provider identity safe
+                # to use as a canonical subject or silently replace it with a
+                # different auto-resolution. Explicit map/merge operations
+                # update the row through their dedicated methods.
+                for key in (
+                    "resolution_status",
+                    "canonical_entity_id",
+                    "canonical_profile_id",
+                    "identity_cluster_id",
+                    "resolution_method",
+                    "confidence",
+                    "verified_at",
+                    "is_shared_mailbox",
+                    "superseded_by",
+                ):
+                    payload[key] = existing.get(key)
         payload["updated_at"] = _now_iso()
         return await self.insert(identity.identity_id, payload)
 
-    async def list_provisional(
-        self, tenant_id: str, *, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    async def list_provisional(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         return await self.find_many(
             {"tenant_id": tenant_id, "resolution_status": "provisional"},
-            sort_by="updated_at", sort_order="desc", limit=limit,
+            sort_by="updated_at",
+            sort_order="desc",
+            limit=limit,
         )
 
     async def list_for_entity(
@@ -102,8 +114,33 @@ class ProviderIdentityRepository(BaseRepository):
     ) -> list[dict[str, Any]]:
         return await self.find_many(
             {"tenant_id": tenant_id, "canonical_entity_id": canonical_entity_id},
-            sort_by="updated_at", sort_order="desc", limit=limit,
+            sort_by="updated_at",
+            sort_order="desc",
+            limit=limit,
         )
+
+    async def find_for_provider_recipient(
+        self,
+        tenant_id: str,
+        provider: str,
+        provider_account_id: str,
+        *,
+        provider_recipient_id: Optional[str] = None,
+        provider_profile_id: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Return exact tenant/account/source-recipient identity candidates."""
+        filters: dict[str, Any] = {
+            "tenant_id": tenant_id,
+            "provider": provider,
+            "provider_account_id": provider_account_id,
+        }
+        if provider_recipient_id:
+            filters["provider_recipient_id"] = provider_recipient_id
+        if provider_profile_id:
+            filters["provider_profile_id"] = provider_profile_id
+        if not provider_recipient_id and not provider_profile_id:
+            return []
+        return await self.find_many(filters, limit=2)
 
 
 class ProviderIdentityBridge:
@@ -112,18 +149,19 @@ class ProviderIdentityBridge:
     def __init__(self, repo: Optional[ProviderIdentityRepository] = None) -> None:
         self.repo = repo or ProviderIdentityRepository()
 
-    async def _resolve_entity_by_alias(
-        self, tenant_id: str, alias_hash: str
-    ) -> Optional[str]:
+    async def _resolve_entity_by_alias(self, tenant_id: str, alias_hash: str) -> Optional[str]:
         """Best-effort canonical-entity lookup by email alias (never raises)."""
         try:
             from identity.identity.repository import IdentityResolutionRepository
             from identity.identity.signals import IdentitySignalType
+
             repo = IdentityResolutionRepository()
             entity_ids = await repo.find_subjects_by_alias(
                 tenant_id, IdentitySignalType.EMAIL_HASH, alias_hash
             )
-            return entity_ids[0] if entity_ids else None
+            # An alias that resolves to multiple subjects is ambiguous evidence,
+            # not permission to choose whichever row happened to be first.
+            return entity_ids[0] if len(entity_ids) == 1 else None
         except Exception:  # pragma: no cover - identity backend optional in local
             return None
 
@@ -167,8 +205,9 @@ class ProviderIdentityBridge:
             status = "provisional"
 
         confidence = (
-            identity_confidence_for_alias(alias, method=method) if alias else
-            (0.7 if resolved_entity else 0.0)
+            identity_confidence_for_alias(alias, method=method)
+            if alias
+            else (0.7 if resolved_entity else 0.0)
         )
 
         identity = ProviderIdentity(
@@ -192,8 +231,12 @@ class ProviderIdentityBridge:
         return identity
 
     async def mark_resolved(
-        self, tenant_id: str, identity_id: str, canonical_entity_id: str,
-        *, method: str = "manual_mapping",
+        self,
+        tenant_id: str,
+        identity_id: str,
+        canonical_entity_id: str,
+        *,
+        method: str = "manual_mapping",
     ) -> Optional[dict[str, Any]]:
         """Operator/mapping-review resolution of a provisional identity."""
         row = await self.repo.find_by_id(identity_id)
@@ -231,12 +274,16 @@ class ProviderIdentityBridge:
         """Best-effort communications state rebuild for one entity."""
         try:
             from journeys.comms.rebuild_coalescer import get_rebuild_coalescer
+
             await get_rebuild_coalescer().request_rebuild(
-                tenant_id, entity_id, reason="identity_bridge",
+                tenant_id,
+                entity_id,
+                reason="identity_bridge",
             )
         except Exception:  # pragma: no cover - rebuild is best-effort
             try:
                 from journeys.comms.state import CommunicationStateService
+
                 await CommunicationStateService().rebuild_for_entity(tenant_id, entity_id)
             except Exception:
                 pass
@@ -260,7 +307,6 @@ async def record_identity_from_event(
             provider_profile_id=props.get("provider_profile_id") or props.get("provider_profile"),
             provider_recipient_id=props.get("provider_recipient_id"),
             raw_email=props.get("recipient_email") or props.get("email"),
-            canonical_entity_id=props.get("recipient_entity_id"),
             method="provider_profile",
             source_evidence=str(data.get("event_type") or ""),
         )
@@ -268,9 +314,82 @@ async def record_identity_from_event(
         return None
 
 
+async def resolve_provider_recipient_identity(
+    tenant_id: str,
+    provider: str,
+    provider_account_id: Optional[str],
+    *,
+    provider_recipient_id: Optional[str] = None,
+    provider_profile_id: Optional[str] = None,
+    repository: Optional[ProviderIdentityRepository] = None,
+    entity_repository: Any = None,
+) -> Optional[dict[str, str]]:
+    """Resolve only an explicitly verified source recipient binding.
+
+    Source-supplied ``recipient_entity_id`` and message category never enter
+    this decision. A mapping must match the exact tenant, provider account, and
+    supplied source recipient/profile keys, be explicitly resolved, and point
+    to a tenant-owned canonical entity.
+    """
+    provider = str(provider or "").strip()
+    account = str(provider_account_id or provider).strip()
+    recipient = str(provider_recipient_id or "").strip() or None
+    profile = str(provider_profile_id or "").strip() or None
+    if not tenant_id or not provider or not account or not (recipient or profile):
+        return None
+
+    repo = repository or ProviderIdentityRepository()
+    rows = await repo.find_for_provider_recipient(
+        tenant_id,
+        provider,
+        account,
+        provider_recipient_id=recipient,
+        provider_profile_id=profile,
+    )
+    if len(rows) != 1:
+        return None
+    row = rows[0]
+    canonical_id = row.get("canonical_entity_id")
+    identity_id = row.get("identity_id")
+    if (
+        row.get("tenant_id") != tenant_id
+        or row.get("provider") != provider
+        or row.get("provider_account_id") != account
+        or (recipient is not None and row.get("provider_recipient_id") != recipient)
+        or (profile is not None and row.get("provider_profile_id") != profile)
+        or row.get("resolution_status") != "resolved"
+        or row.get("resolution_method") == "provider_profile"
+        or not row.get("verified_at")
+        or row.get("is_shared_mailbox") is True
+        or not isinstance(canonical_id, str)
+        or not canonical_id
+        or not isinstance(identity_id, str)
+        or not identity_id
+    ):
+        return None
+
+    if entity_repository is None:
+        from repositories.repos import EntityRepository
+
+        entity_repository = EntityRepository()
+    entity = await entity_repository.find_by_id(canonical_id)
+    if (
+        not isinstance(entity, dict)
+        or entity.get("tenant_id") != tenant_id
+        or entity.get("entity_id") != canonical_id
+    ):
+        return None
+    return {
+        "tenant_id": tenant_id,
+        "canonical_entity_id": canonical_id,
+        "identity_id": identity_id,
+    }
+
+
 __all__ = [
     "ProviderIdentity",
     "ProviderIdentityRepository",
     "ProviderIdentityBridge",
+    "resolve_provider_recipient_identity",
     "record_identity_from_event",
 ]

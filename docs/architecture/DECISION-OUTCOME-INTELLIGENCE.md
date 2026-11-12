@@ -13,13 +13,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
-  "services/api/intelligence/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
+  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/intelligence/intelligence/decision_models.py": "sha256:fa7574a7f99bcebb21ff58d6cd61ffbb761a58b0022b5a247a13387c8c9853d8"
   "services/api/intelligence/intelligence/ooda_engine.py": "sha256:e029e43ee23fe742c4ad33a5023e5b04d66e2003a3b655ab177d4567747b92de"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "services/api/intelligence/intelligence/recommendation_families.py": "sha256:1d4ef3823c50ca7cd13617c779fb0c83266dd9d57f1b61e4f819f8c820b5bb6a"
-  "services/api/intelligence/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
-  "services/api/intelligence/intelligence/routes.py": "sha256:58d87548dec926d8526d02b2b9cfd044adbf81569d3e6372cdaa80bf7496d5e6"
+  "services/api/intelligence/intelligence/repositories.py": "sha256:89fc229eeb1b7dd12ced0bc8cc50ab8413277a2ca0e2d8e396b8c088f07c3e07"
+  "services/api/intelligence/intelligence/routes.py": "sha256:60d5307836ffcd38c784710b60689c803347d7a3dbb0f7608a64ba66ef150241"
 ---
 # Decision & Outcome Intelligence
 
@@ -38,6 +38,17 @@ Aether extends the existing intelligence graph into a graph-native OODA loop: **
 
 `generated → viewed → decided → outcome_observed → confidence_updated`.
 Recommendations include evidence, confidence decomposition, required approval level, policy/governance flags, graph snapshot id, and data freshness. When a recommendation is promoted from a comparison finding, optional `finding_id` and `investigation_id` provenance links are carried onto the decision, planned action/dispatch, and observed outcome records so the full loop remains traceable.
+
+Action dispatch also persists an `action.dispatch` policy decision with the
+durable dispatch. A successful record is bound to its dispatch ID, tenant,
+authenticated principal, selected action, target, elevation and approval
+context, and Journey or Risk association record. Journey360 and Risk360 rejoin
+and validate those exact fields, as well as requiring policy evaluation to
+precede delivery. For idempotent dispatches, an `authorization_pending`
+reservation is claimed atomically before policy persistence. A persistence
+failure returns it to the retryable pending state, preserving the dispatch ID;
+only the successful claimant can proceed to delivery. This records the application permission decision; it
+does not prove event-time authority, connector execution, or an external effect.
 
 ## Graph relationships
 
@@ -64,7 +75,11 @@ unattributed vertices are not a wildcard). An optional action idempotency key
 is reserved before any connector call, and a missing adapter leaves an
 auditable queued plan rather than claiming an external effect. Delivered
 receipts must contain real provider evidence; simulation-shaped receipts are
-not accepted.
+not accepted. Journey360 and Risk360 can join a dispatch to canonical worker
+delivery evidence, including provider receipts and signature-verified,
+receipt-bound callbacks. Tenant-submitted outcome events remain
+`caller_asserted`; neither those events nor a provider delivery record changes
+the projection's external-effect state from `not_independently_verified`.
 
 ## Tenant vs Kyber responsibilities
 

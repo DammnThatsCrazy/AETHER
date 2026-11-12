@@ -72,14 +72,18 @@ def _repo():
 
 
 async def _drive_to_approved() -> str:
-    session = await svc.create_import(TENANT)
+    from tests.fakes.import_rights import grant_import_source
+
+    session = await svc.create_import(
+        TENANT, created_by="approver-1", source_id=await grant_import_source(TENANT)
+    )
     import_id = session["id"]
     await svc.store_file(TENANT, import_id, filename="batch.csv", content=CSV, content_type="text/csv")
     await svc.analyze_import(TENANT, import_id)
     await svc.set_mapping(TENANT, import_id, MAPPING)
     result = await svc.validate_import(TENANT, import_id)
     assert result["status"] == "validated"
-    await svc.approve_import(TENANT, import_id)
+    await svc.approve_import(TENANT, import_id, approver="approver-1")
     return import_id
 
 

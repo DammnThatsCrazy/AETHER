@@ -1,0 +1,12 @@
+[
+  "agentic_projection_outbox",
+  "bronze_agentic_observations",
+  "experiment_assignments",
+  "experiment_exposures",
+  "experiment_outcomes",
+  "experiments",
+  "silver_agent_activity_facts",
+  "silver_agent_risk_facts",
+  "silver_agent_tool_invocation_facts",
+  "silver_mcp_connection_facts"
+]
