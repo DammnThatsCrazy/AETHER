@@ -365,5 +365,18 @@ describe('attestAgentEvent', () => {
       properties: { parentAgentId: 'orch', childAgentId: 'worker' },
     })).toBe('G68ByW+maN/LMs72HOrv9grBJrOq+Rt1xIEVR3zoYytFUekJggOQbpzDBZgkUcJA122fQkIevosoGYU8UAneCg==');
   });
+
+  it('matches the backend twin for numbers JSON.stringify writes without an exponent', () => {
+    // Shared with services/api/tests/agent_lineage/test_attestation.py.
+    expect(attestAgentEvent({
+      privateKey: pem,
+      deploymentId: 'dep-1',
+      agentId: 'orch',
+      id: 'ev-2',
+      type: 'agent_tool_invocation_observed',
+      timestamp: '2026-11-06T10:00:00.000Z',
+      properties: { toolName: 'search', confidence: 0.000001, costMicros: 123456789012345680000, floor: 1e-7 },
+    })).toBe('57G01kxuCFXvknLCTK8vAbVCOVTgUIIfO5C5870SXGWEIRcpq/euIfR/swlK8ko7XU40jHM98K/5uX58B62uDA==');
+  });
 });
 

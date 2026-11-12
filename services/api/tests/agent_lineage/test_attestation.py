@@ -146,3 +146,26 @@ def test_the_real_batch_event_model_keeps_the_signed_fields_intact():
     )
     record = {"id": "dep-1", "agent_id": "orch", "attestation_public_key": public}
     assert _event_is_attested(event, {"attestation": _sign(private, _payload())}, record) is True
+
+
+NUMERIC_VECTOR_SIGNATURE = "57G01kxuCFXvknLCTK8vAbVCOVTgUIIfO5C5870SXGWEIRcpq/euIfR/swlK8ko7XU40jHM98K/5uX58B62uDA=="
+
+
+def test_numbers_are_canonicalized_like_json_stringify():
+    """The SDK signs JSON.stringify output; Python must hash the same bytes for the
+    parsed wire values (0.000001, not 1e-06). Shared with agent-telemetry.test.ts."""
+    import json
+
+    from actions.agent.attestation import _canonical_json, _js_number
+
+    assert [_js_number(v) for v in (0.000001, 1e-7, 1e21, 1.2345678901234568e20, 1.0, -0.0, float("nan"))] == [
+        "0.000001", "1e-7", "1e+21", "123456789012345680000", "1", "0", "null"]
+    wire = json.loads('{"toolName":"search","confidence":0.000001,"costMicros":123456789012345680000,"floor":1e-7}')
+    assert _canonical_json(wire) == (
+        '{"confidence":0.000001,"costMicros":123456789012345680000,"floor":1e-7,"toolName":"search"}')
+    private, public = _keys()
+    payload = canonical_payload(
+        deployment_id="dep-1", agent_id="orch", message_id="ev-2", event_type="agent_tool_invocation_observed",
+        timestamp="2026-11-06T10:00:00.000Z", properties=wire)
+    assert _sign(private, payload) == NUMERIC_VECTOR_SIGNATURE
+    assert verify_attestation(public, NUMERIC_VECTOR_SIGNATURE, payload)
