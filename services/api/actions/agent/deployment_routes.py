@@ -855,7 +855,8 @@ async def agent_decision_detail(agent_ref: str, decision_id: str, request: Reque
     from repositories.repos import DelegationRepository
 
     facts, _ = await _behavior_facts(tenant.tenant_id, agent_ref)
-    grants = await DelegationRepository().active_for(agent_ref, tenant.tenant_id)
+    # A historical decision is judged against the grant that applied at the time.
+    grants = await DelegationRepository().history_for(agent_ref, tenant.tenant_id)
     detail = decision_detail(facts, decision_id, grants=grants)
     if detail is None or detail["envelope"]["decision_actor"].get("value") != agent_ref:
         raise NotFoundError("decision not found")

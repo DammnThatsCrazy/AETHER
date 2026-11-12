@@ -271,3 +271,16 @@ def test_failed_execution_with_a_pending_retry_is_not_failed():
         ("agent_execution_failed", "buyer", {"decisionId": "d2", "actionId": "retry"}),
     )])
     assert project_decisions(done)["decisions"][0]["disposition"]["disposition"] == "failed_execution"
+
+
+def test_pending_retry_detection_orders_mixed_precision_timestamps():
+    import dataclasses
+
+    failed, retry = facts(
+        ("agent_execution_failed", "buyer", {"decisionId": "d1", "actionId": "a1"}),
+        ("agent_execution_started", "buyer", {"decisionId": "d1", "actionId": "a1"}),
+    )
+    failed = dataclasses.replace(failed, occurred_at="2026-10-22T10:00:01Z")
+    retry = dataclasses.replace(retry, occurred_at="2026-10-22T10:00:01.100000Z")  # after, but sorts first as text
+    [env] = project_decisions([failed, retry])["decisions"]
+    assert env["disposition"]["disposition"] == "selected_action"

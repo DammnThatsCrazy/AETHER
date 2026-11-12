@@ -129,8 +129,11 @@ def action_disposition(group: list[AgentFact], opportunity: dict[str, Any]) -> d
     failed = [f for f in terminal if f.event_type.endswith(("_failed", "_aborted"))]
     # An execution whose latest record (per actionId, else the decision's
     # sequence) is not terminal is still pending, so the decision is not failed.
+    from shared.temporal.instant import MIN_INSTANT, coerce_utc_lenient
+
     latest: dict[str, AgentFact] = {}
-    for f in sorted(executed, key=lambda f: (f.occurred_at, f.event_id)):
+    # Mixed whole/fractional-second timestamps do not sort as text; use instants.
+    for f in sorted(executed, key=lambda f: (coerce_utc_lenient(f.occurred_at) or MIN_INSTANT, f.event_id)):
         latest[f.action_ref or "_sequence"] = f
     pending = any(not is_terminal(f) for f in latest.values())
     selected = [f for f in group if f.event_type == "agent_action_selected"]

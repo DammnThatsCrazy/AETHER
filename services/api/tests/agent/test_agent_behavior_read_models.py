@@ -416,3 +416,17 @@ async def test_principal_agents_counts_a_granted_child_once(_routes, monkeypatch
     monkeypatch.setattr(read_models, "profile360_agents", capture)
     await agent_routes.principal_agents("gsa-person-1", _request())
     assert seen["keys"] and len(seen["keys"]) == len(set(seen["keys"]))
+
+
+@pytest.mark.asyncio
+async def test_noesis_and_decision_detail_use_grant_history(monkeypatch):
+    """Every behavior surface must judge history against grant history, like the
+    HTTP behavior read model; none may load only currently active grants."""
+    import inspect
+
+    from actions.agent import deployment_routes
+    from intelligence.noesis.adapters import agent_behavior_adapter
+
+    for fn in (agent_behavior_adapter.read_agent_behavior, deployment_routes.agent_decision_detail):
+        src = inspect.getsource(fn)
+        assert "history_for(" in src and "active_for(" not in src, fn.__name__
