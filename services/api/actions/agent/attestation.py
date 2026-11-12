@@ -48,12 +48,21 @@ def _js_number(value: float | int) -> str:
     """
     if isinstance(value, int) and abs(value) < 2**53:
         return str(value)
-    try:
-        number = float(value)
-    except OverflowError:
-        # JSON.parse reads an integer this large as Infinity, which
-        # JSON.stringify writes as null; never let it abort a batch.
-        return "null"
+    if isinstance(value, int):
+        # Downstream keeps the exact integer, so the signed text must be that
+        # integer's own decimal text. One that JSON.stringify would render
+        # differently (2**53 + 1 renders as 9007199254740992) would let a signed
+        # amount change without breaking the signature; JSON.stringify never
+        # emits such a value, so refuse it. ValueError leaves the event
+        # unattested; it never aborts a batch.
+        try:
+            rendered = _js_number(float(value))
+        except OverflowError:
+            rendered = "null"
+        if rendered != str(value):
+            raise ValueError("integer text differs from its JavaScript number rendering")
+        return rendered
+    number = float(value)
     if not math.isfinite(number):
         return "null"
     if number == 0:

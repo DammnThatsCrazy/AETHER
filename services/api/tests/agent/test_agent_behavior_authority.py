@@ -232,3 +232,22 @@ def test_correlated_action_keeps_the_decision_link_from_an_earlier_phase():
     )
     [row] = agent360_behavior(facts, "agent-1")["sections"]["value"]["data"]["actions"]
     assert row["event_id"] == facts[-1].event_id and row["class"] == "agent_selected_and_executed"
+
+
+def test_approval_timeline_compares_instants_not_strings():
+    """Silver mixes whole and fractional seconds; "...00Z" sorts after
+    "...00.100000Z" as text, which would hide a grant or reorder a denial."""
+    import dataclasses
+
+    from intelligence.agent_behavior.read_models import _approval_timeline, _granted_approval_ref
+
+    grant, deny, action = _facts(
+        ("agent_authorization_granted", "agent-1", {"authorizationId": "appr-1"}),
+        ("agent_authorization_denied", "agent-1", {"authorizationId": "appr-1"}),
+        ("agent_transaction_settled", "agent-1", {"amount": "90.00", "authorizationId": "appr-1"}),
+    )
+    grant = dataclasses.replace(grant, occurred_at="2026-10-22T10:00:00Z")
+    action = dataclasses.replace(action, occurred_at="2026-10-22T10:00:00.100000Z")
+    assert _granted_approval_ref(action, _approval_timeline([grant])) == "appr-1"
+    deny = dataclasses.replace(deny, occurred_at="2026-10-22T10:00:00.050000Z")  # after the grant
+    assert _granted_approval_ref(action, _approval_timeline([grant, deny])) is None

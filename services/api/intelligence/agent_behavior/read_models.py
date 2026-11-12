@@ -49,26 +49,35 @@ _AUTHORIZATION_STATUS = {
 }
 
 
-def _approval_timeline(facts: Iterable[AgentFact]) -> dict[str, list[tuple[str, str, str]]]:
-    """``authorization_ref -> [(occurred_at, event_id, status)]`` in time order."""
-    timeline: dict[str, list[tuple[str, str, str]]] = {}
+def _instant(value: str) -> Any:
+    from shared.temporal.instant import MIN_INSTANT, coerce_utc_lenient
+
+    # Silver timestamps mix whole and fractional seconds, so strings do not sort
+    # chronologically; compare parsed UTC instants (unparseable sorts first).
+    return coerce_utc_lenient(value) or MIN_INSTANT
+
+
+def _approval_timeline(facts: Iterable[AgentFact]) -> dict[str, list[tuple[Any, str, str]]]:
+    """``authorization_ref -> [(instant, event_id, status)]`` in time order."""
+    timeline: dict[str, list[tuple[Any, str, str]]] = {}
     for f in facts:
         status = _AUTHORIZATION_STATUS.get(f.event_type)
         if status and f.authorization_ref:
-            timeline.setdefault(f.authorization_ref, []).append((f.occurred_at, f.event_id, status))
+            timeline.setdefault(f.authorization_ref, []).append((_instant(f.occurred_at), f.event_id, status))
     for entries in timeline.values():
         entries.sort()
     return timeline
 
 
-def _granted_approval_ref(f: AgentFact, timeline: dict[str, list[tuple[str, str, str]]]) -> Optional[str]:
+def _granted_approval_ref(f: AgentFact, timeline: dict[str, list[tuple[Any, str, str]]]) -> Optional[str]:
     """The action's authorization reference only when that authorization's latest
     status at the action's time is ``granted``. The same id is used for requested,
     granted and denied, so the reference alone is not evidence of approval."""
     ref = f.authorization_ref
     if not ref:
         return None
-    at_or_before = [e for e in timeline.get(ref, []) if e[0] <= f.occurred_at]
+    at = _instant(f.occurred_at)
+    at_or_before = [e for e in timeline.get(ref, []) if e[0] <= at]
     return ref if at_or_before and at_or_before[-1][2] == "granted" else None
 
 

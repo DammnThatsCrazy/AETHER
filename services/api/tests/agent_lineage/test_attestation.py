@@ -172,13 +172,23 @@ def test_numbers_are_canonicalized_like_json_stringify():
 
 
 
-def test_integers_beyond_float_range_canonicalize_as_null_without_raising():
-    """JSON.parse reads 10**310 as Infinity and JSON.stringify writes null; the
-    backend must match and must never abort a batch on such a value."""
+def test_integers_a_js_number_cannot_hold_are_never_attested():
+    """2**53 + 1 would sign like 2**53 while Silver keeps the exact amount, so a
+    signed amount could change under the same signature. Such values (and ones
+    beyond float range) refuse canonicalization with ValueError, which leaves the
+    event unattested instead of aborting the batch."""
     import json
 
-    from actions.agent.attestation import _canonical_json
+    import pytest
 
-    wire = json.loads('{"n":1' + "0" * 310 + '}')
-    assert _canonical_json(wire) == '{"n":null}'
-    _payload(properties=wire)  # must not raise
+    from actions.agent.attestation import _canonical_json, _js_number
+
+    assert _js_number(2**53) == "9007199254740992"  # exactly representable: fine
+    for wire in ('{"amount":9007199254740993}', '{"n":1' + "0" * 310 + '}'):
+        with pytest.raises(ValueError):
+            _canonical_json(json.loads(wire))
+    private, public = _keys()
+    signature = _sign(private, _payload(properties={"amount": 2**53}))
+    with pytest.raises(ValueError):
+        _payload(properties={"amount": 2**53 + 1})  # cannot verify under the 2**53 signature
+    assert verify_attestation(public, signature, _payload(properties={"amount": 2**53}))
