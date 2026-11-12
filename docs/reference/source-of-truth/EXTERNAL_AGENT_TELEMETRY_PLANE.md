@@ -136,6 +136,9 @@ Scheduled behavior jobs (`AETHER_AGENT_BEHAVIOR_JOBS_ENABLED`, interval
 `maintenance` worker role: stored daily behavior snapshots, drift between stored
 windows and Risk360 assessments from agent behavior evidence, for agents of
 active registered deployments.
+A pass never records a window snapshot from a truncated fact read (the read is
+newest-first and capped, so it may not cover the window); it counts
+`skipped_truncated_snapshots` instead of overwriting a stored snapshot.
 
 Python (`packages/sdk/python/aether_agentic`): `build_behavior_event(...)` emits the same behavior types (deployment required, content keys and float amounts rejected); `build_deployment_context(...)`
 plus an optional `deployment=` parameter on all envelope builders; emits the

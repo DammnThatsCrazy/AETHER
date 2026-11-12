@@ -28,6 +28,20 @@ _PAYLOAD_FALLBACK: dict[str, tuple[str, ...]] = {
 }
 
 
+# The server SDK's typed tool helper reports results as ``<outcome>_observed``;
+# behavior consumers read the plain lifecycle vocabulary.
+_SDK_OBSERVED_STATUS = {
+    "succeeded_observed": "succeeded",
+    "failed_observed": "failed",
+    "denied_observed": "denied",
+}
+
+
+def _status(value: Any) -> Optional[str]:
+    status = _ref(value)
+    return _SDK_OBSERVED_STATUS.get(status, status) if status else status
+
+
 def _ref(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
@@ -150,7 +164,7 @@ def fact_from_row(row: dict[str, Any]) -> AgentFact:
         tool_name=_ref(row.get("tool_name")),
         previous_tool_name=_ref(col("previous_tool_name")),
         server_url=_ref(row.get("server_url")),
-        status=_ref(row.get("status")),
+        status=_status(row.get("status")),
         outcome=_ref(row.get("outcome")),
         attempt=_int(row.get("attempt") if row.get("attempt") is not None else payload.get("attempt")),
         latency_ms=_int(row.get("latency_ms") if row.get("latency_ms") is not None else payload.get("latencyMs")),

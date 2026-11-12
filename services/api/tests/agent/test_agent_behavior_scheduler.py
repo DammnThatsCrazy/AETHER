@@ -110,3 +110,26 @@ def test_worker_is_registered_off_by_default_under_maintenance():
     patched = dataclasses.replace(settings, external_agent_telemetry=on)
     spec_on = next(sp for sp in build_worker_specs(registry=None, settings=patched) if sp.name == "agent_behavior_jobs")
     assert spec_on.enabled() is True
+
+
+@pytest.mark.asyncio
+async def test_truncated_fact_read_never_overwrites_a_stored_window(monkeypatch):
+    """The fact read is newest-first and capped; a truncated read may miss the
+    window, so the pass must not replace a stored snapshot with it."""
+    from actions.agent import behavior_read_model
+
+    await _facts("01", "succeeded")
+    first = await scheduler.run_once(NOW, agents=[(T, "a1")])
+    assert first.snapshots_recorded == 1
+    before = await BehaviorSnapshotRepository().windows(T, "a1")
+
+    real = behavior_read_model.load_behavior_inputs
+
+    async def truncated(tenant_id, agent_ref):
+        inputs = await real(tenant_id, agent_ref)
+        return behavior_read_model.BehaviorInputs(facts=inputs.facts[:1], truncated=True, grants=inputs.grants)
+
+    monkeypatch.setattr(behavior_read_model, "load_behavior_inputs", truncated)
+    again = await scheduler.run_once(NOW, agents=[(T, "a1")])
+    assert again.snapshots_recorded == 0 and again.skipped_truncated_snapshots == 1
+    assert await BehaviorSnapshotRepository().windows(T, "a1") == before

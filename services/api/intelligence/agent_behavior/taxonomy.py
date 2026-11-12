@@ -159,8 +159,12 @@ class CanonicalEvent:
                 "timestamp": self.timestamp, "properties": self.properties}
 
 
-def _message_id(adapter: str, source_id: str, canonical_type: str) -> str:
-    material = json.dumps([adapter, source_id, canonical_type], separators=(",", ":"))
+def _message_id(adapter: str, source_id: str, canonical_type: str, phase: Optional[str] = None) -> str:
+    # Several lifecycle phases (invoked / succeeded / failed) share one canonical
+    # type; the phase keeps their ids distinct so dedupe cannot drop a completion.
+    # Phase-less types keep their original id, so retries stay idempotent.
+    parts = [adapter, source_id, canonical_type] + ([phase] if phase else [])
+    material = json.dumps(parts, separators=(",", ":"))
     return "abi_" + hashlib.sha256(material.encode()).hexdigest()[:32]
 
 
@@ -181,7 +185,7 @@ def _emit(adapter: str, record: dict[str, Any], dotted: str, props: dict[str, An
         props["status"] = status
     return CanonicalEvent(
         type=canonical_type,
-        message_id=_message_id(adapter, str(record["id"]), canonical_type),
+        message_id=_message_id(adapter, str(record["id"]), canonical_type, status),
         timestamp=str(record["timestamp"]),
         properties=props,
     )

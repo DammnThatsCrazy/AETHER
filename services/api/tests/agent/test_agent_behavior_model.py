@@ -146,3 +146,21 @@ def test_capability_revocation_follows_occurrence_order_not_event_id():
     assert status([revoked, granted]) == "revoked"  # input order does not matter
     assert status([granted, dataclasses.replace(revoked, event_id="zzzz")]) == "revoked"
     assert status([granted, revoked, dataclasses.replace(regranted, event_id="00")]) == "declared_only"
+
+
+def test_failure_after_resolution_reopens_the_episode():
+    from intelligence.agent_behavior.activity import failure_resolution
+
+    episode = lambda *statuses: failure_resolution(facts(*[
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": s})
+        for s in statuses]))[0]
+    assert episode("failed", "succeeded")["resolved"] is True
+    reopened = episode("failed", "succeeded", "failed")
+    assert reopened["resolved"] is False and reopened["resolution"] is None
+    assert episode("failed", "succeeded", "failed", "succeeded")["resolved"] is True
+
+
+def test_sdk_observed_tool_statuses_are_normalized_at_the_fact_boundary():
+    fs = facts(*[("agent_tool_invocation_observed", "a", {"toolName": "A", "status": s})
+                 for s in ("failed_observed", "succeeded_observed", "denied_observed")])
+    assert [f.status for f in fs] == ["failed", "succeeded", "denied"]

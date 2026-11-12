@@ -37,6 +37,8 @@ def classify(roles: dict[str, dict[str, Any]], agent_refs: set[str]) -> str:
         return "agent_selected_human_executed"
     if influence in agent_refs:
         return "agent_influenced"
+    if by_agent_executed:
+        return "unattributed"  # agent executed; who decided is unknown, not human
     if decision is not None or execution is not None:
         return "human_only"
     return "unattributed"

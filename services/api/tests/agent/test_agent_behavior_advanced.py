@@ -215,3 +215,12 @@ def test_risk360_pipeline_consumes_agent_behavior_evidence():
         compute_assessment(tenant_id=T, subject_kind="entity", subject_id="person-1", evidence_bundle=bundle)
     with _pytest.raises(ValueError):
         compute_assessment(tenant_id=T, subject_kind="agent", subject_id="someone-else", evidence_bundle=bundle)
+
+
+def test_agent_execution_with_unknown_decision_actor_is_not_human_only():
+    from value.attribution.agent_behavior_value import classify
+
+    roles = {"execution_actor": {"value": "buyer"}, "decision_actor": {"value": None}}
+    assert classify(roles, {"buyer"}) == "unattributed"
+    human = {"execution_actor": {"value": "ops-person"}, "decision_actor": {"value": None}}
+    assert classify(human, {"buyer"}) == "human_only"

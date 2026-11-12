@@ -32,6 +32,7 @@ class PassReport:
     drift_detected: int = 0
     assessments_persisted: int = 0
     skipped_no_facts: int = 0
+    skipped_truncated_snapshots: int = 0
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -76,8 +77,13 @@ async def run_agent(tenant_id: str, agent_ref: str, window: tuple[str, str], rep
         report.skipped_no_facts += 1
         return
     repo = BehaviorSnapshotRepository()
-    await record_window(repo, tenant_id, agent_ref, inputs.facts, window)
-    report.snapshots_recorded += 1
+    if inputs.truncated:
+        # The fact read is newest-first and capped, so it may not cover the
+        # window; recording it could overwrite a complete snapshot with less.
+        report.skipped_truncated_snapshots += 1
+    else:
+        await record_window(repo, tenant_id, agent_ref, inputs.facts, window)
+        report.snapshots_recorded += 1
     drift = await drift_over_stored_windows(repo, tenant_id, agent_ref)
     if drift.get("status") == "drift_detected":
         report.drift_detected += 1

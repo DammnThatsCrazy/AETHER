@@ -170,6 +170,7 @@ def failure_resolution(facts: Iterable[AgentFact]) -> list[dict[str, Any]]:
             if f.status == "failed":
                 failures.append({"tool": f.tool_name, "event_id": f.event_id})
                 last_failed = f
+                resolved_by = None  # a later failure reopens the episode
             elif f.status == "succeeded":
                 if last_failed is not None and resolved_by is None:
                     resolved_by = f

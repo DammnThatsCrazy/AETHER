@@ -219,3 +219,14 @@ def test_facts_fall_back_to_payload_and_are_tenant_ordered():
     assert facts[0].memory_ref == "m1"
     assert watermark(facts).endswith(newer["source_event_id"])
     assert fact_from_row({**legacy, "payload": None}).memory_ref is None
+
+
+def test_mcp_lifecycle_phases_get_distinct_message_ids():
+    """invoked / failed / succeeded share one canonical type; equal ids would let
+    dedupe drop the completion. Each phase stays stable across retries."""
+    base = {"id": "c1", "timestamp": "2026-10-22T10:00:00Z", "agentId": "a1",
+            "method": "tools/call", "params": {"name": "search"}}
+    records = (base, {**base, "error": {"code": -32000}}, {**base, "result": {"isError": False}})
+    ids = [map_runtime_record("mcp", r)[0]["messageId"] for r in records]
+    assert len(set(ids)) == 3
+    assert ids == [map_runtime_record("mcp", r)[0]["messageId"] for r in records]
