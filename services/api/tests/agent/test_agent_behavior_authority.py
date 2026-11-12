@@ -131,7 +131,7 @@ def test_one_purchase_across_lifecycle_phases_counts_once():
 
     grant = {**GRANT, "scope": {**GRANT["scope"], "daily_limit": "100.00"}}
     purchase = {"amount": "60.00", "currency": "USD", "actionType": "purchase", "merchant": "shop-1",
-                "resourceRef": "merchant:shop-1", "objectType": "order", "objectId": "o-1"}
+                "resourceRef": "merchant:shop-1", "objectType": "order", "objectId": "o-1", "decisionId": "d-1"}
     facts = _facts(*[(f"agent_transaction_{phase}", "agent-1", purchase)
                      for phase in ("initiated", "authorized", "settled")])
     sections = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]
@@ -201,3 +201,34 @@ def test_requested_or_denied_authorization_is_not_observed_approval():
     granted = approval("requested", "granted")
     assert granted["human_approval_observed"] is True
     assert "human_approval_required_not_observed" not in granted["reasons"]
+
+
+
+def test_repeat_purchases_of_one_product_stay_distinct():
+    """An object names a target, not a transaction: two purchases of one product
+    under different decisions are two spends, unless an actionId joins them."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    grant = {**GRANT, "scope": {**GRANT["scope"], "daily_limit": "100.00"}}
+    base = {"amount": "60.00", "currency": "USD", "actionType": "purchase", "merchant": "shop-1",
+            "resourceRef": "merchant:shop-1", "objectType": "product", "objectId": "sku-1"}
+    facts = _facts(("agent_transaction_settled", "agent-1", {**base, "decisionId": "d-1"}),
+                   ("agent_transaction_settled", "agent-1", {**base, "decisionId": "d-2"}))
+    sections = agent360_behavior(facts, "agent-1", grants=[grant])["sections"]
+    assert "daily_limit_exceeded" in sections["authority"]["data"][-1]["reasons"]
+    assert [t["amount"] for t in sections["value"]["data"]["totals"]] == ["120.00"]
+
+
+def test_correlated_action_keeps_the_decision_link_from_an_earlier_phase():
+    """Settlement often omits decisionId; the single value row must keep the link
+    the initiation reported, so attribution does not fall back to unattributed."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    pay = {"amount": "60.00", "currency": "USD", "actionType": "purchase", "actionId": "act-1"}
+    facts = _facts(
+        ("agent_action_selected", "agent-1", {"decisionId": "d-1", "candidateId": "c-1"}),
+        ("agent_transaction_initiated", "agent-1", {**pay, "decisionId": "d-1"}),
+        ("agent_transaction_settled", "agent-1", pay),
+    )
+    [row] = agent360_behavior(facts, "agent-1")["sections"]["value"]["data"]["actions"]
+    assert row["event_id"] == facts[-1].event_id and row["class"] == "agent_selected_and_executed"

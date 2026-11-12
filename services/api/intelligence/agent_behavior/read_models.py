@@ -97,26 +97,41 @@ _PHASE_RANK = {
 def _economic_key(f: AgentFact) -> Optional[tuple[str, str]]:
     """Explicit source correlation for one economic action across its phases.
 
-    Only a reported action id or an explicit object type and id correlate phases;
-    nothing is inferred from amount or timing, so uncorrelated events stay distinct.
+    A reported action id correlates phases on its own. An object reference names a
+    target (a product can be bought twice), so it correlates only together with
+    the same decision or task. Nothing is inferred from amount or timing, so
+    uncorrelated events stay distinct.
     """
     if f.action_ref:
         return (f.agent_ref or "", f"action:{f.action_ref}")
-    if f.object_type and f.object_id:
-        return (f.agent_ref or "", f"object:{f.object_type}:{f.object_id}")
+    scope = f.decision_ref or (f"task:{f.task_ref}" if f.task_ref else None)
+    if f.object_type and f.object_id and scope:
+        return (f.agent_ref or "", f"object:{f.object_type}:{f.object_id}|{scope}")
     return None
 
 
+# References decompose() reads from an action; a correlated action keeps any of
+# them reported on an earlier phase when its most final phase omits them.
+_ATTRIBUTION_REFS = ("decision_ref", "objective_ref", "authorization_ref")
+
+
 def _distinct_actions(actions: list[AgentFact]) -> list[AgentFact]:
-    """One representative per correlated action (its most final phase)."""
-    chosen: dict[Any, AgentFact] = {}
+    """One representative per correlated action: its most final phase, carrying
+    attribution references reported only on earlier phases."""
+    import dataclasses
+
+    groups: dict[Any, list[AgentFact]] = {}
     for f in actions:
-        key = _economic_key(f) or ("event", f.event_id)
-        best = chosen.get(key)
-        rank = (_PHASE_RANK.get(f.event_type, 1), f.occurred_at, f.event_id)
-        if best is None or rank > (_PHASE_RANK.get(best.event_type, 1), best.occurred_at, best.event_id):
-            chosen[key] = f
-    return sorted(chosen.values(), key=lambda f: (f.occurred_at, f.event_id))
+        groups.setdefault(_economic_key(f) or ("event", f.event_id), []).append(f)
+    chosen = []
+    for group in groups.values():
+        ordered = sorted(group, key=lambda f: (f.occurred_at, f.event_id))
+        best = max(group, key=lambda f: (_PHASE_RANK.get(f.event_type, 1), f.occurred_at, f.event_id))
+        missing = {name: next((getattr(f, name) for f in ordered if getattr(f, name)), None)
+                   for name in _ATTRIBUTION_REFS if not getattr(best, name)}
+        missing = {k: v for k, v in missing.items() if v}
+        chosen.append(dataclasses.replace(best, **missing) if missing else best)
+    return sorted(chosen, key=lambda f: (f.occurred_at, f.event_id))
 
 
 def _prior_spends(actions: list[AgentFact], observed: list[Any], index: int) -> list[Any]:

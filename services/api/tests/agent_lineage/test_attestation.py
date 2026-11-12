@@ -169,3 +169,16 @@ def test_numbers_are_canonicalized_like_json_stringify():
         timestamp="2026-11-06T10:00:00.000Z", properties=wire)
     assert _sign(private, payload) == NUMERIC_VECTOR_SIGNATURE
     assert verify_attestation(public, NUMERIC_VECTOR_SIGNATURE, payload)
+
+
+
+def test_integers_beyond_float_range_canonicalize_as_null_without_raising():
+    """JSON.parse reads 10**310 as Infinity and JSON.stringify writes null; the
+    backend must match and must never abort a batch on such a value."""
+    import json
+
+    from actions.agent.attestation import _canonical_json
+
+    wire = json.loads('{"n":1' + "0" * 310 + '}')
+    assert _canonical_json(wire) == '{"n":null}'
+    _payload(properties=wire)  # must not raise

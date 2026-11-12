@@ -48,7 +48,12 @@ def _js_number(value: float | int) -> str:
     """
     if isinstance(value, int) and abs(value) < 2**53:
         return str(value)
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        # JSON.parse reads an integer this large as Infinity, which
+        # JSON.stringify writes as null; never let it abort a batch.
+        return "null"
     if not math.isfinite(number):
         return "null"
     if number == 0:
