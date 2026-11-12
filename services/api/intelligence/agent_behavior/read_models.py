@@ -42,7 +42,37 @@ def _ts(value: str) -> Optional[datetime]:
 
 # --- Agent360 (WO-110, WO-111, WO-112) -----------------------------------------------
 
-def _observed_action(f: AgentFact):
+_AUTHORIZATION_STATUS = {
+    "agent_authorization_requested": "requested",
+    "agent_authorization_granted": "granted",
+    "agent_authorization_denied": "denied",
+}
+
+
+def _approval_timeline(facts: Iterable[AgentFact]) -> dict[str, list[tuple[str, str, str]]]:
+    """``authorization_ref -> [(occurred_at, event_id, status)]`` in time order."""
+    timeline: dict[str, list[tuple[str, str, str]]] = {}
+    for f in facts:
+        status = _AUTHORIZATION_STATUS.get(f.event_type)
+        if status and f.authorization_ref:
+            timeline.setdefault(f.authorization_ref, []).append((f.occurred_at, f.event_id, status))
+    for entries in timeline.values():
+        entries.sort()
+    return timeline
+
+
+def _granted_approval_ref(f: AgentFact, timeline: dict[str, list[tuple[str, str, str]]]) -> Optional[str]:
+    """The action's authorization reference only when that authorization's latest
+    status at the action's time is ``granted``. The same id is used for requested,
+    granted and denied, so the reference alone is not evidence of approval."""
+    ref = f.authorization_ref
+    if not ref:
+        return None
+    at_or_before = [e for e in timeline.get(ref, []) if e[0] <= f.occurred_at]
+    return ref if at_or_before and at_or_before[-1][2] == "granted" else None
+
+
+def _observed_action(f: AgentFact, approval_ref: Optional[str] = None):
     from actions.delegation.authority_boundary import ObservedAction
 
     return ObservedAction(
@@ -50,7 +80,7 @@ def _observed_action(f: AgentFact):
         action=f.action_type or ("purchase" if f.event_type.startswith("agent_transaction_") else f.event_type),
         resource=f.resource_ref, amount=str(f.amount) if f.amount is not None else None,
         merchant=f.attr("merchant", "merchantId"), protocol=f.attr("protocol"), asset=f.currency,
-        human_approval_ref=f.authorization_ref,
+        human_approval_ref=approval_ref,
     )
 
 
@@ -123,7 +153,8 @@ def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
     mine = [f for f in facts if f.agent_ref == agent_ref]
     actions = [f for f in mine if f.amount is not None and (
         f.event_type.startswith("agent_transaction_") or f.event_type.startswith("agent_execution_"))]
-    observed = [_observed_action(f) for f in actions]
+    approvals = _approval_timeline(facts)
+    observed = [_observed_action(f, _granted_approval_ref(f, approvals)) for f in actions]
     checks = [check_action(a, grants, _prior_spends(actions, observed, i)).to_dict() | {"event_id": a.event_id}
               for i, a in enumerate(observed)]
     value = attribute(

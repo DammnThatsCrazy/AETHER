@@ -45,7 +45,42 @@ async def load_behavior_facts(tenant_id: str, agent_ref: str, *, analytics: Any 
         SILVER_TABLE, {"tenant_id": tenant_id, "source_event_type": "agent_subagent_spawned"},
         limit=BEHAVIOR_FACT_LIMIT,
     )
-    return normalize_rows(rows[:BEHAVIOR_FACT_LIMIT] + spawns, tenant_id), truncated
+    # The journey traverses descendants, so their activity is loaded too (bounded);
+    # an unread descendant or a capped descendant read marks the inputs truncated.
+    descendant_rows: list[dict[str, Any]] = []
+    descendants, capped = _descendants(normalize_rows(spawns, tenant_id), agent_ref, MAX_JOURNEY_DESCENDANTS)
+    truncated = truncated or capped
+    for child in descendants:
+        child_rows, _child_cursor, child_more = await analytics.query_silver_page(
+            SILVER_TABLE, {"tenant_id": tenant_id, "agent_id": child}, limit=BEHAVIOR_FACT_LIMIT,
+        )
+        descendant_rows.extend(child_rows[:BEHAVIOR_FACT_LIMIT])
+        truncated = truncated or child_more
+    return normalize_rows(rows[:BEHAVIOR_FACT_LIMIT] + descendant_rows + spawns, tenant_id), truncated
+
+
+MAX_JOURNEY_DESCENDANTS = 25
+
+
+def _descendants(spawn_facts: list[Any], root: str, limit: int) -> tuple[list[str], bool]:
+    """Agents spawned (transitively) by ``root``, breadth-first, at most ``limit``."""
+    children: dict[str, list[str]] = {}
+    for f in sorted(spawn_facts, key=lambda f: (f.occurred_at, f.event_id)):
+        if f.event_type == "agent_subagent_spawned" and f.agent_ref and f.child_agent_ref:
+            kids = children.setdefault(f.agent_ref, [])
+            if f.child_agent_ref not in kids:
+                kids.append(f.child_agent_ref)
+    seen, order, queue = {root}, [], list(children.get(root, []))
+    while queue:
+        ref = queue.pop(0)
+        if ref in seen:
+            continue
+        seen.add(ref)
+        if len(order) == limit:
+            return order, True
+        order.append(ref)
+        queue.extend(children.get(ref, []))
+    return order, False
 
 
 WINDOW_FACT_PAGE_LIMIT = 1000

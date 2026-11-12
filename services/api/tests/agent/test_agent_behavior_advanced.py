@@ -224,3 +224,34 @@ def test_agent_execution_with_unknown_decision_actor_is_not_human_only():
     assert classify(roles, {"buyer"}) == "unattributed"
     human = {"execution_actor": {"value": "ops-person"}, "decision_actor": {"value": None}}
     assert classify(human, {"buyer"}) == "human_only"
+
+
+def test_started_then_failed_execution_is_a_failed_execution():
+    fs = facts(
+        ("agent_action_selected", "buyer", {"decisionId": "d1", "candidateId": "c1"}),
+        ("agent_execution_started", "buyer", {"decisionId": "d1", "actionType": "purchase"}),
+        ("agent_execution_failed", "buyer", {"decisionId": "d1", "actionType": "purchase"}),
+    )
+    [env] = project_decisions(fs)["decisions"]
+    assert env["disposition"]["disposition"] == "failed_execution"
+    ok = facts(
+        ("agent_execution_started", "buyer", {"decisionId": "d2", "actionType": "purchase"}),
+        ("agent_execution_succeeded", "buyer", {"decisionId": "d2", "actionType": "purchase"}),
+    )
+    assert project_decisions(ok)["decisions"][0]["disposition"]["disposition"] == "selected_action"
+
+
+def test_counterfactual_ranks_already_permitted_choices_too():
+    """A permitted $10 option stays available when a $20 option's block is lifted;
+    a lowest-price agent would still take the $10 one."""
+    hist = facts(*[e for i in range(5) for e in _shop(i)] + [
+        ("agent_candidate_considered", "buyer", {"decisionId": "d9", "candidateId": "ok-9", "amount": "10"}),
+        ("agent_candidate_considered", "buyer", {"decisionId": "d9", "candidateId": "blocked-9", "amount": "20"}),
+        ("agent_policy_evaluated", "buyer", {"decisionId": "d9", "decision": "deny", "policyId": "p",
+                                             "candidateId": "blocked-9"}),
+    ])
+    model = build_behavior_model(hist, "buyer")
+    env = next(d for d in project_decisions(hist)["decisions"] if d["decision_id"] == "d9")
+    assert "blocked-9" in env["opportunity"]["blocked"]
+    cf = counterfactual_without_constraint(env, hist, model["preferences"])
+    assert cf["likely_choice"] == "ok-9" and cf["changes_choice"] is False

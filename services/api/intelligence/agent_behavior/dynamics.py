@@ -179,13 +179,17 @@ def counterfactual_without_constraint(envelope: dict[str, Any], facts: Iterable[
     prices = {f.object_ref: f.amount for f in facts if f.event_id in set(envelope["evidence"])
               and f.amount is not None and f.object_ref}
     pref = next((p for p in preferences if p["preference"] == "lowest_price" and p["rate"]["value"] is not None), None)
-    options = [b for b in blocked if b in prices]
+    # Removing the constraint leaves every already-permitted option available
+    # too, so rank the whole post-removal choice set, not only the blocked ones.
+    choice_set = set(blocked) | set(envelope["opportunity"].get("available") or [])
+    options = [o for o in choice_set if o in prices]
     if pref and options:
         guess = min(options, key=lambda o: (prices[o], o))
         conf = pref["rate"]["interval"][0]
         return {"status": "hypothetical", "question": "What if the blocking constraint were absent?",
                 "likely_choice": guess, "basis": c.INFERRED, "confidence": conf,
-                "method": "observed lowest-price preference applied to the blocked alternatives",
+                "method": "observed lowest-price preference applied to the post-removal choice set",
+                "changes_choice": guess in blocked,
                 "label": "counterfactual — not observed", "evidence": envelope["evidence"][:10]}
     return {"status": "hypothetical", "question": "What if the blocking constraint were absent?",
             "likely_choice": None, "basis": c.UNKNOWN,

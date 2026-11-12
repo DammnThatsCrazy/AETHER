@@ -122,12 +122,15 @@ def opportunity_envelope(group: list[AgentFact], candidates: dict[str, Any],
 def action_disposition(group: list[AgentFact], opportunity: dict[str, Any]) -> dict[str, Any]:
     types = {f.event_type for f in group}
     executed = [f for f in group if f.event_type in _EXECUTION]
-    failed = [f for f in executed if f.event_type.endswith(("_failed", "_aborted"))]
+    # Judge failure on terminal records only: a started or initiated record
+    # followed by its failure is one failed execution, not a partial success.
+    terminal = [f for f in executed if f.event_type.endswith(("_succeeded", "_settled", "_failed", "_aborted"))]
+    failed = [f for f in terminal if f.event_type.endswith(("_failed", "_aborted"))]
     selected = [f for f in group if f.event_type == "agent_action_selected"]
     outcome = next((f.outcome for f in reversed(group) if f.outcome), None)
     if "agent_escalated_to_human" in types:
         kind, ev = "escalated", [f.event_id for f in group if f.event_type == "agent_escalated_to_human"]
-    elif failed and len(failed) == len(executed):
+    elif failed and len(failed) == len(terminal):
         kind, ev = "failed_execution", [f.event_id for f in failed]
     elif executed or selected:
         kind, ev = "selected_action", [f.event_id for f in (selected or executed)]

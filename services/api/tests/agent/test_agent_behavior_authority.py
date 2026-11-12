@@ -178,3 +178,26 @@ def test_expired_or_revoked_grants_still_judge_the_actions_they_covered():
     assert decompose(facts[0], facts, grants=[*inputs.grants, expired_before])[
         "authorization_actor"]["value"] == "person-1"
     reset_in_memory_stores()
+
+
+def test_requested_or_denied_authorization_is_not_observed_approval():
+    """The same authorizationId names requested, granted and denied, so only a
+    grant at or before the action counts as human approval."""
+    from intelligence.agent_behavior.read_models import agent360_behavior
+
+    big = {"amount": "90.00", "currency": "USD", "actionType": "purchase", "merchant": "shop-1",
+           "resourceRef": "merchant:shop-1", "authorizationId": "appr-1"}  # above the 80.00 threshold
+
+    def approval(*statuses):
+        facts = _facts(*[(f"agent_authorization_{s}", "agent-1", {"authorizationId": "appr-1"}) for s in statuses],
+                       ("agent_transaction_settled", "agent-1", big))
+        [check] = agent360_behavior(facts, "agent-1", grants=[GRANT])["sections"]["authority"]["data"]
+        return check
+
+    for statuses in (("requested",), ("requested", "denied"), ("granted", "denied")):
+        check = approval(*statuses)
+        assert check["human_approval_observed"] is False, statuses
+        assert "human_approval_required_not_observed" in check["reasons"], statuses
+    granted = approval("requested", "granted")
+    assert granted["human_approval_observed"] is True
+    assert "human_approval_required_not_observed" not in granted["reasons"]

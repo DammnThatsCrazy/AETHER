@@ -148,3 +148,15 @@ async def test_window_too_large_to_read_whole_never_overwrites_a_stored_snapshot
     again = await scheduler.run_once(NOW, agents=[(T, "a1")])
     assert again.snapshots_recorded == 0 and again.skipped_truncated_snapshots == 1
     assert await BehaviorSnapshotRepository().windows(T, "a1") == before
+
+
+def test_batches_rotate_through_every_agent_and_interleave_tenants():
+    pairs = [("t-a", f"a{i:02d}") for i in range(6)] + [("t-b", "b00"), ("t-c", "c00")]
+    first = scheduler.fair_batch(pairs, 3)
+    assert {t for t, _ in first} == {"t-a", "t-b", "t-c"}  # one tenant cannot fill a batch
+    seen, after = [], None
+    for _ in range(3):
+        batch = scheduler.fair_batch(pairs, 3, after)
+        seen += batch
+        after = batch[-1]
+    assert sorted(set(seen)) == sorted(pairs)  # every agent visited within ceil(8 / 3) passes

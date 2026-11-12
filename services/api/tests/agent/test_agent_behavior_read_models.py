@@ -350,3 +350,44 @@ def test_behavior_fact_load_reports_truncation_past_the_repository_cap():
     assert truncated is True
     _, truncated = asyncio.run(load_behavior_facts("t", "a", analytics=CappedAnalytics(BEHAVIOR_FACT_LIMIT)))
     assert truncated is False
+
+
+def test_root_journey_loads_descendant_activity():
+    """The journey traverses spawned workers, so their activity is loaded (bounded)."""
+    import asyncio
+
+    from actions.agent import behavior_read_model
+    from actions.agent.behavior_read_model import load_behavior_facts
+    from ingestion.silver.projectors.agent_execution_projector import AgentExecutionProjector
+
+    def project(i, etype, agent, props):
+        return AgentExecutionProjector().project({
+            "messageId": f"j-{i:03d}", "type": etype, "tenantId": "t",
+            "timestamp": f"2026-10-22T10:00:{i:02d}Z", "properties": {"agentId": agent, **props}}).rows
+
+    by_agent = {
+        "orch": project(0, "agent_task_started", "orch", {"taskId": "t1"}),
+        "worker": project(2, "agent_tool_invocation_observed", "worker", {"toolName": "search", "status": "succeeded"}),
+    }
+    spawns = project(1, "agent_subagent_spawned", "orch", {"parentAgentId": "orch", "childAgentId": "worker"})
+
+    class Analytics:
+        async def query_silver_page(self, table, filters, *, limit, cursor=None):
+            return by_agent.get(filters["agent_id"], []), None, False
+
+        async def query_silver(self, table, filters, *, limit=50):
+            return spawns
+
+    facts, truncated = asyncio.run(load_behavior_facts("t", "orch", analytics=Analytics()))
+    assert {f.agent_ref for f in facts} == {"orch", "worker"} and truncated is False
+    assert any(f.tool_name == "search" for f in facts)
+
+    many = [r for i in range(40) for r in project(
+        3 + i % 50, "agent_subagent_spawned", "orch", {"parentAgentId": "orch", "childAgentId": f"w{i}"})]
+
+    class Wide(Analytics):
+        async def query_silver(self, table, filters, *, limit=50):
+            return many
+
+    _, truncated = asyncio.run(load_behavior_facts("t", "orch", analytics=Wide()))
+    assert truncated is True and behavior_read_model.MAX_JOURNEY_DESCENDANTS < 40
