@@ -34,6 +34,12 @@ on:
         description: Approved sha256 checksum of release.json (required with source_run_id)
         type: string
         required: false
+      identity_verification_secrets_enabled:
+        description: "Whether staging task definitions mount the identity verification keys (false only for first-time setup, matching the reviewed wake)"
+        type: choice
+        options: ["true", "false"]
+        default: "true"
+        required: false
       rehearsal_run_id:
         description: "staging-lifecycle run that owns the golden-path smoke (set only by its rehearsal); verified live before the smoke is deferred"
         type: string
@@ -848,6 +854,7 @@ jobs:
         if: github.event_name == 'push' || inputs.environment == 'staging'
         env:
           DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled || 'true' }}
         run: |
           set -euo pipefail
           # The rollout below clones each family's latest ACTIVE revision and
@@ -857,7 +864,8 @@ jobs:
           # or secret shape. The API service still runs the revision it is
           # about to replace, so check the source, not the service pointer.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE" --revision family-latest
+            --lane "$DEPLOYMENT_LANE" --revision family-latest \
+            --identity-verification-secrets-enabled "${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}"
       - name: Apply packaged migrations, then register exact task revision for every profile service
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}

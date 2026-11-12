@@ -47,11 +47,11 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
-  ".github/workflows/deploy.yml": "sha256:61018abf61f2944d9ca884637c929f0f8a8306b3803992396e7f3b552e33ddd4"
+  ".github/workflows/deploy.yml": "sha256:fbbe02229b3a08944d225aa21dc8c4bdf7dde1d558dfbc652b2d4ebafb5e565a"
   ".github/workflows/pilot-staging.yml": "sha256:2f5e41dd0083fe254bceb3fb99a2cb649cc2473ee6e676c47ed89948a4f7e9db"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
-  ".github/workflows/staging-lifecycle.yml": "sha256:7fd6c6e8409012b03ee9c2491ba63058aaee5b638cc08b227167d5387c56ddb0"
+  ".github/workflows/staging-lifecycle.yml": "sha256:18bebda54135c06765b1d7a9c792f2cc7c90b0758fd253ec314986e0823755bf"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
@@ -172,7 +172,10 @@ the reviewed wake and sleep plan/apply handoffs, and the plan artifact binds
 its value so apply cannot change the secret-mount shape. The promotion workflow
 checks both Secrets Manager `AWSCURRENT` versions before it plans or applies a
 task revision with those mounts. For first-time setup, apply with the input
-false, populate both secrets, then create a fresh reviewed plan with it true.
+false, populate both secrets, then create a fresh reviewed plan with it true. The
+same input reaches the pre-wake task-definition contract check and is forwarded
+to canonical delivery (`deploy.yml` `identity_verification_secrets_enabled`), so
+a first-time `false` rehearsal is checked against the shape it actually wakes.
 Pilot also proves that the configured GitHub
 credential can safely write and then remove a disposable repository secret—the
 same persistence path used only if the post-readiness admin bootstrap is needed.

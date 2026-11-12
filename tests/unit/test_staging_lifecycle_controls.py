@@ -2203,3 +2203,23 @@ def test_identity_provider_proof_deferral_is_opt_in_narrow_and_recorded() -> Non
         "Collect and validate identity continuity staging proof pack",
     ])
     assert '-f identity_provider_proof="$IDENTITY_PROVIDER_PROOF"' in _workflow("pilot-staging.yml")
+
+
+def test_identity_key_mount_shape_reaches_every_rehearsal_contract_check() -> None:
+    """First-time setup wakes with identity_verification_secrets_enabled=false
+    before the keys exist. Every task-definition contract check on the rehearsal
+    path must honour that input, as terraform-promote does; otherwise the
+    documented first-time path can never pass the pre-wake or delivery check."""
+    lifecycle = _workflow(LIFECYCLE)
+    deploy = _workflow("deploy.yml")
+    for name, text in ((LIFECYCLE, lifecycle), ("deploy.yml", deploy), ("terraform-promote.yml",
+                                                                         _workflow("terraform-promote.yml"))):
+        calls = text.split("check_staging_task_definition_contract.py")[1:]
+        assert calls, name
+        for call in calls:
+            assert "--identity-verification-secrets-enabled" in call.split("\n\n")[0].split("python ")[0], name
+    assert 'IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}' in lifecycle
+    assert '-f identity_verification_secrets_enabled="${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}"' in lifecycle
+    deploy_inputs = (_workflow_yaml("deploy.yml").get(True) or _workflow_yaml("deploy.yml")["on"])[
+        "workflow_dispatch"]["inputs"]
+    assert deploy_inputs["identity_verification_secrets_enabled"]["default"] == "true"
