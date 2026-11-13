@@ -214,6 +214,7 @@ from ingestion.ingestion.replay_routes import kyber_replay_router
 from ingestion.ingestion.observability_routes import ingestion_observability_router
 from identity.identity.routes import router as identity_router
 from identity.identity.reconciliation_routes import router as identity_reconciliation_router
+from identity.identity.staging_capture_routes import router as identity_staging_capture_router
 from intelligence.analytics.routes import router as analytics_router
 from intelligence.ml_serving.routes import router as ml_router
 from intelligence.ml_serving.kyber_ml_admin import router as kyber_ml_admin_router
@@ -840,6 +841,11 @@ def create_app() -> FastAPI:
     app.include_router(ingestion_observability_router)  # /v1/kyber/ingest/observability — funnel + Observation Inspector (WS-E)
     app.include_router(identity_router)
     app.include_router(identity_reconciliation_router)
+    # Staging-only identity proof evidence (tenant admin, own tenant). The
+    # routes also refuse outside staging; mounting only there keeps them off
+    # every other deployment's surface.
+    if settings.env.value == "staging":
+        app.include_router(identity_staging_capture_router)
     app.include_router(analytics_router)
     app.include_router(ml_router)
     app.include_router(kyber_ml_admin_router)  # Kyber ML command center admin hooks

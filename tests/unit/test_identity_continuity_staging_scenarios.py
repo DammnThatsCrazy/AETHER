@@ -151,7 +151,7 @@ def test_admin_endpoints_require_separate_tenant_admin_credential(tmp_path):
     )
 
     try:
-        ctx.call("GET", "/v1/admin/identity/staging-proof-capture", admin=True)
+        ctx.call("GET", "/v1/identity/staging-proof-capture", admin=True)
     except runner.ScenarioFailure as exc:
         assert "tenant admin API key is required" in str(exc)
     else:
@@ -193,5 +193,5 @@ def test_projection_scenario_waits_for_every_registered_projection(tmp_path):
 
     assert ctx.assertions_failed == 0
     assert ctx.assertions_passed == 6
-    assert sum(call[1] == "/v1/admin/identity/staging-proof-capture" for call in calls) == 2
+    assert sum(call[1] == "/v1/identity/staging-proof-capture" for call in calls) == 2
     assert all(call[3].get("admin") is True for call in calls if "staging-proof-capture" in call[1])

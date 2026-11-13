@@ -2106,7 +2106,10 @@ def test_delivery_renders_registrable_task_definition_from_deregistered_revision
     """
     text = (WORKFLOW_DIR / "deploy.yml").read_text(encoding="utf-8")
     assert 'describe-task-definition --task-definition "$family" --query taskDefinition > task.json' in text
-    program = re.search(r"jq --arg image \"\$IMAGE\" --arg role \"\$role\" '(.*?)' task\.json > rendered\.json", text, re.S)
+    program = re.search(
+        r"jq --arg image \"\$IMAGE\" --arg role \"\$role\" --arg deployment \"\$\{IMAGE##\*@\}\" '(.*?)' task\.json > rendered\.json",
+        text, re.S,
+    )
     assert program, "delivery no longer renders the task definition with jq"
     described = {
         "taskDefinitionArn": "arn:aws:ecs:us-east-1:1:task-definition/AETHER-staging-backend:29",
@@ -2124,17 +2127,26 @@ def test_delivery_renders_registrable_task_definition_from_deregistered_revision
         "networkMode": "awsvpc",
         "requiresCompatibilities": ["FARGATE"],
         "containerDefinitions": [
-            {"name": "backend", "image": "old@sha256:aaa", "environment": [{"name": "AETHER_ROLE", "value": "stale"}]}
+            {"name": "backend", "image": "old@sha256:aaa", "environment": [
+                {"name": "AETHER_ROLE", "value": "stale"},
+                {"name": "AETHER_DEPLOYMENT_ID", "value": "sha256:aaa"},
+            ]}
         ],
     }
     rendered = json.loads(subprocess.run(
-        ["jq", "--arg", "image", "new@sha256:bbb", "--arg", "role", "api", program.group(1)],
+        ["jq", "--arg", "image", "new@sha256:bbb", "--arg", "role", "api",
+         "--arg", "deployment", "sha256:bbb", program.group(1)],
         input=json.dumps(described), capture_output=True, text=True, check=True,
     ).stdout)
     assert set(rendered) == {"family", "cpu", "memory", "networkMode", "requiresCompatibilities", "containerDefinitions"}
     container = rendered["containerDefinitions"][0]
     assert container["image"] == "new@sha256:bbb"
-    assert container["environment"] == [{"name": "AETHER_ROLE", "value": "api"}]
+    # AETHER_DEPLOYMENT_ID binds runtime evidence (the staging identity proof
+    # capture answers 503 without it) to the delivered image digest.
+    assert container["environment"] == [
+        {"name": "AETHER_ROLE", "value": "api"},
+        {"name": "AETHER_DEPLOYMENT_ID", "value": "sha256:bbb"},
+    ]
 
 
 def test_rehearsal_delivery_defers_only_the_fixed_key_smoke_to_the_rehearsal():
@@ -2189,3 +2201,4 @@ def test_required_check_gates_query_the_authority_by_name():
         assert "check-runs?per_page=100" not in workflow, name
         assert "-f check_name=" in workflow, name
         assert "gh api -X GET" in workflow, name
+

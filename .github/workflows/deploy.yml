@@ -942,9 +942,12 @@ jobs:
             aws ecs describe-task-definition --task-definition "$family" --query taskDefinition > task.json
             # Keep only register-task-definition inputs; read-only describe
             # fields (deregisteredAt, status, revision, ...) are rejected.
-            jq --arg image "$IMAGE" --arg role "$role" '
+            # AETHER_DEPLOYMENT_ID binds runtime evidence (the staging identity
+            # proof capture) to the exact delivered image digest; delivery owns
+            # it because it is the step that changes the running image.
+            jq --arg image "$IMAGE" --arg role "$role" --arg deployment "${IMAGE##*@}" '
               .containerDefinitions[0].image=$image |
-              .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE"))) + [{name:"AETHER_ROLE",value:$role}] |
+              .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE" and .name != "AETHER_DEPLOYMENT_ID"))) + [{name:"AETHER_ROLE",value:$role},{name:"AETHER_DEPLOYMENT_ID",value:$deployment}] |
               with_entries(select(.key | IN("family","taskRoleArn","executionRoleArn","networkMode","containerDefinitions","volumes","placementConstraints","requiresCompatibilities","cpu","memory","pidMode","ipcMode","proxyConfiguration","inferenceAccelerators","ephemeralStorage","runtimePlatform","enableFaultInjection")))' task.json > rendered.json
             if [ "$TARGET_ENV" = staging ]; then
               lease_json=$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until --query 'Parameter.Value' --output text)

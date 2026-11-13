@@ -77,8 +77,8 @@ async function getStagingIdentity(page: Page): Promise<{ deploymentId: string; t
   if (!API_BASE_URL || !ADMIN_KEY) {
     throw new Error('AETHER_STAGING_BASE_URL and IDENTITY_STAGING_CAPTURE_API_KEY are required for live UI evidence');
   }
-  const response = await page.context().request.get(`${API_BASE_URL.replace(/\/$/, '')}/v1/admin/identity/staging-proof-capture`, {
-    headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+  const response = await page.context().request.get(`${API_BASE_URL.replace(/\/$/, '')}/v1/identity/staging-proof-capture`, {
+    headers: { 'X-API-Key': ADMIN_KEY },
   });
   if (!response.ok()) throw new Error(`staging identity capture returned HTTP ${response.status()}`);
   const envelope = await response.json() as { data?: { environment?: string; deployment_id?: string; capture?: { tenant_ref?: string } } };
@@ -108,9 +108,11 @@ async function authenticatedSurface(page: Page, testInfo: TestInfo, surface: Sur
     await expect(page.getByRole('heading', { name: 'Review Queue' })).toBeVisible();
     await expect(page.getByText('Loading review queue...')).toHaveCount(0);
   }
+  // The tenant UI reads the tenant-scoped identity routes (see
+  // src/lib/api/endpoints.ts); /v1/admin/identity/* is platform-operator only.
   const expected = surface === 'activation'
-    ? ['/v1/me', '/v1/capabilities', '/v1/admin/identity/activation-status']
-    : ['/v1/me', '/v1/capabilities', '/v1/admin/identity/review-queue'];
+    ? ['/v1/me', '/v1/capabilities', '/v1/identity/activation-status']
+    : ['/v1/me', '/v1/capabilities', '/v1/identity/review-queue'];
   for (const path of expected) {
     expect(observations.some((item) => item.path === path && item.status >= 200 && item.status < 300), `live request ${path} must succeed`).toBe(true);
   }
