@@ -911,7 +911,19 @@ jobs:
             }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
+              # A just-dispatched run can answer 404 for a few seconds; treat
+              # only that, and only in the first 120 s, as still pending.
+              if ! reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
+                if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
+                  && [ "$(date -u +%s)" -lt "${reconcile_run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
+                  reconcile_status=lookup_pending
+                  sleep 5
+                  continue
+                fi
+                cat "$RUNNER_TEMP/run-status.err" >&2
+                echo "::error::could not read run ${reconcile_run_id} status"
+                exit 1
+              fi
               if [ "$reconcile_status" = completed ]; then
                 reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
                 test "$reconcile_conclusion" = success || {
@@ -952,7 +964,19 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # A just-dispatched run can answer 404 for a few seconds; treat
+            # only that, and only in the first 120 s, as still pending.
+            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
+                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
+                status=lookup_pending
+                sleep 5
+                continue
+              fi
+              cat "$RUNNER_TEMP/run-status.err" >&2
+              echo "::error::could not read run ${run_id} status"
+              exit 1
+            fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -1378,7 +1402,19 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # A just-dispatched run can answer 404 for a few seconds; treat
+            # only that, and only in the first 120 s, as still pending.
+            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
+                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
+                status=lookup_pending
+                sleep 5
+                continue
+              fi
+              cat "$RUNNER_TEMP/run-status.err" >&2
+              echo "::error::could not read run ${run_id} status"
+              exit 1
+            fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -1558,7 +1594,19 @@ jobs:
           echo "canonical immutable delivery run: ${delivery_run_id}"
           wait_deadline="$(( $(date -u +%s) + DELIVERY_TIMEOUT_MINUTES * 60 ))"
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}" --jq '.status')"
+            # A just-dispatched run can answer 404 for a few seconds; treat
+            # only that, and only in the first 120 s, as still pending.
+            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
+                && [ "$(date -u +%s)" -lt "${delivery_run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
+                status=lookup_pending
+                sleep 5
+                continue
+              fi
+              cat "$RUNNER_TEMP/run-status.err" >&2
+              echo "::error::could not read run ${delivery_run_id} status"
+              exit 1
+            fi
             if [ "$status" = completed ]; then
               run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}")"
               run_path="$(jq -r '.path' <<<"$run_json")"
@@ -3134,7 +3182,19 @@ jobs:
             }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
+              # A just-dispatched run can answer 404 for a few seconds; treat
+              # only that, and only in the first 120 s, as still pending.
+              if ! reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
+                if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
+                  && [ "$(date -u +%s)" -lt "${reconcile_run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
+                  reconcile_status=lookup_pending
+                  sleep 5
+                  continue
+                fi
+                cat "$RUNNER_TEMP/run-status.err" >&2
+                echo "::error::could not read run ${reconcile_run_id} status"
+                exit 1
+              fi
               if [ "$reconcile_status" = completed ]; then
                 reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
                 test "$reconcile_conclusion" = success || {
@@ -3175,7 +3235,19 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # A just-dispatched run can answer 404 for a few seconds; treat
+            # only that, and only in the first 120 s, as still pending.
+            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
+                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
+                status=lookup_pending
+                sleep 5
+                continue
+              fi
+              cat "$RUNNER_TEMP/run-status.err" >&2
+              echo "::error::could not read run ${run_id} status"
+              exit 1
+            fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -3368,7 +3440,19 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # A just-dispatched run can answer 404 for a few seconds; treat
+            # only that, and only in the first 120 s, as still pending.
+            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
+                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
+                status=lookup_pending
+                sleep 5
+                continue
+              fi
+              cat "$RUNNER_TEMP/run-status.err" >&2
+              echo "::error::could not read run ${run_id} status"
+              exit 1
+            fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break

@@ -416,7 +416,7 @@ def _run_projection(ctx: ScenarioContext) -> None:
     tag = ctx.execution_id[:8]
     left = ctx.resolve("projection-left", user_id=f"projection-left-{tag}", email=f"projection-left-{tag}@example.invalid")
     right = ctx.resolve("projection-right", user_id=f"projection-right-{tag}", email=f"projection-right-{tag}@example.invalid")
-    status, before_raw = ctx.call("GET", "/v1/admin/identity/staging-proof-capture", admin=True)
+    status, before_raw = ctx.call("GET", "/v1/identity/staging-proof-capture", admin=True)
     before_capture = _data(before_raw).get("capture", {})
     before_jobs = before_capture.get("restatement_jobs", []) if isinstance(before_capture, dict) else []
     known_job_refs = {
@@ -446,7 +446,7 @@ def _run_projection(ctx: ScenarioContext) -> None:
     deadline = time.monotonic() + 300
     observed_job = None
     while time.monotonic() < deadline:
-        status, raw = ctx.call("GET", "/v1/admin/identity/staging-proof-capture", admin=True)
+        status, raw = ctx.call("GET", "/v1/identity/staging-proof-capture", admin=True)
         capture = _data(raw).get("capture", {})
         jobs = capture.get("restatement_jobs", []) if isinstance(capture, dict) else []
         new_jobs = [
@@ -526,7 +526,7 @@ def execute_scenario(ctx: ScenarioContext, scenario_id: str) -> dict[str, Any]:
         raise RuntimeError(f"refusing to overwrite prior scenario artifact: {target}")
     target.write_bytes(artifact)
     digest = hashlib.sha256(artifact).hexdigest()
-    status, response = ctx.call("POST", "/v1/admin/identity/staging-proof-scenarios", {
+    status, response = ctx.call("POST", "/v1/identity/staging-proof-scenarios", {
         "execution_id": ctx.execution_id, "scenario_id": scenario_id, "outcome": outcome,
         "evidence_sha256": digest, "assertions_passed": ctx.assertions_passed,
         "assertions_failed": ctx.assertions_failed, "started_at": started,
@@ -576,7 +576,7 @@ def main(argv: list[str] | None = None) -> int:
                           admin_api_key=admin_api_key,
                           foreign_entity_id=os.getenv("AETHER_STAGING_FOREIGN_ENTITY_ID"))
     try:
-        status, raw = ctx.call("GET", "/v1/admin/identity/staging-proof-capture", admin=True)
+        status, raw = ctx.call("GET", "/v1/identity/staging-proof-capture", admin=True)
         data = _data(raw)
         if status != 200 or data.get("environment") != "staging":
             raise RuntimeError("endpoint did not confirm staging")

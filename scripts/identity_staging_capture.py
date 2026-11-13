@@ -29,7 +29,7 @@ from identity.identity.contract_inventory import REQUIRED_STAGING_IDENTITY_FLAGS
 
 def _call_capture(base_url: str, api_key: str) -> dict[str, Any]:
     request = urllib.request.Request(
-        base_url.rstrip("/") + "/v1/admin/identity/staging-proof-capture",
+        base_url.rstrip("/") + "/v1/identity/staging-proof-capture",
         headers={"Accept": "application/json", "X-API-Key": api_key},
         method="GET",
     )

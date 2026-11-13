@@ -2368,3 +2368,38 @@ def test_sleep_drain_has_no_text_split_task_stop_after_convergence() -> None:
     assert tail.strip() == "fi", f"code after the final failure guard: {tail!r}"
     for key in ("scaled_to_zero", "tasks_stopped"):
         assert script.count(f"printf '{key}=%s\\n'") == 1, key
+
+
+def test_every_dispatched_run_poll_tolerates_a_brief_not_found():
+    # Rehearsal run 43387214569: the sleep plan wait read the run it had just
+    # dispatched, got `gh: Not Found (HTTP 404)` 0.3 s later, and set -e
+    # ended the step. Every status poll must retry only a 404, and only in a
+    # bounded grace window, then fail closed on anything else.
+    text = _workflow(LIFECYCLE)
+    bare = re.findall(r'^\s+\w+="\$\(gh api "repos/\$\{GITHUB_REPOSITORY\}/actions/runs/\$\{\w+\}" --jq \'\.status\'\)"$', text, re.M)
+    assert not bare, f"unguarded run-status polls: {bare}"
+    guarded = re.findall(
+        r'if ! (\w+)="\$\(gh api "repos/\$\{GITHUB_REPOSITORY\}/actions/runs/\$\{(\w+)\}" --jq \'\.status\' 2>"\$RUNNER_TEMP/run-status\.err"\)"; then\n'
+        r'\s+if grep -q "HTTP 404" "\$RUNNER_TEMP/run-status\.err" \\\n'
+        r'\s+&& \[ "\$\(date -u \+%s\)" -lt "\$\{\2_lookup_grace:=\$\(\( \$\(date -u \+%s\) \+ 120 \)\)\}" \]; then\n'
+        r'(?:.*\n){3}\s+fi\n\s+cat "\$RUNNER_TEMP/run-status\.err" >&2\n.*\n\s+exit 1\n',
+        text,
+    )
+    assert len(guarded) == 7, guarded
+
+
+def test_live_identity_ui_evidence_expects_the_routes_the_ui_calls():
+    # The tenant UI reads /v1/identity/{activation-status,review-queue}; the
+    # live spec expected the platform-operator /v1/admin/identity/* paths and
+    # could never pass for a tenant admin session.
+    endpoints = (ROOT / "apps/aether-web/src/lib/api/endpoints.ts").read_text(encoding="utf-8")
+    spec = (ROOT / "apps/aether-web/src/test/e2e/identity-continuity-live.spec.ts").read_text(encoding="utf-8")
+    for path in ("/v1/identity/activation-status", "/v1/identity/review-queue"):
+        assert path in endpoints
+        assert f"'{path}'" in spec
+    assert "/v1/admin/identity/activation-status" not in spec
+    assert "/v1/admin/identity/review-queue" not in spec
+    for source in (spec, (ROOT / "scripts/identity_staging_capture.py").read_text(encoding="utf-8"),
+                   (ROOT / "scripts/identity_continuity_staging_scenarios.py").read_text(encoding="utf-8")):
+        assert "/v1/admin/identity/staging-proof" not in source
+        assert "/v1/identity/staging-proof-capture" in source

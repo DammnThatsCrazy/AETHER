@@ -42,7 +42,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: identity.identity
-    modules: [calibration_evaluation, calibration_intake, source_precedence, split_service, staging_capture, staging_capture_routes]
+    modules: [calibration_evaluation, calibration_intake, source_precedence, split_service]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: connectors.integrations
