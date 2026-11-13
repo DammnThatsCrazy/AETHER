@@ -95,7 +95,7 @@ source_hashes:
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
-  "services/api/Dockerfile": "sha256:619471497e7144f93af70b49c509667754ed834809c1977335d38fa90173bee9"
+  "services/api/Dockerfile": "sha256:160ec776b6017b436c836ee9d96a2a5681be38528679cd0541beeb94b0bd57ee"
 ---
 
 # AWS Deployment — Infrastructure Reference
