@@ -47,7 +47,7 @@ reviewed_source_commits:
 source_hashes:
   "apps/aether-web/src/": "sha256:f9fda1ce7b8e06c50874fad72ccab8a885857f3541cf9fcb453d1d3f7b2bdfab"
   "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
-  "packages/ui/core/src/": "sha256:18d64294d740b4e81689a232ad006a0e5a15a3b6edcdf3727e04540030ae001e"
+  "packages/ui/core/src/": "sha256:02a14d802d773a5b7e255fa0d1b0e1c661d5fa106b3892e5370f3ecf339a5805"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
