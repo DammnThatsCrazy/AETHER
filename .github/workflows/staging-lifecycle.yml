@@ -1645,7 +1645,12 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install identity UI E2E workspace dependencies
         id: identity_ui_dependencies
-        run: pnpm install --frozen-lockfile --filter '@aether/aether...' --filter '@aether/proof-reporting...'
+        # The Vite dev server resolves @aether/shared through its built dist
+        # entry, so the workspace package must be compiled before Playwright.
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --filter '@aether/aether...' --filter '@aether/proof-reporting...'
+          pnpm --filter '@aether/shared' run build
       - name: Install Playwright Chromium for identity UI evidence
         id: identity_ui_browser
         run: pnpm --filter @aether/aether exec playwright install --with-deps chromium
@@ -2060,7 +2065,8 @@ jobs:
           save_marker()
           # The capability matrix exercises plan-gated services (graph
           # Connectivity and ML Prediction require gamma), so the primary
-          # tenant is enterprise. The isolation peer only has to be refused.
+          # tenant is enterprise. The isolation peer resolves an identity of
+          # its own, and /v1/identity/* needs beta or above, so it is pro.
           mine_id = create_tenant("Primary", "enterprise")
           mine_key = create_key(mine_id, "Primary", [
               "read", "write", "ingest", "analytics", "analytics:export",
@@ -2070,8 +2076,8 @@ jobs:
           # scoped to this disposable rehearsal tenant. The workflow masks it
           # and deletes the tenant during unconditional cleanup.
           identity_capture_key = create_key(mine_id, "Identity Evidence", ["admin"], "enterprise")
-          peer_id = create_tenant("Isolation", "free")
-          peer_key = create_key(peer_id, "Isolation", ["read", "write"], "free")
+          peer_id = create_tenant("Isolation", "pro")
+          peer_key = create_key(peer_id, "Isolation", ["read", "write"], "pro")
           if mine_id == peer_id:
               sys.exit("::error::run-scoped rehearsal tenants must be distinct")
 
@@ -2562,7 +2568,10 @@ jobs:
         if: always() && steps.identity_ui_dependencies.outcome == 'success' && steps.identity_ui_browser.outcome == 'success'
         env:
           PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/.artifacts/rehearsal/identity-continuity-ui
-        run: pnpm --filter @aether/aether run e2e -- --reporter=line src/test/e2e/identity-continuity.spec.ts
+        # `pnpm run e2e -- <args>` forwards a literal `--`, after which
+        # Playwright ignored both the reporter and the file filter and ran
+        # the whole suite. Call the runner directly.
+        run: pnpm --filter @aether/aether exec playwright test --reporter=line src/test/e2e/identity-continuity.spec.ts
 
       - name: Run authenticated live staging identity UI evidence
         id: identity_ui_live_e2e
@@ -2576,7 +2585,7 @@ jobs:
           set -euo pipefail
           test -n "${IDENTITY_STAGING_UI_BASE_URL:-}" \
             || { echo '::error::deployed AETHER application URL secret is missing'; exit 1; }
-          pnpm --filter @aether/aether run e2e -- --reporter=line src/test/e2e/identity-continuity-live.spec.ts
+          pnpm --filter @aether/aether exec playwright test --reporter=line src/test/e2e/identity-continuity-live.spec.ts
 
       - name: Capture identity continuity evidence
         if: always() && env.IDENTITY_STAGING_CAPTURE_API_KEY != '' && env.ALB_DNS_NAME != ''

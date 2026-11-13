@@ -405,6 +405,7 @@ statements:
       - events:PutTargets
       - events:RemoveTargets
       - events:TagResource
+      - events:ListTagsForResource
     resource: arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*
     scope: staging-name-prefix
   # ----- VPC (module.vpc) -----

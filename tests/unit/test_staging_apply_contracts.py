@@ -1312,6 +1312,9 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
         "lambda:CreateFunction",
         "iam:CreateRole",
         "events:PutRule",
+        # Terraform re-reads rule tags after every PutRule; without this a
+        # schedule-state change fails the apply (sleep apply 43361395192).
+        "events:ListTagsForResource",
         "logs:PutRetentionPolicy",
         "amplify:CreateApp",
         "amplify:TagResource",
@@ -1427,6 +1430,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "events:PutTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:RemoveTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:TagResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:ListTagsForResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "logs:CreateLogGroup": [
             "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
             "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*",

@@ -335,6 +335,7 @@ REQUIRED_ACTIONS = {
     "events:PutTargets",
     "events:RemoveTargets",
     "events:TagResource",
+    "events:ListTagsForResource",
     # STS
     "sts:GetCallerIdentity",
     # Free Tier
@@ -1003,7 +1004,7 @@ def main() -> int:
     for _evt in (
         "events:ListTargetsByRule", "events:PutRule", "events:DeleteRule",
         "events:DescribeRule", "events:PutTargets", "events:RemoveTargets",
-        "events:TagResource",
+        "events:TagResource", "events:ListTagsForResource",
     ):
         expected_resources[_evt] = _EVENTS_RULE
 
