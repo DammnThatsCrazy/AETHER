@@ -127,6 +127,9 @@ resource "aws_cloudwatch_event_rule" "nightly_drift" {
   name                = "${var.project}-${var.environment}-nightly-drift"
   description         = "Triggers the ML drift Lambda nightly to compute PSI scores and publish to CloudWatch"
   schedule_expression = var.schedule_expression
+  # An asleep staging profile owns the rule but keeps it off, so nothing runs
+  # on a schedule while staging sleeps (the lifecycle's asleep-shape gate).
+  state = var.enabled ? "ENABLED" : "DISABLED"
 
   tags = {
     Name = "${var.project}-${var.environment}-nightly-drift-rule"

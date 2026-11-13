@@ -42,3 +42,9 @@ variable "lambda_memory" {
   description = "Lambda memory in MB"
   default     = 512
 }
+
+variable "enabled" {
+  type        = bool
+  description = "Whether the nightly drift schedule runs. False for an asleep staging profile."
+  default     = true
+}

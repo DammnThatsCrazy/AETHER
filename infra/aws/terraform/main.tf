@@ -748,6 +748,9 @@ module "ml_drift_lambda" {
   environment = var.environment
   project     = var.project
   log_bucket  = module.monitoring.log_archive_bucket
+  # Off while staging is asleep (multiplier 0); always on for profiles without
+  # a staging_state block (multiplier 1).
+  enabled = local.staging_state_multiplier > 0
 }
 
 # ---------------------------------------------------------------------------
