@@ -143,7 +143,7 @@ snapshot. Authority checks load the agent's full tenant-scoped grant history, an
 each action is judged against the grant window (start, end, revocation) that
 applied when it happened.
 
-Python (`packages/sdk/python/aether_agentic`): `build_behavior_event(...)` emits the same behavior types (deployment required, content keys and float amounts rejected); `build_deployment_context(...)`
+Python (`packages/sdk/python/aether_agentic`): `build_behavior_event(...)` emits the same behavior types as canonical `/v1/batch` events (`id` from `message_id`, required `session_id` and `anonymous_id`, optional `user_id`; deployment required, content keys and float amounts rejected); `build_deployment_context(...)`
 plus an optional `deployment=` parameter on all envelope builders; emits the
 same camelCase `agentDeployment` wire shape. `execution_by_aether` remains
 hard-`False`.

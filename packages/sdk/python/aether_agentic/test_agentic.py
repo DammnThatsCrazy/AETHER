@@ -170,15 +170,22 @@ def test_behavior_event_builder_requires_deployment_and_rejects_content():
     dep = {"deploymentId": "dep-1", "agentId": "a1", "externalPlatform": "mcp_server",
            "environment": "production", "consentMode": "tenant_managed"}
     ev = build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m1",
-                              timestamp="2026-10-22T10:00:00Z", properties={"amount": "10.5"}, deployment=dep)
+                              timestamp="2026-10-22T10:00:00Z", session_id="s1", anonymous_id="anon-1",
+                              properties={"amount": "10.5"}, deployment=dep)
     assert ev["properties"]["agentId"] == "a1" and ev["context"]
+    # Canonical /v1/batch identity keys (BaseEvent forbids unknown keys).
+    assert (ev["id"], ev["sessionId"], ev["anonymousId"]) == ("m1", "s1", "anon-1")
+    assert "messageId" not in ev and "userId" not in ev
     with pytest.raises(ValueError):
-        build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m", timestamp="t")
+        build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m",
+                             timestamp="t", session_id="", anonymous_id="x", deployment=dep)
     with pytest.raises(ValueError):
-        build_behavior_event(event_type="agent_memory_created", agent_id="a1", message_id="m", timestamp="t",
+        build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m", timestamp="t", session_id="s", anonymous_id="x")
+    with pytest.raises(ValueError):
+        build_behavior_event(event_type="agent_memory_created", agent_id="a1", message_id="m", timestamp="t", session_id="s", anonymous_id="x",
                              properties={"content": "secret"}, deployment=dep)
     with pytest.raises(ValueError):
-        build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m", timestamp="t",
+        build_behavior_event(event_type="agent_quote_received", agent_id="a1", message_id="m", timestamp="t", session_id="s", anonymous_id="x",
                              properties={"amount": 1.5}, deployment=dep)
     with pytest.raises(ValueError):
-        build_behavior_event(event_type="track", agent_id="a1", message_id="m", timestamp="t", deployment=dep)
+        build_behavior_event(event_type="track", agent_id="a1", message_id="m", timestamp="t", session_id="s", anonymous_id="x", deployment=dep)
