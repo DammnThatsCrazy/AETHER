@@ -58,7 +58,7 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:fbbe02229b3a08944d225aa21dc8c4bdf7dde1d558dfbc652b2d4ebafb5e565a"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:18bebda54135c06765b1d7a9c792f2cc7c90b0758fd253ec314986e0823755bf"
+  ".github/workflows/staging-lifecycle.yml": "sha256:2b8e06429d49561bd8f4bd666356c40e2c74642eb2393a1eaee2b11dc3eda3ac"
   ".github/workflows/staging-state-reconcile.yml": "sha256:f276a02affc88b042ab641da505bc50544b4f5123296b2317b36e14f9591e5fd"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
@@ -78,7 +78,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:2a7439d3113168bfc1df301b6ddd1e496d1460453f076f2a311fa5e818ac1c2b"
+  "infra/aws/terraform/": "sha256:af7852f000412e717f6626e71f728d52ff3e32437e3e03656d42d826591b213b"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -95,7 +95,7 @@ source_hashes:
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
-  "services/api/Dockerfile": "sha256:619471497e7144f93af70b49c509667754ed834809c1977335d38fa90173bee9"
+  "services/api/Dockerfile": "sha256:160ec776b6017b436c836ee9d96a2a5681be38528679cd0541beeb94b0bd57ee"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -860,7 +860,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `alb` | Internet-facing ALB, HTTP→HTTPS redirect, backend target group | always; **gated** ML target group + `/v1/ml/*` rule |
 | `ecs` | Fargate cluster, backend service, per-service task definitions, IAM roles, autoscaling | always; **gated** dedicated ML service |
 | `monitoring` | SNS alerts, CloudWatch alarms, dashboard, S3 log archive | always; per-backend alarms **gated** |
-| `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always |
+| `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always; the schedule is disabled while staging is asleep |
 | `auth0` | Aether and Kyber SPA clients, public Aether CLI Native client with Device Authorization, and the API resource server | always |
 | `elasticache` | Redis 7.x, TLS in transit, AUTH token, KMS at rest | **gated** — off in both profiles; enabled only by a reviewed production variable change |
 | `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics | **gated** — off in both profiles; enabled only by a reviewed production variable change |

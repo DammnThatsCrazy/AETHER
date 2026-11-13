@@ -2259,3 +2259,41 @@ def test_aurora_minor_version_drift_cannot_block_an_apply() -> None:
     assert 'engine_version = "16.13"' in cluster
     assert "ignore_changes  = [engine_version]" in cluster
     assert "prevent_destroy = true" in cluster
+
+
+def test_nightly_drift_schedule_is_off_while_staging_sleeps() -> None:
+    """The asleep-shape gate rejects any enabled staging schedule. The ML drift
+    rule had no state switch, so no sleep plan could pass (rehearsal fail-safe
+    sleep in lifecycle run 43349946026). Its state must follow staging_state."""
+    module = (ROOT / "infra/aws/terraform/modules/ml_drift_lambda/main.tf").read_text(encoding="utf-8")
+    rule = module[module.index('resource "aws_cloudwatch_event_rule" "nightly_drift"'):]
+    rule = rule[:rule.index("\n}\n")]
+    assert 'state = var.enabled ? "ENABLED" : "DISABLED"' in rule
+    variables = (ROOT / "infra/aws/terraform/modules/ml_drift_lambda/variables.tf").read_text(encoding="utf-8")
+    assert 'variable "enabled"' in variables and "default     = true" in variables
+    root = (ROOT / "infra/aws/terraform/main.tf").read_text(encoding="utf-8")
+    call = root[root.index('module "ml_drift_lambda"'):]
+    call = call[:call.index("\n}\n")]
+    assert "enabled = local.staging_state_multiplier > 0" in call
+
+
+def test_sleep_drain_has_no_text_split_task_stop_after_convergence() -> None:
+    # Rehearsal run 43349946026 failed its fail-safe sleep with "not
+    # authorized to perform ecs:StopTask on resource task/[": a leftover tail
+    # re-split the JSON task list as tab-separated text and tried to stop the
+    # literal "[" token. Task stops belong only to the jq-parsed convergence
+    # loop, and nothing may run after its final failure guard.
+    doc = _workflow_yaml("staging-lifecycle.yml")
+    step = next(
+        s for s in _steps(doc, "sleep")
+        if s.get("name") == "Enforce zero capacity bounds and wait for staging to drain"
+    )
+    script = step["run"]
+    assert script.count("aws ecs stop-task") == 1
+    assert "jq -r '.[]?' .artifacts/sleep/tasks-before.json" in script
+    assert 'printf \'%s\' "$task_arns_raw" | tr' not in script
+    assert "task_stop_count" not in script
+    tail = script.rstrip().rsplit("exit 1", 1)[1]
+    assert tail.strip() == "fi", f"code after the final failure guard: {tail!r}"
+    for key in ("scaled_to_zero", "tasks_stopped"):
+        assert script.count(f"printf '{key}=%s\\n'") == 1, key
