@@ -29,10 +29,10 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:329268b3b23333e8bf99491b762813cd60896fe0e86cbd0a7a6cbcba86925f9c"
+  ".github/workflows/": "sha256:e6f8771a64831ada50d970c4a75e248965e343425bb4ed90def2e3d0b5bfe27c"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
-  "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
+  "infra/aws/terraform/modules/aurora/main.tf": "sha256:c35befa025c62c9350a7151be85a0cd393c7f99b1e230712104bd04dd3262657"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"

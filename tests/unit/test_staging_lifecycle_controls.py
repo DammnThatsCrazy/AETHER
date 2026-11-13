@@ -2234,3 +2234,28 @@ def test_pilot_wrapper_tolerates_a_briefly_unreadable_dispatched_run() -> None:
     assert 'visible_by="$(( $(date -u +%s) + 120 ))"' in helper
     assert "not readable yet; retrying" in helper
     assert "could not be read" in helper and "exit 1" in helper
+
+
+def test_reconcile_imports_a_live_amplify_branch_terraform_does_not_own() -> None:
+    """A live staging Amplify branch without a Terraform owner made the reviewed
+    apply fail ("branch staging already exists", promotion run 43346276563).
+    Every reconcile must import it at its canonical address, import-only."""
+    text = _workflow("staging-state-reconcile.yml")
+    step = text[text.index("- name: Import only the known staging resources"):]
+    step = step[:step.index("\n      - name:", 10)] if "\n      - name:" in step[10:] else step
+    assert "aws amplify get-branch --app-id \"$app_id\" --branch-name staging" in step
+    assert 'aws_amplify_branch.main[\\"${app_key}\\"]' in step
+    assert '"$branch_address" "${app_id}/staging"' in step
+    assert 'grep -Fxq "$branch_address" "$state_list_file"' in step  # skip when already owned
+
+
+def test_aurora_minor_version_drift_cannot_block_an_apply() -> None:
+    """AWS auto-upgraded staging Aurora 16.8 -> 16.13 and the apply then tried to
+    "upgrade" back to 16.8, which AWS rejects. engine_version must track the live
+    minor release and be ignored after creation."""
+    module = (ROOT / "infra/aws/terraform/modules/aurora/main.tf").read_text(encoding="utf-8")
+    cluster = module[module.index('resource "aws_rds_cluster" "this"'):]
+    cluster = cluster[:cluster.index("\nresource ")]
+    assert 'engine_version = "16.13"' in cluster
+    assert "ignore_changes  = [engine_version]" in cluster
+    assert "prevent_destroy = true" in cluster

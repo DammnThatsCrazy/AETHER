@@ -59,7 +59,7 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:fbbe02229b3a08944d225aa21dc8c4bdf7dde1d558dfbc652b2d4ebafb5e565a"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:18bebda54135c06765b1d7a9c792f2cc7c90b0758fd253ec314986e0823755bf"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:f276a02affc88b042ab641da505bc50544b4f5123296b2317b36e14f9591e5fd"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
@@ -78,7 +78,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:667f817e0fd6918293e6531949d32490ea8435c0016e8f914002a74f34b1134c"
+  "infra/aws/terraform/": "sha256:2a7439d3113168bfc1df301b6ddd1e496d1460453f076f2a311fa5e818ac1c2b"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -762,10 +762,11 @@ returns HTML for them and the app renders blank). This keeps route-specific
 marketing metadata intact while preserving direct navigation for the
 runtime-routed apps.
 
-The Aurora module pins the standard provisioned Aurora PostgreSQL 16.8 engine
-release. The repository previously used 16.4, but that exact standard engine
-version is not available in the staging account/region; the major-family
-parameter group remains `aurora-postgresql16`.
+The Aurora module pins the standard provisioned Aurora PostgreSQL 16.13 engine
+release (the release live staging runs after AWS's automatic minor upgrade from
+16.8) and ignores `engine_version` after creation, so automatic minor upgrades
+can never make a reviewed apply attempt a minor-version downgrade; the
+major-family parameter group remains `aurora-postgresql16`.
 
 ### Production lead intake
 
@@ -1165,7 +1166,10 @@ detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group or an exact reviewed ECR repository, and produce a fresh
-reviewed plan. The legacy Aurora path is separate and exact: it accepts only
+reviewed plan. Every reconcile also imports a live staging Amplify branch that
+Terraform does not yet own (`aws_amplify_branch.main["<app>"]`, ID
+`<app-id>/staging`), import-only, so the reviewed apply never tries to create a
+branch that already exists. The legacy Aurora path is separate and exact: it accepts only
 `aether-staging` with the `IMPORT-LEGACY-STAGING-AURORA` confirmation, checks
 live cluster and writer metadata plus staging-state ownership, and imports only
 that cluster at
