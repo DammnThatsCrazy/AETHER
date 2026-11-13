@@ -1648,14 +1648,23 @@ jobs:
         # Vite resolves the app's workspace packages through their built dist
         # entries, and the proof reporter compiles against proof-runner's
         # declarations, so every one must be built before Playwright runs.
+        # Every workspace package is named explicitly: the workspace links
+        # these with "*" specs, and the CI pnpm (12.x) does not follow them for
+        # `<pkg>...` selection (run 43380069776 scoped 2 installs and 3 builds,
+        # and proof-runner compiled before its dependencies). Builds run one
+        # layer at a time, in dependency order. @aether/ui and @olympus/brand
+        # ship source and have no build step.
         run: |
           set -euo pipefail
-          pnpm install --frozen-lockfile --filter '@aether/aether...' --filter '@aether/proof-reporting...'
-          # `<pkg>...` selects the package and all its workspace dependencies
-          # (proof-runner needs proof-contracts and proof-fixtures built too),
-          # and pnpm runs the builds in dependency order.
-          pnpm --filter '@aether/ui...' --filter '@aether/web...' \
-            --filter '@aether/proof-runner...' run --if-present build
+          pnpm install --frozen-lockfile \
+            --filter '@aether/aether...' --filter '@aether/proof-reporting...' \
+            --filter '@aether/shared' --filter '@aether/web' --filter '@aether/ui' \
+            --filter '@olympus/brand' --filter '@aether/proof-contracts' \
+            --filter '@aether/proof-fixtures' --filter '@aether/proof-runner'
+          pnpm --filter '@aether/shared' run build
+          pnpm --filter '@aether/web' --filter '@aether/proof-contracts' run build
+          pnpm --filter '@aether/proof-fixtures' run build
+          pnpm --filter '@aether/proof-runner' run build
       - name: Install Playwright Chromium for identity UI evidence
         id: identity_ui_browser
         run: pnpm --filter @aether/aether exec playwright install --with-deps chromium
