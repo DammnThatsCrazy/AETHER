@@ -2,6 +2,7 @@ import { createContext, useContext, useCallback, useReducer, useEffect, useRef, 
 import type { AuthState, AetherUser, AuthTokens } from '@aether-app/types';
 import type { HumanSessionGrant } from './grant';
 import { useAuth0 } from '@auth0/auth0-react';
+import { queryCache } from '@aether/ui';
 import { appHref } from '@aether-app/lib/app-path';
 
 /** Legacy reusable API-key credential (trust-plane flag off on the backend). */
@@ -172,6 +173,18 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     }
   }
 
+  /**
+   * A new credential may belong to another tenant, so cached reads are dropped.
+   * The credential is installed first: clear() notifies mounted queries, which
+   * refetch at once, and the REST client reads the token when it builds each
+   * request. Clearing first would refetch with the previous tenant's token
+   * under the new cache generation and repopulate the cache with its data.
+   */
+  function switchIdentity(tokens: AuthTokens | null): void {
+    currentTokens = tokens;
+    queryCache.clear();
+  }
+
   async function verifyCredential(tokens: AuthTokens): Promise<void> {
     currentTokens = tokens;
     try {
@@ -296,6 +309,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       refreshToken: undefined,
       expiresAt: Date.now() / 1000 + 86400,
     };
+    switchIdentity(tokens);
     await verifyCredential(tokens);
   }, []);
 
@@ -311,11 +325,12 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       refreshToken: undefined,
       expiresAt,
     };
+    switchIdentity(tokens);
     await verifyCredential(tokens);
   }, []);
 
   const logout = useCallback(async () => {
-    currentTokens = null;
+    switchIdentity(null);
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_EXPIRY_KEY);

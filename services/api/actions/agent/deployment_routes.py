@@ -810,14 +810,26 @@ async def record_behavior_snapshot(agent_ref: str, body: BehaviorSnapshotRequest
     """Compute and store one window snapshot (a rebuildable cache, not evidence)."""
     _require_registry_enabled()
     tenant = _tenant(request)
+    from actions.agent.behavior_read_model import load_window_facts
     from intelligence.agent_behavior.snapshot_store import BehaviorSnapshotRepository, record_window
+    from shared.temporal.instant import coerce_utc_lenient
 
-    if body.window_end <= body.window_start:
+    start, end = coerce_utc_lenient(body.window_start), coerce_utc_lenient(body.window_end)
+    if start is None or end is None:
+        raise BadRequestError("window_start and window_end must be ISO-8601 instants")
+    if end <= start:
         raise BadRequestError("window_end must be after window_start")
-    facts, truncated = await _behavior_facts(tenant.tenant_id, agent_ref)
-    snap = await record_window(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref, facts,
-                               (body.window_start, body.window_end))
-    return APIResponse(data={"snapshot": snap, "source_truncated": truncated}).to_dict()
+    window = (body.window_start, body.window_end)
+    # Read the requested window itself (paged), not the newest facts, so a busy
+    # agent's recent traffic cannot leave an older window partial. A window too
+    # large to read whole is not stored: a partial snapshot would overwrite a
+    # complete one under the same row key.
+    facts, truncated = await load_window_facts(tenant.tenant_id, agent_ref, window)
+    if truncated:
+        return APIResponse(data={"snapshot": None, "recorded": False,
+                                 "source_truncated": True}).to_dict()
+    snap = await record_window(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref, facts, window)
+    return APIResponse(data={"snapshot": snap, "recorded": True, "source_truncated": False}).to_dict()
 
 
 @lineage_router.get("/{agent_ref}/behavior/drift")

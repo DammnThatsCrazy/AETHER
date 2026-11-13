@@ -15,6 +15,7 @@ from intelligence.agent_behavior.dynamics import SNAPSHOT_VERSION, detect_drift,
 from intelligence.agent_behavior.facts import AgentFact
 from intelligence.agent_behavior.model import build_behavior_model
 from repositories.repos import BaseRepository
+from shared.temporal.instant import coerce_utc_lenient
 
 TABLE = "agent_behavior_snapshots"
 
@@ -58,9 +59,13 @@ class BehaviorSnapshotRepository(BaseRepository):
         return count
 
     async def purge_before(self, tenant_id: str, agent_ref: str, window_end: str) -> int:
+        cutoff = coerce_utc_lenient(window_end)
+        if cutoff is None:
+            raise ValueError(f"invalid window_end: {window_end!r}")
         count = 0
         for row in await self.windows(tenant_id, agent_ref, limit=200):
-            if row["window_end"] < window_end and await self.delete(row["id"]):
+            row_end = coerce_utc_lenient(row["window_end"])
+            if row_end is not None and row_end < cutoff and await self.delete(row["id"]):
                 count += 1
         return count
 
@@ -68,8 +73,18 @@ class BehaviorSnapshotRepository(BaseRepository):
 def compute_window_snapshot(
     facts: Iterable[AgentFact], agent_ref: str, window: tuple[str, str],
 ) -> dict[str, Any]:
-    """Snapshot of the facts inside ``[window[0], window[1])``."""
-    inside = [f for f in facts if window[0] <= f.occurred_at < window[1]]
+    """Snapshot of the facts inside ``[window[0], window[1])``.
+
+    Bounds and fact times are compared as parsed UTC instants: as strings,
+    ``...Z`` and ``...+00:00`` or a date-only bound order wrongly."""
+    start, end = coerce_utc_lenient(window[0]), coerce_utc_lenient(window[1])
+    if start is None or end is None:
+        raise ValueError(f"invalid behavior window: {window!r}")
+    inside = []
+    for f in facts:
+        at = coerce_utc_lenient(f.occurred_at)
+        if at is not None and start <= at < end:
+            inside.append(f)
     return snapshot(build_behavior_model(inside, agent_ref), window)
 
 
