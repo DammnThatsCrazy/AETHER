@@ -32,7 +32,7 @@ source_hashes:
   "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:7d1aa3e9fd042bbb27d8173ea690f41747eee0ea91c5ddcab6c85a5edd688ea6"
-  "infra/aws/terraform/main.tf": "sha256:4d67fde198b1c7c6cae30fbb32725cee6a89b894b29449e9ac1e380f6d26d3a5"
+  "infra/aws/terraform/main.tf": "sha256:b6f5669c78ac87a35f01642cf0840a96293c6bd836f4f3ecc5079ecec15483d0"
   "infra/aws/terraform/moved.tf": "sha256:3a816e2a5b402a98a89d949b1801bd6c3cd99242a26cc17039c6d140faa3a342"
   "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
   "infra/aws/terraform/profiles/production.tfvars": "sha256:85f0417ff14534587c2210d4164adc3e9e775170f01495f62c2884c6f308c36c"

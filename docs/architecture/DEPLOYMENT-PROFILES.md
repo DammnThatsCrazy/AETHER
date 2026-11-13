@@ -19,7 +19,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
-  "infra/aws/terraform/main.tf": "sha256:4d67fde198b1c7c6cae30fbb32725cee6a89b894b29449e9ac1e380f6d26d3a5"
+  "infra/aws/terraform/main.tf": "sha256:b6f5669c78ac87a35f01642cf0840a96293c6bd836f4f3ecc5079ecec15483d0"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:5ffc32ab652489d712a16ec6a1828143d6eed7f12a4c114fa491bb95cbd1367d"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:c35befa025c62c9350a7151be85a0cd393c7f99b1e230712104bd04dd3262657"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
@@ -472,6 +472,7 @@ field to zero in both states to keep the ECS service strategy invariant:
 | `desired_count` | The obvious one, and on its own not enough. |
 | autoscaling `min_capacity` | Application Auto Scaling clamps a service back up to its floor. A floor of 1 against a desired count of 0 revives the task within a cooldown, so staging never sleeps while appearing to. |
 | autoscaling `max_capacity` | A non-zero ceiling lets target-tracking policies scale a service out on queue or request metrics. The asleep plan pins both bounds to zero until a reviewed wake restores the declared envelope. |
+| nightly ML drift rule `state` | The EventBridge rule invokes the drift Lambda on a schedule. Asleep plans set it to `DISABLED`; the lifecycle's asleep-shape guard fails any plan that leaves a staging schedule enabled. |
 | capacity provider `base_count` | Full lane scales the guaranteed floor and rejects `base_count > desired_count`; pilot holds the FARGATE strategy at base 0 because strategy changes force service replacement. |
 
 The declared `max_capacity` is the awake surge envelope. Asleep plans set it to
