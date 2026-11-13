@@ -37,4 +37,20 @@ describe('fanoutJourneys', () => {
     await fanoutJourneys(ids, 3);
     expect(calls.ids).toEqual(['bad']);
   });
+
+  it('drops writes and stops queued reads when the signed-in identity changes mid fan-out', async () => {
+    // Codex review on DammnThatsCrazy/AETHER#867: the direct cache write did
+    // not carry the generation, so a fan-out started under tenant A and
+    // resolved after signing into tenant B repopulated the cache with A's data.
+    queryCache.clear();
+    calls.ids = [];
+    const ids = ['x1', 'x2', 'x3', 'x4'];
+    const pending = fanoutJourneys(ids, 1);
+    queryCache.clear(); // identity switch while x1 is in flight
+    const out = await pending;
+    expect(calls.ids).toEqual(['x1']);
+    expect(queryCache.get('journeys:profile:x1')).toBeNull();
+    expect(out.slice(1).every(e => e.status === 'error')).toBe(true);
+  });
 });
+

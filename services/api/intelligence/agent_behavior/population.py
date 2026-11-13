@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import Any, Iterable, Optional
 
 from intelligence.agent_behavior import contracts as c
-from intelligence.agent_behavior.facts import AgentFact
+from intelligence.agent_behavior.facts import AgentFact, fact_order
 
 _FEATURE_KEYS = ("tool_success_rate", "candidate_rejection_rate", "escalation_rate",
                  "constrained_non_action_rate", "authority_denial_rate")
@@ -89,7 +89,7 @@ def swarm_episodes(facts: Iterable[AgentFact], *, window_seconds: int = 300,
             buckets[(f.tool_name, f.object_ref)].append(f)
     out = []
     for (tool, target), fs in sorted(buckets.items()):
-        fs = sorted((f for f in fs if _ts(f.occurred_at)), key=lambda f: (f.occurred_at, f.event_id))
+        fs = sorted((f for f in fs if _ts(f.occurred_at)), key=fact_order)
         best: Optional[tuple[int, int]] = None
         lo = 0
         for hi in range(len(fs)):
@@ -123,7 +123,7 @@ def contagion(facts: Iterable[AgentFact], behavior: str) -> dict[str, Any]:
     parents.update({f.delegated_to_ref: f.agent_ref for f in facts
                     if f.event_type == "agent_delegated_task" and f.delegated_to_ref})
     first: dict[str, AgentFact] = {}
-    for f in sorted(facts, key=lambda f: (f.occurred_at, f.event_id)):
+    for f in sorted(facts, key=fact_order):
         if f.tool_name == behavior and f.agent_ref and f.agent_ref not in first:
             first[f.agent_ref] = f
     linked = [a for a, f in first.items() if parents.get(a) in first
@@ -201,7 +201,7 @@ def strategic_episodes(facts: Iterable[AgentFact], *, gap_seconds: int = 900) ->
             by_obj[f.object_ref].append(f)
     out = []
     for obj, fs in sorted(by_obj.items()):
-        fs.sort(key=lambda f: (f.occurred_at, f.event_id))
+        fs.sort(key=fact_order)
         current: list[AgentFact] = []
         for f in fs + [None]:
             gap = (f is None or (current and _ts(f.occurred_at) and _ts(current[-1].occurred_at) and
@@ -258,7 +258,7 @@ def identity_discontinuity(baseline: dict[str, Any], recent: dict[str, Any],
 
 def adversarial_signals(facts: Iterable[AgentFact], authority_checks: Iterable[dict[str, Any]] = (),
                         *, probe_threshold: int = 3) -> list[dict[str, Any]]:
-    facts = sorted(facts, key=lambda f: (f.occurred_at, f.event_id))
+    facts = sorted(facts, key=fact_order)
     out = []
     guard = [f for f in facts if f.event_type == "agent_guardrail_observed"]
     if guard:

@@ -18,7 +18,7 @@ from intelligence.agent_behavior.decisions import project_decisions
 from intelligence.agent_behavior.dynamics import (
     counterfactual_without_constraint, decision_attribution, influence_graph,
 )
-from intelligence.agent_behavior.facts import AgentFact
+from intelligence.agent_behavior.facts import AgentFact, fact_order
 from intelligence.agent_behavior.model import build_behavior_model
 from intelligence.agent_behavior.responsibility import decompose
 from intelligence.agent_behavior.taxonomy import COMMUNICATION_EVENTS
@@ -135,13 +135,13 @@ def _distinct_actions(actions: list[AgentFact]) -> list[AgentFact]:
         groups.setdefault(_economic_key(f) or ("event", f.event_id), []).append(f)
     chosen = []
     for group in groups.values():
-        ordered = sorted(group, key=lambda f: (f.occurred_at, f.event_id))
+        ordered = sorted(group, key=fact_order)
         best = max(group, key=lambda f: (_PHASE_RANK.get(f.event_type, 1), f.occurred_at, f.event_id))
         missing = {name: next((getattr(f, name) for f in ordered if getattr(f, name)), None)
                    for name in _ATTRIBUTION_REFS if not getattr(best, name)}
         missing = {k: v for k, v in missing.items() if v}
         chosen.append(dataclasses.replace(best, **missing) if missing else best)
-    return sorted(chosen, key=lambda f: (f.occurred_at, f.event_id))
+    return sorted(chosen, key=fact_order)
 
 
 def _prior_spends(actions: list[AgentFact], observed: list[Any], index: int) -> list[Any]:
