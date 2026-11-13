@@ -51,7 +51,7 @@ source_hashes:
   ".github/workflows/pilot-staging.yml": "sha256:e5f320aaac4e4d94e36346edb904e19870e291b743eace6368fd2a5758fbe643"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
-  ".github/workflows/staging-lifecycle.yml": "sha256:37233d8d841b04bf44d6932c88bf23cb715d74c4c39a719f2fb8a8c67357a48a"
+  ".github/workflows/staging-lifecycle.yml": "sha256:6a768d6c30c430417f8a85d295ea1be0f57c8e1d1afccdaf6f2e21fa6902723f"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
@@ -64,7 +64,7 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:c942565ccebb3b6b0209178327080e90070be3cffe70931e561474394d34d532"
   "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
   "infra/aws/terraform/profiles/staging.tfvars": "sha256:efa09f987f2178d6a4e336f99954258a63df80756d24970fa5597ac6b35a786c"
   "infra/aws/terraform/variables.tf": "sha256:ca0ecdd26f0d7212e4ab11cd7361af4ae6e562915a9f36b7e5d76cb97c1a4b6e"
@@ -654,6 +654,8 @@ Steps, in order, with what each proves:
    gamma-gated) and a `pro` isolation peer with `read` and `write` only. The
    peer is `pro` because it resolves an identity of its own for the
    cross-tenant entity check, and `/v1/identity/*` requires beta or above.
+   Identity resolution itself is on because staging tasks carry the identity
+   block of `config/release/feature_flags/staging.yaml` as task environment.
    The raw keys are masked and held only in the runner environment; they are
    never committed or uploaded. Their `tenant_id` values must differ. The
    primary tenant writes a consent record for a unique subject and reads it

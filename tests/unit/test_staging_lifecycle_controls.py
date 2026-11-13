@@ -2184,7 +2184,17 @@ def test_rehearsal_playwright_steps_run_only_their_spec():
     # also needs @aether/shared built for Vite to resolve it.
     steps = {s.get("name"): s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")}
     deps = next(s for s in steps.values() if s.get("id") == "identity_ui_dependencies")["run"]
-    assert "pnpm --filter '@aether/shared' run build" in deps
+    # Run 43365158651: Vite then failed on @aether/web, and the reporter on
+    # @aether/proof-runner. Every workspace package they import is built.
+    # Each filter carries `...` so transitive workspace dependencies build too
+    # (proof-runner imports proof-contracts and proof-fixtures dist entries).
+    build = deps.split("pnpm install", 1)[1].split("\n", 1)[1]
+    for package in ("@aether/ui", "@aether/web", "@aether/proof-runner"):
+        assert f"--filter '{package}...'" in build
+    assert "run --if-present build" in build
+    runner = json.loads((ROOT / "tests/e2e/proof/packages/runner/package.json").read_text())
+    for dependency in ("@aether/proof-contracts", "@aether/proof-fixtures"):
+        assert dependency in {**runner.get("dependencies", {}), **runner.get("devDependencies", {})}
     for name, spec in (
         ("Run identity UI evidence with fixture API", "identity-continuity.spec.ts"),
         ("Run authenticated live staging identity UI evidence", "identity-continuity-live.spec.ts"),

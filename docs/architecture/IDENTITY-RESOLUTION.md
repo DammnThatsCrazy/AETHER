@@ -35,7 +35,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:a27c51da33dee6ac53fb4dbbb5df46db175d354a47c882f8d9069a3a184f9a83"
+  "services/api/identity/identity/": "sha256:ae265e2e02cef5ce3576b926c7bf48ae6d30ef3dd2ee11d0d5898414c5420d4d"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:7e042b4b53ff4926fcacbfa236ab0c997d9e9576654b16a2cc32cf25f9d8e6a1"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
@@ -162,6 +162,13 @@ and connector evidence are both disabled by default
 connector evidence may be considered through the tenant-scoped late-binding
 flow; a claim match does not merge profiles by itself, and approval revalidates
 the evidence and requires server-verified identity-link consent.
+
+Staging tasks run with the Identity Continuity runtime on: the ECS module sets
+every flag in the identity block of `config/release/feature_flags/staging.yaml`
+(resolution, auto-merge, review, conflicts, splits, late binding, connector
+backfill, restatement, explainability and the activation dashboard).
+Production keeps the source defaults above. Strong auto-linking stays off in
+both until `AETHER_IDENTITY_STRONG_AUTOLINK` is set.
 
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
 
@@ -487,7 +494,7 @@ Production routes are served under `/v1/identity/` by `services/api/identity/ide
 | `/v1/identity/reconciliation` | GET | Repository↔graph identity-edge drift for the tenant (`missing_in_graph` / `missing_in_repo`); `?refresh=true` forces a fresh check, else returns the latest persisted run (`read`) |
 | `/v1/admin/kyber/identity/reconciliation` | POST | Kyber-operator trigger to run edge reconciliation for a given `tenant_id` (`require_kyber_operator`) |
 | `/v1/identity/recompute` | POST | Recompute identity from stored signals |
-| `/v1/identity/health` | GET | Resolver health in the standard envelope (`IdentityHealthEnvelope`). `data.status` is `healthy` when the repository answers and the tenant counts read back, otherwise `degraded`. The counts are total entities/aliases/clusters, open conflicts and recent merges/splits. |
+| `/v1/identity/health` | GET | Resolver health in the standard envelope (`IdentityHealthEnvelope`; every other identity route declares `IdentityEnvelope[...]` around its payload). `data.status` is `healthy` when the repository answers and the tenant counts read back, otherwise `degraded`. The counts are total entities/aliases/clusters, open conflicts and recent merges/splits. |
 | `/v1/identity/suppress` | POST | Suppress an identifier hash — revokes matching aliases + blocks future resolution (`write` permission) |
 | `/v1/identity/suppress/{suppression_id}` | DELETE | Revoke a suppression rule (`write` permission) |
 | `/v1/identity/suppressions` | GET | List active suppression rules for tenant |

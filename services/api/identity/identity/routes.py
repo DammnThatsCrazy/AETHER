@@ -50,6 +50,7 @@ from .repository import IdentityResolutionRepository
 from .resolver import IdentityResolutionService
 from .schemas import (
     ActivationStatusResponse,
+    IdentityEnvelope,
     AdminIdentityMergeRequest,
     AdminIdentityMergeResponse,
     AdminIdentityReviewQueueResponse,
@@ -143,7 +144,7 @@ def _get_resolution_repo() -> IdentityResolutionRepository:
 
 # ── Identity Resolution API ───────────────────────────────────────────────────
 
-@router.post("/resolve", response_model=IdentityResolveResponse)
+@router.post("/resolve", response_model=IdentityEnvelope[IdentityResolveResponse])
 async def resolve_identity(
     body: IdentityResolveRequest,
     request: Request,
@@ -373,7 +374,7 @@ async def list_conflicts(
     return APIResponse(data={"conflicts": conflicts, "total": len(conflicts)}).to_dict()
 
 
-@router.post("/merge", response_model=IdentityMergeResponse)
+@router.post("/merge", response_model=IdentityEnvelope[IdentityMergeResponse])
 async def merge_identities(
     body: IdentityMergeRequest,
     request: Request,
@@ -436,7 +437,7 @@ async def merge_identities(
     ).model_dump()).to_dict()
 
 
-@router.post("/split", response_model=IdentitySplitResponse)
+@router.post("/split", response_model=IdentityEnvelope[IdentitySplitResponse])
 async def split_identity(
     body: IdentitySplitRequest,
     request: Request,
@@ -492,7 +493,7 @@ async def split_identity(
     return APIResponse(data=IdentitySplitResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/split/preview", response_model=IdentitySplitPreviewResponse)
+@router.post("/split/preview", response_model=IdentityEnvelope[IdentitySplitPreviewResponse])
 async def preview_fragment_split(
     body: IdentitySplitPreviewRequest,
     request: Request,
@@ -524,7 +525,7 @@ async def preview_fragment_split(
     return APIResponse(data=IdentitySplitPreviewResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/split/execute", response_model=IdentityFragmentSplitResponse)
+@router.post("/split/execute", response_model=IdentityEnvelope[IdentityFragmentSplitResponse])
 async def execute_fragment_split(
     body: IdentityFragmentSplitRequest,
     request: Request,
@@ -596,7 +597,7 @@ async def execute_fragment_split(
     return APIResponse(data=IdentityFragmentSplitResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/recompute", response_model=IdentityRecomputeResponse)
+@router.post("/recompute", response_model=IdentityEnvelope[IdentityRecomputeResponse])
 async def recompute_identity(
     body: IdentityRecomputeRequest,
     request: Request,
@@ -618,7 +619,7 @@ async def recompute_identity(
     return APIResponse(data=IdentityRecomputeResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/suppress", response_model=IdentitySuppressResponse)
+@router.post("/suppress", response_model=IdentityEnvelope[IdentitySuppressResponse])
 async def suppress_identifier(body: IdentitySuppressRequest, request: Request) -> dict:
     """
     Create a suppression rule blocking an identifier hash from being used in identity linking.
@@ -640,7 +641,7 @@ async def suppress_identifier(body: IdentitySuppressRequest, request: Request) -
     return APIResponse(data=IdentitySuppressResponse(**result).model_dump()).to_dict()
 
 
-@router.delete("/suppress/{suppression_id}", response_model=IdentityUnsuppressResponse)
+@router.delete("/suppress/{suppression_id}", response_model=IdentityEnvelope[IdentityUnsuppressResponse])
 async def unsuppress_identifier(suppression_id: str, request: Request) -> dict:
     """Revoke a suppression rule. Requires write permission."""
     tenant = request.state.tenant
@@ -772,7 +773,7 @@ async def get_decision_details(
 # ── Admin identity operations (PR 8 admin endpoints) ───────────────────────────
 
 
-@router_admin.post("/merge", response_model=AdminIdentityMergeResponse)
+@router_admin.post("/merge", response_model=IdentityEnvelope[AdminIdentityMergeResponse])
 async def admin_manual_merge(
     body: AdminIdentityMergeRequest,
     request: Request,
@@ -804,7 +805,7 @@ async def admin_manual_merge(
     return APIResponse(data=AdminIdentityMergeResponse(**result).model_dump()).to_dict()
 
 
-@router_admin.post("/split", response_model=AdminIdentitySplitResponse)
+@router_admin.post("/split", response_model=IdentityEnvelope[AdminIdentitySplitResponse])
 async def admin_manual_split(
     body: AdminIdentitySplitRequest,
     request: Request,
@@ -839,7 +840,7 @@ async def admin_manual_split(
     return APIResponse(data=AdminIdentitySplitResponse(**result).model_dump()).to_dict()
 
 
-@router_admin.post("/reconcile", response_model=AdminIdentityReconcileResponse)
+@router_admin.post("/reconcile", response_model=IdentityEnvelope[AdminIdentityReconcileResponse])
 async def admin_reconcile(
     body: AdminIdentityReconcileRequest,
     request: Request,
@@ -867,7 +868,7 @@ async def admin_reconcile(
     return APIResponse(data=AdminIdentityReconcileResponse(**result).model_dump()).to_dict()
 
 
-@router_admin.get("/review-queue", response_model=AdminIdentityReviewQueueResponse)
+@router_admin.get("/review-queue", response_model=IdentityEnvelope[AdminIdentityReviewQueueResponse])
 async def admin_review_queue(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
@@ -887,7 +888,7 @@ async def admin_review_queue(
     ).to_dict()
 
 
-@router_admin.get("/activation-status", response_model=ActivationStatusResponse)
+@router_admin.get("/activation-status", response_model=IdentityEnvelope[ActivationStatusResponse])
 async def admin_activation_status(
     request: Request,
     admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
@@ -1834,7 +1835,7 @@ async def admin_reject_conflict(
 # is the only tenant selector; these handlers never accept a tenant_id from the
 # URL or request body. The matching /v1/admin handlers above remain available
 # for operator integrations when that router is mounted separately.
-@router.get("/review-queue", response_model=AdminIdentityReviewQueueResponse)
+@router.get("/review-queue", response_model=IdentityEnvelope[AdminIdentityReviewQueueResponse])
 async def tenant_review_queue(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
@@ -1853,7 +1854,7 @@ async def tenant_review_queue(
     ).to_dict()
 
 
-@router.get("/activation-status", response_model=ActivationStatusResponse)
+@router.get("/activation-status", response_model=IdentityEnvelope[ActivationStatusResponse])
 async def tenant_activation_status(
     request: Request,
     admin_service: AdminIdentityService = Depends(_get_admin_identity_service),

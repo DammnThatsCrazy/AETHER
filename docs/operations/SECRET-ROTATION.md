@@ -19,7 +19,7 @@ canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
 source_hashes:
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:c942565ccebb3b6b0209178327080e90070be3cffe70931e561474394d34d532"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/outputs.tf": "sha256:5c5a051e56e3e00f811c86663f6a2e8a9f8fd34df133723fef76e7ea1338f816"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:c6c06da21c6ccd01468741102529c59a17ffc0e0b9c230df08d49869a3858589"

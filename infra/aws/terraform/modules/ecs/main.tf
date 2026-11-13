@@ -363,6 +363,35 @@ locals {
   # Pilot billing is direct Aether Checkout + Portal billing, not the deferred
   # Kyber revops/provider-sync surface. URLs are derived from the canonical
   # Aether origin so a plan cannot point a paid pilot at a local default.
+  # config/release/feature_flags/staging.yaml turns the Identity Continuity
+  # runtime on for staging proof. These flags default off in
+  # services/api/config/settings.py, so the manifest alone left staging tasks
+  # with identity resolution disabled. Production keeps the source defaults.
+  # tests/unit/test_staging_identity_runtime_flags.py keeps this list equal
+  # to the manifest's identity block.
+  staging_identity_runtime_flags = [
+    "IDENTITY_RESOLUTION_ENABLED",
+    "IDENTITY_AUTO_MERGE_ENABLED",
+    "IDENTITY_MANUAL_REVIEW_ENABLED",
+    "IDENTITY_CONFLICT_DETECTION_ENABLED",
+    "IDENTITY_SPLIT_ENABLED",
+    "IDENTITY_MANUAL_SPLIT_ENABLED",
+    "IDENTITY_AUTO_SPLIT_CANDIDATES_ENABLED",
+    "SDK_LATE_BINDING_ENABLED",
+    "ANONYMOUS_TO_KNOWN_BINDING_ENABLED",
+    "MULTI_SDK_IDENTITY_STITCHING_ENABLED",
+    "CONNECTOR_BACKFILL_IDENTITY_RESOLUTION_ENABLED",
+    "PROJECTION_RESTATEMENT_ENABLED",
+    "CAMPAIGN_RESTATEMENT_ENABLED",
+    "VALUE_RESTATEMENT_ENABLED",
+    "IDENTITY_EXPLAINABILITY_ENABLED",
+    "TENANT_IDENTITY_ACTIVATION_DASHBOARD_ENABLED",
+    "AGENT_IDENTITY_RESOLUTION_ENABLED",
+  ]
+  identity_runtime_environment = var.deployment_profile == "staging" ? [
+    for flag in local.staging_identity_runtime_flags : { name = flag, value = "true" }
+  ] : []
+
   stripe_runtime_environment = [
     { name = "DEPLOYMENT_LANE", value = var.deployment_lane },
     { name = "STRIPE_BILLING_ENABLED", value = var.stripe_billing_enabled ? "true" : "false" },
@@ -610,6 +639,7 @@ resource "aws_ecs_task_definition" "backend" {
         ],
         concat(
           local.kyber_runtime_environment,
+          local.identity_runtime_environment,
           local.stripe_runtime_environment_with_urls,
           local.email_runtime_environment,
           local.self_signup_runtime_environment,
@@ -836,6 +866,7 @@ resource "aws_ecs_task_definition" "runtime_service" {
       ],
       concat(
         local.kyber_runtime_environment,
+        local.identity_runtime_environment,
         local.stripe_runtime_environment_with_urls,
         local.email_runtime_environment,
         local.self_signup_runtime_environment,
