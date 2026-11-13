@@ -287,14 +287,23 @@ def build_behavior_event(
     agent_id: str,
     message_id: str,
     timestamp: str,
+    session_id: str,
+    anonymous_id: str,
     properties: Optional[dict[str, Any]] = None,
     deployment: Optional[dict[str, Any]] = None,
+    user_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """A canonical ``/v1/batch`` event for one agent behavior step.
 
-    ``deployment`` is required: ingestion only accepts these types from a
-    validated deployment. Amounts must be decimal strings.
+    ``message_id`` becomes the event ``id``. ``session_id`` and
+    ``anonymous_id`` are required by the batch contract (``BaseEvent``), which
+    rejects unknown keys. ``deployment`` is required: ingestion only accepts
+    these types from a validated deployment. Amounts must be decimal strings.
     """
+    for name, value in (("message_id", message_id), ("session_id", session_id),
+                        ("anonymous_id", anonymous_id)):
+        if not value:
+            raise ValueError(f"{name} is required")
     if event_type not in AGENT_BEHAVIOR_EVENT_TYPES:
         raise ValueError(f"{event_type!r} is not an agent behavior event type")
     if not deployment:
@@ -307,13 +316,18 @@ def build_behavior_event(
     if amount is not None and (not isinstance(amount, str) or not _is_decimal(amount)):
         raise ValueError("amount must be a decimal string")
     props["agentId"] = agent_id
-    return {
+    event: dict[str, Any] = {
+        "id": message_id,
         "type": event_type,
-        "messageId": message_id,
         "timestamp": timestamp,
+        "sessionId": session_id,
+        "anonymousId": anonymous_id,
         "properties": props,
         "context": _deployment_wrapper(deployment),
     }
+    if user_id:
+        event["userId"] = user_id
+    return event
 
 
 def _is_decimal(text: str) -> bool:

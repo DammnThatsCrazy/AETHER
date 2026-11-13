@@ -18,6 +18,8 @@ from repositories.repos import BaseRepository
 from shared.temporal.instant import coerce_utc_lenient
 
 TABLE = "agent_behavior_snapshots"
+WINDOW_READ_PAGE = 200
+WINDOW_READ_MAX_PAGES = 25  # 5,000 windows: over 13 years of daily snapshots
 
 
 def snapshot_id(tenant_id: str, agent_ref: str, window: tuple[str, str]) -> str:
@@ -45,11 +47,30 @@ class BehaviorSnapshotRepository(BaseRepository):
         return await self.insert(sid, row)
 
     async def windows(self, tenant_id: str, agent_ref: str, limit: int = 50) -> list[dict[str, Any]]:
-        rows = await self.find_many(
-            filters={"tenant_id": tenant_id, "agent_ref": agent_ref}, limit=max(1, min(limit, 200)),
-        )
-        rows = [r for r in rows if r.get("tenant_id") == tenant_id]
-        return sorted(rows, key=lambda r: (r["window_end"], r["window_start"]))
+        """The ``limit`` chronologically latest windows, oldest first.
+
+        ``find_many`` orders by insertion time and cannot sort by window
+        bounds, so limiting there would drop the real latest windows whenever
+        older windows were backfilled after newer ones. The agent's rows are
+        read in pages (one row per window, bounded) and ordered by window
+        instant before the limit applies."""
+        filters = {"tenant_id": tenant_id, "agent_ref": agent_ref}
+        rows: list[dict[str, Any]] = []
+        for page in range(WINDOW_READ_MAX_PAGES):
+            batch = await self.find_many(filters=filters, limit=WINDOW_READ_PAGE, offset=page * WINDOW_READ_PAGE)
+            rows.extend(r for r in batch if r.get("tenant_id") == tenant_id)
+            if len(batch) < WINDOW_READ_PAGE:
+                break
+
+        def instant(value: Any) -> float:
+            at = coerce_utc_lenient(value)
+            return at.timestamp() if at is not None else float("-inf")
+
+        def chronological(r: dict[str, Any]) -> tuple[float, float]:
+            return (instant(r["window_end"]), instant(r["window_start"]))
+
+        rows.sort(key=chronological)
+        return rows[-max(1, min(limit, 200)):]
 
     async def delete_by_agent(self, tenant_id: str, agent_ref: str) -> int:
         count = 0

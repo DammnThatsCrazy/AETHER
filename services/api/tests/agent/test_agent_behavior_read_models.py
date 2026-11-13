@@ -340,6 +340,8 @@ def test_behavior_fact_load_reports_truncation_past_the_repository_cap():
             self.total = total
 
         async def query_silver_page(self, table, filters, *, limit, cursor=None):
+            if "source_event_type" in filters:
+                return [], None, False
             limit = min(limit, 1000)
             return [], None, self.total > limit
 
@@ -372,11 +374,12 @@ def test_root_journey_loads_descendant_activity():
     spawns = project(1, "agent_subagent_spawned", "orch", {"parentAgentId": "orch", "childAgentId": "worker"})
 
     class Analytics:
-        async def query_silver_page(self, table, filters, *, limit, cursor=None):
-            return by_agent.get(filters["agent_id"], []), None, False
+        edges = spawns
 
-        async def query_silver(self, table, filters, *, limit=50):
-            return spawns
+        async def query_silver_page(self, table, filters, *, limit, cursor=None):
+            if "source_event_type" in filters:
+                return self.edges, None, False
+            return by_agent.get(filters["agent_id"], []), None, False
 
     facts, truncated = asyncio.run(load_behavior_facts("t", "orch", analytics=Analytics()))
     assert {f.agent_ref for f in facts} == {"orch", "worker"} and truncated is False
@@ -386,11 +389,49 @@ def test_root_journey_loads_descendant_activity():
         3 + i % 50, "agent_subagent_spawned", "orch", {"parentAgentId": "orch", "childAgentId": f"w{i}"})]
 
     class Wide(Analytics):
-        async def query_silver(self, table, filters, *, limit=50):
-            return many
+        edges = many
 
     _, truncated = asyncio.run(load_behavior_facts("t", "orch", analytics=Wide()))
     assert truncated is True and behavior_read_model.MAX_JOURNEY_DESCENDANTS < 40
+
+
+def test_unread_spawn_edges_mark_the_journey_truncated():
+    """Codex review on #867: the tenant-wide spawn-edge read was one unpaged
+    query capped at 1,000 rows, so an older root's edges could be dropped while
+    ``truncated`` stayed false. Edges are now paged; edges left unread at the
+    page cap mark the inputs truncated."""
+    import asyncio
+
+    from actions.agent import behavior_read_model
+    from actions.agent.behavior_read_model import load_behavior_facts
+    from ingestion.silver.projectors.agent_execution_projector import AgentExecutionProjector
+
+    root_edge = AgentExecutionProjector().project({
+        "messageId": "old-root-edge", "type": "agent_subagent_spawned", "tenantId": "t",
+        "timestamp": "2026-10-01T10:00:00Z",
+        "properties": {"agentId": "root", "parentAgentId": "root", "childAgentId": "old-worker"}}).rows
+    edge_pages = {None: ([], "page-2", True), "page-2": (root_edge, None, False)}
+    edge_reads = []
+
+    class Paged:
+        async def query_silver_page(self, table, filters, *, limit, cursor=None):
+            if "source_event_type" in filters:
+                edge_reads.append(cursor)
+                return edge_pages[cursor]
+            return [], None, False
+
+    facts, truncated = asyncio.run(load_behavior_facts("t", "root", analytics=Paged()))
+    assert edge_reads == [None, "page-2"] and truncated is False
+    assert any(f.child_agent_ref == "old-worker" for f in facts)
+
+    class Endless:
+        async def query_silver_page(self, table, filters, *, limit, cursor=None):
+            if "source_event_type" in filters:
+                return [], "more", True
+            return [], None, False
+
+    _, truncated = asyncio.run(load_behavior_facts("t", "root", analytics=Endless()))
+    assert truncated is True and behavior_read_model.SPAWN_EDGE_MAX_PAGES >= 2
 
 
 

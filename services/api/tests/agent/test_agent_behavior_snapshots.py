@@ -171,3 +171,20 @@ async def test_snapshot_route_reads_the_window_and_skips_a_truncated_one(monkeyp
     out = (await routes.record_behavior_snapshot("a1", body, req))["data"]
     assert out["recorded"] is True and out["snapshot"]["rates"]["tool_success_rate"]["n"] == 30
     assert calls == [(T, "a1", D1), (T, "a1", D1)]
+
+
+@pytest.mark.asyncio
+async def test_windows_returns_the_latest_windows_even_when_older_ones_were_backfilled():
+    # Codex review on #867: find_many limits by insertion time, so recording
+    # older windows after newer ones pushed the real latest windows out and
+    # drift compared historical snapshots.
+    repo = BehaviorSnapshotRepository()
+    await record_window(repo, T, "a1", facts("22", "succeeded"), D1)
+    await record_window(repo, T, "a1", facts("23", "failed"), D2)
+    for day in range(1, 21):  # backfill October 1-20 afterwards
+        start = f"2026-10-{day:02d}T00:00:00Z"
+        end = f"2026-10-{day + 1:02d}T00:00:00Z"
+        await record_window(repo, T, "a1", [], (start, end))
+    latest = await repo.windows(T, "a1", limit=2)
+    assert [(r["window_start"], r["window_end"]) for r in latest] == [D1, D2]
+    assert (await drift_over_stored_windows(repo, T, "a1"))["status"] == "drift_detected"

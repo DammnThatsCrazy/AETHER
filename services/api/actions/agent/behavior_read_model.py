@@ -41,10 +41,10 @@ async def load_behavior_facts(tenant_id: str, agent_ref: str, *, analytics: Any 
     rows, _cursor, truncated = await analytics.query_silver_page(
         SILVER_TABLE, {"tenant_id": tenant_id, "agent_id": agent_ref}, limit=BEHAVIOR_FACT_LIMIT,
     )
-    spawns = await analytics.query_silver(
-        SILVER_TABLE, {"tenant_id": tenant_id, "source_event_type": "agent_subagent_spawned"},
-        limit=BEHAVIOR_FACT_LIMIT,
-    )
+    # Descendant discovery uses only these edges, so an unread edge can hide a
+    # whole subtree; edges still unread at the page cap mark the inputs truncated.
+    spawns, spawns_truncated = await _load_spawn_edges(analytics, tenant_id)
+    truncated = truncated or spawns_truncated
     # The journey traverses descendants, so their activity is loaded too (bounded);
     # an unread descendant or a capped descendant read marks the inputs truncated.
     descendant_rows: list[dict[str, Any]] = []
@@ -60,6 +60,22 @@ async def load_behavior_facts(tenant_id: str, agent_ref: str, *, analytics: Any 
 
 
 MAX_JOURNEY_DESCENDANTS = 25
+SPAWN_EDGE_MAX_PAGES = 10
+
+
+async def _load_spawn_edges(analytics: Any, tenant_id: str) -> tuple[list[dict[str, Any]], bool]:
+    """The tenant's spawn edges, paged; ``truncated`` when edges remain unread."""
+    edges: list[dict[str, Any]] = []
+    cursor: Optional[str] = None
+    for _ in range(SPAWN_EDGE_MAX_PAGES):
+        rows, cursor, more = await analytics.query_silver_page(
+            SILVER_TABLE, {"tenant_id": tenant_id, "source_event_type": "agent_subagent_spawned"},
+            limit=BEHAVIOR_FACT_LIMIT, cursor=cursor,
+        )
+        edges.extend(rows)
+        if not more or not cursor:
+            return edges, False
+    return edges, True
 
 
 def _descendants(spawn_facts: list[Any], root: str, limit: int) -> tuple[list[str], bool]:
