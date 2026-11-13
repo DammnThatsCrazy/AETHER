@@ -173,6 +173,18 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     }
   }
 
+  /**
+   * A new credential may belong to another tenant, so cached reads are dropped.
+   * The credential is installed first: clear() notifies mounted queries, which
+   * refetch at once, and the REST client reads the token when it builds each
+   * request. Clearing first would refetch with the previous tenant's token
+   * under the new cache generation and repopulate the cache with its data.
+   */
+  function switchIdentity(tokens: AuthTokens | null): void {
+    currentTokens = tokens;
+    queryCache.clear();
+  }
+
   async function verifyCredential(tokens: AuthTokens): Promise<void> {
     currentTokens = tokens;
     try {
@@ -288,8 +300,6 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }, []);
 
   const apiKeyLogin = useCallback(async (apiKey: string) => {
-    // A new credential may belong to another tenant: drop cached reads first.
-    queryCache.clear();
     sessionStorage.setItem(SESSION_KEY, apiKey);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_EXPIRY_KEY);
@@ -299,11 +309,11 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       refreshToken: undefined,
       expiresAt: Date.now() / 1000 + 86400,
     };
+    switchIdentity(tokens);
     await verifyCredential(tokens);
   }, []);
 
   const sessionLogin = useCallback(async (session: HumanSessionGrant) => {
-    queryCache.clear();
     const expiresAt = sessionExpiryEpochS(session.absolute_expires_at);
     sessionStorage.setItem(SESSION_TOKEN_KEY, session.token);
     sessionStorage.setItem(SESSION_EXPIRY_KEY, new Date(expiresAt * 1000).toISOString());
@@ -315,12 +325,12 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       refreshToken: undefined,
       expiresAt,
     };
+    switchIdentity(tokens);
     await verifyCredential(tokens);
   }, []);
 
   const logout = useCallback(async () => {
-    currentTokens = null;
-    queryCache.clear();
+    switchIdentity(null);
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_EXPIRY_KEY);

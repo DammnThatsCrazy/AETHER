@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:ddfa6900e9359e10d949566652b9ef54ab069007c6d9e29f63bb647f19c68096"
+  "apps/aether-web/src/": "sha256:f9fda1ce7b8e06c50874fad72ccab8a885857f3541cf9fcb453d1d3f7b2bdfab"
   "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
   "packages/ui/core/src/": "sha256:a99ef2eb865c796d1732f6dd9d81f82d3ce614e4f3d272daa6f41baf673a6c0b"
 ---
@@ -277,7 +277,9 @@ request completed.
 
 The `@aether/ui` query cache is module-global and its keys are not
 tenant-scoped, so the Aether auth provider clears it on every API-key login,
-session login and logout. Responses that were in flight before the switch are
+session login and logout, after installing the new credential (mounted queries
+refetch as soon as the cache is cleared, and the REST client reads the token
+when it builds each request). Responses that were in flight before the switch are
 dropped by the cache's generation counter, so one tenant's reads never render
 for another.
 

@@ -5,9 +5,10 @@ import {
   SESSION_EXPIRY_KEY,
   SESSION_KEY,
   SESSION_TOKEN_KEY,
+  getAccessToken,
   useAuth,
 } from '@aether-app/features/auth';
-import { queryCache, ThemeProvider } from '@aether/ui';
+import { queryCache, ThemeProvider, useQuery } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
@@ -155,6 +156,50 @@ describe('Auth identity switches clear cached reads', () => {
       renderWithProviders(<SwitchConsumer action={action} />);
       (await screen.findByText('switch')).click();
       await vi.waitFor(() => expect(queryCache.get('aether:comms:index')).toBeNull());
+    },
+  );
+
+  it.each(['apiKey', 'session'] as const)(
+    '%s login refetches mounted queries with the new credential only',
+    async (kind) => {
+      // Codex review on DammnThatsCrazy/AETHER#868: clear() notifies mounted
+      // queries, which refetch at once. If the new credential is not installed
+      // yet, the refetch carries the previous tenant's token under the new
+      // cache generation and repopulates the cache with its data.
+      const tokensSeen: Array<string | null> = [];
+      function Reader() {
+        useQuery({
+          key: 'aether:comms:index',
+          fetcher: async () => { tokensSeen.push(getAccessToken()); return ['row']; },
+        });
+        return null;
+      }
+      function Login() {
+        const auth = useAuth();
+        const next = () => kind === 'apiKey'
+          ? auth.apiKeyLogin('ak_tenant_b')
+          : auth.sessionLogin({
+            token: 'sess_tenant_b',
+            absolute_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          } as Parameters<typeof auth.sessionLogin>[0]);
+        return (
+          <>
+            <button type="button" onClick={() => { void auth.apiKeyLogin('ak_tenant_a'); }}>a</button>
+            <button type="button" onClick={() => { void next(); }}>b</button>
+          </>
+        );
+      }
+      renderWithProviders(<><Login /><Reader /></>);
+      (await screen.findByText('a')).click();
+      await vi.waitFor(() => expect(getAccessToken()).toBe('ak_tenant_a'));
+      await vi.waitFor(() => expect(tokensSeen).toContain('ak_tenant_a'));
+      const before = tokensSeen.length;
+      screen.getByText('b').click();
+      const expected = kind === 'apiKey' ? 'ak_tenant_b' : 'sess_tenant_b';
+      await vi.waitFor(() => expect(tokensSeen.length).toBeGreaterThan(before));
+      expect(tokensSeen.slice(before)).toEqual(
+        tokensSeen.slice(before).map(() => expected),
+      );
     },
   );
 });
