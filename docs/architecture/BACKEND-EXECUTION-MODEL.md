@@ -20,7 +20,7 @@ toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
-  "services/api/main.py": "sha256:6b1648a545d1fb615724a09f25537f2241ad3f5e7187b1bc78f5e1601a095791"
+  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
   "services/api/workers/runtime/roles.py": "sha256:9dc895c61c99ce3bcf81c979bc4b195a2e230822233ab178159a48379f6d4f0b"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"

@@ -29,9 +29,9 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:a928f782d01f2b695684f82b53c8da66674cc936d256cacf8570662484f4b3bd"
-  "services/api/governance/": "sha256:b287f008d8982cb66b93e37f5654a5cbcd808c6fcee3d811ed81bb1e9bcab7ca"
+  "services/api/governance/": "sha256:1fa42276acc1c8c489d2f0f4a7ab325c9fa4c0b2d7fd7318bb6cd2726f41d3db"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
-  "services/api/identity/": "sha256:ca264d8032b8d3293000aa0d3a48ca3c339f64bc7770563bd63069a9d722516f"
+  "services/api/identity/": "sha256:a52e1403d9780c9ab1a9c409c9f89a54d4f22c9667c5e58b5f35981bf5408d2a"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
   "services/api/intelligence/": "sha256:20ac2f4e60fa1495024aa597385d3dec976c090eb073c7e7317f8f308170a3a9"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
@@ -1788,7 +1788,7 @@ failure and can be retried after repository access recovers.
 | POST | `/v1/identity/siwx/bind` | Bind a SIWX session to an identity for entitlement reuse (`write`) |
 | GET | `/v1/identity/siwx/status/{session_id}` | Check SIWX session binding status |
 | DELETE | `/v1/identity/siwx/{session_id}` | Revoke a SIWX session binding (`write`) |
-| POST | `/v1/identity/staging-proof-scenarios` | Staging only (mounted and served only when `AETHER_ENV=staging`). Records one identity-continuity scenario result for the calling tenant (`admin` permission, own tenant only) |
+| POST | `/v1/identity/staging-proof-scenarios` | Staging only (mounted and served only when `AETHER_ENV=staging`). Records one identity-continuity scenario result for the calling tenant (`admin` permission, own tenant only; route policy marks both proof routes sensitive and audited) |
 | GET | `/v1/identity/staging-proof-capture` | Staging only. Reads the calling tenant's recorded scenario evidence and identity runtime state for the proof pack (`admin` permission). Answers `503` unless `AETHER_DEPLOYMENT_ID` is set; delivery sets it to the running backend image digest |
 
 SIWX (Sign-In With X) session bindings allow the entitlement service to reuse active payment entitlements for a wallet session without requiring a new payment challenge.

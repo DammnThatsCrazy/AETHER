@@ -19,7 +19,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "config/environments/.env.example": "sha256:d5c32df6e26b4efd5a195a9b7c7bd37effb8a1420d8952786e95ac9735cb6a24"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:c942565ccebb3b6b0209178327080e90070be3cffe70931e561474394d34d532"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:f0500e7d769c491ae522cd617b42c960ceaca0ea2cf4e7e2bee06a153bcafed4"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/outputs.tf": "sha256:5c5a051e56e3e00f811c86663f6a2e8a9f8fd34df133723fef76e7ea1338f816"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:c6c06da21c6ccd01468741102529c59a17ffc0e0b9c230df08d49869a3858589"

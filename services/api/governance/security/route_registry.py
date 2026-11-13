@@ -411,6 +411,7 @@ def classify(path: str, method: Optional[str] = None) -> Optional[RoutePolicy]:
         is_kyber
         or "admin" in seg
         or domain in set(cat.get("sensitive_domains", []) or [])
+        or any(path.startswith(p) for p in cat.get("sensitive_path_prefixes", []) or [])
     )
     infra = domain in set(cat.get("infra_domains", []) or [])
     public = is_public_path(path)

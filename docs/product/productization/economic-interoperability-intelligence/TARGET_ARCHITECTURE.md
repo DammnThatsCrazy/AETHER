@@ -22,7 +22,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
-  "services/api/main.py": "sha256:6b1648a545d1fb615724a09f25537f2241ad3f5e7187b1bc78f5e1601a095791"
+  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
 ---
 
 # Target Architecture

@@ -186,7 +186,7 @@ def validate(
                 "Kyber contains a deployment mutation endpoint: "
                 + str(source_path.relative_to(root))
             )
-        if "gh workflow run" in text:
+        if "gh workflow run" in text or "dispatch_workflow.sh" in text:
             errors.append(
                 "Kyber must not dispatch GitHub workflows: "
                 + str(source_path.relative_to(root))

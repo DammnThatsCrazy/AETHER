@@ -35,7 +35,7 @@ source_hashes:
   "config/storage_policies.yaml": "sha256:4a44084cac17fff5155b4fc04bf4e36fc3fee1bae95fba683b8cdb55ada9b066"
   "docs/_generated/adapter-certification-matrix.json": "sha256:30c99f26bb77d405851ce92caa915c358988e140e290808a21d538f594fdc7de"
   "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
-  "services/api/main.py": "sha256:6b1648a545d1fb615724a09f25537f2241ad3f5e7187b1bc78f5e1601a095791"
+  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
   "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"

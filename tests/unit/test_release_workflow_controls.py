@@ -63,7 +63,11 @@ AUTOMATIC_TRIGGERS = {
 
 
 def _workflow(name: str) -> str:
-    return (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+    # The shared helper is the dispatch command: treat it as `gh workflow run` so
+    # every dispatch assertion (including the no-dispatch-from-a-timer guard)
+    # still covers helper calls.
+    text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+    return text.replace("scripts/ci/dispatch_workflow.sh", "gh workflow run")
 
 
 def _workflow_names() -> list[str]:
@@ -2183,7 +2187,7 @@ def test_rehearsal_delivery_defers_only_the_fixed_key_smoke_to_the_rehearsal():
     assert smoke["if"] == "steps.smoke_owner.outputs.deferred != 'true'"
     assert "--api-key" in smoke["run"]
 
-    lifecycle = (WORKFLOW_DIR / "staging-lifecycle.yml").read_text(encoding="utf-8")
+    lifecycle = _workflow("staging-lifecycle.yml")
     dispatch = lifecycle[lifecycle.index('gh workflow run deploy.yml'):]
     dispatch = dispatch[: dispatch.index("2>&1")]
     assert '-f rehearsal_run_id="$GITHUB_RUN_ID"' in dispatch

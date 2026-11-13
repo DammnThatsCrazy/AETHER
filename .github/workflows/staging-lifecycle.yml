@@ -901,13 +901,8 @@ jobs:
                 -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
               )
             fi
-            # A failed dispatch must say why: inside a captured $(...) set -e
-            # exits before the error is printed (run 43462809460 ended silently).
-            if ! reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"; then
-              printf '%s\n' "$reconcile_output" >&2
-              echo "::error::workflow dispatch failed; see the gh output above" >&2
-              exit 1
-            fi
+            # The dispatch helper prints any gh failure, then exits 1 (never retries).
+            reconcile_output="$(scripts/ci/dispatch_workflow.sh "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}")"
             printf '%s\n' "$reconcile_output"
             reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
               | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -917,19 +912,9 @@ jobs:
             }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              # A just-dispatched run can answer 404 for a few seconds; treat
-              # only that, and only in the first 120 s, as still pending.
-              if ! reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
-                if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
-                  && [ "$(date -u +%s)" -lt "${reconcile_run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
-                  reconcile_status=lookup_pending
-                  sleep 5
-                  continue
-                fi
-                cat "$RUNNER_TEMP/run-status.err" >&2
-                echo "::error::could not read run ${reconcile_run_id} status"
-                exit 1
-              fi
+              # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+              reconcile_status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${reconcile_run_id}")"
+              if [ "$reconcile_status" = lookup_pending ]; then sleep 5; continue; fi
               if [ "$reconcile_status" = completed ]; then
                 reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
                 test "$reconcile_conclusion" = success || {
@@ -950,9 +935,8 @@ jobs:
           else
             reconcile_staging_state ''
           fi
-          # A failed dispatch must say why: inside a captured $(...) set -e
-          # exits before the error is printed (run 43462809460 ended silently).
-          if ! dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
@@ -960,11 +944,7 @@ jobs:
             -f staging_state="$STAGING_STATE" \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$INTENDED_RELEASE_SHA" 2>&1)"; then
-            printf '%s\n' "$dispatch_output" >&2
-            echo "::error::workflow dispatch failed; see the gh output above" >&2
-            exit 1
-          fi
+            -f expected_commit_sha="$INTENDED_RELEASE_SHA")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -976,19 +956,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            # A just-dispatched run can answer 404 for a few seconds; treat
-            # only that, and only in the first 120 s, as still pending.
-            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
-              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
-                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
-                status=lookup_pending
-                sleep 5
-                continue
-              fi
-              cat "$RUNNER_TEMP/run-status.err" >&2
-              echo "::error::could not read run ${run_id} status"
-              exit 1
-            fi
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -1396,19 +1366,14 @@ jobs:
           # has already downloaded, checksummed and policy-validated.
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified plan_checksum'; exit 1; }
-          # A failed dispatch must say why: inside a captured $(...) set -e
-          # exits before the error is printed (run 43462809460 ended silently).
-          if ! dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"; then
-            printf '%s\n' "$dispatch_output" >&2
-            echo "::error::workflow dispatch failed; see the gh output above" >&2
-            exit 1
-          fi
+            -f plan_checksum="$PLAN_CHECKSUM")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -1420,19 +1385,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            # A just-dispatched run can answer 404 for a few seconds; treat
-            # only that, and only in the first 120 s, as still pending.
-            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
-              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
-                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
-                status=lookup_pending
-                sleep 5
-                continue
-              fi
-              cat "$RUNNER_TEMP/run-status.err" >&2
-              echo "::error::could not read run ${run_id} status"
-              exit 1
-            fi
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -1594,20 +1549,15 @@ jobs:
           test -n "$RELEASE_MANIFEST_CHECKSUM" || {
             echo '::error::release_manifest_checksum is required before staging can deploy the approved release'; exit 1;
           }
-          # A failed dispatch must say why: inside a captured $(...) set -e
-          # exits before the error is printed (run 43462809460 ended silently).
-          if ! dispatch_output="$(gh workflow run deploy.yml --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh deploy.yml --ref "$REF_NAME" \
             -f environment=staging \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f delivery_mode=deploy \
             -f rehearsal_run_id="$GITHUB_RUN_ID" \
             -f source_run_id="$RELEASE_RUN_ID" \
             -f identity_verification_secrets_enabled="${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}" \
-            -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" 2>&1)"; then
-            printf '%s\n' "$dispatch_output" >&2
-            echo "::error::workflow dispatch failed; see the gh output above" >&2
-            exit 1
-          fi
+            -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM")"
           printf '%s\n' "$dispatch_output"
           delivery_run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -1618,19 +1568,9 @@ jobs:
           echo "canonical immutable delivery run: ${delivery_run_id}"
           wait_deadline="$(( $(date -u +%s) + DELIVERY_TIMEOUT_MINUTES * 60 ))"
           while :; do
-            # A just-dispatched run can answer 404 for a few seconds; treat
-            # only that, and only in the first 120 s, as still pending.
-            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
-              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
-                && [ "$(date -u +%s)" -lt "${delivery_run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
-                status=lookup_pending
-                sleep 5
-                continue
-              fi
-              cat "$RUNNER_TEMP/run-status.err" >&2
-              echo "::error::could not read run ${delivery_run_id} status"
-              exit 1
-            fi
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${delivery_run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}")"
               run_path="$(jq -r '.path' <<<"$run_json")"
@@ -3207,13 +3147,8 @@ jobs:
                 -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
               )
             fi
-            # A failed dispatch must say why: inside a captured $(...) set -e
-            # exits before the error is printed (run 43462809460 ended silently).
-            if ! reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"; then
-              printf '%s\n' "$reconcile_output" >&2
-              echo "::error::workflow dispatch failed; see the gh output above" >&2
-              exit 1
-            fi
+            # The dispatch helper prints any gh failure, then exits 1 (never retries).
+            reconcile_output="$(scripts/ci/dispatch_workflow.sh "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}")"
             printf '%s\n' "$reconcile_output"
             reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
               | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -3223,19 +3158,9 @@ jobs:
             }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              # A just-dispatched run can answer 404 for a few seconds; treat
-              # only that, and only in the first 120 s, as still pending.
-              if ! reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
-                if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
-                  && [ "$(date -u +%s)" -lt "${reconcile_run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
-                  reconcile_status=lookup_pending
-                  sleep 5
-                  continue
-                fi
-                cat "$RUNNER_TEMP/run-status.err" >&2
-                echo "::error::could not read run ${reconcile_run_id} status"
-                exit 1
-              fi
+              # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+              reconcile_status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${reconcile_run_id}")"
+              if [ "$reconcile_status" = lookup_pending ]; then sleep 5; continue; fi
               if [ "$reconcile_status" = completed ]; then
                 reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
                 test "$reconcile_conclusion" = success || {
@@ -3256,9 +3181,8 @@ jobs:
           else
             reconcile_staging_state ''
           fi
-          # A failed dispatch must say why: inside a captured $(...) set -e
-          # exits before the error is printed (run 43462809460 ended silently).
-          if ! dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
@@ -3267,11 +3191,7 @@ jobs:
             -f secret_preflight_required=false \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$EXPECTED_COMMIT_SHA" 2>&1)"; then
-            printf '%s\n' "$dispatch_output" >&2
-            echo "::error::workflow dispatch failed; see the gh output above" >&2
-            exit 1
-          fi
+            -f expected_commit_sha="$EXPECTED_COMMIT_SHA")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -3282,19 +3202,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            # A just-dispatched run can answer 404 for a few seconds; treat
-            # only that, and only in the first 120 s, as still pending.
-            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
-              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
-                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
-                status=lookup_pending
-                sleep 5
-                continue
-              fi
-              cat "$RUNNER_TEMP/run-status.err" >&2
-              echo "::error::could not read run ${run_id} status"
-              exit 1
-            fi
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -3469,20 +3379,15 @@ jobs:
             || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified sleep plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified sleep plan_checksum'; exit 1; }
-          # A failed dispatch must say why: inside a captured $(...) set -e
-          # exits before the error is printed (run 43462809460 ended silently).
-          if ! dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f secret_preflight_required=false \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"; then
-            printf '%s\n' "$dispatch_output" >&2
-            echo "::error::workflow dispatch failed; see the gh output above" >&2
-            exit 1
-          fi
+            -f plan_checksum="$PLAN_CHECKSUM")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -3493,19 +3398,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            # A just-dispatched run can answer 404 for a few seconds; treat
-            # only that, and only in the first 120 s, as still pending.
-            if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>"$RUNNER_TEMP/run-status.err")"; then
-              if grep -q "HTTP 404" "$RUNNER_TEMP/run-status.err" \
-                && [ "$(date -u +%s)" -lt "${run_id_lookup_grace:=$(( $(date -u +%s) + 120 ))}" ]; then
-                status=lookup_pending
-                sleep 5
-                continue
-              fi
-              cat "$RUNNER_TEMP/run-status.err" >&2
-              echo "::error::could not read run ${run_id} status"
-              exit 1
-            fi
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break

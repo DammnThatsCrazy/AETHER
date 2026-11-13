@@ -58,6 +58,12 @@ sensitive_domains:
   - social360
   - workflows
 
+# Path prefixes that are sensitive (audited) although their domain is not. The
+# staging identity proof routes write durable proof evidence; they left
+# /v1/admin (operator-only) for tenant-admin access but stay audited.
+sensitive_path_prefixes:
+  - /v1/identity/staging-proof-
+
 # Domains classified high risk.
 high_risk_domains:
   - admin

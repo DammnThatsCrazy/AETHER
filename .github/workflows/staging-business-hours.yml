@@ -49,6 +49,13 @@ concurrency:
 env:
   LIFECYCLE_WORKFLOW: staging-lifecycle.yml
   DEPLOYMENT_LANE: pilot
+  # Scheduled wakes and sleeps must plan the same identity-key mount shape as
+  # the live task definitions. The two identity-verification key secrets exist
+  # but stay empty until first-time setup populates them, and planning with
+  # mounts (the lifecycle default) fails the key-version check, so the schedule
+  # could neither wake nor sleep cleanly. Set the repository variable to true
+  # once both keys have versions.
+  IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ vars.STAGING_IDENTITY_VERIFICATION_SECRETS_ENABLED || 'false' }}
   # The lifecycle caps a lease at 8 hours; a wake that lands around 08:45 stays
   # up past the 17:00 sleep, and the TTL guard backs up a missed sleep.
   MAX_AWAKE_HOURS: "8"
@@ -63,6 +70,11 @@ jobs:
       GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
       REPO: ${{ github.repository }}
     steps:
+      # Only the shared dispatch/poll helpers are needed here.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
       - name: Choose the transition
         id: choose
         env:
@@ -144,13 +156,8 @@ jobs:
           dispatch() {
             # Prints the created run ID; refuses an ambiguous correlation.
             local output run_id
-            # A failed dispatch must say why: inside a captured $(...) set -e
-            # exits before the error is printed (run 43462809460 ended silently).
-            if ! output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging "$@" 2>&1)"; then
-              printf '%s\n' "$output" >&2
-              echo "::error::workflow dispatch failed; see the gh output above" >&2
-              return 1
-            fi
+            # The dispatch helper prints any gh failure, then exits 1 (never retries).
+            output="$(scripts/ci/dispatch_workflow.sh "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging "$@")" || return 1
             printf '%s\n' "$output" >&2
             run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
             test -n "$run_id" || { echo '::error::lifecycle dispatch did not return its run URL' >&2; return 1; }
@@ -160,7 +167,8 @@ jobs:
             local run_id="$1" deadline status conclusion
             deadline="$(( $(date -u +%s) + RUN_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              status="$(gh api "repos/${REPO}/actions/runs/${run_id}" --jq '.status')"
+              # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+              status="$(scripts/ci/run_status.sh "$REPO" "$run_id")" || return 1
               [ "$status" = completed ] && break
               [ "$(date -u +%s)" -lt "$deadline" ] \
                 || { echo "::error::lifecycle run ${run_id} did not finish in ${RUN_TIMEOUT_MINUTES}m"; return 1; }
@@ -173,6 +181,7 @@ jobs:
           plan_run="$(dispatch \
             -f action=plan-wake \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f release_run_id="$RELEASE_RUN_ID" \
             -f release_manifest_checksum="$RELEASE_CHECKSUM" \
             -f intended_release_sha="$RELEASE_SHA" \
@@ -196,6 +205,7 @@ jobs:
           apply_run="$(dispatch \
             -f action=apply-wake \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f release_run_id="$RELEASE_RUN_ID" \
             -f release_manifest_checksum="$RELEASE_CHECKSUM" \
             -f intended_release_sha="$RELEASE_SHA" \
@@ -211,19 +221,19 @@ jobs:
         if: steps.choose.outputs.transition == 'sleep'
         run: |
           set -euo pipefail
-          # A failed dispatch must say why: inside a captured $(...) set -e
-          # exits before the error is printed (run 43462809460 ended silently).
-          if ! output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging \
-            -f action=apply-sleep -f deployment_lane="$DEPLOYMENT_LANE" 2>&1)"; then
-            printf '%s\n' "$output" >&2
-            echo "::error::workflow dispatch failed; see the gh output above" >&2
-            exit 1
-          fi
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          output="$(scripts/ci/dispatch_workflow.sh "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging \
+            -f action=apply-sleep -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED")" || exit 1
           printf '%s\n' "$output"
           run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
           test -n "$run_id" || { echo '::error::lifecycle dispatch did not return its run URL'; exit 1; }
           deadline="$(( $(date -u +%s) + RUN_TIMEOUT_MINUTES * 60 ))"
-          until [ "$(gh api "repos/${REPO}/actions/runs/${run_id}" --jq '.status')" = completed ]; do
+          while :; do
+            # scripts/ci/run_status.sh retries only a just-dispatched 404,
+            # briefly; any other error stops the step (set -e).
+            status="$(scripts/ci/run_status.sh "$REPO" "$run_id")"
+            [ "$status" = completed ] && break
             [ "$(date -u +%s)" -lt "$deadline" ] \
               || { echo "::error::apply-sleep run ${run_id} did not finish in ${RUN_TIMEOUT_MINUTES}m"; exit 1; }
             sleep 30

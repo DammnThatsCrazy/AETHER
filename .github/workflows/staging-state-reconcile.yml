@@ -1241,12 +1241,20 @@ jobs:
             app_id="$(terraform state show -no-color "$app_address" \
               | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
             test -n "$app_id" || { echo "::error::could not resolve Amplify app ID for ${app_key}"; exit 1; }
-            if aws amplify get-branch --app-id "$app_id" --branch-name staging >/dev/null 2>&1; then
+            # Only NotFoundException means "no live branch to import"; any other
+            # error (AccessDenied, throttling) must fail the reconcile, or the
+            # next apply hits "branch staging already exists" with no clue why.
+            if aws amplify get-branch --app-id "$app_id" --branch-name staging \
+              >/dev/null 2>"$RUNNER_TEMP/amplify-get-branch.err"; then
               terraform import -input=false \
                 -var-file=profiles/staging.tfvars \
                 -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
                 "$branch_address" "${app_id}/staging"
               echo "Imported live Amplify branch ${app_id}/staging at ${branch_address}; no AWS resource was modified."
+            elif ! grep -q "NotFoundException" "$RUNNER_TEMP/amplify-get-branch.err"; then
+              cat "$RUNNER_TEMP/amplify-get-branch.err" >&2
+              echo "::error::could not determine whether Amplify branch ${app_id}/staging exists"
+              exit 1
             fi
           done < <(grep -E 'aws_amplify_app\.frontend\["[^"]+"\]$' "$state_list_file")
           terraform state list >"$state_list_file"
