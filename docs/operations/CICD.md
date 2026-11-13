@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:6152e39488141635e8f881f354b909c2859fe4a597a25f8a27fc4b89dec6fb72"
+  ".github/workflows/": "sha256:af082e7c3bade1df4f00b5fce7183999550b7a2f4bc8bdcda6f081f76b1df688"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:528cc930bd8cedf9f347f4f0630e50e61bf1360bdf5beeb8088c90485519b142"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:c35befa025c62c9350a7151be85a0cd393c7f99b1e230712104bd04dd3262657"

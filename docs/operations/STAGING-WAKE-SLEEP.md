@@ -51,7 +51,7 @@ source_hashes:
   ".github/workflows/pilot-staging.yml": "sha256:e5f320aaac4e4d94e36346edb904e19870e291b743eace6368fd2a5758fbe643"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
-  ".github/workflows/staging-lifecycle.yml": "sha256:370c08ee22c2629d6eb9caa867c91340caea91fc19d3280fb610a9fc176d5b45"
+  ".github/workflows/staging-lifecycle.yml": "sha256:82547749f963ad5f6f1c9506bedd0477638468e2c4b7b49e81d71f417c446f6b"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
@@ -255,7 +255,7 @@ gh workflow run staging-lifecycle.yml \
 | `plan_run_id` | — | required for a standalone `validate` / `apply-wake` |
 | `plan_checksum` | — | required for a standalone `apply-wake` |
 | `max_awake_hours` | `4` | integer 1–8 (`MAX_AWAKE_HOURS_CAP`) |
-| `identity_provider_proof` | `required` | `required` or `deferred`. `deferred` skips only the provider-connection steps (connection bootstrap, live identity-continuity scenarios, proof-pack collection), writes `identity-provider-proof-deferred.json` with `counts_as_identity_continuity_proof: false`, and needs no `IDENTITY_STAGING_PROVIDER_*` secrets. Such a run is not identity-continuity proof. The pilot wrapper passes it through. |
+| `identity_provider_proof` | `required` | `required` or `deferred`. `deferred` skips only the provider-connection steps (connection bootstrap, live identity-continuity scenarios, the evidence capture that binds their run summary, proof-pack collection), writes `identity-provider-proof-deferred.json` with `counts_as_identity_continuity_proof: false`, and needs no `IDENTITY_STAGING_PROVIDER_*` secrets. Such a run is not identity-continuity proof. The pilot wrapper passes it through. |
 | `promote_timeout_minutes` | `180` | digits; bounds the wait for a dispatched promotion **including its environment approval** |
 
 `select-profile` validates every one of these before any job that costs money
