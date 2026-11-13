@@ -417,7 +417,7 @@ jobs:
           dispatch_and_wait() {
             local workflow="$1"
             shift
-            local dispatch_output run_id status conclusion deadline
+            local dispatch_output run_id status conclusion deadline visible_by
             # gh returns the created run URL when the dispatch is accepted.
             # Use that exact ID; a before/after list watermark can bind this
             # parent to an unrelated concurrent run on the same ref.
@@ -431,8 +431,19 @@ jobs:
             }
             DISPATCHED_RUN_ID="$run_id"
             deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+            # A just-created run can briefly read as Not Found; tolerate that
+            # only during a short visibility window, then fail as before.
+            visible_by="$(( $(date -u +%s) + 120 ))"
             while :; do
-              status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+              if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>&1)"; then
+                if [ "$(date -u +%s)" -lt "$visible_by" ]; then
+                  echo "${workflow} run ${run_id} not readable yet; retrying"
+                  sleep 10
+                  continue
+                fi
+                echo "::error::${workflow} run ${run_id} could not be read: ${status}"
+                exit 1
+              fi
               if [ "$status" = completed ]; then
                 conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
                 test "$conclusion" = success || {
