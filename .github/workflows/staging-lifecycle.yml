@@ -2137,7 +2137,12 @@ jobs:
           # Identity capture and scenario evidence use a short-lived admin key
           # scoped to this disposable rehearsal tenant. The workflow masks it
           # and deletes the tenant during unconditional cleanup.
-          identity_capture_key = create_key(mine_id, "Identity Evidence", ["admin"], "enterprise")
+          # A key permission of "admin" does not imply "read" (only the ADMIN
+          # role does), and the live identity UI reads /v1/capabilities, which
+          # requires read. Run 43452018367 got 403 there and every identity
+          # surface rendered as disabled.
+          identity_capture_key = create_key(
+              mine_id, "Identity Evidence", ["read", "write", "admin"], "enterprise")
           peer_id = create_tenant("Isolation", "pro")
           peer_key = create_key(peer_id, "Isolation", ["read", "write"], "pro")
           if mine_id == peer_id:
@@ -2570,6 +2575,7 @@ jobs:
               "skipped_steps": [
                   "Bootstrap run-scoped provider connection for identity reimport",
                   "Run live identity continuity scenarios",
+                  "Capture identity continuity evidence",
                   "Collect and validate identity continuity staging proof pack",
               ],
               "counts_as_identity_continuity_proof": False,
@@ -2650,7 +2656,12 @@ jobs:
           pnpm --filter @aether/aether exec playwright test --reporter=line src/test/e2e/identity-continuity-live.spec.ts
 
       - name: Capture identity continuity evidence
-        if: always() && env.IDENTITY_STAGING_CAPTURE_API_KEY != '' && env.ALB_DNS_NAME != ''
+        # The capture binds the live scenario run summary, which only exists
+        # when the identity provider proof runs (run 43452018367: "live
+        # scenario run summary is missing or invalid").
+        if: >-
+          always() && inputs.identity_provider_proof != 'deferred'
+          && env.IDENTITY_STAGING_CAPTURE_API_KEY != '' && env.ALB_DNS_NAME != ''
         env:
           AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
           AETHER_STAGING_CAPTURE_API_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}

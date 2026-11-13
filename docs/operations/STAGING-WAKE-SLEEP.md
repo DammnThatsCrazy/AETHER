@@ -255,7 +255,7 @@ gh workflow run staging-lifecycle.yml \
 | `plan_run_id` | — | required for a standalone `validate` / `apply-wake` |
 | `plan_checksum` | — | required for a standalone `apply-wake` |
 | `max_awake_hours` | `4` | integer 1–8 (`MAX_AWAKE_HOURS_CAP`) |
-| `identity_provider_proof` | `required` | `required` or `deferred`. `deferred` skips only the provider-connection steps (connection bootstrap, live identity-continuity scenarios, proof-pack collection), writes `identity-provider-proof-deferred.json` with `counts_as_identity_continuity_proof: false`, and needs no `IDENTITY_STAGING_PROVIDER_*` secrets. Such a run is not identity-continuity proof. The pilot wrapper passes it through. |
+| `identity_provider_proof` | `required` | `required` or `deferred`. `deferred` skips only the provider-connection steps (connection bootstrap, live identity-continuity scenarios, the evidence capture that binds their run summary, proof-pack collection), writes `identity-provider-proof-deferred.json` with `counts_as_identity_continuity_proof: false`, and needs no `IDENTITY_STAGING_PROVIDER_*` secrets. Such a run is not identity-continuity proof. The pilot wrapper passes it through. |
 | `promote_timeout_minutes` | `180` | digits; bounds the wait for a dispatched promotion **including its environment approval** |
 
 `select-profile` validates every one of these before any job that costs money

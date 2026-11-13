@@ -2258,8 +2258,12 @@ def test_identity_provider_proof_deferral_is_opt_in_narrow_and_recorded() -> Non
     assert "deferred" in preflight["Record deferred identity provider proof"]["if"]
 
     rehearse = {s.get("name"): s for s in _steps(doc, "rehearse")}
+    # The capture step binds the live scenario run summary, so it belongs to
+    # the deferred provider-proof chain (run 43452018367 failed it on the
+    # missing summary).
     for step in ("Bootstrap run-scoped provider connection for identity reimport",
                  "Run live identity continuity scenarios",
+                 "Capture identity continuity evidence",
                  "Collect and validate identity continuity staging proof pack"):
         assert gated in rehearse[step]["if"], step
     evidence = rehearse["Record deferred identity provider proof evidence"]
@@ -2271,6 +2275,7 @@ def test_identity_provider_proof_deferral_is_opt_in_narrow_and_recorded() -> Non
         "Record deferred identity provider proof evidence",
         "Bootstrap run-scoped provider connection for identity reimport",
         "Run live identity continuity scenarios",
+        "Capture identity continuity evidence",
         "Collect and validate identity continuity staging proof pack",
     ])
     assert '-f identity_provider_proof="$IDENTITY_PROVIDER_PROOF"' in _workflow("pilot-staging.yml")
@@ -2403,3 +2408,19 @@ def test_live_identity_ui_evidence_expects_the_routes_the_ui_calls():
                    (ROOT / "scripts/identity_continuity_staging_scenarios.py").read_text(encoding="utf-8")):
         assert "/v1/admin/identity/staging-proof" not in source
         assert "/v1/identity/staging-proof-capture" in source
+
+
+def test_identity_evidence_key_can_read_capabilities_and_capture_waits_for_scenarios():
+    # Run 43452018367: the evidence key held only "admin", which does not
+    # imply "read", so the live UI's GET /v1/capabilities answered 403 and the
+    # identity surfaces rendered as disabled. The capture step then failed on
+    # the scenario summary the deferred provider proof never produces.
+    steps = {s.get("name"): s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")}
+    bootstrap = steps["Bootstrap run-scoped rehearsal tenants and API keys"]["run"]
+    mint = re.search(r'identity_capture_key = create_key\(\s*mine_id, "Identity Evidence", (\[[^\]]*\]), "enterprise"\)', bootstrap)
+    assert mint, "identity evidence key mint changed shape"
+    assert {"read", "write", "admin"} <= set(re.findall(r'"(\w+)"', mint.group(1)))
+    capture = steps["Capture identity continuity evidence"]["if"]
+    assert "inputs.identity_provider_proof != 'deferred'" in capture
+    deferred = steps["Record deferred identity provider proof evidence"]["run"]
+    assert '"Capture identity continuity evidence"' in deferred
