@@ -57,6 +57,25 @@ describe('journey handoff', () => {
     expect(call.body.anonymous_id).toBeTruthy();
   });
 
+  it('declares the install site on both handoff calls', async () => {
+    // A publishable key without X-Aether-Site is refused with
+    // ROUTE_POLICY_SITE_UNDECLARED (Codex review on DammnThatsCrazy/AETHER#867).
+    const { calls } = installFetch((url) => ({ ok: true, json: { data: url.endsWith('/redeem')
+      ? LINK : { token: 'hnd_abc', handoff_id: 'hof_1' } } }));
+    aether.init({
+      apiKey: 'pk_site_key', siteId: 'site-42', endpoint: 'https://api.test',
+      advanced: { batchSize: 200, flushInterval: 60_000 },
+      modules: { autoDiscovery: false, performance: false, ecommerce: false },
+    });
+    aether.consent.grant(['analytics', 'marketing']);
+    aether.startJourney('checkout', { journeyId: 'journey-9' });
+    await aether.createJourneyHandoff();
+    await aether.redeemJourneyHandoff('hnd_abc');
+    const handoff = calls.filter((c) => c.url.includes('/sdk/journey-handoff'));
+    expect(handoff).toHaveLength(2);
+    for (const call of handoff) expect(call.headers['X-Aether-Site']).toBe('site-42');
+  });
+
   it('returns null without an active journey or on a refusal, never throwing', async () => {
     installFetch(() => ({ ok: false }));
     initialize();

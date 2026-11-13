@@ -294,6 +294,19 @@ class AetherSDK implements AetherSDKInterface {
    * flag off, unauthorised app). The token is shown once; hand it over out of band
    * (link, QR code, deep link) as `aether_handoff=<token>`.
    */
+  /**
+   * Headers for the handoff calls. They use the same site-bound key as
+   * ingestion, and the backend refuses a publishable key that declares no site,
+   * so X-Aether-Site must travel here exactly as it does on event batches.
+   */
+  private handoffHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': this.config!.apiKey,
+      ...(this.config?.siteId ? { 'X-Aether-Site': this.config.siteId } : {}),
+    };
+  }
+
   async createJourneyHandoff(opts?: { ttlSeconds?: number }): Promise<JourneyHandoffToken | null> {
     if (!this.config || !this.identityManager || !this.currentJourney) return null;
     const sessionId = this.sessionManager?.getSession()?.id;
@@ -302,7 +315,7 @@ class AetherSDK implements AetherSDKInterface {
     try {
       const res = await fetch(`${endpoint}/sdk/journey-handoff`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': this.config.apiKey },
+        headers: this.handoffHeaders(),
         body: JSON.stringify({
           journey_id: this.currentJourney.journeyId,
           session_id: sessionId,
@@ -335,7 +348,7 @@ class AetherSDK implements AetherSDKInterface {
     try {
       const res = await fetch(`${endpoint}/sdk/journey-handoff/redeem`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': this.config.apiKey },
+        headers: this.handoffHeaders(),
         body: JSON.stringify({
           token,
           session_id: sessionId,
