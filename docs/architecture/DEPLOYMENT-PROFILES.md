@@ -21,7 +21,7 @@ source_hashes:
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/main.tf": "sha256:4d67fde198b1c7c6cae30fbb32725cee6a89b894b29449e9ac1e380f6d26d3a5"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:5ffc32ab652489d712a16ec6a1828143d6eed7f12a4c114fa491bb95cbd1367d"
-  "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
+  "infra/aws/terraform/modules/aurora/main.tf": "sha256:c35befa025c62c9350a7151be85a0cd393c7f99b1e230712104bd04dd3262657"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
@@ -47,10 +47,12 @@ profile, so their alarms and dashboard widgets are selected by static root
 profile flags. They never use resource-derived cluster or table IDs to decide
 Terraform cardinality, which keeps state-import and plan-only runs resolvable
 before those resources exist in state.
-The shared Aurora module pins the standard provisioned Aurora PostgreSQL 16.8
-release while retaining the `aurora-postgresql16` parameter-group family. This
-is the currently available standard 16.x release in the staging account/region;
-the previously pinned 16.4 release is not offered there.
+The shared Aurora module pins the standard provisioned Aurora PostgreSQL 16.13
+release while retaining the `aurora-postgresql16` parameter-group family.
+Instances keep automatic minor-version upgrades on, so `engine_version` is
+ignored after creation: AWS moved staging from 16.8 to 16.13 on its own, and a
+reviewed apply must never try to return a cluster to an older minor release
+(AWS rejects that). Major-version upgrades remain explicit.
 
 Aether declares two deployment profiles: **`staging`** and **`production`**.
 `config/deployment_profiles.yaml` is the canonical matrix — backend selectors,

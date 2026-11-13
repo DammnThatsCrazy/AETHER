@@ -97,10 +97,12 @@ resource "aws_rds_cluster" "this" {
   cluster_identifier = "${lower(var.project)}-${var.environment}-aurora"
 
   engine = "aurora-postgresql"
-  # 16.4 is no longer offered as a standard provisioned Aurora PostgreSQL
-  # version in the staging account/region. Keep the major-family parameter
-  # group while pinning to the currently available 16.8 release.
-  engine_version = "16.8"
+  # Pin the minor release the live cluster runs. Instances keep
+  # auto_minor_version_upgrade on, so AWS moves the cluster forward on its own
+  # (staging went 16.8 -> 16.13); engine_version is ignored after creation so a
+  # reviewed apply never tries to "upgrade" back to an older minor release,
+  # which AWS rejects (InvalidParameterCombination). Major upgrades stay explicit.
+  engine_version = "16.13"
   engine_mode    = "provisioned"
 
   database_name   = var.db_name
@@ -151,6 +153,7 @@ resource "aws_rds_cluster" "this" {
   # Intentional retirement follows infra/aws/terraform/DECOMMISSION.md.
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [engine_version]
   }
 
   depends_on = [aws_rds_cluster_parameter_group.this]
