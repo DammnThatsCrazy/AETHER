@@ -2,6 +2,7 @@ import { createContext, useContext, useCallback, useReducer, useEffect, useRef, 
 import type { AuthState, AetherUser, AuthTokens } from '@aether-app/types';
 import type { HumanSessionGrant } from './grant';
 import { useAuth0 } from '@auth0/auth0-react';
+import { queryCache } from '@aether/ui';
 import { appHref } from '@aether-app/lib/app-path';
 
 /** Legacy reusable API-key credential (trust-plane flag off on the backend). */
@@ -287,6 +288,8 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }, []);
 
   const apiKeyLogin = useCallback(async (apiKey: string) => {
+    // A new credential may belong to another tenant: drop cached reads first.
+    queryCache.clear();
     sessionStorage.setItem(SESSION_KEY, apiKey);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_EXPIRY_KEY);
@@ -300,6 +303,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }, []);
 
   const sessionLogin = useCallback(async (session: HumanSessionGrant) => {
+    queryCache.clear();
     const expiresAt = sessionExpiryEpochS(session.absolute_expires_at);
     sessionStorage.setItem(SESSION_TOKEN_KEY, session.token);
     sessionStorage.setItem(SESSION_EXPIRY_KEY, new Date(expiresAt * 1000).toISOString());
@@ -316,6 +320,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
 
   const logout = useCallback(async () => {
     currentTokens = null;
+    queryCache.clear();
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_EXPIRY_KEY);

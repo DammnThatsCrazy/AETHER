@@ -67,10 +67,11 @@ export function useQuery<T>({
         setError(null);
       }
 
+      const generation = queryCache.generation;
       const promise = fetcherRef
         .current()
         .then((data) => {
-          queryCache.set(key, data);
+          queryCache.set(key, data, generation);
           if (mountedRef.current) {
             setIsLoading(false);
             setError(null);

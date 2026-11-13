@@ -7,7 +7,7 @@ import {
   SESSION_TOKEN_KEY,
   useAuth,
 } from '@aether-app/features/auth';
-import { ThemeProvider } from '@aether/ui';
+import { queryCache, ThemeProvider } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
@@ -124,4 +124,37 @@ describe('Auth boot flow (test environment)', () => {
     expect(sessionStorage.getItem(SESSION_TOKEN_KEY)).toBeNull();
     expect(profileMock).not.toHaveBeenCalled();
   });
+});
+
+describe('Auth identity switches clear cached reads', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    profileMock.mockReset();
+    profileMock.mockResolvedValue(BACKEND_PROFILE);
+  });
+
+  function SwitchConsumer({ action }: { action: 'apiKey' | 'logout' }) {
+    const auth = useAuth();
+    return (
+      <button
+        type="button"
+        onClick={() => { void (action === 'apiKey' ? auth.apiKeyLogin('ak_other_tenant_key') : auth.logout()); }}
+      >
+        switch
+      </button>
+    );
+  }
+
+  it.each(['apiKey', 'logout'] as const)(
+    '%s drops the previous tenant\'s cached data',
+    async (action) => {
+      // The query cache is module-global and its keys are not tenant-scoped,
+      // so a tenant switch without a reload used to show the previous
+      // tenant's communications (Codex review on DammnThatsCrazy/AETHER#867).
+      queryCache.set('aether:comms:index', ['previous-tenant-campaign']);
+      renderWithProviders(<SwitchConsumer action={action} />);
+      (await screen.findByText('switch')).click();
+      await vi.waitFor(() => expect(queryCache.get('aether:comms:index')).toBeNull());
+    },
+  );
 });
