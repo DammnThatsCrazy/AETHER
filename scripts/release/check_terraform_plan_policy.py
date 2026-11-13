@@ -953,6 +953,22 @@ def check_alarm_names(
                 "no alarms for absent backends")
 
 
+def plan_bool(value: Any) -> bool:
+    """A root variable's boolean value as recorded in plan JSON.
+
+    Terraform records values supplied through ``TF_VAR_*`` or ``-var`` in their
+    raw string form, so a disabled flag arrives as ``"false"``, and plain
+    ``bool("false")`` is ``True``. Only a real ``true`` or the string ``"true"``
+    enables; every other value (including ``"false"`` and a redacted marker)
+    does not.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return False
+
+
 def check_service_cardinality(
     r: Reporter, results: list[dict[str, Any]], profile: str,
     runtime: dict[str, Any], resources: list[dict[str, Any]],
@@ -993,8 +1009,8 @@ def check_service_cardinality(
 
     remote_ml = bool(entry.get("remote_ml"))
     variables = plan.get("variables") or {}
-    access_mcp_enabled = bool(
-        ((variables.get("enable_access_mcp") or {}).get("value"))
+    access_mcp_enabled = plan_bool(
+        (variables.get("enable_access_mcp") or {}).get("value")
     )
     expected_access_mcp_address = "module.access_mcp[0].aws_ecs_service.this"
     access_mcp_addresses = sorted(
@@ -1653,6 +1669,13 @@ PILOT_AUTH0_MUTABLE_ADDRESSES = frozenset({
     "module.auth0.auth0_client.aether",
     "module.auth0.auth0_client_grant.aether_api",
     "module.auth0.auth0_connection_client.aether_db",
+    # The Aether CLI is part of the Aether Auth0 path (owner-approved): its
+    # public client, credentials, API grant and DB connection may be created or
+    # updated. Deleting or replacing any of them stays a destructive violation.
+    "module.auth0.auth0_client.aether_cli",
+    "module.auth0.auth0_client_credentials.aether_cli_public",
+    "module.auth0.auth0_client_grant.aether_cli_api",
+    "module.auth0.auth0_connection_client.aether_cli_db",
 })
 PILOT_AUTH0_STATE_ONLY_REMOVALS = frozenset({
     "module.auth0.auth0_connection_clients.aether_db",

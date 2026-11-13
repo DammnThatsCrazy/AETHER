@@ -2223,3 +2223,14 @@ def test_identity_key_mount_shape_reaches_every_rehearsal_contract_check() -> No
     deploy_inputs = (_workflow_yaml("deploy.yml").get(True) or _workflow_yaml("deploy.yml")["on"])[
         "workflow_dispatch"]["inputs"]
     assert deploy_inputs["identity_verification_secrets_enabled"]["default"] == "true"
+
+
+def test_pilot_wrapper_tolerates_a_briefly_unreadable_dispatched_run() -> None:
+    """GitHub can answer Not Found for a run it just created; the wrapper must
+    retry within a bounded window instead of failing a healthy rehearsal
+    (pilot run 43314557878), and still fail once that window has passed."""
+    text = _workflow("pilot-staging.yml")
+    helper = text[text.index("dispatch_and_wait() {"):text.index("reconcile_pilot_price_secret_state() {")]
+    assert 'visible_by="$(( $(date -u +%s) + 120 ))"' in helper
+    assert "not readable yet; retrying" in helper
+    assert "could not be read" in helper and "exit 1" in helper

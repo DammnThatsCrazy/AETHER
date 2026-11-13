@@ -48,7 +48,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:fbbe02229b3a08944d225aa21dc8c4bdf7dde1d558dfbc652b2d4ebafb5e565a"
-  ".github/workflows/pilot-staging.yml": "sha256:2f5e41dd0083fe254bceb3fb99a2cb649cc2473ee6e676c47ed89948a4f7e9db"
+  ".github/workflows/pilot-staging.yml": "sha256:e5f320aaac4e4d94e36346edb904e19870e291b743eace6368fd2a5758fbe643"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
   ".github/workflows/staging-lifecycle.yml": "sha256:18bebda54135c06765b1d7a9c792f2cc7c90b0758fd253ec314986e0823755bf"
@@ -129,7 +129,9 @@ because the AWS Terraform provider marks changes to
 `aws_ecs_service.capacity_provider_strategy` as replacement-only. Pilot plan
 policy fails before apply if an ECS service or scaling target would be
 replaced, scaling-target tags would be removed, an Aether Auth0 resource would
-be deleted, or a deferred Auth0 surface would be mutated.
+be deleted, or a deferred Auth0 surface would be mutated. The Aether Auth0 path
+covers the web client and the `aether_cli` client, credentials, grant and DB
+connection, which a pilot plan may create or update.
 
 The floor and pilot's stable strategy are not decoration. The `api` service's
 `desired_count` is `ignore_changes`d in `modules/ecs` so an apply cannot fight
