@@ -187,3 +187,23 @@ def test_facts_order_by_instant_not_timestamp_text():
     assert not mem["m1"]["anomalies"], mem["m1"]["anomalies"]
     assert build_behavior_model(list(reversed(fs)), "a") == build_behavior_model(fs, "a")
     assert watermark(fs).startswith("2026-10-22T10:00:00.2")
+
+
+def test_one_retry_attempt_is_counted_once_across_its_lifecycle_events():
+    """Codex review on #867: failed -> agent_tool_retried -> invoked ->
+    succeeded counted three retries (retry_per_failure 3.0) instead of one."""
+    explicit = facts(
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "failed"}),
+        ("agent_tool_retried", "a", {"taskId": "t", "toolName": "A"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "invoked"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "succeeded"}),
+    )
+    [ep] = failure_resolution(explicit)
+    assert [r["basis"] for r in ep["retries"]] == ["observed"] and ep["resolved"]
+    derived = facts(
+        ("agent_tool_invocation_observed", "a", {"taskId": "u", "toolName": "A", "status": "failed"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "u", "toolName": "A", "status": "invoked"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "u", "toolName": "A", "status": "succeeded"}),
+    )
+    [ep] = failure_resolution(derived)
+    assert [r["basis"] for r in ep["retries"]] == ["derived"]

@@ -154,9 +154,12 @@ class CanonicalEvent:
     timestamp: str
     properties: dict[str, Any]
 
-    def to_batch_event(self) -> dict[str, Any]:
-        return {"type": self.type, "messageId": self.message_id,
-                "timestamp": self.timestamp, "properties": self.properties}
+    def to_batch_event(self, *, session_id: str, anonymous_id: str) -> dict[str, Any]:
+        """A ``BaseEvent``: ``id``, ``sessionId`` and ``anonymousId`` are required
+        and unknown keys are rejected, so ``message_id`` is sent as ``id``."""
+        return {"id": self.message_id, "type": self.type, "timestamp": self.timestamp,
+                "sessionId": session_id, "anonymousId": anonymous_id,
+                "properties": self.properties}
 
 
 def _message_id(adapter: str, source_id: str, canonical_type: str, phase: Optional[str] = None) -> str:
@@ -284,8 +287,20 @@ ADAPTERS: dict[str, Callable[[dict[str, Any]], list[CanonicalEvent]]] = {
 }
 
 
-def map_runtime_record(adapter_class: str, record: dict[str, Any]) -> list[dict[str, Any]]:
-    """Map one native runtime record to canonical ``/v1/batch`` events."""
+def map_runtime_record(
+    adapter_class: str, record: dict[str, Any], *,
+    session_id: Optional[str] = None, anonymous_id: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """Map one native runtime record to canonical ``/v1/batch`` events.
+
+    The batch contract requires a session and an anonymous identity on every
+    event. They come from the keyword arguments or, failing that, the record's
+    ``sessionId`` / ``anonymousId``; a record with neither is rejected."""
     if adapter_class not in ADAPTERS:
         raise AdapterError(f"unknown adapter class {adapter_class!r}")
-    return [e.to_batch_event() for e in ADAPTERS[adapter_class](record)]
+    session = session_id or record.get("sessionId")
+    anonymous = anonymous_id or record.get("anonymousId")
+    if not session or not anonymous:
+        raise AdapterError("a runtime record needs a session id and an anonymous id for /v1/batch")
+    return [e.to_batch_event(session_id=str(session), anonymous_id=str(anonymous))
+            for e in ADAPTERS[adapter_class](record)]
