@@ -21,7 +21,7 @@ source_hashes:
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/main.tf": "sha256:b6f5669c78ac87a35f01642cf0840a96293c6bd836f4f3ecc5079ecec15483d0"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:5ffc32ab652489d712a16ec6a1828143d6eed7f12a4c114fa491bb95cbd1367d"
-  "infra/aws/terraform/modules/aurora/main.tf": "sha256:c35befa025c62c9350a7151be85a0cd393c7f99b1e230712104bd04dd3262657"
+  "infra/aws/terraform/modules/aurora/main.tf": "sha256:327097c1efc7b214e8b56ead967d30dbab9376854840c20a2d59372660f2b6d5"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
