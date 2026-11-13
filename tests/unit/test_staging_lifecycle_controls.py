@@ -2144,7 +2144,54 @@ def test_rehearsal_primary_tenant_is_entitled_to_the_capabilities_it_checks():
     )["run"]
     assert 'create_tenant("Primary", "enterprise")' in run
     assert '], "enterprise")' in run
-    assert 'create_tenant("Isolation", "free")' in run
+
+
+def test_rehearsal_isolation_peer_plan_grants_identity_resolution():
+    # Rehearsal run 43357241871 got 403 from POST /v1/identity/resolve: the
+    # peer was a free (alpha) tenant, and the Unification service gives alpha
+    # no access. Check the peer's key tier against the real service catalog.
+    run = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")
+        if s.get("name") == "Bootstrap run-scoped rehearsal tenants and API keys"
+    )["run"]
+    assert 'call("POST", "/v1/identity/resolve"' in run
+    tenant = re.search(r'create_tenant\("Isolation", "(\w+)"\)', run)
+    key = re.search(r'create_key\(peer_id, "Isolation", \[[^\]]*\], "(\w+)"\)', run)
+    assert tenant and key, "isolation peer bootstrap shape changed"
+    assert tenant.group(1) == key.group(1)
+    backend = str(ROOT / "services" / "api")
+    original_path, original_mods = list(sys.path), set(sys.modules)
+    sys.path.insert(0, backend)
+    try:
+        from shared.auth.auth import APIKeyTier, legacy_tier_to_plan
+        from shared.plans.service_catalog import check_plan_access, resolve_service
+
+        service = resolve_service("/v1/identity/resolve")
+        assert service is not None
+        plan = legacy_tier_to_plan(APIKeyTier(key.group(1)))
+        assert check_plan_access(plan, service) is not None, (
+            f"{key.group(1)} ({plan.value}) cannot call /v1/identity/resolve"
+        )
+    finally:
+        sys.path[:] = original_path
+        for name in set(sys.modules) - original_mods:
+            sys.modules.pop(name, None)
+
+
+def test_rehearsal_playwright_steps_run_only_their_spec():
+    # `pnpm run e2e -- --reporter=line <spec>` forwarded a literal `--`;
+    # Playwright then ran all 32 tests against the live UI. The fixture run
+    # also needs @aether/shared built for Vite to resolve it.
+    steps = {s.get("name"): s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")}
+    deps = next(s for s in steps.values() if s.get("id") == "identity_ui_dependencies")["run"]
+    assert "pnpm --filter '@aether/shared' run build" in deps
+    for name, spec in (
+        ("Run identity UI evidence with fixture API", "identity-continuity.spec.ts"),
+        ("Run authenticated live staging identity UI evidence", "identity-continuity-live.spec.ts"),
+    ):
+        run = steps[name]["run"]
+        assert "run e2e --" not in run
+        assert f"exec playwright test --reporter=line src/test/e2e/{spec}" in run
 
 
 def test_rehearsal_ingestion_probes_fail_fast_on_per_event_rejection():
