@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/": "sha256:a928f782d01f2b695684f82b53c8da66674cc936d256cacf8570662484f4b3bd"
   "services/api/governance/": "sha256:b287f008d8982cb66b93e37f5654a5cbcd808c6fcee3d811ed81bb1e9bcab7ca"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
-  "services/api/identity/": "sha256:d4def8830d93d598443b92351bbe0731c9611af49ee04703a95ed951f5f42d12"
+  "services/api/identity/": "sha256:b824dfd6dfc350db01abb573a782cc00dbaaed51733edf0ede37a9d12ab311d7"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
   "services/api/intelligence/": "sha256:20ac2f4e60fa1495024aa597385d3dec976c090eb073c7e7317f8f308170a3a9"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
@@ -1699,7 +1699,7 @@ Core identity resolution and entity management endpoints.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. The route is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`) and is blocked unless the server finds an identity-link consent receipt for the authenticated tenant and request `anonymous_id`; a caller-supplied consent snapshot is not authorization. A `user_id` sent with a matching `anonymous_id` may merge deterministically (`authenticated_user_binding`) when auto-merge is enabled; otherwise it is a review candidate when manual review is enabled, or blocked |
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. The route is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`; staging tasks set it on) and, when disabled, returns `200` with `decision: blocked` and `blocked_reason: identity_resolution_disabled` and is blocked unless the server finds an identity-link consent receipt for the authenticated tenant and request `anonymous_id`; a caller-supplied consent snapshot is not authorization. A `user_id` sent with a matching `anonymous_id` may merge deterministically (`authenticated_user_binding`) when auto-merge is enabled; otherwise it is a review candidate when manual review is enabled, or blocked |
 | GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers. The entity, alias, graph and audit reads, `/conflicts` and the legacy `/profiles/{user_id}` reads require the `read` permission |
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
