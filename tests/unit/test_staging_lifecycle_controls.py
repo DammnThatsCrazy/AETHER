@@ -2424,3 +2424,24 @@ def test_identity_evidence_key_can_read_capabilities_and_capture_waits_for_scena
     assert "inputs.identity_provider_proof != 'deferred'" in capture
     deferred = steps["Record deferred identity provider proof evidence"]["run"]
     assert '"Capture identity continuity evidence"' in deferred
+
+
+def test_every_captured_workflow_dispatch_reports_its_failure():
+    # Run 43462809460: `dispatch_output="$(gh workflow run ... 2>&1)"` failed,
+    # set -e ended the step inside the substitution, and the captured gh error
+    # was never printed. Every captured dispatch must print it and stop. It
+    # must not retry: a retry after a server-side create could duplicate an
+    # apply.
+    for name in (LIFECYCLE, "pilot-staging.yml", "staging-business-hours.yml"):
+        text = _workflow(name)
+        bare = re.findall(r'^\s+\w+="\$\(gh workflow run', text, re.M)
+        assert not bare, f"{name}: unguarded dispatch {bare}"
+        guarded = re.findall(
+            r'if ! (\w+)="\$\(gh workflow run .*? 2>&1\)"; then\n'
+            r'\s+printf \'%s\\n\' "\$\1" >&2\n'
+            r'\s+echo "::error::workflow dispatch failed; see the gh output above" >&2\n'
+            r'\s+(?:exit|return) 1\n',
+            text, re.S,
+        )
+        assert guarded, f"{name}: no guarded dispatch found"
+        assert len(guarded) == text.count("gh workflow run "), name
