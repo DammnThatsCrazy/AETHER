@@ -18,7 +18,7 @@ from intelligence.agent_behavior.activity import (
     failure_resolution, information_inputs, memory_lifecycle, tool_entities,
 )
 from intelligence.agent_behavior.decisions import project_decisions
-from intelligence.agent_behavior.facts import AgentFact, watermark
+from intelligence.agent_behavior.facts import AgentFact, watermark, fact_order
 from intelligence.agent_behavior.taxonomy import DOTTED_TO_CANONICAL
 
 MODEL = "agent_behavior_model"
@@ -265,7 +265,7 @@ def infer_preferences(facts: list[AgentFact], decisions: list[dict[str, Any]]) -
 def build_behavior_model(facts: Iterable[AgentFact], agent_ref: str, *,
                          identity: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """The rebuildable behavior model for one agent."""
-    all_facts = sorted(facts, key=lambda f: (f.occurred_at, f.event_id))
+    all_facts = sorted(facts, key=fact_order)
     mine = [f for f in all_facts if f.agent_ref == agent_ref]
     decisions = [d for d in project_decisions(mine)["decisions"]
                  if d["decision_actor"].get("value") == agent_ref]

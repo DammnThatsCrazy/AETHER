@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import Any, Iterable, Optional
 
 from intelligence.agent_behavior import contracts as c
-from intelligence.agent_behavior.facts import AgentFact, watermark
+from intelligence.agent_behavior.facts import AgentFact, watermark, fact_order
 from intelligence.agent_behavior.objectives import constraints_for, reconstruct_objectives
 from intelligence.agent_behavior.taxonomy import ECONOMIC_EVENTS, EXECUTION_EVENTS, TOOL_EVENTS
 
@@ -195,7 +195,7 @@ def _hash(payload: dict[str, Any]) -> str:
 
 def build_envelope(decision_id: str, group: list[AgentFact], all_facts: list[AgentFact], *,
                    now: Optional[str] = None, timeout: timedelta = DEFAULT_TIMEOUT) -> DecisionEnvelope:
-    group = sorted(group, key=lambda f: (f.occurred_at, f.event_id))
+    group = sorted(group, key=fact_order)
     tenant = group[0].tenant_id
     actors = [f.agent_ref for f in group if f.event_type == "agent_action_selected" and f.agent_ref] or \
              [f.agent_ref for f in group if f.agent_ref]
@@ -277,7 +277,7 @@ def mutate_closed(env: DecisionEnvelope, **changes: Any) -> DecisionEnvelope:
 # --- projector (WO-052) -----------------------------------------------------------------
 
 def project_decisions(facts: Iterable[AgentFact], *, now: Optional[str] = None) -> dict[str, Any]:
-    facts = sorted(facts, key=lambda f: (f.occurred_at, f.event_id))
+    facts = sorted(facts, key=fact_order)
     envelopes = [build_envelope(did, group, facts, now=now)
                  for did, group in sorted(group_decisions(facts).items())]
     return {

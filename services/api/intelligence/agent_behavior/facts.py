@@ -9,9 +9,12 @@ every field is what the source reported, kept as a reference.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Optional
+
+from shared.temporal.instant import MIN_INSTANT, coerce_utc_lenient
 
 _REF_MAX = 256
 
@@ -192,13 +195,27 @@ def fact_from_row(row: dict[str, Any]) -> AgentFact:
     )
 
 
+@lru_cache(maxsize=65536)
+def _instant(occurred_at: str) -> datetime:
+    return coerce_utc_lenient(occurred_at) or MIN_INSTANT
+
+
+def fact_order(f: "AgentFact") -> tuple[datetime, str]:
+    """Chronological sort key: the parsed UTC instant, then the event id.
+
+    Timestamp text does not sort chronologically: ``10:00:00Z`` sorts after
+    ``10:00:00.200000Z`` and offsets compare by digits, which reversed
+    lifecycles (memory expiry before retrieval) and raised false signals."""
+    return (_instant(f.occurred_at), f.event_id)
+
+
 def normalize_rows(rows: Iterable[dict[str, Any]], tenant_id: str) -> list[AgentFact]:
     """Tenant-filtered facts in deterministic occurrence order."""
     facts = [fact_from_row(r) for r in rows if r.get("tenant_id") == tenant_id]
     facts = [f for f in facts if f.event_id and f.event_type]
     seen: set[str] = set()
     unique: list[AgentFact] = []
-    for f in sorted(facts, key=lambda f: (f.occurred_at, f.event_id)):
+    for f in sorted(facts, key=fact_order):
         if f.event_id in seen:
             continue
         seen.add(f.event_id)
@@ -207,8 +224,5 @@ def normalize_rows(rows: Iterable[dict[str, Any]], tenant_id: str) -> list[Agent
 
 
 def watermark(facts: Iterable[AgentFact]) -> Optional[str]:
-    last = None
-    for f in facts:
-        key = f"{f.occurred_at}|{f.event_id}"
-        last = key if last is None or key > last else last
-    return last
+    latest = max(facts, key=fact_order, default=None)
+    return None if latest is None else f"{latest.occurred_at}|{latest.event_id}"

@@ -80,8 +80,10 @@ async def _load_spawn_edges(analytics: Any, tenant_id: str) -> tuple[list[dict[s
 
 def _descendants(spawn_facts: list[Any], root: str, limit: int) -> tuple[list[str], bool]:
     """Agents spawned (transitively) by ``root``, breadth-first, at most ``limit``."""
+    from intelligence.agent_behavior.facts import fact_order
+
     children: dict[str, list[str]] = {}
-    for f in sorted(spawn_facts, key=lambda f: (f.occurred_at, f.event_id)):
+    for f in sorted(spawn_facts, key=fact_order):
         if f.event_type == "agent_subagent_spawned" and f.agent_ref and f.child_agent_ref:
             kids = children.setdefault(f.agent_ref, [])
             if f.child_agent_ref not in kids:

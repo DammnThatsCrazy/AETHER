@@ -164,3 +164,26 @@ def test_sdk_observed_tool_statuses_are_normalized_at_the_fact_boundary():
     fs = facts(*[("agent_tool_invocation_observed", "a", {"toolName": "A", "status": s})
                  for s in ("failed_observed", "succeeded_observed", "denied_observed")])
     assert [f.status for f in fs] == ["failed", "succeeded", "denied"]
+
+
+def test_facts_order_by_instant_not_timestamp_text():
+    # Codex review on #867: as text, "10:00:00Z" sorts after
+    # "10:00:00.200000Z", so a retrieval followed 200 ms later by expiry was
+    # processed as expiry-then-retrieval and counted as stale use.
+    from intelligence.agent_behavior.facts import watermark
+
+    def at(i, etype, ts):
+        return AgentExecutionProjector().project({
+            "messageId": f"ord-{i}", "type": etype, "tenantId": T, "timestamp": ts,
+            "properties": {"agentId": "a", "memoryId": "m1"}}).rows
+
+    rows = (at(0, "agent_memory_created", "2026-10-22T09:59:59Z")
+            + at(1, "agent_memory_retrieved", "2026-10-22T10:00:00Z")
+            + at(2, "agent_memory_expired", "2026-10-22T10:00:00.200000Z"))
+    fs = normalize_rows(rows, T)
+    assert [f.event_type for f in fs] == [
+        "agent_memory_created", "agent_memory_retrieved", "agent_memory_expired"]
+    mem = {m["memory_ref"]: m for m in memory_lifecycle(fs)}
+    assert not mem["m1"]["anomalies"], mem["m1"]["anomalies"]
+    assert build_behavior_model(list(reversed(fs)), "a") == build_behavior_model(fs, "a")
+    assert watermark(fs).startswith("2026-10-22T10:00:00.2")
