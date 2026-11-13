@@ -1645,12 +1645,14 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install identity UI E2E workspace dependencies
         id: identity_ui_dependencies
-        # The Vite dev server resolves @aether/shared through its built dist
-        # entry, so the workspace package must be compiled before Playwright.
+        # Vite resolves the app's workspace packages through their built dist
+        # entries, and the proof reporter compiles against proof-runner's
+        # declarations, so every one must be built before Playwright runs.
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile --filter '@aether/aether...' --filter '@aether/proof-reporting...'
-          pnpm --filter '@aether/shared' run build
+          pnpm --filter '@aether/shared' --filter '@aether/ui' --filter '@aether/web' \
+            --filter '@aether/proof-runner' run --if-present build
       - name: Install Playwright Chromium for identity UI evidence
         id: identity_ui_browser
         run: pnpm --filter @aether/aether exec playwright install --with-deps chromium
