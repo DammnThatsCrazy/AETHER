@@ -2186,15 +2186,29 @@ def test_rehearsal_playwright_steps_run_only_their_spec():
     deps = next(s for s in steps.values() if s.get("id") == "identity_ui_dependencies")["run"]
     # Run 43365158651: Vite then failed on @aether/web, and the reporter on
     # @aether/proof-runner. Every workspace package they import is built.
-    # Each filter carries `...` so transitive workspace dependencies build too
-    # (proof-runner imports proof-contracts and proof-fixtures dist entries).
-    build = deps.split("pnpm install", 1)[1].split("\n", 1)[1]
-    for package in ("@aether/ui", "@aether/web", "@aether/proof-runner"):
-        assert f"--filter '{package}...'" in build
-    assert "run --if-present build" in build
-    runner = json.loads((ROOT / "tests/e2e/proof/packages/runner/package.json").read_text())
-    for dependency in ("@aether/proof-contracts", "@aether/proof-fixtures"):
-        assert dependency in {**runner.get("dependencies", {}), **runner.get("devDependencies", {})}
+    # Run 43380069776: the CI pnpm ignored `<pkg>...` for these "*" workspace
+    # links. Every package is installed by name, and each build layer must
+    # come after the layers its workspace dependencies live in.
+    install, _, builds = deps.partition("pnpm --filter '@aether/shared' run build")
+    assert builds, "the @aether/shared build no longer runs first"
+    layers = [["@aether/shared"]] + [
+        re.findall(r"--filter '([^']+)'", line)
+        for line in builds.splitlines() if "run build" in line
+    ]
+    position = {name: index for index, layer in enumerate(layers) for name in layer}
+    manifests = {
+        "@aether/web": "packages/sdk/web",
+        "@aether/proof-contracts": "tests/e2e/proof/packages/contracts",
+        "@aether/proof-fixtures": "tests/e2e/proof/packages/fixtures",
+        "@aether/proof-runner": "tests/e2e/proof/packages/runner",
+    }
+    for name, directory in manifests.items():
+        assert name in position, f"{name} is not built"
+        assert f"--filter '{name}'" in install, f"{name} is not installed"
+        manifest = json.loads((ROOT / directory / "package.json").read_text())
+        for dependency in {**manifest.get("dependencies", {}), **manifest.get("devDependencies", {})}:
+            if dependency in position:
+                assert position[dependency] < position[name], f"{name} builds before {dependency}"
     for name, spec in (
         ("Run identity UI evidence with fixture API", "identity-continuity.spec.ts"),
         ("Run authenticated live staging identity UI evidence", "identity-continuity-live.spec.ts"),
