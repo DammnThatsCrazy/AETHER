@@ -144,7 +144,13 @@ jobs:
           dispatch() {
             # Prints the created run ID; refuses an ambiguous correlation.
             local output run_id
-            output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging "$@" 2>&1)"
+            # A failed dispatch must say why: inside a captured $(...) set -e
+            # exits before the error is printed (run 43462809460 ended silently).
+            if ! output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging "$@" 2>&1)"; then
+              printf '%s\n' "$output" >&2
+              echo "::error::workflow dispatch failed; see the gh output above" >&2
+              return 1
+            fi
             printf '%s\n' "$output" >&2
             run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
             test -n "$run_id" || { echo '::error::lifecycle dispatch did not return its run URL' >&2; return 1; }
@@ -205,8 +211,14 @@ jobs:
         if: steps.choose.outputs.transition == 'sleep'
         run: |
           set -euo pipefail
-          output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging \
-            -f action=apply-sleep -f deployment_lane="$DEPLOYMENT_LANE" 2>&1)"
+          # A failed dispatch must say why: inside a captured $(...) set -e
+          # exits before the error is printed (run 43462809460 ended silently).
+          if ! output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging \
+            -f action=apply-sleep -f deployment_lane="$DEPLOYMENT_LANE" 2>&1)"; then
+            printf '%s\n' "$output" >&2
+            echo "::error::workflow dispatch failed; see the gh output above" >&2
+            exit 1
+          fi
           printf '%s\n' "$output"
           run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
           test -n "$run_id" || { echo '::error::lifecycle dispatch did not return its run URL'; exit 1; }

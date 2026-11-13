@@ -421,7 +421,13 @@ jobs:
             # gh returns the created run URL when the dispatch is accepted.
             # Use that exact ID; a before/after list watermark can bind this
             # parent to an unrelated concurrent run on the same ref.
-            dispatch_output="$(gh workflow run "$workflow" --ref "$REF_NAME" "$@" 2>&1)"
+            # A failed dispatch must say why: inside a captured $(...) set -e
+            # exits before the error is printed (run 43462809460 ended silently).
+            if ! dispatch_output="$(gh workflow run "$workflow" --ref "$REF_NAME" "$@" 2>&1)"; then
+              printf '%s\n' "$dispatch_output" >&2
+              echo "::error::workflow dispatch failed; see the gh output above" >&2
+              exit 1
+            fi
             printf '%s\n' "$dispatch_output"
             run_id="$(printf '%s\n' "$dispatch_output" \
               | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
