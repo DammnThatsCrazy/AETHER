@@ -1651,8 +1651,11 @@ jobs:
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile --filter '@aether/aether...' --filter '@aether/proof-reporting...'
-          pnpm --filter '@aether/shared' --filter '@aether/ui' --filter '@aether/web' \
-            --filter '@aether/proof-runner' run --if-present build
+          # `<pkg>...` selects the package and all its workspace dependencies
+          # (proof-runner needs proof-contracts and proof-fixtures built too),
+          # and pnpm runs the builds in dependency order.
+          pnpm --filter '@aether/ui...' --filter '@aether/web...' \
+            --filter '@aether/proof-runner...' run --if-present build
       - name: Install Playwright Chromium for identity UI evidence
         id: identity_ui_browser
         run: pnpm --filter @aether/aether exec playwright install --with-deps chromium
