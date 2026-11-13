@@ -46,7 +46,7 @@ source_hashes:
   "services/api/connectors/managed_integrations/": "sha256:ce5f319f27faa25eced6bedd896c1f40d4b99581383c0e7b5ea30602e7dde195"
   "services/api/governance/kyber/access/": "sha256:23b63f5b1882f5b966c9e23f638fdcd140e4271c38241e58ecfbfb5d53f76e25"
   "services/api/ingestion/sdk_distribution/control_plane.py": "sha256:d49325a1264f40d124a17722f1742b6a08a8342cd93b9ff0b3d0bcf22b73d17b"
-  "services/api/main.py": "sha256:e6dc26fdca74faf4ae6c7b43feb3ff53187739986eb4399fb1033bd7e263ab79"
+  "services/api/main.py": "sha256:6b1648a545d1fb615724a09f25537f2241ad3f5e7187b1bc78f5e1601a095791"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)
