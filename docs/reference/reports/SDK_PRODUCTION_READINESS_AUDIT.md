@@ -12,7 +12,7 @@ source_hashes:
   "docs/reference/source-of-truth/PLATFORM_PARITY.md": "sha256:abb0660e91963d129b1f5d4a5b472c24bfb55001cd336952b709fdf9dbf13771"
   "packages/sdk/web/src/core/event-queue.ts": "sha256:839b25762ec01f03c4f5faa12c73fbfd31d41551dde584fa32c46b7305c6c8c1"
   "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:b2f66953e7f1975c22fd64fca62834321c5c83d5602ddbd5dbb9c4cab30bdf03"
-  "packages/sdk/web/src/index.ts": "sha256:1ea4b4df56cacf5fd355f5f6edca6dca9eeafac7b5ab4a2341abd7ca18bc152a"
+  "packages/sdk/web/src/index.ts": "sha256:40b7cd21b1d10ed068e057f249964ceb67fd8f0be088df67205eea50ae96e8d7"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"

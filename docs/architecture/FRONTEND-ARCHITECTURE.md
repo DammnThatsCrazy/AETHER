@@ -45,9 +45,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:87fb2750ef5b1ff1f6c80ab7bdb30c9bfb70909d47cd1ffba951e3a34362a527"
+  "apps/aether-web/src/": "sha256:ddfa6900e9359e10d949566652b9ef54ab069007c6d9e29f63bb647f19c68096"
   "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
-  "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
+  "packages/ui/core/src/": "sha256:a99ef2eb865c796d1732f6dd9d81f82d3ce614e4f3d272daa6f41baf673a6c0b"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -274,6 +274,12 @@ Component tests follow the same boundary: they wait for a response-backed
 populated or successful-empty value before asserting page content. Shell
 headings can render during the loading state and are not proof that the data
 request completed.
+
+The `@aether/ui` query cache is module-global and its keys are not
+tenant-scoped, so the Aether auth provider clears it on every API-key login,
+session login and logout. Responses that were in flight before the switch are
+dropped by the cache's generation counter, so one tenant's reads never render
+for another.
 
 Demo records are created only by the versioned backend seed engine. Normal
 frontend/backend startup never seeds, and demo disclosure is driven by backend
