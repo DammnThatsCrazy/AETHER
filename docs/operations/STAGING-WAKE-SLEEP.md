@@ -443,6 +443,14 @@ guard still scales staging to zero if a sleep is missed.
 For a demo outside these hours, dispatch the workflow with
 `transition=wake`, and later `transition=sleep`.
 
+**Identity-key mounts on the schedule.** Scheduled wakes and sleeps pass
+`identity_verification_secrets_enabled` from the repository variable
+`STAGING_IDENTITY_VERIFICATION_SECRETS_ENABLED`, which defaults to `false`. The
+two identity-verification key secrets stay empty until first-time setup
+populates them, and a plan with mounts fails the key-version check, so the
+schedule could otherwise neither wake nor sleep cleanly. Set the variable to
+`true` once both keys have versions.
+
 **Holding the scheduled wake.** While the repository variable
 `STAGING_WAKE_HOLD` is `true`, the 08:15 timer skips its wake and reports a
 notice, so a new release on `staging` is not deployed to staging by the schedule.
@@ -654,8 +662,8 @@ Steps, in order, with what each proves:
    gamma-gated) and a `pro` isolation peer with `read` and `write` only. The
    peer is `pro` because it resolves an identity of its own for the
    cross-tenant entity check, and `/v1/identity/*` requires beta or above.
-   Identity resolution itself is on because staging tasks carry the identity
-   block of `config/release/feature_flags/staging.yaml` as task environment.
+   Identity resolution itself is on because staging tasks set every flag in
+   `runtime.flags.task_environment` of `config/release/feature_flags/staging.yaml`.
    The raw keys are masked and held only in the runner environment; they are
    never committed or uploaded. Their `tenant_id` values must differ. The
    primary tenant writes a consent record for a unique subject and reads it

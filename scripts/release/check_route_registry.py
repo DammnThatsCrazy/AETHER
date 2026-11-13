@@ -126,6 +126,12 @@ def check() -> int:
         r.require(isinstance(val, list) and bool(val),
                   f"{name} present", f"{name} must be a non-empty list")
 
+    sensitive_prefixes = data.get("sensitive_path_prefixes", []) or []
+    r.require(isinstance(sensitive_prefixes, list)
+              and all(isinstance(p, str) and p.startswith("/v1/") for p in sensitive_prefixes),
+              "sensitive_path_prefixes are /v1/ path prefixes",
+              "every sensitive_path_prefixes entry must be a string starting with '/v1/'")
+
     # Kyber must be a sensitive + high-risk domain (operator surface).
     sens = set(data.get("sensitive_domains", []) or [])
     high = set(data.get("high_risk_domains", []) or [])

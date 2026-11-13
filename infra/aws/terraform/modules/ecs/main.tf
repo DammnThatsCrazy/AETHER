@@ -363,34 +363,25 @@ locals {
   # Pilot billing is direct Aether Checkout + Portal billing, not the deferred
   # Kyber revops/provider-sync surface. URLs are derived from the canonical
   # Aether origin so a plan cannot point a paid pilot at a local default.
-  # config/release/feature_flags/staging.yaml turns the Identity Continuity
-  # runtime on for staging proof. These flags default off in
-  # services/api/config/settings.py, so the manifest alone left staging tasks
-  # with identity resolution disabled. Production keeps the source defaults.
-  # tests/unit/test_staging_identity_runtime_flags.py keeps this list equal
-  # to the manifest's identity block.
-  staging_identity_runtime_flags = [
-    "IDENTITY_RESOLUTION_ENABLED",
-    "IDENTITY_AUTO_MERGE_ENABLED",
-    "IDENTITY_MANUAL_REVIEW_ENABLED",
-    "IDENTITY_CONFLICT_DETECTION_ENABLED",
-    "IDENTITY_SPLIT_ENABLED",
-    "IDENTITY_MANUAL_SPLIT_ENABLED",
-    "IDENTITY_AUTO_SPLIT_CANDIDATES_ENABLED",
-    "SDK_LATE_BINDING_ENABLED",
-    "ANONYMOUS_TO_KNOWN_BINDING_ENABLED",
-    "MULTI_SDK_IDENTITY_STITCHING_ENABLED",
-    "CONNECTOR_BACKFILL_IDENTITY_RESOLUTION_ENABLED",
-    "PROJECTION_RESTATEMENT_ENABLED",
-    "CAMPAIGN_RESTATEMENT_ENABLED",
-    "VALUE_RESTATEMENT_ENABLED",
-    "IDENTITY_EXPLAINABILITY_ENABLED",
-    "TENANT_IDENTITY_ACTIVATION_DASHBOARD_ENABLED",
-    "AGENT_IDENTITY_RESOLUTION_ENABLED",
-  ]
+  # config/release/feature_flags/staging.yaml lists, under
+  # runtime.flags.task_environment, the default-off flags staging tasks must
+  # set to true (the Identity Continuity runtime for staging proof). Reading
+  # the manifest keeps it the single source: settings.py defaults these off,
+  # so the manifest alone used to leave staging with identity resolution
+  # disabled. Production keeps the source defaults.
+  staging_identity_runtime_flags = yamldecode(
+    file("${path.module}/../../../../../config/release/feature_flags/staging.yaml")
+  ).runtime.flags.task_environment
   identity_runtime_environment = var.deployment_profile == "staging" ? [
     for flag in local.staging_identity_runtime_flags : { name = flag, value = "true" }
   ] : []
+
+  # Binds runtime evidence (the staging identity proof capture answers 503
+  # without it) to the image this revision runs. Delivery's cloned revisions
+  # replace it with the digest they deliver, so both sources agree.
+  deployment_identity_environment = [
+    { name = "AETHER_DEPLOYMENT_ID", value = var.backend_image_digest },
+  ]
 
   stripe_runtime_environment = [
     { name = "DEPLOYMENT_LANE", value = var.deployment_lane },
@@ -640,6 +631,7 @@ resource "aws_ecs_task_definition" "backend" {
         concat(
           local.kyber_runtime_environment,
           local.identity_runtime_environment,
+          local.deployment_identity_environment,
           local.stripe_runtime_environment_with_urls,
           local.email_runtime_environment,
           local.self_signup_runtime_environment,
@@ -867,6 +859,7 @@ resource "aws_ecs_task_definition" "runtime_service" {
       concat(
         local.kyber_runtime_environment,
         local.identity_runtime_environment,
+        local.deployment_identity_environment,
         local.stripe_runtime_environment_with_urls,
         local.email_runtime_environment,
         local.self_signup_runtime_environment,

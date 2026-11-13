@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -69,7 +70,11 @@ REVIEWED_EVIDENCE = (
 
 
 def _workflow(name: str) -> str:
-    return (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+    # The shared helper is the dispatch command: treat it as `gh workflow run` so
+    # every dispatch assertion (including the no-dispatch-from-a-timer guard)
+    # still covers helper calls.
+    text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+    return text.replace("scripts/ci/dispatch_workflow.sh", "gh workflow run")
 
 
 def _workflow_yaml(name: str) -> dict:
@@ -2304,12 +2309,13 @@ def test_identity_key_mount_shape_reaches_every_rehearsal_contract_check() -> No
 def test_pilot_wrapper_tolerates_a_briefly_unreadable_dispatched_run() -> None:
     """GitHub can answer Not Found for a run it just created; the wrapper must
     retry within a bounded window instead of failing a healthy rehearsal
-    (pilot run 43314557878), and still fail once that window has passed."""
+    (pilot run 43314557878). It uses the same helper as the lifecycle, which
+    retries only a 404 and fails every other error at once."""
     text = _workflow("pilot-staging.yml")
     helper = text[text.index("dispatch_and_wait() {"):text.index("reconcile_pilot_price_secret_state() {")]
-    assert 'visible_by="$(( $(date -u +%s) + 120 ))"' in helper
-    assert "not readable yet; retrying" in helper
-    assert "could not be read" in helper and "exit 1" in helper
+    assert 'status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "$run_id")" || exit 1' in helper
+    assert 'if [ "$status" = lookup_pending ]; then sleep 5; continue; fi' in helper
+    assert "visible_by" not in helper
 
 
 def test_reconcile_imports_a_live_amplify_branch_terraform_does_not_own() -> None:
@@ -2323,6 +2329,40 @@ def test_reconcile_imports_a_live_amplify_branch_terraform_does_not_own() -> Non
     assert 'aws_amplify_branch.main[\\"${app_key}\\"]' in step
     assert '"$branch_address" "${app_id}/staging"' in step
     assert 'grep -Fxq "$branch_address" "$state_list_file"' in step  # skip when already owned
+
+
+@pytest.mark.parametrize("aws_mode, expect_rc, expect_import", [
+    ("exists", 0, True), ("missing", 0, False), ("denied", 1, False),
+])
+def test_amplify_branch_probe_fails_on_errors_other_than_not_found(tmp_path, aws_mode, expect_rc, expect_import):
+    # Only NotFoundException means "nothing to import". An AccessDenied or a
+    # throttle used to read as "absent", so the reconcile passed and the next
+    # apply failed again on "branch staging already exists".
+    text = _workflow("staging-state-reconcile.yml")
+    start = text.index('            if aws amplify get-branch --app-id "$app_id"')
+    end = text.index("\n            fi\n", start) + len("\n            fi\n")
+    block = "\n".join(line[12:] for line in text[start:end].splitlines())
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "aws").write_text(
+        "#!/bin/bash\ncase \"$AWS_MODE\" in\n"
+        "  exists) exit 0;;\n"
+        "  missing) echo 'An error occurred (NotFoundException) when calling GetBranch' >&2; exit 254;;\n"
+        "  denied) echo 'An error occurred (AccessDeniedException) when calling GetBranch' >&2; exit 254;;\n"
+        "esac\n")
+    (bin_dir / "terraform").write_text("#!/bin/bash\necho imported >> \"$RUNNER_TEMP/imports\"\n")
+    for tool in ("aws", "terraform"):
+        (bin_dir / tool).chmod(0o755)
+    script = "set -euo pipefail\napp_id=app1\nbranch_address=addr\nBACKEND_IMAGE_DIGEST=sha256:x\n" + block
+    result = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True,
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "AWS_MODE": aws_mode,
+             "RUNNER_TEMP": str(tmp_path)},
+    )
+    assert result.returncode == expect_rc, result.stderr
+    assert (tmp_path / "imports").exists() is expect_import
+    if aws_mode == "denied":
+        assert "AccessDeniedException" in result.stderr
 
 
 def test_aurora_minor_version_drift_cannot_block_an_apply() -> None:
@@ -2377,21 +2417,16 @@ def test_sleep_drain_has_no_text_split_task_stop_after_convergence() -> None:
 
 def test_every_dispatched_run_poll_tolerates_a_brief_not_found():
     # Rehearsal run 43387214569: the sleep plan wait read the run it had just
-    # dispatched, got `gh: Not Found (HTTP 404)` 0.3 s later, and set -e
-    # ended the step. Every status poll must retry only a 404, and only in a
-    # bounded grace window, then fail closed on anything else.
-    text = _workflow(LIFECYCLE)
-    bare = re.findall(r'^\s+\w+="\$\(gh api "repos/\$\{GITHUB_REPOSITORY\}/actions/runs/\$\{\w+\}" --jq \'\.status\'\)"$', text, re.M)
-    assert not bare, f"unguarded run-status polls: {bare}"
-    guarded = re.findall(
-        r'if ! (\w+)="\$\(gh api "repos/\$\{GITHUB_REPOSITORY\}/actions/runs/\$\{(\w+)\}" --jq \'\.status\' 2>"\$RUNNER_TEMP/run-status\.err"\)"; then\n'
-        r'\s+if grep -q "HTTP 404" "\$RUNNER_TEMP/run-status\.err" \\\n'
-        r'\s+&& \[ "\$\(date -u \+%s\)" -lt "\$\{\2_lookup_grace:=\$\(\( \$\(date -u \+%s\) \+ 120 \)\)\}" \]; then\n'
-        r'(?:.*\n){3}\s+fi\n\s+cat "\$RUNNER_TEMP/run-status\.err" >&2\n.*\n\s+exit 1\n',
-        text,
-    )
-    assert len(guarded) == 7, guarded
-
+    # dispatched, got `gh: Not Found (HTTP 404)` 0.3 s later, and set -e ended
+    # the step. Every status poll goes through scripts/ci/run_status.sh, which
+    # retries only a 404 within a bounded window (tested behaviourally in
+    # test_ci_dispatch_helpers.py); no workflow keeps its own copy.
+    for name in (LIFECYCLE, "pilot-staging.yml", "staging-business-hours.yml"):
+        text = _workflow(name)
+        raw = re.findall(r'gh api "repos/\$\{\w+\}/actions/runs/\$\{\w+\}" --jq \'\.status\'', text)
+        assert not raw, f"{name}: status read bypasses scripts/ci/run_status.sh: {raw}"
+        assert "scripts/ci/run_status.sh" in text, name
+    assert _workflow(LIFECYCLE).count('"$(scripts/ci/run_status.sh "') == 7
 
 def test_live_identity_ui_evidence_expects_the_routes_the_ui_calls():
     # The tenant UI reads /v1/identity/{activation-status,review-queue}; the
@@ -2429,19 +2464,19 @@ def test_identity_evidence_key_can_read_capabilities_and_capture_waits_for_scena
 def test_every_captured_workflow_dispatch_reports_its_failure():
     # Run 43462809460: `dispatch_output="$(gh workflow run ... 2>&1)"` failed,
     # set -e ended the step inside the substitution, and the captured gh error
-    # was never printed. Every captured dispatch must print it and stop. It
-    # must not retry: a retry after a server-side create could duplicate an
-    # apply.
+    # was never printed. Every dispatch goes through
+    # scripts/ci/dispatch_workflow.sh, which prints the failure and exits 1
+    # without retrying (tested behaviourally in test_ci_dispatch_helpers.py).
     for name in (LIFECYCLE, "pilot-staging.yml", "staging-business-hours.yml"):
-        text = _workflow(name)
-        bare = re.findall(r'^\s+\w+="\$\(gh workflow run', text, re.M)
-        assert not bare, f"{name}: unguarded dispatch {bare}"
-        guarded = re.findall(
-            r'if ! (\w+)="\$\(gh workflow run .*? 2>&1\)"; then\n'
-            r'\s+printf \'%s\\n\' "\$\1" >&2\n'
-            r'\s+echo "::error::workflow dispatch failed; see the gh output above" >&2\n'
-            r'\s+(?:exit|return) 1\n',
-            text, re.S,
-        )
-        assert guarded, f"{name}: no guarded dispatch found"
-        assert len(guarded) == text.count("gh workflow run "), name
+        text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+        assert "gh workflow run" not in text, f"{name}: dispatch bypasses scripts/ci/dispatch_workflow.sh"
+        assert "scripts/ci/dispatch_workflow.sh" in text, name
+    for name in ("pilot-staging.yml", "staging-business-hours.yml"):
+        steps = [s for job in _workflow_yaml(name)["jobs"].values() for s in job.get("steps") or []]
+        users = [s for s in steps if "scripts/ci/" in str(s.get("run", ""))]
+        assert users, name
+        job = next(j for j in _workflow_yaml(name)["jobs"].values()
+                   if any("scripts/ci/" in str(s.get("run", "")) for s in j.get("steps") or []))
+        checkout = next(s for s in job["steps"] if "actions/checkout" in str(s.get("uses", "")))
+        assert "scripts/ci" in checkout["with"]["sparse-checkout"], name
+

@@ -52,7 +52,10 @@ release while retaining the `aurora-postgresql16` parameter-group family.
 Instances keep automatic minor-version upgrades on, so `engine_version` is
 ignored after creation: AWS moved staging from 16.8 to 16.13 on its own, and a
 reviewed apply must never try to return a cluster to an older minor release
-(AWS rejects that). Major-version upgrades remain explicit.
+(AWS rejects that). The ignore covers every version change, so a major-version
+upgrade is a reviewed change that removes `engine_version` from
+`ignore_changes` for that apply (and moves the parameter-group family), then
+restores it.
 
 Aether declares two deployment profiles: **`staging`** and **`production`**.
 `config/deployment_profiles.yaml` is the canonical matrix — backend selectors,

@@ -203,6 +203,19 @@ def validate(path: Path) -> list[str]:
         errors.append(f"{label}: required release flags not ON: {sorted(REQUIRED_ON - on)}")
     if not REQUIRED_OFF <= off:
         errors.append(f"{label}: required release flags not OFF: {sorted(REQUIRED_OFF - off)}")
+    if "task_environment" in flags:
+        try:
+            task_environment = set(_list(flags.get("task_environment"), label + ".runtime.flags.task_environment"))
+        except ValueError as exc:
+            errors.append(str(exc))
+        else:
+            if not task_environment <= on:
+                errors.append(
+                    f"{label}: task_environment flags must also be ON: {sorted(task_environment - on)}")
+            if task_environment & default_on:
+                errors.append(
+                    f"{label}: task_environment must list only default-off flags (the task env is what "
+                    f"turns them on): {sorted(task_environment & default_on)}")
     for key in ("required_on", "required_off"):
         try:
             required = set(_list(flags.get(key), label + f".runtime.flags.{key}"))

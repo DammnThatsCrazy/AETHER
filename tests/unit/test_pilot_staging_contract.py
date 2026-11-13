@@ -92,7 +92,8 @@ def test_pilot_credential_preflight_matches_each_action_to_its_real_inputs():
         "${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}"
     )
     assert "github.token" not in dispatch["env"]["GH_TOKEN"]
-    assert "configure WORKFLOW_DISPATCH_TOKEN or TF_AMPLIFY_GITHUB_ACCESS_TOKEN" in dispatch["steps"][0]["run"]
+    dispatch_run = next(step["run"] for step in dispatch["steps"] if step.get("run"))
+    assert "configure WORKFLOW_DISPATCH_TOKEN or TF_AMPLIFY_GITHUB_ACCESS_TOKEN" in dispatch_run
 
     terraform = _workflow("terraform-promote.yml")
     plan_credential_check = next(

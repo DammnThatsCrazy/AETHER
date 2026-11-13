@@ -101,7 +101,10 @@ resource "aws_rds_cluster" "this" {
   # auto_minor_version_upgrade on, so AWS moves the cluster forward on its own
   # (staging went 16.8 -> 16.13); engine_version is ignored after creation so a
   # reviewed apply never tries to "upgrade" back to an older minor release,
-  # which AWS rejects (InvalidParameterCombination). Major upgrades stay explicit.
+  # which AWS rejects (InvalidParameterCombination). The ignore covers every
+  # version change, major ones included: a major upgrade must be a reviewed
+  # change that removes engine_version from ignore_changes for that apply (and
+  # moves the parameter group family), then restores it.
   engine_version = "16.13"
   engine_mode    = "provisioned"
 

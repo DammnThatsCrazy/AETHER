@@ -36,7 +36,7 @@ def test_aurora_stateful_resources_have_destroy_backstops() -> None:
     ):
         block = _resource_block(source, resource_type, name)
         assert re.search(
-            r"lifecycle\s*\{\s*prevent_destroy\s*=\s*true\s*\}",
+            r"lifecycle\s*\{[^}]*\bprevent_destroy\s*=\s*true\b[^}]*\}",
             block,
             re.DOTALL,
         ), f"{resource_type}.{name} can be destroyed by a profile toggle"

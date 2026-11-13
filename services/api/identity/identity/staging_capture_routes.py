@@ -20,6 +20,18 @@ from identity.identity.scenario_evidence import (
 router = APIRouter(prefix="/v1/identity", tags=["Identity Staging Proof"])
 
 
+def mount_if_staging(app, environment: str) -> bool:
+    """Mount the proof routes only on a staging deployment.
+
+    The routes also refuse outside staging; mounting only there keeps them off
+    every other deployment's surface. Returns whether they were mounted.
+    """
+    if environment != "staging":
+        return False
+    app.include_router(router)
+    return True
+
+
 def _staging_deployment_id() -> str:
     deployment_id = os.getenv("AETHER_DEPLOYMENT_ID", "").strip()
     if not deployment_id or len(deployment_id) > 128 or any(char in deployment_id for char in "\r\n\x00"):

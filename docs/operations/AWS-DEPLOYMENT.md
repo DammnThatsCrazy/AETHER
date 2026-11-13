@@ -766,7 +766,10 @@ The Aurora module pins the standard provisioned Aurora PostgreSQL 16.13 engine
 release (the release live staging runs after AWS's automatic minor upgrade from
 16.8) and ignores `engine_version` after creation, so automatic minor upgrades
 can never make a reviewed apply attempt a minor-version downgrade; the
-major-family parameter group remains `aurora-postgresql16`.
+major-family parameter group remains `aurora-postgresql16`. Because the ignore
+covers every version change, a major upgrade must remove `engine_version` from
+`ignore_changes` for that reviewed apply (and move the parameter-group family),
+then restore it.
 
 ### Production lead intake
 

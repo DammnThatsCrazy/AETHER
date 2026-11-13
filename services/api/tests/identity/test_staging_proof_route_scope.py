@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from governance.security.route_registry import classify
@@ -34,9 +36,29 @@ def test_proof_routes_are_tenant_scoped_identity_routes():
         assert policy.requires_auth and policy.tenant_scoped
         assert not policy.platform_operator_required
         assert not policy.kyber_operator_required
+        # Leaving /v1/admin dropped only the operator requirement: the routes
+        # that write durable proof evidence stay sensitive and audited.
+        assert policy.sensitive and policy.audit_required
 
 
-def test_proof_router_is_mounted_only_in_staging():
+@pytest.mark.parametrize("environment, mounted", [
+    ("staging", True), ("production", False), ("local", False), ("development", False),
+])
+def test_proof_routes_are_mounted_only_on_staging(environment, mounted):
+    app = FastAPI()
+    assert staging_capture_routes.mount_if_staging(app, environment) is mounted
+    # Included routers mount lazily in this FastAPI version; the OpenAPI
+    # schema lists what the app actually serves.
+    paths = set(app.openapi()["paths"])
+    proof = {"/v1/identity/staging-proof-capture", "/v1/identity/staging-proof-scenarios"}
+    assert (proof <= paths) is mounted
+    assert not (proof & paths) or mounted
+
+
+def test_create_app_mounts_through_the_staging_gate():
+    # create_app passes the running environment to the gate; building the full
+    # app as staging needs the fail-closed staging wiring, so this binds the
+    # call site while the behaviour is covered above.
     source = MAIN.read_text(encoding="utf-8")
-    assert "from identity.identity.staging_capture_routes import router as identity_staging_capture_router" in source
-    assert 'if settings.env.value == "staging":\n        app.include_router(identity_staging_capture_router)' in source
+    assert "mount_staging_identity_proof_routes(app, settings.env.value)" in source
+    assert "identity_staging_capture_router" not in source

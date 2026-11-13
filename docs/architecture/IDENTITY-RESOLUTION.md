@@ -163,8 +163,9 @@ connector evidence may be considered through the tenant-scoped late-binding
 flow; a claim match does not merge profiles by itself, and approval revalidates
 the evidence and requires server-verified identity-link consent.
 
-Staging tasks run with the Identity Continuity runtime on: the ECS module sets
-every flag in the identity block of `config/release/feature_flags/staging.yaml`
+Staging tasks run with the Identity Continuity runtime on: the ECS module reads
+`runtime.flags.task_environment` from `config/release/feature_flags/staging.yaml`
+and sets each listed (default-off) flag
 (resolution, auto-merge, review, conflicts, splits, late binding, connector
 backfill, restatement, explainability and the activation dashboard).
 Production keeps the source defaults above. Strong auto-linking stays off in

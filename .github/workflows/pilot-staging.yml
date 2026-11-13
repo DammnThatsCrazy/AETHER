@@ -396,6 +396,11 @@ jobs:
       MAX_AWAKE_HOURS: ${{ inputs.max_awake_hours }}
       PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
     steps:
+      # Only the shared dispatch/poll helpers are needed here.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
       - name: Dispatch and wait for the selected canonical authority
         shell: bash
         run: |
@@ -417,17 +422,12 @@ jobs:
           dispatch_and_wait() {
             local workflow="$1"
             shift
-            local dispatch_output run_id status conclusion deadline visible_by
+            local dispatch_output run_id status conclusion deadline
             # gh returns the created run URL when the dispatch is accepted.
             # Use that exact ID; a before/after list watermark can bind this
             # parent to an unrelated concurrent run on the same ref.
-            # A failed dispatch must say why: inside a captured $(...) set -e
-            # exits before the error is printed (run 43462809460 ended silently).
-            if ! dispatch_output="$(gh workflow run "$workflow" --ref "$REF_NAME" "$@" 2>&1)"; then
-              printf '%s\n' "$dispatch_output" >&2
-              echo "::error::workflow dispatch failed; see the gh output above" >&2
-              exit 1
-            fi
+            # The dispatch helper prints any gh failure, then exits 1 (never retries).
+            dispatch_output="$(scripts/ci/dispatch_workflow.sh "$workflow" --ref "$REF_NAME" "$@")" || exit 1
             printf '%s\n' "$dispatch_output"
             run_id="$(printf '%s\n' "$dispatch_output" \
               | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -437,19 +437,11 @@ jobs:
             }
             DISPATCHED_RUN_ID="$run_id"
             deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
-            # A just-created run can briefly read as Not Found; tolerate that
-            # only during a short visibility window, then fail as before.
-            visible_by="$(( $(date -u +%s) + 120 ))"
             while :; do
-              if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status' 2>&1)"; then
-                if [ "$(date -u +%s)" -lt "$visible_by" ]; then
-                  echo "${workflow} run ${run_id} not readable yet; retrying"
-                  sleep 10
-                  continue
-                fi
-                echo "::error::${workflow} run ${run_id} could not be read: ${status}"
-                exit 1
-              fi
+              # scripts/ci/run_status.sh retries only a just-dispatched 404,
+              # briefly; any other gh error fails at once, as in the lifecycle.
+              status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "$run_id")" || exit 1
+              if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
               if [ "$status" = completed ]; then
                 conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
                 test "$conclusion" = success || {
