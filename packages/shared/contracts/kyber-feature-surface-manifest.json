@@ -477,18 +477,10 @@
     {
       "feature_id": "patterns",
       "aether_route": "/patterns",
-      "tenant_parity_required": true,
-      "parity_exception_reason": null,
-      "kyber_mirror_route": "/tenants/:tenantId/mirror/patterns",
-      "minimum_disclosure": "D3",
-      "backend_capability": "kyber.tenant.mirror.read",
-      "operator_augmentations": [
-        "quality",
-        "lineage",
-        "policy",
-        "health",
-        "recomputeOptions"
-      ]
+      "tenant_parity_required": false,
+      "parity_exception_reason": "Kyber operators review a tenant's discovered patterns on the dedicated operator queue (/intelligence/patterns with a tenant_id query, backed by /v1/kyber/patterns/*), which adds operator review history; there is no tenant-mirror store reader for the pattern store, so it is not a byte-parity Tenant Mirror surface.",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
     },
     {
       "feature_id": "syndicates",
