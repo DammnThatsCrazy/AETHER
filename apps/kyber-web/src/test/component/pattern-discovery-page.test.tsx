@@ -109,6 +109,43 @@ describe('Pattern Discovery queue', () => {
     }));
   });
 
+  async function openQueue() {
+    render(<MemoryRouter><PatternDiscoveryPage /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('Tenant ID'), { target: { value: 'tenant-pd' } });
+    fireEvent.click(screen.getByText('Open queue'));
+  }
+
+  it('shows loading while the queue is pending', async () => {
+    api.patternQueue.mockReturnValue(new Promise(() => {}));
+    await openQueue();
+    expect(await screen.findByRole('status', { name: 'Loading data' })).toBeInTheDocument();
+  });
+
+  it('shows an empty state when nothing matches', async () => {
+    api.patternQueue.mockResolvedValue({ items: [], count: 0, total: 0 });
+    await openQueue();
+    expect(await screen.findByText('Nothing to review')).toBeInTheDocument();
+  });
+
+  it('shows an error state when the queue cannot be read', async () => {
+    api.patternQueue.mockRejectedValue(new Error('operator gate closed'));
+    await openQueue();
+    expect(await screen.findByText('Unable to load the discovery queue')).toBeInTheDocument();
+    expect(screen.getByText('operator gate closed')).toBeInTheDocument();
+  });
+
+  it('refuses operators without approval permission', () => {
+    const saved = [...authState.capabilities];
+    authState.capabilities.splice(0, authState.capabilities.length, 'kyber.diagnostics.read');
+    try {
+      render(<MemoryRouter><PatternDiscoveryPage /></MemoryRouter>);
+      expect(screen.getByText('Operator approval permissions required')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Tenant ID')).not.toBeInTheDocument();
+    } finally {
+      authState.capabilities.splice(0, authState.capabilities.length, ...saved);
+    }
+  });
+
   it('runs discovery for the chosen tenant and refreshes the queue', async () => {
     render(<MemoryRouter><PatternDiscoveryPage /></MemoryRouter>);
     fireEvent.change(screen.getByLabelText('Tenant ID'), { target: { value: 'tenant-pd' } });

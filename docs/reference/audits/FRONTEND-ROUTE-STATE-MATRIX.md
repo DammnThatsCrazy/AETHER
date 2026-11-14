@@ -159,6 +159,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/intelligence/suggestions` | suggestion fleet | no | I | A | — | — | I | `kyber-noncritical-empty-routes.test.tsx` |
 | `/intelligence/suggestions/review` | suggestion review | no | I | A | — | — | I | `kyber-noncritical-empty-routes.test.tsx` |
 | `/intelligence/semantic-review` | semantic review | yes | A | A | A | A | A | `semantic-review-queue-page.test.tsx` |
+| `/intelligence/patterns` | `/v1/kyber/patterns/*` | no | A | A | A | A | A | `pattern-discovery-page.test.tsx` |
 | `/ml` | model registry and releases | no | I | — | — | — | I | gap |
 | `/fraud-networks` | fraud network fleet | no | I | — | — | — | I | gap |
 | `/fraud-networks/flow-trace` | flow trace create | no | I | — | — | — | I | gap |
@@ -194,15 +195,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 165 data-bearing route patterns above: 77 Aether and
-88 Kyber routes.
+The denominator is the 166 data-bearing route patterns above: 77 Aether and
+89 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 35 / 165 (21.2%) | tracked for every route |
-| Empty-state assertions | 150 / 165 (90.9%) | at least 90% overall |
-| Error/unavailable assertions | 131 / 165 (79.4%) | 100% of critical routes |
-| Populated-state assertions | 65 / 165 (39.4%) | tracked for every route |
+| Explicit loading-state assertions | 36 / 166 (21.7%) | tracked for every route |
+| Empty-state assertions | 151 / 166 (91.0%) | at least 90% overall |
+| Error/unavailable assertions | 132 / 166 (79.5%) | 100% of critical routes |
+| Populated-state assertions | 66 / 166 (39.8%) | tracked for every route |
 | Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
