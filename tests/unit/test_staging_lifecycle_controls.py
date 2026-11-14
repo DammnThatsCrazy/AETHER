@@ -2480,25 +2480,3 @@ def test_every_captured_workflow_dispatch_reports_its_failure():
         checkout = next(s for s in job["steps"] if "actions/checkout" in str(s.get("uses", "")))
         assert "scripts/ci" in checkout["with"]["sparse-checkout"], name
 
-
-
-def test_apply_sleep_resolves_the_deployed_backend_digest_when_none_is_supplied():
-    # The scheduled business-hours sleep dispatches apply-sleep without a
-    # backend_image_digest, and the reconcile refuses to run without one, so
-    # every scheduled sleep stopped staging but left Terraform awake (runs
-    # 43351450578 and 43543499827). The sleep job now reads the digest the
-    # backend service is registered with when none is supplied.
-    import yaml
-
-    workflow = yaml.safe_load((ROOT / ".github/workflows/staging-lifecycle.yml").read_text(encoding="utf-8"))
-    steps = next(job["steps"] for job in workflow["jobs"].values()
-                 if any(s.get("id") == "sleep-plan" for s in job.get("steps", [])))
-    ids = [s.get("id") for s in steps]
-    assert ids.index("deployed-digest") < ids.index("sleep-plan")
-    resolve = steps[ids.index("deployed-digest")]
-    plan = steps[ids.index("sleep-plan")]
-    assert resolve["if"] == plan["if"]
-    assert "inputs.backend_image_digest" in resolve["env"]["SUPPLIED_DIGEST"]
-    assert 'service="AETHER-${STAGING_ENV}-backend"' in resolve["run"]
-    assert "aether-backend@" in resolve["run"] and "^sha256:[0-9a-f]{64}$" in resolve["run"]
-    assert plan["env"]["BACKEND_IMAGE_DIGEST"] == "${{ steps.deployed-digest.outputs.digest }}"

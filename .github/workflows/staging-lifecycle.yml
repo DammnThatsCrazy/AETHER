@@ -3102,37 +3102,6 @@ jobs:
           fi
           echo "services with non-zero desired/running/pending counts: ${nonzero}"
 
-      - name: Resolve the deployed backend image digest
-        id: deployed-digest
-        # The scheduled business-hours sleep dispatches apply-sleep without a
-        # digest, and the reconcile below refuses to run without one, so every
-        # scheduled sleep stopped staging but left Terraform's state awake.
-        # The digest the backend service is registered with is the one that
-        # was approved and delivered; reconciling to it keeps Terraform's task
-        # definition identical to what is deployed. An explicit input wins.
-        if: steps.already.outputs.asleep != 'true' || needs.select-profile.outputs.apply_sleep == 'true'
-        env:
-          SUPPLIED_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
-        run: |
-          set -euo pipefail
-          if [ -n "$SUPPLIED_DIGEST" ]; then
-            printf 'digest=%s\n' "$SUPPLIED_DIGEST" >> "$GITHUB_OUTPUT"
-            echo "using the supplied backend image digest ${SUPPLIED_DIGEST}"
-            exit 0
-          fi
-          service="AETHER-${STAGING_ENV}-backend"
-          task_def="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
-            --query 'services[0].taskDefinition' --output text)" \
-            || { echo "::error::could not read the ${service} task definition to resolve the deployed backend digest"; exit 1; }
-          image="$(aws ecs describe-task-definition --task-definition "$task_def" \
-            --query "taskDefinition.containerDefinitions[?contains(image, 'aether-backend@')].image | [0]" --output text)" \
-            || { echo "::error::could not describe ${task_def}"; exit 1; }
-          digest="${image##*@}"
-          [[ "$image" == *@* && "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] \
-            || { echo "::error::${task_def} does not pin aether-backend by digest (image: ${image}); supply backend_image_digest"; exit 1; }
-          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
-          echo "resolved the deployed backend image digest ${digest} from ${task_def}"
-
       - name: Generate the reviewed sleep plan
         id: sleep-plan
         # A live zero envelope can still have an awake Terraform state after a
@@ -3142,7 +3111,7 @@ jobs:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
-          BACKEND_IMAGE_DIGEST: ${{ steps.deployed-digest.outputs.digest }}
+          BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
           IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
