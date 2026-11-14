@@ -79,7 +79,7 @@ describe('Pattern discovery surfaces', () => {
     expect(await screen.findByText('Emerging patterns · 1')).toBeInTheDocument();
     expect(screen.getByText('Unresolved identity overlaps · 1')).toBeInTheDocument();
     expect(screen.getByText('user:u2 · 3')).toBeInTheDocument();
-    expect(screen.getAllByText(ROW.title)[0].closest('a')).toHaveAttribute('href', '/patterns?pattern=t%3Apat%3A1');
+    expect(screen.getAllByText(ROW.title)[0]?.closest('a')).toHaveAttribute('href', '/patterns?pattern=t%3Apat%3A1');
   });
 
   it('says when consent withholds the section', async () => {
