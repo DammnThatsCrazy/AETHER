@@ -105,6 +105,16 @@ class PredictionMarketObservationRepository:
             return observation, True
         async with pool.acquire() as conn:
             async with conn.transaction():
+                # The occurrence key derives from the market's latest row, so
+                # writers for one market must not interleave between that read
+                # and the insert: a writer that read a stale predecessor would
+                # store the same quote twice with different keys. A
+                # transaction-scoped advisory lock serializes them (also when
+                # the market has no row yet) and releases at commit.
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    f"prediction_market_observations|{tenant_id}|{venue}|{observation.market_ref}",
+                )
                 previous = await conn.fetchrow(
                     """
                     SELECT observation_sha256, received_at, data

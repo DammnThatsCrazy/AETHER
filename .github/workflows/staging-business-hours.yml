@@ -136,7 +136,8 @@ jobs:
           # The newest successful push-to-staging delivery run that still carries
           # its release artifact is the release a manual wake would deploy.
           runs="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=staging&event=push&status=success&per_page=20" \
-            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
+            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')" \
+            || no_release 'could not list staging delivery runs'
           release_run_id=""
           release_sha=""
           while read -r run_id head_sha; do
@@ -153,10 +154,12 @@ jobs:
           rm -rf release
           gh run download "$release_run_id" --repo "$REPO" --name "release-${release_sha}" --dir release \
             || no_release "could not download release-${release_sha}"
-          checksum="$(tr -d '[:space:]' < release/release.json.sha256)"
+          checksum="$(tr -d '[:space:]' < release/release.json.sha256)" \
+            || no_release 'release.json.sha256 is missing from the release artifact'
           [[ "$checksum" =~ ^sha256:[0-9a-f]{64}$ ]] || no_release 'release.json.sha256 is not a sha256: checksum'
           [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || no_release 'release head SHA is malformed'
-          digest="$(jq -r '.artifacts.backend_image.digest // empty' release/release.json)"
+          digest="$(jq -r '.artifacts.backend_image.digest // empty' release/release.json)" \
+            || no_release 'release.json is missing or not valid JSON'
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || no_release 'release.json has no backend image digest'
           {
             echo "release_run_id=${release_run_id}"

@@ -123,3 +123,26 @@ async def test_lifecycle_phases_of_one_purchase_are_attributed_once():
     assert sec.state == "available"
     totals = {(t["currency"], t["finality"]): t["amount"] for t in sec.content["attribution"]["totals"]}
     assert totals == {("USD", "reported"): "80.00"}
+
+
+@pytest.mark.asyncio
+async def test_same_action_id_in_two_deployments_is_two_purchases():
+    """Codex review on #872: deduplicating across bindings merged independent
+    purchases that two source namespaces reported under the same agent
+    reference and action id (USD 40 instead of USD 80)."""
+    from actions.agent_marketplace.identity_binding import AgentDeploymentIdentityBindingRepository
+
+    repo = AgentDeploymentIdentityBindingRepository()
+    for namespace, deployment in (("vendor.a", "dep-1"), ("vendor.b", "dep-2")):
+        await repo.bind(
+            tenant_id=T, source_namespace=namespace, source_agent_ref="buyer",
+            canonical_agent_entity_id="ent-agent-1", bound_by="admin", source_deployment_id=deployment)
+        await _persist("buyer", deployment, [
+            ("agent_transaction_initiated", {"actionId": "act-1", "amount": "40.00", "currency": "USD"}),
+            ("agent_transaction_settled", {"actionId": "act-1", "amount": "40.00", "currency": "USD"}),
+        ])
+    provider = Economic360Provider(_Sources(), agent_identity_reader=_CanonicalAgent())
+    sec = _section(await provider.project(*_req("agent", "ent-agent-1")))
+    assert sec.state == "available"
+    totals = {(t["currency"], t["finality"]): t["amount"] for t in sec.content["attribution"]["totals"]}
+    assert totals == {("USD", "reported"): "80.00"}

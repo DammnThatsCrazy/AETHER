@@ -2522,3 +2522,51 @@ def test_a_missing_release_never_blocks_the_sleep(tmp_path, transition, expected
     assert result.returncode == expected_exit, result.stdout + result.stderr
     assert "no successful staging delivery run" in result.stdout
     assert not out.exists() or "backend_digest" not in out.read_text()
+
+
+_RELEASE_SHA = "a" * 40
+_GH_STUBS = {
+    # The run listing itself fails.
+    "listing_error": "#!/bin/sh\nexit 1\n",
+    # A release exists but its artifact has no checksum file.
+    "missing_checksum": f"""#!/bin/sh
+case "$*" in
+  *workflows/deploy.yml/runs*) echo "101 {_RELEASE_SHA}" ;;
+  *runs/101/artifacts*) echo 7 ;;
+  "run download"*) mkdir -p release; echo '{{}}' > release/release.json ;;
+esac
+""",
+    # A release exists but release.json is not JSON.
+    "malformed_release": f"""#!/bin/sh
+case "$*" in
+  *workflows/deploy.yml/runs*) echo "101 {_RELEASE_SHA}" ;;
+  *runs/101/artifacts*) echo 7 ;;
+  "run download"*) mkdir -p release; echo 'sha256:{"b" * 64}' > release/release.json.sha256; echo '{{not json' > release/release.json ;;
+esac
+""",
+}
+
+
+@pytest.mark.parametrize("case", sorted(_GH_STUBS))
+@pytest.mark.parametrize("transition, expected_exit", [("sleep", 0), ("wake", 1)])
+def test_release_lookup_errors_fall_back_for_sleep_and_stop_a_wake(tmp_path, case, transition, expected_exit):
+    """Codex review on #872: an unguarded listing, a missing checksum file or
+    malformed release JSON failed the lookup step before the fallback, which
+    skipped the sleep dispatch entirely."""
+    import os
+    import subprocess
+
+    doc = _workflow_yaml(BUSINESS_HOURS)
+    run = next(step["run"] for job in doc["jobs"].values() for step in job["steps"]
+               if step.get("name") == "Find the newest approved release built from staging")
+    fake_gh = tmp_path / "gh"
+    fake_gh.write_text(_GH_STUBS[case])
+    fake_gh.chmod(0o755)
+    out = tmp_path / "out"
+    result = subprocess.run(
+        ["bash", "-c", run], capture_output=True, text=True, cwd=tmp_path,
+        env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "TRANSITION": transition,
+             "REPO": "o/r", "GITHUB_OUTPUT": str(out)},
+    )
+    assert result.returncode == expected_exit, result.stdout + result.stderr
+    assert not out.exists() or "backend_digest" not in out.read_text()

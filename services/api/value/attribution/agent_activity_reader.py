@@ -41,7 +41,7 @@ class BindingSilverAgentActivityReader:
         if not bindings:
             return {"state": "unknown", "reason": "no_active_identity_binding"}
         analytics = AnalyticsRepository(get_cache())
-        facts, truncated = [], False
+        facts, actions, truncated = [], [], False
         for binding in bindings:
             rows = await analytics.query_silver(
                 "silver_agent_execution_facts",
@@ -51,12 +51,15 @@ class BindingSilverAgentActivityReader:
             truncated = truncated or len(rows) > _FACT_LIMIT
             exact = [r for r in rows[:_FACT_LIMIT]
                      if r.get("deployment_id") == binding.get("source_deployment_id")]
-            facts.extend(normalize_rows(exact, tenant_id))
-        # Lifecycle phases of one purchase (initiated -> authorized -> settled,
-        # correlated by source references) are one monetary action; attributing
-        # each phase would multiply its amount. Separate purchases stay distinct.
-        actions = distinct_actions([f for f in facts if f.amount is not None and f.currency
-                                    and f.event_type.startswith(_VALUE_EVENTS)])
+            binding_facts = normalize_rows(exact, tenant_id)
+            facts.extend(binding_facts)
+            # Lifecycle phases of one purchase (initiated -> authorized ->
+            # settled, correlated by source references) are one monetary action;
+            # attributing each phase would multiply its amount. Correlation is
+            # scoped to one deployment: two source namespaces can reuse the same
+            # agent reference and action id for independent purchases.
+            actions.extend(distinct_actions([f for f in binding_facts if f.amount is not None and f.currency
+                                             and f.event_type.startswith(_VALUE_EVENTS)]))
         refs = {b["source_agent_ref"] for b in bindings}
         result = attribute(
             [{"event_id": f.event_id, "amount": str(f.amount), "currency": f.currency,

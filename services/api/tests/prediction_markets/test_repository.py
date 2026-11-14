@@ -21,15 +21,31 @@ def _obs(price: str) -> MarketObservation:
 
 
 class _FakeConn:
-    """The two statements ``record`` / ``latest`` issue, over an in-memory table
-    with the migration's primary key (tenant, venue, market, observation_sha256)."""
+    """The statements ``record`` / ``latest`` issue, over an in-memory table
+    with the migration's primary key (tenant, venue, market, observation_sha256).
+    ``pg_advisory_xact_lock`` is modelled by a per-key asyncio lock held until
+    the transaction ends."""
 
-    def __init__(self, rows: dict) -> None:
+    def __init__(self, rows: dict, locks: dict, pause=None) -> None:
         self.rows = rows
+        self.locks = locks
+        self.pause = pause
+        self.held: list = []
 
     @contextlib.asynccontextmanager
     async def transaction(self):
-        yield
+        try:
+            yield
+        finally:
+            for lock in self.held:
+                lock.release()
+            self.held.clear()
+
+    async def execute(self, query, *args):
+        assert "pg_advisory_xact_lock" in query
+        lock = self.locks.setdefault(args[0], __import__("asyncio").Lock())
+        await lock.acquire()
+        self.held.append(lock)
 
     def _market(self, tenant, venue, market):
         return [r for r in self.rows.values() if r["tenant_id"] == tenant
@@ -48,16 +64,21 @@ class _FakeConn:
         rows = self._market(*args[:3])
         if len(args) > 3:
             rows = [r for r in rows if r["received_at"] <= args[3]]
-        return max(rows, key=lambda r: (r["received_at"], r["observation_sha256"]), default=None)
+        found = max(rows, key=lambda r: (r["received_at"], r["observation_sha256"]), default=None)
+        if self.pause is not None:
+            await self.pause()
+        return found
 
 
 class _FakePool:
     def __init__(self) -> None:
         self.rows: dict = {}
+        self.locks: dict = {}
+        self.pauses: list = []
 
     @contextlib.asynccontextmanager
     async def acquire(self):
-        yield _FakeConn(self.rows)
+        yield _FakeConn(self.rows, self.locks, self.pauses.pop(0) if self.pauses else None)
 
 
 @pytest.fixture(params=["local", "sql"])
@@ -114,3 +135,40 @@ async def test_receipt_time_stays_ordered_when_the_clock_steps_back(repo, monkey
     for price in ("0.40", "0.60", "0.40"):
         await repo.record("t1", _obs(price))
     assert await _price(repo) == "0.40"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_writers_are_serialized_per_market(monkeypatch):
+    """Codex review on #872: without a per-market lock a writer that read the
+    predecessor, then paused while others committed, derived its occurrence key
+    from a stale row and stored the same quote twice in a row
+    (0.40, 0.80, 0.60, 0.60, both 0.60 submissions reporting created)."""
+    import asyncio
+
+    repository._LOCAL_STORE.clear()
+    pool = _FakePool()
+
+    async def _pool(self):
+        return pool
+
+    monkeypatch.setattr(PredictionMarketObservationRepository, "_pool", _pool)
+    repo = PredictionMarketObservationRepository()
+    await repo.record("t1", _obs("0.40"))
+
+    resume = asyncio.Event()
+
+    async def paused():
+        await resume.wait()
+
+    pool.pauses = [paused]  # the next writer pauses right after its predecessor read
+    slow = asyncio.create_task(repo.record("t1", _obs("0.60")))
+    await asyncio.sleep(0)
+    others = asyncio.gather(repo.record("t1", _obs("0.80")), repo.record("t1", _obs("0.60")))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    resume.set()
+    await slow
+    await others
+    sequence = [str(json.loads(json.dumps(r["data"]))["outcomes"][0]["price"])
+                for r in sorted(pool.rows.values(), key=lambda r: (r["received_at"], r["observation_sha256"]))]
+    assert all(a != b for a, b in zip(sequence, sequence[1:])), sequence
