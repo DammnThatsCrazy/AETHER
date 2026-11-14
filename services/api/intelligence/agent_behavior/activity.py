@@ -152,33 +152,35 @@ def failure_resolution(facts: Iterable[AgentFact]) -> list[dict[str, Any]]:
         failures, retries, switches = [], [], []
         last_failed: Optional[AgentFact] = None
         resolved_by = None
-        # Explicit retry/switch notices are distinct adaptations and are always
-        # recorded (observed). Derived evidence (the invocation and result that
-        # follow a failure) stands in for a notice only when none was emitted,
-        # and counts once per failure: retried -> invoked -> succeeded is one
-        # retry, while retried -> switched -> succeeded keeps both records.
-        attempt_recorded = False
+        # One recovery attempt per tool after each failure. An explicit
+        # retry/switch notice records the attempt (observed); otherwise the
+        # first invocation or result with that tool does (derived), and the
+        # rest of that tool's lifecycle is the same attempt, not another one.
+        # So retried(A) -> invoked(A) -> succeeded(A) is one retry, and
+        # invoked(A) -> invoked(B) -> succeeded(B) is a retry and a switch.
+        attempted: set[Optional[str]] = set()
         for f in seq:
             if f.event_type == "agent_tool_retried":
                 retries.append({"tool": f.tool_name, "event_id": f.event_id, "basis": c.OBSERVED})
-                attempt_recorded = True
+                attempted.add(f.tool_name)
                 continue
             if f.event_type == "agent_tool_switched":
                 switches.append({"from_tool": f.previous_tool_name, "to_tool": f.tool_name,
                                  "event_id": f.event_id, "basis": c.OBSERVED})
-                attempt_recorded = True
+                attempted.add(f.tool_name)
                 continue
-            if last_failed is not None and not attempt_recorded and f.status in {"invoked", "succeeded", "failed"}:
+            if (last_failed is not None and f.tool_name not in attempted
+                    and f.status in {"invoked", "succeeded", "failed"}):
                 if f.tool_name == last_failed.tool_name:
                     retries.append({"tool": f.tool_name, "event_id": f.event_id, "basis": c.DERIVED})
                 else:
                     switches.append({"from_tool": last_failed.tool_name, "to_tool": f.tool_name,
                                      "event_id": f.event_id, "basis": c.DERIVED})
-                attempt_recorded = True
+                attempted.add(f.tool_name)
             if f.status == "failed":
                 failures.append({"tool": f.tool_name, "event_id": f.event_id})
                 last_failed = f
-                attempt_recorded = False  # the next attempt recovers from this failure
+                attempted = set()  # attempts after this failure recover from it
                 resolved_by = None  # a later failure reopens the episode
             elif f.status == "succeeded":
                 if last_failed is not None and resolved_by is None:

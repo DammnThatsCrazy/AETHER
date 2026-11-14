@@ -223,3 +223,19 @@ def test_an_explicit_switch_after_an_explicit_retry_is_kept():
     assert [r["basis"] for r in ep["retries"]] == ["observed"]
     assert [(s["from_tool"], s["to_tool"], s["basis"]) for s in ep["switches"]] == [("A", "B", "observed")]
     assert ep["resolution"]["strategy"] == "switch"
+
+
+def test_a_derived_switch_after_an_abandoned_retry_is_kept():
+    """Codex review on #871: failed(A) -> invoked(A) -> invoked(B) ->
+    succeeded(B) with no adaptation notices (as the MCP and browser adapters
+    emit) lost the switch to B once the retry was recorded."""
+    fs = facts(
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "failed"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "invoked"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "B", "status": "invoked"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "B", "status": "succeeded"}),
+    )
+    [ep] = failure_resolution(fs)
+    assert [(r["tool"], r["basis"]) for r in ep["retries"]] == [("A", "derived")]
+    assert [(s["from_tool"], s["to_tool"], s["basis"]) for s in ep["switches"]] == [("A", "B", "derived")]
+    assert ep["resolution"]["strategy"] == "switch"
