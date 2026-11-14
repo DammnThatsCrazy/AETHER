@@ -18,7 +18,7 @@ source_hashes:
   "services/api/journeys/handoff/continuation_jobs.py": "sha256:13081b7ff46f57f7ae26c005163275d92cef3b7e7bf52959c02df345b0292630"
   "services/api/journeys/handoff/continuation_scope.py": "sha256:4805ff2560480a30d0e5452eefdd92dfc500cc6f84109ad10f5dc38de4e6ad08"
   "services/api/journeys/measurement/activity_rebuild.py": "sha256:f9a05aefbcb77f51aad95b980405b761e5f557cec88a8baf2d72334bcf7286c8"
-  "services/api/journeys/traffic/apple_ads_attribution.py": "sha256:16eac054fed62dcb1a4761d871d41241c773d8edd2c547a066247b5dacfe823b"
+  "services/api/journeys/traffic/apple_ads_attribution.py": "sha256:03622327b54beefc07c555cf35361138df3d908cb0206d9f080c57d203e8b5cc"
 ---
 
 # Cross-Device Journey Certification (XD-1)

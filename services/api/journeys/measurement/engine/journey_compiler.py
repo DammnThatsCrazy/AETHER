@@ -79,8 +79,15 @@ class JourneyCompiler:
         """
         if identity_type == "anonymous" and not _continuation_root:
             scope = await _continuation_scope(tenant_id, [profile_id])
+            if scope is not None and scope.linked:
+                # Every non-root member's standalone journey is superseded, not
+                # only the requested one: a handoff that joins two existing
+                # continuations (A->B and C->D, then B->D) must also retire the
+                # former root C, or two current journeys would overlap.
+                for member in scope.anonymous_ids:
+                    if member != scope.root_anonymous_id:
+                        await self._journey_repo.retire_current_anonymous(tenant_id, member)
             if scope is not None and scope.linked and scope.root_anonymous_id != profile_id:
-                await self._journey_repo.retire_current_anonymous(tenant_id, profile_id)
                 return await self.compile_for_profile(
                     tenant_id,
                     scope.root_anonymous_id,

@@ -157,6 +157,10 @@ async def test_xd1_ad_to_mobile_to_desktop_to_login_to_agents(monkeypatch, queue
     [journey] = await repo.find_current_for_profile(T, "anon-phone", identity_type="anonymous")
     steps = await JourneyStepRepository().list_by_version(T, journey["journey_version_id"])
     assert steps[0]["activity_type"] == "app_install_attributed"
+    # The verified Apple touchpoint is an attribution input of the journey.
+    [apple_tp] = touchpoint_repo._local_store.values()
+    assert journey["touchpoint_ids"] == [str(apple_tp["touchpoint_id"])]
+    assert journey["entry_touchpoint_id"] == str(apple_tp["touchpoint_id"])
     hops = [s["transition_evidence"] for s in steps if s.get("transition_evidence")]
     assert [h["link_basis"] for h in hops] == ["explicit_handoff"]
     assert hops[0]["handoff_id"] == link["handoff_id"]
@@ -171,6 +175,7 @@ async def test_xd1_ad_to_mobile_to_desktop_to_login_to_agents(monkeypatch, queue
     assert kinds[0] == "app_install_attributed"          # the journey still starts at the ad
     assert "product_viewed" in kinds and kinds[-1] == "login"
     assert set(profile_journey["session_ids"]) == {"phone-s1", "desk-s1"}
+    assert profile_journey["touchpoint_ids"] == [str(apple_tp["touchpoint_id"])]
     # No identity was merged: the mobile rows still carry no profile.
     mobile_rows = await ActivityRepository().list_by_profile(T, "anon-phone", identity_type="anonymous")
     assert all(row.get("profile_id") is None for row in mobile_rows)

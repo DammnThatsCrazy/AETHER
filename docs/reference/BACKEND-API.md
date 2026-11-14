@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:82343e60e7de0cc13aa9518cc06872f43e232c69f9e212aa6b7288ba313953f8"
   "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
   "services/api/intelligence/": "sha256:826600c2b12fe08083da5f437fb088c885bf94d428d106e2aff6513229f39848"
-  "services/api/journeys/": "sha256:9306ba707761dcedea8b472584b5395ae1934823d1c414df4f735150ed6033a0"
+  "services/api/journeys/": "sha256:709b83294072ae04af0fb78f634aba926d351d5caa8b5cdf182fcc01b8bd1b2e"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
@@ -3980,7 +3980,7 @@ When on, canonical activity emitted by the silver projectors requests a debounce
 
 ### Apple Ads attribution (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`)
 
-- `POST /v1/attribution/apple-ads/resolve` — SDK key. Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). Responses:
+- `POST /v1/attribution/apple-ads/resolve` — SDK key. Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). The activity references its touchpoint (`silver_table` / `silver_fact_id`, with an ID derived from the token hash), so the touchpoint is listed in the journey's `touchpoint_ids`, including the profile journey after login, and attribution can credit it. Responses:
   - `{resolved: true, evidence}`;
   - `{resolved: false, status: pending, retry_after_seconds: 5}`: Apple's record is not ready, so retry;
   - `{resolved: false, status}` with `not_attributed`, `invalid`, `unavailable` or `token_already_bound`.

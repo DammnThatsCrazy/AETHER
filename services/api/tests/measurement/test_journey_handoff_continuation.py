@@ -195,3 +195,25 @@ async def test_handler_is_registered_internal_only():
     register_durable_job_handlers()
     assert continuation_jobs.JOB_TYPE in HANDLER_REGISTRY
     assert continuation_jobs.JOB_TYPE not in TENANT_INVOCABLE
+
+
+async def test_joining_two_continuations_retires_every_former_root():
+    # A->B and C->D are compiled separately; then B->D joins them. Only the
+    # oldest root (A) may stay current, so C must be retired too.
+    compiler = JourneyCompiler()
+    await _activity(0, anon="A", session="sA", platform="mobile_ios", device="dA")
+    await _activity(1, anon="B", session="sB", platform="web", device="dB")
+    await _activity(2, anon="C", session="sC", platform="mobile_ios", device="dC")
+    await _activity(3, anon="D", session="sD", platform="web", device="dD")
+    await _handoff("A", "sA", "B", "sB")
+    await _handoff("C", "sC", "D", "sD")
+    await compiler.compile_for_profile(T, "B", identity_type="anonymous")
+    await compiler.compile_for_profile(T, "D", identity_type="anonymous")
+    repo = JourneyRepository()
+    assert len(await repo.find_current_for_profile(T, "C", identity_type="anonymous")) == 1
+    await _handoff("B", "sB", "D", "sD")
+    version = await compiler.compile_for_profile(T, "D", identity_type="anonymous")
+    assert version["profile_id"] == "A" and version["step_count"] == 4
+    for member in ("B", "C", "D"):
+        assert await repo.find_current_for_profile(T, member, identity_type="anonymous") == []
+    assert len(await repo.find_current_for_profile(T, "A", identity_type="anonymous")) == 1

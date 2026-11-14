@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -46,6 +47,7 @@ APPLE_ADS_ATTRIBUTION_URL = os.getenv(
 )
 ENTRY_METHOD = "ios_apple_ads_attribution"
 PROOF_LEVEL = "platform_verified"
+TOUCHPOINT_TABLE = "silver_campaign_touchpoint_facts"
 _MAX_TOKEN_LENGTH = 8192
 _RETRY_AFTER_SECONDS = 5
 _TIMEOUT_SECONDS = 10.0
@@ -147,7 +149,12 @@ async def record_attribution(
     from journeys.measurement.repositories.activity_repo import ActivityRepository
     from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
 
-    key = f"apple_ads:{token_hash(body.token)}"
+    digest = token_hash(body.token)
+    key = f"apple_ads:{digest}"
+    # One deterministic touchpoint ID per token, written on both the touchpoint
+    # and the canonical activity (silver_table / silver_fact_id), so the journey
+    # compiler lists it in touchpoint_ids and attribution can credit it.
+    touchpoint_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"aether:apple_ads:{tenant_id}:{digest}"))
     occurred_at = evidence.get("click_date") or datetime.now(timezone.utc).isoformat()
     activity = await ActivityRepository().upsert({
         "tenant_id": tenant_id,
@@ -176,11 +183,14 @@ async def record_attribution(
         "occurred_at": occurred_at,
         "server_received_at": datetime.now(timezone.utc).isoformat(),
         "source_system": "apple_adservices",
+        "silver_table": TOUCHPOINT_TABLE,
+        "silver_fact_id": touchpoint_id,
         "privacy_class": "behavioral",
     })
     if activity.get("anonymous_id") != body.anonymous_id:
         return False, activity
     await TouchpointRepository().upsert({
+        "touchpoint_id": touchpoint_id,
         "tenant_id": tenant_id,
         "idempotency_key": key,
         "anonymous_id": body.anonymous_id,
