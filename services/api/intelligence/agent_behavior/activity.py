@@ -152,21 +152,21 @@ def failure_resolution(facts: Iterable[AgentFact]) -> list[dict[str, Any]]:
         failures, retries, switches = [], [], []
         last_failed: Optional[AgentFact] = None
         resolved_by = None
-        # One recovery attempt per failure: an explicit retry/switch notice and
-        # the invocation and result of that same attempt are one attempt, not
-        # three. The explicit (observed) record wins when both are present.
+        # Explicit retry/switch notices are distinct adaptations and are always
+        # recorded (observed). Derived evidence (the invocation and result that
+        # follow a failure) stands in for a notice only when none was emitted,
+        # and counts once per failure: retried -> invoked -> succeeded is one
+        # retry, while retried -> switched -> succeeded keeps both records.
         attempt_recorded = False
         for f in seq:
             if f.event_type == "agent_tool_retried":
-                if not attempt_recorded:
-                    retries.append({"tool": f.tool_name, "event_id": f.event_id, "basis": c.OBSERVED})
-                    attempt_recorded = True
+                retries.append({"tool": f.tool_name, "event_id": f.event_id, "basis": c.OBSERVED})
+                attempt_recorded = True
                 continue
             if f.event_type == "agent_tool_switched":
-                if not attempt_recorded:
-                    switches.append({"from_tool": f.previous_tool_name, "to_tool": f.tool_name,
-                                     "event_id": f.event_id, "basis": c.OBSERVED})
-                    attempt_recorded = True
+                switches.append({"from_tool": f.previous_tool_name, "to_tool": f.tool_name,
+                                 "event_id": f.event_id, "basis": c.OBSERVED})
+                attempt_recorded = True
                 continue
             if last_failed is not None and not attempt_recorded and f.status in {"invoked", "succeeded", "failed"}:
                 if f.tool_name == last_failed.tool_name:
