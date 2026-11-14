@@ -328,6 +328,57 @@ const semanticReviewQueueSchema = z.object({
   queues: z.array(z.string()),
 }).passthrough();
 
+/** /v1/kyber/patterns — one discovered pattern as listed in the discovery queue. */
+const discoveredPatternSummarySchema = z.object({
+  pattern_id: z.string(),
+  kind: z.string(),
+  title: z.string(),
+  summary: z.string().optional(),
+  status: z.string(),
+  priority: z.string().optional(),
+  severity: z.string().optional(),
+  severity_score: z.number().optional(),
+  confidence: z.number(),
+  confidence_cap: z.number().optional(),
+  novelty: z.number().optional(),
+  affected_entity_count: z.number(),
+  risk_categories: z.array(z.string()),
+  first_observed_at: z.string().nullable().optional(),
+  last_observed_at: z.string().nullable().optional(),
+  version: z.number().optional(),
+  times_observed: z.number().optional(),
+  suppressed_by_feedback: z.boolean().optional(),
+  claim_state: z.string().optional(),
+}).passthrough();
+
+/** /v1/kyber/patterns/queue — the operator discovery queue page. */
+const discoveredPatternListSchema = z.object({
+  items: z.array(discoveredPatternSummarySchema),
+  count: z.number(),
+  total: z.number(),
+}).passthrough();
+
+/** /v1/kyber/patterns/{id} — full record: evidence, competing explanations, review history. */
+const discoveredPatternDetailSchema = discoveredPatternSummarySchema.extend({
+  evidence: z.array(z.object({
+    type: z.string(),
+    basis: z.string(),
+    strength: z.number(),
+    detail: z.record(z.unknown()),
+    source_event_refs: z.array(z.string()),
+  }).passthrough()),
+  competing_explanations: z.array(z.object({ id: z.string(), note: z.string() })),
+  affected_entities: z.array(z.object({ kind: z.string(), id: z.string(), key: z.string() }).passthrough()),
+  review_history: z.array(z.record(z.unknown())),
+  similar_patterns: z.array(discoveredPatternSummarySchema.passthrough()),
+  members: z.array(discoveredPatternSummarySchema.passthrough()),
+  promotion: z.record(z.unknown()).nullable().optional(),
+}).passthrough();
+
+export type DiscoveredPatternSummary = z.infer<typeof discoveredPatternSummarySchema>;
+export type DiscoveredPatternList = z.infer<typeof discoveredPatternListSchema>;
+export type DiscoveredPatternDetail = z.infer<typeof discoveredPatternDetailSchema>;
+
 /** /v1/kyber/measurement/source-classification/operations — traffic-intelligence
  *  operations scorecard (spec §15.3). All fields optional + passthrough so the
  *  backend can grow the payload without breaking Kyber; counts default to 0 and
@@ -2077,6 +2128,22 @@ export const api = {
         restClient.get('/v1/kyber/semantic/fleet-health', wrap(semanticFleetHealthSchema)).then(r => r.data),
       semanticReviewQueue: (queueType?: string) =>
         restClient.get(`/v1/kyber/semantic/review-queue${buildQS({ queue_type: queueType })}`, wrap(semanticReviewQueueSchema)).then(r => r.data),
+
+      // ── Pattern discovery (operator queue, tenant named explicitly) ───────
+      patternQueue: (tenantId: string, params?: { status?: string | undefined; kind?: string | undefined; limit?: number; offset?: number }) =>
+        restClient.get(`/v1/kyber/patterns/queue${buildQS({ tenant_id: tenantId, ...params })}`, wrap(discoveredPatternListSchema)).then(r => r.data),
+      patternStats: (tenantId: string) =>
+        restClient.get(`/v1/kyber/patterns/stats${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      patternDetail: (tenantId: string, patternId: string) =>
+        restClient.get(`/v1/kyber/patterns/${encodeURIComponent(patternId)}${buildQS({ tenant_id: tenantId })}`, wrap(discoveredPatternDetailSchema)).then(r => r.data),
+      runPatternDiscovery: (tenantId: string, body: { window_hours?: number; kinds?: string[] } = {}) =>
+        restClient.post(`/v1/kyber/patterns/runs${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema), body).then(r => r.data),
+      reviewPattern: (tenantId: string, patternId: string, body: { verdict: string; reason: string; duplicate_of?: string }) =>
+        restClient.post(`/v1/kyber/patterns/${encodeURIComponent(patternId)}/review${buildQS({ tenant_id: tenantId })}`, wrap(discoveredPatternDetailSchema), body).then(r => r.data),
+      promotePattern: (tenantId: string, patternId: string, body: { reason: string }) =>
+        restClient.post(`/v1/kyber/patterns/${encodeURIComponent(patternId)}/promote${buildQS({ tenant_id: tenantId })}`, wrap(discoveredPatternDetailSchema), body).then(r => r.data),
+      deprecatePattern: (tenantId: string, patternId: string, body: { reason: string }) =>
+        restClient.post(`/v1/kyber/patterns/${encodeURIComponent(patternId)}/deprecate${buildQS({ tenant_id: tenantId })}`, wrap(discoveredPatternDetailSchema), body).then(r => r.data),
 
       // ── Delivery operations (cross-tenant, operator-only) ─────────────────
       // Uses /v1/admin/delivery/jobs — no tenantId required, operator auth

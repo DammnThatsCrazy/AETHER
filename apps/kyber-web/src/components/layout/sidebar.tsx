@@ -56,6 +56,9 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   { path: '/intelligence-quality', label: 'Intel Quality', destination: 'kyber-intelligence-quality' },
   { path: '/intelligence/suggestions', label: 'Suggestions', destination: 'kyber-suggestions', requirement: { flag: 'suggestions_enabled' } },
   { path: '/intelligence/semantic-review', label: 'Semantic Ops', destination: 'kyber-semantic-ops' },
+  // Reuses the investigations icon taxonomy (no new brand destination). Gated on the
+  // backend AETHER_PATTERN_DISCOVERY_ENABLED capability; the routes are the real grant.
+  { path: '/intelligence/patterns', label: 'Pattern Discovery', destination: 'kyber-investigations', requirement: { flag: 'pattern_discovery_enabled' } },
   { path: '/measurement/traffic-intelligence', label: 'Traffic Intel', destination: 'kyber-traffic-intelligence' },
   { path: '/connectors', label: 'Connectors', destination: 'kyber-connectors', requirement: { flag: 'connectors_enabled' } },
   { path: '/agent-lineage', label: 'Agent Lineage', destination: 'kyber-agent-lineage', envFlag: 'enableExternalAgentTelemetry' },

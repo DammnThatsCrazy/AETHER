@@ -88,7 +88,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
-  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/config/settings.py": "sha256:a4894768d226d29813ac9b1b4e75b4e040e303dfb546d8a66b568fd1432a7655"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
@@ -101,7 +101,7 @@ source_hashes:
   "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
-  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
+  "services/api/main.py": "sha256:832ff34ca99d9e46ed0c1eca0ef43338525630affd1cd763ab1189065f2d9994"
   "services/api/middleware/middleware.py": "sha256:a759e3d55b5791e9fa6c9d022fa68551bc4227638cdcc7871c039bbdad2ccab5"
   "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
@@ -1693,6 +1693,7 @@ Three additive service modules mount conditionally via `main.py` behind feature 
 | `services/api/intelligence/fraud_networks` | `FEATURE_FRAUD_NETWORKS` | `/v1/fraud/networks` |
 | `services/api/value/flow_trace` | `FEATURE_FLOW_TRACE` | `/v1/flow-trace` |
 | `services/api/graph/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlays` |
+| `services/api/intelligence/pattern_discovery` | `AETHER_PATTERN_DISCOVERY_ENABLED` | `/v1/intelligence/patterns`, `/v1/kyber/patterns` |
 
 These services are fully additive — they add no startup overhead when their flags are disabled. They share the graph client, event producer, and investigation repository with existing services. The `FraudIntelligenceConfig` dataclass in `config/settings.py` owns the fraud-intelligence flags and tuning parameters (`max_network_depth`, `max_flow_trace_hops`).
 

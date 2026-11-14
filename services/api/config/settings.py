@@ -1429,6 +1429,25 @@ class FraudIntelligenceConfig:
 
 
 # ---------------------------------------------------------------------------
+# Pattern Discovery & Unstructured Evidence Intelligence
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PatternDiscoveryConfig:
+    """Governed discovery of unknown patterns (intelligence/pattern_discovery).
+
+    ``enabled`` mounts the tenant and Kyber routes. Discovery never writes
+    canonical graph facts; ``risk_promotion_enabled`` controls whether a
+    reviewer's promotion also writes attributed Risk360 signals.
+    """
+
+    enabled: bool = _env_bool("AETHER_PATTERN_DISCOVERY_ENABLED", False)
+    window_hours: int = _env_int("PATTERN_DISCOVERY_WINDOW_HOURS", 72)
+    max_events: int = _env_int("PATTERN_DISCOVERY_MAX_EVENTS", 50_000)
+    risk_promotion_enabled: bool = _env_bool("AETHER_PATTERN_RISK_PROMOTION_ENABLED", True)
+
+
+# ---------------------------------------------------------------------------
 # Delivery Worker
 # ---------------------------------------------------------------------------
 
@@ -2157,6 +2176,7 @@ class Settings:
 
     # Fraud Network Intelligence + Flow-of-Funds (disabled by default)
     fraud_intelligence: FraudIntelligenceConfig = field(default_factory=FraudIntelligenceConfig)
+    pattern_discovery: PatternDiscoveryConfig = field(default_factory=PatternDiscoveryConfig)
 
     # Delivery Worker (durable provider dispatch + outcome tracking)
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)

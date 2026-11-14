@@ -46,7 +46,7 @@ reviewed_source_commits:
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
   "apps/aether-web/src/": "sha256:f1507936d4e5dfc07c939c4d6a2140e498ec881d8420dbe316138efcf50ae7bc"
-  "apps/kyber-web/src/": "sha256:b6e44382c32230570c57980250baf819cbfa529d2079d7c992dc6faf3e2f279e"
+  "apps/kyber-web/src/": "sha256:6e8b1a304dda32396010653c911c7cdde1bc18f2a1637de27f95786adf35674f"
   "packages/ui/core/src/": "sha256:02a14d802d773a5b7e255fa0d1b0e1c661d5fa106b3892e5370f3ecf339a5805"
 ---
 
@@ -164,6 +164,7 @@ the root.
 - Review / approval workflows — human-in-the-loop agent approvals; approval commits staged graph mutations when staged-mutation review is enabled (badge + submitting/error modal states)
 - **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
 - **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
+- **Pattern discovery queue** (`/intelligence/patterns`, gated on the `pattern_discovery_enabled` capability) — per-tenant queue of discovered pattern candidates with evidence, competing explanations, related and member patterns, and review history; operators run discovery, record a verdict with a reason, promote a confirmed pattern to attributed Risk360 signals, or deprecate it (`features/pattern-discovery/`, `/v1/kyber/patterns/*`)
 - **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
 - **Measurement Overview** — spend, attributed revenue, ROAS, data quality, and connector health across all tenants (`/measurement/overview`)
 - **Attribution Studio** — per-conversion attribution runs, model selection, backfill controls; reads `?campaign_id=` URL param to pre-filter runs and surface a "Compare in Campaign 360 →" contextual link (`/measurement/attribution`)

@@ -1310,6 +1310,18 @@ def create_app() -> FastAPI:
     else:
         logger.info("Fraud Network Intelligence: disabled (set FEATURE_FRAUD_NETWORKS=true to enable)")
 
+    # ── Pattern Discovery & Unstructured Evidence Intelligence (flagged) ──
+    if settings.pattern_discovery.enabled:
+        from intelligence.pattern_discovery.routes import (
+            kyber_router as pattern_kyber_router,
+            router as pattern_discovery_router,
+        )
+        app.include_router(pattern_discovery_router)
+        app.include_router(pattern_kyber_router)
+        logger.info("Pattern Discovery: routes mounted (/v1/intelligence/patterns + /v1/kyber/patterns)")
+    else:
+        logger.info("Pattern Discovery: disabled (set AETHER_PATTERN_DISCOVERY_ENABLED=true to enable)")
+
     if fi.flow_trace_enabled:
         from value.flow_trace.routes import router as flow_trace_router
         app.include_router(flow_trace_router)

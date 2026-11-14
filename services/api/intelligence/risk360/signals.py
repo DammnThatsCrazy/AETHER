@@ -50,7 +50,8 @@ from .dimensions import RISK_DIMENSION_KEYS
 
 #: Producer keys the dispatcher understands.
 KNOWN_PRODUCERS: frozenset[str] = frozenset(
-    {"fraud", "fraud_network", "device_risk", "geo", "behavioral", "trust", "agent_behavior", "agent_lineage_fanout"}
+    {"fraud", "fraud_network", "device_risk", "geo", "behavioral", "trust", "agent_behavior",
+     "agent_lineage_fanout", "pattern_discovery"}
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -863,6 +864,27 @@ def signals_from_agent_lineage_fanout(
     return out
 
 
+def signals_from_discovered_pattern(
+    artifact: Any,
+    *,
+    subject_kind: str,
+    subject_id: str,
+    tenant_id: str,
+    observed_at: Optional[datetime] = None,
+) -> list[RiskSignal]:
+    """Adapt a reviewer-confirmed discovered pattern (see ``pattern_discovery``).
+
+    Unreviewed candidates converge to no signals; confirmed and promoted
+    patterns yield ``attributed`` signals, never ``verified`` ones.
+    """
+    from intelligence.pattern_discovery.projections import signals_from_pattern
+
+    return signals_from_pattern(
+        artifact, subject_kind=subject_kind, subject_id=subject_id,
+        tenant_id=tenant_id, observed_at=observed_at,
+    )
+
+
 _PRODUCER_ADAPTERS: Mapping[str, Any] = {
     "fraud": signal_from_fraud_result,
     "fraud_network": signals_from_fraud_network_evidence,
@@ -872,6 +894,7 @@ _PRODUCER_ADAPTERS: Mapping[str, Any] = {
     "trust": signal_from_trust_vector,
     "agent_behavior": signal_from_agent_behavior,
     "agent_lineage_fanout": signals_from_agent_lineage_fanout,
+    "pattern_discovery": signals_from_discovered_pattern,
 }
 
 

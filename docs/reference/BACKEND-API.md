@@ -33,10 +33,10 @@ source_hashes:
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
   "services/api/identity/": "sha256:a52e1403d9780c9ab1a9c409c9f89a54d4f22c9667c5e58b5f35981bf5408d2a"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
-  "services/api/intelligence/": "sha256:17c9f024e594831089f1fecc771e2e86ced5697217592a0c48473bbe6663f68a"
+  "services/api/intelligence/": "sha256:27f1743a4a19b513f0917710daa6e3dca7f2b1c849cb898abd751b34be32f6af"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
+  "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
   "services/api/workers/": "sha256:a6c6b55338c45947832201ac3cfa3d006fa3f6ef029501bf29856755eae0b3b1"
 ---
@@ -1555,7 +1555,7 @@ discovery — callers can determine available capabilities without trial-and-err
 | `providers` | Configured providers with `status`, `last_successful_sync`, `error_count`, `staleness_label`, `circuit_breaker` |
 | `consent_purposes_granted` | Consent purposes the tenant has enabled |
 | `consent_purposes_all` | Full list of supported consent purposes |
-| `feature_flags` | Active flag values: `suggestions_enabled`, `connectors_enabled`, `data_quality_enabled`, etc. |
+| `feature_flags` | Active flag values: `suggestions_enabled`, `connectors_enabled`, `data_quality_enabled`, `pattern_discovery_enabled`, etc. |
 | `evaluated_at` | ISO-8601 timestamp of the capability snapshot |
 
 **Permissions:** `read` (any authenticated tenant call)
@@ -3977,6 +3977,22 @@ Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handof
 - `POST /v1/fraud/fleet-hypotheses/build` — `fraud:evaluate`. Builds an evidence-graded common-operator hypothesis for an orchestrator; with `AETHER_FRAUD360_ENABLED` it also mirrors it into Fraud360 (response `fraud360`).
 - `GET /v1/fraud/fleet-hypotheses` and `GET /v1/fraud/fleet-hypotheses/{id}` — `fraud:read`.
 - `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status. Written atomically against the record's `revision`, so concurrent reviews are all kept in `review_history`.
+
+### Pattern discovery (flag `AETHER_PATTERN_DISCOVERY_ENABLED`)
+
+Discovers patterns nobody defined in advance from raw and semi-structured evidence. Every pattern is an `inferred` candidate with capped confidence and competing explanations; only a reviewer verdict leaves the funnel. See `docs/architecture/PATTERN-DISCOVERY.md`.
+
+- `GET /v1/intelligence/patterns` — `read`. Filters `status`, `queue=true` (needs_review + unresolved), `kind`, `min_confidence`, `limit`, `offset`; ordered by priority, severity, confidence.
+- `GET /v1/intelligence/patterns/stats` and `GET /v1/intelligence/patterns/runs` — `read`. Counts by status/kind, analyst calibration per kind, suppressed families, baseline health; recent runs with coverage and per-detector stats.
+- `POST /v1/intelligence/patterns/runs` — `write`. Body `{window_hours?, max_events?, kinds?, events?, edges?, include_store?}`. Reads the tenant's recent events (truncation reported in `coverage`), plus optional inline evidence (rows naming another tenant are rejected), upserts patterns, ages open patterns it did not re-observe, and folds the run into the tenant baseline.
+- `POST /v1/intelligence/patterns/extract` — `read`. Schema-on-read preview of one payload: typed attributes (sensitive values hashed), counterparties, message templates, field profile. Nothing is stored.
+- `GET /v1/intelligence/patterns/entities/{kind:id}` — `read`. Advisory emerging-pattern context for one entity (open and reviewed patterns, identity-overlap candidates, co-implicated entities).
+- `GET /v1/intelligence/patterns/{id}` — `read`. Full record with evidence, competing explanations, review history, cross-domain members and similar patterns.
+- `POST /v1/intelligence/patterns/{id}/review` — `write`. `{verdict: valid|malicious|benign|duplicate|unresolved, reason (>=10 chars), duplicate_of?}`. Also recorded as analyst feedback that calibrates the detector kind.
+- `POST /v1/intelligence/patterns/{id}/promote` — `admin`. Only from `confirmed_valid` / `confirmed_malicious` with unchanged evidence. Writes `attributed` Risk360 signals for canonical subjects (unresolvable subjects are reported, never guessed) unless `AETHER_PATTERN_RISK_PROMOTION_ENABLED=false`.
+- `POST /v1/intelligence/patterns/{id}/deprecate` — `write`.
+- Kyber operator routes `GET /v1/kyber/patterns/queue`, `GET /v1/kyber/patterns/stats`, `GET /v1/kyber/patterns/{id}`, `POST /v1/kyber/patterns/runs`, `POST /v1/kyber/patterns/{id}/review|promote|deprecate` take `tenant_id` as a query parameter and record the operator as `kyber:<actor>` in review history.
+
 
 ## Agentic Observability Layer
 

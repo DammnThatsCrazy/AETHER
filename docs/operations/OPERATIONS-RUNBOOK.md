@@ -51,13 +51,13 @@ source_hashes:
   "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/config/settings.py": "sha256:a4894768d226d29813ac9b1b4e75b4e040e303dfb546d8a66b568fd1432a7655"
   "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
-  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
+  "services/api/main.py": "sha256:832ff34ca99d9e46ed0c1eca0ef43338525630affd1cd763ab1189065f2d9994"
   "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
@@ -682,12 +682,13 @@ Inbox rows written before `received_at` was recorded are judged against their
 
 ## Fraud Intelligence Services
 
-Three services mount conditionally in `main.py` based on feature flags:
+These services mount conditionally in `main.py` based on feature flags:
 
 ```
 FEATURE_FRAUD_NETWORKS=true    → mounts services/api/intelligence/fraud_networks router at /v1/fraud/networks
 FEATURE_FLOW_TRACE=true        → mounts services/api/value/flow_trace router at /v1/flow-trace
 FEATURE_RISK_OVERLAYS=true     → mounts services/api/graph/risk_overlay router at /v1/risk-overlay
+AETHER_PATTERN_DISCOVERY_ENABLED=true → mounts services/api/intelligence/pattern_discovery routers at /v1/intelligence/patterns and /v1/kyber/patterns
 ```
 
 ### Enabling

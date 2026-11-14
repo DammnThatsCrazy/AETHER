@@ -117,6 +117,7 @@ services:
   onchain: {class: experimental, stage: action, reason: "on-chain action recording, chain listening and RPC gateway"}
   operational_intelligence: {class: beta, stage: intelligence, reason: "operational intelligence contracts and graph routes"}
   oracle: {class: experimental, stage: action, reason: "oracle bridge proofs for on-chain reward claims"}
+  pattern_discovery: {class: experimental, stage: intelligence, reason: "flag-gated discovery of unknown patterns from raw and semi-structured evidence; review-gated, default off"}
   payment_catalog: {class: experimental, stage: intake, reason: "card-linked payment catalog seed"}
   pnl: {class: experimental, stage: intelligence, reason: "realized and unrealized PNL and TVL delta"}
   policy: {class: core, stage: control-plane, reason: "consent policy decision evidence"}

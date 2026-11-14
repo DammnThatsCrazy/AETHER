@@ -717,6 +717,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/PATTERN-DISCOVERY.md",
+      "title": "Pattern Discovery and Unstructured Evidence Intelligence",
+      "slug": "pattern-discovery",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/PLATFORM-ARCHITECTURE.md",
       "title": "Aether Architecture Guide",
       "slug": "architecture/system-map",

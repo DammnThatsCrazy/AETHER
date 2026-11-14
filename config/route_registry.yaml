@@ -355,6 +355,37 @@ kyber_routes:
     capability: kyber.command.rebuild
     disclosure: D4
     action_class: 3
+  # Pattern Discovery (intelligence/pattern_discovery): tenant-scoped discovery
+  # queue reads, discovery runs (a bounded recompute over the tenant's evidence),
+  # analyst verdicts, and promotion, which writes attributed Risk360 signals.
+  - route: "GET /v1/kyber/patterns/queue"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/patterns/stats"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/patterns/{pattern_id}"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "POST /v1/kyber/patterns/runs"
+    capability: kyber.command.recompute
+    disclosure: D3
+    action_class: 2
+  - route: "POST /v1/kyber/patterns/{pattern_id}/review"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/patterns/{pattern_id}/deprecate"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/patterns/{pattern_id}/promote"
+    capability: kyber.command.rebuild
+    disclosure: D4
+    action_class: 3
   - route: "GET /v1/kyber/jobs/timeline"
     capability: kyber.platform.health.read
     disclosure: D1
