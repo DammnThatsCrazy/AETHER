@@ -137,6 +137,20 @@ def tool_entities(facts: Iterable[AgentFact]) -> list[dict[str, Any]]:
     return out
 
 
+def _same_attempt_recorded(
+    fact: AgentFact, attempted: set[tuple[Optional[str], Optional[int]]],
+) -> bool:
+    """Whether this fact belongs to a recovery attempt already recorded.
+
+    A numbered fact matches the same tool and number, or an unnumbered record
+    of that tool (a notice usually carries no number). An unnumbered fact
+    matches any record of that tool."""
+    tool, number = fact.tool_name, fact.attempt
+    if number is None:
+        return any(t == tool for t, _ in attempted)
+    return (tool, number) in attempted or (tool, None) in attempted
+
+
 def failure_resolution(facts: Iterable[AgentFact]) -> list[dict[str, Any]]:
     """Per (agent, task): failures, retries, switches and whether it resolved.
 
@@ -152,31 +166,35 @@ def failure_resolution(facts: Iterable[AgentFact]) -> list[dict[str, Any]]:
         failures, retries, switches = [], [], []
         last_failed: Optional[AgentFact] = None
         resolved_by = None
-        # One recovery attempt per tool after each failure. An explicit
+        # One recovery attempt per tool after each failure, or per (tool,
+        # attempt number) when telemetry numbers its attempts. An explicit
         # retry/switch notice records the attempt (observed); otherwise the
-        # first invocation or result with that tool does (derived), and the
-        # rest of that tool's lifecycle is the same attempt, not another one.
-        # So retried(A) -> invoked(A) -> succeeded(A) is one retry, and
-        # invoked(A) -> invoked(B) -> succeeded(B) is a retry and a switch.
-        attempted: set[Optional[str]] = set()
+        # first invocation or result of it does (derived), and the rest of
+        # that attempt's lifecycle is not counted again. So retried(A) ->
+        # invoked(A) -> succeeded(A) is one retry, invoked(A) -> invoked(B) is
+        # a retry and a switch, and invoked(A, 2) -> invoked(A, 3) is two retries.
+        attempted: set[tuple[Optional[str], Optional[int]]] = set()
+
+        def attempt_key(fact: AgentFact) -> tuple[Optional[str], Optional[int]]:
+            return (fact.tool_name, fact.attempt)
         for f in seq:
             if f.event_type == "agent_tool_retried":
                 retries.append({"tool": f.tool_name, "event_id": f.event_id, "basis": c.OBSERVED})
-                attempted.add(f.tool_name)
+                attempted.add(attempt_key(f))
                 continue
             if f.event_type == "agent_tool_switched":
                 switches.append({"from_tool": f.previous_tool_name, "to_tool": f.tool_name,
                                  "event_id": f.event_id, "basis": c.OBSERVED})
-                attempted.add(f.tool_name)
+                attempted.add(attempt_key(f))
                 continue
-            if (last_failed is not None and f.tool_name not in attempted
+            if (last_failed is not None and not _same_attempt_recorded(f, attempted)
                     and f.status in {"invoked", "succeeded", "failed"}):
                 if f.tool_name == last_failed.tool_name:
                     retries.append({"tool": f.tool_name, "event_id": f.event_id, "basis": c.DERIVED})
                 else:
                     switches.append({"from_tool": last_failed.tool_name, "to_tool": f.tool_name,
                                      "event_id": f.event_id, "basis": c.DERIVED})
-                attempted.add(f.tool_name)
+                attempted.add(attempt_key(f))
             if f.status == "failed":
                 failures.append({"tool": f.tool_name, "event_id": f.event_id})
                 last_failed = f
