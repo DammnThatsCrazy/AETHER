@@ -227,6 +227,24 @@ async def test_follows_redirect_revalidating_and_dropping_auth_on_host_change():
 
 
 @pytest.mark.asyncio
+async def test_redirect_does_not_replay_response_cookies_to_another_host_on_the_same_ip():
+    # Codex review on #867: requests go to the pinned IP, so the cookie jar
+    # filed a host-only Set-Cookie under that IP and replayed it to a different
+    # hostname resolving to the same address on the next hop.
+    dns = {"origin.example": ["93.184.216.34"], "other.example": ["93.184.216.34"]}
+    rec = _Recorder([
+        httpx.Response(302, headers={"location": "https://other.example/next",
+                                     "set-cookie": "session=secret; Path=/"}),
+        httpx.Response(200),
+    ])
+    with patch("socket.getaddrinfo", side_effect=_resolver(dns)):
+        await send_public_request("GET", "https://origin.example/", transport=httpx.MockTransport(rec))
+    second = rec.requests[1]
+    assert second.headers["host"] == "other.example"
+    assert "cookie" not in second.headers
+
+
+@pytest.mark.asyncio
 async def test_same_host_307_keeps_method_body_and_auth():
     rec = _Recorder([
         httpx.Response(307, headers={"location": "/moved"}),

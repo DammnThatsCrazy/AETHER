@@ -425,7 +425,8 @@ async def send_public_request(
     The connection goes to the validated address. Redirects are followed by
     hand, at most *max_redirects* hops (``0`` returns the redirect response),
     each hop re-validated; ``Authorization``/``Proxy-Authorization``/``Cookie``
-    are dropped when the host changes or ``https`` downgrades to ``http``, and
+    are dropped when the host changes or ``https`` downgrades to ``http``,
+    response cookies are never stored or replayed, and
     301/302 on POST and every 303 turn into a body-less GET. A connection that
     cannot be established moves on to the host's next validated address.
     Raises :class:`UnsafeDestinationError` before any connection to a
@@ -439,6 +440,11 @@ async def send_public_request(
     async with httpx.AsyncClient(transport=transport, timeout=timeout, follow_redirects=False) as client:
         for _ in range(max_redirects + 1):
             response = await _send_pinned(client, method, url, headers, body, allow_local)
+            # Requests go to the pinned address, so the client's cookie jar
+            # files Set-Cookie under that IP and would replay it to any other
+            # hostname sharing the IP on the next hop. Response cookies are
+            # never persisted; callers that need a cookie pass it explicitly.
+            client.cookies.clear()
             location = response.headers.get("location")
             if response.status_code not in _REDIRECT_STATUSES or not location or max_redirects == 0:
                 return response

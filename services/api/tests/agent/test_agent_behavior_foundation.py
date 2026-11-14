@@ -152,6 +152,7 @@ def test_every_design_event_maps_to_an_active_registered_and_projected_type():
 
 def test_mcp_adapter_maps_without_inference_and_drops_content():
     base = {"id": "c1", "timestamp": "2026-10-22T10:00:00Z", "agentId": "a1",
+            "sessionId": "s1", "anonymousId": "anon-1",
             "method": "tools/call", "params": {"name": "search"}, "prompt": "secret plan"}
     [invoked] = map_runtime_record("mcp", base)
     assert invoked["type"] == "agent_tool_invocation_observed"
@@ -160,23 +161,24 @@ def test_mcp_adapter_maps_without_inference_and_drops_content():
     assert failed["properties"]["status"] == "failed"
     [ok] = map_runtime_record("mcp", {**base, "result": {"isError": False}})
     assert ok["properties"]["status"] == "succeeded"
-    assert map_runtime_record("mcp", base)[0]["messageId"] == invoked["messageId"]
+    assert map_runtime_record("mcp", base)[0]["id"] == invoked["id"]
     with pytest.raises(AdapterError):
         map_runtime_record("mcp", {**base, "method": "resources/list"})
 
 
 def test_wallet_and_generic_adapters():
+    ids = {"session_id": "s1", "anonymous_id": "anon-1"}
     [quote] = map_runtime_record("wallet_payment", {"id": "w1", "timestamp": "t", "agentId": "a",
-                                                     "state": "quoted", "amount": "10.5", "currency": "USDC"})
+                                                     "state": "quoted", "amount": "10.5", "currency": "USDC"}, **ids)
     assert quote["type"] == "agent_quote_received" and quote["properties"]["amount"] == "10.5"
     [gen] = map_runtime_record("generic_runtime", {"id": "g1", "timestamp": "t", "agentId": "a",
                                                    "event": "agent.objective.created",
-                                                   "properties": {"objectiveId": "o1", "reasoning": "x"}})
+                                                   "properties": {"objectiveId": "o1", "reasoning": "x"}}, **ids)
     assert gen["type"] == "agent_objective_created" and "reasoning" not in gen["properties"]
     with pytest.raises(AdapterError):
-        map_runtime_record("generic_runtime", {"id": "g1", "timestamp": "t", "event": "agent.x"})
+        map_runtime_record("generic_runtime", {"id": "g1", "timestamp": "t", "event": "agent.x"}, **ids)
     with pytest.raises(AdapterError):
-        map_runtime_record("teleporter", {})
+        map_runtime_record("teleporter", {}, **ids)
 
 
 # --- Bronze secrets and Silver facts (WO-032, WO-033) --------------------------
@@ -225,8 +227,25 @@ def test_mcp_lifecycle_phases_get_distinct_message_ids():
     """invoked / failed / succeeded share one canonical type; equal ids would let
     dedupe drop the completion. Each phase stays stable across retries."""
     base = {"id": "c1", "timestamp": "2026-10-22T10:00:00Z", "agentId": "a1",
+            "sessionId": "s1", "anonymousId": "anon-1",
             "method": "tools/call", "params": {"name": "search"}}
     records = (base, {**base, "error": {"code": -32000}}, {**base, "result": {"isError": False}})
-    ids = [map_runtime_record("mcp", r)[0]["messageId"] for r in records]
+    ids = [map_runtime_record("mcp", r)[0]["id"] for r in records]
     assert len(set(ids)) == 3
-    assert ids == [map_runtime_record("mcp", r)[0]["messageId"] for r in records]
+    assert ids == [map_runtime_record("mcp", r)[0]["id"] for r in records]
+
+
+def test_runtime_adapter_output_is_a_valid_batch_event():
+    """Codex review on #867: adapters emitted messageId without sessionId or
+    anonymousId, so every event they produced failed BaseEvent validation."""
+    from ingestion.ingestion.batch import BaseEvent
+
+    record = {"id": "c1", "timestamp": "2026-10-22T10:00:00Z", "agentId": "a1",
+              "method": "tools/call", "params": {"name": "search"}}
+    [event] = map_runtime_record("mcp", record, session_id="s1", anonymous_id="anon-1")
+    parsed = BaseEvent.model_validate(event)
+    assert (parsed.sessionId, parsed.anonymousId) == ("s1", "anon-1") and parsed.id.startswith("abi_")
+    [from_record] = map_runtime_record("mcp", {**record, "sessionId": "s2", "anonymousId": "anon-2"})
+    assert (from_record["sessionId"], from_record["anonymousId"]) == ("s2", "anon-2")
+    with pytest.raises(AdapterError):
+        map_runtime_record("mcp", record)
