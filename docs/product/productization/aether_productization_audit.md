@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:dcf36a012fc9a8cf32ccf243ccc046bbb56b8befbd43a64a3d12a95539bf3a05"
+  "scripts/production_status.py": "sha256:b71f250a3fc16797858f1ad58f62c0acdc06c4fbce2c39dda9d690f24acdca62"
 ---
 
 # AETHER Productization Audit
@@ -230,9 +230,11 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 `make production-status`; this table is a dated excerpt of the full scorecard).
 The 2026-11-14 pass added **pattern discovery at 2/5 (partial/pilot)**: a
 complete, flag-gated discovery plane (schema-on-read extraction, segmented and
-seasonal baselines, 13 detectors, review lifecycle, DSR erasure, consent gates,
-Risk360 and graph promotion, 360 sections, scheduler, Kyber and Aether
-surfaces) held at 2 because no detector has measured precision on production
+seasonal baselines, 13 detectors, a lifecycle that surfaces patterns
+automatically and keeps them reviewable, what's-new digests and notifications,
+pattern subgraphs and graph overlay, 360 sections and segment lenses, DSR
+erasure, consent gates, Risk360 and graph promotion, scheduler, Kyber and
+Aether surfaces) held at 2 because no detector has measured precision on production
 data. Like the semantic intelligence addition, the lower average is honest
 denominator growth, not a regression in any existing area.
 A W3C trace-context seam (correlation-id + traceparent propagation across the

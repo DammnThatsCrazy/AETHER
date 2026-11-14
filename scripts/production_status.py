@@ -767,13 +767,16 @@ AREAS: list[Area] = [
         "Governed discovery of patterns nobody defined in advance: schema-on-read "
         "extraction (PII digested), segmented and seasonal tenant baselines, 13 "
         "deterministic detectors plus cross-domain/cross-run correlation, ML window "
-        "scoring, analyst-calibrated scoring and thresholds, a versioned review "
-        "lifecycle with DSR erasure and consent gates, promotion into attributed "
-        "Risk360 signals and governed RiskCluster graph edges, 360 sections, a "
-        "scheduled worker and Kyber/Aether review surfaces. Migration and indexed "
-        "queries are exercised against PostgreSQL in tests. Not production: every "
-        "flag defaults OFF and no detector has been validated on labelled production "
-        "data, so precision and recall are unknown.",
+        "scoring, analyst-calibrated scoring and thresholds, a versioned lifecycle "
+        "that surfaces patterns automatically and keeps them reviewable (curation, "
+        "optional verdicts), per-viewer what's-new digests and notifications, "
+        "pattern subgraphs and a graph overlay, 360 sections and Campaign / "
+        "Geographic / Communications / Journey lenses, DSR erasure and consent gates, "
+        "promotion into attributed Risk360 signals and governed RiskCluster graph "
+        "edges, a scheduled worker and Kyber/Aether surfaces. Migration and indexed "
+        "queries are exercised against PostgreSQL in tests. Not production: the "
+        "master flag defaults OFF and no detector has been validated on labelled "
+        "production data, so precision and recall are unknown.",
         [
             "services/api/intelligence/pattern_discovery/",
             "services/api/alembic/versions/20261114_pattern_discovery_stores.py",
@@ -790,8 +793,8 @@ BLOCKERS: list[Blocker] = [
         "Pattern discovery detectors have no measured precision/recall on production data",
         "pattern discovery",
         "Run discovery in shadow on a pilot tenant, collect analyst verdicts until each "
-        "kind has calibration evidence, and record precision per kind before enabling "
-        "review queues for customers",
+        "kind has calibration evidence, and record precision per kind before surfacing "
+        "patterns to customers",
     ),
     Blocker(
         "release-blocker",

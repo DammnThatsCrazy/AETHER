@@ -19,7 +19,8 @@ plane:
 * honours legal holds on ``discovered_patterns`` for any subject ref (the
   whole plane is skipped, never half-applied).
 
-Baselines and feedback rows carry no subject key (aggregate rates and
+The subject's own "last seen" rows (``pattern_viewer_state``, when the
+subject is a viewer) are deleted. Baselines and feedback rows carry no subject key (aggregate rates and
 pattern-id verdicts) and are untouched. Erased entities can re-enter a
 pattern only through new evidence, which the ingestion erasure fence already
 blocks.
@@ -170,11 +171,15 @@ async def erase_pattern_discovery(tenant_id: str, refs: frozenset[str]) -> dict[
             offset += _PAGE
         if stale:
             runs_deleted = await runs.delete_for_tenant_where(tenant_id, "run_id", stale)
+    from .feed import PatternViewerStateRepository
+
+    viewers_deleted = await PatternViewerStateRepository().delete_viewers(tenant_id, sorted(refs))
     logger.info("pattern_discovery.erasure", extra={"tenant_id": tenant_id, "redacted": redacted,
                                                      "deleted": deleted, "runs_deleted": runs_deleted})
     return {
         "status": "completed",
-        "records_impacted": redacted + deleted + runs_deleted,
-        "detail": {"patterns_redacted": redacted, "patterns_deleted": deleted, "runs_deleted": runs_deleted},
+        "records_impacted": redacted + deleted + runs_deleted + viewers_deleted,
+        "detail": {"patterns_redacted": redacted, "patterns_deleted": deleted, "runs_deleted": runs_deleted,
+                   "viewer_state_deleted": viewers_deleted},
         "hold": None,
     }

@@ -18,6 +18,7 @@ from .contracts import DETECTOR_VERSION, KIND_CROSS_DOMAIN, PATTERN_KINDS, RawPa
 from .detectors import DETECTORS, DetectorConfig, DiscoveryFrame, correlate, known_motif_signatures
 from .detectors.schema_drift import current_profiles
 from .extraction import ExtractionResult, extract_events
+from .lenses import segment_profile
 from .registry import build_record
 from .scoring import calibration_factors, score, suppressed_families, tuned_config
 
@@ -143,6 +144,15 @@ def run_discovery(
         for raw in cross.patterns:
             scored = score(raw, baseline=baseline, calibration=calibration, suppressed=suppressed)
             records.append(build_record(tenant_id, raw, scored, run_id=run_id))
+
+    # Segment profile per pattern: where its affected entities' activity
+    # concentrates (campaign, channel, geography, ...), for the segment lenses.
+    events_by_entity: dict[str, list] = {}
+    for ev in frame.events:
+        events_by_entity.setdefault(ev.entity, []).append(ev)
+    for rec in records:
+        evs = [ev for key in rec.get("affected_entity_keys") or [] for ev in events_by_entity.get(key, ())]
+        rec["segment_profile"], rec["segment_keys"] = segment_profile(evs)
 
     if "field_profiles" not in contributions:
         profiles, counts = current_profiles(frame)

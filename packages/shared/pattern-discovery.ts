@@ -7,9 +7,10 @@
 // Hand-authored twin; parity of every vocabulary below is asserted by
 // tests/unit/test_pattern_discovery_contract_parity.py.
 //
-// Every discovered pattern is an inferred candidate: confidence is capped per
-// kind, only a reviewer verdict leaves the funnel, and promotion produces
-// attributed (never verified) Risk360 signals.
+// Patterns are surfaced automatically (no human step) and are always
+// reviewable: people can hide, pin, rename or give a verdict at any time.
+// Confidence is capped per kind; only a deliberate promotion writes
+// attributed (never verified) Risk360 signals and graph edges.
 // =============================================================================
 
 export const PATTERN_KINDS = [
@@ -50,7 +51,7 @@ export const PATTERN_CONFIDENCE_CAPS: Readonly<Record<PatternKind, number>> = {
 
 export const PATTERN_STATUSES = [
   'candidate',
-  'needs_review',
+  'surfaced',
   'confirmed_valid',
   'confirmed_malicious',
   'benign',
@@ -58,6 +59,7 @@ export const PATTERN_STATUSES = [
   'unresolved',
   'promoted',
   'deprecated',
+  'hidden',
 ] as const;
 export type PatternStatus = (typeof PATTERN_STATUSES)[number];
 
@@ -99,6 +101,17 @@ export interface CompetingExplanation {
   note: string;
 }
 
+/** Statuses shown by default in the feed and every lens. */
+export const PATTERN_VISIBLE_STATUSES = [
+  'surfaced', 'unresolved', 'confirmed_valid', 'confirmed_malicious', 'promoted',
+] as const satisfies readonly PatternStatus[];
+
+export const PATTERN_CURATION_ACTIONS = ['hide', 'unhide', 'pin', 'unpin', 'rename'] as const;
+export type PatternCurationAction = (typeof PATTERN_CURATION_ACTIONS)[number];
+
+export const PATTERN_LENSES = ['campaign360', 'geographic360', 'communication360', 'journey360'] as const;
+export type PatternLens = (typeof PATTERN_LENSES)[number];
+
 export interface DiscoveredPatternSummary {
   pattern_id: string;
   kind: PatternKind;
@@ -119,6 +132,16 @@ export interface DiscoveredPatternSummary {
   times_observed?: number;
   suppressed_by_feedback?: boolean;
   claim_state?: 'inferred';
+  /** User-set display title wins over the detector title (kept in detector_title). */
+  detector_title?: string;
+  pinned?: boolean;
+  surfaced_at?: string | null;
+  changed_at?: string | null;
+  deprecated_at?: string | null;
+  segment_keys?: string[];
+  /** Set on section / lens rows relative to the viewer's last-seen time. */
+  is_new?: boolean;
+  is_changed?: boolean;
 }
 
 export interface PatternReviewEntry {
@@ -146,6 +169,7 @@ export interface PatternPromotion {
     reason_code?: string;
   }>;
   risk_projection?: 'written' | 'no_resolvable_subjects' | 'disabled';
+  graph_revocation?: { status: string; revoked?: number };
   graph_projection?: { status: string; vertex_id?: string; edges?: number };
 }
 
@@ -172,6 +196,89 @@ export interface PatternReviewRequest {
   duplicate_of?: string;
 }
 
+export interface PatternCurateRequest {
+  action: PatternCurationAction;
+  title?: string;
+  reason?: string;
+}
+
+export interface PatternDigest {
+  count: number;
+  by_kind: Record<string, number>;
+  by_severity: Record<string, number>;
+  by_segment: Record<string, number>;
+  risk_categories: Record<string, number>;
+}
+
+/** GET /v1/intelligence/patterns/whats-new */
+export interface PatternWhatsNew {
+  scope: string;
+  withheld: boolean;
+  reason_code?: string | null;
+  since: string;
+  since_source?: 'explicit' | 'last_seen' | 'default_lookback';
+  last_seen_at: string | null;
+  as_of?: string;
+  new: DiscoveredPatternSummary[];
+  changed: DiscoveredPatternSummary[];
+  retired: DiscoveredPatternSummary[];
+  digest: { new: PatternDigest; changed: PatternDigest; retired: PatternDigest };
+}
+
+export interface PatternGraphNode {
+  id: string;
+  kind: string;
+  label: string;
+  role: 'pattern' | 'member' | 'attribute' | 'principal' | 'member_pattern';
+}
+
+export interface PatternGraphEdge {
+  source: string;
+  target: string;
+  type: string;
+}
+
+/** GET /v1/intelligence/patterns/{id}/graph */
+export interface PatternSubgraph {
+  pattern_id: string;
+  kind: PatternKind;
+  title: string;
+  nodes: PatternGraphNode[];
+  edges: PatternGraphEdge[];
+  truncated: boolean;
+  claim_state: 'inferred';
+}
+
+/** POST /v1/intelligence/patterns/graph-overlay */
+export interface PatternGraphOverlay {
+  by_node: Record<string, string[]>;
+  patterns: Array<{
+    pattern_id: string;
+    kind: PatternKind;
+    title: string;
+    severity?: PatternSeverity;
+    status: PatternStatus;
+    pinned?: boolean;
+    surfaced_at?: string | null;
+    members_in_view: string[];
+    affected_entity_count: number;
+  }>;
+  nodes_requested: number;
+}
+
+/** GET /v1/intelligence/patterns/lenses/{lens}/{subject} */
+export interface PatternLensView {
+  lens: PatternLens;
+  subject: string;
+  withheld: boolean;
+  scope: string;
+  last_seen_at: string | null;
+  new_count: number;
+  counts: { total: number; by_kind: Record<string, number> };
+  groups: Array<{ kind: PatternKind; heading: string; patterns: DiscoveredPatternSummary[] }>;
+  patterns: DiscoveredPatternSummary[];
+}
+
 export interface PatternDiscoveryRunRequest {
   window_hours?: number;
   max_events?: number;
@@ -187,7 +294,10 @@ export interface PatternSectionBase {
   claim_state: 'inferred';
   withheld: boolean;
   reason_code?: string | null;
-  counts: { total: number; open: number; reviewed: number; promoted: number };
+  scope?: string;
+  last_seen_at?: string | null;
+  new_count?: number;
+  counts: { total: number; surfaced: number; reviewed: number; promoted: number; watching: number; hidden: number };
 }
 
 export interface CoImplicatedEntity {

@@ -9,18 +9,22 @@ import {
   PATTERN_STATUS_FILTERS,
   PATTERN_VERDICTS,
   usePatternActions,
+  usePatternCuration,
   usePatternDetail,
+  usePatternGraph,
   usePatternQueue,
+  usePatternWhatsNew,
   type DiscoveredPatternDetail,
   type DiscoveredPatternSummary,
   type PatternVerdict,
 } from '@kyber/features/pattern-discovery';
 
 const COPY =
-  'Patterns nobody defined in advance, discovered from raw and semi-structured evidence. ' +
-  'Every item is an inferred candidate with capped confidence and competing explanations. ' +
-  'Nothing here merges identities, blocks a transaction or writes graph facts; only a promotion ' +
-  'after review creates attributed Risk360 signals.';
+  'Patterns nobody defined in advance, discovered from raw and semi-structured evidence and surfaced ' +
+  'to tenants automatically once they clear the confidence and novelty bar. Every item stays inferred, ' +
+  'with capped confidence and competing explanations, and stays reviewable: hide, pin, rename or give a ' +
+  'verdict at any time. Nothing here merges identities or blocks a transaction; only a deliberate ' +
+  'promotion creates attributed Risk360 signals.';
 
 type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -32,8 +36,9 @@ const SEVERITY_VARIANT: Record<string, BadgeVariant> = {
 };
 
 const STATUS_VARIANT: Record<string, BadgeVariant> = {
-  needs_review: 'warning',
+  surfaced: 'warning',
   candidate: 'default',
+  hidden: 'default',
   confirmed_valid: 'info',
   confirmed_malicious: 'danger',
   benign: 'success',
@@ -70,6 +75,7 @@ function QueueRow({ item, selected, onSelect }: {
       aria-pressed={selected}
     >
       <div className="flex flex-wrap items-center gap-2">
+        {item.pinned ? <Badge size="sm" variant="accent">pinned</Badge> : null}
         <Badge variant={SEVERITY_VARIANT[item.severity ?? 'low'] ?? 'default'} size="sm">{item.severity ?? 'low'}</Badge>
         <Badge variant={STATUS_VARIANT[item.status] ?? 'default'} size="sm">{humanize(item.status)}</Badge>
         <span className="text-xs font-mono text-text-muted">{humanize(item.kind)}</span>
@@ -78,9 +84,96 @@ function QueueRow({ item, selected, onSelect }: {
       <div className="text-sm text-text-primary">{item.title}</div>
       <div className="text-xs font-mono text-text-muted">
         {item.affected_entity_count} entities · confidence {pct(item.confidence)} (cap {pct(item.confidence_cap)}) ·
-        novelty {pct(item.novelty)} · last seen {when(item.last_observed_at)}
+        novelty {pct(item.novelty)} · surfaced {when(item.surfaced_at)} · last seen {when(item.last_observed_at)}
       </div>
     </button>
+  );
+}
+
+function CurationPanel({ tenantId, detail, onChanged }: {
+  readonly tenantId: string;
+  readonly detail: DiscoveredPatternDetail;
+  readonly onChanged: () => void;
+}) {
+  const curation = usePatternCuration(tenantId);
+  const [title, setTitle] = useState('');
+  const hidden = detail.status === 'hidden';
+  const act = async (action: 'pin' | 'unpin' | 'hide' | 'unhide' | 'rename', newTitle?: string) => {
+    if (await curation.curate(detail.pattern_id, action, newTitle)) {
+      if (action === 'rename') setTitle('');
+      onChanged();
+    }
+  };
+  return (
+    <Card>
+      <CardHeader><CardTitle>Curation</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-text-muted">
+          Curation changes how the pattern is presented to the tenant without a verdict. A hidden pattern
+          resurfaces only if its evidence materially changes.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" disabled={curation.busy}
+            onClick={() => act(detail.pinned ? 'unpin' : 'pin')}>{detail.pinned ? 'Unpin' : 'Pin'}</Button>
+          <Button size="sm" variant="ghost" disabled={curation.busy}
+            onClick={() => act(hidden ? 'unhide' : 'hide')}>{hidden ? 'Unhide' : 'Hide'}</Button>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs font-mono text-text-muted">
+            Display title
+            <Input aria-label="Display title" value={title} placeholder={detail.title} onChange={e => setTitle(e.target.value)} />
+          </label>
+          <Button size="sm" variant="ghost" disabled={curation.busy || !title.trim()}
+            onClick={() => act('rename', title.trim())}>Rename</Button>
+        </div>
+        {detail.detector_title && detail.detector_title !== detail.title ? (
+          <div className="text-xs font-mono text-text-muted">detector title: {detail.detector_title}</div>
+        ) : null}
+        {curation.error ? <div className="text-xs text-status-danger font-mono">{curation.error}</div> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function GraphPanel({ tenantId, patternId }: { readonly tenantId: string; readonly patternId: string }) {
+  const graph = usePatternGraph(tenantId, patternId);
+  if (graph.loading && !graph.data) return <LoadingState lines={3} />;
+  if (graph.error) return <EmptyState title="Unable to load the pattern graph" description={graph.error} />;
+  const data = graph.data;
+  if (!data) return null;
+  const byRole = (role: string) => data.nodes.filter(n => n.role === role);
+  const groups: Array<[string, string]> = [
+    ['member', 'Members'], ['attribute', 'Shared values'], ['principal', 'Principals'], ['member_pattern', 'Member patterns'],
+  ];
+  return (
+    <Card data-testid="kyber-pattern-graph">
+      <CardHeader><CardTitle>Pattern graph</CardTitle></CardHeader>
+      <CardContent className="space-y-2 text-xs font-mono">
+        <div className="text-text-muted">
+          {data.nodes.length} nodes · {data.edges.length} links{data.truncated ? ' · truncated' : ''}
+        </div>
+        {groups.map(([role, heading]) => {
+          const nodes = byRole(role);
+          if (nodes.length === 0) return null;
+          return (
+            <div key={role}>
+              <div className="text-text-secondary">{heading} ({nodes.length})</div>
+              <div className="flex flex-wrap gap-1">
+                {nodes.slice(0, 60).map(n => (
+                  <span key={n.id} className="border border-border-default rounded px-1" title={`${n.kind}: ${n.id}`}>{n.label}</span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        <details>
+          <summary className="cursor-pointer text-text-secondary">Links</summary>
+          <ul className="mt-1 space-y-0.5">
+            {data.edges.slice(0, 120).map((e, i) => <li key={i}>{e.source} —{humanize(e.type)}→ {e.target}</li>)}
+          </ul>
+        </details>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -106,7 +199,7 @@ function ReviewPanel({ tenantId, detail, onChanged }: {
 
   return (
     <Card>
-      <CardHeader><CardTitle>Analyst decision</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Analyst decision (optional)</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <Select
@@ -213,6 +306,8 @@ function DetailPanel({ tenantId, patternId, onChanged }: {
           </CardContent>
         </Card>
       ) : null}
+      <CurationPanel tenantId={tenantId} detail={data} onChanged={() => { refresh(); onChanged(); }} />
+      <GraphPanel tenantId={tenantId} patternId={data.pattern_id} />
       <ReviewPanel tenantId={tenantId} detail={data} onChanged={() => { refresh(); onChanged(); }} />
       {data.review_history.length > 0 ? (
         <Card>
@@ -236,6 +331,8 @@ function DiscoveryQueue() {
   const [selected, setSelected] = useState<string | null>(null);
   const queue = usePatternQueue(tenantId, status, kind);
   const actions = usePatternActions(tenantId);
+  const fresh = usePatternWhatsNew(tenantId);
+  const curation = usePatternCuration(tenantId);
 
   return (
     <div className="space-y-4">
@@ -247,31 +344,56 @@ function DiscoveryQueue() {
               onChange={e => setTenantInput(e.target.value)} />
           </label>
           <Button size="sm" disabled={!tenantInput.trim()} onClick={() => { setTenantId(tenantInput.trim()); setSelected(null); }}>
-            Open queue
+            Open feed
           </Button>
           <Select label="Status" value={status} onChange={setStatus}
-            options={PATTERN_STATUS_FILTERS.map(s => ({ value: s, label: s ? humanize(s) : 'open review queue' }))} />
+            options={PATTERN_STATUS_FILTERS.map(s => ({
+              value: s,
+              label: s === '' ? 'surfaced feed' : s === 'candidate' ? 'watching (below bar)' : humanize(s),
+            }))} />
           <Select label="Kind" value={kind} onChange={setKind}
             options={[{ value: '', label: 'all kinds' }, ...PATTERN_KINDS.map(k => ({ value: k, label: humanize(k) }))]} />
           <Button size="sm" variant="secondary" disabled={!tenantId || actions.busy}
-            onClick={async () => { if (await actions.run()) queue.refresh(); }}>
+            onClick={async () => { if (await actions.run()) { queue.refresh(); fresh.refresh(); } }}>
             {actions.busy ? 'Running discovery…' : 'Run discovery'}
           </Button>
           {actions.error ? <span className="text-xs text-status-danger font-mono">{actions.error}</span> : null}
         </CardContent>
       </Card>
+      {tenantId && fresh.data && (fresh.data.new.length > 0 || fresh.data.changed.length > 0 || fresh.data.retired.length > 0) ? (
+        <Card data-testid="kyber-pattern-whats-new">
+          <CardContent className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
+              <span>Since you last looked ({when(fresh.data.since)}):</span>
+              <span>{fresh.data.new.length} new</span>
+              <span>{fresh.data.changed.length} changed</span>
+              <span>{fresh.data.retired.length} retired</span>
+              <Button size="sm" variant="ghost" onClick={async () => { if (await curation.markSeen()) fresh.refresh(); }}>
+                Mark seen
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[...fresh.data.new, ...fresh.data.changed].slice(0, 8).map(p => (
+                <button key={p.pattern_id} type="button" className="text-xs underline text-left" onClick={() => setSelected(p.pattern_id)}>
+                  {p.title}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       {!tenantId ? (
-        <EmptyState title="Choose a tenant" description="The discovery queue is per tenant; name one to open it." />
+        <EmptyState title="Choose a tenant" description="Discovered patterns are per tenant; name one to open its feed." />
       ) : queue.loading && !queue.data ? (
         <LoadingState lines={6} />
       ) : queue.error ? (
-        <EmptyState title="Unable to load the discovery queue" description={queue.error} />
+        <EmptyState title="Unable to load discovered patterns" description={queue.error} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
             <div className="text-xs font-mono text-text-muted">{queue.data?.total ?? 0} patterns</div>
             {(queue.data?.items ?? []).length === 0 ? (
-              <EmptyState title="Nothing to review" description="No patterns match this filter. Run discovery to analyse recent evidence." />
+              <EmptyState title="Nothing surfaced" description="No patterns match this filter. Run discovery to analyse recent evidence." />
             ) : (
               (queue.data?.items ?? []).map(item => (
                 <QueueRow key={item.pattern_id} item={item} selected={selected === item.pattern_id} onSelect={setSelected} />
@@ -282,7 +404,7 @@ function DiscoveryQueue() {
             {selected ? (
               <DetailPanel tenantId={tenantId} patternId={selected} onChanged={queue.refresh} />
             ) : (
-              <EmptyState title="Select a pattern" description="Evidence, competing explanations and the review controls appear here." />
+              <EmptyState title="Select a pattern" description="Evidence, the pattern graph, curation and the optional review controls appear here." />
             )}
           </div>
         </div>
@@ -299,7 +421,7 @@ export function PatternDiscoveryPage() {
         fallback={
           <EmptyState
             title="Operator approval permissions required"
-            description="The discovery queue is restricted to operators with approval permissions."
+            description="Operator pattern curation is restricted to operators with approval permissions."
           />
         }
       >

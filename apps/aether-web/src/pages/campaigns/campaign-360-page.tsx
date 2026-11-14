@@ -33,6 +33,7 @@ import {
   GlassSection, LoadingRow, OutlineChip, SegmentedTabs, ShareRow, type SegmentOption,
 } from '@aether-app/components/ae-campaigns-geo-ui';
 import { asList, asRecord, num, pct, ratio, shortDate, statusTone, text, usd } from './campaign-model';
+import { PatternLensPanel } from '@aether-app/features/pattern-discovery';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -1274,6 +1275,7 @@ export function Campaign360Page() {
                   onOpenTab={value => setTab(value)}
                 />
               )}
+              {tab === 'overview' && campaignId && <PatternLensPanel lens="campaign360" subject={campaignId} />}
               {tab === 'population' && (
                 <PopulationTab
                   campaignId={campaignId}

@@ -394,6 +394,8 @@ _BOT_UA = re.compile(r"(bot|crawler|spider|curl|python-requests|go-http-client|h
 _GEO_KEYS = ("country", "country_code", "geo.country", "geo.country_code", "location.country", "region")
 _APP_KEYS = ("app_id", "application", "app", "client", "client_id", "sdk_name", "platform")
 _AGENT_TYPE_KEYS = ("agent_type", "agent_framework", "framework", "model", "agent_kind")
+_CAMPAIGN_KEYS = ("campaign_id", "utm_campaign", "campaign", "utm.campaign", "context.campaign.name")
+_CHANNEL_KEYS = ("channel", "delivery_channel", "utm_medium", "medium", "utm.medium", "context.campaign.medium")
 _TOOL_KEYS = ("tool_name", "tool", "function_name", "function", "action_name")
 _LATENCY_KEYS = ("latency_ms", "duration_ms", "response_time_ms", "elapsed_ms")
 
@@ -410,8 +412,8 @@ def segments_of(row: dict[str, Any], entity: Optional[str], leaves: dict[str, An
     """Segment dimensions used for segmented baselines.
 
     ``entity_kind`` (human / agent / anonymous cohort), ``application``,
-    ``geography`` and, for agents, ``agent_type``. Missing dimensions are
-    absent, never guessed."""
+    ``geography``, ``campaign``, ``channel`` (email, sms, push, ...) and, for
+    agents, ``agent_type``. Missing dimensions are absent, never guessed."""
     seg: dict[str, str] = {}
     if entity:
         seg["entity_kind"] = entity.split(":", 1)[0]
@@ -425,6 +427,12 @@ def segments_of(row: dict[str, Any], entity: Optional[str], leaves: dict[str, An
         at = _first(leaves, _AGENT_TYPE_KEYS)
         if at:
             seg["agent_type"] = at.lower()
+    campaign = _first(leaves, _CAMPAIGN_KEYS) or (str(row["campaign_id"])[:64] if row.get("campaign_id") else None)
+    if campaign:
+        seg["campaign"] = campaign
+    channel = _first(leaves, _CHANNEL_KEYS)
+    if channel:
+        seg["channel"] = channel.lower()
     return seg
 
 

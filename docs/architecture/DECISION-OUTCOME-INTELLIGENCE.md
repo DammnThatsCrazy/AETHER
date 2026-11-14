@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/api/config/settings.py": "sha256:7234c00664c3987614886c00670589047bbc242ef7ae513604f1dbc8e2dbc1de"
+  "services/api/config/settings.py": "sha256:792ed64340a76ab4efe2f22e42ece719f8f588689feccb6f7d769bb87c9eb798"
   "services/api/intelligence/intelligence/decision_models.py": "sha256:fa7574a7f99bcebb21ff58d6cd61ffbb761a58b0022b5a247a13387c8c9853d8"
   "services/api/intelligence/intelligence/ooda_engine.py": "sha256:e029e43ee23fe742c4ad33a5023e5b04d66e2003a3b655ab177d4567747b92de"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
@@ -161,7 +161,7 @@ the server. The compatibility request field cannot override audit identity.
 | `FEATURE_FRAUD_NETWORKS` | `False` | Enable fraud network clustering service |
 | `FEATURE_FLOW_TRACE` | `False` | Enable flow-of-funds BFS traversal |
 | `FEATURE_RISK_OVERLAYS` | `False` | Enable Cytoscape risk overlay generation |
-| `AETHER_PATTERN_DISCOVERY_ENABLED` | `False` | Enable review-gated discovery of unknown patterns (`docs/architecture/PATTERN-DISCOVERY.md`) |
+| `AETHER_PATTERN_DISCOVERY_ENABLED` | `False` | Enable discovery of unknown patterns, surfaced automatically and reviewable (`docs/architecture/PATTERN-DISCOVERY.md`) |
 | `FRAUD_NETWORK_MAX_DEPTH` | `4` | Maximum graph traversal depth for clustering |
 | `FLOW_TRACE_MAX_HOPS` | `10` | Maximum BFS hops for flow-of-funds trace |
 

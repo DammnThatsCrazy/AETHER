@@ -98,7 +98,7 @@ async def test_end_to_end_on_postgres(pool, monkeypatch):
     run = await svc.run(T)
     assert run["patterns_detected"] >= 5
 
-    queue = await svc.list_patterns(T, queue=True)
+    queue = await svc.list_patterns(T, feed=True)
     assert queue["total"] >= 5
     async with pool.acquire() as conn:
         stored = await conn.fetchval("SELECT count(*) FROM discovered_patterns WHERE tenant_id = $1", T)
@@ -144,3 +144,25 @@ async def test_check_constraint_rejects_cross_tenant_rows(pool):
             await conn.execute(
                 "INSERT INTO discovered_patterns (id, data, tenant_id) VALUES ('x', '{\"tenant_id\": \"a\"}', 'b')"
             )
+
+
+async def test_overlay_lens_and_viewer_state_on_postgres(pool):
+    from intelligence.pattern_discovery.feed import PatternViewerStateRepository
+
+    rows = normal_traffic(2, 2) + fraud_ring(2)
+    for r in rows:
+        if r["user_id"].startswith("r"):
+            r["properties"].update(utm_campaign="spring_sale")
+    svc = _service(pool, rows)
+    viewer = PatternViewerStateRepository()
+    viewer._pool, viewer._table_ensured = pool, True
+    svc.viewer_state = viewer
+    await svc.run(T)
+    overlay = await svc.graph_overlay(T, ["r0", "user:r1"])
+    assert overlay["patterns"] and "r0" in overlay["by_node"]
+    lens = await svc.lens(T, "campaign360", "spring_sale")
+    assert lens["counts"]["total"] >= 5
+    await svc.mark_seen(T, viewer_id="u1")
+    assert (await svc.whats_new(T, viewer_id="u1"))["new"] == []
+    async with pool.acquire() as conn:
+        assert await conn.fetchval("SELECT count(*) FROM pattern_viewer_state WHERE tenant_id = $1", T) == 1

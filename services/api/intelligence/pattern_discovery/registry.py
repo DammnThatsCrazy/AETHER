@@ -5,18 +5,23 @@ signature in a later run updates the same record (support, evidence,
 ``times_observed``) instead of creating a new one, and bumps ``version`` when
 the evidence fingerprint changes.
 
-Lifecycle::
+Lifecycle (surfaced by default, review optional)::
 
-    candidate <-> needs_review --(reviewer verdict)--> confirmed_valid
-                                                       confirmed_malicious --(promote)--> promoted
-                                                       benign / duplicate / unresolved
-    any open or reviewed state --(reviewer or staleness)--> deprecated --(re-detected)--> funnel
+    candidate <-> surfaced  (automatic: shown to users with no human step)
+    surfaced / candidate --(optional verdict)--> confirmed_valid / confirmed_malicious
+                                                 benign / duplicate / unresolved
+    any visible state --(hide)--> hidden --(unhide)--> back where it was
+    confirmed_* --(promote: deliberate human act)--> promoted
+    any open or reviewed state --(user or staleness)--> deprecated --(re-detected)--> funnel
 
 Rules:
 
-* Only :func:`apply_review` sets a reviewed status, and it requires a reviewer
-  and a reason. Only :func:`apply_promotion` promotes, and only from a
-  confirmed status.
+* The backend surfaces patterns automatically. People curate afterwards:
+  :func:`apply_curation` hides, unhides, pins and renames; :func:`apply_review`
+  records an optional verdict (with a reason). Curation and verdicts persist
+  across re-detection while the evidence fingerprint is unchanged.
+* Only :func:`apply_promotion` promotes, only from a confirmed status: seeing a
+  pattern is automatic, letting it write risk signals and graph edges is not.
 * A verdict is valid for the evidence it was made on. A re-detection whose
   evidence fingerprint differs from the reviewed fingerprint supersedes the
   verdict (kept in ``review_history``) and the pattern re-enters the funnel.
@@ -38,18 +43,21 @@ from shared.common.common import ConflictError, utc_now
 
 from .contracts import (
     DETECTOR_VERSION, MAX_AFFECTED_ENTITIES, PROMOTABLE_STATUSES, REVIEWED_STATUSES,
-    STALE_AFTER_RUNS, STATUS_CANDIDATE, STATUS_DEPRECATED, STATUS_DUPLICATE, STATUS_NEEDS_REVIEW,
-    STATUS_PROMOTED, SYSTEM_STATUSES, VERDICT_STATUS, RawPattern, content_hash, entity_ref,
-    pattern_id, size_bucket,
+    STALE_AFTER_RUNS, STATUS_CANDIDATE, STATUS_DEPRECATED, STATUS_DUPLICATE, STATUS_HIDDEN,
+    STATUS_SURFACED, STATUS_PROMOTED, SYSTEM_STATUSES, VERDICT_STATUS, RawPattern, content_hash,
+    entity_ref, pattern_id, size_bucket,
 )
 
 _VERDICT_TARGETS = frozenset(VERDICT_STATUS.values())
 LEGAL_TRANSITIONS: dict[str, frozenset[str]] = {
-    STATUS_CANDIDATE: frozenset({STATUS_NEEDS_REVIEW, STATUS_DEPRECATED}) | _VERDICT_TARGETS,
-    STATUS_NEEDS_REVIEW: frozenset({STATUS_CANDIDATE, STATUS_DEPRECATED}) | _VERDICT_TARGETS,
-    **{s: (_VERDICT_TARGETS - {s}) | {STATUS_DEPRECATED} for s in REVIEWED_STATUSES},
-    STATUS_PROMOTED: frozenset({STATUS_DEPRECATED}),
-    STATUS_DEPRECATED: frozenset({STATUS_CANDIDATE, STATUS_NEEDS_REVIEW}),
+    STATUS_CANDIDATE: frozenset({STATUS_SURFACED, STATUS_DEPRECATED, STATUS_HIDDEN}) | _VERDICT_TARGETS,
+    STATUS_SURFACED: frozenset({STATUS_CANDIDATE, STATUS_DEPRECATED, STATUS_HIDDEN}) | _VERDICT_TARGETS,
+    **{s: (_VERDICT_TARGETS - {s}) | {STATUS_DEPRECATED, STATUS_HIDDEN} for s in REVIEWED_STATUSES},
+    STATUS_PROMOTED: frozenset({STATUS_DEPRECATED, STATUS_HIDDEN}),
+    STATUS_DEPRECATED: frozenset({STATUS_CANDIDATE, STATUS_SURFACED}),
+    # Unhide restores the stored pre-hide status (validated in apply_curation).
+    STATUS_HIDDEN: frozenset({STATUS_CANDIDATE, STATUS_SURFACED, STATUS_DEPRECATED, STATUS_PROMOTED})
+    | _VERDICT_TARGETS,
 }
 for _s in PROMOTABLE_STATUSES:
     LEGAL_TRANSITIONS[_s] = LEGAL_TRANSITIONS[_s] | {STATUS_PROMOTED}
@@ -139,6 +147,13 @@ def build_record(tenant_id: str, raw: RawPattern, scored: dict[str, Any], *, run
         "promotion": None,
         "created_at": now,
         "detected_at": now,
+        "surfaced_at": now if scored["status"] == STATUS_SURFACED else None,
+        "changed_at": now,
+        "deprecated_at": None,
+        "pinned": False,
+        "display_title": None,
+        "segment_profile": {},
+        "segment_keys": [],
     }
     record["evidence_fingerprint"] = evidence_fingerprint(record)
     return record
@@ -161,17 +176,29 @@ def merge_redetection(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[s
     record["version"] = int(existing.get("version") or 1) + (1 if changed else 0)
     status = existing.get("status", STATUS_CANDIDATE)
     now = utc_now().isoformat()
+    # Curation survives re-detection; timestamps drive "what's new".
+    for key in ("pinned", "pinned_by", "pinned_at", "display_title", "hidden_from_status",
+                "hidden_at", "hidden_by", "duplicates"):
+        if key in existing:
+            record[key] = existing[key]
+    if record.get("duplicates"):
+        # The fresh detection is the new base; merged duplicates are re-folded on top.
+        record["base_entity_keys"] = list(record.get("affected_entity_keys") or [])
+        record["base_entity_count"] = int(record.get("affected_entity_count") or 0)
+        record["base_occurrence_count"] = int(record.get("occurrence_count") or 0)
+        _apply_duplicates(record)
+    record["surfaced_at"] = existing.get("surfaced_at")
+    record["changed_at"] = now if changed else existing.get("changed_at") or existing.get("created_at")
+    record["deprecated_at"] = existing.get("deprecated_at")
     if status in SYSTEM_STATUSES:
-        # The funnel recomputes, but a queued pattern stays queued until a
-        # reviewer acts or it goes stale: recurrence lowers novelty, and that
-        # must not silently pull an unreviewed item out of the queue.
-        if status == STATUS_NEEDS_REVIEW and record["status"] == STATUS_CANDIDATE:
-            record["status"] = STATUS_NEEDS_REVIEW
+        # A surfaced pattern stays surfaced until a person acts or it goes
+        # stale: recurrence lowers novelty, and that must not silently pull a
+        # pattern out of view.
+        if status == STATUS_SURFACED and record["status"] == STATUS_CANDIDATE:
+            record["status"] = STATUS_SURFACED
             record["priority"] = existing.get("priority", record["priority"])
-            record["queued_since"] = existing.get("queued_since") or existing.get("detected_at")
-        elif record["status"] == STATUS_NEEDS_REVIEW:
-            record["queued_since"] = existing.get("queued_since") or now
     elif status == STATUS_DEPRECATED:
+        record["deprecated_at"] = None
         record["review_history"].append({
             "decision": "revived", "reason": "re_detected_after_deprecation",
             "previous_status": status, "at": now,
@@ -184,21 +211,27 @@ def merge_redetection(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[s
                 "decision": "evidence_changed_after_promotion", "previous_fingerprint":
                 existing.get("evidence_fingerprint"), "new_fingerprint": record["evidence_fingerprint"], "at": now,
             })
-    elif status in REVIEWED_STATUSES:
+    elif status in REVIEWED_STATUSES or status == STATUS_HIDDEN:
         reviewed = existing.get("reviewed_fingerprint") or existing.get("evidence_fingerprint")
         if reviewed == record["evidence_fingerprint"]:
             record["status"] = status
             record["reviewed_fingerprint"] = reviewed
             record["priority"] = existing.get("priority", record["priority"])
         else:
+            # The pattern changed materially since a person judged or hid it:
+            # show it again rather than keep acting on a stale judgement.
+            for key in ("hidden_from_status", "hidden_at", "hidden_by"):
+                record.pop(key, None)
             record["review_history"].append({
-                "decision": "superseded",
+                "decision": "resurfaced_after_material_change" if status == STATUS_HIDDEN else "superseded",
                 "reason": "evidence_changed_since_review",
                 "previous_status": status,
                 "reviewed_fingerprint": reviewed,
                 "new_fingerprint": record["evidence_fingerprint"],
                 "at": now,
             })
+    if record["status"] == STATUS_SURFACED and not record.get("surfaced_at"):
+        record["surfaced_at"] = now
     return record
 
 
@@ -226,6 +259,56 @@ def apply_review(record: dict[str, Any], *, reviewer_id: str, verdict: str, reas
         "reviewer_id": reviewer_id.strip(), "decision": verdict, "reason": reason.strip()[:2000],
         "previous_status": record.get("status"), "evidence_fingerprint": record.get("evidence_fingerprint"),
         "duplicate_of": duplicate_of, "at": utc_now().isoformat(),
+    }]
+    return updated
+
+
+CURATION_ACTIONS = ("hide", "unhide", "pin", "unpin", "rename")
+
+
+def apply_curation(record: dict[str, Any], *, actor: str, action: str, title: Optional[str] = None,
+                   reason: Optional[str] = None) -> dict[str, Any]:
+    """User curation of an automatically surfaced pattern. No verdict needed.
+
+    ``hide`` removes it from the default feed and lenses (restorable with
+    ``unhide``), ``pin`` keeps it first, ``rename`` sets a display title (the
+    detector's title is kept). Every action is recorded in ``review_history``.
+    """
+    if action not in CURATION_ACTIONS:
+        raise LifecycleError(f"action must be one of {list(CURATION_ACTIONS)}")
+    if not actor.strip():
+        raise LifecycleError("actor is required")
+    updated = copy.deepcopy(record)
+    now = utc_now().isoformat()
+    status = record.get("status", STATUS_CANDIDATE)
+    if action == "hide":
+        if status == STATUS_HIDDEN:
+            return updated
+        check_transition(status, STATUS_HIDDEN)
+        updated.update({"status": STATUS_HIDDEN, "hidden_from_status": status, "hidden_at": now,
+                        "hidden_by": actor.strip(), "reviewed_fingerprint": record.get("evidence_fingerprint")})
+    elif action == "unhide":
+        if status != STATUS_HIDDEN:
+            raise LifecycleError("pattern is not hidden")
+        back = record.get("hidden_from_status") or STATUS_SURFACED
+        check_transition(STATUS_HIDDEN, back)
+        updated["status"] = back
+        for key in ("hidden_from_status", "hidden_at", "hidden_by"):
+            updated.pop(key, None)
+        if back == STATUS_SURFACED and not updated.get("surfaced_at"):
+            updated["surfaced_at"] = now
+    elif action in ("pin", "unpin"):
+        updated["pinned"] = action == "pin"
+        updated["pinned_by"] = actor.strip() if action == "pin" else None
+        updated["pinned_at"] = now if action == "pin" else None
+    elif action == "rename":
+        clean = (title or "").strip()
+        if not clean or len(clean) > 300:
+            raise LifecycleError("rename needs a title of 1-300 characters")
+        updated["display_title"] = clean
+    updated["review_history"] = [*record.get("review_history", []), {
+        "reviewer_id": actor.strip(), "decision": action, "reason": (reason or "").strip()[:2000] or None,
+        "title": title if action == "rename" else None, "previous_status": status, "at": now,
     }]
     return updated
 
@@ -264,6 +347,7 @@ def apply_deprecation(record: dict[str, Any], *, actor: str, reason: str, automa
     updated = copy.deepcopy(record)
     updated["status"] = STATUS_DEPRECATED
     updated["priority"] = "low"
+    updated["deprecated_at"] = utc_now().isoformat()
     updated["review_history"] = [*record.get("review_history", []), {
         "reviewer_id": actor, "decision": "deprecate_stale" if automatic else "deprecate",
         "reason": reason.strip()[:2000], "previous_status": record.get("status"),
@@ -272,38 +356,61 @@ def apply_deprecation(record: dict[str, Any], *, actor: str, reason: str, automa
     return updated
 
 
-def merge_duplicate(target: dict[str, Any], duplicate: dict[str, Any]) -> dict[str, Any]:
-    """Fold a pattern reviewers marked duplicate into the pattern it duplicates.
+def _apply_duplicates(record: dict[str, Any]) -> dict[str, Any]:
+    """Fold the stored contributions of merged duplicates into a record:
+    entity union (bounded) and summed occurrence support. Pure and repeatable,
+    so it can run after every re-detection without double counting."""
+    dups = record.get("duplicates") or []
+    if not dups:
+        return record
+    base_keys = list(record.get("base_entity_keys") or record.get("affected_entity_keys") or [])
+    base_count = int(record.get("base_entity_count") or record.get("affected_entity_count") or 0)
+    base_occ = int(record.get("base_occurrence_count") or record.get("occurrence_count") or 0)
+    keys = list(dict.fromkeys([*base_keys, *(k for d in dups for k in d.get("entity_keys") or [])]))
+    record["base_entity_keys"] = base_keys
+    record["base_entity_count"] = base_count
+    record["base_occurrence_count"] = base_occ
+    record["affected_entity_keys"] = keys[:MAX_AFFECTED_ENTITIES]
+    record["affected_entities"] = [entity_ref(k) for k in record["affected_entity_keys"]]
+    record["affected_entity_count"] = base_count + (len(keys) - len(base_keys))
+    record["affected_entities_truncated"] = len(keys) > MAX_AFFECTED_ENTITIES
+    record["entity_kinds"] = sorted({k.split(":", 1)[0] for k in record["affected_entity_keys"]})
+    record["occurrence_count"] = base_occ + sum(int(d.get("occurrence_count") or 0) for d in dups)
+    return record
 
-    The target gains the duplicate's affected entities (bounded), occurrence
-    support and observation window, and records the duplicate's id, so later
-    re-detections of the duplicate signature strengthen the canonical pattern
-    instead of re-entering the queue. Idempotent per duplicate fingerprint."""
+
+def merge_duplicate(target: dict[str, Any], duplicate: dict[str, Any]) -> dict[str, Any]:
+    """Fold a pattern people marked duplicate into the pattern it duplicates.
+
+    The duplicate's entities and support are recorded on the canonical
+    pattern (``duplicates``) and folded in by :func:`_apply_duplicates`, which
+    re-runs after every re-detection, so the merged support is never lost or
+    double counted. Re-merging the same duplicate refreshes its contribution."""
     updated = copy.deepcopy(target)
     dup_id = duplicate["pattern_id"]
     seen = {d["pattern_id"]: d for d in updated.get("duplicates") or []}
-    if seen.get(dup_id, {}).get("evidence_fingerprint") == duplicate.get("evidence_fingerprint"):
-        return updated
-    keys = list(dict.fromkeys([*(updated.get("affected_entity_keys") or []),
-                               *(duplicate.get("affected_entity_keys") or [])]))
-    added = len(keys) - len(updated.get("affected_entity_keys") or [])
-    updated["affected_entity_keys"] = keys[:MAX_AFFECTED_ENTITIES]
-    updated["affected_entities"] = [entity_ref(k) for k in updated["affected_entity_keys"]]
-    updated["affected_entity_count"] = int(updated.get("affected_entity_count") or 0) + max(0, added)
-    updated["affected_entities_truncated"] = len(keys) > MAX_AFFECTED_ENTITIES
-    updated["entity_kinds"] = sorted({k.split(":", 1)[0] for k in updated["affected_entity_keys"]})
-    updated["occurrence_count"] = int(updated.get("occurrence_count") or 0) + (
-        0 if dup_id in seen else int(duplicate.get("occurrence_count") or 0))
+    first_merge = dup_id not in seen
+    if not first_merge and seen[dup_id].get("evidence_fingerprint") == duplicate.get("evidence_fingerprint"):
+        return _apply_duplicates(updated)
+    if not updated.get("duplicates"):
+        updated["base_entity_keys"] = list(updated.get("affected_entity_keys") or [])
+        updated["base_entity_count"] = int(updated.get("affected_entity_count") or 0)
+        updated["base_occurrence_count"] = int(updated.get("occurrence_count") or 0)
+    seen[dup_id] = {"pattern_id": dup_id, "kind": duplicate.get("kind"),
+                    "evidence_fingerprint": duplicate.get("evidence_fingerprint"),
+                    "entity_keys": list(duplicate.get("affected_entity_keys") or [])[:MAX_AFFECTED_ENTITIES],
+                    "occurrence_count": int(duplicate.get("occurrence_count") or 0),
+                    "merged_at": utc_now().isoformat()}
+    updated["duplicates"] = list(seen.values())
+    before = int(updated.get("affected_entity_count") or 0)
     for field_name, pick in (("first_observed_at", min), ("last_observed_at", max)):
         values = [v for v in (updated.get(field_name), duplicate.get(field_name)) if v]
         updated[field_name] = pick(values) if values else None
-    seen[dup_id] = {"pattern_id": dup_id, "kind": duplicate.get("kind"),
-                    "evidence_fingerprint": duplicate.get("evidence_fingerprint"),
-                    "merged_at": utc_now().isoformat()}
-    updated["duplicates"] = list(seen.values())
+    updated = _apply_duplicates(updated)
     updated["review_history"] = [*updated.get("review_history", []), {
         "decision": "merged_duplicate", "duplicate_pattern_id": dup_id,
-        "entities_added": max(0, added), "at": utc_now().isoformat(),
+        "entities_added": max(0, int(updated["affected_entity_count"]) - before),
+        "refreshed": not first_merge, "at": utc_now().isoformat(),
     }]
     return updated
 
@@ -392,9 +499,41 @@ class PatternRegistryRepository(BaseRepository):
             rows = await self.scan(tenant_id, kind=kind)
         rows = [r for r in rows if float(r.get("confidence") or 0) >= min_confidence]
         prio = {"high": 0, "normal": 1, "low": 2}
-        rows.sort(key=lambda r: (prio.get(r.get("priority"), 3), -float(r.get("severity_score") or 0),
+        rows.sort(key=lambda r: (not r.get("pinned"), prio.get(r.get("priority"), 3),
+                                 -float(r.get("severity_score") or 0),
                                  -float(r.get("confidence") or 0), r.get("pattern_id", "")))
         return rows[offset: offset + limit], len(rows)
+
+    async def _jsonb_any(self, tenant_id: str, field: str, keys: list[str], limit: int) -> Optional[list[dict[str, Any]]]:
+        """GIN-indexed ``data->field ?| keys`` on PostgreSQL; None in memory."""
+        pool = await self._ensure_pool()
+        if pool is None:
+            return None
+        await self._ensure_table()
+        records = await pool.fetch(
+            f"SELECT data FROM discovered_patterns WHERE tenant_id = $1 AND data->'{field}' ?| $2::text[] LIMIT $3",
+            tenant_id, keys, max(1, min(int(limit), 5_000)),
+        )
+        rows = [json.loads(r["data"]) if isinstance(r["data"], str) else dict(r["data"]) for r in records]
+        return [r for r in rows if r.get("tenant_id") == tenant_id]
+
+    async def for_entities(self, tenant_id: str, entity_keys: list[str], limit: int = 2_000) -> list[dict[str, Any]]:
+        """Patterns implicating any of ``entity_keys`` (graph overlay)."""
+        keys = sorted(set(entity_keys))[:3_000]
+        if not keys:
+            return []
+        rows = await self._jsonb_any(tenant_id, "affected_entity_keys", keys, limit)
+        if rows is None:
+            wanted = set(keys)
+            rows = [r for r in await self.scan(tenant_id) if wanted & set(r.get("affected_entity_keys") or [])]
+        return rows[:limit]
+
+    async def for_segment(self, tenant_id: str, segment_key: str, limit: int = 500) -> list[dict[str, Any]]:
+        """Patterns concentrated in one ``dimension=value`` (segment lenses)."""
+        rows = await self._jsonb_any(tenant_id, "segment_keys", [segment_key], limit)
+        if rows is None:
+            rows = [r for r in await self.scan(tenant_id) if segment_key in (r.get("segment_keys") or [])]
+        return rows[:limit]
 
     async def for_entity(self, tenant_id: str, entity_key: str, limit: int = 50) -> list[dict[str, Any]]:
         """Patterns implicating one entity. On PostgreSQL this is a GIN-indexed

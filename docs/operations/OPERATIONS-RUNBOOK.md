@@ -51,7 +51,7 @@ source_hashes:
   "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:7234c00664c3987614886c00670589047bbc242ef7ae513604f1dbc8e2dbc1de"
+  "services/api/config/settings.py": "sha256:792ed64340a76ab4efe2f22e42ece719f8f588689feccb6f7d769bb87c9eb798"
   "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
@@ -689,7 +689,8 @@ FEATURE_FRAUD_NETWORKS=true    → mounts services/api/intelligence/fraud_networ
 FEATURE_FLOW_TRACE=true        → mounts services/api/value/flow_trace router at /v1/flow-trace
 FEATURE_RISK_OVERLAYS=true     → mounts services/api/graph/risk_overlay router at /v1/risk-overlay
 AETHER_PATTERN_DISCOVERY_ENABLED=true → mounts services/api/intelligence/pattern_discovery routers at /v1/intelligence/patterns, /v1/kyber/patterns and the /v1/profile|agent|risk360/.../patterns sections
-PATTERN_DISCOVERY_SCHEDULER_ENABLED=true → the pattern_discovery_sweep worker (materializer role) enqueues one pattern_discovery.run job per tenant every PATTERN_DISCOVERY_INTERVAL_MINUTES
+PATTERN_DISCOVERY_SCHEDULER_ENABLED=true (default) → the pattern_discovery_sweep worker (materializer role) enqueues one pattern_discovery.run job per tenant every PATTERN_DISCOVERY_INTERVAL_MINUTES; inert while AETHER_PATTERN_DISCOVERY_ENABLED is off
+AETHER_PATTERN_NOTIFICATIONS_ENABLED=true (default) → a run that surfaces high or critical patterns raises one in-app notification per tenant per day (category pattern_discovery)
 ```
 
 ### Enabling

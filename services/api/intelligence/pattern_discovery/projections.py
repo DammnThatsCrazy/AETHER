@@ -32,7 +32,7 @@ from shared.contracts_models.epistemic import EpistemicStatus
 from shared.logger.logger import get_logger
 
 from .contracts import (
-    DETECTOR_VERSION, PROMOTABLE_STATUSES, QUEUE_STATUSES, REVIEWED_STATUSES, STATUS_PROMOTED,
+    DETECTOR_VERSION, PROMOTABLE_STATUSES, VISIBLE_STATUSES, REVIEWED_STATUSES, STATUS_PROMOTED,
     content_hash,
 )
 
@@ -230,22 +230,24 @@ async def promote_to_risk(pattern: dict[str, Any], *, resolver: Optional[Resolve
 
 
 def _brief(p: dict[str, Any]) -> dict[str, Any]:
-    return {k: p.get(k) for k in (
+    out = {k: p.get(k) for k in (
         "pattern_id", "kind", "title", "summary", "status", "priority", "severity", "confidence",
         "novelty", "affected_entity_count", "risk_categories", "first_observed_at", "last_observed_at",
-        "version", "claim_state",
+        "version", "claim_state", "pinned", "surfaced_at", "changed_at",
     )}
+    out["title"] = p.get("display_title") or p.get("title")
+    return out
 
 
 def entity_context(entity_key: str, patterns: list[dict[str, Any]], *, similar_limit: int = 10) -> dict[str, Any]:
     """Emerging-pattern context for one entity (Profile / Agent / Risk 360 panels)."""
-    relevant = [p for p in patterns if p.get("status") != "deprecated"]
+    relevant = [p for p in patterns if p.get("status") in VISIBLE_STATUSES]
     co = Counter()
     for p in relevant:
         for other in p.get("affected_entity_keys") or []:
             if other != entity_key:
                 co[other] += 1
-    open_ = [p for p in relevant if p.get("status") in QUEUE_STATUSES or p.get("status") == "candidate"]
+    open_ = [p for p in relevant if p.get("status") == "surfaced"]
     reviewed = [p for p in relevant if p.get("status") in REVIEWED_STATUSES or p.get("status") == STATUS_PROMOTED]
     identity_overlap = [
         p for p in relevant if any(e.get("type") == "identity_overlap_candidate" for e in p.get("evidence") or [])
@@ -254,7 +256,7 @@ def entity_context(entity_key: str, patterns: list[dict[str, Any]], *, similar_l
         "entity": entity_key,
         "claim_state": "inferred",
         "advisory": True,
-        "note": "Discovered patterns are review material; they do not merge identities or change risk decisions.",
+        "note": "Surfaced automatically; patterns do not merge identities or change risk decisions on their own.",
         "emerging_patterns": [_brief(p) for p in open_],
         "reviewed_patterns": [_brief(p) for p in reviewed],
         "unresolved_identity_overlaps": [_brief(p) for p in identity_overlap],

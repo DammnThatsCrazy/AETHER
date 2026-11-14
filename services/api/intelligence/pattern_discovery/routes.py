@@ -5,14 +5,20 @@ only; a caller-supplied tenant id is never trusted. Kyber routes
 (``/v1/kyber/patterns``) are operator-only and name the tenant explicitly.
 
 Endpoints:
-    GET  /v1/intelligence/patterns                       list (status / queue / kind filters)
+    GET  /v1/intelligence/patterns                       list (feed=true: surfaced default view; status / kind)
     GET  /v1/intelligence/patterns/stats                 counts, calibration, baseline health
+    GET  /v1/intelligence/patterns/whats-new             new / changed / retired since the viewer last looked
+    POST /v1/intelligence/patterns/whats-new/seen        mark a scope seen
+    GET  /v1/intelligence/patterns/lenses/{lens}/{subject}  campaign / geographic / communication / journey lens
+    POST /v1/intelligence/patterns/graph-overlay         patterns touching the graph nodes in view
+    GET  /v1/intelligence/patterns/{pattern_id}/graph    the pattern as a renderable subgraph
     GET  /v1/intelligence/patterns/runs                  recent discovery runs
     POST /v1/intelligence/patterns/runs                  run discovery (write)
     POST /v1/intelligence/patterns/extract               schema-on-read preview (no persistence)
     GET  /v1/intelligence/patterns/entities/{entity}     emerging-pattern context for one entity
     GET  /v1/intelligence/patterns/{pattern_id}          detail with similar patterns
-    POST /v1/intelligence/patterns/{pattern_id}/review   analyst verdict (write)
+    POST /v1/intelligence/patterns/{pattern_id}/curate   hide / unhide / pin / unpin / rename (write)
+    POST /v1/intelligence/patterns/{pattern_id}/review   optional verdict (write)
     POST /v1/intelligence/patterns/{pattern_id}/promote  promote to Risk360 (admin)
     POST /v1/intelligence/patterns/{pattern_id}/deprecate
 
@@ -20,10 +26,11 @@ Endpoints:
     GET  /v1/agent/{agent_id}/patterns                   Agent 360 discovered-pattern section
     GET  /v1/risk360/{kind}/{id}/patterns                Risk 360 pattern findings
 
-    GET  /v1/kyber/patterns/queue                        operator discovery queue
+    GET  /v1/kyber/patterns/queue                        surfaced feed for a tenant (operator)
     GET  /v1/kyber/patterns/stats
     POST /v1/kyber/patterns/runs
     GET  /v1/kyber/patterns/{pattern_id}
+    POST /v1/kyber/patterns/{pattern_id}/curate
     POST /v1/kyber/patterns/{pattern_id}/review
     POST /v1/kyber/patterns/{pattern_id}/promote
     POST /v1/kyber/patterns/{pattern_id}/deprecate
@@ -41,10 +48,23 @@ from shared.common.common import (
 )
 
 from .contracts import (
-    PATTERN_KINDS, PATTERN_STATUSES, DeprecateRequest, DiscoveryRunRequest, ExtractRequest,
+    PATTERN_KINDS, PATTERN_STATUSES, CurateRequest, DeprecateRequest, DiscoveryRunRequest, ExtractRequest,
     PromoteRequest, ReviewRequest,
 )
+from pydantic import BaseModel, ConfigDict, Field
+
 from .registry import LifecycleError
+
+
+class SeenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scope: str = Field("feed", min_length=1, max_length=400)
+    at: Optional[str] = Field(default=None, max_length=64)
+
+
+class OverlayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    node_ids: list[str] = Field(..., min_length=1, max_length=500)
 from .service import get_service
 
 router = APIRouter(prefix="/v1/intelligence/patterns", tags=["Pattern Discovery"])
@@ -125,6 +145,17 @@ async def _review(tenant_id: str, pattern_id: str, body: ReviewRequest, actor: s
     return row
 
 
+async def _curate(tenant_id: str, pattern_id: str, body: CurateRequest, actor: str) -> dict:
+    try:
+        row = await get_service().curate(tenant_id, pattern_id, actor=actor, action=body.action,
+                                         title=body.title, reason=body.reason)
+    except LifecycleError as exc:
+        raise BadRequestError(str(exc))
+    if row is None:
+        raise NotFoundError("pattern")
+    return row
+
+
 async def _promote(tenant_id: str, pattern_id: str, body: PromoteRequest, actor: str) -> dict:
     try:
         row = await get_service().promote(tenant_id, pattern_id, reviewer_id=actor, reason=body.reason)
@@ -151,7 +182,8 @@ async def _deprecate(tenant_id: str, pattern_id: str, body: DeprecateRequest, ac
 async def list_patterns(
     request: Request,
     status: Optional[str] = Query(None),
-    queue: bool = Query(False),
+    feed: bool = Query(False, description="Default surfaced view: visible statuses, pinned first"),
+    queue: bool = Query(False, description="Deprecated alias of feed"),
     kind: Optional[str] = Query(None),
     min_confidence: float = Query(0.0, ge=0.0, le=1.0),
     limit: int = Query(50, ge=1, le=200),
@@ -160,7 +192,7 @@ async def list_patterns(
     tenant_id, _ = _tenant(request, Permissions.READ)
     _validate_filters(status, kind)
     return _ok(await get_service().list_patterns(
-        tenant_id, status=status, queue=queue, kind=kind, min_confidence=min_confidence,
+        tenant_id, status=status, feed=feed or queue, kind=kind, min_confidence=min_confidence,
         limit=limit, offset=offset,
     ))
 
@@ -169,6 +201,44 @@ async def list_patterns(
 async def pattern_stats(request: Request):
     tenant_id, _ = _tenant(request, Permissions.READ)
     return _ok(await get_service().stats(tenant_id))
+
+
+@router.get("/whats-new")
+async def whats_new(request: Request, scope: str = Query("feed", max_length=400),
+                    since: Optional[str] = Query(None, max_length=64)):
+    """New, changed and retired patterns since this viewer last looked at ``scope``."""
+    tenant_id, actor = _tenant(request, Permissions.READ)
+    try:
+        return _ok(await get_service().whats_new(tenant_id, viewer_id=actor, scope=scope, since=since))
+    except LifecycleError as exc:
+        raise BadRequestError(str(exc))
+
+
+@router.post("/whats-new/seen")
+async def mark_seen(body: SeenRequest, request: Request):
+    """Record that this viewer has looked at ``scope`` (now, or at ``at``)."""
+    tenant_id, actor = _tenant(request, Permissions.READ)
+    try:
+        return _ok(await get_service().mark_seen(tenant_id, viewer_id=actor, scope=body.scope, at=body.at))
+    except LifecycleError as exc:
+        raise BadRequestError(str(exc))
+
+
+@router.get("/lenses/{lens}/{subject}")
+async def lens_view(lens: str, subject: str, request: Request):
+    """Campaign / Geographic / Communications / Journey 360 pattern lens."""
+    tenant_id, actor = _tenant(request, Permissions.READ)
+    try:
+        return _ok(await get_service().lens(tenant_id, lens, subject, viewer_id=actor))
+    except LifecycleError as exc:
+        raise BadRequestError(str(exc))
+
+
+@router.post("/graph-overlay")
+async def graph_overlay(body: OverlayRequest, request: Request):
+    """Which surfaced patterns touch the graph nodes currently in view."""
+    tenant_id, _ = _tenant(request, Permissions.READ)
+    return _ok(await get_service().graph_overlay(tenant_id, body.node_ids))
 
 
 @router.get("/runs")
@@ -203,10 +273,27 @@ async def get_pattern(pattern_id: str, request: Request):
     return _ok(await _detail(tenant_id, pattern_id))
 
 
+@router.get("/{pattern_id}/graph")
+async def pattern_graph(pattern_id: str, request: Request):
+    """The pattern as a small graph: members, shared attributes, links."""
+    tenant_id, _ = _tenant(request, Permissions.READ)
+    graph = await get_service().pattern_graph(tenant_id, pattern_id)
+    if graph is None:
+        raise NotFoundError("pattern")
+    return _ok(graph)
+
+
 @router.post("/{pattern_id}/review")
 async def review_pattern(pattern_id: str, body: ReviewRequest, request: Request):
     tenant_id, actor = _tenant(request, Permissions.WRITE)
     return _ok(await _review(tenant_id, pattern_id, body, actor))
+
+
+@router.post("/{pattern_id}/curate")
+async def curate_pattern(pattern_id: str, body: CurateRequest, request: Request):
+    """Hide, unhide, pin, unpin or rename an automatically surfaced pattern."""
+    tenant_id, actor = _tenant(request, Permissions.WRITE)
+    return _ok(await _curate(tenant_id, pattern_id, body, actor))
 
 
 @router.post("/{pattern_id}/promote")
@@ -237,25 +324,25 @@ def _ref(raw: str) -> str:
 @profile_router.get("/{user_id}/patterns")
 async def profile_patterns(user_id: str, request: Request):
     """Discovered patterns involving this profile (Profile 360 section)."""
-    tenant_id, _ = _tenant(request, Permissions.READ)
-    return _ok(await get_service().section(tenant_id, f"user:{_ref(user_id)}", "profile360"))
+    tenant_id, actor = _tenant(request, Permissions.READ)
+    return _ok(await get_service().section(tenant_id, f"user:{_ref(user_id)}", "profile360", viewer_id=actor))
 
 
 @agent_router.get("/{agent_id}/patterns")
 async def agent_patterns(agent_id: str, request: Request):
     """Discovered patterns involving this agent (Agent 360 section)."""
-    tenant_id, _ = _tenant(request, Permissions.READ)
-    return _ok(await get_service().section(tenant_id, f"agent:{_ref(agent_id)}", "agent360"))
+    tenant_id, actor = _tenant(request, Permissions.READ)
+    return _ok(await get_service().section(tenant_id, f"agent:{_ref(agent_id)}", "agent360", viewer_id=actor))
 
 
 @risk_router.get("/{subject_kind}/{subject_id}/patterns")
 async def risk_patterns(subject_kind: str, subject_id: str, request: Request):
     """Pattern-based findings for a Risk 360 subject."""
-    tenant_id, _ = _tenant(request, Permissions.READ)
+    tenant_id, actor = _tenant(request, Permissions.READ)
     kind = _RISK_SUBJECT_KINDS.get(subject_kind)
     if kind is None:
         raise BadRequestError(f"subject_kind must be one of {sorted(_RISK_SUBJECT_KINDS)}")
-    return _ok(await get_service().section(tenant_id, f"{kind}:{_ref(subject_id)}", "risk360"))
+    return _ok(await get_service().section(tenant_id, f"{kind}:{_ref(subject_id)}", "risk360", viewer_id=actor))
 
 
 # ── Kyber operator routes ────────────────────────────────────────────────────
@@ -279,7 +366,7 @@ async def kyber_queue(
     _operator(request)
     _validate_filters(status, kind)
     return _ok(await get_service().list_patterns(
-        _tenant_param(tenant_id), status=status, queue=status is None, kind=kind, limit=limit, offset=offset,
+        _tenant_param(tenant_id), status=status, feed=status is None, kind=kind, limit=limit, offset=offset,
     ))
 
 
@@ -295,6 +382,36 @@ async def kyber_run(body: DiscoveryRunRequest, request: Request, tenant_id: str 
     return _ok(await _run(_tenant_param(tenant_id), body, f"kyber:{actor}"))
 
 
+@kyber_router.get("/whats-new")
+async def kyber_whats_new(request: Request, tenant_id: str = Query(...), scope: str = Query("feed", max_length=400),
+                          since: Optional[str] = Query(None, max_length=64)):
+    actor = _operator(request)
+    try:
+        return _ok(await get_service().whats_new(_tenant_param(tenant_id), viewer_id=f"kyber:{actor}",
+                                                 scope=scope, since=since))
+    except LifecycleError as exc:
+        raise BadRequestError(str(exc))
+
+
+@kyber_router.post("/whats-new/seen")
+async def kyber_mark_seen(body: SeenRequest, request: Request, tenant_id: str = Query(...)):
+    actor = _operator(request)
+    try:
+        return _ok(await get_service().mark_seen(_tenant_param(tenant_id), viewer_id=f"kyber:{actor}",
+                                                 scope=body.scope, at=body.at))
+    except LifecycleError as exc:
+        raise BadRequestError(str(exc))
+
+
+@kyber_router.get("/{pattern_id}/graph")
+async def kyber_pattern_graph(pattern_id: str, request: Request, tenant_id: str = Query(...)):
+    _operator(request)
+    graph = await get_service().pattern_graph(_tenant_param(tenant_id), pattern_id)
+    if graph is None:
+        raise NotFoundError("pattern")
+    return _ok(graph)
+
+
 @kyber_router.get("/{pattern_id}")
 async def kyber_detail(pattern_id: str, request: Request, tenant_id: str = Query(...)):
     _operator(request)
@@ -305,6 +422,12 @@ async def kyber_detail(pattern_id: str, request: Request, tenant_id: str = Query
 async def kyber_review(pattern_id: str, body: ReviewRequest, request: Request, tenant_id: str = Query(...)):
     actor = _operator(request)
     return _ok(await _review(_tenant_param(tenant_id), pattern_id, body, f"kyber:{actor}"))
+
+
+@kyber_router.post("/{pattern_id}/curate")
+async def kyber_curate(pattern_id: str, body: CurateRequest, request: Request, tenant_id: str = Query(...)):
+    actor = _operator(request)
+    return _ok(await _curate(_tenant_param(tenant_id), pattern_id, body, f"kyber:{actor}"))
 
 
 @kyber_router.post("/{pattern_id}/promote")

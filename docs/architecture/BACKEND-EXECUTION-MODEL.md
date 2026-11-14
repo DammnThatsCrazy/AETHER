@@ -19,7 +19,7 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
-  "services/api/config/settings.py": "sha256:7234c00664c3987614886c00670589047bbc242ef7ae513604f1dbc8e2dbc1de"
+  "services/api/config/settings.py": "sha256:792ed64340a76ab4efe2f22e42ece719f8f588689feccb6f7d769bb87c9eb798"
   "services/api/main.py": "sha256:6647f3160e499a6449f1689e3031debf56031a3abfd57885e0292510b26fac59"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
   "services/api/workers/runtime/roles.py": "sha256:976796e657b941759e2aceeb1658cb89866c615fc95023bf334de29ae1369181"
@@ -252,8 +252,8 @@ depending on an operator manually draining a queue:
   idempotent, kill-switch aware (skips SUSPENDED x402 capabilities), durable
   per-tenant cursor in `x402_reconciliation_cursor`.
 - **`pattern_discovery_sweep`** (`materializer`, gated by
-  `AETHER_PATTERN_DISCOVERY_ENABLED` + `PATTERN_DISCOVERY_SCHEDULER_ENABLED`,
-  re-read every pass) — enqueues one durable `pattern_discovery.run` job per
+  `AETHER_PATTERN_DISCOVERY_ENABLED` + `PATTERN_DISCOVERY_SCHEDULER_ENABLED`
+  (default on, so the master flag decides), re-read every pass) — enqueues one durable `pattern_discovery.run` job per
   tenant with analytics events every `PATTERN_DISCOVERY_INTERVAL_MINUTES`; the
   interval bucket is the idempotency key, so a restart never doubles a pass.
 - **`reward_reservation_release`** (`maintenance`) — returns stale,

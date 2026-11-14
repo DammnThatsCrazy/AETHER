@@ -24,7 +24,7 @@ from intelligence.pattern_discovery import contracts  # noqa: E402
 def _ts_tuple(name: str) -> list[str]:
     match = re.search(rf"export const {name} = \[(.*?)\] as const;", TS, re.S)
     assert match, f"{name} not found in pattern-discovery.ts"
-    return re.findall(r"'([a-z_]+)'", match.group(1))
+    return re.findall(r"'([a-z_0-9]+)'", match.group(1))
 
 
 def _ts_record(name: str) -> dict[str, str]:
@@ -44,6 +44,21 @@ def test_confidence_caps_match():
 
 def test_statuses_match():
     assert _ts_tuple("PATTERN_STATUSES") == list(contracts.PATTERN_STATUSES)
+
+
+def test_visible_statuses_and_curation_actions_match():
+    from intelligence.pattern_discovery.registry import CURATION_ACTIONS
+    from intelligence.pattern_discovery.lenses import LENSES
+
+    assert set(_ts_tuple_satisfies("PATTERN_VISIBLE_STATUSES")) == set(contracts.VISIBLE_STATUSES)
+    assert _ts_tuple("PATTERN_CURATION_ACTIONS") == list(CURATION_ACTIONS)
+    assert _ts_tuple("PATTERN_LENSES") == list(LENSES)
+
+
+def _ts_tuple_satisfies(name: str) -> list[str]:
+    match = re.search(rf"export const {name} = \[(.*?)\] as const satisfies", TS, re.S)
+    assert match, f"{name} not found in pattern-discovery.ts"
+    return re.findall(r"'([a-z_0-9]+)'", match.group(1))
 
 
 def test_verdicts_and_their_statuses_match():

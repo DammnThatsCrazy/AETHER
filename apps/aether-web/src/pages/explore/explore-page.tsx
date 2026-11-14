@@ -5,6 +5,7 @@ import { useGraphActions, useGraphContext } from '@aether/ui/exploration';
 import type { GraphNode } from '@aether-app/components/graph/graph-canvas';
 import { ExploreAdvancedView } from './explore-advanced-view';
 import { ExploreNetworkView } from './explore-network-view';
+import { ExplorePatternsPanel, PatternHighlightBridge } from '@aether-app/features/pattern-discovery';
 import { useExploreGraphRead } from './explore-read';
 import { ExploreTraceView, type TraceVisual } from './explore-trace-view';
 
@@ -100,14 +101,29 @@ function ExploreReadViews({ view, scopeId, params, setView, setScope, selectObje
     );
   }
 
+  const patternId = params.get('pattern');
+  const nodeIds = snapshot.nodes.map(n => n.id);
   return (
-    <ExploreNetworkView
-      snapshot={snapshot}
-      scopeId={scopeId}
-      onScope={setScope}
-      onSelectObject={selectObject}
-      onOpenTrace={openTrace}
-      onOpenAdvanced={() => setView('advanced')}
-    />
+    <>
+      <ExplorePatternsPanel
+        nodeIds={nodeIds}
+        patternId={patternId}
+        onPattern={(id) => setView(view, next => { if (id) next.set('pattern', id); else next.delete('pattern'); })}
+        onFocusNode={(id) => setScope(id)}
+      />
+      <PatternHighlightBridge patternId={patternId} nodeIds={nodeIds}>
+        {(ids) => (
+          <ExploreNetworkView
+            snapshot={snapshot}
+            scopeId={scopeId}
+            onScope={setScope}
+            onSelectObject={selectObject}
+            onOpenTrace={openTrace}
+            onOpenAdvanced={() => setView('advanced')}
+            highlightIds={ids}
+          />
+        )}
+      </PatternHighlightBridge>
+    </>
   );
 }

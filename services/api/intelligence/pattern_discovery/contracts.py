@@ -73,7 +73,7 @@ CONFIDENCE_CAPS: dict[str, float] = {
 
 # ── Lifecycle ────────────────────────────────────────────────────────────────
 STATUS_CANDIDATE = "candidate"
-STATUS_NEEDS_REVIEW = "needs_review"
+STATUS_SURFACED = "surfaced"
 STATUS_CONFIRMED_VALID = "confirmed_valid"
 STATUS_CONFIRMED_MALICIOUS = "confirmed_malicious"
 STATUS_BENIGN = "benign"
@@ -81,10 +81,11 @@ STATUS_DUPLICATE = "duplicate"
 STATUS_UNRESOLVED = "unresolved"
 STATUS_PROMOTED = "promoted"
 STATUS_DEPRECATED = "deprecated"
+STATUS_HIDDEN = "hidden"
 
 PATTERN_STATUSES: tuple[str, ...] = (
     STATUS_CANDIDATE,
-    STATUS_NEEDS_REVIEW,
+    STATUS_SURFACED,
     STATUS_CONFIRMED_VALID,
     STATUS_CONFIRMED_MALICIOUS,
     STATUS_BENIGN,
@@ -92,10 +93,13 @@ PATTERN_STATUSES: tuple[str, ...] = (
     STATUS_UNRESOLVED,
     STATUS_PROMOTED,
     STATUS_DEPRECATED,
+    STATUS_HIDDEN,
 )
 
-#: System-computed statuses (the detector funnel). Everything else needs a human.
-SYSTEM_STATUSES = frozenset({STATUS_CANDIDATE, STATUS_NEEDS_REVIEW})
+#: System-computed statuses. ``surfaced`` patterns are shown to users by
+#: default with no human step; ``candidate`` patterns are below the surfacing
+#: bar ("watching") and shown only on request. Everything else is a human act.
+SYSTEM_STATUSES = frozenset({STATUS_CANDIDATE, STATUS_SURFACED})
 #: Statuses that carry a human decision.
 REVIEWED_STATUSES = frozenset({
     STATUS_CONFIRMED_VALID, STATUS_CONFIRMED_MALICIOUS, STATUS_BENIGN,
@@ -103,8 +107,16 @@ REVIEWED_STATUSES = frozenset({
 })
 #: Statuses that may be promoted into durable risk intelligence.
 PROMOTABLE_STATUSES = frozenset({STATUS_CONFIRMED_VALID, STATUS_CONFIRMED_MALICIOUS})
-#: Statuses shown in the open review queue.
-QUEUE_STATUSES = frozenset({STATUS_NEEDS_REVIEW, STATUS_UNRESOLVED})
+#: Statuses shown in the default feed and the 360 lenses without any filter.
+#: Review is optional: a human can hide, pin, rename or give a verdict later.
+VISIBLE_STATUSES = frozenset({
+    STATUS_SURFACED, STATUS_UNRESOLVED, STATUS_CONFIRMED_VALID, STATUS_CONFIRMED_MALICIOUS,
+    STATUS_PROMOTED,
+})
+#: Human curation that removes a pattern from view (``hidden``) or records a
+#: judgement (verdicts). Both are kept across re-detection while the evidence
+#: fingerprint is unchanged.
+HUMAN_STATUSES = REVIEWED_STATUSES | {STATUS_HIDDEN}
 
 Verdict = Literal["valid", "malicious", "benign", "duplicate", "unresolved"]
 VERDICT_STATUS: dict[str, str] = {
@@ -117,13 +129,13 @@ VERDICT_STATUS: dict[str, str] = {
 #: Verdicts that mean "the detector found something real" (calibration numerator).
 USEFUL_VERDICTS = frozenset({"valid", "malicious"})
 #: Verdicts that mean "the detector produced noise" (calibration penalty).
-NOISE_VERDICTS = frozenset({"benign", "duplicate"})
+NOISE_VERDICTS = frozenset({"benign", "duplicate", "hidden"})
 
 SEVERITIES: tuple[str, ...] = ("low", "medium", "high", "critical")
 
 # ── Thresholds shared by the scoring layer ──────────────────────────────────
-NEEDS_REVIEW_CONFIDENCE = 0.4
-NEEDS_REVIEW_NOVELTY = 0.3
+SURFACE_CONFIDENCE = 0.4
+SURFACE_NOVELTY = 0.3
 #: After this many consecutive discovery runs without re-observation an open
 #: pattern is deprecated automatically (reviewed patterns are left alone).
 STALE_AFTER_RUNS = 6
@@ -239,6 +251,15 @@ class ReviewRequest(BaseModel):
     verdict: Verdict
     reason: str = Field(..., min_length=10, max_length=2000)
     duplicate_of: Optional[str] = Field(default=None, max_length=300)
+
+
+class CurateRequest(BaseModel):
+    """Optional curation of an automatically surfaced pattern."""
+
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["hide", "unhide", "pin", "unpin", "rename"]
+    title: Optional[str] = Field(default=None, max_length=300)
+    reason: Optional[str] = Field(default=None, max_length=2000)
 
 
 class PromoteRequest(BaseModel):

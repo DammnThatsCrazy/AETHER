@@ -4,14 +4,17 @@ Revision ID: 20261114_pattern_discovery_stores
 Revises: 20261107_merge_rcp_activation_lineage_heads
 Create Date: 2026-11-14
 
-Four tenant-scoped JSONB stores for intelligence/pattern_discovery:
+Five tenant-scoped JSONB stores for intelligence/pattern_discovery:
 
 * ``discovered_patterns`` — versioned pattern candidates. Indexed for the
-  review queue (status, kind, priority), entity context lookups (GIN on the
-  affected-entity keys) and the staleness sweep.
+  surfaced feed (status, kind, priority), entity context and graph overlay
+  lookups (GIN on the affected-entity keys) and the segment lenses (GIN on
+  segment keys).
 * ``pattern_feedback`` — append-only analyst verdicts (calibration source).
 * ``pattern_discovery_baselines`` — one decayed aggregate baseline per tenant.
 * ``pattern_discovery_runs`` — discovery run records.
+* ``pattern_viewer_state`` — when each viewer last looked at each scope
+  ("what's new since I last looked").
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ _TABLES = (
     "pattern_feedback",
     "pattern_discovery_baselines",
     "pattern_discovery_runs",
+    "pattern_viewer_state",
 )
 
 
@@ -59,6 +63,14 @@ def upgrade() -> None:
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_discovered_patterns_entities "
         "ON discovered_patterns USING GIN ((data->'affected_entity_keys'))"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS idx_discovered_patterns_segments "
+        "ON discovered_patterns USING GIN ((data->'segment_keys'))"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pattern_viewer_state_viewer "
+        "ON pattern_viewer_state (tenant_id, (data->>'viewer_id'))"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_pattern_feedback_kind "

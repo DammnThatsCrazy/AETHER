@@ -478,7 +478,7 @@
       "feature_id": "patterns",
       "aether_route": "/patterns",
       "tenant_parity_required": false,
-      "parity_exception_reason": "Kyber operators review a tenant's discovered patterns on the dedicated operator queue (/intelligence/patterns with a tenant_id query, backed by /v1/kyber/patterns/*), which adds operator review history; there is no tenant-mirror store reader for the pattern store, so it is not a byte-parity Tenant Mirror surface.",
+      "parity_exception_reason": "Kyber operators work a tenant's surfaced patterns on the dedicated operator page (/intelligence/patterns with a tenant_id query, backed by /v1/kyber/patterns/*), which adds the operator's own what's-new state, curation and review history; there is no tenant-mirror store reader for the pattern store, so it is not a byte-parity Tenant Mirror surface.",
       "kyber_mirror_route": null,
       "minimum_disclosure": "D0"
     },

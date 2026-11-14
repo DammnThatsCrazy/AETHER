@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@kyber/lib/api';
-import type { PatternKind, PatternVerdict } from '@aether/shared';
-import type { DiscoveredPatternDetail, DiscoveredPatternList } from '@kyber/lib/api/endpoints';
+import type { PatternCurationAction, PatternKind, PatternVerdict } from '@aether/shared';
+import type { DiscoveredPatternDetail, DiscoveredPatternList, PatternSubgraph, PatternWhatsNew } from '@kyber/lib/api/endpoints';
 
-export type { DiscoveredPatternDetail, DiscoveredPatternList, DiscoveredPatternSummary } from '@kyber/lib/api/endpoints';
+export type {
+  DiscoveredPatternDetail, DiscoveredPatternList, DiscoveredPatternSummary, PatternSubgraph, PatternWhatsNew,
+} from '@kyber/lib/api/endpoints';
 
 /** Typed against the shared contract (packages/shared/pattern-discovery.ts), whose
  *  parity with the backend is asserted by tests/unit/test_pattern_discovery_contract_parity.py;
  *  a value outside the shared vocabulary fails the typecheck. */
-export type { PatternKind, PatternVerdict } from '@aether/shared';
+export type { PatternCurationAction, PatternKind, PatternVerdict } from '@aether/shared';
 
 export const PATTERN_VERDICTS = ['valid', 'malicious', 'benign', 'duplicate', 'unresolved'] as const satisfies readonly PatternVerdict[];
 
@@ -29,10 +31,12 @@ export const PATTERN_KINDS = [
   'cross_domain',
 ] as const satisfies readonly PatternKind[];
 
-/** Statuses an operator can filter the queue by. Empty = the open review queue. */
+/** Statuses an operator can filter by. Empty = the surfaced feed (what tenants see by default). */
 export const PATTERN_STATUS_FILTERS = [
   '',
+  'surfaced',
   'candidate',
+  'hidden',
   'confirmed_valid',
   'confirmed_malicious',
   'benign',
@@ -124,4 +128,64 @@ export function usePatternActions(tenantId: string) {
     deprecate: (patternId: string, reason: string) =>
       wrap(() => api.admin.kyber.deprecatePattern(tenantId, patternId, { reason })),
   };
+}
+
+/** Loads one value for (tenant, key) with a manual refresh; nothing loads without a tenant / key. */
+function useLoader<T>(tenantId: string, key: string | null, load: () => Promise<T>) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(() => {
+    let active = true;
+    if (!tenantId || key === null) {
+      setData(null);
+      return () => { active = false; };
+    }
+    setLoading(true);
+    setError(null);
+    load()
+      .then((res) => { if (active) setData(res); })
+      .catch((e) => active && setError(message(e)))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [tenantId, key]);
+  useEffect(() => refresh(), [refresh]);
+  return { data, loading, error, refresh };
+}
+
+/** New / changed / retired patterns since this operator last looked at the tenant's feed. */
+export function usePatternWhatsNew(tenantId: string) {
+  return useLoader<PatternWhatsNew>(tenantId, 'feed', () => api.admin.kyber.patternWhatsNew(tenantId, 'feed'));
+}
+
+export function usePatternGraph(tenantId: string, patternId: string | null) {
+  return useLoader<PatternSubgraph>(tenantId, patternId, () => api.admin.kyber.patternGraph(tenantId, patternId ?? ''));
+}
+
+export function usePatternCuration(tenantId: string) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const curate = useCallback(async (patternId: string, action: PatternCurationAction, title?: string): Promise<boolean> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.admin.kyber.curatePattern(tenantId, patternId, title !== undefined ? { action, title } : { action });
+      return true;
+    } catch (e) {
+      setError(message(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [tenantId]);
+  const markSeen = useCallback(async (): Promise<boolean> => {
+    try {
+      await api.admin.kyber.markPatternsSeen(tenantId, 'feed');
+      return true;
+    } catch (e) {
+      setError(message(e));
+      return false;
+    }
+  }, [tenantId]);
+  return { curate, markSeen, busy, error };
 }

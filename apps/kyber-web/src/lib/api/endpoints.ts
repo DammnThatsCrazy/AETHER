@@ -349,9 +349,36 @@ const discoveredPatternSummarySchema = z.object({
   times_observed: z.number().optional(),
   suppressed_by_feedback: z.boolean().optional(),
   claim_state: z.string().optional(),
+  detector_title: z.string().optional(),
+  pinned: z.boolean().optional(),
+  surfaced_at: z.string().nullable().optional(),
+  changed_at: z.string().nullable().optional(),
+  deprecated_at: z.string().nullable().optional(),
 }).passthrough();
 
-/** /v1/kyber/patterns/queue — the operator discovery queue page. */
+/** /v1/kyber/patterns/whats-new — new / changed / retired since this operator last looked. */
+const patternWhatsNewSchema = z.object({
+  scope: z.string(),
+  withheld: z.boolean(),
+  since: z.string(),
+  since_source: z.string().optional(),
+  last_seen_at: z.string().nullable(),
+  new: z.array(discoveredPatternSummarySchema),
+  changed: z.array(discoveredPatternSummarySchema),
+  retired: z.array(discoveredPatternSummarySchema),
+}).passthrough();
+
+/** /v1/kyber/patterns/{id}/graph — the pattern as a renderable subgraph. */
+const patternSubgraphSchema = z.object({
+  pattern_id: z.string(),
+  kind: z.string(),
+  title: z.string().nullable(),
+  nodes: z.array(z.object({ id: z.string(), kind: z.string(), label: z.string(), role: z.string() })),
+  edges: z.array(z.object({ source: z.string(), target: z.string(), type: z.string() })),
+  truncated: z.boolean(),
+}).passthrough();
+
+/** /v1/kyber/patterns/queue — the operator view of the surfaced feed (or one status). */
 const discoveredPatternListSchema = z.object({
   items: z.array(discoveredPatternSummarySchema),
   count: z.number(),
@@ -378,6 +405,8 @@ const discoveredPatternDetailSchema = discoveredPatternSummarySchema.extend({
 export type DiscoveredPatternSummary = z.infer<typeof discoveredPatternSummarySchema>;
 export type DiscoveredPatternList = z.infer<typeof discoveredPatternListSchema>;
 export type DiscoveredPatternDetail = z.infer<typeof discoveredPatternDetailSchema>;
+export type PatternWhatsNew = z.infer<typeof patternWhatsNewSchema>;
+export type PatternSubgraph = z.infer<typeof patternSubgraphSchema>;
 
 /** /v1/kyber/measurement/source-classification/operations — traffic-intelligence
  *  operations scorecard (spec §15.3). All fields optional + passthrough so the
@@ -2144,6 +2173,14 @@ export const api = {
         restClient.post(`/v1/kyber/patterns/${encodeURIComponent(patternId)}/promote${buildQS({ tenant_id: tenantId })}`, wrap(discoveredPatternDetailSchema), body).then(r => r.data),
       deprecatePattern: (tenantId: string, patternId: string, body: { reason: string }) =>
         restClient.post(`/v1/kyber/patterns/${encodeURIComponent(patternId)}/deprecate${buildQS({ tenant_id: tenantId })}`, wrap(discoveredPatternDetailSchema), body).then(r => r.data),
+      curatePattern: (tenantId: string, patternId: string, body: { action: string; title?: string; reason?: string }) =>
+        restClient.post(`/v1/kyber/patterns/${encodeURIComponent(patternId)}/curate${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema), body).then(r => r.data),
+      patternWhatsNew: (tenantId: string, scope = 'feed') =>
+        restClient.get(`/v1/kyber/patterns/whats-new${buildQS({ tenant_id: tenantId, scope })}`, wrap(patternWhatsNewSchema)).then(r => r.data),
+      markPatternsSeen: (tenantId: string, scope = 'feed') =>
+        restClient.post(`/v1/kyber/patterns/whats-new/seen${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema), { scope }).then(r => r.data),
+      patternGraph: (tenantId: string, patternId: string) =>
+        restClient.get(`/v1/kyber/patterns/${encodeURIComponent(patternId)}/graph${buildQS({ tenant_id: tenantId })}`, wrap(patternSubgraphSchema)).then(r => r.data),
 
       // ── Delivery operations (cross-tenant, operator-only) ─────────────────
       // Uses /v1/admin/delivery/jobs — no tenantId required, operator auth

@@ -32,7 +32,9 @@ const SUMMARY = {
   kind: 'cross_domain',
   title: '14 entities linked across 6 independent signals',
   summary: '14 entities appear in 12 patterns of 6 different kinds.',
-  status: 'needs_review',
+  status: 'surfaced',
+  pinned: false,
+  surfaced_at: '2026-11-02T16:05:00Z',
   priority: 'high',
   severity: 'high',
   severity_score: 0.3,
@@ -68,7 +70,21 @@ const api = vi.hoisted(() => ({
   deprecatePattern: vi.fn(),
   runPatternDiscovery: vi.fn(),
   patternStats: vi.fn(),
+  curatePattern: vi.fn(),
+  patternWhatsNew: vi.fn(),
+  markPatternsSeen: vi.fn(),
+  patternGraph: vi.fn(),
 }));
+
+const GRAPH = {
+  pattern_id: SUMMARY.pattern_id, kind: 'cross_domain', title: SUMMARY.title, truncated: false,
+  nodes: [
+    { id: 'pattern:abc', kind: 'pattern', label: 'cross domain', role: 'pattern' },
+    { id: 'user:r0', kind: 'user', label: 'r0', role: 'member' },
+    { id: 'device:d9', kind: 'device', label: 'd9', role: 'attribute' },
+  ],
+  edges: [{ source: 'pattern:abc', target: 'user:r0', type: 'MEMBER_OF_PATTERN' }],
+};
 
 vi.mock('@kyber/lib/api', () => ({ api: { admin: { kyber: api } } }));
 
@@ -79,6 +95,12 @@ describe('Pattern Discovery queue', () => {
     api.patternDetail.mockResolvedValue(DETAIL);
     api.reviewPattern.mockResolvedValue({ ...DETAIL, status: 'confirmed_malicious' });
     api.runPatternDiscovery.mockResolvedValue({ patterns_detected: 3 });
+    api.patternWhatsNew.mockResolvedValue({
+      scope: 'feed', withheld: false, since: '2026-11-01T00:00:00Z', last_seen_at: null, new: [SUMMARY], changed: [], retired: [],
+    });
+    api.patternGraph.mockResolvedValue(GRAPH);
+    api.curatePattern.mockResolvedValue({});
+    api.markPatternsSeen.mockResolvedValue({});
   });
 
   it('asks for a tenant before loading anything', () => {
@@ -90,9 +112,9 @@ describe('Pattern Discovery queue', () => {
   it('opens the queue, shows evidence and competing explanations, and records a verdict', async () => {
     render(<MemoryRouter><PatternDiscoveryPage /></MemoryRouter>);
     fireEvent.change(screen.getByLabelText('Tenant ID'), { target: { value: 'tenant-pd' } });
-    fireEvent.click(screen.getByText('Open queue'));
+    fireEvent.click(screen.getByText('Open feed'));
     await waitFor(() => expect(api.patternQueue).toHaveBeenCalledWith('tenant-pd', { status: undefined, kind: undefined, limit: 100 }));
-    fireEvent.click(await screen.findByText(SUMMARY.title));
+    fireEvent.click((await screen.findAllByText(SUMMARY.title))[0]!);
     await waitFor(() => expect(api.patternDetail).toHaveBeenCalledWith('tenant-pd', SUMMARY.pattern_id));
     expect(await screen.findByText(/One upstream cause/)).toBeInTheDocument();
     expect(screen.getByText(/Recurring sequence/)).toBeInTheDocument();
@@ -112,7 +134,7 @@ describe('Pattern Discovery queue', () => {
   async function openQueue() {
     render(<MemoryRouter><PatternDiscoveryPage /></MemoryRouter>);
     fireEvent.change(screen.getByLabelText('Tenant ID'), { target: { value: 'tenant-pd' } });
-    fireEvent.click(screen.getByText('Open queue'));
+    fireEvent.click(screen.getByText('Open feed'));
   }
 
   it('shows loading while the queue is pending', async () => {
@@ -124,13 +146,13 @@ describe('Pattern Discovery queue', () => {
   it('shows an empty state when nothing matches', async () => {
     api.patternQueue.mockResolvedValue({ items: [], count: 0, total: 0 });
     await openQueue();
-    expect(await screen.findByText('Nothing to review')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing surfaced')).toBeInTheDocument();
   });
 
   it('shows an error state when the queue cannot be read', async () => {
     api.patternQueue.mockRejectedValue(new Error('operator gate closed'));
     await openQueue();
-    expect(await screen.findByText('Unable to load the discovery queue')).toBeInTheDocument();
+    expect(await screen.findByText('Unable to load discovered patterns')).toBeInTheDocument();
     expect(screen.getByText('operator gate closed')).toBeInTheDocument();
   });
 
@@ -149,10 +171,35 @@ describe('Pattern Discovery queue', () => {
   it('runs discovery for the chosen tenant and refreshes the queue', async () => {
     render(<MemoryRouter><PatternDiscoveryPage /></MemoryRouter>);
     fireEvent.change(screen.getByLabelText('Tenant ID'), { target: { value: 'tenant-pd' } });
-    fireEvent.click(screen.getByText('Open queue'));
-    await screen.findByText(SUMMARY.title);
+    fireEvent.click(screen.getByText('Open feed'));
+    await screen.findAllByText(SUMMARY.title);
     fireEvent.click(screen.getByText('Run discovery'));
     await waitFor(() => expect(api.runPatternDiscovery).toHaveBeenCalledWith('tenant-pd'));
     await waitFor(() => expect(api.patternQueue).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows what is new since the operator last looked and marks it seen', async () => {
+    await openQueue();
+    expect(await screen.findByTestId('kyber-pattern-whats-new')).toBeInTheDocument();
+    expect(screen.getByText('1 new')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Mark seen'));
+    await waitFor(() => expect(api.markPatternsSeen).toHaveBeenCalledWith('tenant-pd', 'feed'));
+    await waitFor(() => expect(api.patternWhatsNew).toHaveBeenCalledTimes(2));
+  });
+
+  it('curates a pattern and shows its graph', async () => {
+    await openQueue();
+    fireEvent.click((await screen.findAllByText(SUMMARY.title))[0]!);
+    expect(await screen.findByTestId('kyber-pattern-graph')).toBeInTheDocument();
+    expect(screen.getByText('Shared values (1)')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Pin'));
+    await waitFor(() => expect(api.curatePattern).toHaveBeenCalledWith('tenant-pd', SUMMARY.pattern_id, { action: 'pin' }));
+    fireEvent.click(screen.getByText('Hide'));
+    await waitFor(() => expect(api.curatePattern).toHaveBeenCalledWith('tenant-pd', SUMMARY.pattern_id, { action: 'hide' }));
+    fireEvent.change(screen.getByLabelText('Display title'), { target: { value: 'Card ring across six signals' } });
+    fireEvent.click(screen.getByText('Rename'));
+    await waitFor(() => expect(api.curatePattern).toHaveBeenCalledWith(
+      'tenant-pd', SUMMARY.pattern_id, { action: 'rename', title: 'Card ring across six signals' },
+    ));
   });
 });

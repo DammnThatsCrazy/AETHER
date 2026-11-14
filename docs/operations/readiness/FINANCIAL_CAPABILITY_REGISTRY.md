@@ -26,7 +26,7 @@ source_files:
 source_hashes:
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/founding_tenant_release.yaml": "sha256:d90fe5eb258ef25f87773f719e5f87b1f7c25a87b0bdb9506bfda3c7755162ec"
-  "config/route_registry.yaml": "sha256:06dac174eed083f6b9ef02b4911efde72640cabb6739300c9f1c34027925eee0"
+  "config/route_registry.yaml": "sha256:39bd08a8cb61c64a831c476e7db4142fcacc1031f6313cca0970d1ecdf115170"
   "config/service_classification.yaml": "sha256:142c77b7ec067cb0ac04ca3cb54c5e977ae709aae18125554dd49ddf419da89b"
   "docs/_generated/adapter-certification-matrix.json": "sha256:30c99f26bb77d405851ce92caa915c358988e140e290808a21d538f594fdc7de"
   "docs/_generated/financial-capability-matrix.json": "sha256:9fe22542e9acddb2d8af224de1666086d25e8d7b0cbf2bf4ac7dc2f53b72bb27"

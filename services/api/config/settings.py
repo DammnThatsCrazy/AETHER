@@ -1443,7 +1443,9 @@ class PatternDiscoveryConfig:
     ``graph_motifs_enabled`` lets motif discovery read the tenant's canonical
     graph; ``ml_scoring_enabled`` scores hourly traffic windows with the ML
     ``anomaly_detection`` model; ``scheduler_enabled`` runs discovery for
-    every active tenant every ``scheduler_interval_minutes``.
+    every active tenant every ``scheduler_interval_minutes``;
+    ``notifications_enabled`` raises one in-app notification per day when
+    high or critical patterns surface.
     """
 
     enabled: bool = _env_bool("AETHER_PATTERN_DISCOVERY_ENABLED", False)
@@ -1453,8 +1455,9 @@ class PatternDiscoveryConfig:
     graph_promotion_enabled: bool = _env_bool("AETHER_PATTERN_GRAPH_PROMOTION_ENABLED", True)
     graph_motifs_enabled: bool = _env_bool("PATTERN_DISCOVERY_GRAPH_MOTIFS_ENABLED", True)
     ml_scoring_enabled: bool = _env_bool("PATTERN_DISCOVERY_ML_ENABLED", False)
-    scheduler_enabled: bool = _env_bool("PATTERN_DISCOVERY_SCHEDULER_ENABLED", False)
+    scheduler_enabled: bool = _env_bool("PATTERN_DISCOVERY_SCHEDULER_ENABLED", True)
     scheduler_interval_minutes: int = _env_int("PATTERN_DISCOVERY_INTERVAL_MINUTES", 360)
+    notifications_enabled: bool = _env_bool("AETHER_PATTERN_NOTIFICATIONS_ENABLED", True)
 
 
 # ---------------------------------------------------------------------------

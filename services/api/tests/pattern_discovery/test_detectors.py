@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from intelligence.pattern_discovery.baselines import empty_baseline
 from intelligence.pattern_discovery.contracts import (
     CONFIDENCE_CAPS, KIND_CROSS_DOMAIN, KIND_LOCKSTEP, KIND_NOVEL_MOTIF, KIND_OUTLIER,
-    KIND_SCHEMA_DRIFT, KIND_SEQUENCE, KIND_SHARED_ATTRIBUTE, KIND_TEMPORAL_BURST, STATUS_NEEDS_REVIEW,
+    KIND_SCHEMA_DRIFT, KIND_SEQUENCE, KIND_SHARED_ATTRIBUTE, KIND_TEMPORAL_BURST, STATUS_SURFACED,
 )
 from intelligence.pattern_discovery.detectors.frame import poisson_sf, robust_stats
 from intelligence.pattern_discovery.engine import run_discovery
@@ -23,7 +23,7 @@ def test_normal_traffic_alone_produces_no_patterns():
     first, baseline = _baselined()
     assert first.records == []
     second = run_discovery(T, normal_traffic(2, 2), baseline=baseline)
-    assert [r for r in second.records if r["status"] == STATUS_NEEDS_REVIEW] == []
+    assert [r for r in second.records if r["status"] == STATUS_SURFACED] == []
 
 
 def test_fraud_ring_is_found_independently_by_several_detectors():
@@ -55,7 +55,7 @@ def test_cross_domain_composite_tells_the_whole_story():
     kinds = c["evidence"][0]["detail"]["kinds"]
     assert len(kinds) >= 4 and KIND_SEQUENCE in kinds and KIND_SHARED_ATTRIBUTE in kinds
     assert len(c["member_pattern_ids"]) >= 4
-    assert c["status"] == STATUS_NEEDS_REVIEW
+    assert c["status"] == STATUS_SURFACED
 
 
 def test_confidence_never_exceeds_the_kind_cap_and_everything_is_inferred():
@@ -65,7 +65,7 @@ def test_confidence_never_exceeds_the_kind_cap_and_everything_is_inferred():
         assert r["confidence"] <= CONFIDENCE_CAPS[r["kind"]]
         assert r["claim_state"] == "inferred"
         assert r["competing_explanations"]
-        assert r["status"] in ("candidate", "needs_review")
+        assert r["status"] in ("candidate", "surfaced")
 
 
 def test_first_run_novelty_is_capped_because_new_means_nothing_without_history():

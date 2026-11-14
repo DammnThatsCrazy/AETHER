@@ -20,18 +20,24 @@ from shared.logger.logger import get_logger, metrics
 
 from .baselines import PatternBaselineRepository
 from .contracts import (
-    KIND_NOVEL_MOTIF, KIND_TRAFFIC_ANOMALY, PATTERN_KINDS, QUEUE_STATUSES, STATUS_DEPRECATED,
+    KIND_NOVEL_MOTIF, KIND_TRAFFIC_ANOMALY, PATTERN_KINDS, VISIBLE_STATUSES, STATUS_DEPRECATED,
     STATUS_PROMOTED,
 )
 from .detectors import DETECTORS
 from .engine import new_run_id, run_discovery
 from .extraction import extract_events, extract_payload
+from .feed import (
+    PatternViewerStateRepository, annotate_new, notify_new_patterns, resolve_since, summarize, whats_new,
+)
 from .graph import project_promotion, revoke_promotion, tenant_graph_edges
+from .graphview import keys_for_ids, overlay, pattern_subgraph
+from .lenses import LENSES, SEGMENT_LENSES, lens_segment_key, lens_view
 from .ml import score_windows
+from .registry import LifecycleError
 from .projections import consent_allows, entity_context, promote_to_risk, similar_patterns
 from .registry import (
     PatternDiscoveryRunRepository, PatternFeedbackRepository, PatternRegistryRepository,
-    apply_deprecation, apply_promotion, apply_review, mark_unseen, merge_duplicate,
+    apply_curation, apply_deprecation, apply_promotion, apply_review, mark_unseen, merge_duplicate,
 )
 
 logger = get_logger("aether.pattern_discovery.service")
@@ -68,7 +74,9 @@ class PatternDiscoveryService:
                  subject_resolver: Optional[Any] = None,
                  consent_reader: Optional[Any] = None,
                  graph_client: Optional[Any] = None,
-                 ml_client: Optional[Any] = None) -> None:
+                 ml_client: Optional[Any] = None,
+                 viewer_state: Optional[Any] = None,
+                 notifier: Optional[Any] = None) -> None:
         self.registry = registry or PatternRegistryRepository()
         self.baselines = baselines or PatternBaselineRepository()
         self.feedback = feedback or PatternFeedbackRepository()
@@ -79,6 +87,8 @@ class PatternDiscoveryService:
         self._consent = consent_reader
         self._graph = graph_client
         self._ml_client = ml_client
+        self.viewer_state = viewer_state or PatternViewerStateRepository()
+        self._notifier = notifier or notify_new_patterns
 
     # ── Evidence ─────────────────────────────────────────────────────────────
     async def _read_events(self, tenant_id: str, window_hours: int, max_events: int) -> tuple[list[dict], dict]:
@@ -150,6 +160,11 @@ class PatternDiscoveryService:
                 target = await self.registry.mutate(
                     tenant_id, stored["duplicate_of"], lambda row, dup=stored: merge_duplicate(row, dup))
                 merged += bool(target)
+        newly_surfaced = [r for r in saved if r.get("status") == "surfaced"
+                          and (r.get("surfaced_at") or "") >= started_at]
+        notification = None
+        if newly_surfaced and cfg.notifications_enabled:
+            notification = await self._notifier(tenant_id, newly_surfaced, run_id=run_id)
         seen = {r["pattern_id"] for r in result.records}
         aged = deprecated = 0
         for existing in await self.registry.scan(tenant_id):
@@ -192,6 +207,8 @@ class PatternDiscoveryService:
             "patterns_by_status_after_merge": by_status,
             "pattern_ids": [r["pattern_id"] for r in saved][:500],
             "duplicates_merged": merged,
+            "newly_surfaced": len(newly_surfaced),
+            "notification_id": (notification or {}).get("id") if isinstance(notification, dict) else None,
             "aged_patterns": aged,
             "auto_deprecated": deprecated,
             "baseline_updated": baseline_updated,
@@ -204,18 +221,23 @@ class PatternDiscoveryService:
 
     @staticmethod
     def _summary(r: dict[str, Any]) -> dict[str, Any]:
-        return {k: r.get(k) for k in (
-            "pattern_id", "kind", "title", "summary", "status", "priority", "severity", "severity_score",
+        out = {k: r.get(k) for k in (
+            "pattern_id", "kind", "summary", "status", "priority", "severity", "severity_score",
             "confidence", "confidence_cap", "novelty", "affected_entity_count", "risk_categories",
             "first_observed_at", "last_observed_at", "version", "times_observed", "detector",
-            "suppressed_by_feedback", "claim_state",
+            "suppressed_by_feedback", "claim_state", "pinned", "surfaced_at", "changed_at",
+            "deprecated_at", "segment_keys",
         )}
+        out["title"] = r.get("display_title") or r.get("title")
+        out["detector_title"] = r.get("title")
+        return out
 
     # ── Reads ────────────────────────────────────────────────────────────────
-    async def list_patterns(self, tenant_id: str, *, status: Optional[str] = None, queue: bool = False,
+    async def list_patterns(self, tenant_id: str, *, status: Optional[str] = None, feed: bool = False,
                             kind: Optional[str] = None, min_confidence: float = 0.0,
                             limit: int = 50, offset: int = 0) -> dict[str, Any]:
-        statuses = set(QUEUE_STATUSES) if queue else ({status} if status else None)
+        """``feed=True`` is the default surfaced view (visible statuses, pinned first)."""
+        statuses = set(VISIBLE_STATUSES) if feed else ({status} if status else None)
         rows, total = await self.registry.list_patterns(
             tenant_id, statuses=statuses, kind=kind, min_confidence=min_confidence,
             limit=max(1, min(limit, 200)), offset=max(0, offset),
@@ -246,7 +268,8 @@ class PatternDiscoveryService:
         ctx["consent_receipt_id"] = receipt
         return ctx
 
-    async def section(self, tenant_id: str, entity_key: str, surface: str) -> dict[str, Any]:
+    async def section(self, tenant_id: str, entity_key: str, surface: str,
+                      viewer_id: Optional[str] = None) -> dict[str, Any]:
         """Profile 360 / Agent 360 / Risk 360 section for one entity (consent-gated)."""
         from .sections import SECTIONS
 
@@ -265,6 +288,106 @@ class PatternDiscoveryService:
                 rows.setdefault(row["pattern_id"], row)
         out = builder(entity_key, list(rows.values()))
         out.update({"withheld": False, "consent_receipt_id": receipt})
+        return await self._with_last_seen(out, tenant_id, viewer_id, f"{surface}:{entity_key}")
+
+    async def _with_last_seen(self, out: dict[str, Any], tenant_id: str, viewer_id: Optional[str],
+                              scope: str) -> dict[str, Any]:
+        """Attach the viewer's last-seen time for ``scope`` and mark new/changed rows."""
+        last_seen = await self.viewer_state.get_last_seen(tenant_id, viewer_id, scope) if viewer_id else None
+        out["scope"] = scope
+        out["last_seen_at"] = last_seen
+        for value in out.values():
+            if isinstance(value, list) and value and isinstance(value[0], dict) and "pattern_id" in value[0]:
+                annotate_new(value, last_seen)
+        for group in out.get("groups") or []:
+            annotate_new(group.get("patterns") or [], last_seen)
+        out["new_count"] = len({r["pattern_id"] for v in out.values() if isinstance(v, list)
+                                for r in v if isinstance(r, dict) and r.get("is_new")})
+        return out
+
+    # ── What's new ───────────────────────────────────────────────────────────
+    async def _scope_patterns(self, tenant_id: str, scope: str) -> list[dict[str, Any]]:
+        if scope == "feed":
+            return await self.registry.scan(tenant_id)
+        if scope.startswith("lens:"):
+            _, lens, subject = (scope.split(":", 2) + ["", ""])[:3]
+            if lens in SEGMENT_LENSES:
+                return await self.registry.for_segment(tenant_id, lens_segment_key(lens, subject))
+            if lens == "journey360":
+                return await self.registry.for_entity(tenant_id, f"user:{subject}", limit=500)
+            raise LifecycleError(f"unknown lens {lens!r}")
+        surface, _, entity_key = scope.partition(":")
+        if surface in ("profile360", "agent360", "risk360") and ":" in entity_key:
+            return await self.registry.for_entity(tenant_id, entity_key, limit=500)
+        raise LifecycleError("scope must be 'feed', '<surface>:<kind>:<id>' or 'lens:<lens>:<subject>'")
+
+    async def whats_new(self, tenant_id: str, *, viewer_id: str, scope: str = "feed",
+                        since: Optional[str] = None) -> dict[str, Any]:
+        """New, changed and retired patterns since the viewer last looked at ``scope``."""
+        last_seen = await self.viewer_state.get_last_seen(tenant_id, viewer_id, scope)
+        since_dt = resolve_since(since, last_seen)
+        if scope != "feed" and not scope.startswith("lens:") or scope.startswith("lens:journey360:"):
+            key = scope.partition(":")[2] if not scope.startswith("lens:") else f"user:{scope.split(':', 2)[2]}"
+            allowed, _receipt, reason = await consent_allows(tenant_id, key, reader=self._consent)
+            if not allowed:
+                return {"scope": scope, "withheld": True, "reason_code": reason, "since": since_dt.isoformat(),
+                        "last_seen_at": last_seen, "new": [], "changed": [], "retired": [],
+                        "digest": {"new": summarize([]), "changed": summarize([]), "retired": summarize([])}}
+        buckets = whats_new(await self._scope_patterns(tenant_id, scope), since=since_dt)
+        return {
+            "scope": scope,
+            "withheld": False,
+            "since": since_dt.isoformat(),
+            "since_source": "explicit" if since else ("last_seen" if last_seen else "default_lookback"),
+            "last_seen_at": last_seen,
+            "as_of": utc_now().isoformat(),
+            **{name: [self._summary(r) for r in rows] for name, rows in buckets.items()},
+            "digest": {name: summarize(rows) for name, rows in buckets.items()},
+        }
+
+    async def mark_seen(self, tenant_id: str, *, viewer_id: str, scope: str = "feed",
+                        at: Optional[str] = None) -> dict[str, Any]:
+        if scope != "feed":
+            await self._scope_patterns(tenant_id, scope)  # validates the scope
+        return await self.viewer_state.mark_seen(tenant_id, viewer_id, scope, at)
+
+    # ── Lenses ───────────────────────────────────────────────────────────────
+    async def lens(self, tenant_id: str, lens: str, subject: str, viewer_id: Optional[str] = None) -> dict[str, Any]:
+        if lens not in LENSES:
+            raise LifecycleError(f"lens must be one of {list(LENSES)}")
+        subject = (subject or "").strip()
+        if not subject:
+            raise LifecycleError("subject is required")
+        if lens == "journey360":
+            key = f"user:{subject}"
+            allowed, _receipt, reason = await consent_allows(tenant_id, key, reader=self._consent)
+            if not allowed:
+                out = lens_view(lens, subject, [])
+                out.update({"withheld": True, "reason_code": reason})
+                return out
+            rows = await self.registry.for_entity(tenant_id, key, limit=500)
+            rows += [r for r in await self.registry.for_entity(tenant_id, f"entity:{subject}", limit=500)
+                     if r["pattern_id"] not in {x["pattern_id"] for x in rows}]
+        elif lens == "communication360" and subject.lower() == "all":
+            rows = [r for r in await self.registry.scan(tenant_id)
+                    if any(k.startswith("channel=") for k in r.get("segment_keys") or [])
+                    or "communication" in (r.get("risk_categories") or [])]
+        else:
+            rows = await self.registry.for_segment(tenant_id, lens_segment_key(lens, subject))
+        out = lens_view(lens, subject, rows)
+        out["withheld"] = False
+        return await self._with_last_seen(out, tenant_id, viewer_id, f"lens:{lens}:{subject}")
+
+    # ── Graph ────────────────────────────────────────────────────────────────
+    async def pattern_graph(self, tenant_id: str, pid: str) -> Optional[dict[str, Any]]:
+        row = await self.registry.get(tenant_id, pid)
+        return pattern_subgraph(row) if row is not None else None
+
+    async def graph_overlay(self, tenant_id: str, node_ids: list[str]) -> dict[str, Any]:
+        ids = [str(i) for i in node_ids][:500]
+        lookup = keys_for_ids(ids)
+        out = overlay(ids, await self.registry.for_entities(tenant_id, list(lookup)))
+        out["nodes_requested"] = len(ids)
         return out
 
     async def stats(self, tenant_id: str) -> dict[str, Any]:
@@ -282,7 +405,10 @@ class PatternDiscoveryService:
             "patterns": len(rows),
             "by_status": by_status,
             "by_kind": by_kind,
-            "queue_depth": sum(by_status.get(s, 0) for s in QUEUE_STATUSES),
+            "visible": sum(by_status.get(s, 0) for s in VISIBLE_STATUSES),
+            "surfaced": by_status.get("surfaced", 0),
+            "watching": by_status.get("candidate", 0),
+            "hidden": by_status.get("hidden", 0),
             "feedback": {"total": feedback.get("total", 0), "kinds": feedback.get("kinds", {})},
             "calibration": calibration_factors(feedback),
             "suppressed_families": sorted(suppressed_families(feedback)),
@@ -320,6 +446,18 @@ class PatternDiscoveryService:
                 await self.registry.mutate(tenant_id, duplicate_of,
                                            lambda row, dup=updated: merge_duplicate(row, dup))
             metrics.increment("pattern_discovery_reviews_total", labels={"verdict": verdict})
+        return updated
+
+    async def curate(self, tenant_id: str, pid: str, *, actor: str, action: str,
+                     title: Optional[str] = None, reason: Optional[str] = None) -> Optional[dict[str, Any]]:
+        """Hide / unhide / pin / unpin / rename an automatically surfaced pattern.
+        ``hide`` is also recorded as noise feedback so similar patterns are
+        surfaced less eagerly; ``unhide`` is not counted either way."""
+        updated = await self.registry.mutate(
+            tenant_id, pid, lambda row: apply_curation(row, actor=actor, action=action, title=title, reason=reason))
+        if updated is not None and action == "hide":
+            await self.feedback.record(tenant_id, updated, reviewer_id=actor, verdict="hidden",
+                                       reason=reason or "hidden by user")
         return updated
 
     async def promote(self, tenant_id: str, pid: str, *, reviewer_id: str, reason: str) -> Optional[dict[str, Any]]:

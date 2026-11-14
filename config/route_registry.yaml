@@ -366,6 +366,18 @@ kyber_routes:
     capability: kyber.tenant.mirror.read
     disclosure: D3
     action_class: 0
+  - route: "GET /v1/kyber/patterns/whats-new"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "POST /v1/kyber/patterns/whats-new/seen"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
+  - route: "GET /v1/kyber/patterns/{pattern_id}/graph"
+    capability: kyber.tenant.mirror.read
+    disclosure: D3
+    action_class: 0
   - route: "GET /v1/kyber/patterns/{pattern_id}"
     capability: kyber.tenant.mirror.read
     disclosure: D3
@@ -375,6 +387,10 @@ kyber_routes:
     disclosure: D3
     action_class: 2
   - route: "POST /v1/kyber/patterns/{pattern_id}/review"
+    capability: kyber.incident.manage
+    disclosure: D4
+    action_class: 1
+  - route: "POST /v1/kyber/patterns/{pattern_id}/curate"
     capability: kyber.incident.manage
     disclosure: D4
     action_class: 1

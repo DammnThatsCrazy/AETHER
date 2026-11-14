@@ -2891,6 +2891,26 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # "What's new since I last looked": per (tenant, viewer, scope) last-seen
+  # times. Names the viewer, so the pattern_discovery DSR component deletes a
+  # subject's rows.
+  - resource_type: pattern_viewer_state
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: false
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   # Analyst verdicts on discovered patterns (pattern ids, never subject keys);
   # the calibration source. Kept with the review audit trail.
   - resource_type: pattern_feedback

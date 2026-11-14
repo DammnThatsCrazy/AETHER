@@ -28,8 +28,8 @@ from .contracts import (
     KIND_OUTLIER, KIND_SCHEMA_DRIFT, KIND_SEQUENCE, KIND_SHARED_ATTRIBUTE, KIND_TEMPORAL_BURST,
     KIND_SEGMENT_SHIFT, KIND_AGENT_SPAWN, KIND_AGENT_TOOL_SIGNATURE, KIND_AGENT_INTERACTION,
     KIND_TRAFFIC_ANOMALY,
-    NEEDS_REVIEW_CONFIDENCE, NEEDS_REVIEW_NOVELTY, NOISE_VERDICTS, STATUS_CANDIDATE,
-    STATUS_NEEDS_REVIEW, USEFUL_VERDICTS, RawPattern, content_hash,
+    SURFACE_CONFIDENCE, SURFACE_NOVELTY, NOISE_VERDICTS, STATUS_CANDIDATE,
+    STATUS_SURFACED, USEFUL_VERDICTS, RawPattern, content_hash,
 )
 
 SUPPRESS_AFTER_NOISE = 3
@@ -132,12 +132,12 @@ def tuned_config(base: Any, calibration: dict[str, dict[str, Any]]) -> tuple[Any
 
 
 def review_threshold(kind: str, calibration: dict[str, dict[str, Any]]) -> float:
-    """Per-kind needs-review confidence bar: noisy kinds must clear a higher bar."""
+    """Per-kind surfacing confidence bar: noisy kinds must clear a higher bar."""
     cal = calibration.get(kind)
     if not cal:
-        return NEEDS_REVIEW_CONFIDENCE
+        return SURFACE_CONFIDENCE
     factor = float(cal["factor"])
-    return round(min(0.7, max(0.3, NEEDS_REVIEW_CONFIDENCE / max(factor, 0.5) * 1.0)), 3)
+    return round(min(0.7, max(0.3, SURFACE_CONFIDENCE / max(factor, 0.5) * 1.0)), 3)
 
 
 def suppressed_families(feedback: dict[str, Any]) -> set[str]:
@@ -186,8 +186,8 @@ def score(raw: RawPattern, *, baseline: dict[str, Any], calibration: dict[str, d
     is_suppressed = fam in suppressed
     sev, sev_score = severity(confidence, novelty, len(raw.affected_entities), raw.risk_categories)
     bar = review_threshold(raw.kind, calibration)
-    review = (confidence >= bar and novelty >= NEEDS_REVIEW_NOVELTY and not is_suppressed)
-    status = STATUS_NEEDS_REVIEW if review else STATUS_CANDIDATE
+    review = (confidence >= bar and novelty >= SURFACE_NOVELTY and not is_suppressed)
+    status = STATUS_SURFACED if review else STATUS_CANDIDATE
     if is_suppressed:
         priority = "low"
     elif review and sev in ("high", "critical"):

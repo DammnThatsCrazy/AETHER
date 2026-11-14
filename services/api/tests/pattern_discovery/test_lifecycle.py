@@ -8,7 +8,7 @@ import pytest
 from intelligence.pattern_discovery.baselines import empty_baseline
 from intelligence.pattern_discovery.contracts import (
     KIND_CROSS_DOMAIN, KIND_SEQUENCE, KIND_SHARED_ATTRIBUTE, STATUS_BENIGN, STATUS_CONFIRMED_MALICIOUS,
-    STATUS_DEPRECATED, STATUS_NEEDS_REVIEW, STATUS_PROMOTED, STALE_AFTER_RUNS,
+    STATUS_DEPRECATED, STATUS_SURFACED, STATUS_PROMOTED, STALE_AFTER_RUNS,
 )
 from intelligence.pattern_discovery.engine import run_discovery
 from intelligence.pattern_discovery.projections import entity_context, pattern_risk_signals
@@ -73,7 +73,7 @@ def test_promotion_requires_confirmation_and_unchanged_evidence():
 
 
 def test_illegal_transitions_are_refused():
-    check_transition("candidate", "needs_review")
+    check_transition("candidate", "surfaced")
     with pytest.raises(LifecycleError):
         check_transition("candidate", "promoted")
     with pytest.raises(LifecycleError):
@@ -182,8 +182,8 @@ async def test_service_end_to_end_review_feedback_and_promotion():
     svc._event_reader = FakeEventReader(normal_traffic(2, 2) + fraud_ring(2))
     second = await svc.run(T)
     assert second["patterns_detected"] >= 5
-    queue = await svc.list_patterns(T, queue=True)
-    assert queue["total"] >= 5 and all(i["status"] == STATUS_NEEDS_REVIEW for i in queue["items"])
+    queue = await svc.list_patterns(T, feed=True)
+    assert queue["total"] >= 5 and all(i["status"] == STATUS_SURFACED for i in queue["items"])
     composite = next(i for i in (await svc.list_patterns(T, kind=KIND_CROSS_DOMAIN))["items"])
     detail = await svc.get_pattern(T, composite["pattern_id"])
     assert detail["members"] and detail["similar_patterns"]
@@ -404,10 +404,10 @@ async def test_erasure_scrubs_refs_embedded_in_signature_title_and_summary():
 
 def test_a_queued_pattern_stays_queued_when_its_novelty_decays():
     rec = _by_kind(_ring_records(), KIND_SEQUENCE)
-    assert rec["status"] == STATUS_NEEDS_REVIEW
+    assert rec["status"] == STATUS_SURFACED
     familiar = dict(rec, status="candidate", priority="low", last_run_id="r2")
     merged = merge_redetection(rec, familiar)
-    assert merged["status"] == STATUS_NEEDS_REVIEW and merged["queued_since"]
+    assert merged["status"] == STATUS_SURFACED and merged["surfaced_at"]
 
 
 @pytest.mark.asyncio
@@ -421,3 +421,56 @@ async def test_overlapping_windows_fold_into_the_baseline_once():
     assert (await svc.baselines.get(T))["runs"] == 1
     svc._event_reader = FakeEventReader(normal_traffic(5, 5))  # three days later
     assert (await svc.run(T))["baseline_updated"] is True
+
+
+# ── Surfaced by default; curation is optional ───────────────────────────────
+
+@pytest.mark.asyncio
+async def test_patterns_reach_the_lenses_with_no_human_step():
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2))
+    await svc.run(T)
+    feed = await svc.list_patterns(T, feed=True)
+    assert feed["total"] >= 5 and all(i["status"] == "surfaced" for i in feed["items"])
+    section = await svc.section(T, "user:r0", "profile360")
+    assert section["emerging_patterns"] and section["counts"]["surfaced"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_hide_unhide_pin_and_rename():
+    from intelligence.pattern_discovery.registry import LifecycleError as _LE
+
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2))
+    await svc.run(T)
+    items = (await svc.list_patterns(T, feed=True))["items"]
+    a, b = items[0]["pattern_id"], items[1]["pattern_id"]
+    hidden = await svc.curate(T, a, actor="u1", action="hide", reason="known QA traffic")
+    assert hidden["status"] == "hidden" and hidden["hidden_from_status"] == "surfaced"
+    assert a not in {i["pattern_id"] for i in (await svc.list_patterns(T, feed=True))["items"]}
+    section = await svc.section(T, "user:r0", "risk360")
+    assert a not in {f["pattern_id"] for f in section["pattern_findings"]}
+    restored = await svc.curate(T, a, actor="u1", action="unhide")
+    assert restored["status"] == "surfaced" and "hidden_from_status" not in restored
+    await svc.curate(T, b, actor="u1", action="pin")
+    renamed = await svc.curate(T, b, actor="u1", action="rename", title="Card farm on two devices")
+    feed = (await svc.list_patterns(T, feed=True))["items"]
+    assert feed[0]["pattern_id"] == b and feed[0]["title"] == "Card farm on two devices"
+    assert renamed["title"] != renamed["display_title"]  # the detector title is kept
+    with pytest.raises(_LE):
+        await svc.curate(T, b, actor="u1", action="rename", title="  ")
+    with pytest.raises(_LE):
+        await svc.curate(T, b, actor="u1", action="unhide")
+    stats = await svc.stats(T)
+    assert stats["calibration"][hidden["kind"]]["noise"] >= 1  # hiding teaches the detector
+
+
+@pytest.mark.asyncio
+async def test_hidden_and_pinned_survive_redetection_until_the_pattern_changes():
+    rec = _by_kind(_ring_records(), KIND_SEQUENCE)
+    from intelligence.pattern_discovery.registry import apply_curation
+
+    hidden = apply_curation(apply_curation(rec, actor="u", action="pin"), actor="u", action="hide")
+    same = merge_redetection(hidden, dict(rec, last_run_id="r2"))
+    assert same["status"] == "hidden" and same["pinned"] is True
+    grown = merge_redetection(hidden, dict(rec, last_run_id="r3", evidence_fingerprint="grew-by-10x"))
+    assert grown["status"] == rec["status"]
+    assert grown["review_history"][-1]["decision"] == "resurfaced_after_material_change"

@@ -45,8 +45,8 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:2a2f79951f74348fb6b976d5f987193499f356c1f5adc2a6d04628912949197e"
-  "apps/kyber-web/src/": "sha256:929e0e686409ea3365dada5734e1fd120bff444caba32dc5a43b63d017da549b"
+  "apps/aether-web/src/": "sha256:8354cb8a948fe2d1e7d0c38accfd4b1f3ef81b6cf3b1afdc4ac8b02a0692d5f7"
+  "apps/kyber-web/src/": "sha256:4c1a612756b5ca88a2a92ea22e7fd8c578f90ce74aa778e9d092f9e4714d9e06"
   "packages/ui/core/src/": "sha256:02a14d802d773a5b7e255fa0d1b0e1c661d5fa106b3892e5370f3ecf339a5805"
 ---
 
@@ -148,7 +148,7 @@ the root.
   quota or price bar.
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
 - **Governed 360 frame slots** — `ExperienceFramePanel` reads one frame from `POST /v1/experience360/frames` through `restClient` and renders each slot's state, requirement, reason codes, limitations, evidence-reference count, and policy disposition exactly as the server sent them. Unknown state words are shown verbatim, and slot `content` is never rendered (`features/experience-frame/`). It is mounted as the Campaign 360 "Frame" tab (surface `campaign360`, subject kind `campaign`). There is no Kyber twin: the route is bound to the authenticated tenant.
-- **Discovered patterns** (gated on the `pattern_discovery_enabled` capability) — Profile 360 overview and Agent 360 pages render the consent-gated pattern sections (`/v1/profile|agent|risk360/.../patterns`), the Risk overview shows the open discovery queue, and `/patterns` is the tenant review page (`features/pattern-discovery/`)
+- **Discovered patterns** (gated on the `pattern_discovery_enabled` capability) — Profile 360 overview and Agent 360 pages render the consent-gated pattern sections (`/v1/profile|agent|risk360/.../patterns`), with new / changed badges and mark-seen, the Risk overview shows the surfaced feed with a what's-new link, `/patterns` is the tenant page ("New since you last looked" and "All surfaced" views; pin / hide / rename, optional verdict, pattern graph, "Show on graph"), Explore highlights a pattern's members (`?pattern=`) and lists patterns touching the objects in view, and Campaign 360, Journey detail, Geo (country level) and Communications render the segment lenses (`features/pattern-discovery/`)
 - **Continue-on-phone** — continuation creation, recent mobile activity, and resume surfaces backed by the `/v1/continuations` and `/v1/client-sync` planes (`features/continuation/`)
 
 **Kyber (internal operator console) contains:**
@@ -165,7 +165,7 @@ the root.
 - Review / approval workflows — human-in-the-loop agent approvals; approval commits staged graph mutations when staged-mutation review is enabled (badge + submitting/error modal states)
 - **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
 - **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
-- **Pattern discovery queue** (`/intelligence/patterns`, gated on the `pattern_discovery_enabled` capability) — per-tenant queue of discovered pattern candidates with evidence, competing explanations, related and member patterns, and review history; operators run discovery, record a verdict with a reason, promote a confirmed pattern to attributed Risk360 signals, or deprecate it (`features/pattern-discovery/`, `/v1/kyber/patterns/*`)
+- **Pattern discovery** (`/intelligence/patterns`, gated on the `pattern_discovery_enabled` capability) — per-tenant surfaced feed with what's new since the operator last looked, evidence, competing explanations, the pattern graph, related and member patterns, and review history; operators curate (pin, hide, rename), run discovery, record an optional verdict with a reason, promote a confirmed pattern to attributed Risk360 signals, or deprecate it (`features/pattern-discovery/`, `/v1/kyber/patterns/*`)
 - **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
 - **Measurement Overview** — spend, attributed revenue, ROAS, data quality, and connector health across all tenants (`/measurement/overview`)
 - **Attribution Studio** — per-conversion attribution runs, model selection, backfill controls; reads `?campaign_id=` URL param to pre-filter runs and surface a "Compare in Campaign 360 →" contextual link (`/measurement/attribution`)

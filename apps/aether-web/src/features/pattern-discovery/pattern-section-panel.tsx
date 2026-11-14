@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import {
-  Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState,
+  Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState,
 } from '@aether/ui';
 import type { PatternSurface } from '@aether/shared';
 import { Link } from 'react-router-dom';
 import {
-  SECTION_LAYOUT, usePatternDiscoveryEnabled, usePatternSection, type PatternSummaryRow,
+  SECTION_LAYOUT, markPatternsSeen, usePatternDiscoveryEnabled, usePatternSection, type PatternSummaryRow,
 } from './use-patterns';
 
 const TITLES: Record<PatternSurface, string> = {
@@ -24,6 +25,9 @@ function PatternRow({ row }: { row: PatternSummaryRow }) {
   return (
     <li className="space-y-0.5">
       <div className="flex flex-wrap items-center gap-2">
+        {row.is_new && <Badge size="sm" variant="accent">new</Badge>}
+        {row.is_changed && <Badge size="sm" variant="info">changed</Badge>}
+        {row.pinned && <Badge size="sm">pinned</Badge>}
         <Badge size="sm" variant={SEVERITY[row.severity ?? 'low'] ?? 'default'}>{row.severity ?? 'low'}</Badge>
         <Badge size="sm">{row.status.replace(/_/g, ' ')}</Badge>
         <Link className="text-sm text-text-primary hover:underline" to={`/patterns?pattern=${encodeURIComponent(row.pattern_id)}`}>
@@ -47,6 +51,7 @@ export function PatternSectionPanel({ surface, entityId, riskKind }: {
 }) {
   const enabled = usePatternDiscoveryEnabled();
   const section = usePatternSection(surface, entityId, riskKind);
+  const [marking, setMarking] = useState(false);
   if (!enabled) return null;
   const data = section.data as Record<string, unknown> | undefined;
   return (
@@ -54,8 +59,17 @@ export function PatternSectionPanel({ surface, entityId, riskKind }: {
       <CardHeader><CardTitle>{TITLES[surface]}</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-text-secondary">
-          Patterns are inferred review material with capped confidence. They never merge identities or change decisions on their own.
+          Surfaced automatically. Patterns are inferred, with capped confidence, and never merge identities or change decisions on their own; hide, pin or rename them on the Patterns page.
         </p>
+        {data && data.withheld === false && Number(data.new_count ?? 0) > 0 && (
+          <div className="flex items-center gap-2 text-xs" data-testid="pattern-section-new">
+            <span>{String(data.new_count)} new since you last looked</span>
+            <Button size="sm" variant="ghost" disabled={marking} onClick={async () => {
+              setMarking(true);
+              try { await markPatternsSeen(String(data.scope)); section.refetch(); } finally { setMarking(false); }
+            }}>Mark seen</Button>
+          </div>
+        )}
         {section.isLoading && !data && <LoadingState lines={3} />}
         {section.error && <ErrorState title="Discovered patterns unavailable" message={section.error} onRetry={section.refetch} />}
         {data?.withheld === true && (

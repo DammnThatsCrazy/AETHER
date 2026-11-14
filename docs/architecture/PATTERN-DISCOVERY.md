@@ -9,7 +9,7 @@ since_version: "0.1.0"
 source_files:
   - services/api/intelligence/pattern_discovery/
 source_hashes:
-  "services/api/intelligence/pattern_discovery/": "sha256:08b7ed9eb3406bc6d74d621e942bac4ed6417d6fbf655ee06562c791a8c84e5e"
+  "services/api/intelligence/pattern_discovery/": "sha256:26138d8443966f019a9d2e405a6e64751437491a6bd139c4036ffcafadb8a278"
 ---
 
 # Pattern Discovery and Unstructured Evidence Intelligence
@@ -17,15 +17,19 @@ source_hashes:
 Aether's normalizers, identity resolution, graph projection and risk detectors
 interpret evidence they were built to understand. Pattern Discovery handles
 everything else. It reads raw and semi-structured evidence, interprets it
-schema-on-read, finds patterns nobody defined in advance, puts each one in
-front of a reviewer as an evidence-backed candidate, and promotes it into
-durable risk and graph intelligence only after that review.
+schema-on-read, finds patterns nobody defined in advance, and surfaces each
+one to the people using Aether automatically: in a tenant feed, on the graph,
+in the 360 views and in a "new since you last looked" digest. No human step
+is needed to *see* a pattern. Every pattern stays reviewable afterwards:
+anyone can hide, pin or rename it, or give it a verdict. Only a deliberate
+promotion turns a pattern into durable risk and graph intelligence.
 
 It is a governed plane *beside* the canonical graph, not inside it. Discovery
 output is always `claim_state: inferred`. Discovery never merges identities,
-marks an agent malicious, denies a transaction or writes a graph fact. Only a
-reviewer's promotion writes anything durable outside the plane, and what it
-writes is `attributed`, never `verified`.
+marks an agent malicious, denies a transaction or writes a graph fact.
+Surfacing is presentation, not a decision. Only a promotion writes anything
+durable outside the plane, and what it writes is `attributed`, never
+`verified`.
 
 Code: `services/api/intelligence/pattern_discovery/`. Master flag:
 `AETHER_PATTERN_DISCOVERY_ENABLED` (default off).
@@ -153,17 +157,19 @@ never fails a run. Flag: `PATTERN_DISCOVERY_ML_ENABLED`.
   threshold that governs it moves with `0.5 - precision`: up to 50% stricter
   for noisy kinds and up to 25% more sensitive for trusted ones. The tunable
   thresholds are sequence lift, cohort similarity, outlier z, burst tail
-  probability, motif lift and lockstep size. The per-kind needs-review
-  confidence bar moves the same way. Every adjustment is recorded in the run
+  probability, motif lift and lockstep size. The per-kind surfacing
+  confidence bar (base `SURFACE_CONFIDENCE`, 0.4) moves the same way. Every adjustment is recorded in the run
   stats (`threshold_tuning`).
 - **Suppression.** A *family* (kind plus the coarse shape of its signature)
   dismissed three times and never confirmed stays in `candidate` at low
   priority.
 - **Novelty** is the lower of the detector's novelty and the signature's
   novelty against the baseline. On a tenant's first run it is capped at 0.5.
-- **Status.** A pattern goes to `needs_review` when confidence clears the
-  per-kind bar, novelty is at least 0.3 and its family is not suppressed.
-  Otherwise it stays `candidate`.
+- **Status.** A pattern is `surfaced` (shown to users, with no human step)
+  when confidence clears the per-kind bar, novelty is at least
+  `SURFACE_NOVELTY` (0.3) and its family is not suppressed. Otherwise it stays
+  `candidate`, which the UIs call "watching": kept and re-scored every run,
+  but not shown by default.
 
 ## Registry and lifecycle
 
@@ -174,16 +180,31 @@ signature, the evidence types, the order of magnitude of the affected
 population and the risk categories.
 
 ```
-candidate <-> needs_review --verdict--> confirmed_valid / confirmed_malicious --promote--> promoted
-                                      \-> benign / duplicate / unresolved
+candidate <-> surfaced            (automatic; surfaced is what users see)
+surfaced / candidate --(optional verdict)--> confirmed_valid / confirmed_malicious --promote--> promoted
+                                          \-> benign / duplicate / unresolved
+any visible state --hide--> hidden --unhide--> the status it was hidden from
 any open or reviewed state --> deprecated --(re-detected)--> funnel
 ```
 
-- Only a reviewer verdict, with a reason of at least 10 characters, leaves the
-  funnel.
-- A queued pattern stays queued until a reviewer acts or it goes stale.
-  Recurrence lowers novelty, and that never pulls an unreviewed item out of
-  the queue.
+- **Visible statuses** (`VISIBLE_STATUSES`) are `surfaced`, `unresolved`,
+  `confirmed_valid`, `confirmed_malicious` and `promoted`. The tenant feed,
+  the 360 sections, the lenses and the graph overlay show only these, pinned
+  patterns first.
+- **Surfacing is sticky.** Once surfaced, a pattern keeps `surfaced_at` and
+  stays visible while it recurs. Recurrence lowers novelty, and that never
+  pulls a surfaced pattern back to `candidate`.
+- **Curation** (`apply_curation`, `POST .../curate`) is how people change a
+  pattern without judging it: `hide` / `unhide` (unhide restores the stored
+  pre-hide status), `pin` / `unpin`, and `rename` (sets `display_title`; the
+  detector title stays in `detector_title`). Every action is recorded in
+  `review_history`, and a hide is also recorded as noise feedback for
+  calibration. Curation keys survive re-detection.
+- **Verdicts are optional.** A verdict needs a reason of at least 10
+  characters, and it is what calibration learns from.
+- **Hidden and reviewed patterns stay put** while their evidence fingerprint is
+  unchanged. A materially changed fingerprint resurfaces a hidden pattern
+  (`resurfaced_after_material_change` in its history).
 - A verdict holds only for the evidence fingerprint it was made on; a changed
   fingerprint supersedes it, and the superseded verdict stays in
   `review_history`.
@@ -193,26 +214,32 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   duplicate signature strengthen the canonical pattern instead of
   re-entering the queue. Merging is idempotent per duplicate fingerprint.
 - Promotion is allowed only from a confirmed status whose evidence has not
-  changed since review, and it is sticky.
+  changed since review, and it is sticky. Seeing a pattern is automatic;
+  letting it write risk signals and graph edges stays a human act.
+- **Timestamps.** `surfaced_at` (first visible), `changed_at` (last evidence
+  fingerprint change, i.e. a new `version`) and `deprecated_at` drive "what's
+  new".
 - Open patterns not re-observed for `STALE_AFTER_RUNS` (6) runs of their
   detector are deprecated automatically. Reviewed patterns never are.
 - Every write after the first is a compare-and-set on `revision`.
 
 ### Stores
 
-There are four tenant-scoped JSONB tables, created by migration
+There are five tenant-scoped JSONB tables, created by migration
 `20261114_pattern_discovery_stores`. Each has CHECK constraints binding the row
 tenant to the data tenant.
 
 | Table | Contents | Indexes |
 |---|---|---|
-| `discovered_patterns` | pattern records | `(tenant, status, priority)`, `(tenant, kind)`, GIN on `affected_entity_keys` |
+| `discovered_patterns` | pattern records | `(tenant, status, priority)`, `(tenant, kind)`, GIN on `affected_entity_keys` and on `segment_keys` |
 | `pattern_feedback` | analyst verdicts | `(tenant, kind)` |
 | `pattern_discovery_baselines` | one row per tenant | `(tenant, created_at)` |
 | `pattern_discovery_runs` | run records | `(tenant, created_at)` |
+| `pattern_viewer_state` | per-viewer, per-scope `last_seen_at` | `(tenant, viewer)` |
 
-The review queue reads by indexed status, and entity lookups use the GIN index
-(`data->'affected_entity_keys' ? key`). The integration test
+The feed reads by indexed status. Entity lookups and the graph overlay use the
+GIN index (`data->'affected_entity_keys' ?| keys`), and lenses use the
+`segment_keys` GIN index. The integration test
 `tests/pattern_discovery/test_postgres.py` runs the migration's own SQL against
 PostgreSQL when `PATTERN_DISCOVERY_TEST_DSN` is set. Storage policies are in
 `config/storage_policies.yaml`.
@@ -226,15 +253,18 @@ PostgreSQL when `PATTERN_DISCOVERY_TEST_DSN` is set. Storage policies are in
   content, title, summary, review history and promotion outcomes. The pattern
   id and signature hash are kept. Patterns left with fewer than two entities
   are deleted, because one remaining entity would re-identify the erased one
-  by difference. Run records listing a redacted pattern are deleted too. A
-  legal hold on `discovered_patterns` skips the plane. Baselines and feedback
-  carry no subject keys.
-- **Consent.** Per-entity reads (entity context and the three 360 sections)
-  and promotion require an affirmative `analytics` consent receipt from the
+  by difference. Run records listing a redacted pattern are deleted too, as
+  are the subject's own `pattern_viewer_state` rows. A legal hold on
+  `discovered_patterns` skips the plane. Baselines and feedback carry no
+  subject keys.
+- **Consent.** Per-entity reads (entity context, the three 360 sections, the
+  Journey 360 lens and "what's new" for an entity scope) and promotion require an affirmative `analytics` consent receipt from the
   authoritative server store, the same rule Agent 360 applies before reading
   Risk360. The check fails closed: a store error is a denial. The tenant
   review queue lists patterns built from evidence that already passed
-  ingestion consent. It is an analyst surface, not a per-subject disclosure.
+  ingestion consent. The tenant feed, segment lenses and graph overlay list
+  patterns built from evidence that already passed ingestion consent; they
+  are tenant analytics surfaces, not per-subject disclosures.
 
 ## Promotion
 
@@ -269,14 +299,56 @@ consume those signals through their existing authorities.
 | `GET /v1/agent/{id}/patterns` | novel delegation motifs, tool-call signatures, spawning anomalies, shared infrastructure, behaviour repeated across principals, agent-to-agent interaction, principals |
 | `GET /v1/risk360/{kind}/{id}/patterns` | pattern findings with evidence coverage and review status, campaigns, emerging clusters, graph motifs, temporal anomalies, written risk signals |
 
-**Aether web.** The Profile 360 overview and the Agent 360 page render the
-sections, the Risk overview shows the open queue, and `/patterns` is the
-tenant review page. All of these are gated on the `pattern_discovery_enabled`
-capability.
+**What's new since I last looked** (`feed.py`). Each viewer has a
+`last_seen_at` per scope: `feed` (the whole tenant), `<surface>:<entity key>`
+for a 360 section, or `lens:<lens>:<subject>`. `GET .../whats-new?scope=`
+returns patterns that are **new** (surfaced after last seen), **changed**
+(already surfaced, but with a new evidence version since) and **retired**
+(deprecated since), each with a digest by kind, severity, segment and risk
+category. With no last-seen time it looks back 7 days. Viewing never marks
+anything seen. `POST .../whats-new/seen` does, when the user clicks "Mark
+seen". 360 sections and lenses carry `last_seen_at`, `new_count` and per-row
+`is_new` / `is_changed`. After each run that surfaces high or critical
+patterns, the service raises one in-app notification per tenant per day
+(category `pattern_discovery`, link `/patterns?view=new`; flag
+`AETHER_PATTERN_NOTIFICATIONS_ENABLED`).
 
-**Kyber web.** `/intelligence/patterns` is the operator queue: evidence,
-competing explanations, related and member patterns, review history, run
-discovery, verdict, promote and deprecate.
+**Patterns on the graph** (`graphview.py`). `GET .../{id}/graph` returns the
+pattern as a renderable subgraph: the pattern node, member entities, the
+shared attribute values and counterparties its evidence names (hashed values
+stay hashed), principals and member patterns, and the links between them (at
+most 300 nodes; `truncated` says so). `POST .../graph-overlay` takes the node
+ids in a graph view (bare ids or `kind:id` keys, at most 500) and returns, per
+node, the visible patterns it belongs to.
+
+**Segment lenses** (`lenses.py`). The engine stores a `segment_profile` on
+each pattern: the share of its entities' events in each campaign, channel,
+geography, application, entity kind and agent type. It also indexes
+`segment_keys` (values with at least a 20% share).
+`GET .../lenses/{lens}/{subject}` groups the visible patterns that
+concentrate in a subject by kind: `campaign360/<campaign id>`,
+`geographic360/<country code>`, `communication360/<channel | all>`, and
+`journey360/<profile id>`. The journey lens shows the journey-shaped subset
+of the profile's patterns and is consent-gated.
+
+**Aether web.** `/patterns` is the tenant page. It has two views: "New since
+you last looked" (`?view=new`, with mark-all-seen) and "All surfaced", with
+filters for watching, hidden, reviewed and retired patterns. The detail panel
+draws the pattern graph and offers pin / hide / rename, an optional verdict
+and "Show on graph", which opens `/explore?pattern=<id>`. There, members in
+view are outlined and the panel draws the subgraph. Without a pattern
+selected, Explore offers "patterns touching these objects" through the
+overlay. The Profile 360 overview and the Agent 360 page render the sections
+with new / changed badges. The Risk overview shows the surfaced feed and a
+link to what's new. Campaign 360 (overview), Journey detail (overview), Geo
+(country level) and Communications render the lenses. All of these are gated
+on the `pattern_discovery_enabled` capability.
+
+**Kyber web.** `/intelligence/patterns` is the operator view of a tenant's
+surfaced feed. It shows what is new since the operator last looked (with mark
+seen), evidence, competing explanations, the pattern graph, related and member
+patterns and review history. Operators can curate (pin, hide, rename), run
+discovery, record an optional verdict, promote and deprecate.
 
 **Contracts.** `packages/shared/pattern-discovery.ts` is the frontend twin of
 the vocabularies. `tests/unit/test_pattern_discovery_contract_parity.py`
@@ -289,7 +361,8 @@ The `pattern_discovery_sweep` worker (materializer role) enqueues one durable
 `PATTERN_DISCOVERY_INTERVAL_MINUTES`. The idempotency key is the interval
 bucket, so a restarted worker never doubles a pass. It is inert unless both
 `AETHER_PATTERN_DISCOVERY_ENABLED` and `PATTERN_DISCOVERY_SCHEDULER_ENABLED` are
-on, and it re-reads them every pass. On-demand runs remain available through
+on, and it re-reads them every pass. The scheduler defaults to on, so a tenant
+with discovery enabled gets patterns surfaced with no manual run. On-demand runs remain available through
 `POST /v1/intelligence/patterns/runs` and the Kyber equivalent.
 
 ## Configuration
@@ -303,7 +376,8 @@ on, and it re-reads them every pass. On-demand runs remain available through
 | `AETHER_PATTERN_GRAPH_PROMOTION_ENABLED` | `true` | Promotion writes RiskCluster membership edges |
 | `PATTERN_DISCOVERY_GRAPH_MOTIFS_ENABLED` | `true` | Motif discovery reads the tenant's canonical graph |
 | `PATTERN_DISCOVERY_ML_ENABLED` | `false` | Score hourly windows with the ML anomaly model |
-| `PATTERN_DISCOVERY_SCHEDULER_ENABLED` | `false` | Run discovery for every active tenant on a schedule |
+| `PATTERN_DISCOVERY_SCHEDULER_ENABLED` | `true` | Run discovery for every active tenant on a schedule |
+| `AETHER_PATTERN_NOTIFICATIONS_ENABLED` | `true` | In-app notification when a run surfaces high or critical patterns |
 | `PATTERN_DISCOVERY_INTERVAL_MINUTES` | `360` | Scheduler interval |
 
 ## Known limits

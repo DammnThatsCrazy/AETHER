@@ -23,25 +23,35 @@ from collections import Counter
 from typing import Any
 
 from .contracts import (
+    VISIBLE_STATUSES,
     KIND_AGENT_INTERACTION, KIND_AGENT_SPAWN, KIND_AGENT_TOOL_SIGNATURE, KIND_BEHAVIORAL_COHORT,
     KIND_CROSS_DOMAIN, KIND_LOCKSTEP, KIND_NOVEL_MOTIF, KIND_OUTLIER, KIND_SEGMENT_SHIFT,
     KIND_SEQUENCE, KIND_SHARED_ATTRIBUTE, KIND_TEMPORAL_BURST, KIND_TRAFFIC_ANOMALY,
-    QUEUE_STATUSES, REVIEWED_STATUSES, STATUS_PROMOTED,
+    REVIEWED_STATUSES, STATUS_PROMOTED,
 )
 
 _DELEGATION_EDGES = ("DELEGATED_BY", "SPAWNED_BY")
 
 
 def _row(p: dict[str, Any]) -> dict[str, Any]:
-    return {k: p.get(k) for k in (
-        "pattern_id", "kind", "title", "summary", "status", "priority", "severity", "confidence",
+    out = {k: p.get(k) for k in (
+        "pattern_id", "kind", "summary", "status", "priority", "severity", "confidence",
         "confidence_cap", "novelty", "affected_entity_count", "risk_categories", "first_observed_at",
-        "last_observed_at", "version", "times_observed", "claim_state",
+        "last_observed_at", "version", "times_observed", "claim_state", "pinned", "surfaced_at",
+        "changed_at", "detector_title",
     )}
+    out["title"] = p.get("display_title") or p.get("title")
+    out["detector_title"] = p.get("title")
+    return out
 
 
 def _live(patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [p for p in patterns if p.get("status") not in ("deprecated", "duplicate")]
+    """What a lens shows by default: surfaced and human-kept patterns, pinned
+    first. Hidden, benign, duplicate, deprecated and below-bar ("watching")
+    patterns are left out and only counted."""
+    rows = [p for p in patterns if p.get("status") in VISIBLE_STATUSES]
+    rows.sort(key=lambda p: (not p.get("pinned"), -float(p.get("severity_score") or 0), p.get("pattern_id", "")))
+    return rows
 
 
 def _of(patterns, *kinds):
@@ -59,18 +69,23 @@ def _co_implicated(entity_key: str, patterns, kinds=None, prefix=None, limit=10)
     return [{"entity": e, "shared_patterns": c} for e, c in co.most_common(limit)]
 
 
-def _base(entity_key: str, surface: str, patterns: list[dict[str, Any]]) -> dict[str, Any]:
+def _base(entity_key: str, surface: str, patterns: list[dict[str, Any]],
+          all_patterns: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    everything = all_patterns if all_patterns is not None else patterns
     return {
         "entity": entity_key,
         "surface": surface,
         "advisory": True,
         "claim_state": "inferred",
-        "note": "Discovered patterns are review material; they never merge identities or change decisions.",
+        "note": "Surfaced automatically. Patterns never merge identities or change decisions on their own; "
+                "hide, pin, rename or judge them at any time.",
         "counts": {
             "total": len(patterns),
-            "open": sum(1 for p in patterns if p.get("status") in QUEUE_STATUSES or p.get("status") == "candidate"),
+            "surfaced": sum(1 for p in patterns if p.get("status") == "surfaced"),
             "reviewed": sum(1 for p in patterns if p.get("status") in REVIEWED_STATUSES),
             "promoted": sum(1 for p in patterns if p.get("status") == STATUS_PROMOTED),
+            "watching": sum(1 for p in everything if p.get("status") == "candidate"),
+            "hidden": sum(1 for p in everything if p.get("status") == "hidden"),
         },
     }
 
@@ -87,8 +102,8 @@ def profile_section(entity_key: str, patterns: list[dict[str, Any]]) -> dict[str
                & {"benign", "confirmed_malicious", "confirmed_valid", "promoted"}) >= 2
     ]
     return {
-        **_base(entity_key, "profile360", live),
-        "emerging_patterns": [_row(p) for p in live if p.get("status") in QUEUE_STATUSES or p.get("status") == "candidate"],
+        **_base(entity_key, "profile360", live, patterns),
+        "emerging_patterns": [_row(p) for p in live if p.get("status") == "surfaced"],
         "similar_profiles": _co_implicated(entity_key, live, prefix=None),
         "behavioral_cohorts": _of(live, KIND_BEHAVIORAL_COHORT, KIND_LOCKSTEP, KIND_SEQUENCE),
         "unresolved_identity_overlaps": [
@@ -107,7 +122,7 @@ def agent_section(entity_key: str, patterns: list[dict[str, Any]]) -> dict[str, 
         and any(any(edge in str(lbl) for edge in _DELEGATION_EDGES) for lbl in (p.get("signature") or {}).get("edges", []))
     ]
     return {
-        **_base(entity_key, "agent360", live),
+        **_base(entity_key, "agent360", live, patterns),
         "novel_delegation_motifs": delegation_motifs,
         "tool_call_signatures": _of(live, KIND_AGENT_TOOL_SIGNATURE),
         "spawning_anomalies": _of(live, KIND_AGENT_SPAWN),
@@ -140,7 +155,7 @@ def risk_section(entity_key: str, patterns: list[dict[str, Any]]) -> dict[str, A
         })
     cats = Counter(c for p in live for c in p.get("risk_categories") or [])
     return {
-        **_base(entity_key, "risk360", live),
+        **_base(entity_key, "risk360", live, patterns),
         "pattern_findings": findings,
         "campaigns": _of(live, KIND_CROSS_DOMAIN),
         "emerging_clusters": _of(live, KIND_SHARED_ATTRIBUTE, KIND_BEHAVIORAL_COHORT, KIND_AGENT_INTERACTION),
