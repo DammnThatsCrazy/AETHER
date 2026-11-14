@@ -64,6 +64,21 @@ def _advances(last: Optional[str], current: str, window_hours: int) -> bool:
     return (b - a).total_seconds() >= window_hours * 3600 / 2
 
 
+
+def _projections_incomplete(row: dict[str, Any]) -> bool:
+    """True when a promoted pattern's risk or graph projection did not finish."""
+    promotion = row.get("promotion") or {}
+    if "risk_projection" not in promotion:
+        return True  # the promotion was persisted but its outcomes never were
+    cfg = _config()
+    if cfg.risk_promotion_enabled and any(
+            o.get("status") == "failed" for o in promotion.get("risk_signals") or []):
+        return True
+    if cfg.graph_promotion_enabled and (promotion.get("graph_projection") or {}).get("status") in (
+            None, "failed", "disabled"):
+        return True
+    return False
+
 class PatternDiscoveryService:
     def __init__(self, *, registry: Optional[PatternRegistryRepository] = None,
                  baselines: Optional[PatternBaselineRepository] = None,
@@ -167,7 +182,12 @@ class PatternDiscoveryService:
             notification = await self._notifier(tenant_id, newly_surfaced, run_id=run_id)
         seen = {r["pattern_id"] for r in result.records}
         aged = deprecated = 0
-        for existing in await self.registry.scan(tenant_id):
+        # A pattern missing from this run is evidence it went away only when the
+        # run actually read the evidence store. After a failed read the absence
+        # means nothing, so aging (and the deprecation it leads to) is skipped.
+        store_unavailable = include_store and coverage.get("store") == "unavailable"
+        coverage["aging"] = {"status": "skipped_store_unavailable" if store_unavailable else "applied"}
+        for existing in ([] if store_unavailable else await self.registry.scan(tenant_id)):
             if (existing["pattern_id"] in seen or existing.get("kind") not in result.kinds_run
                     or existing.get("status") in (STATUS_DEPRECATED, STATUS_PROMOTED)):
                 continue
@@ -461,11 +481,23 @@ class PatternDiscoveryService:
         return updated
 
     async def promote(self, tenant_id: str, pid: str, *, reviewer_id: str, reason: str) -> Optional[dict[str, Any]]:
-        updated = await self.registry.mutate(
-            tenant_id, pid, lambda row: apply_promotion(row, reviewer_id=reviewer_id, reason=reason),
-        )
-        if updated is None:
+        current = await self.registry.get(tenant_id, pid)
+        if current is None:
             return None
+        retry = current.get("status") == STATUS_PROMOTED
+        if retry:
+            # Already approved: no second lifecycle transition. Re-run only the
+            # projections a transient risk-store or graph outage left incomplete;
+            # both are idempotent (signal ids and graph idempotency keys).
+            if not _projections_incomplete(current):
+                return current
+            updated = current
+        else:
+            updated = await self.registry.mutate(
+                tenant_id, pid, lambda row: apply_promotion(row, reviewer_id=reviewer_id, reason=reason),
+            )
+            if updated is None:
+                return None
         outcomes: list[dict[str, Any]] = []
         risk_status = "disabled"
         if _config().risk_promotion_enabled:
@@ -482,6 +514,9 @@ class PatternDiscoveryService:
             promotion["risk_signals"] = outcomes
             promotion["risk_projection"] = risk_status
             promotion["graph_projection"] = graph_report
+            if retry:
+                promotion["projection_retries"] = int(promotion.get("projection_retries") or 0) + 1
+                promotion["last_projection_retry"] = {"by": reviewer_id.strip(), "at": utc_now().isoformat()}
             row["promotion"] = promotion
             return row
 

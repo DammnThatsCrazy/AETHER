@@ -181,11 +181,13 @@ class _Resp:
 class _MLClient:
     def __init__(self, scorer=None, status=200, raise_exc=None):
         self.scorer, self.status, self.raise_exc, self.payloads = scorer, status, raise_exc, []
+        self.headers: list[dict] = []
 
-    async def post(self, path, json=None, timeout=None):
+    async def post(self, path, json=None, timeout=None, headers=None):
         if self.raise_exc:
             raise self.raise_exc
         self.payloads.append((path, json))
+        self.headers.append(dict(headers or {}))
         preds = [{"anomaly_score": self.scorer(f)} for f in json["instances"]]
         return _Resp(self.status, {"predictions": preds})
 
@@ -472,3 +474,30 @@ async def test_job_handler_runs_discovery_for_the_job_tenant():
     from workers.jobs.handlers import HANDLER_REGISTRY
 
     assert jobs_mod.JOB_TYPE in HANDLER_REGISTRY
+
+
+
+@pytest.mark.asyncio
+async def test_ml_scoring_sends_the_service_token_standalone_serving_requires(monkeypatch):
+    rows = normal_traffic(1, 1, users=40) + fraud_ring(1)
+    ex = extract_events(rows, T)
+    monkeypatch.setenv("ML_SERVICE_TOKEN", "svc-token")
+    client = _MLClient(lambda f: 0.1)
+    await score_windows(ex, client)
+    assert client.headers[0] == {"X-Service-Token": "svc-token"}
+    monkeypatch.delenv("ML_SERVICE_TOKEN")
+    client = _MLClient(lambda f: 0.1)
+    await score_windows(ex, client)
+    assert client.headers[0] == {}
+
+
+def test_the_shared_ml_client_carries_the_service_token(monkeypatch):
+    from intelligence.ml_serving import routes
+
+    monkeypatch.setenv("ML_SERVICE_TOKEN", "svc-token")
+    monkeypatch.setattr(routes, "_http_client", None)
+    client = routes._get_client()
+    try:
+        assert client.headers.get("X-Service-Token") == "svc-token"
+    finally:
+        monkeypatch.setattr(routes, "_http_client", None)

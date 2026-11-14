@@ -87,8 +87,19 @@ def _scrub_text(text: Any, keys: set[str]) -> Any:
     return text
 
 
+def _contribution_keys(row: dict[str, Any]) -> set[str]:
+    """Entity keys held in merged-duplicate state, which is not visible membership
+    but is folded back into it by every re-detection (registry._apply_duplicates)."""
+    out = set(row.get("base_entity_keys") or [])
+    for dup in row.get("duplicates") or []:
+        out.update(dup.get("entity_keys") or [])
+    return out
+
+
 def names_subject(row: dict[str, Any], keys: set[str]) -> bool:
     if set(row.get("affected_entity_keys") or []) & keys:
+        return True
+    if _contribution_keys(row) & keys:
         return True
     if _text_names(row.get("title"), keys) or _text_names(row.get("summary"), keys):
         return True
@@ -107,6 +118,19 @@ def redact(row: dict[str, Any], keys: set[str]) -> dict[str, Any]:
     out["affected_entities"] = [e for e in row.get("affected_entities") or [] if e.get("key") not in keys]
     out["affected_entity_count"] = max(0, int(row.get("affected_entity_count") or 0) - removed)
     out["entity_kinds"] = sorted({k.split(":", 1)[0] for k in remaining})
+    # Merged-duplicate contributions are re-folded into the membership on every
+    # re-detection, so they must lose the subject too, or it would come back.
+    if row.get("base_entity_keys") is not None:
+        base = list(row.get("base_entity_keys") or [])
+        base_remaining = [k for k in base if k not in keys]
+        out["base_entity_keys"] = base_remaining
+        out["base_entity_count"] = max(
+            0, int(row.get("base_entity_count") or 0) - (len(base) - len(base_remaining)))
+    if row.get("duplicates"):
+        out["duplicates"] = [
+            {**dup, "entity_keys": [k for k in dup.get("entity_keys") or [] if k not in keys]}
+            for dup in row.get("duplicates") or []
+        ]
     out["evidence"], _ = _scrub(row.get("evidence") or [], keys)
     # The signature keeps its hash (the pattern's identity); its content loses the refs.
     out["signature"], _ = _scrub(row.get("signature") or {}, keys)

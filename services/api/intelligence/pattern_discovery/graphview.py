@@ -71,8 +71,12 @@ def pattern_subgraph(pattern: dict[str, Any]) -> dict[str, Any]:
             for attr in detail.get("attributes") or []:
                 aid = f"{attr.get('type')}:{attr.get('value')}"
                 _node(nodes, aid, kind=str(attr.get("type")), label=str(attr.get("value")), role="attribute")
-                for m in members:
-                    edge(m, aid, f"USES_{str(attr.get('type')).split(':', 1)[0].upper()}")
+                # Only the members the detector observed with this value. A record
+                # without an owner set draws no member-to-attribute edges at all
+                # rather than inventing links across a transitive cluster.
+                for m in attr.get("owners") or []:
+                    if m in member_set:
+                        edge(m, aid, f"USES_{str(attr.get('type')).split(':', 1)[0].upper()}")
         elif etype == "motif_instances":
             for inst in detail.get("examples") or []:
                 inst = [n for n in inst if isinstance(n, str)]

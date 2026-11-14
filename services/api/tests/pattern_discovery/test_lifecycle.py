@@ -474,3 +474,123 @@ async def test_hidden_and_pinned_survive_redetection_until_the_pattern_changes()
     grown = merge_redetection(hidden, dict(rec, last_run_id="r3", evidence_fingerprint="grew-by-10x"))
     assert grown["status"] == rec["status"]
     assert grown["review_history"][-1]["decision"] == "resurfaced_after_material_change"
+
+
+@pytest.mark.asyncio
+async def test_erasure_scrubs_merged_duplicate_contributions_and_survives_redetection():
+    from intelligence.pattern_discovery.erasure import erase_pattern_discovery
+    from intelligence.pattern_discovery.registry import merge_duplicate
+
+    import json as _json
+
+    repo = PatternRegistryRepository()
+    base = dict(_by_kind(_ring_records(), KIND_SEQUENCE))
+    base["pattern_id"] = f"{T}:pat:canonical"
+    base["affected_entity_keys"] = ["user:a", "user:b", "user:c"]
+    base["affected_entities"] = [{"kind": "user", "id": i, "key": f"user:{i}"} for i in "abc"]
+    base["affected_entity_count"] = 3
+    dup = dict(base, pattern_id=f"{T}:pat:dup", affected_entity_keys=["user:x", "user:a"],
+               affected_entity_count=2, evidence_fingerprint="fp-dup")
+    merged = merge_duplicate(base, dup)
+    assert "user:x" in merged["affected_entity_keys"]
+    await repo.upsert_detected(merged)
+    await erase_pattern_discovery(T, frozenset({"x"}))
+    row = await repo.get(T, base["pattern_id"])
+    assert "user:x" not in _json.dumps(row)            # gone from duplicates and base state too
+    # Re-detection re-folds the duplicate contributions: the subject must not return.
+    again = merge_redetection(row, dict(base))
+    assert "user:x" not in again["affected_entity_keys"]
+    assert "user:x" not in _json.dumps(again)
+
+
+@pytest.mark.asyncio
+async def test_erasure_finds_a_subject_held_only_in_duplicate_state():
+    from intelligence.pattern_discovery.erasure import names_subject
+
+    row = {"affected_entity_keys": ["user:a", "user:b"],
+           "duplicates": [{"pattern_id": "d", "entity_keys": ["user:z"]}]}
+    assert names_subject(row, {"user:z"})
+
+
+class _DownReader:
+    async def query_events(self, tenant_id, params, limit=100):
+        raise ConnectionError("analytics store down")
+
+
+@pytest.mark.asyncio
+async def test_a_failed_evidence_read_never_ages_or_deprecates_patterns():
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2))
+    await svc.run(T)
+    before = {r["pattern_id"]: r for r in await svc.registry.scan(T)}
+    assert before
+    svc._event_reader = _DownReader()
+    for _ in range(STALE_AFTER_RUNS + 1):
+        out = await svc.run(T)
+        assert out["coverage"]["store"] == "unavailable"
+        assert out["coverage"]["aging"]["status"] == "skipped_store_unavailable"
+    after = {r["pattern_id"]: r for r in await svc.registry.scan(T)}
+    assert all(after[pid]["status"] == before[pid]["status"] for pid in before)
+    assert not any(r["status"] == STATUS_DEPRECATED for r in after.values())
+
+
+@pytest.mark.asyncio
+async def test_the_scheduled_run_fails_when_the_evidence_store_is_unavailable(monkeypatch):
+    from types import SimpleNamespace
+
+    from intelligence.pattern_discovery import jobs, service as service_mod
+
+    svc = _service([])
+    svc._event_reader = _DownReader()
+    monkeypatch.setattr(service_mod, "get_service", lambda: svc)
+    outcome = await jobs.run_job({}, SimpleNamespace(tenant_id=T))
+    assert outcome.status == "failed" and outcome.error == "event_store_unavailable"
+    svc._event_reader = FakeEventReader(normal_traffic(1, 1))
+    assert (await jobs.run_job({}, SimpleNamespace(tenant_id=T))).status == "succeeded"
+
+
+class _FlakyRiskStore(FakeRiskStore):
+    def __init__(self):
+        super().__init__()
+        self.down = True
+
+    async def upsert_scoped(self, tenant_id, natural_id, data):
+        if self.down:
+            raise ConnectionError("risk store down")
+        return await super().upsert_scoped(tenant_id, natural_id, data)
+
+
+@pytest.mark.asyncio
+async def test_a_promotion_retries_projections_a_transient_outage_left_incomplete():
+    store = _FlakyRiskStore()
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2), risk_store=store)
+    await svc.run(T)
+    pid = (await svc.list_patterns(T, kind=KIND_CROSS_DOMAIN))["items"][0]["pattern_id"]
+    await svc.review(T, pid, reviewer_id="a", verdict="malicious", reason="ring confirmed with chargebacks")
+    first = await svc.promote(T, pid, reviewer_id="a", reason="standing risk signal for the ring")
+    assert first["status"] == STATUS_PROMOTED
+    assert {o["status"] for o in first["promotion"]["risk_signals"]} == {"failed"}
+    assert store.rows == {}
+    store.down = False
+    retried = await svc.promote(T, pid, reviewer_id="a", reason="retry after the risk store recovered")
+    assert retried["status"] == STATUS_PROMOTED
+    assert {o["status"] for o in retried["promotion"]["risk_signals"]} == {"written"}
+    assert retried["promotion"]["projection_retries"] == 1 and store.rows
+    # Complete projections are not re-run, and no second lifecycle transition is recorded.
+    again = await svc.promote(T, pid, reviewer_id="a", reason="nothing left to retry here")
+    assert again["promotion"]["projection_retries"] == 1
+    assert sum(1 for h in again["review_history"] if h.get("decision") == "promote") == 1
+
+
+def test_a_redetected_duplicate_refreshes_its_contribution_when_members_change():
+    from intelligence.pattern_discovery.registry import merge_duplicate
+
+    base = dict(_by_kind(_ring_records(), KIND_SEQUENCE), affected_entity_keys=["user:a", "user:z"],
+                affected_entity_count=2, occurrence_count=5)
+    dup = dict(base, pattern_id=f"{T}:pat:dup", affected_entity_keys=["user:b", "user:c"],
+               affected_entity_count=2, occurrence_count=2, evidence_fingerprint="same")
+    merged = merge_duplicate(base, dup)
+    assert {"user:b", "user:c"} <= set(merged["affected_entity_keys"])
+    drifted = dict(dup, affected_entity_keys=["user:b", "user:d"], occurrence_count=12)  # same fingerprint
+    again = merge_duplicate(merged, drifted)
+    assert "user:d" in again["affected_entity_keys"] and "user:c" not in again["affected_entity_keys"]
+    assert again["occurrence_count"] == 5 + 12

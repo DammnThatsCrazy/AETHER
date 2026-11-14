@@ -165,8 +165,11 @@ def detect_temporal(frame: DiscoveryFrame) -> DetectorOutput:
             first, last = bounds(evs)
             patterns.append(RawPattern(
                 kind=KIND_LOCKSTEP,
+                # ``anchor`` (the group's smallest member) keeps disjoint groups
+                # doing the same token as distinct patterns, while staying stable
+                # as the group's other members drift between runs.
                 signature={"token": token, "size_bucket": int(math.log2(len(members))),
-                           "repeated": repeated},
+                           "repeated": repeated, "anchor": members[0]},
                 title=f"Lockstep {token} by {plural(len(members), 'entity')}",
                 summary=(f"{plural(len(members), 'entity')} performed {token} within the same "
                          f"{lw}-second window {plural(len(windows), 'time')}."),

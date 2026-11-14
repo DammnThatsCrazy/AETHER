@@ -257,3 +257,27 @@ def test_experience_routes_over_http():
         assert c.get("/v1/intelligence/patterns", params={"feed": True}).json()["data"]["items"][0]["pattern_id"] == pid
     finally:
         set_service(None)
+
+
+def test_subgraph_links_members_only_to_attributes_they_were_seen_with():
+    rec = {"pattern_id": "p", "status": "surfaced", "kind": "shared_attribute",
+           "affected_entity_keys": ["user:a", "user:b", "user:c"],
+           "evidence": [{"type": "shared_attribute_values", "detail": {"attributes": [
+               {"type": "device", "value": "X", "owners": ["user:a", "user:b"]},
+               {"type": "device", "value": "Y", "owners": ["user:b", "user:c"]},
+           ]}}]}
+    links = {(e["source"], e["target"]) for e in pattern_subgraph(rec)["edges"] if e["type"].startswith("USES_")}
+    assert links == {("user:a", "device:X"), ("user:b", "device:X"), ("user:b", "device:Y"), ("user:c", "device:Y")}
+    legacy = {**rec, "evidence": [{"type": "shared_attribute_values", "detail": {"attributes": [
+        {"type": "device", "value": "X"}]}}]}
+    assert not [e for e in pattern_subgraph(legacy)["edges"] if e["type"].startswith("USES_")]
+
+
+@pytest.mark.asyncio
+async def test_shared_attribute_evidence_records_each_values_owners():
+    svc = _svc(normal_traffic(2, 2) + fraud_ring(2))
+    await svc.run(T)
+    pid = (await svc.list_patterns(T, kind=KIND_SHARED_ATTRIBUTE))["items"][0]["pattern_id"]
+    row = await svc.registry.get(T, pid)
+    attrs = next(e for e in row["evidence"] if e["type"] == "shared_attribute_values")["detail"]["attributes"]
+    assert attrs and all(set(a["owners"]) <= set(row["affected_entity_keys"]) and a["owners"] for a in attrs)

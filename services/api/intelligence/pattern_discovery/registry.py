@@ -390,7 +390,15 @@ def merge_duplicate(target: dict[str, Any], duplicate: dict[str, Any]) -> dict[s
     dup_id = duplicate["pattern_id"]
     seen = {d["pattern_id"]: d for d in updated.get("duplicates") or []}
     first_merge = dup_id not in seen
-    if not first_merge and seen[dup_id].get("evidence_fingerprint") == duplicate.get("evidence_fingerprint"):
+    entity_keys = list(duplicate.get("affected_entity_keys") or [])[:MAX_AFFECTED_ENTITIES]
+    occurrence_count = int(duplicate.get("occurrence_count") or 0)
+    # evidence_fingerprint deliberately ignores individual members and counts, so
+    # an unchanged fingerprint does not mean an unchanged contribution: compare
+    # the contribution itself before skipping the refresh.
+    if (not first_merge
+            and seen[dup_id].get("evidence_fingerprint") == duplicate.get("evidence_fingerprint")
+            and list(seen[dup_id].get("entity_keys") or []) == entity_keys
+            and int(seen[dup_id].get("occurrence_count") or 0) == occurrence_count):
         return _apply_duplicates(updated)
     if not updated.get("duplicates"):
         updated["base_entity_keys"] = list(updated.get("affected_entity_keys") or [])
@@ -398,8 +406,8 @@ def merge_duplicate(target: dict[str, Any], duplicate: dict[str, Any]) -> dict[s
         updated["base_occurrence_count"] = int(updated.get("occurrence_count") or 0)
     seen[dup_id] = {"pattern_id": dup_id, "kind": duplicate.get("kind"),
                     "evidence_fingerprint": duplicate.get("evidence_fingerprint"),
-                    "entity_keys": list(duplicate.get("affected_entity_keys") or [])[:MAX_AFFECTED_ENTITIES],
-                    "occurrence_count": int(duplicate.get("occurrence_count") or 0),
+                    "entity_keys": entity_keys,
+                    "occurrence_count": occurrence_count,
                     "merged_at": utc_now().isoformat()}
     updated["duplicates"] = list(seen.values())
     before = int(updated.get("affected_entity_count") or 0)

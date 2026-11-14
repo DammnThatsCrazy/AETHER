@@ -27,6 +27,8 @@ async def score_windows(extraction, client: Optional[Any] = None) -> tuple[dict[
     windows = window_features([e for e in extraction.events if e.entity or e.ts])
     if not windows:
         return {}, {"status": "no_windows"}
+    from intelligence.ml_serving.routes import service_auth_headers
+
     if client is None:
         from intelligence.ml_serving.routes import _get_client
 
@@ -34,7 +36,9 @@ async def score_windows(extraction, client: Optional[Any] = None) -> tuple[dict[
     payload = {"model": MODEL, "instances": [w["features"] for w in windows],
                "purposes": ["analytics", "fraud_prevention"]}
     try:
-        resp = await client.post("/v1/predict/batch", json=payload, timeout=TIMEOUT_SECONDS)
+        # Standalone ML serving rejects requests without the service token.
+        resp = await client.post("/v1/predict/batch", json=payload, timeout=TIMEOUT_SECONDS,
+                                 headers=service_auth_headers())
     except Exception as exc:  # noqa: BLE001 - ML is an enrichment, not a dependency
         logger.warning("pattern_discovery.ml_unreachable", extra={"error_type": type(exc).__name__})
         return {}, {"status": "unreachable", "error_type": type(exc).__name__, "windows": len(windows)}
