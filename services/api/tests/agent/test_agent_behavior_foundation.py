@@ -249,3 +249,56 @@ def test_runtime_adapter_output_is_a_valid_batch_event():
     assert (from_record["sessionId"], from_record["anonymousId"]) == ("s2", "anon-2")
     with pytest.raises(AdapterError):
         map_runtime_record("mcp", record)
+
+
+@pytest.mark.asyncio
+async def test_runtime_adapter_output_carries_deployment_context_through_validation(monkeypatch):
+    """Codex review on #867: adapter events omitted ``context``, so ingestion
+    with external-agent telemetry enabled rejected every one of them as
+    ``deployment_context_invalid:missing_deployment_id``."""
+    import dataclasses
+    import uuid
+
+    from actions.agent.deployments import AgentDeploymentRepository
+    from config.settings import settings
+    from ingestion.ingestion.batch import BaseEvent
+    from ingestion.ingestion.validation import validate_event
+
+    monkeypatch.setattr(settings, "external_agent_telemetry", dataclasses.replace(
+        settings.external_agent_telemetry, enabled=True))
+    tenant = f"tenant-{uuid.uuid4().hex}"
+    deployment = await AgentDeploymentRepository().create(
+        tenant, {"agent_id": "a1", "display_name": "Bot", "external_platform": "web_widget"})
+    ctx = {"deploymentId": deployment["id"], "agentId": "a1"}
+    ids = {"session_id": "s1", "anonymous_id": "anon-1"}
+    records = {
+        "mcp": {"id": "c1", "timestamp": "2026-10-22T10:00:00Z", "agentId": "a1",
+                "method": "tools/call", "params": {"name": "search"}},
+        "wallet_payment": {"id": "w1", "timestamp": "2026-10-22T10:00:00Z", "agentId": "a1",
+                           "state": "settled", "amount": "40.00", "currency": "USD"},
+        "model_gateway": {"id": "m1", "timestamp": "2026-10-22T10:00:00Z", "agentId": "a1",
+                          "model": "m"},
+    }
+
+    async def validate(event):
+        parsed = BaseEvent.model_validate(event)
+        return parsed, await validate_event(sdk_event=parsed, tenant_id=tenant, batch_id="b1",
+                                            received_at="2026-10-22T10:00:01+00:00")
+
+    for adapter, record in records.items():
+        [bare] = map_runtime_record(adapter, record, **ids)
+        _, rejected = await validate(bare)
+        assert not rejected.allowed and rejected.audit_metadata["deployment_reason"] == "missing_deployment_id"
+
+        for event in (map_runtime_record(adapter, record, deployment_context=ctx, **ids)[0],
+                      map_runtime_record(adapter, {**record, "context": {"agentDeployment": ctx}}, **ids)[0]):
+            assert event["context"] == {"agentDeployment": ctx}
+            parsed, result = await validate(event)
+            assert parsed.context.agentDeployment == ctx
+            assert result.allowed, (adapter, result.reason_code, result.audit_metadata)
+            assert result.deployment_id == deployment["id"]
+
+    with pytest.raises(AdapterError):
+        map_runtime_record("mcp", records["mcp"], deployment_context={"agentId": "a1"}, **ids)
+    with pytest.raises(AdapterError):
+        map_runtime_record("mcp", {**records["mcp"], "context": {"agentDeployment": "dep"}}, **ids)
