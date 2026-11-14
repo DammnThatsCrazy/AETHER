@@ -50,7 +50,7 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:76a685c742a3a57790baecd1f774ed606e30a3237d339c017ca9aa0bba6be73e"
   ".github/workflows/pilot-staging.yml": "sha256:36ebc8a80d84008b4b55c2fd562b28aa67f6a02e08478de9e4a4cbd77897a07a"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-business-hours.yml": "sha256:e828d5d39464bd4d694c287cd0362d9e8de81a510a0c97efc788a7a36e4b2234"
+  ".github/workflows/staging-business-hours.yml": "sha256:8eb5cb8af99ff80eb4b1db8c0236dd3c5d8feddd3d5c2f0f994500dc4fcae42a"
   ".github/workflows/staging-lifecycle.yml": "sha256:7a1ca755a832d43137268b2d50ea032f241fa79aa0a57cb187099402e4f186a6"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
@@ -429,7 +429,7 @@ otherwise, in New York time:
 | When (Mon–Fri) | What it starts |
 |---|---|
 | 08:15 | `plan-wake` for the newest release built from `staging`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum` and `max_awake_hours=8`. Staging is ready at about 08:45. |
-| 17:00 | `apply-sleep` |
+| 17:00 | `apply-sleep` with the same newest release's backend digest and commit (`backend_image_digest`, `intended_release_sha`), so the reconcile can bind Terraform to an image tagged with the reviewed commit. If no release can be found the sleep still runs and stops staging; only the Terraform state reconcile fails, loudly. |
 
 It holds no AWS credentials and runs no Terraform. It dispatches the same
 lifecycle actions an operator would, so every check above still applies:
