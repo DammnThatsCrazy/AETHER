@@ -156,7 +156,10 @@ jobs:
             || no_release "could not download release-${release_sha}"
           checksum="$(tr -d '[:space:]' < release/release.json.sha256)" \
             || no_release 'release.json.sha256 is missing from the release artifact'
-          [[ "$checksum" =~ ^sha256:[0-9a-f]{64}$ ]] || no_release 'release.json.sha256 is not a sha256: checksum'
+          # release_manifest.py --write-checksum writes bare hex; the lifecycle's
+          # verifier accepts it with or without the sha256: prefix.
+          checksum="sha256:${checksum#sha256:}"
+          [[ "$checksum" =~ ^sha256:[0-9a-f]{64}$ ]] || no_release 'release.json.sha256 is not a sha256 checksum'
           [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || no_release 'release head SHA is malformed'
           digest="$(jq -r '.artifacts.backend_image.digest // empty' release/release.json)" \
             || no_release 'release.json is missing or not valid JSON'
