@@ -6,9 +6,11 @@ feature_id: pattern-discovery
 title: Pattern Discovery
 owning_system: aether
 summary: 'Governed discovery of patterns nobody defined in advance: schema-on-read extraction (PII digested),
-  tenant baselines, deterministic detectors with cross-domain correlation, a review lifecycle with DSR erasure
-  and consent gates, promotion into attributed Risk360 signals, 360 sections and Kyber/Aether review surfaces.
-  Every flag defaults OFF and no detector has measured precision or recall on labelled production data.'
+  tenant baselines, deterministic detectors with cross-domain correlation, a lifecycle that surfaces patterns
+  automatically and keeps them reviewable (curation, optional verdicts), what''s-new digests, pattern subgraphs,
+  360 sections and segment lenses, DSR erasure and consent gates, promotion into attributed Risk360 signals,
+  and Kyber/Aether surfaces. The master flag defaults OFF and no detector has measured precision or recall
+  on labelled production data.'
 scope:
   id: pattern-discovery-v1
   version: 1
@@ -90,7 +92,7 @@ activation:
     description: Pattern Discovery detectors have no measured precision/recall on labelled production data.
     owner: tenant / platform-ops
     required_action: Run discovery in shadow on a pilot tenant, collect analyst verdicts until each kind has
-      calibration evidence, and record precision per kind before enabling review queues for customers.
+      calibration evidence, and record precision per kind before surfacing patterns to customers.
     source_code_change_expected: false
     affected_environments:
     - staging
@@ -156,10 +158,10 @@ release_profiles:
     business_gate: false
   production:
     participation: not_in_release
-    note: Every pattern discovery flag defaults OFF; not part of the founding-tenant release scope.
+    note: The pattern discovery master flag defaults OFF; not part of the founding-tenant release scope.
   production-scale:
     participation: not_in_release
-    note: Every pattern discovery flag defaults OFF; not part of the founding-tenant release scope.
+    note: The pattern discovery master flag defaults OFF; not part of the founding-tenant release scope.
 historical:
   historical_maturity_index: 2
   historical_maturity_index_scale: 0-5
