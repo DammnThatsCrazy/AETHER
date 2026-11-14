@@ -2,7 +2,9 @@
 
 - ``POST /observations/normalize`` validates a venue market payload and returns
   the canonical ``MarketObservation`` without storing it.
-- ``POST /observations`` normalizes and stores it (idempotent per content).
+- ``POST /observations`` normalizes and stores it. A retry of the market's
+  latest observation is idempotent; a return to an earlier quote is a new
+  occurrence.
 - ``GET /markets/{venue}/{market_ref}`` returns the latest stored observation,
   optionally as of an instant.
 
