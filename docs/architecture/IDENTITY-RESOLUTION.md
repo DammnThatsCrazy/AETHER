@@ -15,6 +15,8 @@ source_files:
   - services/api/identity/profile/composer.py
   - services/api/identity/profile/aggregator.py
   - services/api/actions/agent/deployment_routes.py
+  - services/api/journeys/handoff/continuation_scope.py
+  - services/api/journeys/handoff/continuation_jobs.py
   - services/api/actions/agent_marketplace/identity_binding.py
   - services/api/actions/agent_marketplace/authority.py
   - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
@@ -31,7 +33,7 @@ reviewed_source_commits:
     reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/actions/agent/deployment_routes.py": "sha256:cadc44f0985aa7cdda189eec05499ed8efe8050b7e3f0c0342c286d57914e10a"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -40,6 +42,8 @@ source_hashes:
   "services/api/identity/profile/composer.py": "sha256:7e042b4b53ff4926fcacbfa236ab0c997d9e9576654b16a2cc32cf25f9d8e6a1"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
+  "services/api/journeys/handoff/continuation_jobs.py": "sha256:13081b7ff46f57f7ae26c005163275d92cef3b7e7bf52959c02df345b0292630"
+  "services/api/journeys/handoff/continuation_scope.py": "sha256:4805ff2560480a30d0e5452eefdd92dfc500cc6f84109ad10f5dc38de4e6ad08"
   "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
@@ -638,8 +642,27 @@ session are exactly a redeemed (source, destination) pair gets
 `transition_evidence.link_basis = "explicit_handoff"` (with the `handoff_id` and
 `identity_merge: "not_performed"`); every other cross-device or platform-change hop
 is labelled `"inferred"`. `GET /v1/journeys/{id}/transitions` returns the counts as
-`link_basis`. The label appears the next time the journey is compiled; redeeming a
-handoff does not itself trigger a rebuild. A failed lookup leaves hops inferred.
+`link_basis`. A failed lookup leaves hops inferred.
+
+**Journey continuation.** A redeemed handoff also decides which activity one journey
+spans (`journeys/handoff/continuation_scope.py`). The compiler walks redeemed handoffs
+from the journey's anonymous IDs (tenant-scoped, at most 16 anonymous IDs and 8 hops;
+a truncated walk is logged) and adds the activity and conversions of every linked
+anonymous ID. An anonymous continuation is owned by its root: the source of the
+oldest redeemed handoff, normally the device the journey started on. Compiling any
+other member retires that member's standalone journey and returns the root's
+journey, so the mobile visitor and the desktop visitor who redeemed its token share
+one journey. A profile or cluster journey takes in linked anonymous activity only
+when that activity is not already owned by a different profile or cluster. This is
+journey linkage: no identity is merged, no anonymous ID is rewritten, and identity
+resolution never sees it. Erasing a subject's handoffs removes the link, and the next
+compile builds separate journeys again.
+
+Redeeming a handoff queues the durable `journey.handoff_continuation` job
+(`continuation_jobs.py`, idempotent per handoff, internal only). The job compiles
+the continuation once under its root and rebuilds every profile journey that
+already owns activity on either end. A jobs-plane outage never fails the
+redemption. The next compile for either identity still picks up the handoff.
 
 ## Agent Identity Resolution
 

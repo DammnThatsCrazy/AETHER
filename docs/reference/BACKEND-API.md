@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:0cb68557f87405b32c05c34b36889685ca2af6dc122ef37aeee8b44038969319"
+  "services/api/actions/": "sha256:4225cc7d237065008204eb2691bbd4d78eb896e608150944bbc5468a0d19b876"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
@@ -3969,6 +3969,23 @@ All routes need `agent:manage` and the deployment registry flag. Tenant scope co
 - `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`; not reachable with a publishable key. Handoffs recorded for one journey; an unredeemed token past `expires_at` reads as `expired`.
 
 `GET /v1/journeys/{id}/transitions` now also returns `link_basis` counts (`explicit_handoff` vs `inferred`) for cross-device hops.
+
+A successful redemption also queues the internal `journey.handoff_continuation` job. The rebuilt journey spans both devices: the activity of every anonymous ID linked by redeemed handoffs is compiled into one journey, owned by the root (the source of the oldest handoff). The redeemed end's standalone anonymous journey stops being current. `GET /v1/journeys?profile_id=<anonymous id>` for the root returns it. No identity is merged.
+
+`POST /v1/journeys/{journey_id}/rebuild` rebuilds the journey's own identity type: anonymous, profile or cluster.
+
+### Journey activity rebuilds (flag `JOURNEY_ACTIVITY_REBUILD_ENABLED`)
+
+When on, canonical activity emitted by the silver projectors requests a debounced compile of the journey that owns it: profile, then cluster, then anonymous. One compile runs per identity per window (`AETHER_JOURNEY_ACTIVITY_REBUILD_WINDOW_SECONDS`, default 30). The queue is process-local and best effort, and a lost flush heals on the next activity. There is no route. Staging turns it on; production keeps it off.
+
+### Apple Ads attribution (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`)
+
+- `POST /v1/attribution/apple-ads/resolve` — SDK key. Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). Responses:
+  - `{resolved: true, evidence}`;
+  - `{resolved: false, status: pending, retry_after_seconds: 5}`: Apple's record is not ready, so retry;
+  - `{resolved: false, status}` with `not_attributed`, `invalid`, `unavailable` or `token_already_bound`.
+
+  A token binds to the first anonymous ID that presented it (only its SHA-256 is stored), so it cannot attribute another device. Apple Ads campaigns only. Other ad networks stay Direct / Unknown at user level.
 
 Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handoff_sweep`, maintenance role) and erased by anonymous ID through the `journey_handoffs` DSR component.
 

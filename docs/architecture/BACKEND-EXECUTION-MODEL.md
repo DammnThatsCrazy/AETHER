@@ -97,8 +97,15 @@ python -m workers.runtime.run_role maintenance    # cron/sweeper workers
   process in `run_role` (the handler registry is per process). A worker that
   hosts the `maintenance` role's `job_worker` (for example `lean-worker`)
   therefore runs the jobs the API enqueues — `consent.erasure`, exports,
-  imports — instead of failing them as `unknown job_type`. Registration is
-  idempotent and keeps each handler's existing flag gate.
+  imports, `journey.handoff_continuation` — instead of failing them as
+  `unknown job_type`. Registration is idempotent and keeps each handler's
+  existing flag gate. `journey.handoff_continuation` is queued by a
+  successful journey-handoff redemption (idempotent per handoff, internal
+  only) and rebuilds the cross-device continuation journey.
+- With `JOURNEY_ACTIVITY_REBUILD_ENABLED`, the process that emits canonical
+  activity (the silver projector path) also debounces one journey compile per
+  identity (`journeys/measurement/activity_rebuild.py`). It is process-local
+  and best effort, not a worker spec.
 
 ## Lifespan gating (`WORKER_ROLES_ENABLED`)
 

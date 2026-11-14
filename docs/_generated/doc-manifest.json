@@ -5228,6 +5228,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/operations/runbooks/cross-device-certification.md",
+      "title": "Cross-Device Journey Certification (XD-1)",
+      "slug": "runbooks/cross-device-certification",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
       "title": "Semantic-Sentiment Operations Runbook",
       "slug": "semantic-sentiment/operations-runbook",

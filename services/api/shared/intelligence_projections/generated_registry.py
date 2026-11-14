@@ -4510,9 +4510,9 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "domainSlots": [
             {
                 "canonicalAuthorityRefs": ("agent_access", "agent_executions", "identity"),
-                "description": "Current delegation and action-scoped authority evidence for an exact Agent subject or canonical Agent entity; unbound profiles remain unknown.",
+                "description": "Current delegation and action-scoped authority evidence for an exact Agent subject or canonical Agent entity; for a person entity, the agents acting for that person by recorded grant or declared beneficiary (agent:manage only); unbound profiles remain unknown.",
                 "id": "agent_delegations",
-                "partialImplementationReason": "Exact Agent subjects and canonical Agent entities reuse Agent360 identity and delegation evidence; unbound profile links, historical replay, effective authorization, and freshness remain unknown.",
+                "partialImplementationReason": "Exact Agent subjects and canonical Agent entities reuse Agent360 identity and delegation evidence; person entities list agents by recorded grant or declared beneficiary from bounded, capped fact reads without identity merge; unbound profile links, historical replay, effective authorization, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "profile360",

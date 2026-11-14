@@ -74,7 +74,7 @@ source_hashes:
   "packages/shared/": "sha256:5665ef09c1b80ad5b8fb25fa59c4808ba276122eb481a98a2dc726e37984ef87"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:3438710d537a48fe068478cfe3170255a9decfec1d81adecabeabd03b3766ec7"
-  "services/api/actions/agent/deployment_routes.py": "sha256:cadc44f0985aa7cdda189eec05499ed8efe8050b7e3f0c0342c286d57914e10a"
+  "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent/execution360_provider.py": "sha256:c224bc3be2745382c4952d6fd43e2494302c027cb9829d454e73c34633aba000"
   "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -105,7 +105,7 @@ source_hashes:
   "services/api/middleware/middleware.py": "sha256:a759e3d55b5791e9fa6c9d022fa68551bc4227638cdcc7871c039bbdad2ccab5"
   "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:96cdbec137671727e056037aaceeba7878bf7b100348664d37798c0be38954fd"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:7ded6e7485446260858dbb211146d813dd892929ad5d76a608fb9742c4777796"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
   "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
@@ -827,7 +827,11 @@ route parity: `not_applicable` when the external agent registry is off,
 `suppressed` without a server-derived `agent_behavior` read authorization for
 the same tenant, subject and projection, and `degraded` when the behavior source
 is unavailable or capped. Agent refs stay source-reported; no identity is
-resolved.
+resolved. The Experience 360 frame runtime issues that authorization only when
+the caller holds `agent:manage`. On Agent 360 it is tied to the optional
+`agent_behavior` slot. On Profile 360 it is tied to the `agent_delegations` slot
+for a person, whose section then lists the agents acting for that person
+(recorded grant or declared beneficiary, never an identity merge).
 
 Signals360 `quality` now separately reads a current tenant/site installation
 record for an accepted SDK observation carrying the authenticated server-stamped
