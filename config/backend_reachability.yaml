@@ -21,6 +21,10 @@ allow_unreachable:
     modules: [authority, fidelity, knowledge, registry, resolution]
     ledger: product-backend-unmounted-code-pending
     reason: authority, fidelity, knowledge, registry, and resolution remain unmounted; contracts, provider, reader, repository, and routes are reachable through the mounted Communication360 path
+  - package: shared.integration_contracts
+    modules: [correlation, correlation_token]
+    ledger: product-backend-unmounted-code-pending
+    reason: agent source-role join rules and correlation tokens are a tested contract foundation; the Aether MCP bridge and verdict projector that will import them are later steps of docs/architecture/blueprints/universal-connector-runtime/agent-source-roles.md
   - package: graph.crossdomain
     modules: [models]
     ledger: product-backend-unmounted-code-pending
