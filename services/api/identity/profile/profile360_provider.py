@@ -1966,7 +1966,7 @@ class Profile360Provider:
         )
         if needs_agent_delegations:
             agent_delegation_section, agent_delegation_claims = (
-                await self._agent_delegations(request, temporal, canonical_entity)
+                await self._agent_delegations(request, temporal, canonical_entity, context)
             )
             result = result.model_copy(
                 update={
@@ -3183,13 +3183,81 @@ class Profile360Provider:
         ]
         return section, claims
 
+    async def _principal_agents_section(
+        self,
+        request: ProjectionRequest,
+        temporal: _TemporalRequest,
+        context: Optional[ProjectionContext],
+        unknown: Any,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Agents acting for a person: human-agent reconciliation, no identity merge."""
+        from config.settings import settings
+
+        telemetry = settings.external_agent_telemetry
+        if not (telemetry.enabled or telemetry.registry_enabled):
+            return unknown("external_agent_registry_not_enabled", state="not_applicable")
+        authorizations = getattr(context, "experience360ReadAuthorizations", None) or []
+        authorized = any(
+            auth.capabilityKey == "agent_behavior"
+            and auth.policyState == "allowed"
+            and auth.tenantId == request.tenantId
+            and auth.targetProjectionId == "profile360"
+            and auth.sourceSlotId == SLOT_AGENT_DELEGATIONS
+            and auth.sourceSubject.kind == request.subject.kind
+            and auth.sourceSubject.id == request.subject.id
+            for auth in authorizations
+        )
+        if not authorized:
+            return unknown("agent_behavior_not_authorized", state="suppressed")
+        if temporal.error is not None:
+            return unknown(temporal.error)
+        if temporal.as_of is not None or temporal.mode == "compare":
+            return unknown("principal_agents_historical_replay_unavailable")
+        try:
+            from actions.agent.behavior_read_model import build_principal_agents
+
+            data = await build_principal_agents(request.tenantId, request.subject.id)
+        except Exception:  # noqa: BLE001 - fail closed at the cross-domain boundary
+            return unknown("principal_agents_source_unavailable", state="degraded")
+        # A capped fact read is incomplete evidence, not a full answer.
+        state = "degraded" if data.get("source_truncated") else "available"
+        return (
+            ProjectionSection(
+                id=SLOT_AGENT_DELEGATIONS,
+                state=state,  # type: ignore[arg-type]
+                title="Agents acting for this person",
+                content={
+                    "state": state,
+                    "subjectRole": "principal",
+                    "principalAgents": data,
+                    "identityMerge": "not_performed",
+                    "linkBases": ["recorded_grant", "declared_beneficiary"],
+                    "limitations": [
+                        "agent refs are source-reported runtime references",
+                        "rates and dispositions are uncalibrated",
+                        "a declared beneficiary is the agent's own claim, not a recorded grant",
+                    ],
+                    "temporalSemantics": temporal.mode,
+                },
+            ),
+            [],
+        )
+
     async def _agent_delegations(
         self,
         request: ProjectionRequest,
         temporal: _TemporalRequest,
         canonical_entity: CanonicalEntityRead,
+        context: Optional[ProjectionContext] = None,
     ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
         """Reuse Agent360's tenant-scoped authority path for exact Agent subjects.
+
+        For a PERSON entity subject the section instead lists the agents acting
+        for that person (recorded delegation grants or a declared beneficiary on
+        the agents' own facts), via the same builder as the principal-agents
+        route. That read needs the server-derived ``agent_behavior``
+        authorization (``agent:manage``) the frame runtime issues for this slot;
+        it never merges the person with an agent.
 
         A human/profile entity is not linked to an agent merely because it is
         present in Profile360. Entity subjects are accepted only when Agent360
@@ -3238,7 +3306,9 @@ class Profile360Provider:
             ):
                 return unknown("profile_entity_registry_binding_unavailable")
             if entity.get("entity_type") != "agent":
-                return unknown("profile_entity_is_not_a_canonical_agent")
+                return await self._principal_agents_section(
+                    request, temporal, context, unknown,
+                )
         if temporal.error is not None:
             return unknown(temporal.error)
         if temporal.as_of is not None or temporal.mode == "compare":

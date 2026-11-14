@@ -185,6 +185,37 @@ class RequestAccessPolicyEvaluator:
             evaluatedAt=_utc_now_iso(),
         )
 
+    async def evaluate_agent_behavior_read(
+        self, frame_request: Experience360FrameRequest
+    ) -> Experience360PolicyDisposition:
+        """Server-derived ``agent_behavior`` read decision.
+
+        Used by Agent 360 behavior sections and by Profile 360's
+        ``agent_delegations`` (the agents acting for a person). Parity with ``GET /v1/agent/agents/{agent_ref}/behavior``: the caller
+        must hold ``agent:manage`` on the frame's own tenant. The frame body
+        cannot supply this decision; only the authenticated request can.
+        """
+        actor = tenant_actor(self._request)
+        scope = (frame_request.surfaceId, frame_request.subject.kind)
+        if actor.tenant_id != frame_request.tenantId or scope not in {
+            ("agent360", "agent"), ("profile360", "entity"),
+        }:
+            raise ValueError("agent behavior policy scope mismatch")
+        tenant = getattr(getattr(self._request, "state", None), "tenant", None)
+        has_permission = getattr(tenant, "has_permission", None)
+        allowed = bool(
+            tenant is not None
+            and str(getattr(tenant, "tenant_id", "")) == frame_request.tenantId
+            and callable(has_permission)
+            and has_permission("agent:manage")
+        )
+        return Experience360PolicyDisposition(
+            state="allowed" if allowed else "denied",
+            policyIds=["tenant_permission:agent:manage"],
+            reasonCodes=["access_granted" if allowed else "access_denied"],
+            evaluatedAt=_utc_now_iso(),
+        )
+
     async def evaluate_profile_prediction_outcome_read(
         self, frame_request: Experience360FrameRequest
     ) -> Experience360PolicyDisposition:

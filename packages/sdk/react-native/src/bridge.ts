@@ -441,6 +441,21 @@ const Aether = {
         return null;
       }
     },
+
+    /**
+     * iOS only: resolve Apple Ads (Apple Search Ads) install attribution from
+     * the AdServices token. The backend verifies the token with Apple and
+     * records the attribution server-side; resolves with the stored first-touch
+     * evidence when recorded, null otherwise (and always null on Android).
+     * Requires backend flag AETHER_APPLE_ADS_ATTRIBUTION_ENABLED.
+     */
+    async resolveAppleAdsAttribution(): Promise<AcquisitionEvidence | null> {
+      try {
+        return parseNativeEvidence(await AetherNative?.resolveAppleAdsAttribution?.());
+      } catch {
+        return null;
+      }
+    },
   },
 
   trackPushOpened(data: Record<string, string>): void {

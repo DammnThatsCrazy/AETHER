@@ -1998,6 +1998,22 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "optional"
             },
             {
+                "canonicalAuthorityRefs": ("agent_executions", "observations"),
+                "description": "Optional Aether provider context retained for Agent 360: derived agent behavior (decisions, journey, influence, authority, value, risk, trust, market, observability) over source-reported Silver agent facts. Readable only with a server-derived agent_behavior read authorization (agent:manage).",
+                "id": "agent_behavior",
+                "implementationCrosswalk": ("agent_behavior",),
+                "partialImplementationReason": "The behavior read model is a current bounded rebuild from at most 1,000 recent facts per agent; every rate and confidence is uncalibrated (Wilson intervals only), and event-time windows and as-of anchors are not applied.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "agent360",
+                        "role": "primary",
+                        "subjectKinds": ("agent",),
+                        "sectionIds": ("behavior", "behavior_authority", "behavior_decisions", "behavior_influence", "behavior_journey", "behavior_market", "behavior_observability", "behavior_risk", "behavior_trust", "behavior_value")
+                    }
+                ],
+                "requirement": "optional"
+            },
+            {
                 "canonicalAuthorityRefs": ("agent_access", "agent_executions", "identity"),
                 "description": "Observed current capability grants and recorded action-scoped delegation decisions; no standing action or resource authorization verdict.",
                 "id": "authority_envelope",

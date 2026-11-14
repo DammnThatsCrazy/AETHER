@@ -26,6 +26,10 @@ import AppTrackingTransparency
 import AdSupport
 #endif
 
+#if canImport(AdServices)
+import AdServices
+#endif
+
 // MARK: - Configuration
 
 public struct AetherConfig {
@@ -2442,6 +2446,117 @@ public final class Aether: NSObject {
             if let sourceClass = serverEvidence["source_class"] as? String { properties["sourceClass"] = AnyCodable(sourceClass) }
             if let placement = serverEvidence["placement"] as? String { properties["placement"] = AnyCodable(placement) }
             self.enqueueEvent(type: .deferred_attribution_resolved, properties: properties)
+            completion(true)
+        }.resume()
+    }
+
+    // MARK: - Apple Ads attribution (AdServices token, server-verified)
+
+    private static let appleAdsAttributionStateKey = "appleAdsAttribution.state.v1"
+    private static let appleAdsMaxAttempts = 3
+
+    /// Resolve Apple Ads (Apple Search Ads) install attribution once per install.
+    ///
+    /// Reads the AdServices attribution token (`AAAttribution.attributionToken()`,
+    /// iOS 14.3+, no App Tracking Transparency prompt needed) and posts it to the
+    /// backend, which exchanges it with Apple and records the verified result
+    /// server-side (`entry_method = ios_apple_ads_attribution`,
+    /// `proof_level = platform_verified`). The SDK never asserts the evidence
+    /// itself and emits no event for it. Installs from other ad networks are not
+    /// covered: they stay Direct / Unknown at user level.
+    ///
+    /// Requires backend flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED` and the
+    /// `marketing` consent purpose when GDPR mode is on. Completes with true only
+    /// when the backend recorded an attribution; a finished attempt (attributed
+    /// or not) is not repeated on later launches.
+    public func resolveAppleAdsAttribution(completion: @escaping (Bool) -> Void) {
+        guard isInitialized, let config = config else { completion(false); return }
+        if config.privacy.gdprMode && !consentState.contains("marketing") {
+            completion(false)
+            return
+        }
+        if defaults.string(forKey: Aether.appleAdsAttributionStateKey) == "done" {
+            completion(false)
+            return
+        }
+        guard let token = Aether.appleAdsAttributionToken() else {
+            // Simulator, macOS, pre-14.3 or AdServices error: nothing to resolve.
+            completion(false)
+            return
+        }
+        postAppleAdsAttribution(token: token, attempt: 1, completion: completion)
+    }
+
+    private static func appleAdsAttributionToken() -> String? {
+        #if canImport(AdServices) && os(iOS)
+        if #available(iOS 14.3, *) {
+            return try? AAAttribution.attributionToken()
+        }
+        #endif
+        return nil
+    }
+
+    private func postAppleAdsAttribution(token: String, attempt: Int, completion: @escaping (Bool) -> Void) {
+        guard let config = config,
+              let url = URL(string: "\(config.endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/v1/attribution/apple-ads/resolve") else {
+            completion(false)
+            return
+        }
+        let body: [String: Any] = [
+            "token": token,
+            "anonymous_id": anonymousId,
+            "session_id": sessionId,
+        ]
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
+        request.timeoutInterval = 15.0
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard error == nil, (200...299).contains(statusCode), let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                // Transport failure or flag off: try again on a later launch.
+                completion(false)
+                return
+            }
+            let status = json["status"] as? String ?? ""
+            if status == "pending" && attempt < Aether.appleAdsMaxAttempts {
+                // Apple's record is not ready yet; Apple recommends retrying
+                // up to three times, five seconds apart.
+                let delay = (json["retry_after_seconds"] as? Double) ?? 5.0
+                DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                    self.postAppleAdsAttribution(token: token, attempt: attempt + 1, completion: completion)
+                }
+                return
+            }
+            if status == "unavailable" || status == "pending" {
+                completion(false)  // retry on a later launch
+                return
+            }
+            // attributed, not_attributed, invalid, token_already_bound: final.
+            self.defaults.set("done", forKey: Aether.appleAdsAttributionStateKey)
+            guard (json["resolved"] as? Bool) == true,
+                  let serverEvidence = json["evidence"] as? [String: Any] else {
+                completion(false)
+                return
+            }
+            let now = Date()
+            var evidence = self.evidenceFromDeferredResolution(serverEvidence, at: now)
+            evidence["entryMethod"] = AnyCodable("ios_apple_ads_attribution")
+            self.serialQueue.sync {
+                if self.firstTouchEvidence == nil
+                    || self.isEvidenceExpired(self.firstTouchEvidence!, at: now) {
+                    var first = evidence
+                    first["firstTouch"] = AnyCodable(true)
+                    self.firstTouchEvidence = first
+                    self.persistEvidence(first, forKey: Aether.firstTouchDefaultsKey)
+                }
+            }
             completion(true)
         }.resume()
     }

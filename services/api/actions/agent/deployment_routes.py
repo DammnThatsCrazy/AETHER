@@ -759,26 +759,9 @@ async def principal_agents(entity_id: str, request: Request):
     reads are flagged when capped."""
     _require_registry_enabled()
     tenant = _tenant(request)
-    from intelligence.agent_behavior.read_models import profile360_agents
-    from repositories.repos import DelegationRepository
+    from actions.agent.behavior_read_model import build_principal_agents
 
-    grants = [g for g in await DelegationRepository().find_many(
-        filters={"tenant_id": tenant.tenant_id, "grantor_entity_id": entity_id}, limit=100)
-        if g.get("tenant_id") == tenant.tenant_id and not g.get("revoked_at")]
-    facts, truncated, seen = [], False, set()
-    for ref in sorted({g["grantee_entity_id"] for g in grants if g.get("grantee_entity_id")})[:25]:
-        agent_facts, was_truncated = await _behavior_facts(tenant.tenant_id, ref)
-        # Each load includes spawned descendants' activity and the tenant's spawn
-        # edges, so a child granted alongside its parent would repeat; keep one.
-        for fact in agent_facts:
-            key = (fact.event_id, fact.event_type, fact.agent_ref, fact.child_agent_ref)
-            if key not in seen:
-                seen.add(key)
-                facts.append(fact)
-        truncated = truncated or was_truncated
-    data = profile360_agents(entity_id, facts, grants)
-    data["source_truncated"] = truncated
-    data["agents_capped_at"] = 25
+    data = await build_principal_agents(tenant.tenant_id, entity_id)
     return APIResponse(data=data).to_dict()
 
 

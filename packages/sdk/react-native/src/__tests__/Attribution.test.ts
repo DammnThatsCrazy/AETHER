@@ -19,6 +19,7 @@ const { nativeMethods } = vi.hoisted(() => ({
     handleQrScanResult: vi.fn(),
     handleNfcUri: vi.fn(),
     resolveDeferredHandoff: vi.fn(async (): Promise<unknown> => null),
+    resolveAppleAdsAttribution: vi.fn(async (): Promise<unknown> => null),
   },
 }));
 
@@ -107,6 +108,20 @@ describe('Aether.attribution — native delegation', () => {
   it('resolveDeferredHandoff resolves null when the handoff is unmatched', async () => {
     nativeMethods.resolveDeferredHandoff.mockResolvedValueOnce(null);
     await expect(Aether.attribution.resolveDeferredHandoff('nope')).resolves.toBeNull();
+  });
+
+  it('resolveAppleAdsAttribution resolves the server-verified first touch', async () => {
+    nativeMethods.resolveAppleAdsAttribution.mockResolvedValueOnce(firstTouchJSON);
+    const evidence = await Aether.attribution.resolveAppleAdsAttribution();
+    expect(nativeMethods.resolveAppleAdsAttribution).toHaveBeenCalledWith();
+    expect(evidence?.destinationDomain).toBe('app.example.com');
+  });
+
+  it('resolveAppleAdsAttribution resolves null when nothing was recorded or native rejects', async () => {
+    nativeMethods.resolveAppleAdsAttribution.mockResolvedValueOnce(null);
+    await expect(Aether.attribution.resolveAppleAdsAttribution()).resolves.toBeNull();
+    nativeMethods.resolveAppleAdsAttribution.mockRejectedValueOnce(new Error('offline'));
+    await expect(Aether.attribution.resolveAppleAdsAttribution()).resolves.toBeNull();
   });
 
   it('resolveDeferredHandoff resolves null (never throws) on native rejection', async () => {

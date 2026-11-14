@@ -10,6 +10,9 @@ Pod::Spec.new do |s|
   s.author       = { "Aether" => "sdk@aether.io" }
 
   s.ios.deployment_target = "14.0"
+  # AdServices (Apple Ads attribution token) ships with iOS 14.3; weak-link it
+  # so 14.0-14.2 devices still launch. Calls are guarded by #available.
+  s.ios.weak_frameworks = "AdServices"
   s.swift_version         = "5.9"
 
   s.source       = {
