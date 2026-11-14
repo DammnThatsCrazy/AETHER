@@ -39,7 +39,6 @@ export declare class MoveProvider extends BaseVMProvider {
     readonly vm: VMType;
     readonly defaultChainId: string;
     private provider;
-    private network;
     constructor(callbacks: ProviderCallbacks);
     init(): void;
     destroy(): void;

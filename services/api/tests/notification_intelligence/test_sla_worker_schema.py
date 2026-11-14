@@ -118,7 +118,11 @@ class _SchemaPool:
             assignments = re.findall(r"(\w+) = \$(\d+)", query.split("WHERE")[0])
             cols = [c for c, _ in assignments]
             self._check_param_types(cols, tuple(args[int(i) - 1] for _, i in assignments))
-            row_id = args[-1]
+            where = query.split("WHERE")[1]
+            row_id = args[int(re.search(r"id = \$(\d+)", where).group(1)) - 1]
+            owner = re.search(r"COALESCE\(tenant_id, ''\) = \$(\d+)", where)
+            if owner and (self.rows[row_id].get("tenant_id") or "") != args[int(owner.group(1)) - 1]:
+                return "UPDATE 0"
             for col, i in assignments:
                 self.rows[row_id][col] = args[int(i) - 1]
             return "UPDATE 1"

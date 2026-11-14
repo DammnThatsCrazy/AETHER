@@ -23,6 +23,8 @@
 // authority stays fail-closed (deny).
 // =============================================================================
 
+import type { SourceRelationship } from './observation-envelope';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Vocabulary: rights derivation classes (blueprint §5)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -535,6 +537,8 @@ export interface DataRightsGrantStructured {
   data_category: string;
   data_sensitivity: string;
   raw_data_owner: string;
+  /** Descriptive source classification; absent on legacy rows (= 'unclassified'). */
+  source_relationship?: SourceRelationship;
 
   // ── Legacy write-permission booleans (fail closed; authoritative M0–M3) ──
   tenant_lake_allowed: boolean;

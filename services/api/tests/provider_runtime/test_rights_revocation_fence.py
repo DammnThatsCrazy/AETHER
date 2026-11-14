@@ -13,10 +13,10 @@ from connectors.integrations.data_rights.service import DataRightsService
 from tests.provider_runtime import rights_fence_scenarios as scenarios
 
 
-@pytest.fixture
-def env():
+@pytest.fixture(params=sorted(scenarios.PROFILES))
+def env(request):
     reset_in_memory_stores()
-    yield scenarios.Env(service=DataRightsService(), tenant=scenarios.new_tenant())
+    yield scenarios.new_env(DataRightsService(), request.param)
     reset_in_memory_stores()
 
 

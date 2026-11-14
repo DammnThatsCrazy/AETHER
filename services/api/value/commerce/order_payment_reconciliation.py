@@ -15,12 +15,25 @@ from typing import Any
 
 from shared.common.common import utc_now
 from shared.temporal.instant import coerce_utc_lenient, parse_instant_strict
-from shared.store import DurableStore, get_store
+from shared.store import DurableStore, get_store, update_atomically
 
 
 def _key(tenant_id: str, ref: str) -> str:
     digest = hashlib.sha256(ref.encode("utf-8")).hexdigest()
     return f"{tenant_id}:{digest}"
+
+
+_PAYMENT_SOURCE_DETAIL_FIELDS = (
+    "paymentRail",
+    "flowType",
+    "sourceAmount",
+    "sourceAsset",
+    "sourceChain",
+    "destinationAmount",
+    "destinationAsset",
+    "destinationChain",
+    "txHash",
+)
 
 
 class CommerceOrderPaymentLedger:
@@ -55,53 +68,57 @@ class CommerceOrderPaymentLedger:
             "observedAt": utc_now().isoformat(),
         }
         key = _key(tenant_id, ref)
-        record = await self._store.get(key) or {
-            "tenantId": tenant_id,
-            "commerceOrderRef": ref,
-            "payments": {},
-            "createdAt": occurred_at,
-        }
-        revision_history = record.get("orderRevisions")
-        if not isinstance(revision_history, list):
-            revision_history = []
-        if not revision_history and isinstance(record.get("order"), dict):
-            revision_history.append(record["order"])
-        record["orderRevisions"] = revision_history
-        prior_revision = next(
-            (
-                row for row in revision_history
-                if row.get("revisionId") == order["revisionId"]
-            ),
-            None,
-        )
-        comparable_fields = (
-            "provider", "providerOrderId", "amount", "currency", "revisionId",
-            "sourceRevisionAt", "occurredAt",
-        )
-        if prior_revision is None:
-            revision_history.append(order)
-        elif any(prior_revision.get(field) != order.get(field) for field in comparable_fields):
-            record["state"] = "conflict"
-            record["conflictReason"] = "order_revision_id_reused_with_divergent_evidence"
-
-        prior = record.get("order")
-        if not prior:
-            record["order"] = order
-        elif prior.get("providerOrderId") != order["providerOrderId"]:
-            record["state"] = "conflict"
-            record["conflictReason"] = "reference_maps_to_multiple_orders"
-        elif prior.get("revisionId") != order["revisionId"]:
-            prior_revision_at = str(prior.get("sourceRevisionAt") or "")
-            next_revision_at = str(order.get("sourceRevisionAt") or "")
-            if next_revision_at > prior_revision_at:
-                record["order"] = order
-            elif next_revision_at == prior_revision_at:
+        def _apply(existing: dict | None) -> dict[str, Any]:
+            record = existing or {
+                "tenantId": tenant_id,
+                "commerceOrderRef": ref,
+                "payments": {},
+                "createdAt": occurred_at,
+            }
+            revision_history = record.get("orderRevisions")
+            if not isinstance(revision_history, list):
+                revision_history = []
+            if not revision_history and isinstance(record.get("order"), dict):
+                revision_history.append(record["order"])
+            record["orderRevisions"] = revision_history
+            prior_revision = next(
+                (
+                    row for row in revision_history
+                    if row.get("revisionId") == order["revisionId"]
+                ),
+                None,
+            )
+            comparable_fields = (
+                "provider", "providerOrderId", "amount", "currency", "revisionId",
+                "sourceRevisionAt", "occurredAt",
+            )
+            if prior_revision is None:
+                revision_history.append(order)
+            elif any(prior_revision.get(field) != order.get(field) for field in comparable_fields):
                 record["state"] = "conflict"
-                record["conflictReason"] = "divergent_order_revisions_with_equal_source_time"
-        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
-        self._reconcile(record)
-        await self._store.set(key, record)
-        return record
+                record["conflictReason"] = "order_revision_id_reused_with_divergent_evidence"
+
+            prior = record.get("order")
+            if not prior:
+                record["order"] = order
+            elif prior.get("providerOrderId") != order["providerOrderId"]:
+                record["state"] = "conflict"
+                record["conflictReason"] = "reference_maps_to_multiple_orders"
+            elif prior.get("revisionId") != order["revisionId"]:
+                # Compare instants, not strings: equivalent ISO-8601 values with
+                # different offsets do not sort chronologically as text.
+                prior_revision_at = _time_key(prior.get("sourceRevisionAt"))
+                next_revision_at = _time_key(order.get("sourceRevisionAt"))
+                if next_revision_at > prior_revision_at:
+                    record["order"] = order
+                elif next_revision_at == prior_revision_at:
+                    record["state"] = "conflict"
+                    record["conflictReason"] = "divergent_order_revisions_with_equal_source_time"
+            record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
+            self._reconcile(record)
+            return record
+
+        return await update_atomically(self._store, key, _apply)
 
     async def record_payment(
         self,
@@ -114,6 +131,15 @@ class CommerceOrderPaymentLedger:
         currency: str,
         status: str,
         occurred_at: str,
+        payment_rail: str | None = None,
+        flow_type: str | None = None,
+        source_amount: str | None = None,
+        source_asset: str | None = None,
+        source_chain: str | None = None,
+        destination_amount: str | None = None,
+        destination_asset: str | None = None,
+        destination_chain: str | None = None,
+        tx_hash: str | None = None,
     ) -> dict[str, Any]:
         """Record a provider payment only when its payload explicitly supplies
         the commerce reference. Callers must enforce their provider signature
@@ -122,7 +148,7 @@ class CommerceOrderPaymentLedger:
         ref = _required(commerce_order_ref, "commerce_order_ref")
         payment_id = _required(provider_payment_id, "provider_payment_id")
         payment_provider = _required(provider, "provider").lower()
-        payment = {
+        payment: dict[str, Any] = {
             "provider": payment_provider,
             "providerPaymentId": payment_id,
             "amount": _decimal_text(amount),
@@ -131,47 +157,105 @@ class CommerceOrderPaymentLedger:
             "occurredAt": occurred_at,
             "observedAt": utc_now().isoformat(),
         }
-        key = _key(tenant_id, ref)
-        record = await self._store.get(key) or {
-            "tenantId": tenant_id,
-            "commerceOrderRef": ref,
-            "payments": {},
-            "createdAt": occurred_at,
-        }
-        # Provider IDs are unique only inside their provider's namespace.
-        # Include the provider in the key so equal IDs from distinct rails are
-        # retained as two payment observations rather than overwriting one.
-        payment_key = f"{payment_provider}:{payment_id}"
-        payments = record.setdefault("payments", {})
-        observations = record.setdefault("paymentObservations", [])
-        if not isinstance(observations, list):
-            observations = record["paymentObservations"] = []
-        if not observations:
-            observations.extend(
-                row.copy() for row in payments.values() if isinstance(row, dict)
-            )
-        prior_payment = payments.get(payment_key)
-        if prior_payment is None:
-            payments[payment_key] = payment
-            observations.append(payment.copy())
-        elif any(
-            prior_payment.get(field) != payment.get(field)
-            for field in ("provider", "providerPaymentId", "amount", "currency", "status")
+        from connectors.integrations.providers.payment_rails.models import (
+            FUNDING_FLOW_TYPES,
+            PAYMENT_RAIL_VALUES,
+        )
+
+        if payment_rail is not None:
+            rail = _required(payment_rail, "payment_rail")
+            if rail not in PAYMENT_RAIL_VALUES:
+                raise ValueError("payment_rail must use the canonical payment-rail vocabulary")
+            payment["paymentRail"] = rail
+        if flow_type is not None:
+            flow = _required(flow_type, "flow_type")
+            if flow not in FUNDING_FLOW_TYPES:
+                raise ValueError("flow_type must use the canonical funding-flow vocabulary")
+            payment["flowType"] = flow
+
+        for field_name, value in (
+            ("sourceAmount", source_amount),
+            ("destinationAmount", destination_amount),
         ):
-            record["state"] = "conflict"
-            record["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
-            if not any(
-                all(prior.get(field) == payment.get(field) for field in (
-                    "provider", "providerPaymentId", "amount", "currency", "status", "occurredAt"
-                ))
-                for prior in observations
-                if isinstance(prior, dict)
-            ):
+            if value is not None:
+                payment[field_name] = _decimal_text(value)
+        for field_name, value in (
+            ("sourceAsset", source_asset),
+            ("sourceChain", source_chain),
+            ("destinationAsset", destination_asset),
+            ("destinationChain", destination_chain),
+            ("txHash", tx_hash),
+        ):
+            if value is not None:
+                payment[field_name] = _required(value, field_name)
+
+        key = _key(tenant_id, ref)
+        def _apply(existing: dict | None) -> dict[str, Any]:
+            record = existing or {
+                "tenantId": tenant_id,
+                "commerceOrderRef": ref,
+                "payments": {},
+                "createdAt": occurred_at,
+            }
+            # Provider IDs are unique only inside their provider's namespace.
+            # Include the provider in the key so equal IDs from distinct rails are
+            # retained as two payment observations rather than overwriting one.
+            payment_key = f"{payment_provider}:{payment_id}"
+            payments = record.setdefault("payments", {})
+            observations = record.setdefault("paymentObservations", [])
+            if not isinstance(observations, list):
+                observations = record["paymentObservations"] = []
+            if not observations:
+                observations.extend(
+                    row.copy() for row in payments.values() if isinstance(row, dict)
+                )
+            prior_payment = payments.get(payment_key)
+            if prior_payment is None:
+                payments[payment_key] = payment
                 observations.append(payment.copy())
-        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
-        self._reconcile(record)
-        await self._store.set(key, record)
-        return record
+            elif any(
+                prior_payment.get(field) != payment.get(field)
+                for field in ("provider", "providerPaymentId", "amount", "currency", "status")
+            ) or any(
+                prior_payment.get(field) is not None
+                and payment.get(field) is not None
+                and prior_payment.get(field) != payment.get(field)
+                for field in _PAYMENT_SOURCE_DETAIL_FIELDS
+            ):
+                record["state"] = "conflict"
+                record["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
+                if not any(
+                    all(prior.get(field) == payment.get(field) for field in (
+                        "provider", "providerPaymentId", "amount", "currency", "status", "occurredAt"
+                    ))
+                    and all(
+                        prior.get(field) == payment.get(field)
+                        for field in _PAYMENT_SOURCE_DETAIL_FIELDS
+                        if payment.get(field) is not None
+                    )
+                    for prior in observations
+                    if isinstance(prior, dict)
+                ):
+                    observations.append(payment.copy())
+            else:
+                # Later exact provider evidence may add source-native payment
+                # details. Preserve the earlier observation and expose enrichment
+                # only from its own observation time onward.
+                merged_payment = dict(prior_payment)
+                enriched = False
+                for field in _PAYMENT_SOURCE_DETAIL_FIELDS:
+                    if merged_payment.get(field) is None and payment.get(field) is not None:
+                        merged_payment[field] = payment[field]
+                        enriched = True
+                if enriched:
+                    merged_payment["observedAt"] = payment["observedAt"]
+                    payments[payment_key] = merged_payment
+                    observations.append(merged_payment.copy())
+            record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
+            self._reconcile(record)
+            return record
+
+        return await update_atomically(self._store, key, _apply)
 
     async def record_adjustment(
         self,
@@ -205,40 +289,42 @@ class CommerceOrderPaymentLedger:
             "observedAt": utc_now().isoformat(),
         }
         key = _key(tenant_id, ref)
-        record = await self._store.get(key) or {
-            "tenantId": tenant_id,
-            "commerceOrderRef": ref,
-            "payments": {},
-            "createdAt": occurred_at,
-        }
-        adjustments = record.setdefault("adjustments", {})
-        observations = record.setdefault("adjustmentObservations", [])
-        adjustment_key = f"{adjustment['provider']}:{adjustment['adjustmentId']}"
-        prior = adjustments.get(adjustment_key)
-        if prior is None:
-            adjustments[adjustment_key] = adjustment
-            observations.append(adjustment.copy())
-        elif any(
-            prior.get(field) != adjustment.get(field)
-            for field in (
-                "provider", "adjustmentId", "adjustmentType", "reversesPaymentId",
-                "amount", "currency", "occurredAt",
-            )
-        ):
-            record["state"] = "conflict"
-            record["conflictReason"] = "provider_adjustment_id_reused_with_divergent_evidence"
-            if not any(
-                all(row.get(field) == adjustment.get(field) for field in (
+        def _apply(existing: dict | None) -> dict[str, Any]:
+            record = existing or {
+                "tenantId": tenant_id,
+                "commerceOrderRef": ref,
+                "payments": {},
+                "createdAt": occurred_at,
+            }
+            adjustments = record.setdefault("adjustments", {})
+            observations = record.setdefault("adjustmentObservations", [])
+            adjustment_key = f"{adjustment['provider']}:{adjustment['adjustmentId']}"
+            prior = adjustments.get(adjustment_key)
+            if prior is None:
+                adjustments[adjustment_key] = adjustment
+                observations.append(adjustment.copy())
+            elif any(
+                prior.get(field) != adjustment.get(field)
+                for field in (
                     "provider", "adjustmentId", "adjustmentType", "reversesPaymentId",
                     "amount", "currency", "occurredAt",
-                ))
-                for row in observations
-                if isinstance(row, dict)
+                )
             ):
-                observations.append(adjustment.copy())
-        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
-        await self._store.set(key, record)
-        return record
+                record["state"] = "conflict"
+                record["conflictReason"] = "provider_adjustment_id_reused_with_divergent_evidence"
+                if not any(
+                    all(row.get(field) == adjustment.get(field) for field in (
+                        "provider", "adjustmentId", "adjustmentType", "reversesPaymentId",
+                        "amount", "currency", "occurredAt",
+                    ))
+                    for row in observations
+                    if isinstance(row, dict)
+                ):
+                    observations.append(adjustment.copy())
+            record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
+            return record
+
+        return await update_atomically(self._store, key, _apply)
 
     async def record_settlement(
         self,
@@ -293,44 +379,46 @@ class CommerceOrderPaymentLedger:
             raise ValueError("settlement amount must not be negative")
 
         key = _key(tenant_id, ref)
-        record = await self._store.get(key) or {
-            "tenantId": tenant_id,
-            "commerceOrderRef": ref,
-            "payments": {},
-            "createdAt": occurred_at,
-        }
-        settlements = record.get("settlements")
-        if not isinstance(settlements, dict):
-            settlements = record["settlements"] = {}
-        observations = record.get("settlementObservations")
-        if not isinstance(observations, list):
-            observations = record["settlementObservations"] = []
-        if not observations:
-            observations.extend(
-                row.copy() for row in settlements.values() if isinstance(row, dict)
+        def _apply(existing: dict | None) -> dict[str, Any]:
+            record = existing or {
+                "tenantId": tenant_id,
+                "commerceOrderRef": ref,
+                "payments": {},
+                "createdAt": occurred_at,
+            }
+            settlements = record.get("settlements")
+            if not isinstance(settlements, dict):
+                settlements = record["settlements"] = {}
+            observations = record.get("settlementObservations")
+            if not isinstance(observations, list):
+                observations = record["settlementObservations"] = []
+            if not observations:
+                observations.extend(
+                    row.copy() for row in settlements.values() if isinstance(row, dict)
+                )
+            settlement_key = f"{settlement_provider}:{settlement['providerSettlementId']}"
+            prior = settlements.get(settlement_key)
+            compared_fields = (
+                "provider", "providerSettlementId", "status", "amount", "currency",
+                "settlesPaymentRefs", "occurredAt",
             )
-        settlement_key = f"{settlement_provider}:{settlement['providerSettlementId']}"
-        prior = settlements.get(settlement_key)
-        compared_fields = (
-            "provider", "providerSettlementId", "status", "amount", "currency",
-            "settlesPaymentRefs", "occurredAt",
-        )
-        if prior is None:
-            settlements[settlement_key] = settlement
-            observations.append(settlement.copy())
-        elif any(prior.get(field) != settlement.get(field) for field in compared_fields):
-            record["state"] = "conflict"
-            record["conflictReason"] = "provider_settlement_id_reused_with_divergent_evidence"
-            if not any(
-                all(row.get(field) == settlement.get(field) for field in compared_fields)
-                for row in observations
-                if isinstance(row, dict)
-            ):
+            if prior is None:
+                settlements[settlement_key] = settlement
                 observations.append(settlement.copy())
-        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
-        self._reconcile(record)
-        await self._store.set(key, record)
-        return record
+            elif any(prior.get(field) != settlement.get(field) for field in compared_fields):
+                record["state"] = "conflict"
+                record["conflictReason"] = "provider_settlement_id_reused_with_divergent_evidence"
+                if not any(
+                    all(row.get(field) == settlement.get(field) for field in compared_fields)
+                    for row in observations
+                    if isinstance(row, dict)
+                ):
+                    observations.append(settlement.copy())
+            record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
+            self._reconcile(record)
+            return record
+
+        return await update_atomically(self._store, key, _apply)
 
     async def get(self, tenant_id: str, commerce_order_ref: str) -> dict[str, Any] | None:
         ref = _required(commerce_order_ref, "commerce_order_ref")
@@ -422,6 +510,12 @@ class CommerceOrderPaymentLedger:
                 "provider", "providerPaymentId", "amount", "currency", "status"
             )) for row in group}) > 1
             for group in payment_groups.values()
+        ):
+            snapshot["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
+        if any(
+            len({row.get(field) for row in group if row.get(field) is not None}) > 1
+            for group in payment_groups.values()
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS
         ):
             snapshot["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
         snapshot["paymentObservations"] = known_payments
@@ -550,9 +644,10 @@ def _currency(value: str) -> str:
     return currency
 
 
-def _time_key(value: Any) -> str:
+def _time_key(value: Any) -> float:
+    """Epoch seconds, so offsets compare as instants (unparseable sorts first)."""
     parsed = coerce_utc_lenient(value)
-    return parsed.isoformat() if parsed is not None else ""
+    return parsed.timestamp() if parsed is not None else float("-inf")
 
 
 def _settlement_fingerprint(row: dict[str, Any]) -> tuple[Any, ...]:

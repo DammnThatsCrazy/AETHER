@@ -21,6 +21,7 @@ from config.settings import WorkerType
 from models.core import AgentTask, TaskResult
 
 from workers.base import BaseWorker
+from workers.outbound import UnsafeDestinationError, fetch_public, resolve_public_addresses
 
 logger = logging.getLogger("aether.worker.api_scanner")
 
@@ -109,6 +110,16 @@ class ApiScannerWorker(BaseWorker):
         )
 
         base_url = f"https://{domain}"
+        try:
+            resolve_public_addresses(base_url)
+        except UnsafeDestinationError as exc:
+            return TaskResult(
+                task_id=task.task_id,
+                worker_type=self.worker_type,
+                success=False,
+                error=f"Target is not a public internet address: {exc}",
+                confidence=0.0,
+            )
         endpoints: list[dict[str, Any]] = []
         total_probed = 0
         successful_probes = 0
@@ -117,7 +128,6 @@ class ApiScannerWorker(BaseWorker):
         client = httpx.Client(
             base_url=base_url,
             timeout=_PROBE_TIMEOUT,
-            follow_redirects=True,
             headers={"User-Agent": _USER_AGENT},
         )
 
@@ -201,8 +211,8 @@ class ApiScannerWorker(BaseWorker):
         server responds (any status), or None if the request fails entirely.
         """
         try:
-            resp = client.get(path)
-        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            resp, _ = fetch_public(client, str(client.base_url.join(path)))
+        except (httpx.TimeoutException, httpx.RequestError, UnsafeDestinationError) as exc:
             logger.debug(f"Probe failed for {path}: {exc}")
             return None
 
@@ -291,7 +301,7 @@ class ApiScannerWorker(BaseWorker):
 
         for ep in docs_endpoints:
             try:
-                resp = client.get(ep["path"])
+                resp, _ = fetch_public(client, str(client.base_url.join(ep["path"])))
                 if resp.status_code != 200:
                     continue
 
@@ -305,7 +315,7 @@ class ApiScannerWorker(BaseWorker):
                     candidate = "/" + match.group(1).strip("/")
                     if len(candidate) < 100:  # sanity check
                         additional_paths.append(candidate)
-            except (httpx.TimeoutException, httpx.RequestError):
+            except (httpx.TimeoutException, httpx.RequestError, UnsafeDestinationError):
                 continue
 
         # Deduplicate

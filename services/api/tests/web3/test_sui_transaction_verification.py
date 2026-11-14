@@ -73,6 +73,35 @@ def test_verification_record_ids_preserve_case_sensitive_base58_digests():
 
 
 @pytest.mark.asyncio
+async def test_sui_verification_rejects_case_changed_base58_digest():
+    chains = await _registered_sui_chain()
+    alpha_index = next(index for index, char in enumerate(SUI_DIGEST) if char.isalpha())
+    changed_case_digest = (
+        SUI_DIGEST[:alpha_index]
+        + SUI_DIGEST[alpha_index].swapcase()
+        + SUI_DIGEST[alpha_index + 1 :]
+    )
+    verifier = SDKTransactionVerifier(
+        rpc=FakeSuiRPC({
+            "chain_identifier": MAINNET_CHAIN_IDENTIFIER,
+            "transaction": _transaction(digest=changed_case_digest),
+        }),
+        chains=chains,
+    )
+
+    result = await verifier.verify(
+        tenant_id="tenant-a",
+        chain_id="sui:mainnet",
+        transaction_hash=SUI_DIGEST,
+        vm_family="movevm",
+        source_observation={},
+    )
+
+    assert result.status == "mismatch"
+    assert result.evidence["mismatch"] == "transaction_digest"
+
+
+@pytest.mark.asyncio
 async def test_verifies_sui_graphql_evidence_without_promoting_settlement():
     chains = await _registered_sui_chain()
     rpc = FakeSuiRPC({

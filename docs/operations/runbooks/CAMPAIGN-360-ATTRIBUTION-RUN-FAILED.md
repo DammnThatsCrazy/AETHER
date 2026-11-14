@@ -10,10 +10,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
 source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/measurement/repositories/attribution_run_repo.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/traffic/repair.py]
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR attribution repository diff: bounded credit reads and exact active journey-run joins were added; run creation, failure status, and this recovery procedure are unchanged."
 source_hashes:
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
   "services/api/journeys/measurement/engine/attribution_engine.py": "sha256:f933e4895eeb931f50757a1789081f6a4bc92461bd1de3ece2424b1d918cc0d9"
-  "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:5c5a1edbacb8ebe97e641b0a577eab924a1a0ca5b76e75967711bd88e8ae46dd"
+  "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:56ebf7f346abbd3d9edd84908563baed5baf8967fd8ae4294c2fa0b32ce7c27c"
   "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
 ---
 

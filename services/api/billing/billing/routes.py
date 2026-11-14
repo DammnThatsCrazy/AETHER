@@ -28,7 +28,7 @@ from shared.billing import stripe_client, stripe_repository
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
-from governance.security.request_context import require_kyber_operator
+from governance.security.request_context import require_kyber_operator, require_platform_operator
 
 logger = get_logger("aether.service.billing")
 
@@ -209,6 +209,7 @@ class OverageCycleRequest(BaseModel):
 async def trigger_overage_cycle(body: OverageCycleRequest, request: Request):
     """Manually trigger the overage invoice cycle (admin only)."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     from billing.billing.cycle import run_overage_cycle
     summary = await run_overage_cycle(billing_period=body.billing_period)
     return APIResponse(data=summary).to_dict()
@@ -317,6 +318,18 @@ async def get_billing_usage_summary(request: Request, start: Optional[str] = Non
     return APIResponse(data=summary).to_dict()
 
 
+@router.get("/usage/access-reconciliation")
+async def get_access_kit_reconciliation(request: Request, start: Optional[str] = None, end: Optional[str] = None):
+    """Read-only audit-versus-usage comparison for the tenant's Access Kit calls."""
+    tenant = _require_tenant(request)
+    tenant.require_permission("admin")
+    start, end = (start, end) if start and end else _current_billing_window()
+    from billing.billing.access_reconciliation import reconcile_access_interactions
+
+    report = await reconcile_access_interactions(tenant.tenant_id, start, end)
+    return APIResponse(data=report).to_dict()
+
+
 @router.get("/invoice-previews")
 async def list_invoice_previews(request: Request):
     tenant = _require_tenant(request)
@@ -328,11 +341,12 @@ async def list_invoice_previews(request: Request):
 async def list_value_created(request: Request, start: Optional[str] = None, end: Optional[str] = None):
     tenant = _require_tenant(request)
     if start and end:
-        values = await _value_events.list_for_tenant_period(tenant.tenant_id, start, end)
+        values, truncated = await _value_events.list_for_tenant_period(tenant.tenant_id, start, end)
     else:
         values = await _value_events.find_many(filters={"tenant_id": tenant.tenant_id}, limit=100)
+        truncated = len(values) >= 100
     customer_safe = [{k: v.get(k) for k in ("value_event_id", "tenant_id", "source_type", "source_id", "value_type", "value_amount", "currency", "confidence", "attribution_notes", "occurred_at")} for v in values]
-    return APIResponse(data={"tenant_id": tenant.tenant_id, "items": customer_safe, "count": len(customer_safe)}).to_dict()
+    return APIResponse(data={"tenant_id": tenant.tenant_id, "items": customer_safe, "count": len(customer_safe), "truncated": truncated}).to_dict()
 
 
 @kyber_revops_router.get("/overview")

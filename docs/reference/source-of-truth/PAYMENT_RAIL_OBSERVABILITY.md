@@ -6,7 +6,25 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/payment-rails.ts, services/api/connectors/integrations/providers/payment_rails/base.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/connectors/integrations/providers/payment_rails/repository.py, services/api/connectors/integrations/providers/payment_rails/reconciliation.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/routes.py, services/api/connectors/integrations/providers/payment_rails/sync_worker.py]
+source_files:
+  - packages/shared/payment-rails.ts
+  - services/api/connectors/integrations/providers/payment_rails/models.py
+  - services/api/connectors/integrations/providers/payment_rails/base.py
+  - services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py
+  - services/api/connectors/integrations/providers/payment_rails/repository.py
+  - services/api/connectors/integrations/providers/payment_rails/reconciliation.py
+  - services/api/connectors/integrations/providers/payment_rails/service.py
+  - services/api/connectors/integrations/providers/payment_rails/routes.py
+  - services/api/connectors/integrations/providers/payment_rails/sync_worker.py
+  - services/api/connectors/integrations/providers/payment_rails/kyber_contract.py
+  - services/api/connectors/integrations/providers/payment_rails/kyber_aggregate.py
+  - services/api/connectors/providers/credentials/operator_view.py
+  - services/api/tests/payment_rails/test_kyber_contract.py
+  - apps/kyber-web/src/types/payment-rails.ts
+  - apps/kyber-web/src/pages/payment-rails/payment-rails-page.tsx
+  - apps/aether-web/src/features/payment-rails/api.ts
+  - apps/aether-web/src/pages/payment-rails/payment-rails-page.tsx
+  - apps/aether-web/src/pages/payment-rails/payment-rails-shared.tsx
 last_synced_commit: HEAD
 ---
 
@@ -71,9 +89,13 @@ Shared contract `packages/shared/payment-rails.ts`, Pydantic mirrors in
   `sdk_only → stale` transition is produced only by the periodic sync worker
   (below) — provider-driven reconciliation always has a provider view and can
   never yield it, so without the worker an unconfirmed session would never age.
-- **PaymentRailHealth** — per-provider configured/enabled state, webhook
+- **PaymentRailHealth** — per-provider configured/enabled state,
+  `observation_status` (`observed|never_observed|not_configured`), webhook
   verified/rejected 24h, session counts, reconciliation matched rate,
-  conflicts, `healthy|degraded|not_configured|error`.
+  conflicts, `healthy|degraded|not_configured|error|unknown`. A configured
+  provider with no observed webhook, session, reconciliation, or successful
+  poll is `never_observed` and `unknown` — never `healthy` with fabricated
+  zero counts. A rejected webhook without any accepted signal is `error`.
 
 ## Canonical events
 
@@ -95,6 +117,21 @@ preserves the exact opaque reference and the tenant commerce ledger checks it
 against the Shopify order reference. No reference is inferred from amount,
 time, or customer fields. Live endpoint certification and merchant-side
 metadata configuration remain required.
+
+Completed payment evidence is copied into the existing tenant-scoped commerce
+ledger only when a supported flow supplies an explicit commerce order reference
+and its source amount/currency. Stripe PaymentIntent rails use a single explicit
+`payment_method_types` value when available; ambiguous or unrecognized method
+types remain `stripe`. Stripe crypto-onramp sessions join only when their
+metadata supplies `aether_order_ref` or `commerce_order_ref` and the source
+amount and three-letter source currency are valid. The ledger preserves the
+explicit rail, flow, native source/destination amount, asset, chain, and
+transaction hash as time-bounded observations. It does not copy wallet
+addresses. Value360 classifies Web2 only from explicit supported card, ACH,
+wire, SEPA, or bank-transfer rails; Web3 classification requires an explicit
+crypto flow or on-chain rail, a complete source or destination native-asset leg,
+and an exact transaction-hash evidence reference. These are separate observed
+facts, not totals, wallet attribution, or currency-normalized value.
 
 ## Background sync worker
 
@@ -170,13 +207,22 @@ totals; mixed currencies are never summed into one scalar).
 
 ## Frontend
 
-- Aether `/payment-rails`: provider health cards, funding sessions table with
-  provider/status/reconciliation filters, session detail drawer with
-  attribution + reconciliation discrepancies, sync action, not-configured/
-  empty/error/flag-off states, and the copy "Aether observes payment rails —
+- Aether `/payment-rails`: provider health cards with observed/never-observed/
+  not-configured truth, funding sessions table with provider/status/
+  reconciliation filters, session detail drawer with attribution +
+  reconciliation discrepancies, sync action, not-configured/empty/error/
+  flag-off states, and the copy "Aether observes payment rails —
   it does not execute or settle payments, or custody funds."
 - Kyber `/payment-rails` (flag `enablePaymentRails`): fleet health per
-  provider, tenant drill-down diagnostics.
+  provider and per tenant, tenant drill-down diagnostics. The fleet tables
+  distinguish **configured** tenants (every required credential slot active in
+  at least one environment) from **observed** tenants (durable webhook/session/
+  reconciliation/poll evidence). A configured tenant with no observation
+  evidence is `never_observed` with health `unknown`, never a healthy zero;
+  `not_configured` means no active credential coverage. When the cross-tenant
+  credential inventory cannot be read (`configuration_inventory_available:
+  false`), `configured_tenants` and `never_observed_tenants` are `null` and
+  surface as unknown, never `0`. Fleet contract version is `1.2.0`.
 
 ## Feature flags (default OFF)
 
@@ -187,15 +233,18 @@ totals; mixed currencies are never summed into one scalar).
 
 ## Testing
 
-`BE/tests/payment_rails/` — 41 tests: adapter registry (exactly five; unknown
-→ 404), status-map canonicality, HMAC verification, PII redaction, Privy
+`BE/tests/payment_rails/` covers adapter registry (exactly five; unknown →
+404), status-map canonicality, HMAC verification, PII redaction, Privy
 processor detail + deposit addresses, Coinbase partnerUserRef polling,
 MoonPay AML rejection + buy/sell + fee summation, Bridge masked virtual
 accounts + activity, canonical event implication + at-most-once emission,
 duplicate delivery, final-state non-regression, reconciliation states,
-tenant isolation, flag gating, Kyber operator permission, secret safety.
-Frontend: aether payment-rails tests (93-suite green), kyber component tests
-(115-suite green).
+tenant isolation, flag gating, Kyber operator permission, secret safety,
+configured-vs-observed coverage, required-slot and environment grouping,
+inactive credential states, inventory-unavailable unknowns, and inventory
+pagination. Frontend: Aether payment-rails unit tests and Kyber payment-rails
+component tests cover observed, never-observed, not-configured, and unknown
+states without fabricating zeros.
 
 ## Known limitations / non-goals
 

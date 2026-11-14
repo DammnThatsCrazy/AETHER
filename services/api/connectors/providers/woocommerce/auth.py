@@ -6,17 +6,13 @@ as HTTP Basic auth against the site's WooCommerce REST root. The tenant-supplied
 choke point: it is passed through :func:`validated_https_host
 <shared.security.ssrf.validated_https_host>` with an EMPTY allowlist (the
 program's WooCommerce exception), which returns the normalized public FQDN or
-``None``. Every outbound request in this plugin is built from the RESOLVED host
-with the API path pinned to ``/wp-json/wc/v3`` — a raw tenant value never
-reaches ``httpx``.
-
-.. warning::
-
-   The structural gate is INERT against DNS-rebinding names
-   (``169.254.169.254.nip.io``) and resolver-IP spellings. A resolver-level
-   check (resolve -> validate address -> no-rebinding) is REQUIRED at live-auth
-   time. This build implements only the structural gate and does NOT claim the
-   resolver-level defense.
+``None``. Every outbound request in this plugin is built from that host with
+the API path pinned to ``/wp-json/wc/v3`` — a raw tenant value never reaches
+``httpx`` — and is sent through :func:`send_public_request
+<shared.security.ssrf.send_public_request>`, which resolves the host, requires
+every address to be public, connects only to a validated address and follows
+no redirects. That resolver-level check closes the DNS-rebinding names
+(``169.254.169.254.nip.io``) the structural gate cannot see.
 
 No secret material is ever included in an error message or result ``detail``.
 The credential is read defensively because ``AcquisitionContext.credential`` may
@@ -26,6 +22,7 @@ be a plain dict, a ``StructuredCredential`` (revealed via
 
 from __future__ import annotations
 
+import base64
 from typing import Any, Optional
 
 from shared.credentials.types import to_plaintext_dict
@@ -35,7 +32,12 @@ from shared.integration_contracts.results import (
     AdapterStatus,
     RateLimitInfo,
 )
-from shared.security.ssrf import validated_https_host
+from shared.security.ssrf import (
+    DestinationResolutionError,
+    UnsafeDestinationError,
+    send_public_request,
+    validated_https_host,
+)
 
 REQUIRED_CREDENTIAL_FIELDS = ("consumer_key", "consumer_secret")
 # The WooCommerce REST API path is pinned in code — never tenant input.
@@ -102,11 +104,38 @@ def _missing_fields(context: AcquisitionContext) -> list[str]:
     ]
 
 
-def _http_client():
-    """Lazy httpx client factory (backend pattern). Tests patch this seam."""
-    import httpx
+async def _get(url: str, cred: dict[str, Any]):
+    """GET a pinned WooCommerce URL with Basic auth, reaching only a public address."""
+    token = base64.b64encode(f"{cred['consumer_key']}:{cred['consumer_secret']}".encode()).decode()
+    return await send_public_request(
+        "GET",
+        url,
+        headers={"Accept": "application/json", "Authorization": f"Basic {token}"},
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+        max_redirects=0,
+    )
 
-    return httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS)
+
+def _destination_refused(
+    exc: UnsafeDestinationError, latency_ms: Optional[float] = None
+) -> AdapterResult[Any]:
+    if isinstance(exc, DestinationResolutionError):
+        return AdapterResult(
+            success=False,
+            status=AdapterStatus.RETRYABLE_ERROR,
+            error_code="site_url_unresolved",
+            retryable=True,
+            latency_ms=latency_ms,
+            data={"detail": "site_url host could not be resolved"},
+        )
+    return AdapterResult(
+        success=False,
+        status=AdapterStatus.PERMANENT_ERROR,
+        error_code="site_url_not_public",
+        retryable=False,
+        latency_ms=latency_ms,
+        data={"detail": "site_url does not resolve to a public internet address"},
+    )
 
 
 def _safe_json(response) -> dict[str, Any]:
@@ -136,7 +165,8 @@ class WooCommerceAuthAdapter:
     ``validate_credentials`` is STRUCTURAL ONLY (no network): missing fields and
     a non-conforming ``site_url`` are permanent errors decided without a call. A
     bad host is never probed. ``test`` additionally performs a live ``GET`` of
-    the pinned REST root with HTTP Basic auth.
+    the pinned REST root with HTTP Basic auth, refusing a host that does not
+    resolve to public addresses only.
     """
 
     async def validate_credentials(self, context: AcquisitionContext) -> AdapterResult[Any]:
@@ -158,8 +188,7 @@ class WooCommerceAuthAdapter:
                 error_code="site_url_invalid",
                 retryable=False,
                 data={
-                    "detail": "site_url is not a valid public https host "
-                    "(structural gate; resolver-level check required at live-auth time)"
+                    "detail": "site_url is not a valid public https host"
                 },
             )
         return AdapterResult.ok({})
@@ -186,21 +215,15 @@ class WooCommerceAuthAdapter:
                 error_code="site_url_invalid",
                 retryable=False,
                 data={
-                    "detail": "site_url is not a valid public https host "
-                    "(structural gate; resolver-level check required at live-auth time)"
+                    "detail": "site_url is not a valid public https host"
                 },
             )
 
-        import httpx
-
         start = time.perf_counter()
         try:
-            async with _http_client() as client:
-                response = await client.get(
-                    base,
-                    headers={"Accept": "application/json"},
-                    auth=httpx.BasicAuth(cred["consumer_key"], cred["consumer_secret"]),
-                )
+            response = await _get(base, cred)
+        except UnsafeDestinationError as exc:
+            return _destination_refused(exc, (time.perf_counter() - start) * 1000.0)
         except Exception as exc:  # noqa: BLE001 - network failures are classified
             latency_ms = (time.perf_counter() - start) * 1000.0
             return AdapterResult(
@@ -264,6 +287,8 @@ __all__ = [
     "WooCommerceAuthAdapter",
     "_base_url",
     "_credential_dict",
+    "_get",
+    "_destination_refused",
     "_raw_site_url",
     "_site_host",
 ]

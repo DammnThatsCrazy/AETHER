@@ -50,6 +50,7 @@ from .repository import IdentityResolutionRepository
 from .resolver import IdentityResolutionService
 from .schemas import (
     ActivationStatusResponse,
+    IdentityEnvelope,
     AdminIdentityMergeRequest,
     AdminIdentityMergeResponse,
     AdminIdentityReviewQueueResponse,
@@ -99,7 +100,15 @@ def _get_identity_repo(
     cache: CacheClient = Depends(get_cache),
 ) -> IdentityRepository:
     global _identity_repo
-    if _identity_repo is None:
+    # Reuse the repository only while it wraps the injected graph and cache. In a
+    # running app those are process singletons, so this is one instance; when a
+    # caller injects different ones (tests, an app built with other dependencies)
+    # they must not be silently ignored in favor of whichever came first.
+    if (
+        _identity_repo is None
+        or getattr(_identity_repo, "graph", None) is not graph
+        or getattr(_identity_repo, "cache", None) is not cache
+    ):
         _identity_repo = IdentityRepository(graph, cache)
     return _identity_repo
 
@@ -135,7 +144,7 @@ def _get_resolution_repo() -> IdentityResolutionRepository:
 
 # ── Identity Resolution API ───────────────────────────────────────────────────
 
-@router.post("/resolve", response_model=IdentityResolveResponse)
+@router.post("/resolve", response_model=IdentityEnvelope[IdentityResolveResponse])
 async def resolve_identity(
     body: IdentityResolveRequest,
     request: Request,
@@ -365,7 +374,7 @@ async def list_conflicts(
     return APIResponse(data={"conflicts": conflicts, "total": len(conflicts)}).to_dict()
 
 
-@router.post("/merge", response_model=IdentityMergeResponse)
+@router.post("/merge", response_model=IdentityEnvelope[IdentityMergeResponse])
 async def merge_identities(
     body: IdentityMergeRequest,
     request: Request,
@@ -428,7 +437,7 @@ async def merge_identities(
     ).model_dump()).to_dict()
 
 
-@router.post("/split", response_model=IdentitySplitResponse)
+@router.post("/split", response_model=IdentityEnvelope[IdentitySplitResponse])
 async def split_identity(
     body: IdentitySplitRequest,
     request: Request,
@@ -484,7 +493,7 @@ async def split_identity(
     return APIResponse(data=IdentitySplitResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/split/preview", response_model=IdentitySplitPreviewResponse)
+@router.post("/split/preview", response_model=IdentityEnvelope[IdentitySplitPreviewResponse])
 async def preview_fragment_split(
     body: IdentitySplitPreviewRequest,
     request: Request,
@@ -516,7 +525,7 @@ async def preview_fragment_split(
     return APIResponse(data=IdentitySplitPreviewResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/split/execute", response_model=IdentityFragmentSplitResponse)
+@router.post("/split/execute", response_model=IdentityEnvelope[IdentityFragmentSplitResponse])
 async def execute_fragment_split(
     body: IdentityFragmentSplitRequest,
     request: Request,
@@ -588,7 +597,7 @@ async def execute_fragment_split(
     return APIResponse(data=IdentityFragmentSplitResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/recompute", response_model=IdentityRecomputeResponse)
+@router.post("/recompute", response_model=IdentityEnvelope[IdentityRecomputeResponse])
 async def recompute_identity(
     body: IdentityRecomputeRequest,
     request: Request,
@@ -610,7 +619,7 @@ async def recompute_identity(
     return APIResponse(data=IdentityRecomputeResponse(**result).model_dump()).to_dict()
 
 
-@router.post("/suppress", response_model=IdentitySuppressResponse)
+@router.post("/suppress", response_model=IdentityEnvelope[IdentitySuppressResponse])
 async def suppress_identifier(body: IdentitySuppressRequest, request: Request) -> dict:
     """
     Create a suppression rule blocking an identifier hash from being used in identity linking.
@@ -632,7 +641,7 @@ async def suppress_identifier(body: IdentitySuppressRequest, request: Request) -
     return APIResponse(data=IdentitySuppressResponse(**result).model_dump()).to_dict()
 
 
-@router.delete("/suppress/{suppression_id}", response_model=IdentityUnsuppressResponse)
+@router.delete("/suppress/{suppression_id}", response_model=IdentityEnvelope[IdentityUnsuppressResponse])
 async def unsuppress_identifier(suppression_id: str, request: Request) -> dict:
     """Revoke a suppression rule. Requires write permission."""
     tenant = request.state.tenant
@@ -764,7 +773,7 @@ async def get_decision_details(
 # ── Admin identity operations (PR 8 admin endpoints) ───────────────────────────
 
 
-@router_admin.post("/merge", response_model=AdminIdentityMergeResponse)
+@router_admin.post("/merge", response_model=IdentityEnvelope[AdminIdentityMergeResponse])
 async def admin_manual_merge(
     body: AdminIdentityMergeRequest,
     request: Request,
@@ -796,7 +805,7 @@ async def admin_manual_merge(
     return APIResponse(data=AdminIdentityMergeResponse(**result).model_dump()).to_dict()
 
 
-@router_admin.post("/split", response_model=AdminIdentitySplitResponse)
+@router_admin.post("/split", response_model=IdentityEnvelope[AdminIdentitySplitResponse])
 async def admin_manual_split(
     body: AdminIdentitySplitRequest,
     request: Request,
@@ -831,7 +840,7 @@ async def admin_manual_split(
     return APIResponse(data=AdminIdentitySplitResponse(**result).model_dump()).to_dict()
 
 
-@router_admin.post("/reconcile", response_model=AdminIdentityReconcileResponse)
+@router_admin.post("/reconcile", response_model=IdentityEnvelope[AdminIdentityReconcileResponse])
 async def admin_reconcile(
     body: AdminIdentityReconcileRequest,
     request: Request,
@@ -859,7 +868,7 @@ async def admin_reconcile(
     return APIResponse(data=AdminIdentityReconcileResponse(**result).model_dump()).to_dict()
 
 
-@router_admin.get("/review-queue", response_model=AdminIdentityReviewQueueResponse)
+@router_admin.get("/review-queue", response_model=IdentityEnvelope[AdminIdentityReviewQueueResponse])
 async def admin_review_queue(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
@@ -879,7 +888,7 @@ async def admin_review_queue(
     ).to_dict()
 
 
-@router_admin.get("/activation-status", response_model=ActivationStatusResponse)
+@router_admin.get("/activation-status", response_model=IdentityEnvelope[ActivationStatusResponse])
 async def admin_activation_status(
     request: Request,
     admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
@@ -1826,7 +1835,7 @@ async def admin_reject_conflict(
 # is the only tenant selector; these handlers never accept a tenant_id from the
 # URL or request body. The matching /v1/admin handlers above remain available
 # for operator integrations when that router is mounted separately.
-@router.get("/review-queue", response_model=AdminIdentityReviewQueueResponse)
+@router.get("/review-queue", response_model=IdentityEnvelope[AdminIdentityReviewQueueResponse])
 async def tenant_review_queue(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
@@ -1845,7 +1854,7 @@ async def tenant_review_queue(
     ).to_dict()
 
 
-@router.get("/activation-status", response_model=ActivationStatusResponse)
+@router.get("/activation-status", response_model=IdentityEnvelope[ActivationStatusResponse])
 async def tenant_activation_status(
     request: Request,
     admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
@@ -2000,7 +2009,7 @@ async def get_profile_graph(
     profile = await repo.get_profile(tenant.tenant_id, user_id)
     if not profile:
         raise NotFoundError("Profile")
-    connections = await repo.get_graph_neighbors(user_id)
+    connections = await repo.get_graph_neighbors(user_id, tenant.tenant_id)
     return APIResponse(data={"user_id": user_id, "connections": connections}).to_dict()
 
 
@@ -2107,6 +2116,7 @@ async def revoke_siwx_session(session_id: str, request: Request) -> dict:
 #   POST /v1/identity/verification/wallet/challenges
 #   POST /v1/identity/verification/wallet/challenges/{challenge_id}/verify
 #   GET  /v1/identity/entities/{canonical_entity_id}/evidence   (redacted)
+#   POST /v1/identity/evidence/{evidence_id}/replay
 #   POST /v1/identity/evidence/{evidence_id}/revoke
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -2163,6 +2173,42 @@ async def _require_identity_link_consent(tenant_id: str, anonymous_id: str) -> d
     if not allowed or not context:
         raise BadRequestError("Identity-link consent is required")
     return context
+
+
+async def _wallet_identity_namespace(
+    tenant: Any, requested_app: Optional[str]
+) -> str:
+    """Resolve the SDK identity namespace from authenticated app bindings."""
+    tenant_id = str(getattr(tenant, "tenant_id", "") or "").strip()
+    site_ids = getattr(tenant, "site_ids", None)
+    supplied = str(requested_app or "").strip()
+    if site_ids is None:
+        # Tenant-wide secret keys may select a registered app, but the app ID
+        # is only a selector: tenant ownership and active lifecycle are checked
+        # against the server-owned site registry before it becomes identity
+        # scope. A missing selector retains the SDK's tenant-wide namespace.
+        if supplied:
+            from ingestion.sdk_distribution.sites import (
+                STATUS_ACTIVE,
+                SDKSiteRepository,
+            )
+
+            site = await SDKSiteRepository().get(tenant_id, supplied)
+            if not site or site.get("status") != STATUS_ACTIVE:
+                raise BadRequestError("Wallet proof app scope is not authorized")
+            return f"site:{supplied}"
+        if not tenant_id:
+            raise BadRequestError("Wallet proof app scope is unavailable")
+        return f"tenant:{tenant_id}"
+
+    allowed = {str(site).strip() for site in site_ids if str(site).strip()}
+    if supplied:
+        if supplied not in allowed:
+            raise BadRequestError("Wallet proof app scope is not authorized")
+        return f"site:{supplied}"
+    if len(allowed) == 1:
+        return f"site:{next(iter(allowed))}"
+    raise BadRequestError("Wallet proof app scope is required")
 
 
 # ── Request models ─────────────────────────────────────────────────────────
@@ -2281,12 +2327,16 @@ async def issue_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
+    identity_namespace = await _wallet_identity_namespace(
+        tenant, body.tenant_app_key
+    )
     try:
         result = await _get_wallet_verification_service().issue_wallet_challenge(
             tenant_id=tenant.tenant_id,
             anonymous_id=body.anonymous_id,
             wallet_address=body.wallet_address,
             chain_namespace=body.chain_namespace,
+            identity_namespace=identity_namespace,
             consent_snapshot=consent_context,
         )
     except ValueError as exc:
@@ -2310,6 +2360,9 @@ async def verify_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
+    identity_namespace = await _wallet_identity_namespace(
+        tenant, body.tenant_app_key
+    )
     if body.challenge_id != challenge_id:
         raise BadRequestError("Wallet proof challenge does not match the request")
     try:
@@ -2320,6 +2373,7 @@ async def verify_wallet_verification_challenge(
             wallet_address=body.wallet_address,
             chain_namespace=body.chain_namespace,
             signature=body.signature,
+            identity_namespace=identity_namespace,
             consent_snapshot=consent_context,
         )
     except ValueError as exc:
@@ -2361,6 +2415,45 @@ async def list_entity_verification_evidence(
         "canonical_entity_id": canonical_entity_id,
         "evidence": rows,
         "total": len(rows),
+    }).to_dict()
+
+
+@router.post("/evidence/{evidence_id}/replay")
+async def replay_verification_evidence(
+    evidence_id: str,
+    request: Request,
+) -> dict:
+    """Retry resolution from durable evidence without resupplying the subject."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from config.settings import settings
+
+    if not settings.identity_continuity.resolution_enabled:
+        raise NotFoundError("Identity resolution is not enabled")
+    result = await _get_evidence_service().retry_evidence_replay(
+        tenant.tenant_id, evidence_id
+    )
+    if result.get("status") == "not_found":
+        raise NotFoundError("VerificationEvidence")
+    status = result.get("status")
+    decision = str(result.get("decision") or "").lower()
+    accepted_decision = decision in {"create", "link", "merge"}
+    if status == "reverification_required":
+        error_code = "wallet_evidence_reverification_required"
+    elif status == "expired_evidence":
+        error_code = "verification_evidence_expired"
+    elif status == "error":
+        error_code = "evidence_replay_failed"
+    else:
+        error_code = None
+    return APIResponse(data={
+        "evidence_id": evidence_id,
+        "status": status,
+        "decision": decision or None,
+        "canonical_entity_id": (
+            result.get("canonical_entity_id") if accepted_decision else None
+        ),
+        "error_code": error_code,
     }).to_dict()
 
 

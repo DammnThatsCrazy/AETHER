@@ -40,6 +40,13 @@ async def storage_lifecycle_retention_pass() -> Optional[dict]:
     return await StorageLifecycle().apply_retention_sweep()
 
 
+async def support_case_retention_pass() -> int:
+    """Hard-delete expired support cases and their cascading event evidence."""
+    from journeys.support360.cases import SupportCaseRepository
+
+    return await SupportCaseRepository().purge_expired()
+
+
 async def retention_sweep_loop(interval_hours: int = _INTERVAL_HOURS) -> None:
     """Background task: run retention sweep on a daily schedule."""
     logger.info(f"Retention sweep worker started: interval={interval_hours}h")
@@ -49,6 +56,12 @@ async def retention_sweep_loop(interval_hours: int = _INTERVAL_HOURS) -> None:
             logger.info(f"Retention sweep complete: {summary}")
         except Exception as e:
             logger.error(f"Retention sweep failed: {e}")
+            metrics.increment("retention_sweep_loop_error")
+        try:
+            purged_cases = await support_case_retention_pass()
+            logger.info(f"Support case retention complete: purged={purged_cases}")
+        except Exception as e:
+            logger.error(f"Support case retention failed: {e}")
             metrics.increment("retention_sweep_loop_error")
         try:
             lifecycle_report = await storage_lifecycle_retention_pass()

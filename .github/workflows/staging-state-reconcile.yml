@@ -1226,6 +1226,38 @@ jobs:
             fi
             terraform state list >"$state_list_file"
           fi
+          # A staging Amplify branch can exist live (Amplify creates it with the
+          # app's connected branch) without a Terraform owner, which makes the
+          # reviewed apply fail with "branch staging already exists". Import
+          # each such branch at its canonical address; this changes no AWS
+          # resource and is skipped when the branch is absent or already owned.
+          while IFS= read -r app_address; do
+            app_key="$(printf '%s' "$app_address" | sed -nE 's/.*aws_amplify_app\.frontend\["([^"]+)"\]$/\1/p')"
+            test -n "$app_key" || continue
+            branch_address="${app_address%aws_amplify_app.frontend*}aws_amplify_branch.main[\"${app_key}\"]"
+            if grep -Fxq "$branch_address" "$state_list_file"; then
+              continue
+            fi
+            app_id="$(terraform state show -no-color "$app_address" \
+              | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+            test -n "$app_id" || { echo "::error::could not resolve Amplify app ID for ${app_key}"; exit 1; }
+            # Only NotFoundException means "no live branch to import"; any other
+            # error (AccessDenied, throttling) must fail the reconcile, or the
+            # next apply hits "branch staging already exists" with no clue why.
+            if aws amplify get-branch --app-id "$app_id" --branch-name staging \
+              >/dev/null 2>"$RUNNER_TEMP/amplify-get-branch.err"; then
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$branch_address" "${app_id}/staging"
+              echo "Imported live Amplify branch ${app_id}/staging at ${branch_address}; no AWS resource was modified."
+            elif ! grep -q "NotFoundException" "$RUNNER_TEMP/amplify-get-branch.err"; then
+              cat "$RUNNER_TEMP/amplify-get-branch.err" >&2
+              echo "::error::could not determine whether Amplify branch ${app_id}/staging exists"
+              exit 1
+            fi
+          done < <(grep -E 'aws_amplify_app\.frontend\["[^"]+"\]$' "$state_list_file")
+          terraform state list >"$state_list_file"
           if [ -n "$ECR_REPOSITORY_NAMES" ]; then
             normalize_repositories() {
               printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -

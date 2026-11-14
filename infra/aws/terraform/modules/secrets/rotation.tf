@@ -20,10 +20,10 @@
 # ============================================================================
 
 # --------------------------------------------------------------------------
-# Companion secrets for zero-downtime rotation
-# The Lambda writes the current AWSCURRENT value here in the setSecret phase
-# so the backend can still validate tokens/keys signed with the old secret
-# during the window between rotation and the next ECS deployment.
+# Companion secrets for zero-downtime rotation.
+# The Lambda copies JWT/BYOK values in its setSecret phase. The identity
+# verification previous key is operator-updated during manual key rotation so
+# encrypted evidence remains readable across ECS deployments.
 # --------------------------------------------------------------------------
 
 resource "aws_secretsmanager_secret" "jwt_secret_previous" {
@@ -46,6 +46,18 @@ resource "aws_secretsmanager_secret" "byok_key_previous" {
 
   tags = {
     Name        = "aether/byok-encryption-key-previous"
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret" "identity_verification_token_key_previous" {
+  name                    = "aether/identity-verification-token-key-previous"
+  description             = "Previous identity verification key — retain while evidence still uses it"
+  kms_key_id              = aws_kms_key.secrets.arn
+  recovery_window_in_days = 7
+
+  tags = {
+    Name        = "aether/identity-verification-token-key-previous"
     Environment = var.environment
   }
 }

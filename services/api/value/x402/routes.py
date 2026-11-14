@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse
 from shared.logger.logger import get_logger
 
@@ -66,5 +67,6 @@ async def get_agent_x402_history(agent_id: str, request: Request):
 async def trigger_snapshot(request: Request):
     """Manually trigger a snapshot of the economic graph to Neptune."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     edges = await _economic_graph.snapshot_to_graph()
     return APIResponse(data={"edges_created": edges}).to_dict()

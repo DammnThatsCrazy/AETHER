@@ -294,3 +294,31 @@ def test_status_counts_and_redeliver():
     assert before.get("dead_letter") == 1
     assert replayed["state"] == "queued"
     assert after.get("queued") == 1
+
+
+def test_enqueue_keeps_a_destination_that_does_not_resolve_yet(monkeypatch):
+    """A resolver failure at enqueue is transient: the job is kept and the send-time check decides."""
+    import socket
+    from unittest.mock import patch
+
+    from value.rewards.rails import TenantWebhookAdapter
+
+    # Validate as a deployed environment would while the stores stay in memory.
+    real = TenantWebhookAdapter._validate_destination
+    monkeypatch.setattr(
+        TenantWebhookAdapter,
+        "_validate_destination",
+        lambda self, url, *, is_local: real(self, url, is_local=False),
+    )
+
+    async def run(resolver):
+        actions = RewardActionRepository()
+        outbox = _outbox(_ScriptedSender(SenderResult("success", external_id="x", response_code=200)))
+        action = await _make_action(actions)
+        with patch("socket.getaddrinfo", side_effect=resolver):
+            return await outbox.enqueue(action, {"webhook_url": "https://example.com/hook"}, TENANT)
+
+    job = _run(run(socket.gaierror(socket.EAI_AGAIN, "temporary failure")))
+    assert job["state"] == "queued"
+    with pytest.raises(ValueError, match="rejected before enqueue"):
+        _run(run(lambda *_a, **_k: [(2, 1, 6, "", ("10.0.0.5", 443))]))

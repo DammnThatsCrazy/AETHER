@@ -18,8 +18,14 @@ export interface SDKHealthAgentConfig {
     configVersion?: string;
     /** Rollout cohort label */
     rolloutCohort?: string;
-    /** Secret for HMAC signing (must match SDK_CONFIG_SECRET on backend) */
-    signingSecret?: string;
+    /**
+     * Base64url SPKI P-256 public key used to verify signed SDK manifests (print it
+     * with `python scripts/sdk_manifest_public_key.py`). When set, a manifest that
+     * is unsigned, malformed or fails verification is rejected and the last
+     * known-good configuration is kept (fail closed). When unset, manifests are
+     * applied without verification.
+     */
+    manifestPublicKey?: string;
     /** Extra HTTP headers (e.g. gateway/proxy headers) merged into every request. */
     customHeaders?: Record<string, string>;
     /**
@@ -61,6 +67,10 @@ export interface SDKManifest {
     flags: Record<string, unknown>;
     published_at: string;
     signature: string;
+    /** Signature algorithm identifier (signed); must be "ecdsa-p256-sha256". */
+    signature_alg?: string;
+    source?: string;
+    publisher_id?: string;
     /** Manifest fetch status for diagnostics */
     status?: 'healthy' | 'forbidden' | 'expired' | 'signature_invalid' | 'unavailable';
 }
@@ -124,7 +134,5 @@ export declare class SDKHealthAgent {
     getManifest(): SDKManifest | null;
     private buildHeartbeatPayload;
     private computeSchemaHash;
-    private verifyManifestSignature;
-    private hexToBytes;
     private sleep;
 }

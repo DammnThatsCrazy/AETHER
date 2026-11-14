@@ -1265,7 +1265,7 @@ class Profile360Aggregator:
                                    filters={"grantor_entity_id": entity_id}, limit=200),
             self._scoped_find_many(self._delegations, tenant_id=tenant_id,
                                    filters={"grantee_entity_id": entity_id}, limit=200),
-            _safe("summary.behavior", self._behavior.find_by_id(entity_id)),
+            _safe("summary.behavior", self._behavior.find_for_entity(tenant_id, entity_id)),
             self._scoped_find_many(self._journeys, tenant_id=tenant_id,
                                    filters={"entity_id": entity_id}, limit=50),
             self._scoped_find_many(self._agent_execs, tenant_id=tenant_id,
@@ -1414,7 +1414,7 @@ class Profile360Aggregator:
 
         if ot in ("agent", "agent_config"):
             record = (await _safe("drill.agent", self._agent_configs.find_by_id(object_id))).value_or(None)
-            if record and record.get("tenant_id") in (None, "", tenant_id):
+            if record and record.get("tenant_id") == tenant_id:
                 execs = await self._scoped_find_many(
                     self._agent_execs, tenant_id=tenant_id,
                     filters={"agent_id": object_id}, limit=20,
@@ -1428,7 +1428,7 @@ class Profile360Aggregator:
 
         elif ot in ("wallet",):
             record = (await _safe("drill.wallet", self._wallets.find_by_id(object_id))).value_or(None)
-            if record and record.get("tenant_id") in (None, "", tenant_id):
+            if record and record.get("tenant_id") == tenant_id:
                 transfers = await self._transfers_for_entity(
                     record.get("owner_entity_id") or "", tenant_id, limit=20,
                 )
@@ -1447,7 +1447,10 @@ class Profile360Aggregator:
             record = (await _safe("drill.entity", self._entities.find_by_id(object_id))).value_or(None)
 
         elif ot in ("journey", "journey_chain", "chain"):
-            record = (await _safe("drill.journey", self._journeys.find_by_id(object_id))).value_or(None)
+            chain = (await _safe(
+                "drill.journey", self._journeys.find_for_entity(tenant_id, entity_id),
+            )).value_or(None)
+            record = chain if chain and object_id in (chain.get("chain_id"), chain.get("id")) else None
 
         elif ot in ("payment_intent", "intent"):
             record = (await _safe("drill.intent", self._intents.find_by_id(object_id))).value_or(None)
@@ -1461,7 +1464,8 @@ class Profile360Aggregator:
         else:
             record = None
 
-        if not record or record.get("tenant_id") not in (None, "", tenant_id):
+        # A row with no tenant belongs to no one: it never enters a tenant's drill.
+        if not record or record.get("tenant_id") != tenant_id:
             return _drill_not_found(entity_id, tenant_id, object_type, object_id)
 
         # This route is profile-scoped: the drilled object must be related to
@@ -1591,7 +1595,7 @@ class Profile360Aggregator:
         """Profile quality scorecard: completeness, freshness, confidence, readiness."""
         results = await asyncio.gather(
             _safe("quality.entity", self._entities.find_by_id(entity_id)),
-            _safe("quality.behavior", self._behavior.find_by_id(entity_id)),
+            _safe("quality.behavior", self._behavior.find_for_entity(tenant_id, entity_id)),
             self._scoped_find_many(self._wallets, tenant_id=tenant_id,
                                    filters={"owner_entity_id": entity_id}, limit=10),
             self._transfers_for_entity(entity_id, tenant_id, limit=10),
@@ -1670,7 +1674,7 @@ class Profile360Aggregator:
         """Per-dimension data freshness: sources, last update, stale status, warnings."""
         results = await asyncio.gather(
             _safe("freshness.entity", self._entities.find_by_id(entity_id)),
-            _safe("freshness.behavior", self._behavior.find_by_id(entity_id)),
+            _safe("freshness.behavior", self._behavior.find_for_entity(tenant_id, entity_id)),
             self._scoped_find_many(self._wallets, tenant_id=tenant_id,
                                    filters={"owner_entity_id": entity_id}, limit=10),
             self._transfers_for_entity(entity_id, tenant_id, limit=10),

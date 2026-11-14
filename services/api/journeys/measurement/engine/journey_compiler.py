@@ -345,9 +345,13 @@ class JourneyCompiler:
         steps: list[dict[str, Any]] = []
         if activities:
             transitions = _classify_transitions(activities, session_timeout_seconds)
+            evidence = _transition_evidence(
+                activities, transitions, await _explicit_handoff_links(tenant_id, activities)
+            )
             steps = _build_steps(
                 activities=activities,
                 transitions=transitions,
+                transition_evidence=evidence,
                 tenant_id=tenant_id,
                 journey_id=journey_id,
                 journey_version_id=new_version_id,
@@ -556,6 +560,64 @@ def _classify_pair(
     return TransitionType.same_session.value
 
 
+_CROSS_DEVICE_TYPES = frozenset({
+    TransitionType.cross_device.value,
+    TransitionType.mobile_to_web.value,
+    TransitionType.web_to_mobile.value,
+})
+
+
+async def _explicit_handoff_links(
+    tenant_id: str, activities: list[dict[str, Any]]
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Server-verified handoffs keyed ``(source_session, destination_session)``.
+
+    Fail-soft: if the lookup fails every cross-device hop simply stays inferred.
+    """
+    sessions = sorted({str(a["session_id"]) for a in activities if a.get("session_id")})
+    if len(sessions) < 2:
+        return {}
+    try:
+        from repositories.journey_handoff_repo import get_journey_handoff_repository
+
+        rows = await get_journey_handoff_repository().redeemed_for_sessions(tenant_id, sessions)
+    except Exception as exc:  # noqa: BLE001 — evidence is additive, never blocks compilation
+        logger.warning("journey handoff lookup failed tenant=%s: %s", tenant_id, type(exc).__name__)
+        return {}
+    return {
+        (r["source_session_id"], r["redeemed_session_id"]): r
+        for r in rows if r.get("redeemed_session_id")
+    }
+
+
+def _transition_evidence(
+    activities: list[dict[str, Any]],
+    transitions: list[Optional[str]],
+    explicit_links: dict[tuple[str, str], dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Per-step evidence for HOW a cross-session hop was linked.
+
+    A hop whose (previous session, current session) is a redeemed handoff is
+    ``explicit_handoff``. Every other cross-device hop is ``inferred`` from
+    platform/device change alone. Same-session steps carry no link evidence.
+    """
+    out: list[dict[str, Any]] = [{} for _ in activities]
+    for i in range(1, len(activities)):
+        prev_sid = str(activities[i - 1].get("session_id") or "")
+        curr_sid = str(activities[i].get("session_id") or "")
+        link = explicit_links.get((prev_sid, curr_sid)) if prev_sid and curr_sid else None
+        if link is not None:
+            out[i] = {
+                "link_basis": "explicit_handoff",
+                "evidence_status": "server_verified_token",
+                "handoff_id": link.get("handoff_id"),
+                "identity_merge": "not_performed",
+            }
+        elif transitions[i] in _CROSS_DEVICE_TYPES:
+            out[i] = {"link_basis": "inferred", "evidence_status": "platform_or_device_change"}
+    return out
+
+
 def _build_steps(
     activities: list[dict[str, Any]],
     transitions: list[Optional[str]],
@@ -563,6 +625,7 @@ def _build_steps(
     journey_id: str,
     journey_version_id: str,
     profile_id: Optional[str],
+    transition_evidence: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     steps = []
     for i, activity in enumerate(activities):
@@ -579,7 +642,9 @@ def _build_steps(
             "activity_family": activity.get("activity_family"),
             "activity_type": activity.get("activity_type"),
             "transition_type": transitions[i],
-            "transition_evidence": {},
+            "transition_evidence": (
+                transition_evidence[i] if transition_evidence is not None else {}
+            ),
             "actor_type": activity.get("actor_type"),
             "channel": activity.get("channel"),
             "source": activity.get("source"),

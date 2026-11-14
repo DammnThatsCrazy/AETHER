@@ -2,7 +2,7 @@ name: Immutable delivery
 
 on:
   # Staging delivery follows the persistent `staging` branch. Work reaches it by
-  # promotion from Development. Production is never deployed by a push: it is an
+  # promotion from development. Production is never deployed by a push: it is an
   # explicit dispatch of an approved immutable build (see `environment`).
   push:
     branches: [staging]
@@ -33,6 +33,12 @@ on:
       release_manifest_checksum:
         description: Approved sha256 checksum of release.json (required with source_run_id)
         type: string
+        required: false
+      identity_verification_secrets_enabled:
+        description: "Whether staging task definitions mount the identity verification keys (false only for first-time setup, matching the reviewed wake)"
+        type: choice
+        options: ["true", "false"]
+        default: "true"
         required: false
       rehearsal_run_id:
         description: "staging-lifecycle run that owns the golden-path smoke (set only by its rehearsal); verified live before the smoke is deferred"
@@ -848,6 +854,7 @@ jobs:
         if: github.event_name == 'push' || inputs.environment == 'staging'
         env:
           DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled || 'true' }}
         run: |
           set -euo pipefail
           # The rollout below clones each family's latest ACTIVE revision and
@@ -857,7 +864,8 @@ jobs:
           # or secret shape. The API service still runs the revision it is
           # about to replace, so check the source, not the service pointer.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE" --revision family-latest
+            --lane "$DEPLOYMENT_LANE" --revision family-latest \
+            --identity-verification-secrets-enabled "${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}"
       - name: Apply packaged migrations, then register exact task revision for every profile service
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
@@ -934,9 +942,12 @@ jobs:
             aws ecs describe-task-definition --task-definition "$family" --query taskDefinition > task.json
             # Keep only register-task-definition inputs; read-only describe
             # fields (deregisteredAt, status, revision, ...) are rejected.
-            jq --arg image "$IMAGE" --arg role "$role" '
+            # AETHER_DEPLOYMENT_ID binds runtime evidence (the staging identity
+            # proof capture) to the exact delivered image digest; delivery owns
+            # it because it is the step that changes the running image.
+            jq --arg image "$IMAGE" --arg role "$role" --arg deployment "${IMAGE##*@}" '
               .containerDefinitions[0].image=$image |
-              .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE"))) + [{name:"AETHER_ROLE",value:$role}] |
+              .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE" and .name != "AETHER_DEPLOYMENT_ID"))) + [{name:"AETHER_ROLE",value:$role},{name:"AETHER_DEPLOYMENT_ID",value:$deployment}] |
               with_entries(select(.key | IN("family","taskRoleArn","executionRoleArn","networkMode","containerDefinitions","volumes","placementConstraints","requiresCompatibilities","cpu","memory","pidMode","ipcMode","proxyConfiguration","inferenceAccelerators","ephemeralStorage","runtimePlatform","enableFaultInjection")))' task.json > rendered.json
             if [ "$TARGET_ENV" = staging ]; then
               lease_json=$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until --query 'Parameter.Value' --output text)

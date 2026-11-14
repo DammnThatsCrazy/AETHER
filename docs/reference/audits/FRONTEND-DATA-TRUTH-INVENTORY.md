@@ -18,9 +18,9 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction. It uses the API response type directly; tenant-owned webhook state, delivery history, and one-time secret behavior are unchanged."
 source_hashes:
-  "apps/aether-web/": "sha256:4e1c98fdd6ec72349a217d7df61d91ed30bd503ddac1521d581ba8dfb290287d"
+  "apps/aether-web/": "sha256:b7d5c36d3d53d786b952b3e0e67de3682fb813e9b20ae9ffe9bb22a4faaca5d2"
   "apps/demo/": "sha256:68e3f82d5ac29330519e833dc50bca0023c83e9d6e5b448f09129917617d1b7c"
-  "apps/kyber-web/": "sha256:e7e4bf28d26fd793757e3d85e5bb1f2e6ac0d9d8d34c340fda1f977a46c30a49"
+  "apps/kyber-web/": "sha256:780fb73c09bbcbbe138cfb6ba0705ef0ea79146718ba14a68703604199aa0e3c"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
   "scripts/validate_frontend_data_truth.py": "sha256:25de73c82ac07cdc52b7a9be8d7f8ef69ff50ca7ba735c1e8d51652dcf92636c"
 ---
@@ -68,6 +68,20 @@ and occurrence as separate states; source assertions are labelled, and an
 external action remains unverified without a server-owned receipt. The catalog
 display does not treat public listings as tenant graph nodes, and run coverage
 is withheld when the evidence source is unavailable.
+
+The Agent 360 behavior panel reads the backend-owned behavior read model and
+renders its per-section `available` / `partial` / `unavailable` state; it does
+not derive rates, preferences or decisions in the client.
+
+The pages rebuilt from the Claude Design handoff (Home, onboarding, Profiles,
+Profile 360, Graph, Campaigns, Campaign 360, Geography, Value, Agents,
+Settings, Signals, Risk, Syndicates, Relationships, Communications, Journeys
+and Episodes) ship none of the design's illustrative people, counts or live
+counters. Every figure comes from an existing tenant read, and a design element
+with no backing read is omitted or shown as not reported. The only static data
+they add is base geography for the Graph globe and the Geography dot map
+(continent outlines, a land bitmask, country centroids); it places tenant
+locations and carries no tenant or operational values.
 
 The generated artifact distinguishes:
 

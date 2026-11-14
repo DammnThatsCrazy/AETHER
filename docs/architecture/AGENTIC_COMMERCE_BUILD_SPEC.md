@@ -6,29 +6,39 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, packages/sdk/server/src/agent-telemetry.ts]
+source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261023_commerce_intent_authority.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/value/economic/journey_operation_evidence.py, services/api/value/economic/economic360_provider.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, services/api/connectors/integrations/providers/payment_rails/models.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, packages/shared/contracts/intelligence-projection-registry.json, packages/sdk/server/src/agent-telemetry.ts]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:9e89e42e4b20e1f5125715a30ac1682be037317d784358e46f448e87c55a4f54"
+  "services/api/actions/agent/deployment_routes.py": "sha256:cadc44f0985aa7cdda189eec05499ed8efe8050b7e3f0c0342c286d57914e10a"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
+  "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
+  "services/api/connectors/integrations/providers/payment_rails/models.py": "sha256:f2d1ff390c71a12585f368c9c8f4790086c299743bf17c2394960a1636e3898a"
+  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
+  "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
+  "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
-  "services/api/value/commerce/": "sha256:a6e9cc6ca2eb0e96b6ed2a1fe6b73960fb13ccca9dad287dfa3cd2dc5e28833a"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
+  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
+  "services/api/value/commerce/": "sha256:a23de7b3fd18ecf25fa78e7da791916c4b881c009cc03047b7a545d554c80cd7"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
+  "services/api/value/economic/economic360_provider.py": "sha256:4779d93a36e749fd3320c2c0039228f73e6e909be63ef4518bbb0455c117c1af"
+  "services/api/value/economic/journey_operation_evidence.py": "sha256:075dd15490f0ead55d8eaaae0c88580d7ea496b1173da190e28c3459ff74cb29"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
+  "services/api/value/x402/": "sha256:61d9f14062b059ef88a54e8ebd88b6ff4811fb76c5403bbc0bac1840de5d09fc"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -50,6 +60,67 @@ settlement can be stored and linked only to explicit provider/payment IDs; no
 current processor adapter emits that evidence. Signed Stripe refunds remain
 separate facts only when the webhook supplies exact order/payment/refund IDs;
 other provider correction feeds and live provider certification remain open.
+
+The 360 build adds a separate, read-only Commerce360 product/offer path over
+immutable tenant-scoped catalog revisions. Exact product and offer references
+carry source evidence; conversion line items do not create or infer catalog
+records. This projection does not add checkout, payment, price/availability,
+or execution authority to the agentic commerce control plane. The
+`availability_price` slot now exposes exact catalog lifecycle revisions and
+provenance as partial context; inventory availability, current offer price,
+and freshness remain unknown until their canonical authorities and joins exist.
+
+Commerce360 also has a partial `intent` path for explicit declarations against
+an exact tenant-owned product or offer. `POST /v1/commerce/intents` requires
+`commerce:write` and an authenticated human principal; it stores immutable,
+idempotent revisions with actor, effective and observed times, and evidence.
+Views, cart changes, checkout starts, and payment attempts do not create an
+intent. Agent-authored declarations, commerce/SKU/checkout subjects, and a
+freshness threshold remain unsupported, so the projection does not grant
+purchase or execution authority and the slot remains partial.
+
+Agent360's capabilities slot exposes bounded persisted `capability.invoke`
+policy evaluations with exact Agent, capability, grant reference, outcome, and
+time. These evaluations are not linked to observed MCP calls. A separate
+authenticated `POST /v1/agents/{agent_id}/executions/{execution_id}/resources/read`
+path now performs exact MCP resource reads under a dedicated read grant and
+records a bound receipt with the provider result digest on success. This proves
+the recorded resource-read attempt and result status, not a mutation or any
+external effect; broader effective tool authorization and tool execution
+evidence remain open.
+
+The current x402 approval records can also bind one server-created execution
+ID and action to a typed approval decision history. Execution360 accepts that
+history only after exact tenant, execution, approval, action, and resource
+checks. It reports AETHER's recorded decision, not an external execution or
+payment outcome. Commerce order reconciliation preserves provider-supplied
+payment rail, flow, asset, chain, and transaction evidence at its own
+observation time; later evidence can enrich the ledger without rewriting what
+was known earlier. These are bounded authority and provenance additions to
+the original design below. The proposed graph-as-lifecycle-truth and broader
+operator control flows in this build specification remain design targets;
+the 360 providers compose governed reads from the owning records.
+
+Economic360 attribution governance is a separate bounded evidence path: a
+validation decision is accepted only for the exact tenant and completed run,
+and only when its model configuration and recorded snapshot match the current
+effective configuration lineage. The decision is deterministic and unique per
+tenant/run; the projection exposes its evidence reference and records
+`exact_config_lineage_validated` while calibration remains `unvalidated`.
+An authenticated tenant administrator can record a separate approval or
+rejection bound to that exact validated run, configuration, and validation
+decision; the projection exposes the decision and evidence reference when the
+binding is valid. Approval is human governance evidence, not model performance
+or calibration validation. This attribution governance does not change the
+commerce operation links described above.
+
+The confidence slot's governance authority binds these exact provenance and
+approval records, not calibrated confidence. Its separate authenticated
+`confidence-evaluation` route computes bounded canonical credit touchpoint
+temporal eligibility under `value-credit-temporal-eligibility.v1`. Economic360
+rejoins the exact source samples and manifest before projecting the evaluation
+and its actor/authorization evidence. Temporal eligibility neither validates
+causal contribution or credit weights nor calibrates the reported score.
 
 ---
 
@@ -177,6 +248,25 @@ journey evidence remain open. Linked source references retain source event
 time, validity/revision time where available, and first-persisted time where
 available without conflating source time with ingestion time.
 
+The current Value360 payment slice carries source-native payment-rail and
+on-chain details through the same exact-order ledger path. Stripe
+PaymentIntents map to a specific Web2 rail only when one explicit payment
+method is present; unknown or ambiguous method types remain unclassified.
+Stripe crypto-onramp evidence joins only when metadata supplies an exact
+commerce order reference and the source supplies a valid fiat amount/currency.
+Value360 labels Web2 only for explicit supported card, ACH, wire, SEPA, or
+bank-transfer rails. It labels Web3 only when an exact linked payment has an
+explicit crypto flow or on-chain rail, a complete native amount/asset/chain
+side, and an exact transaction-hash evidence reference. Wallet addresses,
+normalized non-USD values, aggregates, and attribution are not inferred; source
+coverage, policy, and freshness remain unknown.
+
+The shared Experience 360 frame route is a read-only consumer of these
+authorities. Campaign and Journey commerce links require exact same-tenant
+`commerce_order_ref` evidence; episode-linked payment evidence remains unknown
+until a canonical episode-to-order reference is available. Operating cost,
+gross value, measured outcomes, payment, and settlement remain separate facts.
+
 External-agent run evidence accepts optional caller-reported payment-intent
 and settlement-event IDs. The resolver requires an exact same-tenant match to
 server-authoritative x402 rows and a matching `agent_id` from the validated
@@ -270,7 +360,7 @@ certify the whole graph.
 - `auth.py` — ADD scopes: `commerce:challenge`, `commerce:verify`, `commerce:settle`, `commerce:approve`, `commerce:admin`, `commerce:review`, `commerce:policy`, `approvals:read`, `approvals:write`, `entitlements:read`, `entitlements:write`, `resources:admin`. Add Kyber roles: `viewer`, `operator`, `approver`, `admin`.
 
 **`repositories/` (extend)**
-- `challenges_repo.py`, `approvals_repo.py`, `entitlements_repo.py`, `settlements_repo.py`, `resources_repo.py`, `policies_repo.py`, `facilitators_repo.py`. All Postgres-backed with tenant isolation.
+- `challenges_repo.py`, `approvals_repo.py`, `entitlements_repo.py`, `settlements_repo.py`, `resources_repo.py`, `policies_repo.py`, `facilitators_repo.py`. All Postgres-backed with tenant isolation. Outside local, `CommerceStore` stores each object under the row id `{tenant}:{object id}` (the model keeps its own id field), so seeded ids such as `fac_circle_v2` and client-chosen resource ids exist once per tenant; a row keyed by the bare id is still read when it belongs to the tenant.
 
 **`config/` (extend)**
 - `settings.py` — ADD: `commerce_base_rpc`, `commerce_solana_rpc`. (`commerce_approval_required_all`, `commerce_default_facilitator`, `commerce_enable_v2` and `commerce_feature_flag` were specified here but no code ever read them; they are retired. Mandatory approval is the `DEFAULT_APPROVAL_REQUIRED_ALL` constant in `services/api/value/x402/policies.py`.)
@@ -334,11 +424,11 @@ All additions live in `shared/graph/graph.py` (enum extensions) and are document
 | `SETTLEMENT` | settlement | prefixed | FSM transition | required | retain | settlement FSM |
 | `ENTITLEMENT` | entitlements | prefixed | mint/reuse | required | pseudonymize | entitlements.mint |
 | `ACCESS_GRANT` | control_plane | prefixed | grant step | required | pseudonymize | control_plane.grant_access |
-| `FACILITATOR` | facilitators | global + tenant allow | admin registration | required | N/A | facilitators registry |
+| `FACILITATOR` | facilitators | per-tenant copy (seeded ids such as `fac_circle_v2`) | seed + admin registration | required | N/A | facilitators registry |
 | `PRICE_POLICY` | pricing | per-tenant | admin/policy UI | required | N/A | policies repo |
 | `BUDGET_POLICY` | policies | per-tenant | admin/policy UI | required | N/A | policies repo |
 | `TREASURY` | commerce | per-tenant | treasury config | required | N/A | treasury repo |
-| `STABLECOIN_ASSET` | facilitators | global | seed + admin | required | N/A | asset registry |
+| `STABLECOIN_ASSET` | facilitators | per-tenant copy (seeded) | seed + admin | required | N/A | asset registry |
 | `SERVICE_PLAN` | commerce | per-tenant | admin | required | N/A | plans repo |
 | `PAYMENT_ROUTE` | facilitators | per-tenant | routing decision | required | N/A | route selection |
 | `FULFILLMENT` | control_plane | prefixed | fulfillment record | required | pseudonymize | control_plane.record_fulfillment |
@@ -930,6 +1020,9 @@ Extend existing `X-Request-ID` correlation through challenge → approval → ve
 - `GET /v1/diagnostics/commerce/reconciliation` — graph vs silver drift
 - `POST /v1/diagnostics/commerce/replay/{correlation_id}` — safe replay
 - `POST /v1/diagnostics/commerce/recheck/{settlement_id}` — force recheck
+
+As implemented, every `/v1/diagnostics/**` route except the tenant's own SDK
+heartbeat, health and silent-SDK routes admits only platform operators.
 
 ### 11.5 Circuit breakers
 

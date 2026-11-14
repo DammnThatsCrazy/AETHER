@@ -167,7 +167,7 @@ class TestQuality:
         # Entity
         await agg._entities.create_entity(eid, tid, "human", "Full Entity")
         # Behavior
-        await agg._behavior.insert(eid, {"entity_id": eid, "tenant_id": tid, "risk_score": 0.1})
+        await agg._behavior.upsert_snapshot(eid, tid, _now_iso(), _now_iso(), risk_score=0.1)
         # Wallet
         await agg._wallets.link_wallet("wf1", eid, tid, "ethereum", "0xFFF")
         # Transfer

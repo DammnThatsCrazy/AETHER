@@ -7,15 +7,18 @@ audience: [architect, security, compliance, dev-senior]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
+source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "scripts/release/check_dsr_coverage.py": "sha256:2cca7e381e2c76b5e47e178828a8522cbc0794ffb45cdaad304d01e20f9ae1b4"
-  "services/api/governance/consent/erasure_jobs.py": "sha256:c181535d6b0a3fcc2bf5b7f3d248ca9970845285413c54ac75ba9433a5c6f86c"
-  "services/api/governance/consent/erasure_planes.py": "sha256:bfed1f9c260910ea99f8cd56025e949dd15561ebe87bca63dcc7a71c68fc6c36"
-  "services/api/governance/dsr_propagation/models.py": "sha256:c5afa46e9327a7d48ab0583836932ffb3e8f14ce3f420d7afe404ae5afe3450f"
+  "config/storage_policies.yaml": "sha256:4a44084cac17fff5155b4fc04bf4e36fc3fee1bae95fba683b8cdb55ada9b066"
+  "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:e7209845abf90683109a52f895142862b5c8a421f80bf427cb4a90c4143c9a96"
+  "services/api/governance/consent/erasure_planes.py": "sha256:dd529398d1e0d3b60bb8c61bf6371aa241ef63bdaa57738993ab823c8b57cf9e"
+  "services/api/governance/dsr_propagation/models.py": "sha256:132e4816b38b5abe03ba6105b92836da2380fe728e522afdd282e05fc0f8efc5"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
+  "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
+  "services/api/services/social360/evidence_authority.py": "sha256:0b4d377d5a8b0316e11f9cabc13f0fa69c62aac9fc4d7ac313e42d1b38647322"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
-  "services/api/value/x402/commerce_store.py": "sha256:e5bf2b6cffad86e8c21fe08669961e20b74838939bc3f8cc857572b30d0dd5d8"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store
@@ -49,8 +52,18 @@ component, and `scripts/release/check_dsr_coverage.py` fails CI when a
   `skipped_legal_hold` with the retained count and a `policy_decision_id`;
   erasure that needs an operator is `requires_manual_review` with
   `requires_retrain`.
+- The storage registry classifies `agent_invocation_claims` and
+  `agent_invocation_receipts` as PostgreSQL rows with legal retention and
+  `delete_behavior: preserve`. This storage policy is not itself a DSR plane
+  receipt; any subject erasure handling must preserve that distinction.
 
 ## Subject resolution
+
+The `support_case_subjects` storage policy classifies ticket/conversation case
+mappings as standard-retention PostgreSQL metadata with hard deletion and legal
+hold support. Its canonical case foreign key cascades case deletion. This policy
+and database cascade do not create a separate user-subject DSR erasure receipt
+or prove that a DSR request resolved and erased the mapped case.
 
 The DSR names `user_id` (and optionally the SDK `anonymous_id`). Before any
 store is touched, `resolve_subject` reads `identity_aliases` (the `user_id` and
@@ -68,8 +81,8 @@ every other plane succeeded in the same attempt; otherwise they are marked
 |---|---|---|---|
 | `identity_aliases` | `identity_aliases`, `identity_signal_observations` | hard delete (subject entities + raw `user_id`/`anonymous_id` signals) | rows deleted |
 | `identity_subjects` | `identity_subjects` (incl. merge tombstones), `identity_clusters_v2`, `identity_clusters`, `entities` | hard delete | rows deleted |
-| `graph_edges` | `identity_edges`; graph-store edges incident to the subject's vertices | hard delete; governed soft-revoke via `GraphMutationGateway` (`edge_tombstoned`) | rows deleted + edges revoked |
-| `profile360_snapshots` | `profiles`, `behavior_profiles`, `journey_chains` | hard delete | rows deleted |
+| `graph_edges` | `identity_edges`; graph-store edges incident to the subject's vertices, including the tenant's user vertex `{tenant}:user:{user_id}` | hard delete; governed soft-revoke via `GraphMutationGateway` (`edge_tombstoned`) | rows deleted + edges revoked |
+| `profile360_snapshots` | `profiles` (row id `{tenant}:{user_id}`), `behavior_profiles`, `journey_chains` | hard delete | rows deleted |
 | `feature_rows` | lake Gold `gold_*` per-entity rows (semantic Gold excluded); ML feature cache | hard delete; cache drop | rows deleted; `artifacts_impacted` = cache keys |
 | `training_datasets` | none in the backend (offline `services/ml` parquet) | assessment via `dsr_artifact_index` | `records_impacted` = training-eligible Gold rows erased; `requires_retrain` when any; indexed dataset → `requires_manual_review` |
 | `model_artifacts` | none in the backend (artifact root is offline) | assessment via `dsr_artifact_index` | indexed model → `requires_manual_review` + `requires_retrain` |
@@ -81,10 +94,15 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `reward_decisions` | `reward_eligibility_decisions` | retained (`legal` / `preserve`) | `skipped_legal_hold`, retained count, policy pointer |
 | `connector_derived_records` | `comms_provider_identities`; `source_identities` + `identity_claims` | tombstone (identifiers cleared, `resolution_status: erased`); hard delete | rows affected |
 | `financial_value_snapshots` | `derivatives_pnl_snapshots` of the subject's trading accounts | hard delete | rows deleted; `artifacts_impacted` = accounts |
-| `silver_facts` | every `silver_*` and projector fact table, via the Silver writer's introspected schemas (typed columns and lake JSONB `data`) | hard delete | rows deleted |
+| `silver_facts` | every `silver_*` and projector fact table, via the Silver writer's introspected schemas (typed columns and lake JSONB `data`); semantic memory records are erased by the semantic handler | hard delete | rows deleted |
 | `bronze_events` | `bronze_sdk_events` (+ externalized objects), `event_outbox` | chain-preserving tombstone + re-pack; payload redaction | rows affected |
 | `web3_observations` | `web3_observations` | exact subject-ref match in tenant-owned structured fields / payload; hard delete, legal hold respected | rows deleted |
-| `x402_commerce` | commerce challenges, approvals, policies, authorizations, receipts, settlements, entitlements, grants, fulfillments, budget policies | hard delete rows whose requester/subject/holder id equals a subject ref; per-resource legal holds respected | rows deleted by store |
+| `x402_commerce` | commerce challenges, approvals, approval decisions, policies, authorizations, receipts, settlements, entitlements, grants, fulfillments, budget policies | hard delete subject-referenced rows; approval decisions are also deleted when their approval is erased or their authenticated `decided_by` is the subject; per-resource legal holds respected | rows deleted by store |
+| `journey_handoffs` | cross-device journey handoff rows (source and destination anonymous IDs, token hash only) | hard delete rows where the request `anonymous_id` is either end; a user-id-only request locates nothing, so those rows are bounded by the 90-day `journey_handoff_sweep` | rows deleted by store |
+| `risk_poisoning_evidence` | `risk_poisoning_evidence` | hard delete exact tenant rows whose subject or source ID equals a subject ref; legal holds respected | rows deleted |
+| `risk_intervention_records` | `risk_intervention_records` | hard delete exact tenant rows whose subject or actor ID equals a subject ref; legal holds respected | rows deleted |
+| `social_relationship_evidence_events` | `social_relationship_evidence_events` | hard delete exact tenant assertions naming the subject as the indexed subject, source, target, a path participant, or the authenticated actor; legal holds respected | rows deleted |
+| `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings`, `agent_lineage_adjudications`, `delegations`, fan-out `risk_signals` | hard delete rows naming a subject ref as principal, agent, grantor or grantee; `agent_configs` rows owned by the subject keep the agent but lose the owner. Legal holds are checked on each affected row's id and counterparty, and on the subject's refs against every table named here, and any hold skips the plane. `agent_configs` rows naming the subject as the agent are deleted, and `asserted_by_entity_id` and `revoked_by_entity_id` are cleared on rows that stay. The erase bumps `agent_lineage_tenant_state`, so every worker discards its older fold and an in-flight write fails and rebuilds from erased evidence. A full rebuild then runs in the same step, removing derived copies such as parent and root references and cluster labels. The `active_for` delegation cache is invalidated for each affected grantee. `Delegation` graph vertices projected from deleted grants are tombstoned with their parties blanked and their edges revoked | rows deleted across the tables |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a
@@ -92,10 +110,14 @@ regenerable, 7-day derived copy. The value-semantics snapshot stores
 (`value_valuation_snapshots`, `value_rollup_snapshots`,
 `value_price_snapshots`, `valuation_snapshots`,
 `stablecoin_valuation_snapshots`) record asset and metric valuations with no
-subject key; `test_value_snapshot_stores_carry_no_subject_key` pins that. Silver
+subject key; `test_value_snapshot_stores_carry_no_subject_key` pins that. The agent behavior snapshot store (`agent_behavior_snapshots`) is likewise a derived, rebuildable cache: it holds aggregated rates and Silver event ids keyed by tenant, source-reported agent ref and window, with no payloads or person identifiers. It has no DSR component of its own; erasing the underlying Silver facts is followed by recomputation, and `delete_by_agent` / `purge_before` give operators a physical delete. Silver
 tables owned by another component are excluded from `silver_facts`:
 `silver_campaign_touchpoint_facts` and `canonical_conversions`
-(`attribution_records`) and the semantic handler's tables.
+(`attribution_records`). The semantic handler owns and hard-deletes
+`silver_semantic_observations`, `semantic_memory_records`, entity mentions,
+subject links, claims, shadow divergences, sentiment observations, Gold
+semantic/sentiment state, and review-queue rows; its returned per-table counts
+feed the DSR component receipt.
 
 Deliberately **not** erased (storage policy `preserve`, the lawful audit trail):
 `identity_merge_events`, `identity_split_events`, `identity_resolution_audit`,
@@ -143,3 +165,8 @@ relay never publishes it. The outbox chain still verifies.
   addresses and settlement proofs without a canonical subject reference remain
   governed by their existing transaction-retention and legal-hold policies;
   erasure does not infer identity from a wallet address.
+- Risk poisoning evidence erasure matches only exact tenant-scoped subject and
+  source IDs; linked evidence references are removed with the enclosing record.
+- Social relationship evidence erasure removes the whole assertion when a
+  subject appears in any participant or actor role. It does not infer identity
+  from an unrelated assertion's source event or risk signal reference.

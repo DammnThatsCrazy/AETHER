@@ -95,6 +95,11 @@ def _event_entity_ids(
 
 logger = get_logger("aether.identity.resolver")
 
+_VERIFIED_OBSERVED_ALIAS_TYPES = {
+    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED: IdentitySignalType.EMAIL_HASH,
+    IdentitySignalType.WALLET_SIGNATURE_VERIFIED: IdentitySignalType.WALLET_ADDRESS,
+}
+
 _OPERATOR_MERGE_LOCKS: dict[str, "asyncio.Lock"] = {}
 _OPERATOR_MERGE_LOCKS_GUARD: Optional["asyncio.Lock"] = None
 _OPERATOR_MERGE_LOCKS_LOOP: Optional["asyncio.AbstractEventLoop"] = None
@@ -545,7 +550,15 @@ class IdentityResolutionService:
                 # A suppression or revoked observed alias vetoes proof-based
                 # wallet linking for the same chain-scoped digest.
                 lookup_types.append(IdentitySignalType.WALLET_ADDRESS)
+            observed_alias_type = _VERIFIED_OBSERVED_ALIAS_TYPES.get(sig_type)
             for lookup_type in lookup_types:
+                # Revoking a proof-derived verified alias removes the old
+                # assertion; it must not permanently veto a future fresh proof
+                # for that identifier. A revoked observed alias still vetoes
+                # the verified signal, as do revoked aliases on ordinary
+                # observed-signal lookups below.
+                if observed_alias_type is not None and lookup_type == sig_type:
+                    continue
                 historical_aliases = await self._repo.find_aliases_by_signal(
                     tenant_id, lookup_type, sig_hash, include_revoked=True
                 )
@@ -842,6 +855,14 @@ class IdentityResolutionService:
                 IdentitySignalType.MOBILE_INSTALL_ID.value,
             }
             signal_pairs = {(sig_type.value, sig_hash) for sig_type, sig_hash, _ in hashed_signals}
+            fresh_verified_pairs = {
+                pair
+                for pair in signal_pairs
+                if pair[0] in {
+                    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED.value,
+                    IdentitySignalType.WALLET_SIGNATURE_VERIFIED.value,
+                }
+            }
             for candidate_entity_id in existing_entity_ids:
                 subject = await self._repo.get_subject_by_canonical_entity_id(
                     tenant_id, candidate_entity_id
@@ -881,7 +902,15 @@ class IdentityResolutionService:
                     if alias_type == IdentitySignalType.USER_ID.value and alias_hash:
                         candidate_authenticated_user_ids.append((alias_hash, candidate_entity_id))
                     if alias.get("revoked_at") and (alias_type, alias_hash) in signal_pairs:
-                        candidate_has_revoked_consent = True
+                        is_replaced_proof = (
+                            alias_type in {
+                                IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED.value,
+                                IdentitySignalType.WALLET_SIGNATURE_VERIFIED.value,
+                            }
+                            and (alias_type, alias_hash) in fresh_verified_pairs
+                        )
+                        if not is_replaced_proof:
+                            candidate_has_revoked_consent = True
 
             # Gather veto inputs from repository-owned candidate state plus
             # the resolver's canonicalized incoming signal types. Caller

@@ -14,7 +14,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
   "scripts/lib/preflight_dynamodb.py": "sha256:fb2c96646af2b24fc6add4b9463ce3ed19a8ae7ff77161be41eb464cb61ffa15"
-  "scripts/lib/preflight_env.py": "sha256:bb3694db01643e3490dd3263725e39639ddbac697d43c32c190e69184bc79cc6"
+  "scripts/lib/preflight_env.py": "sha256:e465c85941e68d7e0375827096a51a2783a03e99606d137090a4bec9582fbc94"
   "scripts/staging_preflight.py": "sha256:d18e7929deaedc6ad3ecf261d6cde3d3e59136f49515642dfc87b8e8f7026e28"
 ---
 
@@ -57,6 +57,8 @@ runtime deployment profiles):
 - **S3** — object storage / lake.
 - **Inline ML** — staging intentionally does not require a remote ML image.
 - Backend API, consolidated worker, Kyber operator console, and static tenant frontends.
+- `IDENTITY_VERIFICATION_TOKEN_KEY` must be populated for wallet proof; the
+  previous-key companion stays available while persisted evidence needs it.
 
 Absence of any selected staging dependency is a preflight FAIL, not a soft-start.
 

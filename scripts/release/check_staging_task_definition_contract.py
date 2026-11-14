@@ -44,6 +44,8 @@ SECRET_ENV_TO_CANONICAL_NAME = {
     "CANARY_SECRET_SEED": "canary-secret-seed",
     "EXTRACTION_CANARY_SEED": "extraction-canary-seed",
     "SDK_CONFIG_SECRET": "sdk-config-secret",
+    "IDENTITY_VERIFICATION_TOKEN_KEY": "identity-verification-token-key",
+    "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS": "identity-verification-token-key-previous",
     "FIRST_ADMIN_BOOTSTRAP_TOKEN": "first-admin-bootstrap-token",
     "JWT_SECRET_PREVIOUS": "jwt-secret-previous",
     "BYOK_ENCRYPTION_KEY_PREVIOUS": "byok-encryption-key-previous",
@@ -85,10 +87,15 @@ COMMON_SECRET_ENV = frozenset(
         "CANARY_SECRET_SEED",
         "EXTRACTION_CANARY_SEED",
         "SDK_CONFIG_SECRET",
+        "IDENTITY_VERIFICATION_TOKEN_KEY",
         "FIRST_ADMIN_BOOTSTRAP_TOKEN",
         "JWT_SECRET_PREVIOUS",
         "BYOK_ENCRYPTION_KEY_PREVIOUS",
+        "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS",
     }
+)
+IDENTITY_VERIFICATION_SECRET_ENV = frozenset(
+    {"IDENTITY_VERIFICATION_TOKEN_KEY", "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS"}
 )
 PILOT_PRICE_SECRET_ENV = frozenset(
     {"STRIPE_PRICE_ALPHA", "STRIPE_PRICE_BETA", "STRIPE_PRICE_GAMMA", "STRIPE_PRICE_DELTA"}
@@ -253,6 +260,7 @@ def contract_errors(
     cluster: str = "AETHER-staging",
     expected_account_id: str | None = None,
     revision: str = "service",
+    identity_verification_secrets_enabled: bool = True,
 ) -> list[str]:
     if lane not in {"pilot", "full"}:
         return [f"deployment lane must be pilot or full, got {lane!r}"]
@@ -263,6 +271,8 @@ def contract_errors(
     expected_env = dict(REQUIRED_ENV)
     expected_env.update(PILOT_ENV if lane == "pilot" else FULL_ENV)
     expected_secret_names = COMMON_SECRET_ENV | (PILOT_PRICE_SECRET_ENV if lane == "pilot" else KYBER_SECRET_ENV)
+    if not identity_verification_secrets_enabled:
+        expected_secret_names -= IDENTITY_VERIFICATION_SECRET_ENV
 
     for service, expected_role in SERVICES.items():
         payload = client(["ecs", "describe-services", "--cluster", cluster, "--services", service])
@@ -330,6 +340,13 @@ def contract_errors(
         missing = sorted(expected_secret_names - secrets.keys())
         if missing:
             errors.append(f"{service}: missing ECS secret mounts: {', '.join(missing)}")
+        if not identity_verification_secrets_enabled:
+            unexpected = sorted(IDENTITY_VERIFICATION_SECRET_ENV & secrets.keys())
+            if unexpected:
+                errors.append(
+                    f"{service}: identity verification secret mounts are present while disabled: "
+                    f"{', '.join(unexpected)}"
+                )
         for name, value_from in secrets.items():
             errors.extend(
                 _secret_mount_errors(
@@ -361,6 +378,12 @@ def main(argv: list[str] | None = None) -> int:
         default="service",
         help="check the revision each service runs, or the family's latest ACTIVE revision that delivery clones",
     )
+    parser.add_argument(
+        "--identity-verification-secrets-enabled",
+        choices=("true", "false"),
+        default="true",
+        help="require both identity verification key mounts (default: true)",
+    )
     args = parser.parse_args(argv)
     identity = aws_json(["sts", "get-caller-identity"])
     expected_account_id = identity.get("Account")
@@ -372,6 +395,9 @@ def main(argv: list[str] | None = None) -> int:
         client=aws_json,
         expected_account_id=expected_account_id,
         revision=args.revision,
+        identity_verification_secrets_enabled=(
+            args.identity_verification_secrets_enabled == "true"
+        ),
     )
     if errors:
         print("staging ECS task-definition contract FAILED:", file=sys.stderr)

@@ -1,5 +1,16 @@
 # Profile360 Frontend Architecture
 
+## Governed prediction evidence
+
+The projection registry binds `likely_next_states` to canonical prediction-linked
+outcome adjudications and artifact-scoped evaluation records. The supported
+`profile-state-adjudication.v1` labels are churn and retention observations.
+Consumers must keep predicted states, reported outcome associations, authorized
+adjudications and computed evaluation metrics distinct. Missing or rejected
+evidence remains unknown; a bound authority is not complete coverage, calibrated
+applicability or permission to infer success. `modelCalibrationVerified` remains
+false, even when the bounded evaluation evidence is available.
+
 ## Existing frontend analysis
 
 - Routing uses `react-router-dom` inside `AppShell`, lazy page modules, and route constants from `src/routes`.

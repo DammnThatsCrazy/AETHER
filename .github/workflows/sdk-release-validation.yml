@@ -87,7 +87,9 @@ jobs:
           mkdir -p release-evidence
           printf '{"sha":"%s","job":"sdk-js"}\n' "$GITHUB_SHA" > release-evidence/sdk-js.json
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
+          retention-days: 7
           name: sdk-js-release-evidence
           path: release-evidence/sdk-js.json
       - name: Secret pattern scan
@@ -139,7 +141,9 @@ jobs:
           mkdir -p release-evidence
           printf '{"sha":"%s","job":"android"}\n' "$GITHUB_SHA" > release-evidence/android.json
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
+          retention-days: 7
           name: android-release-evidence
           path: release-evidence/android.json
 
@@ -183,6 +187,8 @@ jobs:
           mkdir -p release-evidence
           printf '{"sha":"%s","job":"ios"}\n' "$GITHUB_SHA" > release-evidence/ios.json
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
+          retention-days: 7
           name: ios-release-evidence
           path: release-evidence/ios.json

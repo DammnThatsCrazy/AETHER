@@ -17,7 +17,11 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 
 
 def _workflow_text(name: str) -> str:
-    return (WORKFLOWS / name).read_text(encoding="utf-8")
+    # The shared helper is the dispatch command: treat it as `gh workflow run` so
+    # every dispatch assertion (including the no-dispatch-from-a-timer guard)
+    # still covers helper calls.
+    text = (WORKFLOWS / name).read_text(encoding="utf-8")
+    return text.replace("scripts/ci/dispatch_workflow.sh", "gh workflow run")
 
 
 def _workflow(name: str) -> dict:

@@ -1827,16 +1827,18 @@ def gen_measurement_ts(metric_reg: dict) -> str:
     metrics = metric_reg["metrics"]
     version = metric_reg["contractVersion"]
 
-    name_union = "\n".join(f"  | '{m['name']}'" for m in metrics)
+    name_union = "\n".join(
+        f"  | {json.dumps(m['name'], ensure_ascii=False)}" for m in metrics
+    )
 
     def_objects: list[str] = []
     for m in metrics:
         def_objects.append(
             "  {\n"
-            f"    name: '{m['name']}',\n"
-            f"    version: '{m['version']}',\n"
-            f"    unit: '{m['unit']}',\n"
-            f"    description: '{m.get('description', '')}',\n"
+            f"    name: {json.dumps(m['name'], ensure_ascii=False)},\n"
+            f"    version: {json.dumps(m['version'], ensure_ascii=False)},\n"
+            f"    unit: {json.dumps(m['unit'], ensure_ascii=False)},\n"
+            f"    description: {json.dumps(m.get('description', ''), ensure_ascii=False)},\n"
             f"    lower: {_ts_number(m.get('lower'))},\n"
             f"    upper: {_ts_number(m.get('upper'))},\n"
             f"    allowsProbability: {_ts_number(m['allowsProbability'])},\n"

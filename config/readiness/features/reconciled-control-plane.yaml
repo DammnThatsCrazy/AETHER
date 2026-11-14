@@ -1,0 +1,206 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Program A+B plus the first Program C slice of the Post-734 Reconciled Control
+# Plane plan: reconciled authority map, durable production activation authority
+# and scheduler runtime convergence. SDK manifest/Provider Runtime convergence,
+# recovery, operator actions, security/scale/staging proof and staged activation
+# (Programs C-G remainder) remain repository work and are listed explicitly —
+# this record does not claim a production-ready control plane.
+feature_id: reconciled-control-plane
+title: Reconciled Control Plane
+owning_system: aether
+summary: >-
+  Kyber-adjacent managed-integration reconcile engine with admission,
+  simulation, ChangeSet planning, governed execution, rollouts and a read-only
+  operator surface. This record covers Program A+B (reconciled authority map
+  and durable, readiness-gated production activation that environment flags can
+  only lower, never grant) plus the first Program C slices: the scheduler
+  consumes the effective activation state for reconcile, plan and execute, and
+  SDK manifest changes have an async RCP request path instead of a direct
+  publish while the plane is enabled.
+scope:
+  id: reconciled-control-plane-v1
+  version: 1
+  title: Reconciled Control Plane V1
+  target: staging-proof-then-staged-production-activation
+  included:
+  - contracts-and-schemas
+  - core-activation-law
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  - runtime-convergence
+  excluded:
+  - authoritative-writes-to-customer-systems-without-ChangeSet-gates
+  deferred:
+  - operator-command-write-surface
+repository_ceiling:
+  type: CODE_COMPLETE
+  achieved: true
+remaining_after_ceiling:
+  - Program C — SDK request execution/rollout projection and Provider Runtime convergence through RCP DesiredState/ChangeSet/Rollout; scheduler gate + async SDK request intake landed
+  - Program D — recovery, continuity and reconciliation after interruption
+  - Program E — read model and operator command surface
+  - Program F — security, scale and credentialed staging proof
+  - Program G — staged production activation
+remaining_is_repository_controlled: true
+evidence:
+  - services/api/connectors/managed_integrations/
+  - services/api/ingestion/sdk_config/rcp_requests.py
+  - services/api/alembic/versions/20261029_rcp_activation_authority.py
+  - config/route_registry.yaml
+  - config/storage_policies.yaml
+  - tests/unit/reconciled_control/
+implementation:
+  state: IMPLEMENTED
+  denominator: in-scope repository controls for the Program A+B plus first Program C slice
+  controls:
+  - id: contracts-and-schemas
+    description: TS/Python activation contract twins with parity coverage
+    weight: 20
+    satisfied: true
+    evidence:
+    - packages/shared/managed-integrations.ts
+    - tests/contracts/test_managed_integrations_parity.py
+  - id: core-activation-law
+    description: Ordered advance, freeze-from-anywhere, readiness-gated resume
+    weight: 20
+    satisfied: true
+    evidence:
+    - services/api/connectors/managed_integrations/activation.py
+    - services/api/connectors/managed_integrations/authority.py
+  - id: persistence-and-migrations
+    description: Additive activation tables, CAS revisions and transition evidence
+    weight: 20
+    satisfied: true
+    evidence:
+    - services/api/connectors/managed_integrations/activation_repository.py
+    - services/api/alembic/versions/20261029_rcp_activation_authority.py
+  - id: authorization-and-tenant-isolation
+    description: Operator-gated reads and global/tenant-environment scope isolation
+    weight: 20
+    satisfied: true
+    evidence:
+    - services/api/connectors/managed_integrations/routes.py
+    - tests/unit/reconciled_control/test_routes_activation.py
+  - id: runtime-convergence
+    description: Scheduler consumes effective activation; SDK config and Provider Runtime converge on RCP
+    weight: 20
+    satisfied: false
+    rationale: >-
+      The scheduler now consumes the durable effective activation decision and
+      an RCP-enabled SDK manifest request records a planned ChangeSet plus a
+      stage-zero rollout instead of publishing directly. SDKConfigService still
+      owns the actual publish and its rollout_percentage, request execution is
+      not wired, and Provider Runtime remains a declarative actuator; the
+      no-parallel-authority requirement is not yet met.
+    evidence:
+    - services/api/connectors/managed_integrations/activation.py
+    - services/api/connectors/managed_integrations/scheduler.py
+    - services/api/ingestion/sdk_config/rcp_requests.py
+    - tests/unit/reconciled_control/test_scheduler.py
+    - tests/unit/reconciled_control/test_sdk_manifest_requests.py
+  remaining_work:
+  - Program C — execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime
+  - Program D — recovery, continuity and interruption reconciliation
+  - Program E — operator command surface for governed transitions
+  - Program F — security/scale review and credentialed staging proof
+  - Program G — staged production activation with rollback evidence
+productionization:
+  denominator: in-scope productionization controls for the Program A+B plus first Program C slice
+  controls:
+  - id: security-controls
+    description: Operator gate, fail-closed scope validation and freeze authority
+    weight: 25
+    satisfied: true
+    evidence:
+    - services/api/connectors/managed_integrations/activation.py
+    - services/api/connectors/managed_integrations/routes.py
+  - id: reliability-idempotency-retry
+    description: Revision compare-and-set prevents lost concurrent transitions
+    weight: 25
+    satisfied: true
+    evidence:
+    - services/api/connectors/managed_integrations/activation_repository.py
+    - tests/unit/reconciled_control/test_activation_authority.py
+  - id: observability-metrics-logs
+    description: Activation transition evidence, effective-state blockers and alerts
+    weight: 25
+    satisfied: false
+    rationale: Transition evidence exists, but runtime metrics/alerts for blocked or drifting activation are Program F work.
+  - id: ci-and-release-gates
+    description: Credentialed staging and production activation gates
+    weight: 25
+    satisfied: false
+    rationale: Program F/G work; no activation is claimed for staging or production.
+  remaining_work:
+  - Define activation metrics/alerts and operator runbook
+  - Add credentialed staging proof for activation transitions and rollback
+activation:
+  state: NO_EXTERNAL_BLOCKER
+  blockers: []
+dependencies:
+  hard: []
+  soft:
+  - feature_id: kyber-operator-console
+    state: SATISFIED
+    note: Activation reads are exposed on the existing operator-gated surface.
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+    evidence:
+    - tests/unit/reconciled_control/
+    - tests/contracts/test_managed_integrations_parity.py
+    verification_method: focused-pytest
+  ci:
+    state: NOT_ATTEMPTED
+    credentialed: false
+  staging:
+    state: NOT_ATTEMPTED
+    credentialed: true
+  production:
+    state: NOT_ATTEMPTED
+    credentialed: true
+operational_ownership:
+  team: platform
+  technical_owner: platform
+  operational_owner: platform-ops
+  escalation: pagerduty:platform
+  runbook: docs/architecture/RECONCILED_CONTROL_PLANE.md
+  dashboards: []
+  alerts: []
+  service_level_target: null
+  recovery_objective: null
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: MODERATE
+  reasons:
+  - Activation law is unit-tested against the in-memory seam and parity-checked across TS/Python twins.
+  - Scope, CAS and readiness gates are fail-closed.
+  evidence_gaps:
+  - No credentialed staging/production evidence.
+  - The Postgres transition path is migration- and parity-checked, but no live local database test exercised concurrent CAS writers.
+  - The scheduler consumes effective activation and SDK manifest requests are planned through RCP, but request execution/rollout projection and Provider Runtime changes still bypass RCP (remaining Program C).
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: IMPLEMENTED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: experimental
+    implementation_floor: IMPLEMENTED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: not_in_release
+  production:
+    participation: not_in_release
+  production-scale:
+    participation: not_in_release
+historical:
+  migration_derived: false
+  note: New record for the Post-734 program; not migrated from production_status.py.

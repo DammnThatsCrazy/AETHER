@@ -34,6 +34,17 @@ on:
         options: [full, pilot]
         default: pilot
         required: true
+      identity_verification_secrets_enabled:
+        description: Mount identity verification keys after their Secrets Manager versions are populated
+        type: boolean
+        default: true
+        required: false
+      identity_provider_proof:
+        description: "Live provider-connection identity proof: required, or deferred (skips only the provider steps and records the deferral; the run is not identity-continuity proof)"
+        type: choice
+        options: [required, deferred]
+        default: required
+        required: false
       confirm_runtime_wake:
         description: "Explicitly authorize starting staging ECS services (required for apply-wake/full-rehearsal)"
         type: boolean
@@ -551,7 +562,14 @@ jobs:
           python-version: "3.11"
       - name: Install contract validation dependency
         run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Record deferred identity provider proof
+        if: inputs.identity_provider_proof == 'deferred'
+        run: |
+          set -euo pipefail
+          echo '::warning::identity provider proof is DEFERRED for this rehearsal: the provider-connection steps are skipped and this run is not identity-continuity proof'
+          echo '### Identity provider proof: deferred' >> "$GITHUB_STEP_SUMMARY"
       - name: Validate identity provider inputs before wake planning
+        if: inputs.identity_provider_proof != 'deferred'
         env:
           AETHER_STAGING_PROVIDER_IDENTITY: ${{ secrets.IDENTITY_STAGING_PROVIDER_IDENTITY }}
           AETHER_STAGING_PROVIDER_CONFIG_JSON: ${{ secrets.IDENTITY_STAGING_PROVIDER_CONFIG_JSON }}
@@ -608,6 +626,7 @@ jobs:
       - name: Verify the exact staging delivery principal and live ECR pull permissions
         env:
           EXPECTED_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
         run: |
           set -euo pipefail
           caller_json="$(aws sts get-caller-identity --output json)"
@@ -644,8 +663,11 @@ jobs:
             ecr:BatchCheckLayerAvailability ecr:BatchGetImage \
             ecr:DescribeImages ecr:GetDownloadUrlForLayer
           # Before delivery: check the revisions delivery will clone.
+          # Honour the requested identity-key mount shape, as terraform-promote
+          # does: first-time setup wakes with it false before the keys exist.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE" --revision family-latest
+            --lane "$DEPLOYMENT_LANE" --revision family-latest \
+            --identity-verification-secrets-enabled "${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}"
           python scripts/release/check_staging_runtime_iam.py \
             --live-ecs-cluster AETHER-staging \
             --expected-table-name AETHER-staging-cache \
@@ -844,6 +866,7 @@ jobs:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           STAGING_STATE: awake
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
           STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -878,7 +901,8 @@ jobs:
                 -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
               )
             fi
-            reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"
+            # The dispatch helper prints any gh failure, then exits 1 (never retries).
+            reconcile_output="$(scripts/ci/dispatch_workflow.sh "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}")"
             printf '%s\n' "$reconcile_output"
             reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
               | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -888,7 +912,9 @@ jobs:
             }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
+              # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+              reconcile_status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${reconcile_run_id}")"
+              if [ "$reconcile_status" = lookup_pending ]; then sleep 5; continue; fi
               if [ "$reconcile_status" = completed ]; then
                 reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
                 test "$reconcile_conclusion" = success || {
@@ -909,14 +935,16 @@ jobs:
           else
             reconcile_staging_state ''
           fi
-          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f staging_state="$STAGING_STATE" \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$INTENDED_RELEASE_SHA" 2>&1)"
+            -f expected_commit_sha="$INTENDED_RELEASE_SHA")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -928,7 +956,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -958,6 +988,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           EXPECTED_STATE: awake
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
           PLAN_RUN_ID: ${{ steps.dispatch.outputs.plan_run_id }}
@@ -968,6 +999,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.deployment-lane \
+            reviewed.identity-verification-secrets-enabled \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -978,6 +1010,8 @@ jobs:
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
             || { echo "::error::reviewed plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
+          test "$(cat reviewed.identity-verification-secrets-enabled)" = "$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+            || { echo '::error::reviewed plan identity verification secret setting differs from lifecycle input'; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -1072,6 +1106,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           EXPECTED_CHECKSUM: ${{ needs.wake-plan.outputs.plan_checksum || inputs.plan_checksum }}
           EXPECTED_STATE: awake
         run: |
@@ -1081,6 +1116,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.deployment-lane \
+            reviewed.identity-verification-secrets-enabled \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -1091,6 +1127,8 @@ jobs:
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
             || { echo "::error::reviewed plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
+          test "$(cat reviewed.identity-verification-secrets-enabled)" = "$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+            || { echo '::error::reviewed plan identity verification secret setting differs from lifecycle input'; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -1316,6 +1354,7 @@ jobs:
           PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ needs.wake-validate.outputs.plan_checksum }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -1327,12 +1366,14 @@ jobs:
           # has already downloaded, checksummed and policy-validated.
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified plan_checksum'; exit 1; }
-          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"
+            -f plan_checksum="$PLAN_CHECKSUM")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -1344,7 +1385,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -1493,6 +1536,7 @@ jobs:
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           DELIVERY_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -1505,13 +1549,15 @@ jobs:
           test -n "$RELEASE_MANIFEST_CHECKSUM" || {
             echo '::error::release_manifest_checksum is required before staging can deploy the approved release'; exit 1;
           }
-          dispatch_output="$(gh workflow run deploy.yml --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh deploy.yml --ref "$REF_NAME" \
             -f environment=staging \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f delivery_mode=deploy \
             -f rehearsal_run_id="$GITHUB_RUN_ID" \
             -f source_run_id="$RELEASE_RUN_ID" \
-            -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" 2>&1)"
+            -f identity_verification_secrets_enabled="${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}" \
+            -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM")"
           printf '%s\n' "$dispatch_output"
           delivery_run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -1522,7 +1568,9 @@ jobs:
           echo "canonical immutable delivery run: ${delivery_run_id}"
           wait_deadline="$(( $(date -u +%s) + DELIVERY_TIMEOUT_MINUTES * 60 ))"
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}" --jq '.status')"
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${delivery_run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}")"
               run_path="$(jq -r '.path' <<<"$run_json")"
@@ -1609,7 +1657,26 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install identity UI E2E workspace dependencies
         id: identity_ui_dependencies
-        run: pnpm install --frozen-lockfile --filter '@aether/aether...' --filter '@aether/proof-reporting...'
+        # Vite resolves the app's workspace packages through their built dist
+        # entries, and the proof reporter compiles against proof-runner's
+        # declarations, so every one must be built before Playwright runs.
+        # Every workspace package is named explicitly: the workspace links
+        # these with "*" specs, and the CI pnpm (12.x) does not follow them for
+        # `<pkg>...` selection (run 43380069776 scoped 2 installs and 3 builds,
+        # and proof-runner compiled before its dependencies). Builds run one
+        # layer at a time, in dependency order. @aether/ui and @olympus/brand
+        # ship source and have no build step.
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile \
+            --filter '@aether/aether...' --filter '@aether/proof-reporting...' \
+            --filter '@aether/shared' --filter '@aether/web' --filter '@aether/ui' \
+            --filter '@olympus/brand' --filter '@aether/proof-contracts' \
+            --filter '@aether/proof-fixtures' --filter '@aether/proof-runner'
+          pnpm --filter '@aether/shared' run build
+          pnpm --filter '@aether/web' --filter '@aether/proof-contracts' run build
+          pnpm --filter '@aether/proof-fixtures' run build
+          pnpm --filter '@aether/proof-runner' run build
       - name: Install Playwright Chromium for identity UI evidence
         id: identity_ui_browser
         run: pnpm --filter @aether/aether exec playwright install --with-deps chromium
@@ -2024,7 +2091,8 @@ jobs:
           save_marker()
           # The capability matrix exercises plan-gated services (graph
           # Connectivity and ML Prediction require gamma), so the primary
-          # tenant is enterprise. The isolation peer only has to be refused.
+          # tenant is enterprise. The isolation peer resolves an identity of
+          # its own, and /v1/identity/* needs beta or above, so it is pro.
           mine_id = create_tenant("Primary", "enterprise")
           mine_key = create_key(mine_id, "Primary", [
               "read", "write", "ingest", "analytics", "analytics:export",
@@ -2033,9 +2101,14 @@ jobs:
           # Identity capture and scenario evidence use a short-lived admin key
           # scoped to this disposable rehearsal tenant. The workflow masks it
           # and deletes the tenant during unconditional cleanup.
-          identity_capture_key = create_key(mine_id, "Identity Evidence", ["admin"], "enterprise")
-          peer_id = create_tenant("Isolation", "free")
-          peer_key = create_key(peer_id, "Isolation", ["read", "write"], "free")
+          # A key permission of "admin" does not imply "read" (only the ADMIN
+          # role does), and the live identity UI reads /v1/capabilities, which
+          # requires read. Run 43452018367 got 403 there and every identity
+          # surface rendered as disabled.
+          identity_capture_key = create_key(
+              mine_id, "Identity Evidence", ["read", "write", "admin"], "enterprise")
+          peer_id = create_tenant("Isolation", "pro")
+          peer_key = create_key(peer_id, "Isolation", ["read", "write"], "pro")
           if mine_id == peer_id:
               sys.exit("::error::run-scoped rehearsal tenants must be distinct")
 
@@ -2453,7 +2526,30 @@ jobs:
           print(f"failure/retry checks passed (malformed={status}, retry={first}/{second})")
           PY
 
+      - name: Record deferred identity provider proof evidence
+        if: inputs.identity_provider_proof == 'deferred'
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/rehearsal/identity-continuity-scenarios
+          python - <<'PY'
+          import json, os
+          path = ".artifacts/rehearsal/identity-continuity-scenarios/identity-provider-proof-deferred.json"
+          json.dump({
+              "identity_provider_proof": "deferred",
+              "skipped_steps": [
+                  "Bootstrap run-scoped provider connection for identity reimport",
+                  "Run live identity continuity scenarios",
+                  "Capture identity continuity evidence",
+                  "Collect and validate identity continuity staging proof pack",
+              ],
+              "counts_as_identity_continuity_proof": False,
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "sha": os.environ["GITHUB_SHA"],
+          }, open(path, "w"), indent=2)
+          PY
+          echo '::warning::identity provider proof deferred; identity continuity scenarios and proof pack skipped'
       - name: Bootstrap run-scoped provider connection for identity reimport
+        if: inputs.identity_provider_proof != 'deferred'
         env:
           AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
           AETHER_STAGING_TENANT_WRITE_KEY: ${{ env.REHEARSAL_TENANT_API_KEY }}
@@ -2472,6 +2568,7 @@ jobs:
           python scripts/identity_staging_provider_bootstrap.py
 
       - name: Run live identity continuity scenarios
+        if: inputs.identity_provider_proof != 'deferred'
         env:
           AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
           AETHER_STAGING_SCENARIO_API_KEY: ${{ env.REHEARSAL_TENANT_API_KEY }}
@@ -2503,7 +2600,10 @@ jobs:
         if: always() && steps.identity_ui_dependencies.outcome == 'success' && steps.identity_ui_browser.outcome == 'success'
         env:
           PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/.artifacts/rehearsal/identity-continuity-ui
-        run: pnpm --filter @aether/aether run e2e -- --reporter=line src/test/e2e/identity-continuity.spec.ts
+        # `pnpm run e2e -- <args>` forwards a literal `--`, after which
+        # Playwright ignored both the reporter and the file filter and ran
+        # the whole suite. Call the runner directly.
+        run: pnpm --filter @aether/aether exec playwright test --reporter=line src/test/e2e/identity-continuity.spec.ts
 
       - name: Run authenticated live staging identity UI evidence
         id: identity_ui_live_e2e
@@ -2517,10 +2617,15 @@ jobs:
           set -euo pipefail
           test -n "${IDENTITY_STAGING_UI_BASE_URL:-}" \
             || { echo '::error::deployed AETHER application URL secret is missing'; exit 1; }
-          pnpm --filter @aether/aether run e2e -- --reporter=line src/test/e2e/identity-continuity-live.spec.ts
+          pnpm --filter @aether/aether exec playwright test --reporter=line src/test/e2e/identity-continuity-live.spec.ts
 
       - name: Capture identity continuity evidence
-        if: always() && env.IDENTITY_STAGING_CAPTURE_API_KEY != '' && env.ALB_DNS_NAME != ''
+        # The capture binds the live scenario run summary, which only exists
+        # when the identity provider proof runs (run 43452018367: "live
+        # scenario run summary is missing or invalid").
+        if: >-
+          always() && inputs.identity_provider_proof != 'deferred'
+          && env.IDENTITY_STAGING_CAPTURE_API_KEY != '' && env.ALB_DNS_NAME != ''
         env:
           AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
           AETHER_STAGING_CAPTURE_API_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
@@ -2538,7 +2643,7 @@ jobs:
         run: pnpm --filter @aether/proof-reporting build
 
       - name: Collect and validate identity continuity staging proof pack
-        if: always() && steps.identity_ui_dependencies.outcome == 'success' && hashFiles('.artifacts/rehearsal/identity-continuity-capture.json') != ''
+        if: always() && inputs.identity_provider_proof != 'deferred' && steps.identity_ui_dependencies.outcome == 'success' && hashFiles('.artifacts/rehearsal/identity-continuity-capture.json') != ''
         run: |
           set -euo pipefail
           pnpm --filter @aether/proof-reporting proof-pack -- collect \
@@ -3007,6 +3112,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
@@ -3041,7 +3147,8 @@ jobs:
                 -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
               )
             fi
-            reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"
+            # The dispatch helper prints any gh failure, then exits 1 (never retries).
+            reconcile_output="$(scripts/ci/dispatch_workflow.sh "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}")"
             printf '%s\n' "$reconcile_output"
             reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
               | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -3051,7 +3158,9 @@ jobs:
             }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
+              # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+              reconcile_status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${reconcile_run_id}")"
+              if [ "$reconcile_status" = lookup_pending ]; then sleep 5; continue; fi
               if [ "$reconcile_status" = completed ]; then
                 reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
                 test "$reconcile_conclusion" = success || {
@@ -3072,15 +3181,17 @@ jobs:
           else
             reconcile_staging_state ''
           fi
-          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f staging_state=asleep \
             -f secret_preflight_required=false \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$EXPECTED_COMMIT_SHA" 2>&1)"
+            -f expected_commit_sha="$EXPECTED_COMMIT_SHA")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -3091,7 +3202,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -3123,6 +3236,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           EXPECTED_STATE: asleep
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
@@ -3133,6 +3247,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.deployment-lane \
+            reviewed.identity-verification-secrets-enabled \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -3143,6 +3258,8 @@ jobs:
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
             || { echo "::error::reviewed sleep plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
+          test "$(cat reviewed.identity-verification-secrets-enabled)" = "$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+            || { echo '::error::reviewed sleep plan identity verification secret setting differs from lifecycle input'; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -3253,6 +3370,7 @@ jobs:
           PLAN_RUN_ID: ${{ steps.sleep-plan.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ steps.sleep-verify.outputs.plan_checksum }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -3261,13 +3379,15 @@ jobs:
             || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified sleep plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified sleep plan_checksum'; exit 1; }
-          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f secret_preflight_required=false \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"
+            -f plan_checksum="$PLAN_CHECKSUM")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
             | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -3278,7 +3398,9 @@ jobs:
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
-            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+            # scripts/ci/run_status.sh retries only a just-dispatched 404, briefly.
+            status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "${run_id}")"
+            if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
             if [ "$status" = completed ]; then
               conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
               break
@@ -3607,34 +3729,6 @@ jobs:
             echo '::error::sleep convergence encountered one or more AWS, topology, or drain failures; the lease remains open unless final verification proves zero'
             exit 1
           fi
-          mapfile -t task_arns < <(printf '%s' "$task_arns_raw" | tr '\t' '\n' | sed '/^$/d')
-          for task_arn in "${task_arns[@]:-}"; do
-            test -n "$task_arn" || continue
-            aws ecs stop-task --cluster "$STAGING_CLUSTER" --task "$task_arn" \
-              --reason 'staging reviewed sleep apply failed' >/dev/null
-            task_stop_count=$((task_stop_count + 1))
-            echo "::warning::stopped residual ${task_arn} outside Terraform; state must be reconciled"
-          done
-          # Without this, an autoscaling floor of 1 revives the service within
-          # a cooldown. Lower only the floor: max_capacity is the reviewed
-          # envelope, and changing it is plan drift the next wake rejects.
-          if ! targets_raw="$(aws application-autoscaling describe-scalable-targets \
-            --service-namespace ecs \
-            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].ResourceId" \
-            --output text)"; then
-            echo '::error::could not read staging autoscaling targets; an autoscaling floor may revive staging'
-            exit 1
-          fi
-          mapfile -t targets < <(printf '%s' "$targets_raw" | tr '\t' '\n' | sed '/^$/d')
-          for target in "${targets[@]:-}"; do
-            test -n "$target" || continue
-            aws application-autoscaling register-scalable-target --service-namespace ecs \
-              --scalable-dimension ecs:service:DesiredCount --resource-id "$target" \
-              --min-capacity 0 >/dev/null
-            echo "::warning::lowered autoscaling floor for ${target} to 0 outside Terraform; state must be reconciled"
-          done
-          printf 'scaled_to_zero=%s\n' "$stopped" >> "$GITHUB_OUTPUT"
-          printf 'tasks_stopped=%s\n' "$task_stop_count" >> "$GITHUB_OUTPUT"
 
       - name: Verify zero desired counts and no residual staging compute
         id: residual

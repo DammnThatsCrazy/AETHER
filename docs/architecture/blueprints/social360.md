@@ -174,6 +174,29 @@ repositories + writer routing. All of this stays flag-gated OFF — the live pro
 pull, the enforce-flag flip and real SLO baselines remain release-gated residuals
 (ledger D-07). **No release-readiness claim.**
 
+**M14 (2026-10-22) — Social360 propagation read path.** The product provider now
+reads bounded tenant-scoped FOLLOWS paths through the governed relationship
+predicate and influence-propagation authorities. It checks endpoint consent,
+tenant and endpoint scope, edge validity/revocation, observation time order, and
+evidence before returning a path. It reports partial/degraded observed path
+coverage with completeness and freshness unknown; component values are omitted,
+and the output does not claim social contagion or causal propagation. This
+closes a provider-to-authority join for the `propagation` slot only. The
+`social_contagion`, `trust_edges`, and `risk_edges` slots remain unbound, and
+the technical projection stays `in_flight` with no release-readiness claim.
+
+**M15 (2026-10-23) — evidence-bound influence paths.** The provider now exposes a
+separate `influence` section for bounded, consent-authorized directed FOLLOWS
+paths and binds it to the product `influence_paths` slot. For each path hop, it
+reads the persisted tenant-scoped RelationshipFidelity vector for the exact
+directed relationship and accepts component measurements only when every vector
+evidence ID matches the graph edge's relationship-fact evidence. Missing or
+mismatched evidence leaves that hop's measurements unknown. Component values
+can remain partial; path completeness and freshness remain unknown, and the
+output does not establish actual influence, trust, or causal contagion. The
+`social_contagion`, `trust_edges`, and `risk_edges` slots remain unbound. The
+projection remains `in_flight` and this slice makes no release-readiness claim.
+
 Rollout is flag-gated (`AETHER_SOCIAL360_ENABLED=false`,
 `AETHER_RELATIONSHIP_MOTIFS_ENABLED=false`,
 `AETHER_RELATIONSHIP_FIDELITY_MODE=off`, `AETHER_PATH_FIDELITY_ENABLED=false`,

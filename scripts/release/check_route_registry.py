@@ -126,6 +126,12 @@ def check() -> int:
         r.require(isinstance(val, list) and bool(val),
                   f"{name} present", f"{name} must be a non-empty list")
 
+    sensitive_prefixes = data.get("sensitive_path_prefixes", []) or []
+    r.require(isinstance(sensitive_prefixes, list)
+              and all(isinstance(p, str) and p.startswith("/v1/") for p in sensitive_prefixes),
+              "sensitive_path_prefixes are /v1/ path prefixes",
+              "every sensitive_path_prefixes entry must be a string starting with '/v1/'")
+
     # Kyber must be a sensitive + high-risk domain (operator surface).
     sens = set(data.get("sensitive_domains", []) or [])
     high = set(data.get("high_risk_domains", []) or [])
@@ -152,6 +158,16 @@ def check() -> int:
                   and undeclared.required_capability is None,
                   "an undeclared /kyber route falls back to operator-required",
                   "an undeclared /kyber route must stay operator-required with no capability")
+        admin = classify("/v1/admin/tenants/{tenant_id}")
+        diagnostics = classify("/v1/diagnostics/errors")
+        r.require(admin is not None and admin.platform_operator_required
+                  and diagnostics is not None and diagnostics.platform_operator_required,
+                  "classify() marks admin and diagnostics routes platform-operator-required",
+                  "admin and diagnostics routes must be platform-operator-required")
+        webhook = classify("/v1/admin/billing/stripe/webhook")
+        r.require(webhook is not None and webhook.public and not webhook.platform_operator_required,
+                  "a public admin path is never platform-operator-required",
+                  "a public path must never be platform-operator-required")
     except Exception as exc:  # pragma: no cover - import-time env issues
         r.warn(f"classifier import skipped ({type(exc).__name__}: {exc})")
 

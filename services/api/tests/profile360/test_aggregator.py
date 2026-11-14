@@ -46,6 +46,10 @@ class _Repo:
                 return r
         return None
 
+    async def find_for_entity(self, tenant_id, entity_id):
+        return next((r for r in self._rows
+                     if r.get("tenant_id") == tenant_id and r.get("entity_id") == entity_id), None)
+
     async def find_many(self, filters=None, limit=50, **_):
         f = filters or {}
 

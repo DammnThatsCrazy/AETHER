@@ -58,6 +58,21 @@ set of concepts. Entities are referenced in events via `EntityRef` from
 | **Agent** | Autonomous worker acting on behalf of user/org |
 | **Service** | Callable endpoint agents consume (incl. x402) |
 
+### Agent hierarchy and actor roles
+
+An agent is not one concept. `services/api/shared/agent_lineage/vocabulary.py` and
+its twin `packages/shared/agent-lineage.ts` define the levels: Agent Definition (the
+logical identity), Agent Deployment, Agent Instance (a concrete runtime), Agent Run
+(bounded execution toward a goal), Task, Step, Invocation, External Effect, Outcome.
+One logical agent can have 10 deployments and 10,000 instances without becoming
+10,010 identities.
+
+Observations separate seven actor roles, which may all differ: `principal`,
+`initiator`, `executor`, `operator`, `beneficiary`, `counterparty`, `controller`.
+A human and an agent are never merged into one entity, whatever identifiers they
+share. They are linked by relationships such as `OPERATES`, `AUTHORIZED`, `OWNS` and
+`ACTED_ON_BEHALF_OF`. See `docs/architecture/HIGH-CARDINALITY-AGENT-LINEAGE.md`.
+
 ## Actor kinds
 
 Every event may carry `provenance.actor_kind`:

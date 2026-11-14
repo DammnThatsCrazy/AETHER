@@ -71,8 +71,8 @@ async def list_signals(
 async def get_signal(entity_id: str, signal_id: str, request: Request):
     """Get a specific signal instance."""
     tenant_id = request.state.tenant.tenant_id
-    rec = await _signal_repo.find_by_id(signal_id)
-    if rec is None or rec.get("entity_id") != entity_id or rec.get("tenant_id") != tenant_id:
+    rec = await _signal_repo.get_signal(tenant_id, signal_id)
+    if rec is None or rec.get("entity_id") != entity_id:
         raise HTTPException(status_code=404, detail=f"Signal {signal_id} not found")
     return APIResponse(data=rec).to_dict()
 

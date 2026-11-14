@@ -175,6 +175,35 @@ async def test_ticketing_adapter_requires_backend():
         )
 
 
+# ─── Tenant-configured destinations must be public ──────────────────────────
+
+@pytest.fixture
+def private_dns_no_network():
+    """Every host resolves to a private address; any connection attempt fails the test."""
+    import httpx
+
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("10.0.0.5", 443))]), \
+         patch.object(httpx.AsyncClient, "send", AsyncMock(side_effect=AssertionError("connection attempted"))):
+        yield
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("adapter_name", "provider_config"),
+    [
+        ("webhook", {"url": "https://hooks.example.com/in"}),
+        ("jira", {"base_url": "https://jira.example.com", "project_key": "OPS"}),
+        ("ticketing", {"backend": "jira", "base_url": "https://jira.example.com", "project_key": "OPS"}),
+        ("crm", {"crm_url": "https://crm.example.com/api"}),
+        ("marketing", {"platform_url": "https://mkt.example.com/api", "consent_verified": True}),
+    ],
+)
+async def test_rejects_non_public_destination(private_dns_no_network, adapter_name, provider_config):
+    adapter = ProviderAdapterRegistry.default().get_or_raise(adapter_name)
+    with pytest.raises(SSRFBlockedError):
+        await adapter.dispatch({"title": "T"}, provider_config, credential="user@example.com:token")
+
+
 # ─── SlackAdapter (mocked HTTP) ──────────────────────────────────────────────
 
 @pytest.mark.asyncio

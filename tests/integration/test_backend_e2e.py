@@ -645,15 +645,16 @@ class TestA2HRelationshipLayerE2E:
         graph = GraphClient()
         await graph.connect()
 
-        await graph.add_vertex(Vertex(vertex_type=VertexType.AGENT, vertex_id="agent-sub"))
-        await graph.add_vertex(Vertex(vertex_type=VertexType.USER, vertex_id="user-sub"))
+        owner = {"tenant_id": "t-a2h"}
+        await graph.add_vertex(Vertex(vertex_type=VertexType.AGENT, vertex_id="agent-sub", properties=owner))
+        await graph.add_vertex(Vertex(vertex_type=VertexType.USER, vertex_id="user-sub", properties=owner))
         await graph.add_edge(Edge(
             edge_type=EdgeType.DELIVERS_TO,
             from_vertex_id="agent-sub",
             to_vertex_id="user-sub",
         ))
 
-        subgraph = await get_layer_subgraph(graph, "agent-sub", RelationshipLayer.A2H)
+        subgraph = await get_layer_subgraph(graph, "agent-sub", RelationshipLayer.A2H, tenant_id="t-a2h")
         assert subgraph["layer"] == "A2H"
         assert subgraph["vertex_count"] >= 1
         assert EdgeType.DELIVERS_TO in subgraph["edge_types"]

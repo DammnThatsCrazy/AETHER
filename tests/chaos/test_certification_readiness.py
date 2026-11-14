@@ -20,13 +20,13 @@ from shared.certification.readiness import (
 from shared.certification.registry import build_capability_matrix
 
 
-# ── all 26 first-release providers are uniformly credential_waiting ───────────
+# ── every first-release provider is uniformly credential_waiting ──────────────
 def test_all_first_release_providers_are_credential_waiting():
     matrix = build_capability_matrix()
     summary = matrix["summary"]
-    assert summary["total"] == 26
-    assert summary["first_release"] == 26
-    assert summary["by_state"] == {"credential_waiting": 26}
+    assert summary["total"] == 28
+    assert summary["first_release"] == 28
+    assert summary["by_state"] == {"credential_waiting": 28}
     # none are production/partner-live, none are scaffolded (forbidden for release)
     states = {p["state"] for p in matrix["providers"].values()}
     assert states == {"credential_waiting"}
@@ -38,9 +38,11 @@ def test_provider_domains_match_the_shipped_scope():
     # is the certified reference pull adapter; SendGrid/Customer.io/Mailchimp/
     # Postmark are webhook-only, and HubSpot/Iterable/Braze (ADR-C11 follow-up)
     # extend the cohort with pull-capable adapters.
+    # prediction_market: Polymarket and Kalshi payload normalization + observation
+    # store only (no live polling), code-complete and flag-gated.
     assert matrix["summary"]["by_domain"] == {
         "communications": 8, "derivatives": 4, "interop": 7, "payments": 5,
-        "stablecoin_chain": 2,
+        "prediction_market": 2, "stablecoin_chain": 2,
     }
 
 

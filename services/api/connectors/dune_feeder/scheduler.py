@@ -9,8 +9,9 @@ Design constraints (same as DuneFeederService):
 - No graph/Neptune imports or writes.
 - Silver/Gold promotion remains explicit operator actions.
 - Graph state is NEVER touched here.
-- All polling is credential-gated: requires DUNE_API_KEY env var or per-schedule
-  vault reference; skips with status="skipped" when neither is available.
+- All polling is credential-gated: tenant schedules resolve api_key_ref from
+  the tenant credential store; platform schedules use DUNE_API_KEY. A missing
+  credential skips with status="skipped" and a generic detail.
 - Live API calls are gated by AETHER_ENV != "local"; in local mode the worker
   logs intent but never calls the external Dune API.
 """
@@ -151,15 +152,14 @@ class DunePollingWorker:
     def __init__(self) -> None:
         self._store = ScheduledQueryStore()
 
-    def _resolve_api_key(self, config: ScheduledQueryConfig) -> Optional[str]:
+    async def _resolve_api_key(self, config: ScheduledQueryConfig) -> Optional[str]:
         """Return the Dune API key for this config, or None if not configured."""
-        if config.api_key_ref:
-            # Vault lookup would go here in production.
-            # For now, treat api_key_ref as a direct env var name (safe for staging).
-            key = os.getenv(config.api_key_ref)
-            if key:
-                return key
-        return os.getenv("DUNE_API_KEY")
+        if config.tenant_scope is None:
+            return os.getenv("DUNE_API_KEY")
+        if not config.api_key_ref:
+            return None
+        from shared.credentials.service import credential_service
+        return await credential_service.reveal(config.tenant_scope, config.api_key_ref)
 
     def _is_due(self, config: ScheduledQueryConfig) -> bool:
         if not config.enabled:
@@ -198,9 +198,16 @@ class DunePollingWorker:
                 detail="local mode — no external API call",
             )
 
-        api_key = self._resolve_api_key(config)
+        try:
+            api_key = await self._resolve_api_key(config)
+        except Exception as exc:
+            logger.warning(
+                "Dune scheduler: credential lookup failed",
+                extra={"schedule_id": config.schedule_id, "error": type(exc).__name__},
+            )
+            api_key = None
         if not api_key:
-            detail = "no Dune API key configured (set DUNE_API_KEY or api_key_ref)"
+            detail = "credential unavailable"
             logger.warning(
                 "Dune scheduler: no API key",
                 extra={"schedule_id": config.schedule_id},
@@ -262,7 +269,11 @@ class DunePollingWorker:
             )
 
         except Exception as exc:
-            detail = str(exc)[:200]
+            # Exception text can echo request headers, including the API key.
+            detail = type(exc).__name__
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if status_code is not None:
+                detail = f"{detail} status={status_code}"
             logger.error(
                 "Dune scheduler: poll failed",
                 extra={

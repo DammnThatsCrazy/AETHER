@@ -1348,3 +1348,48 @@ def test_network_egress_counts_the_type_the_contract_names(tmp_path, monkeypatch
     assert "network_egress_mode" in failed_checks(result)
     assert "expected_by_profile_resource_type" in detail_for(result, "network_egress_mode")
 
+
+
+def test_access_mcp_flag_is_read_from_terraforms_raw_string_form():
+    """Terraform records TF_VAR_* values as raw strings, so a disabled flag is
+    "false" in plan JSON. Treating that as enabled demanded an MCP service the
+    staging plan correctly omits (rehearsal promotion run 43315664691)."""
+    assert MODULE.plan_bool("false") is False and MODULE.plan_bool("False") is False
+    assert MODULE.plan_bool("true") is True and MODULE.plan_bool(True) is True
+    assert MODULE.plan_bool(False) is False and MODULE.plan_bool(None) is False
+    assert MODULE.plan_bool("__REDACTED_SENSITIVE__") is False
+
+    runtime = {"profiles": {"staging": {"services": {"api": {}, "lean-worker": {}},
+                                        "remote_ml": False, "execution_mode": "consolidated"}}}
+    resources = [
+        {"type": "aws_ecs_service", "address": address, "actions": ["no-op"]}
+        for address in ("module.ecs.aws_ecs_service.backend",
+                        'module.ecs.aws_ecs_service.runtime_service["lean-worker"]')
+    ]
+    reporter = MODULE.Reporter("raw string flag")
+    results: list[dict] = []
+    MODULE.check_service_cardinality(
+        reporter, results, "staging", runtime, resources,
+        {"variables": {"enable_access_mcp": {"value": "false"}}},
+    )
+    assert reporter.failures == [], reporter.failures
+
+
+def test_pilot_may_create_the_aether_cli_auth0_path_but_never_destroy_it():
+    """The Aether CLI's Auth0 resources are part of the Aether path; creating
+    them is allowed in the pilot, deleting or replacing them is not, and Kyber
+    stays out of scope."""
+    def plan(*changes):
+        return {"resource_changes": [
+            {"address": address, "type": address.split(".")[2], "change": {"actions": actions}}
+            for address, actions in changes
+        ]}
+
+    cli = ("module.auth0.auth0_client.aether_cli", "module.auth0.auth0_client_credentials.aether_cli_public",
+           "module.auth0.auth0_client_grant.aether_cli_api", "module.auth0.auth0_connection_client.aether_cli_db")
+    created = MODULE.pilot_plan_safety_violations(plan(*[(a, ["create"]) for a in cli]))
+    assert not created.get("pilot.auth0_scope") and not created.get("pilot.auth0_destructive_change")
+    replaced = MODULE.pilot_plan_safety_violations(plan((cli[0], ["delete", "create"])))
+    assert replaced.get("pilot.auth0_destructive_change") == [cli[0]]
+    kyber = MODULE.pilot_plan_safety_violations(plan(("module.auth0.auth0_client.kyber", ["update"])))
+    assert kyber.get("pilot.auth0_scope") == ["module.auth0.auth0_client.kyber"]

@@ -35,6 +35,7 @@ source_files:
   - config/staging_secret_preflight_trust_policy.json
   - config/staging_plan_iam_policy.yaml
   - config/staging_plan_trust_policy.json
+  - config/staging_lifecycle_trust_policy.json
   - config/staging_plan_reconcile_iam_policy.json
   - config/staging_plan_reconcile_trust_policy.json
   - config/staging_apply_iam_policy.yaml
@@ -55,15 +56,16 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
-  ".github/workflows/deploy.yml": "sha256:e9555bd68e7a994e984fd012fa290540c89e078775e4f6da8c3f5b82ed539238"
+  ".github/workflows/deploy.yml": "sha256:76a685c742a3a57790baecd1f774ed606e30a3237d339c017ca9aa0bba6be73e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
+  ".github/workflows/staging-lifecycle.yml": "sha256:7a1ca755a832d43137268b2d50ea032f241fa79aa0a57cb187099402e4f186a6"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:3da807f71996e7b397bc4a593fafd27d3818c3d4f0d7a2fa37b5619674209d48"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
+  ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
-  "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
+  "config/staging_apply_iam_policy.yaml": "sha256:528cc930bd8cedf9f347f4f0630e50e61bf1360bdf5beeb8088c90485519b142"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
+  "config/staging_lifecycle_trust_policy.json": "sha256:9623d3b8d39575a1bf00b5cc0ba2e14159e5fc821dfbfa84e26a108ba91fd5d6"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
   "config/staging_plan_reconcile_trust_policy.json": "sha256:4d413822419f32fb1cd82b99f8cabbda1b66a72c02f819d65b0213d15b14001a"
@@ -76,7 +78,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:d7294219d0cb8e10fa5a108a1af562d586bb3b7cb78b1ef34cccf37e1ffb79f2"
+  "infra/aws/terraform/": "sha256:a9e4be4d113fbfc912ad1b80a9ccee3ab7e3bab8a9fc73851956a38d70ff613c"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -87,13 +89,13 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:3b38ca65a936f122927c214b814d9742913e6b65f7b7b9295f040fdac5e61fa3"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
-  "services/api/Dockerfile": "sha256:619471497e7144f93af70b49c509667754ed834809c1977335d38fa90173bee9"
+  "services/api/Dockerfile": "sha256:160ec776b6017b436c836ee9d96a2a5681be38528679cd0541beeb94b0bd57ee"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -192,7 +194,27 @@ repository-secret write access with a disposable GitHub secret, then verifies
 that secret was removed. The preflight's `iam:SimulatePrincipalPolicy` call
 runs under `AetherStagingDeploy` and is covered by the application-delivery and
 apply-state-backend contracts; it is intentionally absent from the
-`AetherStagingLifecycle` policy. The checked-in
+`AetherStagingLifecycle` policy.
+
+`AetherStagingDeploy` is managed outside Terraform, so its trust policy is
+mirrored in `config/staging_application_delivery_trust_policy.json` and pinned
+by a unit test. The immutable build job in `deploy.yml` has no environment, so
+on a push to `staging` it presents the branch subject
+`repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging`; the role must trust that
+subject (alongside `main`, `environment:staging` and
+`environment:staging-terraform`) or the build stops at "Configure AWS
+credentials" with `AssumeRoleWithWebIdentity` denied. Change the live role and
+the manifest together.
+`AetherStagingLifecycle` is also managed outside Terraform; its trust policy is
+mirrored in `config/staging_lifecycle_trust_policy.json`, and a unit test derives
+the required subjects from every workflow job that assumes the role. Lifecycle
+dispatches must come from merged `staging`, so the environment-less
+`select-profile`, `wake-apply` and `sleep` jobs present
+`repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging`; the scheduled TTL guard
+presents `ref:refs/heads/main`; the rehearsal and delivery jobs present
+`environment:staging`. A live role missing the staging branch subject fails every
+lifecycle run at "Verify lifecycle role assumption before dispatch" while the
+TTL guard keeps passing. The checked-in
 IAM manifests are validated against the workflow action inventory so adding a
 new lifecycle AWS call without its least-privilege grant fails CI before a
 rehearsal can start. AWS evaluates several lifecycle namespace/read APIs against
@@ -740,10 +762,14 @@ returns HTML for them and the app renders blank). This keeps route-specific
 marketing metadata intact while preserving direct navigation for the
 runtime-routed apps.
 
-The Aurora module pins the standard provisioned Aurora PostgreSQL 16.8 engine
-release. The repository previously used 16.4, but that exact standard engine
-version is not available in the staging account/region; the major-family
-parameter group remains `aurora-postgresql16`.
+The Aurora module pins the standard provisioned Aurora PostgreSQL 16.13 engine
+release (the release live staging runs after AWS's automatic minor upgrade from
+16.8) and ignores `engine_version` after creation, so automatic minor upgrades
+can never make a reviewed apply attempt a minor-version downgrade; the
+major-family parameter group remains `aurora-postgresql16`. Because the ignore
+covers every version change, a major upgrade must remove `engine_version` from
+`ignore_changes` for that reviewed apply (and move the parameter-group family),
+then restore it.
 
 ### Production lead intake
 
@@ -837,7 +863,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `alb` | Internet-facing ALB, HTTP→HTTPS redirect, backend target group | always; **gated** ML target group + `/v1/ml/*` rule |
 | `ecs` | Fargate cluster, backend service, per-service task definitions, IAM roles, autoscaling | always; **gated** dedicated ML service |
 | `monitoring` | SNS alerts, CloudWatch alarms, dashboard, S3 log archive | always; per-backend alarms **gated** |
-| `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always |
+| `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always; the schedule is disabled while staging is asleep |
 | `auth0` | Aether and Kyber SPA clients, public Aether CLI Native client with Device Authorization, and the API resource server | always |
 | `elasticache` | Redis 7.x, TLS in transit, AUTH token, KMS at rest | **gated** — off in both profiles; enabled only by a reviewed production variable change |
 | `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics | **gated** — off in both profiles; enabled only by a reviewed production variable change |
@@ -1143,7 +1169,10 @@ detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group or an exact reviewed ECR repository, and produce a fresh
-reviewed plan. The legacy Aurora path is separate and exact: it accepts only
+reviewed plan. Every reconcile also imports a live staging Amplify branch that
+Terraform does not yet own (`aws_amplify_branch.main["<app>"]`, ID
+`<app-id>/staging`), import-only, so the reviewed apply never tries to create a
+branch that already exists. The legacy Aurora path is separate and exact: it accepts only
 `aether-staging` with the `IMPORT-LEGACY-STAGING-AURORA` confirmation, checks
 live cluster and writer metadata plus staging-state ownership, and imports only
 that cluster at
@@ -1253,6 +1282,17 @@ accounts when their names would otherwise collide.
    WebAuthn. Populate those values through the secure bootstrap, then let the
    reviewed state-reconciliation workflow import only their metadata. Do not
    put any secret value in Terraform variables, state, plans, or logs.
+   The same bootstrap creates `aether/identity-verification-token-key` and
+   `aether/identity-verification-token-key-previous`, initially with the same
+   generated key. For the first rollout, plan and apply with
+   `identity_verification_secrets_enabled=false`, populate both values through
+   the secure bootstrap, and create a fresh reviewed plan with the input true.
+   The workflow checks both `AWSCURRENT` versions using metadata only before
+   creating or applying ECS task definitions that mount them as
+   `IDENTITY_VERIFICATION_TOKEN_KEY` and
+   `IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS`. During rotation, keep the
+   previous value until stored verification evidence no longer needs it (see
+   [Secret Rotation](SECRET-ROTATION.md)).
 3. **Push images.** Task definitions pin an immutable digest, so a new digest is
    a new task definition and deploys itself. The ML image is only needed on
    profiles that run the dedicated ML service.

@@ -72,3 +72,70 @@ async def test_outcome_graph_off_mode_no_ledger(set_mode):
     # Projection still happened: PRODUCED edge exists out of the outcome vertex.
     assert await client.get_edges("outcome-1")
     assert await GraphMutationLedgerRepository().list_records(TENANT) == []
+
+
+def _recommendation(tenant: str, rec_id: str) -> dict:
+    return {
+        "recommendation_id": rec_id,
+        "tenant_id": tenant,
+        "entity_id": f"{tenant}-entity",
+        "evidence": [
+            {"source_type": "profile_signal", "source_id": "profile360:shared-entity"},
+            {"source_type": "edge", "source_id": "graph:shared-entity"},
+            {"source_type": "policy", "source_id": "policy:churn_risk"},
+        ],
+    }
+
+
+def _graph() -> GraphClient:
+    from shared.graph.graph import _InMemoryGraphBackend
+
+    client = GraphClient()
+    client._backend = _InMemoryGraphBackend()  # noqa: SLF001
+    return client
+
+
+async def _supported_by(client: GraphClient, rec_id: str) -> list[str]:
+    return sorted(e.to_vertex_id for e in await client.get_edges(rec_id, "SUPPORTED_BY", "out"))
+
+
+@pytest.mark.asyncio
+async def test_tenants_sharing_evidence_ids_each_get_their_own_vertices(set_mode):
+    set_mode("off")
+    client = _graph()
+    from intelligence.intelligence.graph_mutations import upsert_recommendation_graph
+
+    for tenant in ("tenant-a", "tenant-b"):
+        await upsert_recommendation_graph(client, _recommendation(tenant, f"rec-{tenant}"))
+
+    for tenant in ("tenant-a", "tenant-b"):
+        expected = sorted(f"{tenant}:{source}" for source in (
+            "graph:shared-entity", "policy:churn_risk", "profile360:shared-entity",
+        ))
+        assert await _supported_by(client, f"rec-{tenant}") == expected
+        for vertex_id in expected:
+            assert (await client.get_vertex(vertex_id)).properties["tenant_id"] == tenant
+
+
+@pytest.mark.asyncio
+async def test_a_refused_evidence_vertex_is_counted_and_only_its_edge_skipped(set_mode, monkeypatch):
+    set_mode("off")
+    client = _graph()
+    from intelligence.intelligence import graph_mutations
+    from shared.graph.graph import Vertex, VertexType
+
+    counted: list[tuple] = []
+    monkeypatch.setattr(
+        graph_mutations.metrics, "increment",
+        lambda name, *a, **k: counted.append((name, k.get("labels"))),
+    )
+    await client.add_vertex(Vertex(
+        VertexType.POLICY_DECISION, "tenant-a:policy:churn_risk", {"tenant_id": "tenant-z"},
+    ))
+
+    await graph_mutations.upsert_recommendation_graph(client, _recommendation("tenant-a", "rec-a"))
+
+    assert await _supported_by(client, "rec-a") == [
+        "tenant-a:graph:shared-entity", "tenant-a:profile360:shared-entity",
+    ]
+    assert counted == [("intelligence_graph_vertex_conflict_total", {"kind": "evidence"})]

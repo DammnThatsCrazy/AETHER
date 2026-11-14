@@ -1,201 +1,3822 @@
-"""Tenant-scoped Social360 projection over canonical Social Silver facts."""
+"""Tenant-scoped Social360 projection over canonical Social Silver facts.
+
+This projection reports persisted social observations. It does not derive a
+universal influence score, promote observations into graph relationships, or
+turn unavailable coverage into zero. Relationship subjects use the canonical
+``source_entity::target_entity`` pair form shared with Relationship360 and only
+surface Social Silver facts that are bound to those exact endpoints.
+"""
+
 from __future__ import annotations
 
+import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any, Literal, Optional, Protocol
 
+from shared.contracts_models.epistemic import EpistemicStatus
+from shared.intelligence_projections.composition import PRODUCT_360_SURFACE_DEFINITIONS
 from shared.intelligence_projections.contracts import (
-    ProjectionContext, ProjectionRequest, ProjectionResult, ProjectionSection,
+    ClaimEnvelope,
+    ProjectionContext,
+    ProjectionRequest,
+    ProjectionResult,
+    ProjectionSection,
+    ProjectionSubject,
 )
-from shared.intelligence_projections.generated_registry import INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+from shared.intelligence_projections.generated_registry import (
+    INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+)
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
+from shared.intelligence_projections.registry import ProviderRegistry
+from graph.operational_intelligence.models import EvidenceRef
+from shared.graph.graph import Edge
 from governance.consent.authority import evaluate_consent
-from ingestion.silver.repositories.social_facts import (
-    SocialCommunityFactsRepository, SocialConnectionFactsRepository,
-    SocialContentFactsRepository, SocialIdentityFactsRepository,
-    SocialInteractionFactsRepository, SocialMetricFactsRepository,
+from identity.population360.scope import (
+    PopulationScopeRead,
+    PopulationScopeReader,
+    RepositoryPopulationScopeReader,
 )
+from identity.identity.source_subject_scope import (
+    RepositorySourceSubjectScopeReader,
+    SourceSubjectScopeRead,
+    SourceSubjectScopeReader,
+)
+
+
+PROJECTION_ID = "social360"
+OUTPUT_SECTIONS: tuple[str, ...] = (
+    "evidence",
+    "findings",
+    "influence",
+    "interactions",
+    "paths",
+    "propagation",
+    "risk_edges",
+    "social_contagion",
+    "state",
+    "summary",
+    "syndicates",
+    "timeline",
+    "trust_edges",
+)
+_MAX_READ_ROWS = 500
+_SOCIAL_PATH_DEPTH = 3
+_SOCIAL_PATH_NODE_LIMIT = 100
+_SOCIAL_PATH_EDGE_LIMIT = 500
+_SOCIAL_PATH_RESULT_LIMIT = 50
+_MAX_SOCIAL_INFLUENCE_FIDELITY_READS = _SOCIAL_PATH_RESULT_LIMIT * _SOCIAL_PATH_DEPTH
+_SOCIAL_INFLUENCE_DIMENSIONS = (
+    "interaction_frequency",
+    "interaction_depth",
+    "persistence",
+    "reciprocity",
+    "incentive_exposure",
+    "incentive_independence_support",
+    "coordination_indicator_strength",
+    "outcome_support",
+)
+_SOCIAL_PATH_AUTHORITIES = ["graph", "relationship_facts"]
+_SOCIAL_PROPAGATION_AUTHORITIES = [
+    "graph",
+    "relationship_facts",
+    "relationship_predicate_registry",
+    "influence_propagation",
+]
+_SOCIAL_INFLUENCE_AUTHORITIES = [
+    "computation",
+    "graph",
+    "influence_propagation",
+    "relationship_facts",
+    "relationship_fidelity",
+    "relationship_predicate_registry",
+]
+_SOCIAL_SYNDICATE_AUTHORITIES = [
+    "cohort_membership",
+    "evidence",
+    "graph",
+    "population_definitions",
+]
+_SOCIAL_RISK_EDGE_AUTHORITIES = ["graph", "relationship_facts", "risk_outputs"]
+_SOCIAL_CONTAGION_AUTHORITIES = [
+    "social_relationship_evidence_events",
+    "entity_identity",
+    "source_provenance",
+    "risk_signals",
+    "graph",
+    "relationship_facts",
+]
+_SOCIAL_TRUST_AUTHORITIES = [
+    "social_relationship_evidence_events",
+    "entity_identity",
+    "authenticated_tenant_permission",
+]
+_MAX_SYNDICATE_MEMBERSHIPS = 100
+_MAX_SOCIAL_RISK_EDGES = 100
+_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY = 100
+_MAX_SOCIAL_EVIDENCE_READ = 100
+_SYNDICATE_POPULATION_TYPES = frozenset(
+    {
+        "segment",
+        "cohort",
+        "cluster",
+        "community",
+        "batch",
+        "archetype",
+        "anomaly",
+        "lookalike",
+        "risk",
+        "lifecycle",
+    }
+)
+_FACT_TABLES = (
+    "identity",
+    "connection",
+    "interaction",
+    "content",
+    "community",
+    "metric",
+)
+
+
+@dataclass(frozen=True)
+class AgentSubjectScopeRead:
+    """Verified tenant Agent reference to a canonical Agent entity."""
+
+    tenant_id: str
+    agent_id: str
+    state: Literal["available", "unknown", "degraded", "conflicted"]
+    canonical_agent_entity_id: Optional[str] = None
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+
+
+class AgentSubjectScopeReader(Protocol):
+    """Resolve an Agent subject through canonical Agent identity authority."""
+
+    async def resolve(self, tenant_id: str, agent_id: str) -> AgentSubjectScopeRead: ...
+
+
+class RepositoryAgentSubjectScopeReader:
+    """Adapter over the source-to-canonical Agent identity resolver."""
+
+    def __init__(
+        self, *, deployments: Any = None, identity_bindings: Any = None, entities: Any = None
+    ):
+        self._deployments = deployments
+        self._identity_bindings = identity_bindings
+        self._entities = entities
+
+    async def resolve(self, tenant_id: str, agent_id: str) -> AgentSubjectScopeRead:
+        if self._deployments is None:
+            from actions.agent.deployments import get_deployment_repository
+
+            self._deployments = get_deployment_repository()
+        if self._identity_bindings is None:
+            from actions.agent_marketplace.identity_binding import (
+                AgentDeploymentIdentityBindingRepository,
+            )
+
+            self._identity_bindings = AgentDeploymentIdentityBindingRepository()
+        if self._entities is None:
+            from repositories.repos import EntityRepository
+
+            self._entities = EntityRepository()
+        from actions.agent.identity_resolution import resolve_agent_identities
+
+        try:
+            result = await resolve_agent_identities(
+                tenant_id,
+                {agent_id},
+                deployments=self._deployments,
+                identity_bindings=self._identity_bindings,
+                entities=self._entities,
+                limit=_MAX_READ_ROWS,
+            )
+        except Exception:  # noqa: BLE001 - canonical identity authority is fail-closed
+            return AgentSubjectScopeRead(
+                tenant_id, agent_id, "degraded", reason="agent_identity_authority_unavailable"
+            )
+        if result.truncated:
+            return AgentSubjectScopeRead(
+                tenant_id, agent_id, "degraded", reason="agent_identity_scan_truncated"
+            )
+        if result.scope_mismatch:
+            return AgentSubjectScopeRead(
+                tenant_id, agent_id, "conflicted", reason="agent_identity_scope_conflict"
+            )
+
+        rows = [row for row in result.rows if isinstance(row, dict)]
+        if not rows:
+            return AgentSubjectScopeRead(
+                tenant_id, agent_id, "unknown", reason="agent_canonical_identity_unresolved"
+            )
+        canonical_ids = {
+            row.get("canonical_agent_entity_id")
+            for row in rows
+            if row.get("tenant_id") == tenant_id and row.get("agent_id") == agent_id
+        }
+        if len(canonical_ids) != 1 or not all(
+            isinstance(value, str) and value for value in canonical_ids
+        ):
+            return AgentSubjectScopeRead(
+                tenant_id, agent_id, "conflicted", reason="agent_identity_binding_conflicted"
+            )
+        canonical_id = next(iter(canonical_ids))
+        if len(rows) != len(canonical_ids) and any(
+            row.get("tenant_id") != tenant_id
+            or row.get("agent_id") != agent_id
+            or row.get("canonical_agent_entity_id") != canonical_id
+            for row in rows
+        ):
+            return AgentSubjectScopeRead(
+                tenant_id, agent_id, "conflicted", reason="agent_identity_scope_conflict"
+            )
+        refs = tuple(
+            EvidenceRef(
+                id=str(row.get("identity_evidence_id")),
+                type="entity",
+                source=str(row.get("identity_evidence_source")),
+                observedAt=row.get("identity_bound_at"),
+            )
+            for row in rows
+            if row.get("identity_evidence_id")
+            and row.get("identity_evidence_source")
+            and row.get("tenant_id") == tenant_id
+            and row.get("agent_id") == agent_id
+            and row.get("canonical_agent_entity_id") == canonical_id
+        )
+        if not refs:
+            return AgentSubjectScopeRead(
+                tenant_id, agent_id, "degraded", reason="agent_identity_evidence_unavailable"
+            )
+        return AgentSubjectScopeRead(
+            tenant_id,
+            agent_id,
+            "available",
+            canonical_agent_entity_id=canonical_id,
+            evidence_refs=tuple(_dedupe_refs(list(refs))),
+        )
+
+
+@dataclass(frozen=True)
+class Social360FactRead:
+    """One bounded source read with explicit availability and truncation."""
+
+    rows: list[dict[str, Any]]
+    available: bool = True
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+class Social360Source(Protocol):
+    """Narrow testable read seam over the six Social Silver fact authorities."""
+
+    async def read(self, fact_family: str, tenant_id: str, *, limit: int) -> Social360FactRead: ...
+
+
+@dataclass(frozen=True)
+class SocialObservedPath:
+    """One directed path made only from observed canonical FOLLOWS edges."""
+
+    entity_ids: tuple[str, ...]
+    edge_evidence_refs: tuple[tuple[EvidenceRef, ...], ...]
+    graph_edges: tuple[Any, ...] = ()
+    edge_observed_at: tuple[Optional[str], ...] = ()
+
+
+@dataclass(frozen=True)
+class SocialGraphPathRead:
+    """Bounded tenant-scoped read from the canonical relationship graph."""
+
+    tenant_id: str
+    start_entity_id: str
+    paths: tuple[SocialObservedPath, ...] = ()
+    available: bool = True
+    truncated: bool = False
+    reason_codes: tuple[str, ...] = ()
+
+
+class SocialGraphPathReader(Protocol):
+    """Read observed canonical graph paths without deriving trust or influence."""
+
+    async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead: ...
+
+
+@dataclass(frozen=True)
+class SocialRelationshipFidelityRead:
+    """One exact tenant/pair read from the persisted M7 fidelity authority."""
+
+    tenant_id: str
+    relationship_ref: str
+    state: Literal["available", "unknown", "degraded", "conflicted"]
+    vector: Optional[dict[str, Any]] = None
+    vector_evidence_refs: tuple[EvidenceRef, ...] = ()
+    run_evidence_ref: Optional[EvidenceRef] = None
+    computed_at: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class SocialRelationshipFidelityReader(Protocol):
+    """Read a persisted fidelity vector for one exact directed relationship."""
+
+    async def read(
+        self, tenant_id: str, source_entity_id: str, target_entity_id: str
+    ) -> SocialRelationshipFidelityRead: ...
+
+
+class RepositorySocialRelationshipFidelityReader:
+    """Adapter over the tenant-keyed Computation Substrate fidelity reader."""
+
+    async def read(
+        self, tenant_id: str, source_entity_id: str, target_entity_id: str
+    ) -> SocialRelationshipFidelityRead:
+        relationship_ref = f"{source_entity_id}::{target_entity_id}"
+        try:
+            from identity.relationship_intelligence.reads import read_latest_fidelity
+            from shared.relationship_fidelity.vector import FidelityVector
+
+            result = await read_latest_fidelity(tenant_id, relationship_ref)
+        except Exception:  # noqa: BLE001 - canonical computation reads fail closed
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_authority_unavailable",
+            )
+        if result is None:
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "unknown",
+                reason="relationship_fidelity_not_persisted",
+            )
+        if (
+            not isinstance(result, dict)
+            or result.get("kind") != "fidelity_vector_surface"
+            or result.get("relationship_ref") != relationship_ref
+            or result.get("status") != "completed"
+            or not isinstance(result.get("run_id"), str)
+            or not result.get("run_id")
+        ):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "conflicted",
+                reason="relationship_fidelity_run_scope_or_contract_invalid",
+            )
+
+        try:
+            vector = FidelityVector.model_validate(result.get("vector"))
+        except Exception:  # noqa: BLE001 - persisted vectors are untrusted input
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_vector_invalid",
+            )
+        if vector.relationship_ref != relationship_ref:
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "conflicted",
+                reason="relationship_fidelity_vector_scope_mismatch",
+            )
+        computed_at = _text(vector.computed_at)
+        if (
+            vector.status != "current"
+            or vector.observation_count < 1
+            or not vector.evidence_refs
+            or _parse_graph_time(computed_at) is None
+        ):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "unknown",
+                reason="relationship_fidelity_measurement_or_evidence_unavailable",
+            )
+        refs = tuple(
+            EvidenceRef(
+                id=evidence_id,
+                type="event",
+                source="relationship_fidelity",
+            )
+            for evidence_id in vector.evidence_refs
+            if _text(evidence_id)
+        )
+        if len(refs) != len(vector.evidence_refs):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_evidence_reference_invalid",
+            )
+        run_ref = EvidenceRef(
+            id=result["run_id"],
+            type="model_output",
+            source="computation_substrate",
+            observedAt=computed_at,
+            uri=f"computation://relationship-fidelity/{result['run_id']}",
+        )
+        return SocialRelationshipFidelityRead(
+            tenant_id,
+            relationship_ref,
+            "available",
+            vector=vector.model_dump(mode="json"),
+            vector_evidence_refs=refs,
+            run_evidence_ref=run_ref,
+            computed_at=computed_at,
+        )
+
+
+@dataclass(frozen=True)
+class SocialSyndicateMembership:
+    """Exact active membership in a population explicitly opted into Syndicates."""
+
+    tenant_id: str
+    entity_id: str
+    population_id: str
+    population_type: str
+    joined_at: Optional[str]
+    evidence_ref: EvidenceRef
+
+
+@dataclass(frozen=True)
+class SocialSyndicateMembershipRead:
+    """Bounded current membership read with an explicit scope state."""
+
+    tenant_id: str
+    entity_id: str
+    rows: list[SocialSyndicateMembership]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+class SocialSyndicateMembershipReader(Protocol):
+    """Read explicit syndicate memberships for one exact canonical entity."""
+
+    async def read(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> SocialSyndicateMembershipRead: ...
+
+
+@dataclass(frozen=True)
+class SocialRiskContextEdge:
+    """One active registered shared-risk-context graph edge and its evidence."""
+
+    tenant_id: str
+    source_entity_id: str
+    target_entity_id: str
+    idempotency_key: str
+    evidence_refs: tuple[EvidenceRef, ...]
+    observed_at: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SocialRiskContextEdgeRead:
+    """Bounded current read of registered risk-context edges for one subject."""
+
+    tenant_id: str
+    subject_id: str
+    edges: tuple[SocialRiskContextEdge, ...]
+    available: bool
+    truncated: bool = False
+    reason_codes: tuple[str, ...] = ()
+
+
+class SocialRiskContextEdgeReader(Protocol):
+    """Read exact tenant graph relationships registered as shared risk context."""
+
+    async def read_edges(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> SocialRiskContextEdgeRead: ...
+
+
+class RepositorySocialRiskContextEdgeReader:
+    """Read registered ``SHARES_RISK_CONTEXT_WITH`` edges from the graph ledger."""
+
+    def __init__(self, *, graph_client: Any = None) -> None:
+        self._graph_client = graph_client
+
+    async def read_edges(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> SocialRiskContextEdgeRead:
+        from shared.graph.graph import get_graph_client, tenant_of
+        from shared.relationship_spine.relationship_registry import (
+            live_graph_edge_type,
+            predicate_entry,
+        )
+
+        if subject.kind not in {"entity", "relationship"}:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=True,
+                reason_codes=("social_risk_edge_entity_or_relationship_subject_required",),
+            )
+        endpoints = _subject_endpoints(subject)
+        if endpoints is None:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=True,
+                reason_codes=("social_risk_edge_relationship_pair_invalid",),
+            )
+
+        entry = predicate_entry("SHARES_RISK_CONTEXT_WITH")
+        edge_type = live_graph_edge_type("SHARES_RISK_CONTEXT_WITH")
+        if (
+            not entry
+            or entry.get("family") != "RISK_CONTEXT"
+            or entry.get("graphRegistrationState") != "REGISTERED"
+            or entry.get("graphEdgeType") != edge_type
+            or "INFERENTIAL_ONLY" not in entry.get("transitivityClasses", [])
+            or edge_type is None
+        ):
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("registered_risk_context_edge_authority_unavailable",),
+            )
+
+        client = self._graph_client or get_graph_client()
+        try:
+            for endpoint in endpoints:
+                vertex = await client.get_vertex_for_tenant(tenant_id, endpoint)
+                if vertex is None or tenant_of(vertex.properties) != tenant_id:
+                    return SocialRiskContextEdgeRead(
+                        tenant_id,
+                        subject.id,
+                        (),
+                        available=True,
+                        reason_codes=("canonical_risk_edge_subject_unresolved",),
+                    )
+            edge_page = await client.get_edges_for_tenant(
+                tenant_id,
+                limit=_MAX_SOCIAL_RISK_EDGES,
+                edge_types=[edge_type],
+                include_revoked=False,
+            )
+        except Exception:  # noqa: BLE001 - canonical graph reads fail closed
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("canonical_social_risk_edge_graph_unavailable",),
+            )
+
+        if (
+            not isinstance(edge_page, tuple)
+            or len(edge_page) != 2
+            or not isinstance(edge_page[0], list)
+            or not isinstance(edge_page[1], bool)
+        ):
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("invalid_canonical_risk_edge_graph_read_contract",),
+            )
+
+        tenant_edges, truncated = edge_page
+        endpoint_ids = set(endpoints)
+        reasons: set[str] = set()
+        result: list[SocialRiskContextEdge] = []
+        now = datetime.now(timezone.utc)
+        for edge in tenant_edges:
+            if not isinstance(edge, Edge):
+                reasons.add("canonical_risk_edge_graph_contract_invalid")
+                continue
+            props = edge.properties if isinstance(edge.properties, dict) else {}
+            if (
+                edge.edge_type != edge_type
+                or props.get("relationship_predicate") != "SHARES_RISK_CONTEXT_WITH"
+            ):
+                continue
+            if tenant_of(props) != tenant_id:
+                reasons.add("canonical_risk_edge_scope_mismatch")
+                continue
+            source_id = _text(edge.from_vertex_id)
+            target_id = _text(edge.to_vertex_id)
+            if (
+                source_id is None
+                or target_id is None
+                or source_id == target_id
+                or not endpoint_ids.intersection({source_id, target_id})
+            ):
+                continue
+            if subject.kind == "relationship" and {source_id, target_id} != endpoint_ids:
+                continue
+            if _truthy_marker(props.get("revoked")) or bool(props.get("revoked_at")):
+                continue
+            endpoint_scope_valid = True
+            for endpoint_id in (source_id, target_id):
+                if endpoint_id in endpoint_ids:
+                    continue
+                try:
+                    vertex = await client.get_vertex_for_tenant(tenant_id, endpoint_id)
+                except Exception:  # noqa: BLE001 - tenant endpoint reads fail closed
+                    endpoint_scope_valid = False
+                    reasons.add("canonical_risk_edge_endpoint_authority_unavailable")
+                    break
+                if vertex is None or tenant_of(vertex.properties) != tenant_id:
+                    endpoint_scope_valid = False
+                    reasons.add("canonical_risk_edge_endpoint_scope_unverified")
+                    break
+            if not endpoint_scope_valid:
+                continue
+
+            valid_from_value = props.get("valid_from")
+            valid_to_value = props.get("valid_to")
+            valid_from = _parse_graph_time(valid_from_value) if valid_from_value else None
+            valid_to = _parse_graph_time(valid_to_value) if valid_to_value else None
+            if (valid_from_value and valid_from is None) or (valid_to_value and valid_to is None):
+                reasons.add("canonical_risk_edge_validity_unknown")
+                continue
+            if valid_from is not None and valid_from > now:
+                continue
+            if valid_to is not None and valid_to <= now:
+                continue
+
+            idempotency_key = _text(props.get("idempotency_key"))
+            evidence_ids = _graph_evidence_ids(props.get("evidence_refs"))
+            if idempotency_key is None or not evidence_ids:
+                reasons.add("canonical_risk_edge_evidence_unavailable")
+                continue
+            observed_at_value = _text(props.get("observed_at"))
+            observed_at = _parse_graph_time(observed_at_value) if observed_at_value else None
+            if observed_at_value and observed_at is None:
+                reasons.add("canonical_risk_edge_observed_time_invalid")
+                continue
+            if observed_at is not None and observed_at > now:
+                reasons.add("canonical_risk_edge_observed_time_in_future")
+                continue
+
+            evidence_refs = (
+                EvidenceRef(
+                    id=idempotency_key,
+                    type="relationship",
+                    source="entity_graph",
+                    observedAt=(valid_from.isoformat() if valid_from is not None else None),
+                ),
+                *(
+                    EvidenceRef(
+                        id=evidence_id,
+                        type="event",
+                        source="relationship_facts",
+                    )
+                    for evidence_id in evidence_ids
+                ),
+            )
+            result.append(
+                SocialRiskContextEdge(
+                    tenant_id=tenant_id,
+                    source_entity_id=source_id,
+                    target_entity_id=target_id,
+                    idempotency_key=idempotency_key,
+                    evidence_refs=tuple(evidence_refs),
+                    observed_at=observed_at.isoformat() if observed_at is not None else None,
+                )
+            )
+        result.sort(
+            key=lambda item: (item.source_entity_id, item.target_entity_id, item.idempotency_key)
+        )
+        if truncated:
+            reasons.add("canonical_risk_edge_scan_capped")
+        return SocialRiskContextEdgeRead(
+            tenant_id=tenant_id,
+            subject_id=subject.id,
+            edges=tuple(result[:_MAX_SOCIAL_RISK_EDGES]),
+            available=True,
+            truncated=truncated or len(result) > _MAX_SOCIAL_RISK_EDGES,
+            reason_codes=tuple(sorted(reasons)),
+        )
+
+
+@dataclass(frozen=True)
+class SocialRiskSignalRead:
+    """Bounded exact-entity RiskSignal repository response."""
+
+    tenant_id: str
+    entity_id: str
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+class SocialRiskSignalReader(Protocol):
+    """Read RiskSignals for one exact entity in one tenant."""
+
+    async def read(self, tenant_id: str, entity_id: str) -> SocialRiskSignalRead: ...
+
+
+class RepositorySocialRiskSignalReader:
+    """Adapter over the canonical tenant-scoped RiskSignal repository."""
+
+    async def read(self, tenant_id: str, entity_id: str) -> SocialRiskSignalRead:
+        try:
+            from intelligence.risk360.store import RiskSignalRepository
+
+            rows = await RiskSignalRepository().list_by_subject(
+                tenant_id,
+                "entity",
+                entity_id,
+                limit=_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY + 1,
+            )
+        except Exception:  # noqa: BLE001 - canonical risk reads fail closed
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="canonical_risk_signal_authority_unavailable",
+            )
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="invalid_canonical_risk_signal_read_contract",
+            )
+        truncated = len(rows) > _MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY
+        return SocialRiskSignalRead(
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            rows=tuple(rows[:_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY]),
+            available=True,
+            truncated=truncated,
+            reason="canonical_risk_signal_read_bounded" if truncated else None,
+        )
+
+
+class RepositorySocialSyndicateMembershipReader:
+    """Reuse Profile360's exact population and graph-ledger membership authority."""
+
+    def __init__(self, *, source: Any = None) -> None:
+        self._source = source
+
+    async def read(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> SocialSyndicateMembershipRead:
+        try:
+            if self._source is None:
+                from identity.profile.profile360_provider import RepositoryProfile360Source
+
+                self._source = RepositoryProfile360Source()
+
+            from shared.intelligence_projections.contracts import ProjectionSubject
+
+            subject = ProjectionSubject(kind="entity", id=entity_id)
+            canonical = await self._source.canonical_entity(tenant_id, subject)
+            if not canonical.available:
+                return SocialSyndicateMembershipRead(
+                    tenant_id,
+                    entity_id,
+                    [],
+                    available=False,
+                    scope_known=False,
+                    reason=canonical.reason or "social_syndicate_entity_authority_unavailable",
+                )
+            canonical_record = canonical.record
+            if (
+                not canonical.scope_known
+                or not isinstance(canonical_record, dict)
+                or canonical_record.get("tenant_id") != tenant_id
+                or str(canonical_record.get("entity_id") or "") != entity_id
+            ):
+                return SocialSyndicateMembershipRead(
+                    tenant_id,
+                    entity_id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason=canonical.reason or "social_syndicate_entity_scope_unverified",
+                )
+
+            result = await self._source.syndicate_memberships(
+                tenant_id,
+                subject,
+                limit=min(max(limit, 1), _MAX_SYNDICATE_MEMBERSHIPS),
+            )
+        except Exception:  # noqa: BLE001 - canonical membership reads fail closed
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_authority_unavailable",
+            )
+
+        rows = getattr(result, "rows", None)
+        if not isinstance(rows, list):
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_source_invalid_response",
+            )
+        memberships: list[SocialSyndicateMembership] = []
+        for row in rows:
+            evidence_ref = getattr(row, "evidence_ref", None)
+            population_id = getattr(row, "population_id", None)
+            population_type = getattr(row, "population_type", None)
+            joined_at = getattr(row, "joined_at", None)
+            row_tenant = getattr(row, "tenant_id", None)
+            row_entity = getattr(row, "entity_id", None)
+            if (
+                not isinstance(evidence_ref, EvidenceRef)
+                or not isinstance(population_id, str)
+                or not isinstance(population_type, str)
+                or (joined_at is not None and not isinstance(joined_at, str))
+                or row_tenant != tenant_id
+                or row_entity != entity_id
+            ):
+                return SocialSyndicateMembershipRead(
+                    tenant_id,
+                    entity_id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    truncated=bool(getattr(result, "truncated", False)),
+                    reason="social_syndicate_membership_scope_or_contract_invalid",
+                )
+            memberships.append(
+                SocialSyndicateMembership(
+                    tenant_id=tenant_id,
+                    entity_id=entity_id,
+                    population_id=population_id,
+                    population_type=population_type,
+                    joined_at=joined_at,
+                    evidence_ref=evidence_ref,
+                )
+            )
+        return SocialSyndicateMembershipRead(
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            rows=memberships,
+            available=getattr(result, "available", False) is True,
+            scope_known=getattr(result, "scope_known", False) is True,
+            truncated=getattr(result, "truncated", False) is True,
+            reason=getattr(result, "reason", None),
+        )
+
+
+class RepositorySocialGraphPathReader:
+    """Resolve bounded paths over registered tenant-scoped FOLLOWS graph edges."""
+
+    def __init__(self, *, graph_client: Any = None) -> None:
+        self._graph_client = graph_client
+
+    async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead:
+        from shared.graph.graph import get_graph_client, tenant_of
+        from shared.relationship_spine.relationship_registry import (
+            live_graph_edge_type,
+            predicate_entry,
+        )
+
+        entry = predicate_entry("FOLLOWS")
+        edge_type = live_graph_edge_type("FOLLOWS")
+        if (
+            not entry
+            or entry.get("family") != "SOCIAL"
+            or entry.get("graphRegistrationState") != "REGISTERED"
+            or "NON_TRANSITIVE" not in entry.get("transitivityClasses", [])
+            or edge_type is None
+        ):
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("registered_social_follows_authority_unavailable",),
+            )
+
+        client = self._graph_client or get_graph_client()
+        try:
+            anchor = await client.get_vertex_for_tenant(tenant_id, start_entity_id)
+            if anchor is None or tenant_of(anchor.properties) != tenant_id:
+                # Do not distinguish a missing vertex from a foreign-tenant id.
+                return SocialGraphPathRead(
+                    tenant_id,
+                    start_entity_id,
+                    reason_codes=("canonical_graph_subject_unresolved",),
+                )
+            edge_page = await client.get_edges_for_tenant(
+                tenant_id,
+                limit=_SOCIAL_PATH_EDGE_LIMIT,
+                edge_types=[edge_type],
+                include_revoked=False,
+            )
+        except Exception:  # noqa: BLE001 - graph authority failures fail closed
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("canonical_social_graph_authority_unavailable",),
+            )
+
+        if (
+            not isinstance(edge_page, tuple)
+            or len(edge_page) != 2
+            or not isinstance(edge_page[0], list)
+            or not isinstance(edge_page[1], bool)
+        ):
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("invalid_canonical_social_graph_read_contract",),
+            )
+        tenant_edges, edges_truncated = edge_page
+
+        now = datetime.now(timezone.utc)
+        candidate_edges: dict[
+            str, list[tuple[str, tuple[EvidenceRef, ...], str, Any, Optional[str]]]
+        ] = {}
+        reasons: set[str] = set()
+        if edges_truncated:
+            reasons.add("canonical_social_path_edge_scan_capped")
+
+        for edge_index, edge in enumerate(tenant_edges):
+            if edge_index >= _SOCIAL_PATH_EDGE_LIMIT:
+                edges_truncated = True
+                reasons.add("canonical_social_path_edge_scan_capped")
+                break
+            props = edge.properties or {}
+            if (
+                edge.edge_type != edge_type
+                or tenant_of(props) != tenant_id
+                or props.get("relationship_predicate") != "FOLLOWS"
+                or _truthy_marker(props.get("revoked"))
+                or bool(props.get("revoked_at"))
+            ):
+                if tenant_of(props) != tenant_id:
+                    reasons.add("canonical_social_path_scope_mismatch")
+                continue
+
+            valid_from = _parse_graph_time(props.get("valid_from"))
+            valid_to_value = props.get("valid_to")
+            valid_to = _parse_graph_time(valid_to_value) if valid_to_value else None
+            valid_from_value = props.get("valid_from")
+            if (valid_to_value and valid_to is None) or (valid_from_value and valid_from is None):
+                reasons.add("canonical_social_path_validity_unknown")
+                continue
+            if valid_from is not None and valid_from > now:
+                continue
+            if valid_to is not None and valid_to <= now:
+                continue
+
+            idempotency_key = _text(props.get("idempotency_key"))
+            evidence_ids = _graph_evidence_ids(props.get("evidence_refs"))
+            if idempotency_key is None or not evidence_ids:
+                reasons.add("canonical_social_path_edge_evidence_unavailable")
+                continue
+
+            # valid_from is relationship validity time. Preserve an explicit
+            # source observation time separately; validity time cannot prove
+            # chronological order between social observations.
+            observed_at_value = _text(props.get("observed_at"))
+            observed_at = _parse_graph_time(observed_at_value)
+            refs = [
+                EvidenceRef(
+                    id=idempotency_key,
+                    type="relationship",
+                    source="entity_graph",
+                    observedAt=valid_from.isoformat() if valid_from is not None else None,
+                ),
+                *[
+                    EvidenceRef(
+                        id=evidence_id,
+                        type="event",
+                        source="relationship_facts",
+                    )
+                    for evidence_id in evidence_ids
+                ],
+            ]
+            candidate_edges.setdefault(edge.from_vertex_id, []).append(
+                (
+                    edge.to_vertex_id,
+                    tuple(refs),
+                    idempotency_key,
+                    edge,
+                    observed_at.isoformat() if observed_at is not None else None,
+                )
+            )
+
+        for outgoing in candidate_edges.values():
+            outgoing.sort(key=lambda item: (item[0], item[2]))
+
+        nodes = {start_entity_id: anchor}
+        node_depths = {start_entity_id: 0}
+        queue = [start_entity_id]
+        adjacency: dict[
+            str, list[tuple[str, tuple[EvidenceRef, ...], str, Any, Optional[str]]]
+        ] = {}
+        node_scan_truncated = False
+        while queue:
+            current_id = queue.pop(0)
+            depth = node_depths[current_id]
+            if depth >= _SOCIAL_PATH_DEPTH:
+                continue
+            for target_id, refs, edge_key, graph_edge, observed_at in candidate_edges.get(
+                current_id, []
+            ):
+                if target_id not in nodes:
+                    if len(nodes) >= _SOCIAL_PATH_NODE_LIMIT:
+                        node_scan_truncated = True
+                        reasons.add("canonical_social_path_node_scan_capped")
+                        continue
+                    try:
+                        target = await client.get_vertex_for_tenant(tenant_id, target_id)
+                    except Exception:  # noqa: BLE001 - tenant-scoped vertex read is fail-closed
+                        return SocialGraphPathRead(
+                            tenant_id,
+                            start_entity_id,
+                            available=False,
+                            reason_codes=("canonical_social_graph_authority_unavailable",),
+                        )
+                    if target is None or tenant_of(target.properties) != tenant_id:
+                        reasons.add("canonical_social_path_endpoint_unresolved")
+                        continue
+                    nodes[target_id] = target
+                    node_depths[target_id] = depth + 1
+                    queue.append(target_id)
+                adjacency.setdefault(current_id, []).append(
+                    (target_id, refs, edge_key, graph_edge, observed_at)
+                )
+
+        for outgoing in adjacency.values():
+            outgoing.sort(key=lambda item: (item[0], item[2]))
+
+        paths: list[SocialObservedPath] = []
+        path_scan_truncated = False
+
+        def visit(
+            current_id: str,
+            entity_ids: tuple[str, ...],
+            edge_refs: tuple[tuple[EvidenceRef, ...], ...],
+            graph_edges: tuple[Any, ...],
+            edge_observed_at: tuple[Optional[str], ...],
+        ) -> None:
+            nonlocal path_scan_truncated
+            hops = len(edge_refs)
+            if hops >= 2:
+                if len(paths) >= _SOCIAL_PATH_RESULT_LIMIT:
+                    path_scan_truncated = True
+                    return
+                paths.append(
+                    SocialObservedPath(entity_ids, edge_refs, graph_edges, edge_observed_at)
+                )
+            if hops >= _SOCIAL_PATH_DEPTH or path_scan_truncated:
+                return
+            for next_id, refs, _edge_key, graph_edge, observed_at in adjacency.get(
+                current_id, []
+            ):
+                if next_id in entity_ids:
+                    continue
+                visit(
+                    next_id,
+                    (*entity_ids, next_id),
+                    (*edge_refs, refs),
+                    (*graph_edges, graph_edge),
+                    (*edge_observed_at, observed_at),
+                )
+                if path_scan_truncated:
+                    return
+
+        visit(start_entity_id, (start_entity_id,), (), (), ())
+        truncated = edges_truncated or node_scan_truncated or path_scan_truncated
+        if truncated:
+            reasons.add("canonical_social_path_read_bounded")
+        if not paths and not reasons and not truncated:
+            reasons.add("no_bounded_observed_follows_paths")
+        return SocialGraphPathRead(
+            tenant_id,
+            start_entity_id,
+            paths=tuple(paths),
+            available=True,
+            truncated=truncated,
+            reason_codes=tuple(sorted(reasons)),
+        )
+
+
+class RepositorySocial360Source:
+    """Read tenant-scoped rows from the durable Social Silver repositories."""
+
+    def __init__(self) -> None:
+        from ingestion.silver.repositories.social_facts import (
+            SocialCommunityFactsRepository,
+            SocialConnectionFactsRepository,
+            SocialContentFactsRepository,
+            SocialIdentityFactsRepository,
+            SocialInteractionFactsRepository,
+            SocialMetricFactsRepository,
+        )
+
+        self._repositories = {
+            "identity": SocialIdentityFactsRepository(),
+            "connection": SocialConnectionFactsRepository(),
+            "interaction": SocialInteractionFactsRepository(),
+            "content": SocialContentFactsRepository(),
+            "community": SocialCommunityFactsRepository(),
+            "metric": SocialMetricFactsRepository(),
+        }
+
+    async def read(self, fact_family: str, tenant_id: str, *, limit: int) -> Social360FactRead:
+        repository = self._repositories.get(fact_family)
+        if repository is None:
+            return Social360FactRead(
+                rows=[], available=False, reason="social_fact_family_unavailable"
+            )
+        try:
+            # The repository caps at 500. A full page therefore means the read
+            # may be truncated; it is never described as complete coverage.
+            rows = await repository.list_for_tenant(
+                tenant_id, limit=min(max(limit, 1), _MAX_READ_ROWS)
+            )
+        except Exception:  # noqa: BLE001 - source failures become typed degradation
+            return Social360FactRead(
+                rows=[], available=False, reason=f"{fact_family}_source_unavailable"
+            )
+        return Social360FactRead(
+            rows=rows if isinstance(rows, list) else [],
+            available=isinstance(rows, list),
+            truncated=isinstance(rows, list) and len(rows) >= _MAX_READ_ROWS,
+            reason=None if isinstance(rows, list) else "invalid_source_contract",
+        )
 
 
 class Social360Provider(IntelligenceProjectionProvider):
-    """Read existing authorized facts; never infer missing social metrics."""
+    """Read authorized social observations without fabricating missing state."""
 
-    projection_id = "social360"
+    projection_id = PROJECTION_ID
     contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
 
-    async def project(self, request: ProjectionRequest, context: ProjectionContext) -> ProjectionResult:
+    def __init__(
+        self,
+        *,
+        source: Optional[Social360Source] = None,
+        consent_reader: Any = None,
+        population_scope_reader: Optional[PopulationScopeReader] = None,
+        source_subject_scope_reader: Optional[SourceSubjectScopeReader] = None,
+        agent_subject_scope_reader: Optional[AgentSubjectScopeReader] = None,
+        social_graph_path_reader: Optional[SocialGraphPathReader] = None,
+        relationship_fidelity_reader: Optional[SocialRelationshipFidelityReader] = None,
+        syndicate_membership_reader: Optional[SocialSyndicateMembershipReader] = None,
+        risk_context_edge_reader: Optional[SocialRiskContextEdgeReader] = None,
+        risk_signal_reader: Optional[SocialRiskSignalReader] = None,
+        social_evidence_authority: Any = None,
+    ) -> None:
+        self._source = source if source is not None else RepositorySocial360Source()
+        self._consent_reader = consent_reader or evaluate_consent
+        self._population_scope = (
+            population_scope_reader
+            if population_scope_reader is not None
+            else RepositoryPopulationScopeReader()
+        )
+        self._source_subject_scope = (
+            source_subject_scope_reader
+            if source_subject_scope_reader is not None
+            else RepositorySourceSubjectScopeReader()
+        )
+        self._agent_subject_scope = (
+            agent_subject_scope_reader
+            if agent_subject_scope_reader is not None
+            else RepositoryAgentSubjectScopeReader()
+        )
+        self._social_graph_paths = (
+            social_graph_path_reader
+            if social_graph_path_reader is not None
+            else RepositorySocialGraphPathReader()
+        )
+        self._relationship_fidelity = (
+            relationship_fidelity_reader
+            if relationship_fidelity_reader is not None
+            else RepositorySocialRelationshipFidelityReader()
+        )
+        self._syndicate_memberships = (
+            syndicate_membership_reader
+            if syndicate_membership_reader is not None
+            else RepositorySocialSyndicateMembershipReader()
+        )
+        self._risk_context_edges = (
+            risk_context_edge_reader
+            if risk_context_edge_reader is not None
+            else RepositorySocialRiskContextEdgeReader()
+        )
+        self._risk_signals = (
+            risk_signal_reader
+            if risk_signal_reader is not None
+            else RepositorySocialRiskSignalReader()
+        )
+        if social_evidence_authority is None:
+            from services.social360.evidence_authority import SocialEvidenceAuthority
+
+            social_evidence_authority = SocialEvidenceAuthority()
+        self._social_evidence_authority = social_evidence_authority
+
+    async def project(
+        self, request: ProjectionRequest, context: ProjectionContext
+    ) -> ProjectionResult:
+        now = datetime.now(timezone.utc).isoformat()
         if not request.tenantId or not request.subject.id:
             raise ValueError("tenant and subject are required")
 
-        # Social360 is a historical relationship read. A fact's stored
-        # consent_snapshot_id is provenance, not current authorization; consult
-        # the server-owned receipt authority on every read and fail closed.
-        consent_allowed, _ = await evaluate_consent(
-            request.tenantId,
-            request.subject.id,
-            None,
-            "analytics",
-        )
-        if not consent_allowed:
-            sections = [
-                ProjectionSection(
-                    id=section_id,
-                    state="suppressed",
-                    title=title,
-                )
-                for section_id, title in (
-                    ("evidence", "Evidence"),
-                    ("findings", "Observed relationships"),
-                    ("interactions", "Observed interactions"),
-                    ("state", "Social identities"),
-                    ("summary", "Social summary"),
-                    ("timeline", "Interaction timeline"),
-                )
-            ]
-            return ProjectionResult(
-                projectionId=self.projection_id,
-                tenantId=request.tenantId,
-                contractVersion=self.contract_version,
-                sections=sections,
-                claims=[],
-                dependencyState=context.dependencyState,
-                generatedAt=datetime.now(timezone.utc).isoformat(),
-                degradedReasons=["consent_required"],
+        # Runtime context is the authenticated tenant boundary. Reject a direct
+        # caller with a mismatched tenant before invoking either authority.
+        if context.tenantId != request.tenantId:
+            return self._unknown_result(
+                request,
+                context,
+                now,
+                "tenant_scope_mismatch",
+                subject=request.subject,
             )
 
-        identity_rows = await SocialIdentityFactsRepository().list_for_tenant(
-            request.tenantId, limit=500
+        population_scope: Optional[PopulationScopeRead] = None
+        source_scope: Optional[SourceSubjectScopeRead] = None
+        agent_scope: Optional[AgentSubjectScopeRead] = None
+        if request.subject.kind == "population":
+            has_temporal_filter = (
+                request.asOf is not None
+                or context.asOf is not None
+                or (
+                    request.timeRange is not None
+                    and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+                )
+                or (request.temporalMode or "window") != "window"
+            )
+            if has_temporal_filter:
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    "population_membership_temporal_scope_unknown",
+                    subject=request.subject,
+                )
+            try:
+                population_scope = await self._population_scope.resolve(
+                    request.tenantId, request.subject.id, limit=_MAX_READ_ROWS
+                )
+            except Exception:  # noqa: BLE001 - population authority is fail-closed
+                population_scope = PopulationScopeRead(
+                    request.tenantId,
+                    request.subject.id,
+                    "degraded",
+                    reason="population_membership_authority_unavailable",
+                )
+            if (
+                population_scope.tenant_id != request.tenantId
+                or population_scope.population_id != request.subject.id
+            ):
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    "population_membership_scope_mismatch",
+                    subject=request.subject,
+                )
+            if population_scope.state == "empty":
+                return self._empty_population_result(request, context, now, population_scope)
+            if population_scope.state != "available":
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    population_scope.reason or "population_membership_scope_unavailable",
+                    subject=request.subject,
+                )
+            endpoints = population_scope.entity_ids
+        elif request.subject.kind == "source":
+            has_temporal_filter = (
+                request.asOf is not None
+                or context.asOf is not None
+                or (
+                    request.timeRange is not None
+                    and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+                )
+                or (request.temporalMode or "window") != "window"
+            )
+            if has_temporal_filter:
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    "source_identity_temporal_scope_unknown",
+                    subject=request.subject,
+                )
+            try:
+                source_scope = await self._source_subject_scope.resolve(
+                    request.tenantId, request.subject.id
+                )
+            except Exception:  # noqa: BLE001 - canonical source identity is fail-closed
+                source_scope = SourceSubjectScopeRead(
+                    request.tenantId,
+                    request.subject.id,
+                    "degraded",
+                    reason="source_identity_authority_unavailable",
+                )
+            if (
+                source_scope.tenant_id != request.tenantId
+                or source_scope.source_identity_id != request.subject.id
+            ):
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    "source_identity_scope_mismatch",
+                    subject=request.subject,
+                )
+            if source_scope.state != "available" or not source_scope.canonical_entity_id:
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    source_scope.reason or "source_identity_binding_unresolved",
+                    subject=request.subject,
+                )
+            endpoints = (source_scope.canonical_entity_id,)
+        elif request.subject.kind == "agent":
+            has_temporal_filter = (
+                request.asOf is not None
+                or context.asOf is not None
+                or (
+                    request.timeRange is not None
+                    and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+                )
+                or (request.temporalMode or "window") != "window"
+            )
+            if has_temporal_filter:
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    "agent_identity_temporal_scope_unknown",
+                    subject=request.subject,
+                )
+            try:
+                agent_scope = await self._agent_subject_scope.resolve(
+                    request.tenantId, request.subject.id
+                )
+            except Exception:  # noqa: BLE001 - canonical identity is fail-closed
+                agent_scope = AgentSubjectScopeRead(
+                    request.tenantId,
+                    request.subject.id,
+                    "degraded",
+                    reason="agent_identity_authority_unavailable",
+                )
+            if (
+                agent_scope.tenant_id != request.tenantId
+                or agent_scope.agent_id != request.subject.id
+            ):
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    "agent_identity_scope_mismatch",
+                    subject=request.subject,
+                )
+            if agent_scope.state != "available" or not agent_scope.canonical_agent_entity_id:
+                return self._unknown_result(
+                    request,
+                    context,
+                    now,
+                    agent_scope.reason or "agent_canonical_identity_unresolved",
+                    subject=request.subject,
+                )
+            endpoints = (agent_scope.canonical_agent_entity_id,)
+        else:
+            endpoints = _subject_endpoints(request.subject)
+        if endpoints is None:
+            return self._unknown_result(
+                request,
+                context,
+                now,
+                "social_subject_binding_unsupported",
+                subject=request.subject,
+            )
+
+        consent_results = []
+        for endpoint in endpoints:
+            try:
+                consent_results.append(
+                    await self._consent_reader(request.tenantId, endpoint, None, "analytics")
+                )
+            except Exception:  # noqa: BLE001 - consent is a fail-closed read gate
+                consent_results.append((False, "consent_authority_unavailable"))
+        denied = [result for result in consent_results if not _consent_allowed(result)]
+        if denied:
+            return self._suppressed_result(
+                request,
+                context,
+                now,
+                "consent_required",
+                subject=request.subject,
+            )
+
+        include = set(request.includeSections or OUTPUT_SECTIONS)
+        path_read = SocialGraphPathRead(
+            request.tenantId,
+            request.subject.id,
+            available=False,
+            reason_codes=("multi_hop_paths_entity_subject_required",),
         )
-        identities = [
-            row for row in identity_rows
-            if row.get("canonical_entity_ref") == request.subject.id
-        ]
-        identity_ids = {
-            str(row.get("social_identity_id")) for row in identities
-            if row.get("social_identity_id")
+        propagation_read = SocialGraphPathRead(
+            request.tenantId,
+            request.subject.id,
+            available=False,
+            reason_codes=("social_propagation_subject_scope_unavailable",),
+        )
+        influence_read = SocialGraphPathRead(
+            request.tenantId,
+            request.subject.id,
+            available=False,
+            reason_codes=("social_influence_subject_scope_unavailable",),
+        )
+        temporal_filter_requested = (
+            request.asOf is not None
+            or context.asOf is not None
+            or (
+                request.timeRange is not None
+                and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+            )
+            or (request.temporalMode or "window") in {"as_of", "relative"}
+        )
+        risk_edges_section: Optional[ProjectionSection] = None
+        risk_edge_claims: list[ClaimEnvelope] = []
+        syndicate_read: Optional[SocialSyndicateMembershipRead] = None
+        if "syndicates" in include:
+            if request.subject.kind != "entity":
+                syndicate_read = SocialSyndicateMembershipRead(
+                    request.tenantId,
+                    request.subject.id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason="social_syndicate_entity_subject_required",
+                )
+            elif temporal_filter_requested:
+                syndicate_read = SocialSyndicateMembershipRead(
+                    request.tenantId,
+                    request.subject.id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason="social_syndicate_historical_replay_unavailable",
+                )
+            else:
+                syndicate_read = await self._read_social_syndicates(
+                    request.tenantId, request.subject.id
+                )
+        consent_by_endpoint = {
+            endpoint: _consent_allowed(consent)
+            for endpoint, consent in zip(endpoints, consent_results)
         }
-        connection_rows = await SocialConnectionFactsRepository().list_for_tenant(
-            request.tenantId, limit=500
-        ) if identity_ids else []
-        connections = [
-            row for row in connection_rows
-            if row.get("source_social_identity_ref") in identity_ids
-            or row.get("target_social_identity_ref") in identity_ids
-        ]
-        interaction_rows = await SocialInteractionFactsRepository().list_for_tenant(
-            request.tenantId, limit=500
-        ) if identity_ids else []
-        interactions = [
-            row for row in interaction_rows
-            if row.get("actor_social_identity_ref") in identity_ids
-            or row.get("target_social_identity_ref") in identity_ids
-        ]
-        content_rows = await SocialContentFactsRepository().list_for_tenant(
-            request.tenantId, limit=500
-        ) if identity_ids else []
-        content = [row for row in content_rows
-                   if row.get("author_social_identity_ref") in identity_ids]
-        community_rows = await SocialCommunityFactsRepository().list_for_tenant(
-            request.tenantId, limit=500
-        ) if identity_ids else []
-        communities = [row for row in community_rows
-                       if row.get("social_identity_ref") in identity_ids]
-        metric_rows = await SocialMetricFactsRepository().list_for_tenant(
-            request.tenantId, limit=500
-        ) if identity_ids else []
-        metrics = [row for row in metric_rows
-                   if row.get("social_identity_ref") in identity_ids]
+        if "risk_edges" in include:
+            risk_edges_section, risk_edge_claims = await self._risk_edges_section_and_claims(
+                request,
+                endpoints=endpoints,
+                consent_by_endpoint=consent_by_endpoint,
+                temporal_filter_requested=temporal_filter_requested,
+            )
+        social_contagion_section: Optional[ProjectionSection] = None
+        social_contagion_claims: list[ClaimEnvelope] = []
+        if "social_contagion" in include:
+            social_contagion_section, social_contagion_claims = await self._social_assertion_section(
+                request,
+                context,
+                assertion_kind="social_contagion",
+                temporal_filter_requested=temporal_filter_requested,
+            )
+        trust_edges_section: Optional[ProjectionSection] = None
+        trust_edge_claims: list[ClaimEnvelope] = []
+        if "trust_edges" in include:
+            trust_edges_section, trust_edge_claims = await self._social_assertion_section(
+                request,
+                context,
+                assertion_kind="trust_edge",
+                temporal_filter_requested=temporal_filter_requested,
+            )
+        if "paths" in include:
+            if request.subject.kind == "entity" and temporal_filter_requested:
+                path_read = SocialGraphPathRead(
+                    request.tenantId,
+                    request.subject.id,
+                    available=False,
+                    reason_codes=("social_graph_path_temporal_scope_unsupported",),
+                )
+            elif request.subject.kind == "entity":
+                path_read = await self._read_social_paths(request.tenantId, request.subject.id)
+                path_read = await self._authorize_social_paths(
+                    path_read,
+                    request.tenantId,
+                    request.subject.id,
+                    already_checked=consent_by_endpoint,
+                )
 
-        include = set(request.includeSections or (
-            "evidence", "findings", "interactions", "state", "summary", "timeline"
-        ))
-        sections = []
-        def visible(row: dict, fields: tuple[str, ...]) -> dict:
-            # Raw payload and content fields never leave Social Silver through
-            # this projection; only typed facts and evidence references do.
-            return {key: row.get(key) for key in fields if row.get(key) is not None}
+        if "propagation" in include:
+            if temporal_filter_requested:
+                propagation_read = SocialGraphPathRead(
+                    request.tenantId,
+                    endpoints[0] if request.subject.kind == "relationship" else request.subject.id,
+                    available=False,
+                    reason_codes=("social_propagation_temporal_scope_unsupported",),
+                )
+            elif request.subject.kind == "entity" and "paths" in include:
+                # The entity path section and propagation section share the
+                # same authorized canonical graph read.
+                propagation_read = path_read
+            elif request.subject.kind in {"entity", "relationship"}:
+                propagation_start = endpoints[0]
+                propagation_read = await self._read_social_paths(
+                    request.tenantId, propagation_start
+                )
+                propagation_read = await self._authorize_social_paths(
+                    propagation_read,
+                    request.tenantId,
+                    propagation_start,
+                    already_checked=consent_by_endpoint,
+                )
+                if request.subject.kind == "relationship":
+                    target_entity_id = endpoints[1]
+                    pair_paths = tuple(
+                        path
+                        for path in propagation_read.paths
+                        if path.entity_ids[-1] == target_entity_id
+                    )
+                    if not pair_paths and not propagation_read.reason_codes:
+                        pair_reasons = ("no_bounded_observed_propagation_paths_for_pair",)
+                    else:
+                        pair_reasons = propagation_read.reason_codes
+                    propagation_read = SocialGraphPathRead(
+                        request.tenantId,
+                        propagation_start,
+                        paths=pair_paths,
+                        available=propagation_read.available,
+                        truncated=propagation_read.truncated,
+                        reason_codes=pair_reasons,
+                    )
+            else:
+                propagation_read = SocialGraphPathRead(
+                    request.tenantId,
+                    request.subject.id,
+                    available=False,
+                    reason_codes=("social_propagation_entity_or_relationship_subject_required",),
+                )
 
-        identity_items = [visible(row, (
-            "social_identity_id", "provider_identity", "account_type",
-            "verification_state", "resolution_state", "resolution_confidence",
-            "identity_evidence_refs",
-        )) for row in identities]
-        connection_items = [visible(row, (
-            "source_social_identity_ref", "target_social_identity_ref",
-            "connection_type", "directionality", "proof_level", "claim_type",
-            "evidence_refs", "contradictory_evidence_refs",
-        )) for row in connections]
-        interaction_items = [visible(row, (
-            "interaction_id", "actor_social_identity_ref",
-            "target_social_identity_ref", "interaction_type", "observed_at",
-            "machine_classification", "human_qualification", "evidence_refs",
-        )) for row in interactions]
-        content_items = [visible(row, (
-            "content_id", "author_social_identity_ref", "content_type",
-            "provider_content_subtype", "parent_content_ref", "root_content_ref",
-            "published_at", "edited_at", "deleted_at", "content_hash",
-            "semantic_ref", "narrative_refs", "campaign_ref",
-            "incentive_context_ref", "evidence_refs",
-        )) for row in content]
-        community_items = [visible(row, (
-            "membership_id", "social_identity_ref", "community_ref",
-            "membership_role", "provider_membership_role", "valid_from",
-            "valid_to", "observed_at", "evidence_refs",
-        )) for row in communities]
-        metric_items = [visible(row, (
-            "metric_observation_id", "social_identity_ref", "metric_name",
-            "value", "unit", "status", "metric_window", "population",
-            "observed_at", "computation_ref", "quality", "evidence_refs",
-        )) for row in metrics]
-        evidence_refs = sorted({
-            str(ref)
-            for row in identities + connections + interactions + content + communities + metrics
-            for field in ("identity_evidence_refs", "evidence_refs", "contradictory_evidence_refs")
-            for ref in (row.get(field) or [])
-            if ref
-        })
+        if "influence" in include:
+            if temporal_filter_requested:
+                influence_read = SocialGraphPathRead(
+                    request.tenantId,
+                    endpoints[0] if request.subject.kind == "relationship" else request.subject.id,
+                    available=False,
+                    reason_codes=("social_influence_path_temporal_scope_unsupported",),
+                )
+            elif request.subject.kind == "entity" and "paths" in include:
+                influence_read = path_read
+            elif request.subject.kind == "entity" and "propagation" in include:
+                influence_read = propagation_read
+            elif request.subject.kind == "relationship" and "propagation" in include:
+                influence_read = propagation_read
+            elif request.subject.kind in {"entity", "relationship"}:
+                influence_start = endpoints[0]
+                influence_read = await self._read_social_paths(
+                    request.tenantId, influence_start
+                )
+                influence_read = await self._authorize_social_paths(
+                    influence_read,
+                    request.tenantId,
+                    influence_start,
+                    already_checked=consent_by_endpoint,
+                )
+                if request.subject.kind == "relationship":
+                    target_entity_id = endpoints[1]
+                    pair_paths = tuple(
+                        path
+                        for path in influence_read.paths
+                        if path.entity_ids[-1] == target_entity_id
+                    )
+                    pair_reasons = influence_read.reason_codes
+                    if not pair_paths and not pair_reasons:
+                        pair_reasons = ("no_bounded_observed_influence_paths_for_pair",)
+                    influence_read = SocialGraphPathRead(
+                        request.tenantId,
+                        influence_start,
+                        paths=pair_paths,
+                        available=influence_read.available,
+                        truncated=influence_read.truncated,
+                        reason_codes=pair_reasons,
+                    )
+            else:
+                influence_read = SocialGraphPathRead(
+                    request.tenantId,
+                    request.subject.id,
+                    available=False,
+                    reason_codes=("social_influence_entity_or_relationship_subject_required",),
+                )
+
+        reads: dict[str, Social360FactRead] = {}
+        reads["identity"] = await self._read("identity", request.tenantId)
+        tenant_identity_rows, bad_identity_scope = _tenant_rows(reads["identity"], request.tenantId)
+        if not reads["identity"].available:
+            # A reader may return a partial page alongside an unavailable
+            # status. Those rows cannot establish an identity join.
+            tenant_identity_rows = []
+            bad_identity_scope = False
+        entity_ids = set(endpoints)
+        identity_rows = [
+            row
+            for row in tenant_identity_rows
+            if _text(row.get("canonical_entity_ref")) in entity_ids
+        ]
+
+        # Social identity references can be bound to more than one entity in
+        # dirty or conflicting data. Remove those references before joining
+        # any other social fact family.
+        identity_ids, ambiguous_identity_ids = _unique_identity_ids(
+            tenant_identity_rows, entity_ids
+        )
+        subject_identity_rows = [
+            row for row in identity_rows if _text(row.get("social_identity_id")) in identity_ids
+        ]
+
+        scoped: dict[str, list[dict[str, Any]]] = {"identity": subject_identity_rows}
+        scope_mismatch = bad_identity_scope or bool(ambiguous_identity_ids)
+        queried_families = {"identity"}
+        if identity_ids:
+            for family in _FACT_TABLES[1:]:
+                reads[family] = await self._read(family, request.tenantId)
+                queried_families.add(family)
+                rows, bad_scope = _tenant_rows(reads[family], request.tenantId)
+                if not reads[family].available:
+                    # Do not turn a partial failed read into evidence-backed
+                    # claims; its coverage remains explicit below.
+                    rows = []
+                    bad_scope = False
+                scope_mismatch = scope_mismatch or bad_scope
+                scoped[family] = _subject_rows(
+                    family,
+                    rows,
+                    request.subject,
+                    identity_ids,
+                    _identity_ids_by_entity(subject_identity_rows),
+                    population_entity_ids=entity_ids
+                    if request.subject.kind == "population"
+                    else None,
+                )
+        else:
+            for family in _FACT_TABLES[1:]:
+                reads[family] = Social360FactRead(rows=[], available=True)
+                scoped[family] = []
+
+        # Time filters operate on the source event/observation time. For an
+        # as-of read, received_at is the knowledge-time anchor. Rows without a
+        # usable timestamp are omitted from bounded temporal results.
+        temporal_unknown = False
+        for family, rows in list(scoped.items()):
+            filtered, unknown = _filter_temporal(rows, request, context.asOf)
+            scoped[family] = filtered
+            temporal_unknown = temporal_unknown or unknown
+
+        identities = scoped["identity"]
+        connections = scoped["connection"]
+        interactions = scoped["interaction"]
+        content = scoped["content"]
+        communities = scoped["community"]
+        metrics = scoped["metric"]
+
+        identity_items = _visible_items(
+            identities,
+            "silver_social_identity_facts",
+            (
+                "social_identity_id",
+                "provider_identity",
+                "account_type",
+                "verification_state",
+                "resolution_state",
+                "resolution_confidence",
+                "identity_evidence_refs",
+            ),
+        )
+        connection_items = _visible_items(
+            connections,
+            "silver_social_connection_facts",
+            (
+                "source_social_identity_ref",
+                "target_social_identity_ref",
+                "connection_type",
+                "directionality",
+                "proof_level",
+                "claim_type",
+                "evidence_refs",
+                "contradictory_evidence_refs",
+            ),
+        )
+        interaction_items = _visible_items(
+            interactions,
+            "silver_social_interaction_facts",
+            (
+                "interaction_id",
+                "actor_social_identity_ref",
+                "target_social_identity_ref",
+                "interaction_type",
+                "observed_at",
+                "machine_classification",
+                "human_qualification",
+                "evidence_refs",
+            ),
+        )
+        content_items = _visible_items(
+            content,
+            "silver_social_content_facts",
+            (
+                "content_id",
+                "author_social_identity_ref",
+                "content_type",
+                "provider_content_subtype",
+                "parent_content_ref",
+                "root_content_ref",
+                "published_at",
+                "edited_at",
+                "deleted_at",
+                "content_hash",
+                "semantic_ref",
+                "narrative_refs",
+                "campaign_ref",
+                "incentive_context_ref",
+                "evidence_refs",
+            ),
+        )
+        community_items = _visible_items(
+            communities,
+            "silver_social_community_facts",
+            (
+                "membership_id",
+                "social_identity_ref",
+                "community_ref",
+                "membership_role",
+                "provider_membership_role",
+                "valid_from",
+                "valid_to",
+                "observed_at",
+                "evidence_refs",
+            ),
+        )
+        metric_items = _visible_items(
+            metrics,
+            "silver_social_metric_facts",
+            (
+                "metric_observation_id",
+                "social_identity_ref",
+                "metric_name",
+                "value",
+                "unit",
+                "status",
+                "metric_window",
+                "population",
+                "observed_at",
+                "computation_ref",
+                "quality",
+                "evidence_refs",
+            ),
+        )
+
+        rows_by_family = {
+            "identity": identities,
+            "connection": connections,
+            "interaction": interactions,
+            "content": content,
+            "community": communities,
+            "metric": metrics,
+        }
+        identity_binding_state = _identity_binding_state(
+            reads["identity"],
+            identity_ids,
+            ambiguous_identity_ids,
+            bad_identity_scope,
+        )
+        identity_scope_incomplete = identity_binding_state in {
+            "unavailable",
+            "truncated",
+            "degraded",
+        }
+        refs_by_family = {
+            family: [
+                ref
+                for row in rows
+                if (ref := _row_evidence(row, f"silver_social_{family}_facts")) is not None
+            ]
+            for family, rows in rows_by_family.items()
+        }
+        all_refs = _dedupe_refs(
+            [
+                *(population_scope.evidence_refs if population_scope is not None else ()),
+                *(source_scope.evidence_refs if source_scope is not None else ()),
+                *(agent_scope.evidence_refs if agent_scope is not None else ()),
+                *(ref for refs in refs_by_family.values() for ref in refs),
+            ]
+        )
+
+        source_status = _source_status(reads, families=_FACT_TABLES)
+        if not identity_ids and source_status == "available":
+            source_status = "unresolved"
+        if scope_mismatch or temporal_unknown:
+            source_status = (
+                "degraded"
+                if source_status in {"available", "empty", "unresolved"}
+                else source_status
+            )
+
+        identity_count_known = (
+            bool(identity_ids)
+            and not reads["identity"].truncated
+            and not scope_mismatch
+            and not temporal_unknown
+        )
+        source_coverage = _source_coverage(
+            reads,
+            rows_by_family,
+            queried_families=queried_families,
+            overall_state=source_status,
+            identity_binding_state=identity_binding_state,
+            scope_mismatch=scope_mismatch,
+            temporal_unknown=temporal_unknown,
+            temporal_bounded=(
+                (request.temporalMode or "window") in {"as_of", "relative"}
+                or (
+                    request.timeRange is not None
+                    and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+                )
+            ),
+        )
         section_data = {
-            "evidence": ("Evidence", bool(evidence_refs), {"items": evidence_refs}),
-            "findings": ("Observed relationships and communities", bool(connection_items or community_items), {
-                "relationships": connection_items, "communityMemberships": community_items,
-            }),
-            "interactions": ("Observed interactions and content", bool(interaction_items or content_items), {
-                "interactions": interaction_items, "content": content_items,
-            }),
-            "state": ("Social identities and measured metrics", bool(identity_items or metric_items), {
-                "identities": identity_items, "metrics": metric_items,
-            }),
-            "summary": ("Social summary", bool(identity_items or connection_items or interaction_items or content_items or community_items or metric_items), {
-                "identityCount": len(identity_items),
-                "relationshipCount": len(connection_items),
-                "communityMembershipCount": len(community_items),
-                "interactionCount": len(interaction_items),
-                "contentObservationCount": len(content_items),
-                "metricObservationCount": len(metric_items),
-            }),
-            "timeline": ("Interaction timeline", bool(interaction_items), {
-                "items": sorted(
-                    interaction_items + [
-                        {**item, "observed_at": item.get("published_at")}
-                        for item in content_items if item.get("published_at")
-                    ], key=lambda item: str(item.get("observed_at") or ""),
-                ),
-            }),
+            "evidence": (
+                "Evidence",
+                all_refs,
+                {
+                    "evidenceRefs": all_refs,
+                    "populationMembershipEvidenceRefs": (
+                        list(population_scope.evidence_refs) if population_scope is not None else []
+                    ),
+                    "sourceIdentityEvidenceRefs": (
+                        list(source_scope.evidence_refs) if source_scope is not None else []
+                    ),
+                    "agentIdentityEvidenceRefs": (
+                        list(agent_scope.evidence_refs) if agent_scope is not None else []
+                    ),
+                    "untypedSourceReferenceCount": _untyped_ref_count(rows_by_family),
+                    "sourceCoverage": source_coverage,
+                },
+                ("identity", "connection", "interaction", "content", "community", "metric"),
+            ),
+            "findings": (
+                "Observed social relationships and communities",
+                connection_items or community_items,
+                {
+                    "relationships": connection_items,
+                    "communityMemberships": community_items,
+                    "coverage": source_status,
+                    "sourceCoverage": source_coverage,
+                },
+                ("connection", "community"),
+            ),
+            "interactions": (
+                "Observed interactions and content",
+                interaction_items or content_items,
+                {"interactions": interaction_items, "content": content_items},
+                ("interaction", "content"),
+            ),
+            "state": (
+                "Social identities and measured observations",
+                identity_items or metric_items,
+                {"identities": identity_items, "metrics": metric_items},
+                ("identity", "metric"),
+            ),
+            "summary": (
+                "Social observation summary",
+                identity_items
+                or connection_items
+                or interaction_items
+                or content_items
+                or community_items
+                or metric_items,
+                {
+                    "identityCount": len(identity_items) if identity_count_known else None,
+                    "relationshipCount": len(connection_items)
+                    if source_status == "available"
+                    else None,
+                    "communityMembershipCount": len(community_items)
+                    if source_status == "available"
+                    else None,
+                    "interactionCount": len(interaction_items)
+                    if source_status == "available"
+                    else None,
+                    "contentObservationCount": len(content_items)
+                    if source_status == "available"
+                    else None,
+                    "metricObservationCount": len(metric_items)
+                    if source_status == "available"
+                    else None,
+                    "coverage": source_status,
+                    "sourceCoverage": source_coverage,
+                    "metricsAreObservedValues": True,
+                    "influenceScore": None,
+                    "organicClassification": None,
+                    "populationScope": (
+                        {
+                            "state": population_scope.state,
+                            "memberCount": len(population_scope.entity_ids),
+                            "relationshipScope": "internal_to_verified_population_members",
+                        }
+                        if population_scope is not None
+                        else None
+                    ),
+                    "sourceIdentityScope": (
+                        {
+                            "state": source_scope.state,
+                            "canonicalEntityId": source_scope.canonical_entity_id,
+                        }
+                        if source_scope is not None
+                        else None
+                    ),
+                    "agentIdentityScope": (
+                        {
+                            "state": agent_scope.state,
+                            "canonicalAgentEntityId": agent_scope.canonical_agent_entity_id,
+                        }
+                        if agent_scope is not None
+                        else None
+                    ),
+                },
+                _FACT_TABLES,
+            ),
+            "timeline": (
+                "Observed social timeline",
+                interaction_items or content_items,
+                {
+                    "items": sorted(
+                        interaction_items
+                        + [
+                            {**item, "observed_at": item.get("published_at")}
+                            for item in content_items
+                            if item.get("published_at")
+                        ],
+                        key=lambda item: str(item.get("observed_at") or ""),
+                    ),
+                },
+                ("interaction", "content"),
+            ),
         }
-        for section_id in ("evidence", "findings", "interactions", "state", "summary", "timeline"):
-            if section_id in include:
-                title, has_data, content = section_data[section_id]
-                sections.append(ProjectionSection(
-                    id=section_id,
-                    state="available" if has_data else "unknown",
-                    title=title,
-                    content=content,
-                ))
 
-        # A capped source read is explicit; counts never imply absence or zero.
-        capped = any(len(rows) >= 500 for rows in (
-            identity_rows, connection_rows, interaction_rows, content_rows,
-            community_rows, metric_rows,
-        ))
+        sections: list[ProjectionSection] = []
+        for section_id, (title, rows_or_refs, content_value, families) in section_data.items():
+            if section_id not in include:
+                continue
+            family_reads = [
+                reads.get(family, Social360FactRead([], available=False)) for family in families
+            ]
+            has_rows = bool(rows_or_refs)
+            failed = any(not read.available for read in family_reads)
+            truncated = any(read.truncated for read in family_reads)
+            if (
+                failed
+                or truncated
+                or scope_mismatch
+                or identity_scope_incomplete
+                or temporal_unknown
+            ):
+                state = "degraded"
+            elif not identity_ids:
+                state = "unknown"
+            elif has_rows:
+                state = "available"
+            else:
+                state = "empty"
+            warnings = []
+            warnings.extend(
+                f"{family}_source_unavailable"
+                for family in families
+                if not reads.get(family, Social360FactRead([], available=False)).available
+            )
+            warnings.extend(
+                f"{family}_source_truncated"
+                for family in families
+                if reads.get(family) and reads[family].truncated
+            )
+            if not identity_ids:
+                warnings.append("canonical_social_identity_binding_unavailable")
+            if scope_mismatch:
+                warnings.append("social_fact_scope_or_identity_conflict")
+            if temporal_unknown:
+                warnings.append("temporal_fact_coverage_incomplete")
+            sections.append(
+                ProjectionSection(
+                    id=section_id,
+                    state=state,
+                    title=title,
+                    content=content_value if state in {"available", "degraded", "empty"} else None,
+                    warnings=sorted(set(warnings)) or None,
+                )
+            )
+
+        path_section, path_claims = self._path_section_and_claims(request.subject, path_read)
+        if "paths" in include:
+            sections.append(path_section)
+        propagation_section, propagation_claims = self._propagation_section_and_claims(
+            request.subject,
+            request.tenantId,
+            propagation_read,
+            as_of=now,
+        )
+        if "propagation" in include:
+            sections.append(propagation_section)
+        influence_section, influence_claims = await self._influence_section_and_claims(
+            request.subject,
+            request.tenantId,
+            influence_read,
+            as_of=now,
+        )
+        if "influence" in include:
+            sections.append(influence_section)
+        syndicates_section, syndicates_claims = self._syndicates_section_and_claims(
+            request.tenantId, request.subject, syndicate_read
+        )
+        if "syndicates" in include:
+            sections.append(syndicates_section)
+        if risk_edges_section is not None:
+            sections.append(risk_edges_section)
+        if social_contagion_section is not None:
+            sections.append(social_contagion_section)
+        if trust_edges_section is not None:
+            sections.append(trust_edges_section)
+
+        claims = self._claims(request.subject, rows_by_family, refs_by_family)
+        claims.extend(path_claims)
+        if "propagation" in include:
+            claims.extend(propagation_claims)
+        if "influence" in include:
+            claims.extend(influence_claims)
+        if "syndicates" in include:
+            claims.extend(syndicates_claims)
+        claims.extend(risk_edge_claims)
+        claims.extend(social_contagion_claims)
+        claims.extend(trust_edge_claims)
+        degraded_reasons = sorted(
+            {
+                read.reason or f"{family}_source_unavailable"
+                for family, read in reads.items()
+                if not read.available
+            }
+            | ({"source_read_capped"} if any(read.truncated for read in reads.values()) else set())
+            | ({"social_fact_scope_or_identity_conflict"} if scope_mismatch else set())
+            | ({"canonical_social_identity_binding_unavailable"} if not identity_ids else set())
+            | ({"temporal_fact_coverage_incomplete"} if temporal_unknown else set())
+        )
+        return ProjectionResult(
+            projectionId=self.projection_id,
+            tenantId=request.tenantId,
+            contractVersion=self.contract_version,
+            sections=sections,
+            claims=claims,
+            dependencyState=context.dependencyState,
+            generatedAt=now,
+            asOf=(request.asOf or context.asOf) if request.temporalMode == "as_of" else None,
+            degradedReasons=degraded_reasons,
+            temporalMode=request.temporalMode or "window",
+        )
+
+    async def _social_assertion_section(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        *,
+        assertion_kind: Literal["social_contagion", "trust_edge"],
+        temporal_filter_requested: bool,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Project explicit Social evidence without inferring causality or trust.
+
+        Social360 and Risk360 read this append-only assertion ledger only for an
+        exact canonical entity subject. The frame runtime still owns policy and
+        redaction, and the provider retains source, graph, risk, and actor refs.
+        """
+        section_id = "social_contagion" if assertion_kind == "social_contagion" else "trust_edges"
+        authorities = (
+            _SOCIAL_CONTAGION_AUTHORITIES
+            if assertion_kind == "social_contagion"
+            else _SOCIAL_TRUST_AUTHORITIES
+        )
+        title = (
+            "Source reported social contagion evidence"
+            if assertion_kind == "social_contagion"
+            else "Operator asserted trust relationships"
+        )
+
+        def unknown(reason: str, *, state: str = "unknown") -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=section_id,
+                    state=state,
+                    title=title,
+                    content={
+                        "items": [],
+                        "coverage": "recorded_assertions_only",
+                        "causalContagionEstablished": False,
+                        "trustScoreInferred": False,
+                        "policyState": "unknown",
+                        "freshness": "unknown",
+                    },
+                    warnings=[reason],
+                    canonicalAuthorityRefs=list(authorities),
+                ),
+                [],
+            )
+
+        if request.subject.kind != "entity":
+            return unknown("social_assertion_entity_subject_required")
+        if request.temporalMode == "relative" and not (
+            request.timeRange
+            and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+        ):
+            return unknown("social_assertion_relative_scope_unavailable")
+
+        if assertion_kind == "social_contagion":
+            read_method = getattr(self._social_evidence_authority, "read_social_contagion_evidence", None)
+        else:
+            read_method = getattr(self._social_evidence_authority, "read_trust_edge_evidence", None)
+        if not callable(read_method):
+            return unknown("social_assertion_authority_binding_unavailable")
+
+        start_raw = request.timeRange.from_ if request.timeRange else None
+        end_raw = request.timeRange.to if request.timeRange else None
+        as_of_raw = request.asOf or context.asOf
+        start = _parse_graph_time(start_raw) if start_raw is not None else None
+        end = _parse_graph_time(end_raw) if end_raw is not None else None
+        as_of = _parse_graph_time(as_of_raw) if as_of_raw is not None else None
+        if (
+            (start_raw is not None and start is None)
+            or (end_raw is not None and end is None)
+            or (as_of_raw is not None and as_of is None)
+            or (start is not None and end is not None and start > end)
+        ):
+            return unknown("social_assertion_window_invalid")
+        try:
+            read = await read_method(
+                request.tenantId,
+                request.subject.id,
+                start=start,
+                end=end,
+                as_of=as_of,
+                limit=_MAX_SOCIAL_EVIDENCE_READ,
+            )
+        except Exception:  # noqa: BLE001 - authority failure is slot-local
+            return unknown("social_assertion_authority_unavailable", state="degraded")
+        if (
+            getattr(read, "tenant_id", None) != request.tenantId
+            or getattr(read, "subject_entity_id", None) != request.subject.id
+            or not isinstance(getattr(read, "records", None), (tuple, list))
+        ):
+            return unknown("social_assertion_read_scope_or_contract_invalid", state="degraded")
+        if not getattr(read, "available", False):
+            return unknown(
+                getattr(read, "reason", None) or "social_assertion_authority_unavailable",
+                state="degraded",
+            )
+
+        visible: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        reasons: set[str] = set()
+        consent_cache: dict[str, bool] = {request.subject.id: True}
+        for row in read.records[:_MAX_SOCIAL_EVIDENCE_READ]:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != request.tenantId
+                or row.get("subject_entity_id") != request.subject.id
+                or row.get("assertion_kind") != assertion_kind
+                or not _text(row.get("record_id"))
+                or not _text(row.get("source_entity_id"))
+                or not _text(row.get("target_entity_id"))
+            ):
+                reasons.add("social_assertion_record_scope_invalid")
+                continue
+
+            entity_ids = row.get("path_entity_ids") if assertion_kind == "social_contagion" else [
+                row.get("source_entity_id"), row.get("target_entity_id")
+            ]
+            if (
+                not isinstance(entity_ids, (list, tuple))
+                or any(not _text(entity_id) for entity_id in entity_ids)
+                or request.subject.id not in entity_ids
+            ):
+                reasons.add("social_assertion_endpoint_scope_invalid")
+                continue
+            allowed = True
+            for entity_id in dict.fromkeys(entity_ids):
+                if entity_id in consent_cache:
+                    allowed = allowed and consent_cache[entity_id]
+                    continue
+                try:
+                    consent = await self._consent_reader(
+                        request.tenantId, entity_id, None, "analytics"
+                    )
+                except Exception:  # noqa: BLE001 - consent remains fail-closed
+                    consent = (False, "consent_authority_unavailable")
+                consent_cache[entity_id] = _consent_allowed(consent)
+                allowed = allowed and consent_cache[entity_id]
+            if not allowed:
+                reasons.add("social_assertion_endpoint_consent_restricted")
+                continue
+
+            evidence_fields = (
+                ("path_evidence_refs", "source_evidence_refs", "risk_evidence_refs")
+                if assertion_kind == "social_contagion"
+                else ("policy_evidence_refs", "risk_evidence_refs")
+            )
+            raw_refs: list[Any] = []
+            for field in evidence_fields:
+                values = row.get(field, [])
+                if values is None:
+                    continue
+                if not isinstance(values, list):
+                    reasons.add("social_assertion_evidence_contract_invalid")
+                    raw_refs = []
+                    break
+                raw_refs.extend(values)
+            if assertion_kind == "social_contagion" and not all(
+                isinstance(row.get(field), list) and row.get(field)
+                for field in ("path_evidence_refs", "source_evidence_refs", "risk_evidence_refs")
+            ):
+                reasons.add("social_contagion_evidence_chain_incomplete")
+                continue
+            try:
+                refs = [EvidenceRef.model_validate(value) for value in raw_refs]
+            except Exception:  # noqa: BLE001 - malformed evidence fails closed
+                reasons.add("social_assertion_evidence_contract_invalid")
+                continue
+            if not refs or any(not _text(ref.id) or not _text(ref.source) for ref in refs):
+                reasons.add("social_assertion_evidence_unavailable")
+                continue
+
+            record_ref = EvidenceRef(
+                id=str(row["record_id"]),
+                type="event",
+                source="services/api/services/social360/evidence_authority.py:social_relationship_evidence_events",
+                observedAt=_text(row.get("recorded_at")),
+                uri=f"store://social_relationship_evidence_events/{row['record_id']}",
+            )
+            refs = _dedupe_refs([record_ref, *refs])
+            observed = _parse_graph_time(row.get("observed_at"))
+            effective = _parse_graph_time(row.get("effective_at"))
+            if observed is None or effective is None:
+                reasons.add("social_assertion_timestamp_invalid")
+                continue
+            item: dict[str, Any] = {
+                "recordId": row["record_id"],
+                "sourceEntityId": row["source_entity_id"],
+                "targetEntityId": row["target_entity_id"],
+                "sourceId": row.get("source_id"),
+                "sourceObservationId": row.get("source_observation_id"),
+                "sourceRevisionId": row.get("source_revision_id"),
+                "sourceRevisionStatus": row.get(
+                    "source_revision_status", "source_reported_revision_unverified"
+                ),
+                "sourceEventId": row.get("source_event_id"),
+                "observedAt": observed.isoformat(),
+                "effectiveAt": effective.isoformat(),
+                "recordedAt": _text(row.get("recorded_at")),
+                "recordedBy": {
+                    "actorId": row.get("actor_id"),
+                    "actorType": row.get("actor_type"),
+                },
+                "evidenceRefs": [
+                    ref.model_dump(by_alias=True, exclude_none=True) for ref in refs
+                ],
+                "domainSlotIds": [section_id],
+            }
+            if assertion_kind == "social_contagion":
+                item.update(
+                    {
+                        "pathEntityIds": list(row.get("path_entity_ids", [])),
+                        "sourceTrustClassification": row.get("source_trust_classification"),
+                        "claimState": row.get("claim_state", EpistemicStatus.CORRELATED.value),
+                        "causalStatus": "unverified",
+                        "policyState": "unknown",
+                    }
+                )
+                claim_kind = "social_contagion_source_report"
+                claim_text = "A tenant-scoped source reported risk evidence associated with this exact observed social path; causation remains unverified."
+                claim_state = EpistemicStatus.CORRELATED
+            else:
+                item.update(
+                    {
+                        "assertionState": row.get("assertion_state", "operator_asserted"),
+                        "riskSignalIds": list(row.get("risk_signal_ids", [])),
+                        "trustScore": None,
+                        "policyState": "unknown",
+                    }
+                )
+                claim_kind = "social_trust_edge_operator_assertion"
+                claim_text = "An authenticated tenant operator recorded a directional trust assertion for this exact canonical entity pair; no trust score is inferred."
+                claim_state = EpistemicStatus.OBSERVED
+            visible.append(item)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"social360:{section_id}:{row['record_id']}",
+                    kind=claim_kind,
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[claim_text],
+                    claimState=claim_state,
+                    domainSlotIds=[section_id],
+                )
+            )
+
+        truncated = bool(getattr(read, "truncated", False)) or len(read.records) > _MAX_SOCIAL_EVIDENCE_READ
+        if truncated:
+            reasons.add("social_assertion_read_truncated")
+        if reasons:
+            state = "degraded"
+            warnings = sorted(reasons)
+        elif visible:
+            state = "available"
+            warnings = None
+        else:
+            state = "empty"
+            warnings = None
+        content = {
+            "items": visible,
+            "coverage": "recorded_assertions_only",
+            "complete": False,
+            "recordedAssertionCount": len(visible),
+            "causalContagionEstablished": False,
+            "trustScoreInferred": False,
+            "policyState": "unknown",
+            "freshness": {
+                "state": "unknown",
+                "sourceTimestampsPreserved": True,
+                "reason": "no_social_assertion_freshness_threshold_registered",
+            },
+            "limitations": [
+                "an empty assertion ledger does not establish absence of social transmission or trust",
+                "source ingress classification does not establish source reliability",
+                "recorded source reports are correlated evidence and do not prove causal contagion",
+                "policy and redaction are evaluated by the frame runtime",
+            ],
+        }
+        return (
+            ProjectionSection(
+                id=section_id,
+                state=state,
+                title=title,
+                content=content,
+                warnings=warnings,
+                canonicalAuthorityRefs=list(authorities),
+            ),
+            claims,
+        )
+
+    async def _read_social_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead:
+        try:
+            result = await self._social_graph_paths.read_paths(tenant_id, start_entity_id)
+        except Exception:  # noqa: BLE001 - canonical graph authority is fail-closed
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("canonical_social_graph_authority_unavailable",),
+            )
+        if not isinstance(result, SocialGraphPathRead):
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("invalid_social_graph_path_source_contract",),
+            )
+        if result.tenant_id != tenant_id or result.start_entity_id != start_entity_id:
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("canonical_social_path_scope_mismatch",),
+            )
+        return result
+
+    async def _risk_edges_section_and_claims(
+        self,
+        request: ProjectionRequest,
+        *,
+        endpoints: tuple[str, ...],
+        consent_by_endpoint: dict[str, bool],
+        temporal_filter_requested: bool,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Join risk signals to exact registered risk-context edge evidence.
+
+        This is an observed/correlated association only. It is not a risk score
+        for the edge, trust, propagation, contagion, or causal attribution.
+        """
+
+        def unknown(reason: str, *, state: str = "unknown") -> ProjectionSection:
+            return ProjectionSection(
+                id="risk_edges",
+                state=state,
+                title="Evidence-linked risk-context associations",
+                content={
+                    "edges": [],
+                    "coverage": "bounded_current_evidence_linked_only",
+                    "riskPolicyEvaluation": "unknown",
+                    "freshness": "unknown",
+                    "causalRiskPropagationEstablished": False,
+                    "socialContagionEstablished": False,
+                    "trustEstablished": False,
+                },
+                warnings=[reason],
+                canonicalAuthorityRefs=list(_SOCIAL_RISK_EDGE_AUTHORITIES),
+            )
+
+        if temporal_filter_requested:
+            return unknown("social_risk_edge_historical_read_unavailable"), []
+        if request.subject.kind not in {"entity", "relationship"}:
+            return unknown("social_risk_edge_entity_or_relationship_subject_required"), []
+
+        edge_read = await self._read_social_risk_context_edges(request.tenantId, request.subject)
+        if not edge_read.available:
+            return unknown("canonical_social_risk_edge_authority_unavailable", state="degraded"), []
+        if edge_read.tenant_id != request.tenantId or edge_read.subject_id != request.subject.id:
+            return unknown("canonical_social_risk_edge_scope_mismatch", state="degraded"), []
+
+        reasons = set(edge_read.reason_codes)
+        if edge_read.truncated:
+            reasons.add("canonical_social_risk_edge_scan_capped")
+        signal_cache: dict[str, SocialRiskSignalRead] = {}
+        output_edges: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        now = datetime.now(timezone.utc)
+        if len(edge_read.edges) > _MAX_SOCIAL_RISK_EDGES:
+            reasons.add("canonical_social_risk_edge_read_limit_exceeded")
+
+        for edge in edge_read.edges[:_MAX_SOCIAL_RISK_EDGES]:
+            if (
+                not isinstance(edge, SocialRiskContextEdge)
+                or edge.tenant_id != request.tenantId
+                or not _text(edge.source_entity_id)
+                or not _text(edge.target_entity_id)
+                or edge.source_entity_id == edge.target_entity_id
+                or not _text(edge.idempotency_key)
+                or not edge.evidence_refs
+                or not all(
+                    isinstance(ref, EvidenceRef) and _text(ref.id) for ref in edge.evidence_refs
+                )
+            ):
+                reasons.add("social_risk_edge_contract_or_scope_invalid")
+                continue
+
+            edge_endpoints = (edge.source_entity_id, edge.target_entity_id)
+            if not set(endpoints).intersection(edge_endpoints):
+                reasons.add("social_risk_edge_endpoint_not_bound_to_subject")
+                continue
+            if request.subject.kind == "relationship" and set(endpoints) != set(edge_endpoints):
+                continue
+
+            edge_consent_allowed = True
+            for endpoint_id in edge_endpoints:
+                if consent_by_endpoint.get(endpoint_id) is True:
+                    continue
+                try:
+                    consent = await self._consent_reader(
+                        request.tenantId, endpoint_id, None, "analytics"
+                    )
+                except Exception:  # noqa: BLE001 - consent is a fail-closed read gate
+                    edge_consent_allowed = False
+                    reasons.add("social_risk_edge_endpoint_consent_unavailable")
+                    continue
+                if not _consent_allowed(consent):
+                    edge_consent_allowed = False
+                    reasons.add("social_risk_edge_endpoint_consent_restricted")
+            if not edge_consent_allowed:
+                continue
+
+            edge_fact_ids = {
+                ref.id
+                for ref in edge.evidence_refs
+                if isinstance(ref, EvidenceRef)
+                and ref.source == "relationship_facts"
+                and _text(ref.id)
+            }
+            if not edge_fact_ids:
+                reasons.add("social_risk_edge_relationship_evidence_unavailable")
+                continue
+
+            support: list[dict[str, Any]] = []
+            claim_refs = list(edge.evidence_refs)
+            for endpoint_id in edge_endpoints:
+                signal_read = signal_cache.get(endpoint_id)
+                if signal_read is None:
+                    signal_read = await self._read_social_risk_signals(
+                        request.tenantId, endpoint_id
+                    )
+                    signal_cache[endpoint_id] = signal_read
+                if (
+                    not signal_read.available
+                    or signal_read.tenant_id != request.tenantId
+                    or signal_read.entity_id != endpoint_id
+                ):
+                    reasons.add(signal_read.reason or "canonical_risk_signal_scope_invalid")
+                    continue
+                if signal_read.truncated:
+                    reasons.add(signal_read.reason or "canonical_risk_signal_read_bounded")
+
+                for raw_signal in signal_read.rows:
+                    try:
+                        from intelligence.risk360.contracts import RiskSignal
+
+                        signal = RiskSignal.model_validate(raw_signal)
+                    except Exception:  # noqa: BLE001 - persisted risk rows are untrusted input
+                        reasons.add("canonical_risk_signal_contract_invalid")
+                        continue
+                    if (
+                        signal.tenant_id != request.tenantId
+                        or signal.subject_kind != "entity"
+                        or signal.subject_id != endpoint_id
+                        or not _text(signal.signal_id)
+                        or not _text(signal.source)
+                    ):
+                        reasons.add("canonical_risk_signal_scope_mismatch")
+                        continue
+                    observed_at = (
+                        signal.observed_at.astimezone(timezone.utc)
+                        if signal.observed_at is not None and signal.observed_at.tzinfo is not None
+                        else None
+                    )
+                    if signal.observed_at is not None and observed_at is None:
+                        reasons.add("canonical_risk_signal_observed_time_invalid")
+                        continue
+                    if observed_at is not None and observed_at > now:
+                        reasons.add("canonical_risk_signal_observed_time_in_future")
+                        continue
+                    matching_refs = [
+                        ref
+                        for ref in signal.evidence_refs
+                        if ref.id in edge_fact_ids and ref.type == "event"
+                    ]
+                    if not matching_refs:
+                        continue
+
+                    matched_signal_ref = EvidenceRef(
+                        id=signal.signal_id,
+                        type="model_output",
+                        source=f"risk_signals:{signal.source}",
+                        observedAt=observed_at.isoformat() if observed_at is not None else None,
+                    )
+                    scoped_signal_refs = _dedupe_refs([*matching_refs, matched_signal_ref])
+                    support.append(
+                        {
+                            "subjectEntityId": endpoint_id,
+                            "signalId": signal.signal_id,
+                            "riskDimension": signal.risk_dimension,
+                            "claimState": signal.claim_state.value,
+                            "observedAt": observed_at.isoformat()
+                            if observed_at is not None
+                            else None,
+                            "evidenceRefs": scoped_signal_refs,
+                        }
+                    )
+                    claim_refs.extend(scoped_signal_refs)
+
+            if not support:
+                continue
+            claim_refs = _dedupe_refs(claim_refs)
+            output_edges.append(
+                {
+                    "sourceEntityId": edge.source_entity_id,
+                    "targetEntityId": edge.target_entity_id,
+                    "predicate": "SHARES_RISK_CONTEXT_WITH",
+                    "associationState": "correlated_risk_context",
+                    "riskSignalSupport": support,
+                    "evidenceRefs": claim_refs,
+                    "riskScore": None,
+                    "riskPolicyEvaluation": "unknown",
+                    "freshness": "unknown",
+                    "causalRiskPropagationEstablished": False,
+                    "socialContagionEstablished": False,
+                    "trustEstablished": False,
+                }
+            )
+            digest = hashlib.sha256(
+                "\x1f".join(
+                    [
+                        request.tenantId,
+                        edge.source_entity_id,
+                        edge.target_entity_id,
+                        edge.idempotency_key,
+                        *(ref.id for ref in claim_refs),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()[:24]
+            claims.append(
+                ClaimEnvelope(
+                    id=f"social360.risk-edge.{digest}",
+                    kind="social_risk_context_edge_association",
+                    subject=request.subject,
+                    evidenceRefs=claim_refs,
+                    claims=[
+                        "A registered SHARES_RISK_CONTEXT_WITH graph edge and an exact tenant-scoped risk signal share canonical evidence. This is correlated context only; it does not establish edge risk, trust, propagation, contagion, causation, or loss."
+                    ],
+                    claimState=EpistemicStatus.CORRELATED,
+                    domainSlotIds=["risk_edges", "evidence_trace"],
+                )
+            )
+
+        if not output_edges:
+            reason = (
+                sorted(reasons)[0]
+                if reasons
+                else "no_risk_signal_evidence_linked_to_registered_risk_context_edge"
+            )
+            return unknown(reason, state="degraded" if reasons else "unknown"), []
+
+        state = "degraded" if reasons else "available"
+        section = ProjectionSection(
+            id="risk_edges",
+            state=state,
+            title="Evidence-linked risk-context associations",
+            content={
+                "edges": output_edges,
+                "coverage": "bounded_current_evidence_linked_only",
+                "riskPolicyEvaluation": "unknown",
+                "freshness": "unknown",
+                "causalRiskPropagationEstablished": False,
+                "socialContagionEstablished": False,
+                "trustEstablished": False,
+            },
+            warnings=sorted(reasons) or None,
+            canonicalAuthorityRefs=list(_SOCIAL_RISK_EDGE_AUTHORITIES),
+        )
+        return section, claims
+
+    async def _read_social_risk_context_edges(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> SocialRiskContextEdgeRead:
+        try:
+            result = await self._risk_context_edges.read_edges(tenant_id, subject)
+        except Exception:  # noqa: BLE001 - canonical graph authority fails closed
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("canonical_social_risk_edge_authority_unavailable",),
+            )
+        if not isinstance(result, SocialRiskContextEdgeRead):
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("invalid_social_risk_edge_source_contract",),
+            )
+        if result.tenant_id != tenant_id or result.subject_id != subject.id:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("canonical_social_risk_edge_scope_mismatch",),
+            )
+        if len(result.edges) > _MAX_SOCIAL_RISK_EDGES:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                result.edges[:_MAX_SOCIAL_RISK_EDGES],
+                available=result.available,
+                truncated=True,
+                reason_codes=tuple(
+                    sorted(
+                        set(result.reason_codes)
+                        | {"canonical_social_risk_edge_read_limit_exceeded"}
+                    )
+                ),
+            )
+        return result
+
+    async def _read_social_risk_signals(
+        self, tenant_id: str, entity_id: str
+    ) -> SocialRiskSignalRead:
+        try:
+            result = await self._risk_signals.read(tenant_id, entity_id)
+        except Exception:  # noqa: BLE001 - canonical risk authority fails closed
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="canonical_risk_signal_authority_unavailable",
+            )
+        if not isinstance(result, SocialRiskSignalRead):
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="invalid_social_risk_signal_source_contract",
+            )
+        if result.tenant_id != tenant_id or result.entity_id != entity_id:
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="canonical_risk_signal_scope_mismatch",
+            )
+        if not isinstance(result.rows, (list, tuple)) or any(
+            not isinstance(row, dict) for row in result.rows
+        ):
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="invalid_social_risk_signal_rows",
+            )
+        if len(result.rows) > _MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY:
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                result.rows[:_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY],
+                available=result.available,
+                truncated=True,
+                reason="canonical_risk_signal_read_limit_exceeded",
+            )
+        return result
+
+    async def _read_social_syndicates(
+        self, tenant_id: str, entity_id: str
+    ) -> SocialSyndicateMembershipRead:
+        try:
+            result = await self._syndicate_memberships.read(
+                tenant_id, entity_id, limit=_MAX_SYNDICATE_MEMBERSHIPS
+            )
+        except Exception:  # noqa: BLE001 - canonical membership authority is fail-closed
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_authority_unavailable",
+            )
+        if not isinstance(result, SocialSyndicateMembershipRead):
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_source_invalid_response",
+            )
+        if result.tenant_id != tenant_id or result.entity_id != entity_id:
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=True,
+                scope_known=False,
+                truncated=result.truncated,
+                reason="social_syndicate_membership_scope_mismatch",
+            )
+        if len(result.rows) > _MAX_SYNDICATE_MEMBERSHIPS:
+            return SocialSyndicateMembershipRead(
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+                rows=result.rows[:_MAX_SYNDICATE_MEMBERSHIPS],
+                available=result.available,
+                scope_known=result.scope_known,
+                truncated=True,
+                reason=result.reason or "social_syndicate_membership_source_limit_exceeded",
+            )
+        return result
+
+    @staticmethod
+    def _syndicates_section_and_claims(
+        tenant_id: str,
+        subject: ProjectionSubject,
+        result: Optional[SocialSyndicateMembershipRead],
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        reason = "social_syndicate_membership_scope_unavailable"
+        available = False
+        scope_known = False
+        truncated = False
+        rows: list[SocialSyndicateMembership] = []
+        if result is not None:
+            available = result.available
+            scope_known = result.scope_known
+            truncated = result.truncated
+            reason = result.reason or reason
+            if (
+                result.tenant_id == tenant_id
+                and subject.kind == "entity"
+                and result.entity_id == subject.id
+                and isinstance(result.rows, list)
+            ):
+                rows = result.rows
+            else:
+                scope_known = False
+                reason = "social_syndicate_membership_scope_mismatch"
+
+        if subject.kind != "entity":
+            scope_known = False
+            reason = "social_syndicate_entity_subject_required"
+
+        memberships: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        claims: list[ClaimEnvelope] = []
+        seen_population_ids: set[str] = set()
+        for row in rows:
+            evidence_ref = row.evidence_ref if isinstance(row, SocialSyndicateMembership) else None
+            if (
+                not isinstance(row, SocialSyndicateMembership)
+                or row.tenant_id != tenant_id
+                or row.entity_id != subject.id
+                or not _text(row.population_id)
+                or row.population_type not in _SYNDICATE_POPULATION_TYPES
+                or not isinstance(evidence_ref, EvidenceRef)
+                or not _text(evidence_ref.id)
+                or evidence_ref.type != "relationship"
+                or evidence_ref.source != "graph_mutation_ledger"
+                or (row.joined_at is not None and not isinstance(row.joined_at, str))
+            ):
+                scope_known = False
+                memberships = []
+                evidence_refs = []
+                reason = "social_syndicate_membership_scope_or_evidence_invalid"
+                break
+            if row.population_id in seen_population_ids:
+                continue
+            seen_population_ids.add(row.population_id)
+            memberships.append(
+                {
+                    "populationId": row.population_id,
+                    "populationType": row.population_type,
+                    "membershipState": "active",
+                    "joinedAt": row.joined_at,
+                    "evidenceRef": evidence_ref.model_dump(mode="json"),
+                }
+            )
+            evidence_refs.append(evidence_ref)
+
+        if not available:
+            state = "degraded"
+            memberships = []
+            evidence_refs = []
+            claims = []
+        elif not scope_known:
+            state = "unknown"
+            memberships = []
+            evidence_refs = []
+            claims = []
+        elif truncated or (result is not None and result.reason) or memberships:
+            state = "degraded"
+        else:
+            state = "unknown"
+            reason = "social_syndicate_membership_not_observed_completeness_unknown"
+
+        if state == "degraded" and result is not None and result.reason:
+            reason = result.reason
+        for membership in memberships:
+            population_id = membership["populationId"]
+            evidence_ref = next(
+                (ref for ref in evidence_refs if ref.id == membership["evidenceRef"]["id"]),
+                None,
+            )
+            if evidence_ref is None:
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"social360.syndicate_membership.{population_id}",
+                    kind="social_syndicate_membership_observation",
+                    subject=subject,
+                    evidenceRefs=[evidence_ref],
+                    claims=[
+                        "The exact tenant entity has an observed active MEMBER_OF edge to an explicitly opted-in Syndicates group."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["syndicates"],
+                )
+            )
+
+        content = {
+            "state": state,
+            "memberships": memberships,
+            "observedMembershipCount": len(memberships) if memberships else None,
+            "coverage": "unknown",
+            "complete": False,
+            "temporalInterpretation": "current_membership_candidates_verified_against_graph_ledger",
+            "freshness": {
+                "state": "unknown",
+                "observedAt": None,
+                "reason": "Social360 has no syndicate membership freshness threshold.",
+            },
+            "readAuthority": "cohort_membership+population_definitions+graph_mutation_ledger",
+            "reasonCode": reason,
+            "limitations": [
+                "only explicitly opted-in Syndicates groups with an exact current MEMBER_OF ledger edge are included",
+                "historical membership replay is unavailable",
+                "membership roster completeness is unknown",
+                "Social360 membership freshness policy is unavailable",
+            ],
+        }
+        if evidence_refs:
+            content["evidenceRefs"] = _dedupe_refs(evidence_refs)
+        warnings = [reason] if state in {"unknown", "degraded"} else None
+        return (
+            ProjectionSection(
+                id="syndicates",
+                state=state,  # type: ignore[arg-type]
+                title="Syndicate memberships",
+                content=content,
+                warnings=warnings,
+                canonicalAuthorityRefs=list(_SOCIAL_SYNDICATE_AUTHORITIES),
+            ),
+            claims,
+        )
+
+    async def _authorize_social_paths(
+        self,
+        result: SocialGraphPathRead,
+        tenant_id: str,
+        start_entity_id: str,
+        *,
+        already_checked: dict[str, bool],
+    ) -> SocialGraphPathRead:
+        if not result.available:
+            return result
+        visible_paths: list[SocialObservedPath] = []
+        policy_filtered = False
+        invalid_path = False
+        consent_by_entity = dict(already_checked)
+        for path in result.paths:
+            if not _valid_social_observed_path(path, start_entity_id):
+                invalid_path = True
+                continue
+            allowed = True
+            for entity_id in path.entity_ids[1:]:
+                if entity_id not in consent_by_entity:
+                    try:
+                        consent = await self._consent_reader(
+                            tenant_id, entity_id, None, "analytics"
+                        )
+                    except Exception:  # noqa: BLE001 - consent is fail-closed
+                        consent = (False, "consent_authority_unavailable")
+                    consent_by_entity[entity_id] = _consent_allowed(consent)
+                if not consent_by_entity[entity_id]:
+                    allowed = False
+            if allowed:
+                visible_paths.append(path)
+            else:
+                policy_filtered = True
+
+        reasons = set(result.reason_codes)
+        if policy_filtered:
+            reasons.add("social_path_endpoint_consent_restricted")
+        if invalid_path:
+            reasons.add("invalid_canonical_social_path_result")
+        return SocialGraphPathRead(
+            tenant_id,
+            start_entity_id,
+            paths=tuple(visible_paths),
+            available=result.available,
+            truncated=result.truncated,
+            reason_codes=tuple(sorted(reasons)),
+        )
+
+    @staticmethod
+    def _path_section_and_claims(
+        subject: ProjectionSubject, result: SocialGraphPathRead
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        reasons = list(result.reason_codes)
+        claims: list[ClaimEnvelope] = []
+        visible_paths = list(result.paths)
+        if visible_paths and result.available:
+            evidence_refs = _dedupe_refs(
+                [ref for path in visible_paths for edge in path.edge_evidence_refs for ref in edge]
+            )
+            path_items = []
+            for path in visible_paths:
+                path_refs = [_dedupe_refs(list(edge_refs)) for edge_refs in path.edge_evidence_refs]
+                path_items.append(
+                    {
+                        "entityPath": list(path.entity_ids),
+                        "edgePredicate": "FOLLOWS",
+                        "edgeEvidenceRefs": path_refs,
+                    }
+                )
+                evidence = _dedupe_refs(
+                    [ref for edge_refs in path.edge_evidence_refs for ref in edge_refs]
+                )
+                path_key = "\x1f".join([*path.entity_ids, *(ref.id for ref in evidence)])
+                digest = hashlib.sha256(path_key.encode("utf-8")).hexdigest()[:24]
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"social360.multi_hop_paths.{digest}",
+                        kind="social_follows_path_observation",
+                        subject=subject,
+                        evidenceRefs=evidence,
+                        claims=[
+                            "The tenant-scoped canonical graph records this directed sequence "
+                            "of FOLLOWS edges as separate observed relationships; no transitive "
+                            "relationship, trust, or influence is asserted."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["multi_hop_paths"],
+                    )
+                )
+
+            state = "degraded" if result.truncated or reasons else "available"
+            content = {
+                "multiHopPaths": {
+                    "state": state,
+                    "paths": path_items,
+                    "coverage": "bounded_observed_paths_only",
+                    "completeness": "unknown",
+                    "freshness": "unknown",
+                    "pathDepthLimit": _SOCIAL_PATH_DEPTH,
+                    "minimumHops": 2,
+                    "pathSemantics": {
+                        "edgePredicate": "FOLLOWS",
+                        "directedObservedEdges": True,
+                        "transitiveRelationshipClaim": False,
+                        "trustInferred": False,
+                        "influenceInferred": False,
+                    },
+                    "evidenceRefs": evidence_refs,
+                }
+            }
+            return (
+                ProjectionSection(
+                    id="paths",
+                    state=state,
+                    title="Bounded observed FOLLOWS paths",
+                    content=content,
+                    warnings=reasons or None,
+                    canonicalAuthorityRefs=list(_SOCIAL_PATH_AUTHORITIES),
+                ),
+                claims,
+            )
+
+        if not reasons:
+            reasons = ["no_bounded_observed_follows_paths"]
+        unsupported_temporal = "social_graph_path_temporal_scope_unsupported" in reasons
+        unsupported_subject = "multi_hop_paths_entity_subject_required" in reasons
+        unavailable = not result.available and not (unsupported_temporal or unsupported_subject)
+        state = "degraded" if unavailable or result.truncated else "unknown"
+        return (
+            ProjectionSection(
+                id="paths",
+                state=state,
+                title="Bounded observed FOLLOWS paths",
+                content=None,
+                warnings=sorted(set(reasons)),
+                canonicalAuthorityRefs=list(_SOCIAL_PATH_AUTHORITIES),
+            ),
+            claims,
+        )
+
+    @staticmethod
+    def _propagation_section_and_claims(
+        subject: ProjectionSubject,
+        tenant_id: str,
+        result: SocialGraphPathRead,
+        *,
+        as_of: str,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Expose only registry-authorized observed paths as propagation context.
+
+        The canonical influence-propagation substrate certifies whether the
+        registered predicates permit a path to carry propagation semantics.
+        This provider deliberately supplies no M7 measurements, so it emits
+        component coverage only (never values or a contagion conclusion).
+        """
+        from shared.relationship_spine.influence_propagation import (
+            decompose_influence_propagation,
+        )
+
+        reasons = set(result.reason_codes)
+        path_items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        saw_invalid_path = False
+        for path in result.paths:
+            if not _valid_social_propagation_path(
+                path, tenant_id, result.start_entity_id, as_of=as_of
+            ):
+                saw_invalid_path = True
+                continue
+
+            decomposition = decompose_influence_propagation(
+                list(path.graph_edges),
+                source_ref=path.entity_ids[0],
+                target_ref=path.entity_ids[-1],
+                as_of=as_of,
+            )
+            edge_times = list(path.edge_observed_at)
+            parsed_times = [_parse_graph_time(value) for value in edge_times]
+            if any(value is None for value in parsed_times):
+                time_order_state = "unknown"
+                reasons.add("social_propagation_source_observation_time_missing")
+            elif parsed_times == sorted(parsed_times):
+                time_order_state = "ordered"
+            else:
+                time_order_state = "conflicted"
+                reasons.add("social_propagation_source_observation_order_conflicted")
+
+            component_coverage = [
+                {
+                    "componentId": component.component_id,
+                    "state": component.state,
+                    "reasonCode": component.reason_code or None,
+                    "measuredHopCount": component.measured_hops,
+                    "materialHopCount": component.material_hops,
+                }
+                for component in decomposition.all_components
+            ]
+            if not decomposition.available_component_ids:
+                reasons.add("social_propagation_components_unmeasured")
+            if not decomposition.propagation_certified:
+                reasons.update(decomposition.reason_codes)
+
+            edge_refs = [
+                _dedupe_refs(list(refs)) for refs in path.edge_evidence_refs
+            ]
+            evidence_refs = _dedupe_refs(
+                [ref for refs in path.edge_evidence_refs for ref in refs]
+            )
+            path_items.append(
+                {
+                    "entityPath": list(path.entity_ids),
+                    "edgePredicate": "FOLLOWS",
+                    "edgeEvidenceRefs": edge_refs,
+                    "sourceObservedAtByEdge": edge_times,
+                    "timeOrderState": time_order_state,
+                    "propagationAuthority": {
+                        "decision": decomposition.decision,
+                        "certifiedForPropagationAnalysis": decomposition.propagation_certified,
+                        "reasonCodes": list(decomposition.reason_codes),
+                        "hopCount": decomposition.hop_count,
+                        "epistemicCeiling": decomposition.min_epistemic_ceiling,
+                        "staleness": decomposition.staleness_status,
+                    },
+                    "componentCoverage": component_coverage,
+                    "evidenceRefs": evidence_refs,
+                }
+            )
+            if decomposition.propagation_certified:
+                digest_basis = "\x1f".join(
+                    [*path.entity_ids, *(ref.id for ref in evidence_refs)]
+                )
+                digest = hashlib.sha256(digest_basis.encode("utf-8")).hexdigest()[:24]
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"social360.propagation_path.{digest}",
+                        kind="social_propagation_path_observation",
+                        subject=subject,
+                        evidenceRefs=evidence_refs,
+                        claims=[
+                            "The tenant-scoped graph records this directed sequence of "
+                            "FOLLOWS relationships, and the governed predicate registry "
+                            "permits propagation analysis on the path. This does not "
+                            "establish that behavior, trust, risk, influence, or an outcome "
+                            "propagated."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["propagation"],
+                    )
+                )
+
+        if saw_invalid_path:
+            reasons.add("canonical_social_propagation_path_validation_failed")
+        if path_items:
+            reasons.add("social_propagation_component_measurements_unavailable")
+            state = "degraded"
+            content: Optional[dict[str, Any]] = {
+                "propagation": {
+                    "state": state,
+                    "paths": path_items,
+                    "coverage": "bounded_observed_propagation_eligible_paths",
+                    "completeness": "unknown",
+                    "freshness": "unknown",
+                    "componentValuesIncluded": False,
+                    "causalContagionEstablished": False,
+                    "evidenceRefs": _dedupe_refs(
+                        [ref for item in path_items for ref in item["evidenceRefs"]]
+                    ),
+                }
+            }
+        else:
+            content = None
+            unsupported_scope = any(
+                code in reasons
+                for code in {
+                    "social_propagation_subject_scope_unavailable",
+                    "social_propagation_entity_or_relationship_subject_required",
+                    "social_propagation_temporal_scope_unsupported",
+                }
+            )
+            unavailable = not result.available and not unsupported_scope
+            if not reasons:
+                reasons.add("no_bounded_observed_propagation_paths")
+            state = "degraded" if unavailable or result.truncated or saw_invalid_path else "unknown"
+
+        return (
+            ProjectionSection(
+                id="propagation",
+                state=state,
+                title="Observed propagation-eligible social paths",
+                content=content,
+                warnings=sorted(reasons) or None,
+                canonicalAuthorityRefs=list(_SOCIAL_PROPAGATION_AUTHORITIES),
+            ),
+            claims,
+        )
+
+    async def _read_social_relationship_fidelity(
+        self, tenant_id: str, source_entity_id: str, target_entity_id: str
+    ) -> SocialRelationshipFidelityRead:
+        relationship_ref = f"{source_entity_id}::{target_entity_id}"
+        try:
+            result = await self._relationship_fidelity.read(
+                tenant_id, source_entity_id, target_entity_id
+            )
+        except Exception:  # noqa: BLE001 - canonical fidelity authority is fail-closed
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_authority_unavailable",
+            )
+        if not isinstance(result, SocialRelationshipFidelityRead):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="invalid_relationship_fidelity_source_contract",
+            )
+        if result.tenant_id != tenant_id or result.relationship_ref != relationship_ref:
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "conflicted",
+                reason="relationship_fidelity_scope_mismatch",
+            )
+        return result
+
+    async def _influence_section_and_claims(
+        self,
+        subject: ProjectionSubject,
+        tenant_id: str,
+        result: SocialGraphPathRead,
+        *,
+        as_of: str,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Expose exact graph paths with any source-matched M7 measurements.
+
+        An observed path is only an influence-analysis basis. A component value
+        is included only when an exact directed tenant relationship has a
+        persisted M7 vector whose every evidence id is present on that path
+        edge. Connectivity never creates trust or a contagion conclusion.
+        """
+        from shared.relationship_spine.influence_propagation import (
+            decompose_influence_propagation,
+        )
+
+        reasons = set(result.reason_codes)
+        path_items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        fidelity_cache: dict[tuple[str, str], SocialRelationshipFidelityRead] = {}
+        fidelity_read_count = 0
+        saw_invalid_path = False
+
+        for path in result.paths:
+            if not _valid_social_propagation_path(
+                path, tenant_id, result.start_entity_id, as_of=as_of
+            ):
+                saw_invalid_path = True
+                continue
+
+            fidelity_by_hop: dict[int, dict[str, float]] = {}
+            fidelity_evidence_refs: list[EvidenceRef] = []
+            hop_measurements: list[dict[str, Any]] = []
+            for hop_index, edge_refs in enumerate(path.edge_evidence_refs):
+                source_entity_id = path.entity_ids[hop_index]
+                target_entity_id = path.entity_ids[hop_index + 1]
+                cache_key = (source_entity_id, target_entity_id)
+                fidelity_read = fidelity_cache.get(cache_key)
+                if fidelity_read is None:
+                    if fidelity_read_count >= _MAX_SOCIAL_INFLUENCE_FIDELITY_READS:
+                        fidelity_read = SocialRelationshipFidelityRead(
+                            tenant_id,
+                            f"{source_entity_id}::{target_entity_id}",
+                            "degraded",
+                            reason="social_influence_fidelity_read_limit_reached",
+                        )
+                    else:
+                        fidelity_read = await self._read_social_relationship_fidelity(
+                            tenant_id, source_entity_id, target_entity_id
+                        )
+                        fidelity_read_count += 1
+                    fidelity_cache[cache_key] = fidelity_read
+
+                reason_code = fidelity_read.reason
+                accepted_refs: list[EvidenceRef] = []
+                dimensions: dict[str, float] = {}
+                path_fact_ids = {
+                    ref.id
+                    for ref in edge_refs
+                    if isinstance(ref, EvidenceRef)
+                    and ref.source == "relationship_facts"
+                    and _text(ref.id)
+                }
+                vector_refs = list(fidelity_read.vector_evidence_refs)
+                refs_contract_valid = all(
+                    isinstance(ref, EvidenceRef)
+                    and ref.source == "relationship_fidelity"
+                    and ref.type == "event"
+                    and _text(ref.id)
+                    for ref in vector_refs
+                )
+                vector_evidence_ids = (
+                    {ref.id for ref in vector_refs}
+                    if refs_contract_valid
+                    else set()
+                )
+                computed_at = _parse_graph_time(fidelity_read.computed_at)
+                graph_observed_at = _parse_graph_time(path.edge_observed_at[hop_index])
+                expected_relationship_ref = f"{source_entity_id}::{target_entity_id}"
+                if fidelity_read.state != "available" or not isinstance(
+                    fidelity_read.vector, dict
+                ):
+                    pass
+                elif (
+                    fidelity_read.vector.get("relationship_ref") != expected_relationship_ref
+                    or fidelity_read.vector.get("status") != "current"
+                    or not refs_contract_valid
+                    or not isinstance(fidelity_read.run_evidence_ref, EvidenceRef)
+                    or fidelity_read.run_evidence_ref.source != "computation_substrate"
+                    or fidelity_read.run_evidence_ref.type != "model_output"
+                    or not _text(fidelity_read.run_evidence_ref.id)
+                    or fidelity_read.run_evidence_ref.observedAt != fidelity_read.computed_at
+                ):
+                    reason_code = "relationship_fidelity_evidence_contract_invalid"
+                elif (
+                    not path_fact_ids
+                    or not vector_evidence_ids
+                    or not vector_evidence_ids.issubset(path_fact_ids)
+                ):
+                    reason_code = "relationship_fidelity_evidence_not_bound_to_path_edge"
+                elif (
+                    computed_at is None
+                    or computed_at > (_parse_graph_time(as_of) or datetime.max.replace(tzinfo=timezone.utc))
+                    or (graph_observed_at is not None and computed_at < graph_observed_at)
+                ):
+                    reason_code = "relationship_fidelity_time_scope_invalid"
+                else:
+                    invalid_dimension = False
+                    for dimension in _SOCIAL_INFLUENCE_DIMENSIONS:
+                        value = fidelity_read.vector.get(dimension)
+                        if value is None:
+                            continue
+                        if (
+                            isinstance(value, bool)
+                            or not isinstance(value, (int, float))
+                            or not 0.0 <= float(value) <= 1.0
+                        ):
+                            invalid_dimension = True
+                            break
+                        dimensions[dimension] = float(value)
+                    if invalid_dimension:
+                        dimensions = {}
+                        reason_code = "relationship_fidelity_dimension_invalid"
+                    elif dimensions:
+                        fidelity_by_hop[hop_index] = dimensions
+                        accepted_refs = [
+                            ref for ref in vector_refs if ref.id in path_fact_ids
+                        ]
+                        accepted_refs.append(fidelity_read.run_evidence_ref)
+                        accepted_refs = _dedupe_refs(accepted_refs)
+                        fidelity_evidence_refs.extend(accepted_refs)
+                        reason_code = None
+                    else:
+                        reason_code = "relationship_fidelity_influence_dimensions_unavailable"
+
+                hop_measurements.append(
+                    {
+                        "hopIndex": hop_index,
+                        "sourceEntityId": source_entity_id,
+                        "targetEntityId": target_entity_id,
+                        "state": "available" if hop_index in fidelity_by_hop else "unknown",
+                        "computedAt": (
+                            fidelity_read.computed_at
+                            if hop_index in fidelity_by_hop
+                            else None
+                        ),
+                        "dimensionIds": sorted(fidelity_by_hop.get(hop_index, {})),
+                        "reasonCode": reason_code,
+                        "evidenceRefs": accepted_refs,
+                    }
+                )
+                if hop_index not in fidelity_by_hop:
+                    reasons.add(reason_code or "relationship_fidelity_measurement_unavailable")
+
+            decomposition = decompose_influence_propagation(
+                list(path.graph_edges),
+                source_ref=path.entity_ids[0],
+                target_ref=path.entity_ids[-1],
+                as_of=as_of,
+                fidelity_by_hop=fidelity_by_hop,
+            )
+            edge_times = list(path.edge_observed_at)
+            parsed_times = [_parse_graph_time(value) for value in edge_times]
+            if any(value is None for value in parsed_times):
+                time_order_state = "unknown"
+                reasons.add("social_influence_source_observation_time_missing")
+            elif parsed_times == sorted(parsed_times):
+                time_order_state = "ordered"
+            else:
+                time_order_state = "conflicted"
+                reasons.add("social_influence_source_observation_order_conflicted")
+
+            components = [
+                {
+                    "componentId": component.component_id,
+                    "state": component.state,
+                    "value": component.value,
+                    "reasonCode": component.reason_code or None,
+                    "reason": component.reason or None,
+                    "formula": component.formula,
+                    "measuredHopCount": component.measured_hops,
+                    "materialHopCount": component.material_hops,
+                    "perHopValues": [
+                        {"hopIndex": index, "value": value}
+                        for index, value in component.per_hop_values
+                    ],
+                    "limitations": component.limitations,
+                }
+                for component in decomposition.all_components
+            ]
+            evidence_refs = _dedupe_refs(
+                [
+                    *[ref for refs in path.edge_evidence_refs for ref in refs],
+                    *fidelity_evidence_refs,
+                ]
+            )
+            measured_hop_count = len(fidelity_by_hop)
+            path_items.append(
+                {
+                    "entityPath": list(path.entity_ids),
+                    "edgePredicate": "FOLLOWS",
+                    "edgeEvidenceRefs": [
+                        _dedupe_refs(list(refs)) for refs in path.edge_evidence_refs
+                    ],
+                    "sourceObservedAtByEdge": edge_times,
+                    "timeOrderState": time_order_state,
+                    "influenceAuthority": {
+                        "algorithm": decomposition.algorithm,
+                        "version": decomposition.version,
+                        "decision": decomposition.decision,
+                        "certifiedForInfluenceAnalysis": decomposition.propagation_certified,
+                        "reasonCodes": list(decomposition.reason_codes),
+                        "epistemicCeiling": decomposition.min_epistemic_ceiling,
+                        "staleness": decomposition.staleness_status,
+                    },
+                    "fidelityCoverage": {
+                        "state": (
+                            "complete"
+                            if measured_hop_count == len(path.entity_ids) - 1
+                            else "partial"
+                            if measured_hop_count
+                            else "unavailable"
+                        ),
+                        "measuredHopCount": measured_hop_count,
+                        "materialHopCount": len(path.entity_ids) - 1,
+                        "completeness": "unknown",
+                        "freshness": "unknown",
+                        "evidenceJoin": "all_vector_evidence_refs_must_match_exact_path_edge",
+                    },
+                    "hopMeasurements": hop_measurements,
+                    "components": components,
+                    "componentValuesIncluded": bool(decomposition.available_component_ids),
+                    "actualInfluenceEstablished": False,
+                    "causalContagionEstablished": False,
+                    "evidenceRefs": evidence_refs,
+                }
+            )
+            if decomposition.propagation_certified:
+                digest_basis = "\x1f".join(
+                    [*path.entity_ids, *(ref.id for ref in evidence_refs)]
+                )
+                digest = hashlib.sha256(digest_basis.encode("utf-8")).hexdigest()[:24]
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"social360.influence_path.{digest}",
+                        kind="social_influence_path_analysis",
+                        subject=subject,
+                        evidenceRefs=evidence_refs,
+                        claims=[
+                            "The tenant-scoped graph records this directed FOLLOWS path as a "
+                            f"bounded basis for governed influence analysis; exact M7 "
+                            f"relationship-fidelity measurements cover {measured_hop_count} "
+                            f"of {len(path.entity_ids) - 1} path hops. Unmeasured components "
+                            "remain unknown, and the path does not establish actual influence "
+                            "or causal contagion."
+                        ],
+                        claimState=(
+                            EpistemicStatus.DERIVED
+                            if decomposition.available_component_ids
+                            else EpistemicStatus.OBSERVED
+                        ),
+                        domainSlotIds=["influence_paths"],
+                    )
+                )
+
+        if saw_invalid_path:
+            reasons.add("canonical_social_influence_path_validation_failed")
+        if path_items:
+            # Path enumeration is bounded and M7 has no Social360 freshness SLA.
+            reasons.add("social_influence_path_completeness_or_freshness_unknown")
+            state = "degraded"
+            content: Optional[dict[str, Any]] = {
+                "influencePaths": {
+                    "state": state,
+                    "paths": path_items,
+                    "coverage": "bounded_evidence_backed_influence_analysis_paths",
+                    "completeness": "unknown",
+                    "freshness": "unknown",
+                    "influenceSemantics": {
+                        "directionSource": "directed_canonical_follows_edges",
+                        "componentMeasurementsSource": "exact_tenant_relationship_fidelity_vectors",
+                        "unmeasuredComponents": "unknown",
+                        "actualInfluenceEstablished": False,
+                        "trustInferred": False,
+                        "causalContagionEstablished": False,
+                    },
+                    "evidenceRefs": _dedupe_refs(
+                        [ref for item in path_items for ref in item["evidenceRefs"]]
+                    ),
+                }
+            }
+        else:
+            content = None
+            unsupported_scope = any(
+                code in reasons
+                for code in {
+                    "social_influence_subject_scope_unavailable",
+                    "social_influence_entity_or_relationship_subject_required",
+                    "social_influence_path_temporal_scope_unsupported",
+                }
+            )
+            unavailable = not result.available and not unsupported_scope
+            if not reasons:
+                reasons.add("no_bounded_observed_influence_paths")
+            state = "degraded" if unavailable or result.truncated or saw_invalid_path else "unknown"
+
+        return (
+            ProjectionSection(
+                id="influence",
+                state=state,
+                title="Evidence-backed influence analysis paths",
+                content=content,
+                warnings=sorted(reasons) or None,
+                canonicalAuthorityRefs=list(_SOCIAL_INFLUENCE_AUTHORITIES),
+            ),
+            claims,
+        )
+
+    async def _read(self, family: str, tenant_id: str) -> Social360FactRead:
+        try:
+            result = await self._source.read(family, tenant_id, limit=_MAX_READ_ROWS)
+        except Exception:  # noqa: BLE001 - authority failures are section degradation
+            return Social360FactRead(
+                rows=[], available=False, reason=f"{family}_source_unavailable"
+            )
+        if not isinstance(result, Social360FactRead):
+            return Social360FactRead(rows=[], available=False, reason="invalid_source_contract")
+        return result
+
+    @staticmethod
+    def _claims(
+        subject: ProjectionSubject,
+        rows_by_family: dict[str, list[dict[str, Any]]],
+        refs_by_family: dict[str, list[EvidenceRef]],
+    ) -> list[ClaimEnvelope]:
+        claims: list[ClaimEnvelope] = []
+        for family, rows in rows_by_family.items():
+            domain_slot_ids = _domain_slot_ids(subject.kind, family)
+            if not domain_slot_ids:
+                continue
+            refs_by_id = {ref.id: ref for ref in refs_by_family.get(family, [])}
+            table = f"silver_social_{family}_facts"
+            for row in rows:
+                ref = refs_by_id.get(_text(row.get("fact_id")) or "")
+                if ref is None:
+                    continue
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"social360.{family}.{ref.id}",
+                        kind=f"social_{family}_fact_observation",
+                        subject=subject,
+                        evidenceRefs=[ref],
+                        claims=[
+                            f"A tenant-scoped {table} row records a social {family} observation."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=domain_slot_ids,
+                    )
+                )
+        return claims
+
+    @staticmethod
+    def _empty_population_result(
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        generated_at: str,
+        scope: PopulationScopeRead,
+    ) -> ProjectionResult:
+        """Return a known-empty social view when a verified population has no members."""
+        membership_refs = list(scope.evidence_refs)
+        empty_content = {
+            "evidence": {
+                "evidenceRefs": membership_refs,
+                "populationMembershipEvidenceRefs": membership_refs,
+                "coverage": "empty_population",
+            },
+            "findings": {
+                "relationships": [],
+                "communityMemberships": [],
+                "coverage": "empty_population",
+            },
+            "interactions": {"interactions": [], "content": []},
+            "state": {"identities": [], "metrics": []},
+            "summary": {
+                "identityCount": 0,
+                "relationshipCount": 0,
+                "communityMembershipCount": 0,
+                "interactionCount": 0,
+                "contentObservationCount": 0,
+                "metricObservationCount": 0,
+                "coverage": "empty_population",
+                "metricsAreObservedValues": True,
+                "influenceScore": None,
+                "organicClassification": None,
+                "populationScope": {
+                    "state": "empty",
+                    "memberCount": 0,
+                    "relationshipScope": "internal_to_verified_population_members",
+                },
+            },
+            "timeline": {"items": []},
+        }
+        include = set(request.includeSections or OUTPUT_SECTIONS)
+        sections = []
+        for section_id in OUTPUT_SECTIONS:
+            if section_id not in include:
+                continue
+            if section_id == "paths":
+                sections.append(
+                    ProjectionSection(
+                        id="paths",
+                        state="unknown",
+                        title="Bounded observed FOLLOWS paths",
+                        warnings=["multi_hop_paths_entity_subject_required"],
+                        canonicalAuthorityRefs=list(_SOCIAL_PATH_AUTHORITIES),
+                    )
+                )
+                continue
+            if section_id == "propagation":
+                sections.append(
+                    ProjectionSection(
+                        id="propagation",
+                        state="unknown",
+                        title="Observed propagation-eligible social paths",
+                        warnings=["empty_population_has_no_path_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_PROPAGATION_AUTHORITIES),
+                    )
+                )
+                continue
+            if section_id == "influence":
+                sections.append(
+                    ProjectionSection(
+                        id="influence",
+                        state="unknown",
+                        title="Evidence-backed influence analysis paths",
+                        warnings=["empty_population_has_no_influence_path_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_INFLUENCE_AUTHORITIES),
+                    )
+                )
+                continue
+            if section_id == "syndicates":
+                sections.append(
+                    ProjectionSection(
+                        id="syndicates",
+                        state="unknown",
+                        title="Syndicate memberships",
+                        warnings=["empty_population_has_no_entity_membership_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_SYNDICATE_AUTHORITIES),
+                    )
+                )
+                continue
+            if section_id == "risk_edges":
+                sections.append(
+                    ProjectionSection(
+                        id="risk_edges",
+                        state="unknown",
+                        title="Evidence-linked risk-context associations",
+                        warnings=["empty_population_has_no_risk_edge_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_RISK_EDGE_AUTHORITIES),
+                    )
+                )
+                continue
+            if section_id in {"social_contagion", "trust_edges"}:
+                contagion = section_id == "social_contagion"
+                sections.append(
+                    ProjectionSection(
+                        id=section_id,
+                        state="unknown",
+                        title=(
+                            "Source reported social contagion evidence"
+                            if contagion
+                            else "Operator asserted trust relationships"
+                        ),
+                        warnings=["empty_population_has_no_entity_assertion_scope"],
+                        canonicalAuthorityRefs=list(
+                            _SOCIAL_CONTAGION_AUTHORITIES
+                            if contagion
+                            else _SOCIAL_TRUST_AUTHORITIES
+                        ),
+                    )
+                )
+                continue
+            sections.append(
+                ProjectionSection(
+                    id=section_id,
+                    state="empty",
+                    title="Social observation population view",
+                    content=empty_content[section_id],
+                )
+            )
+        return ProjectionResult(
+            projectionId=PROJECTION_ID,
+            tenantId=request.tenantId,
+            contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+            sections=sections,
+            claims=[],
+            dependencyState=list(context.dependencyState),
+            generatedAt=generated_at,
+            degradedReasons=[],
+            temporalMode=request.temporalMode or "window",
+        )
+
+    def _unknown_result(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        generated_at: str,
+        reason: str,
+        *,
+        subject: ProjectionSubject,
+    ) -> ProjectionResult:
+        include = set(request.includeSections or OUTPUT_SECTIONS)
+        sections = [
+            ProjectionSection(
+                id=section_id,
+                state="unknown",
+                warnings=[reason],
+                canonicalAuthorityRefs=(
+                    list(_SOCIAL_PATH_AUTHORITIES)
+                    if section_id == "paths"
+                    else list(_SOCIAL_PROPAGATION_AUTHORITIES)
+                    if section_id == "propagation"
+                    else list(_SOCIAL_SYNDICATE_AUTHORITIES)
+                    if section_id == "syndicates"
+                    else list(_SOCIAL_RISK_EDGE_AUTHORITIES)
+                    if section_id == "risk_edges"
+                    else list(_SOCIAL_CONTAGION_AUTHORITIES)
+                    if section_id == "social_contagion"
+                    else list(_SOCIAL_TRUST_AUTHORITIES)
+                    if section_id == "trust_edges"
+                    else None
+                ),
+            )
+            for section_id in OUTPUT_SECTIONS
+            if section_id in include
+        ]
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=request.tenantId,
@@ -203,10 +3824,662 @@ class Social360Provider(IntelligenceProjectionProvider):
             sections=sections,
             claims=[],
             dependencyState=context.dependencyState,
-            generatedAt=datetime.now(timezone.utc).isoformat(),
-            degradedReasons=["source_read_capped"] if capped else [],
+            generatedAt=generated_at,
+            degradedReasons=[reason],
+        )
+
+    def _suppressed_result(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        generated_at: str,
+        reason: str,
+        *,
+        subject: ProjectionSubject,
+    ) -> ProjectionResult:
+        include = set(request.includeSections or OUTPUT_SECTIONS)
+        sections = [
+            ProjectionSection(
+                id=section_id,
+                state="suppressed",
+                warnings=[reason],
+                canonicalAuthorityRefs=(
+                    list(_SOCIAL_PATH_AUTHORITIES)
+                    if section_id == "paths"
+                    else list(_SOCIAL_PROPAGATION_AUTHORITIES)
+                    if section_id == "propagation"
+                    else list(_SOCIAL_SYNDICATE_AUTHORITIES)
+                    if section_id == "syndicates"
+                    else list(_SOCIAL_RISK_EDGE_AUTHORITIES)
+                    if section_id == "risk_edges"
+                    else list(_SOCIAL_CONTAGION_AUTHORITIES)
+                    if section_id == "social_contagion"
+                    else list(_SOCIAL_TRUST_AUTHORITIES)
+                    if section_id == "trust_edges"
+                    else None
+                ),
+            )
+            for section_id in OUTPUT_SECTIONS
+            if section_id in include
+        ]
+        return ProjectionResult(
+            projectionId=self.projection_id,
+            tenantId=request.tenantId,
+            contractVersion=self.contract_version,
+            sections=sections,
+            claims=[],
+            dependencyState=context.dependencyState,
+            generatedAt=generated_at,
+            degradedReasons=[reason],
         )
 
 
-def register_provider(registry) -> str:
+def _subject_endpoints(subject: ProjectionSubject) -> Optional[tuple[str, ...]]:
+    if subject.kind in {"entity", "source"}:
+        return (subject.id,)
+    if subject.kind == "relationship":
+        source, delimiter, target = subject.id.partition("::")
+        if (
+            delimiter
+            and source.strip()
+            and target.strip()
+            and "::" not in target
+            and source != target
+        ):
+            return source, target
+    return None
+
+
+def _consent_allowed(result: Any) -> bool:
+    if isinstance(result, tuple) and result:
+        return result[0] is True
+    return getattr(result, "allowed", False) is True
+
+
+def _text(value: Any) -> Optional[str]:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _truthy_marker(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "revoked"}
+    return False
+
+
+def _parse_graph_time(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _graph_evidence_ids(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(dict.fromkeys(text for item in value if (text := _text(item))))
+
+
+def _valid_social_observed_path(path: Any, start_entity_id: str) -> bool:
+    if not isinstance(path, SocialObservedPath):
+        return False
+    if not (3 <= len(path.entity_ids) <= _SOCIAL_PATH_DEPTH + 1):
+        return False
+    if path.entity_ids[0] != start_entity_id:
+        return False
+    if any(not _text(entity_id) for entity_id in path.entity_ids):
+        return False
+    if len(set(path.entity_ids)) != len(path.entity_ids):
+        return False
+    if len(path.edge_evidence_refs) != len(path.entity_ids) - 1:
+        return False
+    return all(
+        edge_refs and all(isinstance(ref, EvidenceRef) and _text(ref.id) for ref in edge_refs)
+        for edge_refs in path.edge_evidence_refs
+    )
+
+
+def _valid_social_propagation_path(
+    path: Any, tenant_id: str, start_entity_id: str, *, as_of: str
+) -> bool:
+    """Validate the exact graph hops and evidence before propagation analysis."""
+    from shared.graph.graph import tenant_of
+
+    if not _valid_social_observed_path(path, start_entity_id):
+        return False
+    edge_count = len(path.entity_ids) - 1
+    if len(path.graph_edges) != edge_count or len(path.edge_observed_at) != edge_count:
+        return False
+
+    reference = _parse_graph_time(as_of)
+    if reference is None:
+        return False
+    for index, edge in enumerate(path.graph_edges):
+        edge_type = (
+            edge.get("edge_type") or edge.get("type")
+            if isinstance(edge, dict)
+            else getattr(edge, "edge_type", None)
+        )
+        from_id = (
+            edge.get("from_vertex_id") or edge.get("from")
+            if isinstance(edge, dict)
+            else getattr(edge, "from_vertex_id", None)
+        )
+        to_id = (
+            edge.get("to_vertex_id") or edge.get("to")
+            if isinstance(edge, dict)
+            else getattr(edge, "to_vertex_id", None)
+        )
+        properties = (
+            edge.get("properties") or {}
+            if isinstance(edge, dict)
+            else getattr(edge, "properties", None) or {}
+        )
+        if not isinstance(properties, dict):
+            return False
+        if (
+            edge_type != "FOLLOWS_SOCIAL"
+            or from_id != path.entity_ids[index]
+            or to_id != path.entity_ids[index + 1]
+            or tenant_of(properties) != tenant_id
+            or properties.get("relationship_predicate") != "FOLLOWS"
+            or _truthy_marker(properties.get("revoked"))
+            or bool(properties.get("revoked_at"))
+        ):
+            return False
+
+        valid_from_value = properties.get("valid_from")
+        valid_to_value = properties.get("valid_to")
+        valid_from = _parse_graph_time(valid_from_value) if valid_from_value else None
+        valid_to = _parse_graph_time(valid_to_value) if valid_to_value else None
+        if (valid_from_value and valid_from is None) or (valid_to_value and valid_to is None):
+            return False
+        if valid_from is not None and valid_from > reference:
+            return False
+        if valid_to is not None and valid_to <= reference:
+            return False
+
+        idempotency_key = _text(properties.get("idempotency_key"))
+        evidence_ids = set(_graph_evidence_ids(properties.get("evidence_refs")))
+        edge_refs = path.edge_evidence_refs[index]
+        graph_ref_ids = {
+            ref.id for ref in edge_refs if ref.source == "entity_graph" and _text(ref.id)
+        }
+        fact_ref_ids = {
+            ref.id for ref in edge_refs if ref.source == "relationship_facts" and _text(ref.id)
+        }
+        if not idempotency_key or idempotency_key not in graph_ref_ids or evidence_ids != fact_ref_ids:
+            return False
+
+        observed_at = _parse_graph_time(properties.get("observed_at"))
+        expected_observed_at = observed_at.isoformat() if observed_at is not None else None
+        if path.edge_observed_at[index] != expected_observed_at:
+            return False
+    return True
+
+
+def _tenant_rows(read: Social360FactRead, tenant_id: str) -> tuple[list[dict[str, Any]], bool]:
+    rows: list[dict[str, Any]] = []
+    mismatch = False
+    for row in read.rows:
+        if not isinstance(row, dict) or row.get("tenant_id") != tenant_id:
+            mismatch = True
+            continue
+        rows.append(row)
+    return rows, mismatch
+
+
+def _unique_identity_ids(
+    all_rows: list[dict[str, Any]], subject_entities: set[str]
+) -> tuple[set[str], set[str]]:
+    entity_by_identity: dict[str, set[str]] = {}
+    unresolved_identity_ids: set[str] = set()
+    for row in all_rows:
+        identity_id = _text(row.get("social_identity_id"))
+        entity_id = _text(row.get("canonical_entity_ref"))
+        if not identity_id:
+            continue
+        if entity_id:
+            entity_by_identity.setdefault(identity_id, set()).add(entity_id)
+        else:
+            # An unresolved duplicate cannot be ignored when another row binds
+            # the same social identity. Its canonical entity may be unknown.
+            unresolved_identity_ids.add(identity_id)
+    ambiguous = {
+        identity_id
+        for identity_id, entity_ids in entity_by_identity.items()
+        if len(entity_ids) > 1 or identity_id in unresolved_identity_ids
+    }
+    scoped = {
+        identity_id
+        for identity_id, entity_ids in entity_by_identity.items()
+        if entity_ids.issubset(subject_entities) and identity_id not in ambiguous
+    }
+    return scoped, ambiguous.intersection(
+        identity_id
+        for identity_id, entity_ids in entity_by_identity.items()
+        if entity_ids.intersection(subject_entities)
+    )
+
+
+def _identity_ids_by_entity(
+    identities: list[dict[str, Any]],
+) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = {}
+    for row in identities:
+        entity_id = _text(row.get("canonical_entity_ref"))
+        identity_id = _text(row.get("social_identity_id"))
+        if entity_id and identity_id:
+            result.setdefault(entity_id, set()).add(identity_id)
+    return result
+
+
+def _subject_rows(
+    family: str,
+    rows: list[dict[str, Any]],
+    subject: ProjectionSubject,
+    identity_ids: set[str],
+    identity_ids_by_entity: dict[str, set[str]],
+    *,
+    population_entity_ids: Optional[set[str]] = None,
+) -> list[dict[str, Any]]:
+    if subject.kind in {"entity", "source", "agent"}:
+        return [row for row in rows if _row_mentions_identity(family, row, identity_ids)]
+    if subject.kind == "population":
+        if population_entity_ids is None:
+            return []
+        if family in {"connection", "interaction"}:
+            left_field, right_field = (
+                ("source_social_identity_ref", "target_social_identity_ref")
+                if family == "connection"
+                else ("actor_social_identity_ref", "target_social_identity_ref")
+            )
+            return [
+                row
+                for row in rows
+                if _text(row.get(left_field)) in identity_ids
+                and _text(row.get(right_field)) in identity_ids
+            ]
+        return [row for row in rows if _row_mentions_identity(family, row, identity_ids)]
+    endpoints = _subject_endpoints(subject)
+    if endpoints is None or len(endpoints) != 2:
+        return []
+    left_ids = identity_ids_by_entity.get(endpoints[0], set())
+    right_ids = identity_ids_by_entity.get(endpoints[1], set())
+    if not left_ids or not right_ids:
+        return []
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        if family == "connection":
+            left = _text(row.get("source_social_identity_ref"))
+            right = _text(row.get("target_social_identity_ref"))
+            matches = (left in left_ids and right in right_ids) or (
+                left in right_ids and right in left_ids
+            )
+        elif family == "interaction":
+            left = _text(row.get("actor_social_identity_ref"))
+            right = _text(row.get("target_social_identity_ref"))
+            matches = (left in left_ids and right in right_ids) or (
+                left in right_ids and right in left_ids
+            )
+        else:
+            matches = _row_mentions_identity(family, row, identity_ids)
+        if matches:
+            selected.append(row)
+    return selected
+
+
+def _row_mentions_identity(family: str, row: dict[str, Any], identity_ids: set[str]) -> bool:
+    columns = {
+        "connection": ("source_social_identity_ref", "target_social_identity_ref"),
+        "interaction": ("actor_social_identity_ref", "target_social_identity_ref"),
+        "content": ("author_social_identity_ref",),
+        "community": ("social_identity_ref",),
+        "metric": ("social_identity_ref",),
+    }.get(family, ())
+    return any(_text(row.get(column)) in identity_ids for column in columns)
+
+
+def _visible_items(
+    rows: list[dict[str, Any]], table: str, fields: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        # Preserve explicit nulls for observations such as an unavailable
+        # metric; omission and an observed null are different source states.
+        item = {key: row.get(key) for key in fields if key in row}
+        reference = _row_evidence(row, table)
+        if reference is not None:
+            item["evidenceRefs"] = [reference]
+        items.append(item)
+    return items
+
+
+def _row_evidence(row: dict[str, Any], table: str) -> Optional[EvidenceRef]:
+    fact_id = _text(row.get("fact_id"))
+    if not fact_id:
+        return None
+    observed_at = (
+        _text(row.get("received_at"))
+        or _text(row.get("observed_at"))
+        or _text(row.get("occurred_at"))
+        or _text(row.get("published_at"))
+    )
+    return EvidenceRef(
+        id=fact_id,
+        type="event",
+        source=f"services/api/ingestion/silver/{table}",
+        observedAt=observed_at,
+        uri=f"store://{table}/{fact_id}",
+    )
+
+
+def _dedupe_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
+    seen: set[tuple[str, str]] = set()
+    unique: list[EvidenceRef] = []
+    for ref in refs:
+        key = (ref.source, ref.id)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(ref)
+    return unique
+
+
+def _untyped_ref_count(rows_by_family: dict[str, list[dict[str, Any]]]) -> int:
+    count = 0
+    for rows in rows_by_family.values():
+        for row in rows:
+            for field in ("identity_evidence_refs", "evidence_refs", "contradictory_evidence_refs"):
+                refs = row.get(field)
+                if isinstance(refs, list):
+                    count += sum(isinstance(ref, str) for ref in refs)
+    return count
+
+
+def _source_status(reads: dict[str, Social360FactRead], *, families: tuple[str, ...]) -> str:
+    selected = [reads.get(family) for family in families]
+    if any(read is None or not read.available for read in selected):
+        return "unavailable"
+    if any(read and read.truncated for read in selected):
+        return "truncated"
+    return "available"
+
+
+_SOURCE_OBSERVATION_TIME_FIELDS: dict[str, tuple[str, ...]] = {
+    "identity": ("last_observed_at", "observed_at", "first_observed_at"),
+    "connection": ("observed_at",),
+    "interaction": ("observed_at", "occurred_at"),
+    "content": ("edited_at", "published_at"),
+    "community": ("observed_at", "valid_from"),
+    "metric": ("observed_at",),
+}
+
+
+def _identity_binding_state(
+    read: Social360FactRead,
+    identity_ids: set[str],
+    ambiguous_identity_ids: set[str],
+    bad_identity_scope: bool,
+) -> str:
+    if not read.available:
+        return "unavailable"
+    if read.truncated:
+        return "truncated"
+    if bad_identity_scope or ambiguous_identity_ids:
+        return "degraded"
+    return "available" if identity_ids else "unresolved"
+
+
+def _source_coverage(
+    reads: dict[str, Social360FactRead],
+    rows_by_family: dict[str, list[dict[str, Any]]],
+    *,
+    queried_families: set[str],
+    overall_state: str,
+    identity_binding_state: str,
+    scope_mismatch: bool,
+    temporal_unknown: bool,
+    temporal_bounded: bool,
+) -> dict[str, Any]:
+    """Report subject-scoped Silver coverage without treating skipped reads as empty."""
+    families: dict[str, dict[str, Any]] = {}
+    for family in _FACT_TABLES:
+        read = reads.get(family)
+        if family not in queried_families:
+            read_state = "not_read"
+            reason = "canonical_social_identity_binding_not_established"
+            scoped_rows: Optional[list[dict[str, Any]]] = None
+        elif read is None or not read.available:
+            read_state = "unavailable"
+            reason = read.reason if read is not None else f"{family}_source_unavailable"
+            scoped_rows = None
+        elif read.truncated:
+            read_state = "truncated"
+            reason = read.reason or "source_read_capped"
+            scoped_rows = rows_by_family.get(family, [])
+        else:
+            read_state = "available"
+            reason = None
+            scoped_rows = rows_by_family.get(family, [])
+
+        if scoped_rows is None:
+            source_times = None
+            received_times = None
+            scoped_count = None
+        else:
+            source_times = [
+                value
+                for row in scoped_rows
+                if (value := _source_observed_time(family, row)) is not None
+            ]
+            received_times = [
+                value
+                for row in scoped_rows
+                if (value := _parse_time(_text(row.get("received_at")))) is not None
+            ]
+            scoped_count = len(scoped_rows)
+
+        families[family] = {
+            "readState": read_state,
+            "reason": reason,
+            "scopedObservationCount": scoped_count,
+            "sourceTimestampedCount": len(source_times) if source_times is not None else None,
+            "sourceTimestampMissingCount": (
+                scoped_count - len(source_times)
+                if scoped_count is not None and source_times is not None
+                else None
+            ),
+            "latestSourceObservedAt": (max(source_times).isoformat() if source_times else None),
+            "receivedAtCount": len(received_times) if received_times is not None else None,
+            "receivedAtMissingCount": (
+                scoped_count - len(received_times)
+                if scoped_count is not None and received_times is not None
+                else None
+            ),
+        }
+
+    return {
+        "state": overall_state,
+        "identityBindingState": identity_binding_state,
+        "scopeState": (
+            "degraded"
+            if scope_mismatch or identity_binding_state in {"unavailable", "truncated", "degraded"}
+            else "unknown"
+            if identity_binding_state == "unresolved"
+            else "available"
+        ),
+        "temporalScopeState": (
+            "incomplete"
+            if temporal_unknown
+            else "complete"
+            if temporal_bounded
+            else "not_requested"
+        ),
+        "temporalScope": "bounded" if temporal_bounded else "unbounded",
+        "countsAreScopedToRequestedSubject": True,
+        "sourceTimestamps": "preserved_when_present",
+        "missingTimestamp": "unknown",
+        "families": families,
+    }
+
+
+def _source_observed_time(family: str, row: dict[str, Any]) -> Optional[datetime]:
+    for field in _SOURCE_OBSERVATION_TIME_FIELDS[family]:
+        parsed = _parse_time(_text(row.get(field)))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _filter_temporal(
+    rows: list[dict[str, Any]], request: ProjectionRequest, context_anchor: Optional[str]
+) -> tuple[list[dict[str, Any]], bool]:
+    mode = request.temporalMode or "window"
+    start_raw = request.timeRange.from_ if request.timeRange else None
+    end_raw = request.timeRange.to if request.timeRange else None
+    anchor_raw = request.asOf or context_anchor
+
+    start = _parse_time(start_raw)
+    end = _parse_time(end_raw)
+    anchor = _parse_time(anchor_raw)
+    has_window = start_raw is not None or end_raw is not None
+    if mode == "as_of" and anchor is None:
+        return [], True
+    if mode == "relative" and not has_window:
+        return [], True
+    if (start_raw is not None and start is None) or (end_raw is not None and end is None):
+        return [], True
+    if not has_window and mode != "as_of":
+        return rows, False
+
+    filtered: list[dict[str, Any]] = []
+    unknown = False
+    for row in rows:
+        time_value = (
+            row.get("received_at")
+            if mode == "as_of"
+            else row.get("observed_at") or row.get("occurred_at") or row.get("published_at")
+        )
+        observed = _parse_time(_text(time_value))
+        if observed is None:
+            unknown = True
+            continue
+        if mode == "as_of":
+            if anchor is not None and observed <= anchor:
+                filtered.append(row)
+            continue
+        if start is not None and observed < start:
+            continue
+        if end is not None and observed > end:
+            continue
+        filtered.append(row)
+    return filtered, unknown
+
+
+def _parse_time(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+_SUPPORTED_SLOTS_BY_FAMILY: dict[str, frozenset[str]] = {
+    # Every direct Silver claim remains an observation and carries an EvidenceRef.
+    # Optional, more specific slots are earned only by the relevant source family.
+    "identity": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+    "connection": frozenset(
+        {
+            "social_observations_and_sources",
+            "evidence_and_coverage",
+            "evidence_trace",
+            # A provider-recorded connection may populate a relationship map
+            # as source evidence, but does not become a canonical graph edge.
+            "relationship_map",
+        }
+    ),
+    "interaction": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+    "content": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+    "community": frozenset(
+        {
+            "social_observations_and_sources",
+            "evidence_and_coverage",
+            "evidence_trace",
+            # This slot is limited to recorded membership facts, not syndicate
+            # or contagion synthesis.
+            "communities",
+        }
+    ),
+    "metric": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+}
+
+
+def _domain_slot_ids(subject_kind: str, fact_family: str) -> list[str]:
+    result: set[str] = set()
+    supported_slots = _SUPPORTED_SLOTS_BY_FAMILY.get(fact_family, frozenset())
+    for surface_id, surface in PRODUCT_360_SURFACE_DEFINITIONS.items():
+        # These are direct Social360 fact claims. Other surfaces may bind the
+        # projection as supporting evidence, but that does not make every
+        # social fact a risk, fraud, or contagion claim.
+        if surface_id != "social360":
+            continue
+        if not isinstance(surface, dict):
+            continue
+        for slot in surface.get("domainSlots", []):
+            if not isinstance(slot, dict):
+                continue
+            for binding in slot.get("projectionBindings", []):
+                if (
+                    isinstance(binding, dict)
+                    and binding.get("projectionId") == PROJECTION_ID
+                    and subject_kind in binding.get("subjectKinds", [])
+                    and isinstance(slot.get("id"), str)
+                    and slot["id"] in supported_slots
+                ):
+                    result.add(slot["id"])
+    return sorted(result)
+
+
+def register_provider(registry: ProviderRegistry) -> str:
     return registry.register(Social360Provider(), source="social_silver")
+
+
+__all__ = [
+    "AgentSubjectScopeRead",
+    "AgentSubjectScopeReader",
+    "RepositorySocial360Source",
+    "RepositoryAgentSubjectScopeReader",
+    "RepositorySocialRelationshipFidelityReader",
+    "Social360FactRead",
+    "Social360Provider",
+    "Social360Source",
+    "SocialRelationshipFidelityRead",
+    "SocialRelationshipFidelityReader",
+    "SocialSyndicateMembership",
+    "SocialSyndicateMembershipRead",
+    "SocialSyndicateMembershipReader",
+    "RepositorySocialSyndicateMembershipReader",
+    "register_provider",
+]

@@ -72,6 +72,45 @@ describe('RemoteManifest (RN JS-side apply)', () => {
     expect(getSamplingRate()).toBeCloseTo(0.5);
   });
 
+  describe('with a verifier (manifestPublicKey configured)', () => {
+    const serve = (data: unknown) => {
+      globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ data }) })) as unknown as typeof fetch;
+    };
+
+    it('applies a manifest the verifier accepts, passing it the unwrapped manifest', async () => {
+      const manifest = { flags: { ff_signed: true }, rollout_percentage: 25 };
+      serve(manifest);
+      const verify = vi.fn(async () => true);
+      await fetchAndApplyManifest('https://api.test', 'key', verify);
+      expect(verify).toHaveBeenCalledWith(manifest);
+      expect(nativeFlags.setOverride).toHaveBeenCalledWith('ff_signed', true);
+      expect(getSamplingRate()).toBeCloseTo(0.25);
+    });
+
+    it('does not apply a manifest the verifier rejects (fail closed)', async () => {
+      serve({ flags: { ff_forged: true }, rollout_percentage: 0 });
+      await fetchAndApplyManifest('https://api.test', 'key', async () => false);
+      expect(nativeFlags.setOverride).not.toHaveBeenCalled();
+      expect(getManifest()).toBeNull();
+      expect(getSamplingRate()).toBe(1);
+    });
+
+    it('does not apply when the verifier throws', async () => {
+      serve({ flags: { ff_x: true } });
+      await expect(
+        fetchAndApplyManifest('https://api.test', 'key', async () => { throw new Error('native unavailable'); }),
+      ).resolves.toBeUndefined();
+      expect(nativeFlags.setOverride).not.toHaveBeenCalled();
+      expect(getManifest()).toBeNull();
+    });
+
+    it('applies unverified when no verifier is configured', async () => {
+      serve({ flags: { ff_open: true } });
+      await fetchAndApplyManifest('https://api.test', 'key');
+      expect(nativeFlags.setOverride).toHaveBeenCalledWith('ff_open', true);
+    });
+  });
+
   it('fetchAndApplyManifest is non-fatal on network failure', async () => {
     globalThis.fetch = vi.fn(async () => { throw new Error('network down'); }) as unknown as typeof fetch;
     await expect(fetchAndApplyManifest('https://api.test', 'key')).resolves.toBeUndefined();

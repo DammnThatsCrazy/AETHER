@@ -14,7 +14,7 @@ Covered:
   * OIDC trusted claim creates evidence; untrusted issuer / wrong audience /
     missing email_verified do NOT
   * tenant isolation (evidence for tenant A invisible to B)
-  * revoke marks evidence inactive
+  * revoke marks evidence inactive without replaying revoked proof
   * replay is triggered best-effort and a failing replay never breaks issuance
 """
 from __future__ import annotations
@@ -372,8 +372,11 @@ async def test_revoke_marks_evidence_inactive():
     assert await evidence_repo.get_active_for_identifier(
         TENANT, "email", issued["identifier_hash"],
     ) == []
-    # Revocation also triggers a best-effort replay.
-    assert any(c["trigger_type"] == "verification_evidence_revoked" for c in replay.calls)
+    # The issuance replay is the only replay: revoked proof is never replayed
+    # as affirmative ownership evidence.
+    assert [c["trigger_type"] for c in replay.calls] == [
+        "verification_evidence_issued"
+    ]
 
     # Revoking an evidence id that is not in the tenant returns None.
     assert await evidence_service.revoke_evidence(OTHER_TENANT, evidence_id) is None

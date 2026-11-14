@@ -8,6 +8,7 @@ disagreements are enqueued here for operator disposition.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -49,7 +50,7 @@ class SemanticReviewQueueRepository:
         source_event_id: Optional[str] = None,
         payload: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        item_id = f"srq_{uuid4().hex}"
+        item_id = self._item_id(tenant_id, queue_type, subject_ref, source_event_id)
         now = datetime.now(timezone.utc)
         data = {
             "id": item_id,
@@ -63,15 +64,17 @@ class SemanticReviewQueueRepository:
         }
         pool = await self._pool()
         if pool is None:
-            self._store[item_id] = data
-            return data
+            # An already-enqueued item (a redelivery) keeps its state, including
+            # a disposition an operator has since recorded.
+            return self._store.setdefault(item_id, data)
         async with pool.acquire() as conn:
-            await conn.execute(
+            inserted = await conn.fetchval(
                 f"""
                 INSERT INTO {_TABLE}
                     (id, tenant_id, queue_type, subject_ref, source_event_id, status, data)
                 VALUES ($1, $2, $3, $4, $5, 'open', $6::jsonb)
                 ON CONFLICT (id) DO NOTHING
+                RETURNING id
                 """,
                 item_id,
                 tenant_id,
@@ -80,7 +83,36 @@ class SemanticReviewQueueRepository:
                 source_event_id,
                 json.dumps(data),
             )
+            if inserted is None:
+                existing = await conn.fetchval(
+                    f"SELECT data FROM {_TABLE} WHERE tenant_id = $1 AND id = $2",
+                    tenant_id,
+                    item_id,
+                )
+                if existing is not None:
+                    return json.loads(existing) if isinstance(existing, str) else dict(existing)
         return data
+
+    @staticmethod
+    def _item_id(
+        tenant_id: str,
+        queue_type: str,
+        subject_ref: Optional[str],
+        source_event_id: Optional[str],
+    ) -> str:
+        """Stable id for an item derived from a source event, random otherwise.
+
+        A redelivered event re-runs subject resolution and enqueues the same
+        review again; keying the id on tenant, queue, subject and source event
+        lets the existing ``ON CONFLICT (id)`` make that enqueue idempotent.
+        Items with no source event (operator or projector driven) stay unique.
+        """
+        if not source_event_id:
+            return f"srq_{uuid4().hex}"
+        digest = hashlib.sha256(
+            "\x1f".join((tenant_id, queue_type, subject_ref or "", source_event_id)).encode()
+        ).hexdigest()
+        return f"srq_{digest[:32]}"
 
     async def list_open(
         self, tenant_id: str, queue_type: Optional[str] = None, *, limit: int = 200

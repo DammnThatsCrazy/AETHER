@@ -604,7 +604,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Single verification authority policy",
         results=results,
         stop_on_failure=stop,
-        remediation="repair config/verification_policy.yaml and keep verification / disposition as the only blocking PR status",
+        remediation="repair config/verification_policy.yaml and keep ci / verdict as the only blocking PR status",
     )
 
 
@@ -1076,6 +1076,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/reference/source-of-truth/FINANCIAL_NORMALIZATION.md",
+    )
+    run(
+        [sys.executable, "scripts/validate_financial_capability_registry.py"],
+        name="Financial capability records (provider/domain records bound to release, routes, events, rights, profiles)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep services/api/shared/certification/capability_records.py aligned with the "
+            "certification registry, config/founding_tenant_release.yaml, config/route_registry.yaml, "
+            "config/service_classification.yaml, config/deployment_profiles.yaml, and the canonical "
+            "event/rights vocabularies; regenerate docs/_generated/financial-capability-matrix.json"
+        ),
     )
     run(
         [sys.executable, "scripts/validate_kyber_ops_surface.py"],

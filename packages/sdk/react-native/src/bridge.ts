@@ -50,6 +50,29 @@ let activeConfig: AetherRNConfig | null = null;
 // TYPES
 // =============================================================================
 
+/** Single-use, short-lived token another device redeems to continue a journey. */
+export interface JourneyHandoffToken {
+  token: string;
+  handoffId: string;
+  expiresAt: string;
+}
+
+/**
+ * Server-verified link between two sessions. `linkBasis` is always `explicit_handoff`; the link
+ * never merges identities (`identityMerge` is `not_performed`).
+ */
+export interface JourneyHandoffLink {
+  handoffId: string;
+  journeyId: string;
+  linkBasis: 'explicit_handoff';
+  identityMerge: 'not_performed';
+  fromSessionId: string;
+  fromPlatform: string;
+  toSessionId: string;
+  toPlatform: string;
+  redeemedAt: string;
+}
+
 export interface ResolvedIdentity {
   userId?: string;
   anonymousId?: string;
@@ -75,6 +98,15 @@ export interface AetherRNConfig {
     gdprMode?: boolean;
     anonymizeIP?: boolean;
   };
+  /**
+   * Base64url SPKI P-256 public key for verifying signed remote-config manifests
+   * (`python scripts/sdk_manifest_public_key.py`). Forwarded to the native SDKs,
+   * which verify the manifest they fetch, and used by the JS manifest path via
+   * {@link Aether.verifyManifest}. When set, an unsigned or invalid manifest is
+   * rejected and the last known-good config is kept (fail closed). When unset,
+   * manifests are applied without verification.
+   */
+  manifestPublicKey?: string;
   autoResumeJourney?: boolean;
   onJourneyResumed?: (identity: ResolvedIdentity) => void;
 }
@@ -119,6 +151,22 @@ const Aether = {
     }
     activeConfig = config;
     AetherNative.initialize(config);
+  },
+
+  /**
+   * Verify a remote-config manifest (the parsed object, `signature` included)
+   * against `publicKey` using the native ES256 verifier shared with the iOS and
+   * Android SDKs (docs/reference/sdks/manifest-signing.md). Hermes has no
+   * WebCrypto, so verification is delegated to native code. Fails closed: a
+   * missing native module/method, a bad key or any error resolves `false`.
+   */
+  async verifyManifest(manifest: unknown, publicKey: string): Promise<boolean> {
+    try {
+      if (!AetherNative?.verifyManifest) return false;
+      return (await AetherNative.verifyManifest(JSON.stringify(manifest), publicKey)) === true;
+    } catch {
+      return false;
+    }
   },
 
   track(event: string, properties?: Record<string, unknown>): void {
@@ -240,6 +288,50 @@ const Aether = {
 
   checkpointJourney(stepIdOrName: string, properties?: Record<string, unknown>): void {
     AetherNative?.checkpointJourney(stepIdOrName, properties ?? {});
+  },
+
+  /**
+   * Ask the backend for a single-use handoff token for the current journey so another device
+   * (for example the web app) can continue it. Resolves null when there is no active journey or the
+   * server refuses (consent, flag off, unauthorised app, offline). Hand the token over out of band
+   * (link, QR code, deep link) as `aether_handoff=<token>`; it is shown once.
+   */
+  async createJourneyHandoff(opts?: { ttlSeconds?: number }): Promise<JourneyHandoffToken | null> {
+    try {
+      const r = (await AetherNative?.createJourneyHandoff?.(opts?.ttlSeconds ?? 0)) as
+        Partial<JourneyHandoffToken> | null | undefined;
+      if (!r?.token || !r.handoffId) return null;
+      return { token: r.token, handoffId: r.handoffId, expiresAt: r.expiresAt ?? '' };
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Redeem a handoff token on this device. On success the source journey continues here and the
+   * verified link is returned. Every failure (unknown, expired, already used, wrong app/tenant, no
+   * consent) resolves null; the server deliberately does not say which.
+   */
+  async redeemJourneyHandoff(token: string): Promise<JourneyHandoffLink | null> {
+    if (!token) return null;
+    try {
+      const r = (await AetherNative?.redeemJourneyHandoff?.(token)) as
+        Partial<JourneyHandoffLink> | null | undefined;
+      if (!r || r.linkBasis !== 'explicit_handoff' || !r.journeyId) return null;
+      return {
+        handoffId: r.handoffId ?? '',
+        journeyId: r.journeyId,
+        linkBasis: 'explicit_handoff',
+        identityMerge: 'not_performed',
+        fromSessionId: r.fromSessionId ?? '',
+        fromPlatform: r.fromPlatform ?? '',
+        toSessionId: r.toSessionId ?? '',
+        toPlatform: r.toPlatform ?? '',
+        redeemedAt: r.redeemedAt ?? '',
+      };
+    } catch {
+      return null;
+    }
   },
 
   async getCurrentJourney(): Promise<Record<string, unknown> | null> {
@@ -460,8 +552,9 @@ const Aether = {
     observe: true,
     // Per-batch ingestion health via the AetherBatchResult native event (§2.8).
     batchHealth: true,
-    // Manifest signature verification is enforced in the native iOS/Android
-    // layers this bridge delegates to (§2.9).
+    // Manifest signature verification (§2.9): ES256, performed by the native
+    // iOS/Android SDKs. manifestPublicKey is forwarded to them at init, and the
+    // JS manifest path calls verifyManifest(). Fail-closed when a key is set.
     manifestSignatureVerification: true,
   },
 

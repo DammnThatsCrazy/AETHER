@@ -360,6 +360,33 @@ async def test_dry_run_scans_and_checkpoints_without_canonical_or_outbox_writes(
     assert not repos._IN_MEMORY_STORES.get("event_outbox")
 
 
+async def test_dry_run_does_not_count_olympus_scope_events_as_admitted():
+    from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+    await ProviderConnectionRepository().upsert(
+        ProviderConnection(
+            connection_id=CONNECTION,
+            tenant_id=OLYMPUS_SOURCE_TENANT_ID,
+            provider_identity=PROVIDER,
+            selected_accounts=[ACCOUNT],
+        )
+    )
+    await _raw(1, tenant_id=OLYMPUS_SOURCE_TENANT_ID)
+    _, checkpoint, heartbeat = await _checkpoint_list()
+    with patch(
+        "ingestion.ingestion.validation.evaluate_ingress_decision", return_value=(True, None, [])
+    ):
+        result = await _service().run_window(
+            _scope(tenant_id=OLYMPUS_SOURCE_TENANT_ID, dry_run=True),
+            cursor=None,
+            counts={},
+            checkpoint=checkpoint,
+            heartbeat=heartbeat,
+        )
+    assert (result["scanned"], result["candidates"]) == (1, 1)
+    assert result["dry_run_admitted"] == 0
+
+
 async def test_live_replay_is_at_least_once_safe_after_checkpoint_failure():
     await _connection()
     await _raw(1)

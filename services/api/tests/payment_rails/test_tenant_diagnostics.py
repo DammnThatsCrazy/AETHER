@@ -21,7 +21,10 @@ os.environ.setdefault("AETHER_ENV", "local")
 from config.settings import settings  # noqa: E402
 from repositories.repos import reset_in_memory_stores  # noqa: E402
 from connectors.integrations.providers.payment_rails import ADAPTERS, routes as rails_routes  # noqa: E402
-from connectors.integrations.providers.payment_rails.base import payload_hash  # noqa: E402
+from connectors.integrations.providers.payment_rails.base import (  # noqa: E402
+    get_payment_rails_vault,
+    payload_hash,
+)
 from connectors.integrations.providers.payment_rails.repository import PaymentRailsRepositories  # noqa: E402
 from connectors.integrations.providers.payment_rails.service import PaymentRailsService  # noqa: E402
 from shared.common.common import ForbiddenError, RateLimitedError  # noqa: E402
@@ -85,6 +88,7 @@ async def test_tenant_diagnostics_route_returns_typed_contract(monkeypatch):
     reset_in_memory_stores()
     svc, tenant = PaymentRailsService(PaymentRailsRepositories(), producer=_Producer()), _tenant()
     _use(monkeypatch, svc)
+    await get_payment_rails_vault().store_key(tenant, "payment_moonpay", "payment", "whsec_x")
     await _observe(svc, tenant)
 
     resp = await rails_routes.tenant_diagnostics(_Request(tenant))
@@ -92,6 +96,7 @@ async def test_tenant_diagnostics_route_returns_typed_contract(monkeypatch):
     assert data["tenant_id"] == tenant
     assert data["contract_version"]
     moonpay = next(p for p in data["providers"] if p["provider"] == "moonpay")
+    assert moonpay["health"]["observation_status"] == "observed"
     # credential slots + backlogs are present, no secret values
     assert isinstance(moonpay["adapter"]["credential_slots"], list)
     assert "backlogs" in data and data["backlogs"]["receipt_backlog"] >= 0

@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { normalizeInteractionOutcome } from './interaction.mjs';
 import { mcpServiceAssertionHeaders } from './mcp-service-assertion.mjs';
+import {
+  buildExperience360FrameBody,
+  EXPERIENCE360_FRAME_PATH,
+  isFrameForRequest,
+} from './experience360.mjs';
 
 const DEFAULT_API_URL = 'https://api.aether.io';
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -11,11 +16,36 @@ export const MAX_ENTITY_PAGE_SIZE = 50;
 export const MAX_OVERVIEW_BUCKETS = 50;
 const ACCESS_SURFACES = new Set(['cli', 'mcp_stdio', 'mcp_http', 'access_sdk']);
 
+// Non-sensitive, stable classification of the server's HTTP status. The server
+// remains the authority; this never reinterprets a denial as success.
+export function classifyHttpStatus(status) {
+  if (!Number.isInteger(status)) return undefined;
+  if (status === 401) return 'unauthenticated';
+  if (status === 403) return 'forbidden';
+  if (status === 404) return 'not_found';
+  if (status === 409) return 'conflict';
+  if (status === 422) return 'invalid_request';
+  if (status === 429) return 'rate_limited';
+  if (status >= 500) return 'server_error';
+  if (status >= 400) return 'client_error';
+  return undefined;
+}
+
+function parseRetryAfterSeconds(value) {
+  if (typeof value !== 'string' || !/^\d{1,6}$/.test(value.trim())) return undefined;
+  const seconds = Number(value.trim());
+  return seconds <= 86_400 ? seconds : undefined;
+}
+
 export class AccessApiError extends Error {
-  constructor(message, { status, code, problemCode, requestId, apiRequestId, interaction } = {}) {
+  constructor(message, {
+    status, code, problemCode, requestId, apiRequestId, interaction, retryAfterSeconds,
+  } = {}) {
     super(message);
     this.name = 'AccessApiError';
     this.status = status;
+    this.category = classifyHttpStatus(status);
+    if (retryAfterSeconds !== undefined) this.retryAfterSeconds = retryAfterSeconds;
     this.code = code;
     this.problemCode = problemCode;
     this.requestId = requestId;
@@ -99,7 +129,7 @@ export async function requestAether(
   path,
   query = undefined,
   env = process.env,
-  { method = 'GET', operation = 'query', body } = {},
+  { method = 'GET', operation = 'query', body, bareResponse = false } = {},
 ) {
   const { apiOrigin, authHeaders, oauthToken } = readConfig(env);
   const url = new URL(path, `${apiOrigin}/`);
@@ -159,7 +189,8 @@ export async function requestAether(
     ? payload.meta.request_id
     : (typeof payload?.request_id === 'string' ? payload.request_id : undefined);
   const interactionData = {
-    ...(payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+    ...(!bareResponse && payload?.data && typeof payload.data === 'object'
+      && !Array.isArray(payload.data)
       ? payload.data
       : {}),
     ...(response.headers.get('x-aether-audit-event-id')
@@ -177,12 +208,39 @@ export async function requestAether(
         status: response.status, code: errorCode,
         problemCode: typeof payload?.code === 'string' ? payload.code : undefined,
         requestId: headerRequestId, apiRequestId,
+        ...(response.status === 429
+          ? { retryAfterSeconds: parseRetryAfterSeconds(response.headers.get('retry-after') ?? undefined) }
+          : {}),
         interaction: normalizeInteractionOutcome({
           operation, httpStatus: response.status, requestId: headerRequestId,
           apiRequestId, responseOk: false, code: errorCode, data: interactionData,
         }),
       },
     );
+  }
+
+  if (bareResponse) {
+    // The route returns its contract object directly (no data/meta envelope),
+    // like POST /v1/batch. Receipts come from response headers only.
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new AccessApiError('Aether API returned an unexpected response envelope.', {
+        status: response.status,
+        requestId: headerRequestId,
+        interaction: normalizeInteractionOutcome({
+          operation, httpStatus: response.status, requestId: headerRequestId,
+          responseOk: true, contractError: true, data: interactionData,
+        }),
+      });
+    }
+    return {
+      data: payload,
+      requestId: headerRequestId,
+      responseRequestId: undefined,
+      interaction: normalizeInteractionOutcome({
+        operation, httpStatus: response.status, requestId: headerRequestId,
+        responseOk: true, data: interactionData,
+      }),
+    };
   }
 
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)
@@ -424,6 +482,28 @@ export async function getCapability(capabilityId, env = process.env) {
   return { ...result, data: capability };
 }
 
+/**
+ * Read one governed 360 frame. Authorization, tenant scope, slot policy,
+ * evidence and degradation are decided by the server on this request; the
+ * returned frame is the server's object, unmodified. Single attempt: no retry.
+ */
+export async function getExperience360Frame(input, env = process.env) {
+  const body = buildExperience360FrameBody(input);
+  const result = await requestAether(EXPERIENCE360_FRAME_PATH, undefined, env, {
+    method: 'POST', operation: 'query', body, bareResponse: true,
+  });
+  if (!isFrameForRequest(result.data, body)) {
+    throw new AccessApiError('Aether API returned an unexpected 360 frame response.', {
+      requestId: result.requestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', httpStatus: result.interaction.http_status,
+        requestId: result.requestId, responseOk: true, contractError: true,
+      }),
+    });
+  }
+  return result;
+}
+
 function safeEntity(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
   const entityId = row.entity_id;
@@ -575,6 +655,68 @@ export async function getEntityNeighborhood(entityId, { limit = 25 } = {}, env =
       edges_truncated: data.edges_truncated || data.edges.length > 100,
     },
   };
+}
+
+const MAX_AGENT_REF_LENGTH = 256;
+const MAX_DECISION_ID_LENGTH = 256;
+
+function boundedRef(value, maxLength, label) {
+  if (typeof value !== 'string' || !value.trim() || value.length > maxLength) {
+    throw new Error(`${label} must contain 1 through ${maxLength} characters.`);
+  }
+  return value.trim();
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function contractError(result, message) {
+  return new AccessApiError(message, {
+    requestId: result.requestId,
+    apiRequestId: result.responseRequestId,
+    interaction: normalizeInteractionOutcome({
+      operation: 'query', requestId: result.requestId,
+      httpStatus: result.interaction.http_status, responseOk: true, contractError: true,
+      apiRequestId: result.responseRequestId,
+    }),
+  });
+}
+
+/**
+ * Read the backend-owned Agent360 behavior read model. Sections keep their
+ * own evidence and epistemic state; the client passes them through unaltered
+ * and only checks the envelope. The API requires ``agent:manage``.
+ */
+export async function getAgentBehavior(agentRef, env = process.env) {
+  const ref = boundedRef(agentRef, MAX_AGENT_REF_LENGTH, 'Agent refs');
+  const result = await requestAether(
+    `/v1/agent/agents/${encodeURIComponent(ref)}/behavior`, undefined, env,
+  );
+  const data = result.data;
+  const shaped = data.source_status === 'unavailable'
+    ? data.sections === null
+    : isPlainObject(data.sections) && typeof data.source_truncated === 'boolean';
+  if (data.agent_ref !== ref || !shaped) {
+    throw contractError(result, 'Aether API returned an unexpected agent behavior response.');
+  }
+  return result;
+}
+
+/** Read one reconstructed decision envelope with attribution and responsibility. */
+export async function getAgentDecision(agentRef, decisionId, env = process.env) {
+  const ref = boundedRef(agentRef, MAX_AGENT_REF_LENGTH, 'Agent refs');
+  const id = boundedRef(decisionId, MAX_DECISION_ID_LENGTH, 'Decision IDs');
+  const result = await requestAether(
+    `/v1/agent/agents/${encodeURIComponent(ref)}/decisions/${encodeURIComponent(id)}`,
+    undefined, env,
+  );
+  const envelope = result.data.envelope;
+  if (!isPlainObject(envelope) || envelope.decision_id !== id
+      || envelope.decision_actor?.value !== ref) {
+    throw contractError(result, 'Aether API returned an unexpected agent decision response.');
+  }
+  return result;
 }
 
 export function buildTrackBatch({

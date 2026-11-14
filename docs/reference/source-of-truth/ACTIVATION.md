@@ -38,8 +38,18 @@ not_started → account_verified → plan_selected → billing_pending → billi
   → first_value_ready → complete
 ```
 
+Every connector and SDK is optional. The SDK steps (`sdk_selected` →
+`keys_created` → `waiting_for_event`) are one route to first value, not a
+prerequisite: `event_received` may be entered from any pre-completion flow state
+(`account_verified`, `plan_selected`, `billing_pending`, `billing_active`,
+`sdk_selected`, `keys_created`, `waiting_for_event`) once durable first-event
+evidence exists (below). So a tenant that only connects sources, only imports a
+file, or only installs a browser SDK with a publishable site key still reaches
+`first_value_ready` and can complete.
+
 Off-path honest-halt states, set only when a precondition cannot be met (never
 faked into a forward state): `manual_pending`, `blocked`, `externally_blocked`.
+Evidence never moves a record out of an honest-halt state.
 
 `ActivationService.advance()` enforces an explicit `allowed_from` transition map;
 an illegal transition raises `ConflictError` (HTTP 409). A no-op self-transition
@@ -101,9 +111,14 @@ connect flows are surfaced honestly as non-actionable (`connectable: false`).
   `duplicate` and does not double-count.
 - **Billing state** — derived read-only from `stripe_repository.get_billing_account`;
   activation never writes billing.
-- **First value** — read from `BronzeRepository("sdk_events")`; distinguishes
-  `waiting_for_event` (no rows) / `event_received` (≥1 row) / `first_value_ready`
-  (durable row confirmed). Evidence carries the real `event_id`/`batch_id` — never
+- **First value** — read from the tenant's own durable Bronze stores, in order:
+  `sdk_events` (rows with `source == "sdk"`: SDK and publishable site-key events,
+  and the in-process test event), `provider_records` (connector syncs),
+  `connector_events` (connector events) and `tenant_import` (committed imports).
+  No row leaves an early record untouched, and parks a keyed record at
+  `waiting_for_event` with `waiting_reason = no_events_received_yet`; a row moves
+  it to `event_received` then `first_value_ready`. Evidence carries the real
+  record id, batch/source tag, receipt time and `source: bronze_<store>` — never
   a hard-coded success.
 
 ## Tenant isolation

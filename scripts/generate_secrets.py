@@ -21,6 +21,7 @@ Secrets generated:
     WATERMARK_SECRET_KEY        — 32-byte key for ML extraction watermarking
     CANARY_SECRET_SEED          — 32-byte seed for canary input generation
     EXTRACTION_CANARY_SEED      — 32-byte seed for extraction mesh canary layer
+    IDENTITY_VERIFICATION_TOKEN_KEY — HMAC/encryption key for identity evidence
     ORACLE_SIGNER_PRIVATE_KEY   — secp256k1 private key for oracle proof signing
     GRAFANA_ADMIN_PASSWORD      — Random secure password for Grafana admin
     STRIPE_WEBHOOK_SECRET       — Placeholder (obtain from Stripe Dashboard)
@@ -74,9 +75,12 @@ def _generate_eth_private_key() -> tuple[str, str]:
 def _generate_all() -> dict[str, str]:
     """Return a dict of secret_name -> generated_value."""
     oracle_key, _ = _generate_eth_private_key()
+    identity_verification_key = secrets.token_urlsafe(64)
     return {
         "JWT_SECRET": secrets.token_urlsafe(64),
         "PROVIDER_GATEWAY_ENCRYPTION_KEY": _generate_fernet_key(),
+        "IDENTITY_VERIFICATION_TOKEN_KEY": identity_verification_key,
+        "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS": identity_verification_key,
         "WATERMARK_SECRET_KEY": secrets.token_urlsafe(32),
         "CANARY_SECRET_SEED": secrets.token_urlsafe(32),
         "EXTRACTION_CANARY_SEED": secrets.token_urlsafe(32),
@@ -164,6 +168,7 @@ def _validate(env_path: str) -> bool:
     required_in_production = [
         "JWT_SECRET",
         "PROVIDER_GATEWAY_ENCRYPTION_KEY",
+        "IDENTITY_VERIFICATION_TOKEN_KEY",
         "WATERMARK_SECRET_KEY",
         "CANARY_SECRET_SEED",
         "EXTRACTION_CANARY_SEED",

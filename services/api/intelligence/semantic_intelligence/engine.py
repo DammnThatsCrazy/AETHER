@@ -326,6 +326,7 @@ async def classify_event(
         tenant_id=tenant_id,
         project_id=payload.get("project_id"),
         source_event_id=source_event_id,
+        source_namespace=payload.get("source_namespace"),
         source_activity_id=payload.get("source_activity_id"),
         source_type=str(payload.get("source_type", "event")),
         source_platform=payload.get("source_platform"),

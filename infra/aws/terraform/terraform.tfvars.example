@@ -22,6 +22,11 @@ aether_app_url = "https://app.olympuslabsml.com"
 kyber_app_url  = "https://kyber.olympuslabsml.com"
 auth0_domain   = "your-tenant.us.auth0.com"
 
+# Platform operator tenants (PLATFORM_OPERATOR_TENANT_IDS). Admin and diagnostics
+# routes admit only these tenants or a Kyber operator; a customer owner's admin
+# role is not enough.
+# platform_operator_tenant_ids = ["<operator-tenant-id>"]
+
 # Amplify Hosting (GitHub token stored in Secrets Manager / CI, not here)
 # amplify_github_access_token = ""  # Set via TF_VAR or Secrets Manager
 amplify_custom_domain_enabled = true

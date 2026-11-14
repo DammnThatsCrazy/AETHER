@@ -7,7 +7,7 @@ tests/unit/test_route_conflicts.py) and asserts:
   2. every `/kyber` route is kyber_operator_required + audit_required + high risk;
   3. every sensitive route is audit_required;
   4. every public path (feature-gate allowlist) that is mounted classifies as public,
-     and no route is both public and Kyber-operator-required;
+     and no route is both public and Kyber- or platform-operator-required;
   5. an unknown prefix classifies to None (the ratchet actually denies);
   6. (schema v3) every declared Kyber capability resolves to a real entry in
      ALL_CAPABILITY_IDS, an unknown declared capability raises at load, and an
@@ -94,6 +94,40 @@ def test_public_paths_classify_public_and_not_kyber():
         if is_public_path(path):
             assert pol.public is True, f"{path} is a public path but not classified public"
             assert pol.kyber_operator_required is False, f"{path} cannot be both public and Kyber-operator"
+            assert pol.platform_operator_required is False, f"{path} cannot be both public and platform-operator"
+
+
+def test_mounted_admin_and_diagnostics_routes_require_a_platform_operator():
+    from governance.security.route_registry import _catalog, classify, is_public_path
+
+    exempt = set(_catalog()["platform_operator_exempt_routes"])
+    offenders = [
+        p for p in _routes()
+        if ("/admin/" in p or p.startswith("/v1/diagnostics/"))
+        and "/kyber" not in p and not is_public_path(p) and p not in exempt
+        and not classify(p).platform_operator_required
+    ]
+    assert not offenders, f"platform routes must be platform-operator-required: {offenders}"
+
+
+def test_platform_operator_exemptions_are_single_method_tenant_routes():
+    """Exemptions are path templates, so each must mount exactly one method."""
+    import main
+    from governance.security.route_registry import _catalog, classify
+
+    methods: dict[str, set[str]] = {}
+    for route in _iter_api_routes(main.app):
+        methods.setdefault(route.path, set()).update(route.methods or ())
+    expected = {
+        "/v1/diagnostics/sdk/heartbeat": {"POST"},
+        "/v1/diagnostics/sdk/health": {"GET"},
+        "/v1/diagnostics/sdk/health/{sdk_id}": {"GET"},
+        "/v1/diagnostics/sdk/silent": {"GET"},
+    }
+    assert set(_catalog()["platform_operator_exempt_routes"]) == set(expected)
+    for path, verbs in expected.items():
+        assert methods.get(path) == verbs, path
+        assert classify(path).platform_operator_required is False, path
 
 
 def test_unknown_prefix_denies():
@@ -198,6 +232,7 @@ def test_non_kyber_route_is_unchanged_by_schema_v3():
     assert policy.minimum_disclosure is None
     assert policy.action_class == 0
     assert policy.kyber_operator_required is False
+    assert policy.platform_operator_required is False
 
 
 def test_classify_keeps_the_single_argument_signature():

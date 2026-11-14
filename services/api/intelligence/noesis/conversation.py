@@ -1,7 +1,10 @@
 """Noesis conversation persistence.
 
-Stores a sliding window of recent query turns per (conversation_id, tenant_id)
-in CacheClient (Redis in production, in-memory in dev).
+Stores a sliding window of recent query turns per conversation in CacheClient
+(Redis in production, in-memory in dev). A conversation belongs to the caller
+that started it: its key is (tenant_id, user_id, conversation_id), where the
+tenant is always the caller's own — an operator reading another tenant keeps
+the conversation in the operator's scope, never in the target's.
 
 - Turns are append-only; only the last _MAX_TURNS_STORED are retained.
 - Conversations expire after _CONVERSATION_TTL seconds of inactivity.
@@ -42,8 +45,8 @@ class NoesisConversationStore:
     def __init__(self, cache: CacheClient | None = None) -> None:
         self._cache = cache or CacheClient()
 
-    def _key(self, conversation_id: str, tenant_id: str) -> str:
-        return CacheKey.custom(f"noesis:conv:{tenant_id}:{conversation_id}")
+    def _key(self, conversation_id: str, tenant_id: str, user_id: str) -> str:
+        return CacheKey.custom(f"noesis:conv:{tenant_id}:{user_id}:{conversation_id}")
 
     async def append(
         self,
@@ -53,10 +56,12 @@ class NoesisConversationStore:
         intent: str,
         mode: str,
         answer: str,
+        *,
+        user_id: str = "",
     ) -> None:
         """Add a turn to the conversation. Silently no-ops on failure."""
         try:
-            key = self._key(conversation_id, tenant_id)
+            key = self._key(conversation_id, tenant_id, user_id)
             raw = await self._cache.get(key)
             turns: list[dict] = json.loads(raw) if raw else []
             turns.append({
@@ -69,7 +74,7 @@ class NoesisConversationStore:
             if len(turns) > _MAX_TURNS_STORED:
                 turns = turns[-_MAX_TURNS_STORED:]
             await self._cache.set(key, json.dumps(turns), ttl=_CONVERSATION_TTL)
-            await self.register_conversation(conversation_id, tenant_id)
+            await self.register_conversation(conversation_id, tenant_id, user_id=user_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"Noesis conversation append failed: {exc}")
 
@@ -79,6 +84,8 @@ class NoesisConversationStore:
         tenant_id: str,
         n: int = _MAX_TURNS_RETURNED,
         limit: int | None = None,
+        *,
+        user_id: str = "",
     ) -> list[dict]:
         """Return up to n recent turns; [] means the conversation has none.
 
@@ -87,7 +94,7 @@ class NoesisConversationStore:
         """
         n = limit if limit is not None else n
         try:
-            key = self._key(conversation_id, tenant_id)
+            key = self._key(conversation_id, tenant_id, user_id)
             raw = await self._cache.get(key)
             if not raw:
                 return []
@@ -99,13 +106,15 @@ class NoesisConversationStore:
                 f"conversation turns unavailable for {conversation_id}: {exc}"
             ) from exc
 
-    def _index_key(self, tenant_id: str) -> str:
-        return CacheKey.custom(f"noesis:conv:index:{tenant_id}")
+    def _index_key(self, tenant_id: str, user_id: str) -> str:
+        return CacheKey.custom(f"noesis:conv:index:{tenant_id}:{user_id}")
 
-    async def register_conversation(self, conversation_id: str, tenant_id: str) -> None:
-        """Register a conversation ID in the tenant's conversation index."""
+    async def register_conversation(
+        self, conversation_id: str, tenant_id: str, *, user_id: str = "",
+    ) -> None:
+        """Register a conversation ID in the caller's conversation index."""
         try:
-            key = self._index_key(tenant_id)
+            key = self._index_key(tenant_id, user_id)
             raw = await self._cache.get(key)
             index: list[str] = json.loads(raw) if raw else []
             if conversation_id not in index:
@@ -115,22 +124,24 @@ class NoesisConversationStore:
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"Noesis conversation register failed: {exc}")
 
-    async def list_for_tenant(self, tenant_id: str, limit: int = 20) -> list[dict]:
-        """List recent conversation summaries; [] means the tenant has none.
+    async def list_for_tenant(
+        self, tenant_id: str, limit: int = 20, *, user_id: str = "",
+    ) -> list[dict]:
+        """List the caller's recent conversation summaries; [] means none.
 
         Raises :class:`ConversationStoreUnavailable` when the store cannot be
         consulted, so a cache outage is not reported as a tenant with no
         conversations.
         """
         try:
-            key = self._index_key(tenant_id)
+            key = self._index_key(tenant_id, user_id)
             raw = await self._cache.get(key)
             if not raw:
                 return []
             index: list[str] = json.loads(raw)
             results = []
             for conv_id in reversed(index[-limit:]):
-                turns = await self.get_recent(conv_id, tenant_id, n=1)
+                turns = await self.get_recent(conv_id, tenant_id, n=1, user_id=user_id)
                 last = turns[-1] if turns else {}
                 results.append({
                     "conversation_id": conv_id,

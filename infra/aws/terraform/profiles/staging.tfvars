@@ -84,3 +84,9 @@ enable_social_connections = false
 # Per-PR previews of the Aether app (frontend-preview.yml): an unconnected
 # Amplify app whose pr-<N> branches call this staging API and Auth0.
 enable_frontend_previews = true
+
+# Platform operator tenants (PLATFORM_OPERATOR_TENANT_IDS). Admin and
+# diagnostics routes admit only these tenants or a Kyber operator; a customer
+# owner is never one. Staging also admits its first-admin bootstrap tenant.
+# Set the reviewed operator tenant ids before relying on operator tooling here.
+platform_operator_tenant_ids = []

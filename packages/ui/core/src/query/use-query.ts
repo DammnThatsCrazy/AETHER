@@ -44,17 +44,22 @@ export function useQuery<T>({
       if (!enabled) return;
       if (!force && !queryCache.isStale(key, staleTime)) return;
 
+      // A request from before an identity switch (queryCache.clear()) may
+      // settle after its replacement; it must not touch this hook's state.
+      const generation = queryCache.generation;
+      const current = () => mountedRef.current && generation === queryCache.generation;
+
       const inFlight = queryCache.getInFlight<T>(key);
       if (inFlight !== null) {
         if (mountedRef.current) setIsLoading(true);
         try {
           await inFlight;
-          if (mountedRef.current) {
+          if (current()) {
             setIsLoading(false);
             setError(null);
           }
         } catch (err) {
-          if (mountedRef.current) {
+          if (current()) {
             setError(err instanceof Error ? err.message : 'Request failed');
             setIsLoading(false);
           }
@@ -70,8 +75,8 @@ export function useQuery<T>({
       const promise = fetcherRef
         .current()
         .then((data) => {
-          queryCache.set(key, data);
-          if (mountedRef.current) {
+          queryCache.set(key, data, generation);
+          if (current()) {
             setIsLoading(false);
             setError(null);
           }
@@ -79,7 +84,7 @@ export function useQuery<T>({
         })
         .catch((err) => {
           console.error(`[useQuery] ${key} failed`, err);
-          if (mountedRef.current) {
+          if (current()) {
             setError(err instanceof Error ? err.message : 'Request failed');
             setIsLoading(false);
           }

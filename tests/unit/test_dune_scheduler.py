@@ -4,7 +4,9 @@ Verifies:
 - Worker skips live calls in local mode
 - Jobs run when due, are skipped when not yet due
 - A failing job is isolated (others still run)
-- API key resolution: env var fallback, api_key_ref lookup, absent → skipped
+- API key resolution: tenant credential store for tenant schedules, DUNE_API_KEY
+  only for platform schedules, absent → skipped with a generic detail
+- Run details never carry exception text or credential values
 - Schedule store CRUD (create / list / get / delete / update_run_status)
 - Route-level tenant isolation: tenant A cannot read/delete tenant B's schedule
 """
@@ -80,6 +82,7 @@ def mock_repo(monkeypatch):
 def worker(monkeypatch, mock_repo):
     repo_obj, _ = mock_repo
     monkeypatch.setenv("AETHER_ENV", "local")
+    monkeypatch.setenv("AETHER_CREDENTIAL_BACKEND", "in_memory")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
         sched_mod = importlib.import_module("connectors.dune_feeder.scheduler")
@@ -94,11 +97,13 @@ def worker(monkeypatch, mock_repo):
         yield worker_inst, sched_mod, models_mod
 
 
-def _make_config(sched_mod, *, last_run_at=None, enabled=True, interval=300):
+def _make_config(sched_mod, *, last_run_at=None, enabled=True, interval=300,
+                 tenant_scope="tenant-abc", api_key_ref=None):
     models_mod = importlib.import_module("connectors.dune_feeder.models")
     return models_mod.ScheduledQueryConfig(
         schedule_id=str(uuid.uuid4()),
-        tenant_scope="tenant-abc",
+        tenant_scope=tenant_scope,
+        api_key_ref=api_key_ref,
         query_id="12345",
         query_name="test query",
         source_tag="test-tag",
@@ -170,7 +175,7 @@ async def test_run_one_skips_without_api_key(worker, monkeypatch):
         with patch.object(sched_mod, "_is_live", return_value=True):
             summary = await w._run_one(cfg)
         assert summary.status == "skipped"
-        assert "API key" in (summary.detail or "")
+        assert summary.detail == "credential unavailable"
 
 
 # ── successful live run (mocked httpx) ───────────────────────────────────────
@@ -186,7 +191,7 @@ async def test_run_one_success(worker, monkeypatch):
     mock_ingest_resp.rows_rejected = 0
 
     with backend_module_path():
-        cfg = _make_config(sched_mod)
+        cfg = _make_config(sched_mod, tenant_scope=None)
         w._store.update_run_status = AsyncMock()
 
         fake_qr = models_mod.DuneQueryResult(
@@ -221,7 +226,7 @@ async def test_run_one_error_isolated(worker, monkeypatch):
     monkeypatch.setenv("DUNE_API_KEY", "fake-key")
 
     with backend_module_path():
-        cfg = _make_config(sched_mod)
+        cfg = _make_config(sched_mod, tenant_scope=None)
         w._store.update_run_status = AsyncMock()
 
         with patch.object(sched_mod, "_is_live", return_value=True), \
@@ -229,7 +234,7 @@ async def test_run_one_error_isolated(worker, monkeypatch):
             summary = await w._run_one(cfg)
 
         assert summary.status == "error"
-        assert "network error" in (summary.detail or "")
+        assert summary.detail == "RuntimeError"
         w._store.update_run_status.assert_awaited_once()
 
 
@@ -311,3 +316,83 @@ async def test_schedule_store_update_run_status(worker):
         assert updated.last_run_status == "ok"
         assert updated.last_run_detail == "rows=5"
         assert updated.last_run_at is not None
+
+
+# ── credential scoping and run-detail hygiene ────────────────────────────────
+
+_ENV_VALUE = "env-value-not-for-tenants"
+_MULTILINE_ENV = "-----BEGIN PRIVATE KEY-----\nMIIEvQ\n-----END PRIVATE KEY-----"
+
+
+async def _run_live(w, sched_mod, cfg, fetch):
+    w._store.update_run_status = AsyncMock()
+    with patch.object(sched_mod, "_is_live", return_value=True), \
+         patch.object(sched_mod, "_fetch_dune_results", new=fetch):
+        summary = await w._run_one(cfg)
+    stored_detail = w._store.update_run_status.await_args.kwargs.get("detail")
+    return summary, stored_detail
+
+
+@pytest.mark.asyncio
+async def test_tenant_schedule_never_resolves_env_vars(worker, monkeypatch):
+    w, sched_mod, _ = worker
+    monkeypatch.setenv("DUNE_API_KEY", "platform-key")
+    monkeypatch.setenv("SOME_PLATFORM_SECRET", _ENV_VALUE)
+
+    with backend_module_path():
+        results = []
+        for ref in ("SOME_PLATFORM_SECRET", "NO_SUCH_VAR_XYZ", None):
+            fetch = AsyncMock(side_effect=AssertionError("must not call Dune"))
+            cfg = _make_config(sched_mod, tenant_scope="own_tenant", api_key_ref=ref)
+            summary, stored = await _run_live(w, sched_mod, cfg, fetch)
+            fetch.assert_not_awaited()
+            results.append((summary.status, summary.detail, stored))
+
+    assert set(results) == {("skipped", "credential unavailable", "credential unavailable")}
+
+
+@pytest.mark.asyncio
+async def test_tenant_schedule_uses_only_own_tenant_credential(worker, monkeypatch):
+    w, sched_mod, models_mod = worker
+    monkeypatch.setenv("DUNE_API_KEY", "platform-key")
+
+    with backend_module_path():
+        from shared.credentials.service import credential_service
+
+        await credential_service.create("own_tenant", "dune:own", "own-dune-key")
+        await credential_service.create("other_tenant", "dune:other", "other-dune-key")
+
+        fetch = AsyncMock(side_effect=AssertionError("must not call Dune"))
+        cfg = _make_config(sched_mod, tenant_scope="own_tenant", api_key_ref="dune:other")
+        summary, _ = await _run_live(w, sched_mod, cfg, fetch)
+        assert summary.detail == "credential unavailable"
+        fetch.assert_not_awaited()
+
+        fetch = AsyncMock(side_effect=RuntimeError("stop after key resolution"))
+        cfg = _make_config(sched_mod, tenant_scope="own_tenant", api_key_ref="dune:own")
+        await _run_live(w, sched_mod, cfg, fetch)
+        fetch.assert_awaited_once_with(cfg.query_id, "own-dune-key")
+
+
+@pytest.mark.asyncio
+async def test_run_detail_never_contains_exception_text(worker, monkeypatch):
+    import httpx
+
+    w, sched_mod, _ = worker
+    monkeypatch.setenv("DUNE_API_KEY", _MULTILINE_ENV)
+
+    with backend_module_path():
+        cfg = _make_config(sched_mod, tenant_scope=None)
+        fetch = AsyncMock(side_effect=ValueError(f"Illegal header value {_MULTILINE_ENV!r}"))
+        summary, stored = await _run_live(w, sched_mod, cfg, fetch)
+        assert summary.status == "error"
+        assert summary.detail == stored == "ValueError"
+
+        request = httpx.Request("GET", "https://api.dune.com/api/v1/query/1/results")
+        response = httpx.Response(401, request=request, text=f"bad key {_MULTILINE_ENV}")
+        fetch = AsyncMock(side_effect=httpx.HTTPStatusError(
+            f"401 for {_MULTILINE_ENV}", request=request, response=response,
+        ))
+        summary, stored = await _run_live(w, sched_mod, cfg, fetch)
+        assert summary.detail == stored == "HTTPStatusError status=401"
+        assert "PRIVATE KEY" not in summary.model_dump_json()

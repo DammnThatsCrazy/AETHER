@@ -19,8 +19,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
-  "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
+  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
+  "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
   "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
@@ -34,6 +34,12 @@ source_hashes:
 A **provider plugin** is the self-contained unit the Universal Provider
 Runtime (UPR) executes. This spec is the contract for writing one. Reference
 implementation: `services/api/connectors/providers/shopify/`.
+
+The `Source360Provider` and `Connection360Provider` modules under
+`services/api/connectors/provider_runtime/` are consumers of UPR-owned source
+and connection data. They implement the Intelligence Projection provider
+protocol, not `ProviderPlugin`; they do not run connector operations, create
+provider events, or earn UPR certification/readiness.
 
 ## 1. The plugin contract
 
@@ -209,7 +215,12 @@ All use permissions default to false. The canonical Data Rights service stores
 grants and append-only lifecycle events in the migration-owned repository;
 staging/production admission also requires the durable schema to be available.
 Missing, ambiguous, revoked, expired, or cross-tenant grants deny before raw
-payload or webhook-body persistence.
+payload or webhook-body persistence. The grant's rights-source class picks the
+retention use (`tenant_byod_data` to `tenant_lake`, `olympus_provider` to
+`olympus_baseline` only under the reserved `olympus` grant tenant, `partner_feed`
+to either by grant tenant; other classes are denied), and its `source_relationship` can only deny. Accountless records are
+scoped to a manifest-declared `provider-stream:{connection_id}:{stream_id}`.
+Plugins never choose the class, the scope, or the use.
 A revocation that commits after admission but before the write also denies: the
 store holds the admitting grant (shared lock; revocation takes it exclusively)
 across the final grant re-read and the Bronze insert, so a revoked grant never
@@ -285,7 +296,11 @@ Registration is additive and does not touch central type unions:
 - `account.py` — `AccountAdapter`: one selected account per shop. The opt-in
   GraphQL path discovers immutable Shop GID and explicit live/test realm with
   brokered credentials; domain-only structural discovery is insufficient for
-  v2 source-object mapping.
+  v2 source-object mapping. In every orders mode the acquisition coordinator
+  selects a shop only after discovery recorded its live identity, and rejects a
+  shop another tenant holds selected on a live connection. A REST `/shop.json`
+  lookup that fails transiently (transport error, `429`, `5xx`, or no shop id)
+  is a retryable discovery failure rather than a shop without an id.
 - `pull.py` — `PullAdapter`: REST orders with `page_info` or `since_id`
   compatibility cursors; batches honor `has_more ⇒ next_cursor`.
 - `graphql_pull.py` — opt-in, version-pinned GraphQL Admin order snapshots with
@@ -295,7 +310,9 @@ Registration is additive and does not touch central type unions:
 - `webhook.py` — `WebhookAdapter`: constant-time `base64(HMAC-SHA256(secret,
   raw_body)) == X-Shopify-Hmac-SHA256` verification computed over the RAW
   body; on a missing secret it returns `False` (never auto-verifies), and the
-  gateway then DENIES the delivery fail-closed.
+  gateway then DENIES the delivery fail-closed. The shop a delivery names comes
+  from `X-Shopify-Shop-Domain`, else the body `domain` (the two must agree);
+  it only selects the candidate binding whose secret must then verify.
 - `plugin.py` — declares a **`webhook_secret`** credential field so the
   declared `shopify_hmac` scheme is actually verifiable; without it the
   gateway would deny every delivery (no secret ⇒ cannot prove ownership).

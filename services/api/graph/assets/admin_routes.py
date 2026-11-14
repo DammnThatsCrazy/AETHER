@@ -38,6 +38,7 @@ from graph.assets.models import (
     FiatCurrencyMetadata,
 )
 from graph.assets.registry import UniversalAssetRegistry
+from governance.security.request_context import require_platform_operator
 from value.stablecoin.foundation import (
     active_tenant_id as _tenant_id,
     require_flag,
@@ -240,6 +241,7 @@ async def apply_mapping(payload: DiscoveryMappingRequest, request: Request):
     Aether, never an executed transfer. Idempotent on the lowercased alias.
     """
     _gate_apply(request)
+    require_platform_operator(request)
     actor = _actor(request)
     candidate = _seam_suggests(payload)
     _require_seam_match(payload, candidate)
@@ -252,28 +254,33 @@ async def apply_mapping(payload: DiscoveryMappingRequest, request: Request):
 @admin_router.post("/assets", status_code=201)
 async def register_asset(payload: CanonicalAsset, request: Request):
     _gate_apply(request)
+    require_platform_operator(request)
     return await RegistryAdminFacade().register_asset(_actor(request), payload)
 
 
 @admin_router.post("/chains", status_code=201)
 async def register_chain(payload: ChainReference, request: Request):
     _gate_apply(request)
+    require_platform_operator(request)
     return await RegistryAdminFacade().register_chain(_actor(request), payload)
 
 
 @admin_router.post("/fiat", status_code=201)
 async def register_fiat(payload: FiatCurrencyMetadata, request: Request):
     _gate_apply(request)
+    require_platform_operator(request)
     return await RegistryAdminFacade().register_fiat(_actor(request), payload)
 
 
 @admin_router.post("/deployments", status_code=201)
 async def register_deployment(payload: AssetDeployment, request: Request):
     _gate_apply(request)
+    require_platform_operator(request)
     return await RegistryAdminFacade().register_deployment(_actor(request), payload)
 
 
 @admin_router.post("/aliases", status_code=201)
 async def register_alias(payload: AssetAlias, request: Request):
     _gate_apply(request)
+    require_platform_operator(request)
     return await RegistryAdminFacade().register_alias(_actor(request), payload)

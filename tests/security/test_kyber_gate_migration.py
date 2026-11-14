@@ -540,3 +540,48 @@ def test_middleware_denies_when_the_disclosure_ceiling_is_below_the_declaration(
     assert mw._evaluate_kyber_capability(
         FakeRequest(method="GET", path=path), path, _declared_policy(path, "GET")
     ) is not None
+
+
+# ---------------------------------------------------------------------------
+# 3. The policy entry point must pass the request method
+# ---------------------------------------------------------------------------
+
+
+def test_route_policy_enforces_a_method_specific_declaration_end_to_end(
+    kyber_flags, workforce_session, monkeypatch
+):
+    """``_evaluate_route_policy`` must classify with the verb.
+
+    Declarations such as ``POST /v1/kyber/semantic/review-queue/{item_id}/resolve``
+    only match when the method is supplied. Classifying by path alone silently
+    skipped every method-specific declaration, so an operator holding no
+    ``kyber.command.rebuild`` capability reached a graph-promotion write.
+    """
+    from config.settings import settings
+    from middleware import middleware as mw
+
+    kyber_flags(workforce_identity_enabled=True, backend_authz_enforced=True)
+    monkeypatch.setattr(
+        settings,
+        "route_registry",
+        replace(settings.route_registry, route_registry_enforced=True, policy_enforcement_enabled=True),
+    )
+    workforce_session(FakeKyberContext(capabilities={"kyber.platform.health.read"}))
+
+    path = "/v1/kyber/semantic/review-queue/item-1/resolve"
+    request = FakeRequest(method="POST", path=path)
+    denial = mw._evaluate_route_policy(request, path, _tenant(["read"]))
+
+    assert denial is not None
+    assert "ROUTE_POLICY_KYBER_CAPABILITY_REQUIRED" in str(denial)
+
+    workforce_session(FakeKyberContext(
+        capabilities={"kyber.command.rebuild"},
+        max_action_class=3,
+        tenant_scopes={"tenant-a"},
+        granted_disclosure=4,
+        stepped_up=True,
+    ))
+    assert mw._evaluate_route_policy(
+        FakeRequest(method="POST", path=path), path, _tenant(["read"])
+    ) is None

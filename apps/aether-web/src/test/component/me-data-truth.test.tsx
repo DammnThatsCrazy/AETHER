@@ -105,4 +105,15 @@ describe('Me route data-truth states', () => {
     expect(screen.getByText('Backend Tenant')).toBeInTheDocument();
     expect(screen.getByText('7 days remaining')).toBeInTheDocument();
   });
+
+  it('says the burst peak is not measured when the backend returns rpm_peak null', () => {
+    state.usage = {
+      data: { period_start: '2026-07-01T00:00:00Z', period_end: '2026-08-01T00:00:00Z', events_used: 0, events_quota: 1000, rpm_peak: null, rpm_limit: 600, overage_events: 0, days_remaining: 7 },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    renderPage();
+    expect(screen.getByText('peak not measured yet · 600 req/min')).toBeInTheDocument();
+  });
 });

@@ -214,11 +214,13 @@ from ingestion.ingestion.replay_routes import kyber_replay_router
 from ingestion.ingestion.observability_routes import ingestion_observability_router
 from identity.identity.routes import router as identity_router
 from identity.identity.reconciliation_routes import router as identity_reconciliation_router
+from identity.identity.staging_capture_routes import mount_if_staging as mount_staging_identity_proof_routes
 from intelligence.analytics.routes import router as analytics_router
 from intelligence.ml_serving.routes import router as ml_router
 from intelligence.ml_serving.kyber_ml_admin import router as kyber_ml_admin_router
 from journeys.campaign.routes import router as campaign_router, sources_router as campaign_sources_router, mapping_router as campaign_mapping_router, quality_router as campaign_quality_router
 from journeys.comms.routes import router as comms_router, admin_router as comms_admin_router
+from journeys.support360.routes import router as support_cases_router
 from value.economic.routes import router as economic_router
 from governance.consent.routes import router as consent_router
 from journeys.notification_intelligence.routes import router as notification_router
@@ -279,6 +281,7 @@ from intelligence.intelligence.routes import kyber_admin_router, router as intel
 from intelligence.intelligence.customer_success import admin_router as customer_success_admin_router, tenant_router as value_review_router
 from intelligence.intelligence.extraction_intel import router as extraction_intel_router
 from identity.profile.routes import router as profile_router, profile360_router
+from shared.intelligence_projections.routes import router as experience360_router
 from replay.reconciliation.coverage_routes import router as sdk_coverage_router
 from identity.population.routes import router as population_router
 from intelligence.semantic_intelligence.routes import (
@@ -288,6 +291,7 @@ from intelligence.semantic_intelligence.routes import (
     population_router as population_semantic_router,
     router as semantic_intelligence_router,
 )
+from intelligence.workflow.routes import router as workflow_definitions_router
 from intelligence.expectations.routes import router as expectations_router
 from intelligence.behavioral.routes import router as behavioral_router
 from graph.rwa.routes import router as rwa_router
@@ -433,6 +437,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # non-local startup before any database/broker connections are opened.
     if settings.route_registry.route_registry_enforced:
         app.state.route_policy_inventory = validate_mounted_routes(app.routes)
+    from shared.auth.platform_operator import warn_if_no_platform_operator_tenants
+    warn_if_no_platform_operator_tenants()
 
     # Coherence guard (AAI PR-1): the canonical agentic-observability spine only
     # PROJECTS while the FT-6 outbox relay drains event_outbox. If delegation is
@@ -835,6 +841,8 @@ def create_app() -> FastAPI:
     app.include_router(ingestion_observability_router)  # /v1/kyber/ingest/observability — funnel + Observation Inspector (WS-E)
     app.include_router(identity_router)
     app.include_router(identity_reconciliation_router)
+    # Staging-only identity proof evidence (tenant admin, own tenant).
+    mount_staging_identity_proof_routes(app, settings.env.value)
     app.include_router(analytics_router)
     app.include_router(ml_router)
     app.include_router(kyber_ml_admin_router)  # Kyber ML command center admin hooks
@@ -843,6 +851,7 @@ def create_app() -> FastAPI:
     app.include_router(campaign_mapping_router)   # /v1/mapping-review
     app.include_router(campaign_quality_router)   # /v1/campaign-quality
     app.include_router(comms_router)              # /v1/comms — webhook, replies, click tokens, health
+    app.include_router(support_cases_router)      # /v1/support/cases — tenant-scoped case lifecycle ingest
     app.include_router(comms_admin_router)        # /v1/comms/admin — Kyber comms fleet health
     app.include_router(economic_router)
     app.include_router(consent_router)
@@ -933,9 +942,14 @@ def create_app() -> FastAPI:
     app.include_router(pnl_router)
     app.include_router(profile_router)
     app.include_router(profile360_router)
+    app.include_router(experience360_router)  # /v1/experience360 — all catalogued frame surfaces
+    from services.social360.routes import router as social360_evidence_router
+
+    app.include_router(social360_evidence_router)
     app.include_router(sdk_coverage_router)
     app.include_router(population_router)
     app.include_router(semantic_intelligence_router)
+    app.include_router(workflow_definitions_router)
     app.include_router(kyber_semantic_router)
     app.include_router(campaign_semantic_router)
     app.include_router(graph_semantic_router)
@@ -995,6 +1009,9 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+    if settings.identity_continuity.journey_handoff_enabled:
+        from journeys.handoff.routes import router as journey_handoff_router
+        app.include_router(journey_handoff_router)  # SDK + tenant: /sdk/journey-handoff
     app.include_router(sdk_lifecycle_router)  # SDK lifecycle: heartbeat/identify/alias/reset/consent (SourceIdentityRegistry wired)
     # /v1/journeys is owned solely by the persisted measurement journey
     # authority (measurement_journeys_router, mounted below). The in-memory
@@ -1287,6 +1304,8 @@ def create_app() -> FastAPI:
     if fi.fraud_networks_enabled:
         from intelligence.fraud_networks.routes import router as fraud_networks_router
         app.include_router(fraud_networks_router)
+        from intelligence.fraud_networks.fleet_routes import router as fleet_hypothesis_router
+        app.include_router(fleet_hypothesis_router)
         logger.info("Fraud Network Intelligence: routes mounted (/v1/fraud/networks)")
     else:
         logger.info("Fraud Network Intelligence: disabled (set FEATURE_FRAUD_NETWORKS=true to enable)")
@@ -1478,14 +1497,20 @@ def create_app() -> FastAPI:
     # ── External Agent observations (no hosting or execution) ──
     telemetry_flags = settings.external_agent_telemetry
     if telemetry_flags.registry_enabled or telemetry_flags.marketplace_catalog_enabled:
-        from actions.agent.deployment_routes import deployments_router
+        from actions.agent.deployment_routes import deployments_router, lineage_router
         app.include_router(deployments_router)
+        app.include_router(lineage_router)
+        if telemetry_flags.registry_enabled:
+            from actions.agent_lineage.routes import router as agent_lineage_router
+            app.include_router(agent_lineage_router)
         logger.info(
             "External Agent Telemetry: deployment/catalog routes mounted "
             "(/v1/agent/deployments)"
         )
     if telemetry_flags.kyber_enabled:
         from actions.agent.deployment_routes import kyber_router as agent_telemetry_kyber_router
+        from actions.agent_lineage.routes import kyber_router as agent_lineage_kyber_router
+        app.include_router(agent_lineage_kyber_router)
         app.include_router(agent_telemetry_kyber_router)
         logger.info("External Agent Telemetry: Kyber diagnostics mounted (/v1/admin/kyber/agent-telemetry)")
     if not (
@@ -1513,6 +1538,13 @@ def create_app() -> FastAPI:
         or ops_flags.command_center_enabled
     ):
         logger.info("One-Person Ops: disabled (KYBER_ONE_PERSON_OPS_ENABLED=false)")
+    # ── Prediction markets — observation-only; AETHER never places orders ──
+    if settings.prediction_markets.ingestion_enabled:
+        from value.prediction_markets.routes import router as prediction_markets_router
+        app.include_router(prediction_markets_router, tags=["Prediction Markets"])
+        logger.info("Prediction Markets API mounted (/v1/prediction-markets)")
+    else:
+        logger.info("Prediction Markets API disabled (AETHER_PREDICTION_MARKET_INGESTION_ENABLED=false)")
     # ── Stablecoin Intelligence — observation-only; AETHER never executes ──
     if settings.stablecoin.api_enabled:
         from value.stablecoin.routes import router as stablecoin_router

@@ -26,18 +26,13 @@ import {
 } from "@aether-app/features/settings/settings-handoff";
 import { api } from "@aether-app/lib/api/endpoints";
 import { OtpInput } from "@aether-app/components/otp-input";
+import { SDK_VERSION } from "@aether/shared";
 
 type Step = 1 | 2 | 3;
 
 const RESEND_COOLDOWN = 30;
 /** The limiter that locks code checks for an address for 15 minutes, longer than a code lives. */
 const VERIFICATION_LOCKOUT = "verify-failures";
-const SDK_VERSIONS = {
-  web: "8.9.0",
-  ios: "8.3.1",
-  android: "8.3.1",
-  rn: "8.3.1",
-};
 
 function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
   return (
@@ -305,8 +300,8 @@ export function EmailSignupPage() {
 
   const snippets = {
     web: `import aether from '@aether/web-sdk';\naether.init({ apiKey: '${revealedKey ?? "YOUR_API_KEY"}' });`,
-    ios: `.package(url: "https://github.com/AetherSDK/aether-ios.git", from: "${SDK_VERSIONS.ios}")`,
-    android: `implementation("io.aether:sdk-android:${SDK_VERSIONS.android}")`,
+    ios: `.package(url: "https://github.com/AetherSDK/aether-ios.git", from: "${SDK_VERSION}")`,
+    android: `implementation("io.aether:sdk-android:${SDK_VERSION}")`,
     rn: `npm install @aether/react-native-sdk`,
   };
 

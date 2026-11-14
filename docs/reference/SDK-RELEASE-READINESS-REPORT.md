@@ -10,15 +10,15 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 6
 ---
 
-# SDK Release Readiness Report — 1.0.0-alpha.0
+# SDK Release Readiness Report — 0.1.0-alpha.0
 
 ## Release alignment
 
-The first external SDK release target is **1.0.0-alpha.0**. The repository
-platform and package source currently remain at `0.1.0-alpha.0`; the manual
-`publish-sdk.yml` workflow applies the explicit `1.0.0-alpha.0` release version
-across the publishable SDK packages and native artifacts immediately before
-publication. No package is advertised as published until that workflow has
+The first external SDK release target is **0.1.0-alpha.0**, the same version
+as the platform and package source. The manual `publish-sdk.yml` workflow
+applies the explicit release version across the publishable SDK packages and
+native artifacts immediately before publication, and publishes prerelease
+versions under their own npm dist-tag (`alpha`, `beta`, `rc`). No package is advertised as published until that workflow has
 completed its dry run, required credentials are present, and the publish jobs
 finish successfully.
 

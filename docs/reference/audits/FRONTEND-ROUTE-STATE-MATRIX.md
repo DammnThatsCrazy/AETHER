@@ -20,12 +20,12 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 | Route | Primary API dependencies | Critical | L | E | R | P | G | Current test evidence |
 |---|---|---:|:---:|:---:|:---:|:---:|:---:|---|
-| `/users` | entities and profile summaries | yes | I | A | A | — | I | parameterized route-state family |
-| `/users/:id` | Profile360, identity, graph, trust, risk | yes | I | A | A | — | I | parameterized route-state family |
+| `/users` | entities and profile summaries | yes | A | A | A | A | I | route-state family and `users-page.test.tsx` |
+| `/users/:id` | Profile360, identity, graph, trust, risk | yes | I | A | A | A | I | route-state family and `user-profile-page.test.tsx` |
 | `/users/:profileId/journey` | profile-scoped journey and campaign evidence | yes | I | A | A | — | I | parameterized route-state family |
-| `/campaigns` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |
-| `/campaigns/:id` | campaign detail and touchpoints | yes | I | A | A | — | I | parameterized route-state family |
-| `/campaign-intelligence` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |
+| `/campaigns` | campaigns and attribution | yes | A | A | A | A | I | route-state family and `campaigns-page.test.tsx` |
+| `/campaigns/:id` | campaign detail and touchpoints | yes | I | A | A | A | I | route-state family and `campaign-360-page.test.tsx` |
+| `/campaign-intelligence` | campaigns and attribution | yes | A | A | A | A | I | route-state family and `campaigns-page.test.tsx` |
 | `/campaign-intelligence/registry` | campaign registry | no | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence/sources` | campaign sources | no | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence/mapping-review` | mapping review | no | I | A | A | — | I | parameterized route-state family |
@@ -36,7 +36,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/compare` | comparison definitions, runs, preflight, findings | no | I | A | I | A | I | `comparison-page.test.tsx` |
 | `/noesis` | Noesis conversations and answers | no | I | A | A | A | I | `noesis-page.test.tsx`, `noesis-workspace.test.tsx` |
 | `/agents/:agentId` | Agent 360 profile and evidence-linked operations | no | I | — | I | — | — | gap |
-| `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
+| `/settings` | tenant profile, notifications, keys | yes | A | A | A | A | I | route-state family and `settings-shell.test.tsx` |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/data-exchange` | data-exchange settings, capabilities, artifact history | no | I | A | A | A | A | `data-exchange-section.test.tsx`, `data-exchange.spec.ts` |
 | `/settings/integrations` | tenant integration catalog and connections | yes | I | A | A | A | I | `settings-integrations-section.test.tsx` |
@@ -44,9 +44,12 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/settings/sdk-fleet` | SDK fleet health, silent SDKs, remote config | no | I | A | A | A | I | `settings-sections-route-state.test.tsx` |
 | `/settings/webhooks` | webhook endpoint management | no | I | A | A | A | I | `settings-sections-route-state.test.tsx` |
 | `/settings/notification-preferences` | notification preferences (quiet hours, digest) | no | I | n/a | A | A | I | `settings-sections-route-state.test.tsx` |
-| `/onboarding` | readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
-| `/activation` | canonical guided activation: intent-driven connect plan + classic first-value finish | yes | A | A | A | A | I | `activate-page-route-state.test.tsx`, `activation-landing.test.tsx` (classic fold) |
-| `/activate` | compatibility alias → `/activation` (query-preserving redirect; served by canonical ActivatePage) | yes | I | A | A | A | I | `activate-page-route-state.test.tsx` (target page) |
+| `/onboarding` | compatibility alias → `/activation` (query-preserving redirect; served by the workspace onboarding flow) | yes | I | A | A | A | I | `onboarding-flow.test.tsx` (target page) |
+| `/onboarding/implementation` | operator implementation checklist: readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
+| `/activation` | workspace onboarding: goals, connect plan + connect pop-over, CSV import, per-SDK keys (publishable site keys for browsers), readiness-driven graph build | yes | A | A | A | A | I | `onboarding-flow.test.tsx` (loading, unavailable status and plan, empty plan, populated steps) |
+| `/activation/guided` | detailed guided activation: intent-driven connect plan + classic first-value finish | yes | A | A | A | A | I | `activate-page-route-state.test.tsx`, `activation-landing.test.tsx` (classic fold) |
+| `/activate` | compatibility alias → `/activation` (query-preserving redirect; served by the workspace onboarding flow) | yes | I | A | A | A | I | `onboarding-flow.test.tsx` (target page) |
+| `/home` | workspace Home: 24h analytics summary, readiness checks, tenant integrations, campaigns, activation attention items | yes | I | A | A | A | I | `home-page.test.tsx` (new workspace, unavailable reads, populated) |
 | `/identity/activation` | tenant-scoped identity activation status, SDK heartbeat, restatement and review counts | yes | A | A | A | A | A | `identity-activation-dashboard.test.tsx` (no historical data/heartbeat, failure, loading, capability gate, populated), `identity-continuity-routes.test.tsx` (mounted route) |
 | `/identity/reviews` | tenant-scoped conflict and late-binding review queue | yes | A | A | A | A | A | `identity-review-queue.test.tsx` (successful empty, failure, loading, capability gate, populated/recovery), `identity-continuity-routes.test.tsx` (mounted route) |
 | `/billing` | account, subscription, invoices | yes | I | A | A | — | I | parameterized route-state family |
@@ -54,6 +57,18 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/me` | tenant profile and measured usage | no | A | A | A | A | I | `me-data-truth.test.tsx` |
 | `/geo` | geographic summary | no | A | A | A | A | I | `geo-data-truth.test.tsx` |
 | `/geo/:level/:geoId` | geographic drilldown | no | A | A | A | A | I | `geo-data-truth.test.tsx` |
+| `/signals` | notification inbox, alert rules, digest preferences | no | A | A | A | A | I | `signals-page.test.tsx` |
+| `/risk` | agent capability findings, investigations, data quality | no | A | A | A | A | I | `risk-page.test.tsx` |
+| `/syndicates` | population groups and discovered graph clusters | no | A | A | A | A | I | `syndicates-page.test.tsx` |
+| `/syndicates/:syndicateId` | population group, rules and members | no | I | A | A | A | I | `syndicates-page.test.tsx` |
+| `/relationships` | graph traverse and path reads | no | A | A | A | A | I | `relationships-page.test.tsx` |
+| `/relationships/:entityId` | graph traverse and path reads around an entity | no | I | A | A | A | I | `relationships-page.test.tsx` |
+| `/communications` | campaign messages and communications health | no | A | A | A | A | I | `communications-page.test.tsx` |
+| `/communications/:campaignId/:messageId` | message detail, governed comms funnel, population, journeys, conversions | no | A | A | A | A | I | `communications-page.test.tsx` |
+| `/journeys` | profiles and compiled profile journeys | no | A | A | A | A | I | `journeys-page.test.tsx` |
+| `/journeys/:profileId` | compiled profile journey and attribution credits | no | A | A | A | A | I | `journeys-page.test.tsx` |
+| `/episodes` | profiles and compiled profile journeys | no | A | A | A | A | I | `episodes-page.test.tsx` |
+| `/episodes/:profileId/:episodeId` | compiled profile journey (derived episode) | no | I | A | A | A | I | `episodes-page.test.tsx` |
 | `/audit-exports` | audit export history | no | I | A | A | — | I | parameterized route-state family |
 | `/value-review` | tenant value review | no | A | A | A | A | I | route-state family and `value-review-page.test.tsx` |
 | `/security` | policy, audit, retention, DSR | no | I | A | A | — | I | parameterized route-state family |
@@ -168,6 +183,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/derivatives/ops` | derivatives adapter fleet | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/interoperability/ops` | interoperability providers | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/delivery` | delivery operations | no | I | A | — | — | I | `kyber-noncritical-empty-routes.test.tsx` |
+| `/agent-lineage` | principal and fleet lineage investigation | no | I | — | A | A | A | `agent-lineage-page.test.tsx` |
 | `/agent-telemetry` | agent fleet and telemetry | yes | A | A | A | A | A | `agent-telemetry-page.test.tsx` |
 | `/agent-access` | agent access control | yes | A | A | A | A | I | `agent-access-page.test.tsx` |
 | `/payment-rails` | payment provider and tenant fleet | yes | A | A | A | A | A | `payment-rails-page.test.tsx` |
@@ -178,16 +194,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 149 data-bearing route patterns above: 62 Aether and
-87 Kyber routes.
+The denominator is the 165 data-bearing route patterns above: 77 Aether and
+88 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 21 / 149 (14.1%) | tracked for every route |
-| Empty-state assertions | 135 / 149 (90.6%) | at least 90% overall |
-| Error/unavailable assertions | 115 / 149 (77.2%) | 100% of critical routes |
-| Populated-state assertions | 43 / 149 (28.9%) | tracked for every route |
-| Critical routes with both empty and error assertions | 68 / 68 (100%) | 68 / 68 (100%) |
+| Explicit loading-state assertions | 35 / 165 (21.2%) | tracked for every route |
+| Empty-state assertions | 150 / 165 (90.9%) | at least 90% overall |
+| Error/unavailable assertions | 131 / 165 (79.4%) | 100% of critical routes |
+| Populated-state assertions | 65 / 165 (39.4%) | tracked for every route |
+| Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

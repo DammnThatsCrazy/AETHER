@@ -10,6 +10,8 @@ source_files:
   - services/api/main.py
   - services/api/config/settings.py
   - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/delivery/adapters/webhook.py
+  - services/api/actions/delivery/outcome_processor.py
   - services/api/actions/agent_marketplace/catalog.py
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
@@ -22,6 +24,8 @@ source_files:
   - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
   - services/api/repositories/repos.py
+  - services/api/repositories/tenant_row_keys.py
+  - services/api/graph/platform_vertex_owners.py
   - services/api/value/x402/provenance.py
   - services/api/workers/profile360_workers/workers.py
   - services/api/workers/runtime/roles.py
@@ -31,28 +35,35 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent/deployment_routes.py": "sha256:cadc44f0985aa7cdda189eec05499ed8efe8050b7e3f0c0342c286d57914e10a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
+  "services/api/actions/delivery/adapters/webhook.py": "sha256:e3ecc854d8b57fa74ba2a88b0867a81e40ce3f2a1a08dc675dd525085c3bc7f5"
+  "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
-  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
+  "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
+  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
+  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
+  "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
-  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
-  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
+  "services/api/workers/runtime/roles.py": "sha256:9dc895c61c99ce3bcf81c979bc4b195a2e230822233ab178159a48379f6d4f0b"
+  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -169,6 +180,7 @@ All extraction mesh keys use prefix `aether:exbudget:`:
 | `ENABLE_EXTRACTION_DEFENSE` | `false` | ML Serving |
 | `PRICING_OPTION` | `B` | Backend (A/B/C — Market Entry / Ideal / Premium) |
 | `QUOTA_FLUSH_INTERVAL_S` | `60` | Backend (Redis → `tenant_usage` flush cadence) |
+| `ACCESS_KIT_CREDENTIAL_RPM` | `120` | Backend (requests per minute one credential may make to one Access Kit operation, under the tenant burst limit; `0` disables) |
 
 ---
 
@@ -405,6 +417,62 @@ All data access goes through `BaseRepository` (asyncpg PostgreSQL) which provide
 
 All stores support horizontal scaling natively through their backend implementations.
 
+A repository write replaces an existing row only when the row's `tenant_id`
+column matches the writing tenant, and graph vertex writes never change a
+vertex's owner; both raise a `409 Conflict` with the generic `Conflict` text
+instead. Rolling out that rule runs the idempotent steps in
+`services/api/repositories/tenant_row_keys.py` twice: once through migration
+`20261015_tenant_owned_row_keys` before the API and workers roll to the new
+code, and once more after the rollout has finished, to pick up rows old pods
+wrote meanwhile. Alembic never re-runs an applied revision, so the second run
+uses the module directly:
+
+```bash
+# Before the rollout: the usual migration (RUN_MIGRATIONS=1 one-off task)
+alembic upgrade head
+
+# After the rollout, from a host that can reach the database:
+DATABASE_URL=postgresql://... make tenant-row-keys
+# or as a one-off task of the API image (the entrypoint builds DATABASE_URL):
+python -m repositories.tenant_row_keys
+```
+
+The steps backfill empty tenant columns and re-key per-tenant rows
+(`behavior_profiles`, `journey_chains`, `profiles`, `behavioral_signals`,
+`event_envelopes`, x402 objects), and mark `chain:`, card catalog and
+derivatives venue/market vertices in the Postgres graph backend `platform`
+owned. Shared recommendation evidence vertices (`policy:`, `profile360:`,
+`graph:`) are not relabelled; new writes use `{tenant}:`-prefixed ids and the
+old vertices are left in place. While old pods are still
+serving, they cannot read re-keyed x402 objects, profiles or signals by id
+(lists still work) and they write behavior snapshots, journey chains, profiles
+and replay envelopes under the old ids. New pods still read an x402 row stored
+under its bare id when it belongs to the tenant. A burst of `409`s on updates
+after a deploy usually means the migration was skipped: rows whose tenant lives
+only in their JSON cannot be updated until it runs. The run time grows with the
+number of rows that have an empty tenant column.
+
+The steps do not touch a Neptune graph. On a Neptune lane, relabel the existing
+`chain:`, card catalog and derivatives venue/market vertices once, after the
+migration, or the platform writers of those vertices keep failing with
+`409 Conflict`:
+
+```bash
+NEPTUNE_ENDPOINT=... make graph-platform-owners           # dry run: lists the vertices
+NEPTUNE_ENDPOINT=... make graph-platform-owners APPLY=1   # writes the platform owner
+# or in the API image: python -m graph.platform_vertex_owners [--apply]
+```
+
+Derivatives venue and market vertices are written only from the registry
+tables. Nothing in the application creates registry rows, so after rows are
+added (or after the relabel above), project them; tenant account and position
+edges to a venue or market appear only once its vertex exists:
+
+```bash
+DATABASE_URL=postgresql://... make derivatives-registry-graph
+# or in the API image: python -m value.derivatives.registry_graph
+```
+
 ---
 
 ## Kafka Consumer Lag Spike
@@ -553,6 +621,65 @@ If an event type is consistently failing after 3 Stripe retry cycles (Stripe ret
 
 ---
 
+## Outbound Webhook Signing and Callback Dead Letters
+
+The outbound webhook adapter signs a delivery only with the secret named by the
+job's `provider_config.secret_ref` (copied from the channel's `credentials_ref`).
+A job without one is sent unsigned: the adapter logs `webhook_unsigned` and
+increments `delivery_webhook_unsigned_total`. An outcome callback for such a
+delivery can never verify, so the inbox processor dead-letters it with
+`signature_unverified`. A callback that matches no stored delivery (or
+deliveries in more than one tenant) is dead-lettered with `unbound_delivery`.
+Both increment `delivery_inbox_dead_lettered_total{provider,reason}`; the
+callback route still answers 200. The Jira inbound webhook and the Telegram
+callback have no per-connection secret yet, so they answer 404 until
+`INBOUND_JIRA_WEBHOOK_ENABLED` / `INBOUND_TELEGRAM_CALLBACK_ENABLED` is set to
+`true`.
+
+The manual `POST /v1/delivery/outcomes/ingest` path records outcomes with
+`producer_provenance="caller_asserted"` and no signature authority; the
+caller-provided outcome is not signature-verified evidence. For inbox
+callbacks, a valid provider signature alone does not establish trusted outcome
+provenance. `verified_callback` is recorded only when the callback also binds
+to exactly one canonical stored receipt and job with matching tenant, intent,
+provider, and external ID. Missing, conflicting, or ambiguous binding
+candidates are rejected as `unbound_delivery`; a legacy callback binding that
+does not satisfy the complete receipt/job checks can retain its routing
+behavior but its outcome remains caller-asserted.
+
+### Before deploying
+
+List webhook jobs still to be sent and active webhook channels that carry no
+secret reference, and give each channel a signing secret first:
+
+```sql
+-- Webhook jobs that would be sent unsigned
+SELECT id, tenant_id, data->>'state' AS state
+FROM delivery_jobs
+WHERE data->>'provider_adapter' = 'webhook'
+  AND data->>'state' IN ('queued', 'leased', 'failed')
+  AND COALESCE(data->'provider_config'->>'secret_ref', '') = '';
+
+-- Active webhook channels whose new jobs would carry no secret_ref
+SELECT id, tenant_id, channel_name
+FROM user_notification_channels
+WHERE channel_type = 'webhook'
+  AND active IS NOT FALSE
+  AND COALESCE(credentials_ref, '') = '';
+```
+
+### After deploying
+
+A rising `delivery_webhook_unsigned_total`, or
+`delivery_inbox_dead_lettered_total{reason="signature_unverified"}` for
+`provider="webhook"`, means a channel is still unsigned: rerun the queries
+above. A rising `reason="unbound_delivery"` points to callbacks for deliveries
+Aether does not hold (wrong endpoint, deleted delivery, or a shared id).
+Inbox rows written before `received_at` was recorded are judged against their
+`created_at`, so a pre-deploy backlog drains instead of being rejected as stale.
+
+---
+
 ## Fraud Intelligence Services
 
 Three services mount conditionally in `main.py` based on feature flags:
@@ -585,6 +712,7 @@ Two additional routers mount conditionally in `main.py` (all default OFF):
 AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true  → mounts services/api/actions/agent/deployment_routes at /v1/agent/deployments
 KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED=true    → mounts Kyber diagnostics at /v1/admin/kyber/agent-telemetry
 AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED=true  → starts the public xAI catalog observer and mounts its read route
+AETHER_AGENT_BEHAVIOR_JOBS_ENABLED=true         → the maintenance role records daily agent behavior snapshots, drift and Risk360 evidence
 ```
 
 Enable by setting the flags and restarting; the deployment registry persists
@@ -700,14 +828,34 @@ See the [provider outbox rollout](../architecture/blueprints/universal-connector
 and
 `docs/architecture/UNIVERSAL-PROVIDER-RUNTIME.md` for the full runtime guide.
 
+Experience360 `Source360Provider` and `Connection360Provider` read existing
+tenant-scoped UPR state through projection interfaces. They do not use the UPR
+enable flags, dispatch provider work, or write connection/sync state. If their
+frame slots are unknown or degraded, inspect the canonical source/connection
+records and projection evidence; enabling connector execution does not repair
+missing lineage.
+
+The API also mounts authenticated Workflow360 definition registration under
+`/v1/workflows/definitions` and Social360 evidence assertion writes under
+`/v1/social360/evidence`. A definition read is an exact tenant revision read,
+not proof of an executed run. A social evidence write validates its cited
+entity, event, path, and risk records and remains a source assertion. If a 360
+frame is unknown or degraded, inspect the owning authority and its evidence
+and coverage state before treating the value as an operational incident.
+
 ### Provider raw-retention rights gate
 
 Raw provider payloads are retained only after the canonical Effective Rights
 Resolver allows `tenant_lake` use for purpose `provider_raw_ingestion` and
 destination `tenant_lake`. The grant must be active, tenant-scoped, use the
 `tenant_byod_data` connector class, and match the provider identity and account
-source `provider-account:{connection_id}:{account_id}`. BYOK credential access
-does not supply this data-retention grant.
+source `provider-account:{connection_id}:{account_id}`, or
+`provider-stream:{connection_id}:{stream_id}` for a manifest-declared accountless
+stream. Operator-onboarded `olympus_provider` and `partner_feed` grants are
+admitted to `olympus_baseline` or `tenant_lake` by their class (`olympus_provider`
+only under the reserved `olympus` tenant); other classes are denied, and records under the reserved `olympus` tenant are never forwarded to
+the tenant pipeline. A grant whose `source_relationship` is inconsistent with its
+class also denies. BYOK credential access does not supply this data-retention grant.
 
 The canonical Data Rights grant service persists grants and append-only
 create/revoke events in the migration-owned tenant-scoped repository. Raw
@@ -794,9 +942,26 @@ AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED=true    → scheduler kill-switch; t
 
 Both default OFF. Pass-to-pass sleep is
 `AETHER_RECONCILED_CONTROL_SCHEDULER_INTERVAL_SECONDS` (default 300s, mirrors
-the §32 freshness window). Architecture + flag semantics:
-`docs/architecture/RECONCILED_CONTROL_PLANE.md`; production activation sits
-behind the §41+ blueprint review — no deploy flips these today.
+the §32 freshness window). Each pass also resolves the durable activation
+decision for the integration's tenant/environment scope: `shadow` observes
+only, `detect` reconciles, `plan` may persist a ChangeSet, `r0` and above may
+execute, and `disabled`/`emergency_frozen` stop the runtime loop. A tenant row
+may narrow the global activation but never exceed it. The scheduler reports
+`skipped_inactive` rows rather than inventing work. Architecture + flag
+semantics: `docs/architecture/RECONCILED_CONTROL_PLANE.md`; production
+activation sits behind the §41+ blueprint review — no deploy flips these today.
+
+### SDK manifest requests while the control plane is enabled
+
+When `AETHER_RECONCILED_CONTROL_PLANE_ENABLED=true`, the legacy synchronous
+`PUT /v1/config/sdk/manifest` refuses with a conflict. An admin requests the
+change through `POST /v1/config/sdk/manifest/requests` (optional
+`Idempotency-Key`); the response is `202` with the ChangeSet/rollout ids and
+`manifest_published: false`. `GET /v1/config/sdk/manifest/requests/{id}` reads
+the tenant-scoped request state. The request needs the effective `plan`
+capability; `shadow`/`detect`/`disabled` refuse it. It records a stage-zero
+rollout and does **not** publish or advance a manifest — request execution and
+rollout projection remain Program C work.
 
 **Scheduler role:** `reconciled_control_scheduler` rides the existing
 **`maintenance`** role (exact precedent: the UPR/provider loops above — a

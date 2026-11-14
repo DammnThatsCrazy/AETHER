@@ -9,13 +9,14 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 4
-source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/campaign/routes.py, services/api/journeys/measurement/repositories/touchpoint_repo.py, services/api/journeys/measurement/repositories/conversion_repo.py, services/api/journeys/measurement/repositories/attribution_run_repo.py, services/api/journeys/traffic/repair.py]
+source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/campaign/routes.py, services/api/journeys/campaign/campaign_population_links.py, services/api/journeys/measurement/repositories/touchpoint_repo.py, services/api/journeys/measurement/repositories/conversion_repo.py, services/api/journeys/measurement/repositories/attribution_run_repo.py, services/api/journeys/traffic/repair.py]
 source_hashes:
+  "services/api/journeys/campaign/campaign_population_links.py": "sha256:7ea76b412c7aa767d4f874828083c563e35a258773889cfbda179b097f4d0456"
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
-  "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:5c5a1edbacb8ebe97e641b0a577eab924a1a0ca5b76e75967711bd88e8ae46dd"
-  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:ed4dacb42d8b93f67af9e2c819edf3e98fb7b7f407c9187d1502cd1df340144c"
-  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:fe9b5f6c7f24fa33a0288533013677fe2741b36b86e71308579d08cc4e2a68f0"
+  "services/api/journeys/campaign/routes.py": "sha256:43cafac0205f69a989aa26ba63b89075b9d4acbacfdeb672f5768099c19a4bd9"
+  "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:56ebf7f346abbd3d9edd84908563baed5baf8967fd8ae4294c2fa0b32ce7c27c"
+  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:7b3f6cdb71101a726f21444595ef22224b8cc57f7b02fa37313f478e546eebb8"
+  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:98bb17dd43058e20aef6b5430e1d33f69efbd66558a7ac58afd3e460ca63f20e"
   "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
 ---
 
@@ -108,10 +109,32 @@ check.
 | Spend | PostgreSQL `spend_records` | `_local_spend` dict in `spend_repo.py` |
 | Journeys | PostgreSQL `journey_versions` | `_local_journeys` dict in `journey_repo.py` |
 
+Explicit campaign-to-population associations are recorded separately as
+append-only `campaign_population_link_events`, after exact same-tenant
+campaign and population validation. Current reads choose the latest event per
+population whose effective time has arrived; future-effective links do not
+hide the current association. These links do not establish cluster membership
+or syndicate topology. Journey attribution credit reads join a completed,
+active run by exact tenant, journey ID, and journey version and remain bounded.
+
 The explorer never reads directly from ClickHouse gold tables. Those are used
 by the Journey Explorer and Attribution Studio pages separately for aggregate
 analytics. Campaign 360 reads from the PostgreSQL canonical layer for
 entity-level drill-down.
+
+`ConversionRepository` also provides exact tenant/account and tenant/agent
+reads for the Account360 and Agent360 projections. These are separate subject
+lookups: they do not infer a campaign association, replace the campaign
+touchpoint join, or change the campaign-scoped `list_by_campaign()` path.
+
+Signals360 uses a separate event-to-campaign read through
+`TouchpointRepository.list_by_source_event(tenant_id, source_event_id)`. The
+query requires both exact keys. A touchpoint's campaign ID is exposed only
+after `CampaignRepository.get_by_id()` resolves that exact ID for the same
+tenant. This projection read does not infer links from campaign names, source
+labels, or external IDs; malformed, unresolved, cross-tenant, and truncated
+results keep the slot partial or degraded. It does not add a public Campaign
+360 endpoint.
 
 Source classification is evidence carried through the canonical touchpoint,
 journey step, attribution credit, and Campaign 360 read models. Campaign 360
@@ -120,6 +143,10 @@ mediation type, AI provider/product, actor type, and journey role, and retains
 the classifier version and verification provenance used by the run. A repair
 creates a new classification revision and recomputed attribution run linked to
 the prior run; it does not mutate historical credit evidence in place.
+The backend Campaign360 projection now checks an exact tenant, touchpoint, and
+classification ID against the immutable revision store before treating that
+revision as a source fact. It compares the current pointer's class, classifier
+version, and time, and keeps campaign registry source provenance unresolved.
 
 **Money in credit rollups.** `canonical_conversions` keeps the native amount
 and currency; `exchange_rate` is a real recorded rate (with

@@ -11,6 +11,19 @@ canonical_owner: platform@aether
 
 # Execution State
 
+## Episode semantic consumption integration (2026-11-05)
+
+The backend validated-event semantic consumer now preserves its resolver's subject
+type into persisted observations and forwards qualifying classified observations
+to EpisodeEngine under the existing `AETHER_BACKEND_EPISODE_ENGINE_ENABLED` flag.
+Only supported subject types with authenticated source namespaces, aware occurrence
+times, and evidence produce exact typed links into tenant/subject-scoped semantic
+observation streams. Redelivery reuses the canonical observation and episode link.
+SDK envelopes, replay/spine normalization, and flag defaults are unchanged; the
+settings and environment-example surfaces were reviewed as orthogonal to this
+downstream hook. No SDK-side episode or identity inference is introduced. Broad
+coverage, policy, freshness, historical completeness, and continuity remain unknown.
+
 > **Delivery model (supersedes per-slice merges):** all WS-A…E implementation
 > slices are delivered as **stacked commits on one branch,
 > `feat/sdk-universal-ingestion`**, and land as **one consolidated program PR**

@@ -32,6 +32,7 @@ from shared.graph.graph import (
     Edge,
     EdgeType,
     Vertex,
+    VertexOwnershipError,
     VertexType,
     _InMemoryGraphBackend,
     _PostgresGraphBackend,
@@ -453,6 +454,74 @@ async def test_delete_vertex_if_orphaned_guards(kind):
         await backend.revoke_edge(v, ns.vid("w"), EdgeType.SEMANTIC_RELATES_TO, "gone")
         assert await backend.delete_vertex_if_orphaned(v, ns.tenant, "c1") == (True, "deleted")
         assert await backend.get_vertex(v) is None
+    finally:
+        await cleanup()
+
+
+# ── ownership ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("kind", BACKENDS)
+@pytest.mark.parametrize("write", ["add_vertex", "upsert_vertex"])
+async def test_another_tenant_cannot_modify_an_owned_vertex(kind, write):
+    backend, cleanup = await _open(kind)
+    ns = _NS()
+    try:
+        await backend.add_vertex(ns.vertex("v1", secret="own"))
+        with pytest.raises(VertexOwnershipError):
+            await getattr(backend, write)(ns.vertex("v1", tenant=ns.other, secret="taken"))
+        # Either tenant spelling alone names the other tenant just as well.
+        with pytest.raises(VertexOwnershipError):
+            await getattr(backend, write)(Vertex(
+                vertex_type=VertexType.ENTITY, vertex_id=ns.vid("v1"),
+                properties={"tenant_id": ns.other, "secret": "taken"},
+            ))
+        got = await backend.get_vertex(ns.vid("v1"))
+        assert got.properties["secret"] == "own"
+        assert await backend.get_vertex_for_tenant(ns.vid("v1"), ns.other) is None
+        # The owner still rewrites its own vertex.
+        await getattr(backend, write)(ns.vertex("v1", secret="own-2"))
+        assert (await backend.get_vertex(ns.vid("v1"))).properties["secret"] == "own-2"
+    finally:
+        await cleanup()
+
+
+@pytest.mark.parametrize("kind", BACKENDS)
+async def test_unowned_vertex_is_not_adopted_and_owned_vertex_not_disowned(kind):
+    backend, cleanup = await _open(kind)
+    ns = _NS()
+    try:
+        unowned = Vertex(vertex_type=VertexType.ENTITY, vertex_id=ns.vid("u"), properties={"k": "1"})
+        await backend.add_vertex(unowned)
+        with pytest.raises(VertexOwnershipError):
+            await backend.upsert_vertex(ns.vertex("u", k="2"))
+        await backend.upsert_vertex(Vertex(
+            vertex_type=VertexType.ENTITY, vertex_id=ns.vid("u"), properties={"k": "3"},
+        ))
+        assert (await backend.get_vertex(ns.vid("u"))).properties == {"k": "3"}
+
+        await backend.add_vertex(ns.vertex("o"))
+        with pytest.raises(VertexOwnershipError):
+            await backend.add_vertex(Vertex(
+                vertex_type=VertexType.ENTITY, vertex_id=ns.vid("o"), properties={},
+            ))
+    finally:
+        await cleanup()
+
+
+@pytest.mark.parametrize("kind", BACKENDS)
+async def test_vertex_whose_tenant_spellings_disagree_is_rejected(kind):
+    backend, cleanup = await _open(kind)
+    ns = _NS()
+    try:
+        split = Vertex(
+            vertex_type=VertexType.ENTITY, vertex_id=ns.vid("s"),
+            properties={"tenantId": ns.tenant, "tenant_id": ns.other},
+        )
+        for write in (backend.add_vertex, backend.upsert_vertex):
+            with pytest.raises(VertexOwnershipError):
+                await write(split)
+        assert await backend.get_vertex(ns.vid("s")) is None
     finally:
         await cleanup()
 

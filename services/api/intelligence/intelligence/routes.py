@@ -28,6 +28,7 @@ from config.settings import settings
 from dependencies.providers import get_registry
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
+from actions.agent.action_associations import JourneyActionReference, RiskActionReference, validate_action_association
 from repositories.lake import gold_identity, gold_market
 from shared.common.common import APIResponse, BadRequestError, utc_now
 from shared.events import Event, Topic
@@ -323,7 +324,9 @@ async def wallet_risk_score(address: str, request: Request):
     if gold_records:
         features = gold_records[0].get("value", {})
     else:
-        features = await materialize_wallet_features(address, cache=registry.cache)
+        features = await materialize_wallet_features(
+            address, request.state.tenant.tenant_id, cache=registry.cache,
+        )
 
     # Compute trust score using available features
     score = await scorer.compute(
@@ -534,6 +537,8 @@ class DispatchActionRequest(BaseModel):
     payload_overrides: dict[str, Any] = Field(default_factory=dict)
     approval_metadata: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None
+    journey_action_reference: JourneyActionReference | None = None
+    risk_action_reference: RiskActionReference | None = None
 
 
 class DeliveryReceiptRequest(BaseModel):
@@ -606,16 +611,38 @@ def _safe_integration_config(config: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def _config_with_secret_ref(config: dict[str, Any]) -> dict[str, Any]:
-    import hashlib
+def _action_integration_secret_ref(tenant_id: str, config_id: str) -> str:
+    return f"action_integration:{tenant_id}:{config_id}"
 
+
+async def _config_with_secret_ref(
+    tenant_id: str,
+    config_id: str,
+    config: dict[str, Any],
+    existing_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Move any plaintext secret into the tenant credential store.
+
+    A caller-supplied ``secret_ref`` is never kept: the only ref persisted is
+    the server-built one for this tenant and config.
+    """
     prepared = dict(config)
     nested = dict(prepared.get("config") or {})
-    for key in ("auth_secret", "secret", "api_key", "webhook_secret"):
-        secret = prepared.pop(key, None) or nested.pop(key, None)
-        if secret:
-            nested["secret_ref"] = hashlib.sha256(str(secret).encode("utf-8")).hexdigest()[:16]
-            break
+    prepared.pop("secret_ref", None)
+    nested.pop("secret_ref", None)
+    supplied = [
+        value
+        for key in ("auth_secret", "secret", "api_key", "webhook_secret")
+        for value in (prepared.pop(key, None), nested.pop(key, None))
+        if value
+    ]
+    ref = _action_integration_secret_ref(tenant_id, config_id)
+    if supplied:
+        from shared.credentials.service import credential_service
+        await credential_service.rotate(tenant_id, ref, str(supplied[0]))
+        nested["secret_ref"] = ref
+    elif (existing_config or {}).get("secret_ref") == ref:
+        nested["secret_ref"] = ref
     prepared["config"] = nested
     return prepared
 
@@ -650,7 +677,7 @@ async def _enqueue_action_delivery(
         source_type="action",
         source_id=dispatch.dispatch_id,
         channels=[dispatch.target_type],
-        idempotency_key=dispatch.idempotency_key or dispatch.dispatch_id,
+        idempotency_key=dispatch.dispatch_id,
         metadata={"action_id": dispatch.action_id, "decision_id": dispatch.decision_id},
     )
     await DeliveryIntentRepository().insert(intent.id, intent.model_dump())
@@ -663,6 +690,11 @@ async def _enqueue_action_delivery(
         "tenant_id": dispatch.tenant_id,
         "destination": config.default_destination if config is not None else None,
     }
+    provider_config.pop("secret_ref", None)
+    if config is not None:
+        ref = _action_integration_secret_ref(dispatch.tenant_id, config.config_id)
+        if config.config.get("secret_ref") == ref:
+            provider_config["secret_ref"] = ref
     job = DeliveryJob(
         intent_id=intent.id,
         tenant_id=dispatch.tenant_id,
@@ -670,7 +702,7 @@ async def _enqueue_action_delivery(
         provider_adapter=dispatch.target_type,
         payload=dispatch.payload,
         provider_config=provider_config,
-        idempotency_key=dispatch.idempotency_key or dispatch.dispatch_id,
+        idempotency_key=dispatch.dispatch_id,
     )
     return await DeliveryJobRepository().insert(job.id, job.model_dump())
 
@@ -913,9 +945,10 @@ async def create_action_integration(body: IntegrationConfigRequest, request: Req
         _action_targets.get(body.target_type)
     except ValueError as exc:
         raise BadRequestError(str(exc)) from exc
-    prepared = _config_with_secret_ref(body.model_dump())
+    config_id = str(uuid.uuid4())
+    prepared = await _config_with_secret_ref(tenant.tenant_id, config_id, body.model_dump())
     config = ActionIntegrationConfig(
-        config_id=str(uuid.uuid4()),
+        config_id=config_id,
         tenant_id=tenant.tenant_id,
         target_type=body.target_type,
         name=body.name,
@@ -938,7 +971,9 @@ async def update_action_integration(config_id: str, body: IntegrationConfigReque
         raise NotFoundError("action integration")
     if existing.get("target_type") != body.target_type:
         raise BadRequestError("target_type cannot be changed for an integration config")
-    prepared = _config_with_secret_ref(body.model_dump())
+    prepared = await _config_with_secret_ref(
+        tenant.tenant_id, config_id, body.model_dump(), existing.get("config")
+    )
     saved = await _integrations.update(config_id, {
         "name": body.name,
         "default_destination": body.default_destination,
@@ -952,7 +987,128 @@ async def update_action_integration(config_id: str, body: IntegrationConfigReque
 async def _dispatch_action(action_id: str, body: DispatchActionRequest, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("write")
+    tenant.require_permission("dispatch")
+    principal_id = tenant.user_id
+    if not isinstance(principal_id, str) or not principal_id.strip():
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("Authenticated principal is required to dispatch actions")
+    if body.journey_action_reference and body.risk_action_reference:
+        raise BadRequestError("Only one dispatch association may be supplied")
     action, decision, recommendation = await _load_dispatch_context(tenant.tenant_id, action_id)
+    replay_dispatch = None
+    if body.idempotency_key:
+        existing = await _dispatches.find_many(
+            {"tenant_id": tenant.tenant_id, "action_id": action_id, "idempotency_key": body.idempotency_key},
+            limit=1,
+        )
+        if existing and (existing[0].get("risk_action_association") or body.risk_action_reference):
+            association = existing[0].get("risk_action_association")
+            reference = body.risk_action_reference
+            if (not isinstance(association, dict) or reference is None
+                    or association.get("record_id") != reference.record_id
+                    or association.get("subject_id") != reference.subject_id
+                    or association.get("subject_kind") != reference.subject_kind
+                    or body.journey_action_reference or existing[0].get("journey_action_association")):
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different risk association")
+            replay_dispatch = existing[0]
+        if existing and (existing[0].get("journey_action_association") or body.journey_action_reference):
+            association = existing[0].get("journey_action_association")
+            reference = body.journey_action_reference
+            if (not isinstance(association, dict) or reference is None
+                    or association.get("record_id") != reference.record_id
+                    or association.get("subject_id") != reference.journey_id
+                    or association.get("version_id") != reference.journey_version_id):
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different journey association")
+            replay_dispatch = existing[0]
+    if replay_dispatch is not None:
+        from shared.common.common import ConflictError
+
+        selected = decision.get("selected_action") or {}
+        if not isinstance(selected, dict):
+            selected = {}
+        association_conflict = False
+        if body.risk_action_reference is not None:
+            association = replay_dispatch.get("risk_action_association")
+            reference = body.risk_action_reference
+            from actions.agent.risk_dispatch_association import recommendation_matches_risk_subject
+
+            recommendation_id = recommendation.get("recommendation_id")
+            association_conflict = not (
+                isinstance(association, dict)
+                and association.get("kind") == "risk_intervention"
+                and association.get("link_state") == "caller_associated"
+                and association.get("record_id") == reference.record_id
+                and association.get("subject_kind") == reference.subject_kind
+                and association.get("subject_id") == reference.subject_id
+                and association.get("recommendation_id") == recommendation_id
+                and association.get("action_key") == selected.get("action_key")
+                and association.get("action_type") == selected.get("action_type")
+                and replay_dispatch.get("risk_action_association_record_id") == reference.record_id
+                and replay_dispatch.get("tenant_id") == tenant.tenant_id
+                and replay_dispatch.get("action_id") == action_id
+                and replay_dispatch.get("decision_id") == decision.get("decision_id")
+                and replay_dispatch.get("recommendation_id") == recommendation_id
+                and action.get("tenant_id") == tenant.tenant_id
+                and action.get("action_id") == action_id
+                and action.get("decision_id") == decision.get("decision_id")
+                and action.get("recommendation_id") == recommendation_id
+                and action.get("action_type") == selected.get("action_type")
+                and decision.get("tenant_id") == tenant.tenant_id
+                and decision.get("decision_status") == "approved"
+                and decision.get("recommendation_id") == recommendation_id
+                and selected.get("action_key") == association.get("action_key")
+                and selected.get("action_type") == association.get("action_type")
+                and isinstance(recommendation_id, str)
+                and recommendation_matches_risk_subject(
+                    recommendation, reference.subject_kind, reference.subject_id
+                )
+                and not body.journey_action_reference
+                and not replay_dispatch.get("journey_action_association")
+            )
+        elif body.journey_action_reference is not None:
+            association = replay_dispatch.get("journey_action_association")
+            reference = body.journey_action_reference
+            recommendation_id = recommendation.get("recommendation_id")
+            association_conflict = not (
+                isinstance(association, dict)
+                and association.get("kind") == "journey_action_intent"
+                and association.get("link_state") == "caller_associated"
+                and association.get("record_id") == reference.record_id
+                and association.get("subject_id") == reference.journey_id
+                and association.get("version_id") == reference.journey_version_id
+                and association.get("recommendation_id") == recommendation_id
+                and association.get("action_key") == selected.get("action_key")
+                and association.get("action_type") == selected.get("action_type")
+                and replay_dispatch.get("journey_action_association_record_id") == reference.record_id
+                and replay_dispatch.get("tenant_id") == tenant.tenant_id
+                and replay_dispatch.get("action_id") == action_id
+                and replay_dispatch.get("decision_id") == decision.get("decision_id")
+                and replay_dispatch.get("recommendation_id") == recommendation_id
+                and action.get("tenant_id") == tenant.tenant_id
+                and action.get("action_id") == action_id
+                and action.get("decision_id") == decision.get("decision_id")
+                and action.get("recommendation_id") == recommendation_id
+                and action.get("action_type") == selected.get("action_type")
+                and decision.get("tenant_id") == tenant.tenant_id
+                and decision.get("decision_status") == "approved"
+                and decision.get("recommendation_id") == recommendation_id
+                and selected.get("action_key") == association.get("action_key")
+                and selected.get("action_type") == association.get("action_type")
+                and recommendation.get("tenant_id") == tenant.tenant_id
+                and recommendation.get("recommendation_id") == recommendation_id
+                and not replay_dispatch.get("risk_action_association")
+            )
+        else:
+            association_conflict = bool(
+                replay_dispatch.get("journey_action_association")
+                or replay_dispatch.get("risk_action_association")
+                or replay_dispatch.get("journey_action_association_record_id")
+                or replay_dispatch.get("risk_action_association_record_id")
+            )
+        if association_conflict:
+            raise ConflictError("Idempotent dispatch has a different or inconsistent association")
     if decision.get("decision_status") != "approved":
         raise BadRequestError("Actions can only be dispatched for approved decisions")
     # Governance policy: elevated/critical dispatch requires an approval_id. This
@@ -960,18 +1116,88 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     # security policy engine (which records a SecurityAuditEvent on block).
     from governance.security.policy_engine import policy_engine
     selected_action = decision.get("selected_action") or {}
+    journey_association = None
+    risk_association = None
+    if body.journey_action_reference is not None and replay_dispatch is None:
+        action_key, action_type = selected_action.get("action_key"), selected_action.get("action_type")
+        recommendation_id = recommendation.get("recommendation_id")
+        if (not isinstance(action_key, str) or not action_key
+                or not isinstance(action_type, str) or not action_type
+                or not isinstance(recommendation_id, str) or not recommendation_id
+                or action.get("action_type") != action_type
+                or decision.get("recommendation_id") != recommendation_id
+                or action.get("recommendation_id") != recommendation_id):
+            raise BadRequestError("Journey dispatch requires exact selected action and recommendation")
+        try:
+            journey_association = await validate_action_association(
+                tenant_id=tenant.tenant_id, action=action_key,
+                resource=body.journey_action_reference.journey_id,
+                journey=body.journey_action_reference,
+                recommendation_id=recommendation_id, action_type=action_type,
+            )
+            journey_association.update(recommendation_id=recommendation_id, action_type=action_type)
+        except ValueError as exc:
+            raise BadRequestError(str(exc)) from exc
+    if body.risk_action_reference is not None and replay_dispatch is None:
+        from actions.agent.risk_dispatch_association import recommendation_matches_risk_subject
+
+        action_key, action_type = selected_action.get("action_key"), selected_action.get("action_type")
+        recommendation_id = recommendation.get("recommendation_id")
+        if (not all(isinstance(value, str) and value for value in (action_key, action_type, recommendation_id))
+                or action.get("tenant_id") != tenant.tenant_id or decision.get("tenant_id") != tenant.tenant_id
+                or recommendation.get("tenant_id") != tenant.tenant_id or action.get("action_id") != action_id
+                or not isinstance(decision.get("decision_id"), str) or not decision.get("decision_id")
+                or action.get("action_type") != action_type
+                or action.get("decision_id") != decision.get("decision_id")
+                or decision.get("recommendation_id") != recommendation_id
+                or action.get("recommendation_id") != recommendation_id
+                or not recommendation_matches_risk_subject(
+                    recommendation, body.risk_action_reference.subject_kind, body.risk_action_reference.subject_id
+                )):
+            raise BadRequestError("Risk dispatch requires exact selected action and recommendation")
+        try:
+            risk_association = await validate_action_association(
+                tenant_id=tenant.tenant_id, action=action_key,
+                resource=body.risk_action_reference.subject_id, risk=body.risk_action_reference,
+            )
+            from actions.agent.risk_dispatch_association import validate_current_risk_decision
+            await validate_current_risk_decision(tenant.tenant_id, risk_association)
+            risk_association.update(recommendation_id=recommendation_id, action_type=action_type)
+        except ValueError as exc:
+            raise BadRequestError(str(exc)) from exc
+    if replay_dispatch is not None:
+        from shared.common.common import ConflictError
+        from actions.agent.dispatch_authority import read_dispatch_authorization
+
+        if (replay_dispatch.get("tenant_id") != tenant.tenant_id
+                or replay_dispatch.get("action_id") != action_id
+                or replay_dispatch.get("dispatch_actor_id") != principal_id
+                or await read_dispatch_authorization(
+                    tenant_id=tenant.tenant_id, action_id=action_id, dispatch=replay_dispatch,
+                ) is None):
+            raise ConflictError("Idempotent dispatch authority does not match this actor or context")
+        receipts = await _delivery_receipts.find_many({"dispatch_id": replay_dispatch.get("dispatch_id")}, limit=1)
+        return APIResponse(data={"dispatch": replay_dispatch, "receipt": receipts[0] if receipts else None,
+                                 "replayed": True}).to_dict()
     approval_level = selected_action.get("requires_approval_level", "none")
     approval_id = (
         (body.approval_metadata or {}).get("approval_id")
         or (action.get("authorization_metadata") or {}).get("approval_id")
     )
+    dispatch_id = str(uuid.uuid4())
+    selected_action_key = selected_action.get("action_key")
+    selected_action_type = selected_action.get("action_type")
+    association_record_id = (journey_association or risk_association or {}).get("record_id")
+    dispatch_permission = tenant.has_permission("dispatch")
     dispatch_policy = await policy_engine.check_action_dispatch(
-        actor_id=tenant.user_id or tenant.tenant_id, actor_type='tenant_user',
+        actor_id=principal_id, actor_type='tenant_user',
         tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
+        has_dispatch_permission=dispatch_permission, dispatch_id=dispatch_id,
+        target_type=body.target_type, selected_action_key=selected_action_key,
+        selected_action_type=selected_action_type, association_record_id=association_record_id,
         is_elevated=approval_level in {"elevated", "critical"}, approval_id=approval_id,
+        persist=False,
     )
-    if not dispatch_policy.allowed:
-        raise BadRequestError(dispatch_policy.reason)
     config = None
     if body.config_id:
         raw_config = await _integrations.find_by_id_or_fail(body.config_id)
@@ -992,7 +1218,7 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         overrides=body.payload_overrides,
     )
     dispatch = ActionDispatch(
-        dispatch_id=str(uuid.uuid4()),
+        dispatch_id=dispatch_id,
         tenant_id=tenant.tenant_id,
         action_id=action_id,
         decision_id=decision["decision_id"],
@@ -1002,32 +1228,100 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         target_type=body.target_type,
         config_id=body.config_id,
         status="queued",
+        dispatch_policy_decision_id=dispatch_policy.decision_id,
+        dispatch_actor_id=principal_id,
+        dispatch_action_key=selected_action_key,
+        dispatch_action_type=selected_action_type,
+        dispatch_approval_id=approval_id,
+        dispatch_requires_elevation=approval_level in {"elevated", "critical"},
         payload=payload,
         approval_metadata=body.approval_metadata,
         idempotency_key=body.idempotency_key,
+        journey_action_association_record_id=(journey_association or {}).get("record_id"),
+        journey_action_association=journey_association,
+        risk_action_association_record_id=(risk_association or {}).get("record_id"),
+        risk_action_association=risk_association,
         created_at=utc_now().isoformat(),
     )
     # Reserve the tenant/action/key before invoking any connector.  A retry or
     # concurrent request therefore observes the durable queued plan and cannot
     # produce a second external side effect.
     if body.idempotency_key:
+        reservation_data = dispatch.model_dump()
+        reservation_data["status"] = "authorization_pending"
         saved_dispatch, created = await _dispatches.reserve(
             tenant.tenant_id,
             action_id,
             body.idempotency_key,
-            dispatch.model_dump(),
+            reservation_data,
         )
         if not created:
-            receipts = await _delivery_receipts.find_many(
-                {"dispatch_id": saved_dispatch.get("dispatch_id")}, limit=1
-            )
-            return APIResponse(data={
-                "dispatch": saved_dispatch,
-                "receipt": receipts[0] if receipts else None,
-                "replayed": True,
-            }).to_dict()
+            if saved_dispatch.get("journey_action_association") != journey_association:
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different journey association")
+            if saved_dispatch.get("risk_action_association") != risk_association:
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch has a different risk association")
+            from actions.agent.dispatch_authority import read_dispatch_authorization
+            if (saved_dispatch.get("dispatch_actor_id") != principal_id
+                    or (saved_dispatch.get("status") != "authorization_pending"
+                        and await read_dispatch_authorization(
+                            tenant_id=tenant.tenant_id, action_id=action_id, dispatch=saved_dispatch,
+                        ) is None)):
+                from shared.common.common import ConflictError
+                raise ConflictError("Idempotent dispatch authority does not match this actor or context")
+            if saved_dispatch.get("status") == "authorization_pending":
+                if not await _dispatches.claim_authorization(saved_dispatch["dispatch_id"]):
+                    from shared.common.common import ConflictError
+                    raise ConflictError("Idempotent dispatch authorization is already in progress")
+                dispatch = ActionDispatch(**{**saved_dispatch, "status": "queued"})
+                dispatch_id = dispatch.dispatch_id
+                try:
+                    dispatch_policy = await policy_engine.check_action_dispatch(
+                        actor_id=principal_id, actor_type='tenant_user',
+                        tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
+                        has_dispatch_permission=dispatch_permission, dispatch_id=dispatch.dispatch_id,
+                        target_type=dispatch.target_type, selected_action_key=dispatch.dispatch_action_key,
+                        selected_action_type=dispatch.dispatch_action_type,
+                        association_record_id=(journey_association or risk_association or {}).get("record_id"),
+                        is_elevated=dispatch.dispatch_requires_elevation,
+                        approval_id=dispatch.dispatch_approval_id, persist=False,
+                    )
+                except Exception:
+                    await _dispatches.update(dispatch_id, {
+                        "status": "authorization_pending", "updated_at": utc_now().isoformat(),
+                    })
+                    raise
+                dispatch_policy.decision_id = dispatch.dispatch_policy_decision_id
+            else:
+                receipts = await _delivery_receipts.find_many(
+                    {"dispatch_id": saved_dispatch.get("dispatch_id")}, limit=1
+                )
+                return APIResponse(data={
+                    "dispatch": saved_dispatch,
+                    "receipt": receipts[0] if receipts else None,
+                    "replayed": True,
+                }).to_dict()
+        elif not await _dispatches.claim_authorization(saved_dispatch["dispatch_id"]):
+            from shared.common.common import ConflictError
+            raise ConflictError("Dispatch authorization could not be claimed")
     else:
         saved_dispatch = await _dispatches.insert(dispatch.dispatch_id, dispatch.model_dump())
+
+    try:
+        await policy_engine.persist_action_dispatch_decision(dispatch_policy)
+    except Exception:
+        await _dispatches.update(dispatch.dispatch_id, {
+            "status": "authorization_pending", "updated_at": utc_now().isoformat(),
+        })
+        raise
+    dispatch.dispatch_policy_decision_id = dispatch_policy.decision_id
+    saved_dispatch = await _dispatches.update(dispatch_id, {
+        "status": "queued" if dispatch_policy.allowed else "failed",
+        **({"error": dispatch_policy.reason} if not dispatch_policy.allowed else {}),
+    })
+    if not dispatch_policy.allowed:
+        raise BadRequestError(dispatch_policy.reason)
 
     try:
         receipt = await target.dispatch(dispatch, config)
@@ -1243,22 +1537,31 @@ async def list_outcomes(request: Request, limit: int = 50):
     return APIResponse(data={"items": items, "count": len(items)}, meta=_probe_completeness(limit, len(fetched))).to_dict()
 
 
-async def _tenant_ledger(tenant_id: str, limit: int = 500) -> dict:
-    recommendations = await _recommendations.list_for_tenant(tenant_id, limit=limit)
-    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
-    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
-    outcomes = await _outcomes.list_for_tenant(tenant_id, limit=limit)
-    feedback = await _feedback.find_many({"tenant_id": tenant_id}, limit=limit)
-    playbooks = await _playbooks.find_many({"tenant_id": tenant_id}, limit=limit)
-    runs = await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=limit)
-    return _ledger.build(recommendations, decisions, actions, outcomes, feedback, playbooks, runs)
+async def _tenant_ledger(tenant_id: str, limit: int = 500, *, with_completeness: bool = False) -> dict:
+    # Each collection is read with a limit + 1 probe so a capped read is a
+    # reported fact, never a silently partial ledger.
+    probe = limit + 1
+    rows = {
+        "recommendations": await _recommendations.list_for_tenant(tenant_id, limit=probe),
+        "decisions": await _decisions.find_many({"tenant_id": tenant_id}, limit=probe),
+        "actions": await _actions.find_many({"tenant_id": tenant_id}, limit=probe),
+        "outcomes": await _outcomes.list_for_tenant(tenant_id, limit=probe),
+        "feedback": await _feedback.find_many({"tenant_id": tenant_id}, limit=probe),
+        "playbooks": await _playbooks.find_many({"tenant_id": tenant_id}, limit=probe),
+        "runs": await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=probe),
+    }
+    truncated = {name: len(items) > limit for name, items in rows.items()}
+    ledger = _ledger.build(*(items[:limit] for items in rows.values()))
+    if not with_completeness:
+        return ledger
+    return {**ledger, "completeness": {"limit": limit, "complete": not any(truncated.values()), "truncated": truncated}}
 
 
 @router.get("/outcome-ledger")
 async def get_outcome_ledger(request: Request, limit: int = 500):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    ledger = await _tenant_ledger(tenant.tenant_id, limit=limit)
+    ledger = await _tenant_ledger(tenant.tenant_id, limit=limit, with_completeness=True)
     return APIResponse(data=ledger).to_dict()
 
 

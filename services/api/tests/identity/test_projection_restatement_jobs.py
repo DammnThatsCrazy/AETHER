@@ -312,12 +312,12 @@ async def test_agent_and_execution_restatement_use_tenant_scoped_profile_compose
 
 @pytest.mark.asyncio
 async def test_signal_restatement_refresh_is_tenant_scoped_and_retry_idempotent():
-    from repositories.repos import BehaviorProfileRepository, SignalRepository
+    from repositories.repos import BehaviorProfileRepository, SignalRepository, tenant_record_id
     from intelligence.signals.recompute import recompute_signals_for_entity
 
     profiles = BehaviorProfileRepository()
     signals = SignalRepository()
-    await profiles.insert("profile-signal", {
+    await profiles.insert(tenant_record_id(TENANT, "profile-signal"), {
         "entity_id": "profile-signal",
         "tenant_id": TENANT,
         "churn_probability": 0.91,
@@ -356,7 +356,7 @@ async def test_signal_restatement_refresh_is_tenant_scoped_and_retry_idempotent(
         "tenant_id": TENANT,
         "signal_type": "manual_review",
     })
-    await profiles.insert("profile-signal", {
+    await profiles.insert(tenant_record_id(TENANT, "profile-signal"), {
         "entity_id": "profile-signal",
         "tenant_id": TENANT,
         "churn_probability": 0.0,

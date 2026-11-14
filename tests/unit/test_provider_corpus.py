@@ -278,11 +278,13 @@ async def test_data_rights_olympus_provider_baseline_auto_set(monkeypatch):
     with backend_module_path():
         dr_models = importlib.import_module("connectors.integrations.data_rights.models")
         dr_service_mod = importlib.import_module("connectors.integrations.data_rights.service")
+        rel = importlib.import_module("shared.integration_contracts.source_relationship")
         svc = dr_service_mod.DataRightsService()
         body = dr_models.DataRightsGrantCreate(
-            tenant_id="t1", source_id="s1", connector_id="dune_api",
+            tenant_id=rel.OLYMPUS_SOURCE_TENANT_ID, source_id="s1", connector_id="dune_api",
             connector_class="olympus_provider", data_category="onchain",
             data_sensitivity="unclassified", raw_data_owner="olympus_labs",
+            source_relationship="olympus_source",
             olympus_baseline_allowed=False,  # should be overridden
         )
         grant = await svc.create_grant(body, granted_by_user_id="u1")
@@ -295,11 +297,13 @@ async def test_data_rights_model_training_default_false(monkeypatch):
     with backend_module_path():
         dr_models = importlib.import_module("connectors.integrations.data_rights.models")
         dr_service_mod = importlib.import_module("connectors.integrations.data_rights.service")
+        rel = importlib.import_module("shared.integration_contracts.source_relationship")
         svc = dr_service_mod.DataRightsService()
         body = dr_models.DataRightsGrantCreate(
-            tenant_id="t2", source_id="s2", connector_id="dune_api",
+            tenant_id=rel.OLYMPUS_SOURCE_TENANT_ID, source_id="s2", connector_id="dune_api",
             connector_class="olympus_provider", data_category="onchain",
             data_sensitivity="unclassified", raw_data_owner="olympus_labs",
+            source_relationship="olympus_source",
         )
         grant = await svc.create_grant(body, granted_by_user_id="u2")
         assert grant.model_training_allowed is False
@@ -311,11 +315,13 @@ async def test_data_rights_revoke_blocks_all_use(monkeypatch):
     with backend_module_path():
         dr_models = importlib.import_module("connectors.integrations.data_rights.models")
         dr_service_mod = importlib.import_module("connectors.integrations.data_rights.service")
+        rel = importlib.import_module("shared.integration_contracts.source_relationship")
         svc = dr_service_mod.DataRightsService()
         body = dr_models.DataRightsGrantCreate(
-            tenant_id="t3", source_id="s3", connector_id="dune_api",
+            tenant_id=rel.OLYMPUS_SOURCE_TENANT_ID, source_id="s3", connector_id="dune_api",
             connector_class="olympus_provider", data_category="onchain",
             data_sensitivity="unclassified", raw_data_owner="olympus_labs",
+            source_relationship="olympus_source",
             model_training_allowed=True,
         )
         grant = await svc.create_grant(body, granted_by_user_id="u3")

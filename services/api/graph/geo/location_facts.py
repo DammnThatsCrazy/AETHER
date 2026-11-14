@@ -91,6 +91,10 @@ class LocationFactRepository(BaseRepository):
             await self.delete(fact.location_id)
         data["lifecycle_state"] = LOCATION_FACT_ACTIVE
         data["recorded_by"] = actor_id
+        if data.get("normalization_version"):
+            # This is the canonical fact-materialization instant, separate
+            # from upstream observed_at and from the source's own schema.
+            data["normalization_timestamp"] = utc_now().isoformat()
         return await self.insert(fact.location_id, data)
 
     async def active_facts_for_subject(

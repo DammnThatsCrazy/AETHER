@@ -1,4 +1,6 @@
-import { Badge, Card, CardContent, CardHeader, ErrorState, LoadingState, formatDecimal, useTimeContext, type LocaleContext } from '@aether/ui';
+import type { ReactNode } from 'react';
+import { formatDecimal, useTimeContext, type LocaleContext } from '@aether/ui';
+import { Eyebrow, InlineNotice, MetricTile, Spinner, TonePill } from '@aether-app/components/ae-ui';
 import { useOutcomeLedger, useProfileOutcomeLedger } from '@aether-app/features/intelligence';
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -25,16 +27,20 @@ function pct(value: unknown): string {
   return parsed == null ? '—' : `${Math.round(parsed * 100)}%`;
 }
 
-function Stat({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <div className="rounded-lg border border-border-subtle bg-surface-raised p-3">
-      <p className="text-xs text-text-secondary">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-text-primary">{value}</p>
-    </div>
-  );
-}
+/** Full: as many tiles per row as fit. Value: the four value tiles as a 2×2 block. */
+const KPI_GRID = { gridTemplateColumns: 'repeat(auto-fit, minmax(min(140px, 100%), 1fr))' } as const;
+const KPI_GRID_2 = { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' } as const;
+const mute = { color: 'var(--ae-mute)' } as const;
 
-export function OutcomeLedgerPanel({ entityId }: { readonly entityId?: string }) {
+/**
+ * Outcome ledger: value, capture and loop health from recommendations →
+ * decisions → actions → outcomes, in the glass card style.
+ *
+ * `variant="value"` drops the loop counts, outcome mix and loop health — used
+ * on the Value page's Outcomes tab, which already draws those from the same
+ * ledger — and keeps the value figures, confidence change and top lists.
+ */
+export function OutcomeLedgerPanel({ entityId, variant = 'full' }: { readonly entityId?: string; readonly variant?: 'full' | 'value' }) {
   const timeCtx = useTimeContext();
   const tenantLedger = useOutcomeLedger();
   const entityLedger = useProfileOutcomeLedger(entityId ?? '');
@@ -44,84 +50,110 @@ export function OutcomeLedgerPanel({ entityId }: { readonly entityId?: string })
   const byType = asList(data.by_recommendation_type).slice(0, 4);
   const byPlaybook = asList(data.by_playbook).slice(0, 4);
   const confidence = asList(data.confidence_deltas_over_time);
+  const full = variant === 'full';
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="font-medium text-text-primary">Outcome Ledger{entityId ? ' for entity' : ''}</h2>
-            <p className="mt-1 text-xs text-text-secondary">
-              Value, capture, and loop health from recommendations → decisions → actions → outcomes.
-            </p>
-          </div>
-          <Badge variant="info">ROI</Badge>
+    <section className="ae-card flex min-w-0 flex-col gap-3.5 rounded-[20px] px-5 py-[18px]" data-testid="outcome-ledger-panel">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <Eyebrow>Outcome Ledger{entityId ? ' for entity' : ''}</Eyebrow>
+          <span className="text-[12px] leading-snug" style={mute}>
+            Value, capture, and loop health from recommendations → decisions → actions → outcomes.
+          </span>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {ledger.isLoading ? <LoadingState lines={4} /> : null}
-        {ledger.error ? <ErrorState message="Outcome ledger unavailable" onRetry={ledger.refetch} /> : null}
-        {!ledger.isLoading && !ledger.error && !ledger.data ? <p className="text-sm text-text-secondary">No outcome evidence has been recorded.</p> : null}
-        {!ledger.isLoading && !ledger.error && !!ledger.data && <>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Observed value" value={money(summary.observed_value, timeCtx)} />
-          <Stat label="Expected value" value={money(summary.expected_value, timeCtx)} />
-          <Stat label="Pending value" value={money(summary.pending_value, timeCtx)} />
-          <Stat label="Outcome capture" value={pct(summary.outcome_capture_rate)} />
-          <Stat label="Recommendations" value={String(num(summary.recommendations_generated) ?? '—')} />
-          <Stat label="Decisions" value={String(num(summary.decisions_recorded) ?? '—')} />
-          <Stat label="Actions" value={String(num(summary.actions_logged) ?? '—')} />
-          <Stat label="Outcomes" value={String(num(summary.outcomes_observed) ?? '—')} />
-        </div>
+        <TonePill tone="blue" className="flex-none">ROI</TonePill>
+      </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-lg border border-border-subtle p-3">
-            <h3 className="text-sm font-medium text-text-primary">Outcome mix</h3>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <Badge variant="success">Success {pct(summary.success_rate)}</Badge>
-              <Badge variant="danger">Failure {pct(summary.failure_rate)}</Badge>
-              <Badge variant="default">Neutral {pct(summary.neutral_rate)}</Badge>
-            </div>
-          </div>
-          <div className="rounded-lg border border-border-subtle p-3">
-            <h3 className="text-sm font-medium text-text-primary">Loop health</h3>
-            <p className="mt-2 text-xs text-text-secondary">
-              {num(summary.stale_loops) ?? '—'} stale · {num(summary.incomplete_loops) ?? '—'} incomplete · {num(summary.failed_loops) ?? '—'} failed
-            </p>
-          </div>
-          <div className="rounded-lg border border-border-subtle p-3">
-            <h3 className="text-sm font-medium text-text-primary">Confidence change</h3>
-            <p className="mt-2 text-xs text-text-secondary">
-              {num(summary.confidence_delta_total)?.toFixed(2) ?? '—'} total delta across {confidence.length} updates
-            </p>
-          </div>
+      {ledger.isLoading ? (
+        <div className="flex items-center gap-2.5 py-3 text-[13px]" style={mute} role="status">
+          <Spinner size={16} />
+          Loading the outcome ledger
         </div>
+      ) : null}
+      {ledger.error ? (
+        <div className="flex flex-col items-start gap-2">
+          <InlineNotice tone="amber">Outcome ledger unavailable right now.</InlineNotice>
+          <button type="button" onClick={() => ledger.refetch()} className="ae-btn-secondary ae-focus px-3.5 py-1.5 text-[12px]">Retry</button>
+        </div>
+      ) : null}
+      {!ledger.isLoading && !ledger.error && !ledger.data ? (
+        <p className="text-[13px]" style={mute} data-state="empty">No outcome evidence has been recorded.</p>
+      ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <LedgerList title="Top recommendation types" items={byType} empty="No recommendation type value yet." />
-          <LedgerList title="Top playbooks" items={byPlaybook} empty="No playbook-linked value yet." playbook />
-        </div>
-        </>}
-      </CardContent>
-    </Card>
+      {!ledger.isLoading && !ledger.error && !!ledger.data && (
+        <>
+          <div className="grid gap-2.5" style={full ? KPI_GRID : KPI_GRID_2}>
+            <MetricTile label="Observed value" value={money(summary.observed_value, timeCtx)} />
+            <MetricTile label="Expected value" value={money(summary.expected_value, timeCtx)} />
+            <MetricTile label="Pending value" value={money(summary.pending_value, timeCtx)} />
+            <MetricTile label="Outcome capture" value={pct(summary.outcome_capture_rate)} />
+            {full && (
+              <>
+                <MetricTile label="Recommendations" value={String(num(summary.recommendations_generated) ?? '—')} />
+                <MetricTile label="Decisions" value={String(num(summary.decisions_recorded) ?? '—')} />
+                <MetricTile label="Actions" value={String(num(summary.actions_logged) ?? '—')} />
+                <MetricTile label="Outcomes" value={String(num(summary.outcomes_observed) ?? '—')} />
+              </>
+            )}
+          </div>
+
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))' }}>
+            {full && (
+              <LedgerBox title="Outcome mix">
+                <div className="flex flex-wrap gap-1.5">
+                  <TonePill tone="sage">Success {pct(summary.success_rate)}</TonePill>
+                  <TonePill tone="ember">Failure {pct(summary.failure_rate)}</TonePill>
+                  <TonePill tone="mute">Neutral {pct(summary.neutral_rate)}</TonePill>
+                </div>
+              </LedgerBox>
+            )}
+            {full && (
+              <LedgerBox title="Loop health">
+                <span className="text-[12px]" style={mute}>
+                  {num(summary.stale_loops) ?? '—'} stale · {num(summary.incomplete_loops) ?? '—'} incomplete · {num(summary.failed_loops) ?? '—'} failed
+                </span>
+              </LedgerBox>
+            )}
+            <LedgerBox title="Confidence change">
+              <span className="text-[12px]" style={mute}>
+                {num(summary.confidence_delta_total)?.toFixed(2) ?? '—'} total delta across {confidence.length} updates
+              </span>
+            </LedgerBox>
+          </div>
+
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))' }}>
+            {full && <LedgerList title="Top recommendation types" items={byType} empty="No recommendation type value yet." />}
+            <LedgerList title="Top playbooks" items={byPlaybook} empty="No playbook-linked value yet." playbook />
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function LedgerBox({ title, children }: { readonly title: string; readonly children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2 rounded-[14px] px-3.5 py-3" style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge-soft)' }}>
+      <span className="text-[13px] font-medium">{title}</span>
+      {children}
+    </div>
   );
 }
 
 function LedgerList({ title, items, empty, playbook = false }: { readonly title: string; readonly items: Array<Record<string, unknown>>; readonly empty: string; readonly playbook?: boolean }) {
   const timeCtx = useTimeContext();
   return (
-    <div className="rounded-lg border border-border-subtle p-3">
-      <h3 className="text-sm font-medium text-text-primary">{title}</h3>
-      {items.length === 0 ? <p className="mt-2 text-xs text-text-secondary">{empty}</p> : (
-        <div className="mt-2 space-y-2">
+    <LedgerBox title={title}>
+      {items.length === 0 ? <span className="text-[12px]" style={mute}>{empty}</span> : (
+        <div className="flex flex-col">
           {items.map((item) => (
-            <div key={String(playbook ? item.playbook_id : item.key)} className="flex items-center justify-between gap-3 text-xs">
-              <span className="truncate text-text-secondary">{String(playbook ? item.playbook_name : item.key)}</span>
-              <span className="font-medium text-text-primary">{money(item.observed_value, timeCtx)}</span>
+            <div key={String(playbook ? item.playbook_id : item.key)} className="flex items-center justify-between gap-3 border-t py-1.5 text-[12px]" style={{ borderColor: 'var(--ae-edge)' }}>
+              <span className="truncate" style={mute}>{String(playbook ? item.playbook_name : item.key)}</span>
+              <span className="ae-mono">{money(item.observed_value, timeCtx)}</span>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </LedgerBox>
   );
 }

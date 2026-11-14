@@ -12,8 +12,15 @@ const SENSITIVE_PATTERNS = [
   'medical', 'salary', 'income', 'credit_score', 'social_security',
 ];
 
-function isSensitiveKey(key: string): boolean {
+// Exact keys that are non-secret contract references even though they contain a
+// sensitive substring ('auth'). `authorizationId` names an approval record; redacting
+// it collapses distinct approvals into one value downstream. Credentials such as
+// `authorization`, `authToken` or `auth_header` still match the patterns above.
+const NON_SECRET_REFERENCE_KEYS = new Set(['authorizationid', 'authorization_id', 'authorizationref', 'authorization_ref']);
+
+function isSensitiveKey(key: string, value: unknown): boolean {
   const normalized = key.toLowerCase().replace(/[-\s]/g, '_');
+  if (NON_SECRET_REFERENCE_KEYS.has(normalized) && typeof value === 'string') return false;
   return SENSITIVE_PATTERNS.some((p) => normalized.includes(p));
 }
 
@@ -30,7 +37,7 @@ function scrubValue(value: unknown, depth: number, path: WeakSet<object>): unkno
     if (Array.isArray(value)) return value.map((item) => scrubValue(item, depth + 1, path));
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = isSensitiveKey(k) ? '[REDACTED]' : scrubValue(v, depth + 1, path);
+      out[k] = isSensitiveKey(k, v) ? '[REDACTED]' : scrubValue(v, depth + 1, path);
     }
     return out;
   } finally {

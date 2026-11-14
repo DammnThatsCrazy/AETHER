@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,8 @@ from intelligence.risk360.contracts import (  # noqa: E402
     RiskAssessment,
     RiskAssessmentRun,
     RiskComponent,
+    RiskPoisoningEvidence,
+    RiskPoisoningLifecycleEvent,
     RiskSignal,
     RiskVector,
     ValueState,
@@ -130,6 +133,80 @@ def test_risk_signal_rejects_unregistered_dimension() -> None:
             risk_dimension="not_a_real_dimension",
             source="detector",
         )
+
+
+def _poisoning_evidence(**overrides: object) -> RiskPoisoningEvidence:
+    now = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    values: dict[str, object] = {
+        "evidence_id": "poison-1",
+        "tenant_id": "tenant-a",
+        "source_id": "provider:crm",
+        "subject_kind": "agent",
+        "subject_id": "agent-1",
+        "poisoning_type": "agent_trace_tampering",
+        "signal_strength": 0.82,
+        "confidence": "high",
+        "claim_state": EpistemicStatus.INFERRED,
+        "detector_id": "agent-trace-integrity",
+        "detector_version": "2.4.1",
+        "source_record_id": "trace-record-1",
+        "evidence_refs": [EvidenceRef(id="trace-1", type="event", source="agent-traces")],
+        "first_seen_at": now,
+        "last_seen_at": now,
+        "recorded_at": now,
+    }
+    values.update(overrides)
+    return RiskPoisoningEvidence(**values)
+
+
+def test_poisoning_evidence_binds_exact_scope_and_detector_lineage() -> None:
+    evidence = _poisoning_evidence()
+    assert evidence.tenant_id == "tenant-a"
+    assert (evidence.source_id, evidence.subject_kind, evidence.subject_id) == (
+        "provider:crm",
+        "agent",
+        "agent-1",
+    )
+    assert evidence.detector_id == "agent-trace-integrity"
+    assert evidence.detector_version == "2.4.1"
+    assert evidence.evidence_refs[0].id == "trace-1"
+    assert evidence.claim_state is EpistemicStatus.INFERRED
+
+
+def test_poisoning_evidence_rejects_empty_scope_unproven_verified_and_bad_restatement() -> None:
+    with pytest.raises(ValidationError):
+        _poisoning_evidence(source_id=" ")
+    with pytest.raises(ValidationError):
+        _poisoning_evidence(evidence_refs=[])
+    with pytest.raises(ValidationError):
+        _poisoning_evidence(confidence="verified", claim_state=EpistemicStatus.INFERRED)
+    with pytest.raises(ValidationError):
+        _poisoning_evidence(version=2)
+    with pytest.raises(ValidationError):
+        _poisoning_evidence(status="superseded")
+
+
+def test_poisoning_lifecycle_requires_actor_and_a_coherent_transition() -> None:
+    now = datetime(2026, 10, 20, 12, 1, tzinfo=timezone.utc)
+    event = RiskPoisoningLifecycleEvent(
+        event_id="event-1",
+        from_status="open",
+        to_status="acknowledged",
+        occurred_at=now,
+        actor_id="operator-7",
+    )
+    evidence = _poisoning_evidence(status="acknowledged", lifecycle_events=[event])
+    assert evidence.lifecycle_events[0].actor_id == "operator-7"
+    with pytest.raises(ValidationError):
+        RiskPoisoningLifecycleEvent(
+            event_id="event-2",
+            from_status="open",
+            to_status="acknowledged",
+            occurred_at=now,
+            actor_id=" ",
+        )
+    with pytest.raises(ValidationError):
+        _poisoning_evidence(status="resolved", lifecycle_events=[event])
 
 
 # ---------------------------------------------------------------------------

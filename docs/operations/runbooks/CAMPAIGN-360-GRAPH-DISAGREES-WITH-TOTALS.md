@@ -11,10 +11,12 @@ estimated_read_minutes: 6
 toc_depth: 2
 source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/campaign/routes.py]
 reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR campaign routes diff: the additive population-link write endpoint does not change graph or overview reads diagnosed by this runbook."
   - {'commit': '41e8356b', 'reason': 'Reviewed 41e8356b (additive advertising-connect endpoints — overview/ad-options/connect/test/account/disable/enable — appended to the /v1/campaign-sources router in services/api/journeys/campaign/routes.py, orchestrated by new services/api/journeys/campaign/ad_source_links.py). These additions do not touch the Campaign 360 graph/overview path this runbook diagnoses (exploration.py unchanged; sources endpoints never persist probe/sync facts on test), so no body change was required.'}
 source_hashes:
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
+  "services/api/journeys/campaign/routes.py": "sha256:43cafac0205f69a989aa26ba63b89075b9d4acbacfdeb672f5768099c19a4bd9"
 ---
 
 # Runbook — Graph Results Disagree With Campaign Totals

@@ -24,9 +24,14 @@ source_files:
   - services/api/main.py
   - services/api/config/settings.py
   - packages/shared/managed-integrations.ts
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR route and main.py diffs: new Social360 and Workflow tenant routes do not change reconciled-control operator routes, grants, or rollout behavior."
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "config/route_registry.yaml": "sha256:0bcf541b56a982ada9a204d091d8125fa9aa6f1675d982918ea683de2b23d76a"
-  "packages/shared/managed-integrations.ts": "sha256:1277aae12c27f222f7358c793d71bfa0a8e34c07354de88bb48dff5126a55b25"
+  "config/route_registry.yaml": "sha256:22d896dee064bea2536b4ea2dc5b118cff92483273cda3c28d8c18c22b373d08"
+  "packages/shared/managed-integrations.ts": "sha256:2dda9d93a55a544dcf79b22f810d78003a49ac9593a0ccaedba243d53af1533d"
   "scripts/validate_sdk_control_plane_seam.py": "sha256:321dbeec981f9542054e4be9c70f804414b027befeeb11d5eef4342f6c25f3af"
   "services/api/alembic/versions/20260906_rcp_admission.py": "sha256:ac836b9f4fc08cb325444f9447689efc05031157e0b52d7dc2402d04b7514a1e"
   "services/api/alembic/versions/20260906_rcp_change_sets.py": "sha256:173adc0310aabe04f976646217d35c24871597fd4a2e8c6aa23703afae14e988"
@@ -37,11 +42,11 @@ source_hashes:
   "services/api/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:e691acb7903a9758863e19c409d6e03847f40402191b557b39d68e7aa6f0d324"
   "services/api/alembic/versions/20260906_rcp_simulation.py": "sha256:86f635d8f06d758f8fc42b09a7ac4f853f8983483eff275e9f1190fe5c8dbaf4"
   "services/api/alembic/versions/20260906_rcp_source_authority.py": "sha256:2d01381af9228c26b5ed4c24c3ff9cc84af6d08717e771460c9a086491cca760"
-  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
-  "services/api/connectors/managed_integrations/": "sha256:fe2306749156ff6b2969d6de41359213b1715e645f7514295e5f7c19566239cf"
+  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/connectors/managed_integrations/": "sha256:ce5f319f27faa25eced6bedd896c1f40d4b99581383c0e7b5ea30602e7dde195"
   "services/api/governance/kyber/access/": "sha256:23b63f5b1882f5b966c9e23f638fdcd140e4271c38241e58ecfbfb5d53f76e25"
   "services/api/ingestion/sdk_distribution/control_plane.py": "sha256:d49325a1264f40d124a17722f1742b6a08a8342cd93b9ff0b3d0bcf22b73d17b"
-  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
+  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)

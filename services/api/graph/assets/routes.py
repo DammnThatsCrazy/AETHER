@@ -37,6 +37,7 @@ from graph.assets.models import (
     FiatCurrencyMetadata,
 )
 from graph.assets.registry import UniversalAssetRegistry
+from governance.security.request_context import require_platform_operator
 from value.stablecoin.foundation import (
     active_tenant_id as _tenant_id,
     require_flag,
@@ -240,6 +241,7 @@ async def canonicalize(payload: NativePayloadRequest, request: Request):
 async def register_asset(payload: CanonicalAsset, request: Request):
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    require_platform_operator(request)
     return await UniversalAssetRegistry().register_asset(payload)
 
 
@@ -247,6 +249,7 @@ async def register_asset(payload: CanonicalAsset, request: Request):
 async def register_chain(payload: ChainReference, request: Request):
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    require_platform_operator(request)
     return await UniversalAssetRegistry().register_chain(payload)
 
 
@@ -254,6 +257,7 @@ async def register_chain(payload: ChainReference, request: Request):
 async def register_fiat(payload: FiatCurrencyMetadata, request: Request):
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    require_platform_operator(request)
     return await UniversalAssetRegistry().register_fiat(payload)
 
 
@@ -261,6 +265,7 @@ async def register_fiat(payload: FiatCurrencyMetadata, request: Request):
 async def register_deployment(payload: AssetDeployment, request: Request):
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    require_platform_operator(request)
     return await UniversalAssetRegistry().register_deployment(payload)
 
 
@@ -268,6 +273,7 @@ async def register_deployment(payload: AssetDeployment, request: Request):
 async def register_alias(payload: AssetAlias, request: Request):
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    require_platform_operator(request)
     return await UniversalAssetRegistry().register_alias(payload)
 
 
@@ -275,6 +281,7 @@ async def register_alias(payload: AssetAlias, request: Request):
 async def register_capability(payload: AssetSupportCapability, request: Request):
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    require_platform_operator(request)
     return await UniversalAssetRegistry().register_capability(payload)
 
 
@@ -287,4 +294,5 @@ async def seed_registry(request: Request):
     """
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    require_platform_operator(request)
     return await UniversalAssetRegistry().seed_all()

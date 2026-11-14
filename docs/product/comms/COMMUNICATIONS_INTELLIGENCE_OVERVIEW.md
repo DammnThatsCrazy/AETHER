@@ -7,10 +7,13 @@ audience: [dev-senior, architect, buyer]
 status: experimental
 since_version: 0.1.0
 source_files: [services/api/journeys/comms/contracts.py, services/api/journeys/comms/projector.py, services/api/journeys/comms/state.py, services/api/ingestion/silver/dispatcher.py]
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR dispatcher diff: CommerceFlowProjector handles cart and checkout events and does not alter communications projection or the surfaces summarized here."
 source_hashes:
-  "services/api/ingestion/silver/dispatcher.py": "sha256:91649997a908ec2894c0097e513dba14c6a7e4d5c39a6519159bf0593e3d01fb"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:2d6b6441ecd52e2313d377bfed557ea955be035d1e4cede37e80200a80e1939c"
   "services/api/journeys/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
-  "services/api/journeys/comms/projector.py": "sha256:fd040efc9e84420c7d41809a02c253cbcc58d6386f4904e859e2b8bb3fd7b0d2"
+  "services/api/journeys/comms/projector.py": "sha256:e6ebefb5b7e4926236a9b24bf032ae28a4144a895b319e527683757b45b2aef5"
   "services/api/journeys/comms/state.py": "sha256:a25ee352c7f49dbdd6f19e89701500bf174cc9b7273e497dd1131203db9a704b"
 ---
 
@@ -29,6 +32,7 @@ External provider (Klaviyo, generic signed webhook, inbound-parse replies)
   → connector normalization        services/api/connectors/integrations/connectors/klaviyo.py
   → canonical communication event  services/api/journeys/comms/contracts.py (registry family: comms)
   → durable Bronze write + bus     services/api/journeys/comms/ingest.py → SDK_EVENTS_VALIDATED
+  → connector identity/consent     tenant-scoped server-owned evidence bridge
   → multi-projector Silver fan-out services/api/ingestion/silver/dispatcher.py (ADR-C3)
       1. CommsProjector            → silver_comms_facts (authoritative)
       2. IdentityEvidenceProjector → identity evidence
@@ -68,6 +72,10 @@ tables in `services/api/journeys/comms/contracts.py` — no new pipeline is requ
 - **Replies** — inbound replies correlate via In-Reply-To / References /
   provider thread / reply-token (`services/api/journeys/comms/replies.py`); DSN,
   out-of-office, and loop responses are excluded from engagement.
+  Communication360 exposes only explicit `In-Reply-To` target associations from
+  bounded exact tenant/provider/account/thread reads with a unique evidence-backed
+  target no later than the reply. Invalid or incomplete reads remain unknown;
+  association does not establish causality, identity, authority or complete history.
 - **Attribution** — delivery is context-only; reported opens are excluded by
   default; human-qualified clicks are eligible; replies are tenant-configurable;
   transactional mail never earns acquisition credit.
@@ -79,6 +87,13 @@ display (`services/api/journeys/comms/mailbox.py`). Bodies and attachments are n
 stored by default; subjects are used transiently for automated-response
 detection only. Shared/role mailboxes (`sales@`, `support@`, …) resolve to
 organizations, never to individual humans.
+
+For connector ingress, sender and recipient entity IDs and consent evidence
+come from server-owned identity bindings and the consent authority. Provider
+payload fields cannot assert canonical entity IDs, consent state, or consent
+receipts. Without an exact identity binding, the entity association remains
+unknown; without a matching authoritative consent receipt, consent remains
+unknown and downstream analytics apply the existing fail-closed policy.
 
 ## Surfaces
 

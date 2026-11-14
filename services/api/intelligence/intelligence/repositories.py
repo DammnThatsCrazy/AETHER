@@ -126,6 +126,27 @@ class ActionDispatchRepository(BaseRepository):
             raise RuntimeError("idempotency reservation conflicted but existing dispatch was not readable")
         return existing[0], False
 
+    async def claim_authorization(self, dispatch_id: str) -> bool:
+        """Claim a pre-delivery reservation so only one request can authorize it."""
+        pool = await self._ensure_pool()
+        if pool is None:
+            async with self._lock():
+                row = await self.find_by_id(dispatch_id)
+                if not row or row.get("status") != "authorization_pending":
+                    return False
+                row["status"] = "authorizing"
+                row["updated_at"] = utc_now().isoformat()
+                self._store[dispatch_id] = row
+                return True
+        result = await pool.execute(
+            f"""UPDATE {self.table_name}
+                SET data = jsonb_set(data, '{{status}}', to_jsonb('authorizing'::text), true),
+                    updated_at = NOW()
+                WHERE id = $1 AND data->>'status' = 'authorization_pending'""",
+            dispatch_id,
+        )
+        return not str(result).endswith(" 0")
+
 
 class ActionDeliveryReceiptRepository(BaseRepository):
     def __init__(self) -> None:

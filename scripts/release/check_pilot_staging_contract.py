@@ -307,7 +307,8 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
     )
     delivery_run = str(delivery_step.get("run") or "")
     for required in (
-        "gh workflow run deploy.yml",
+        # Dispatches go through the shared helper that reports gh failures.
+        "scripts/ci/dispatch_workflow.sh deploy.yml",
         "-f delivery_mode=deploy",
         '-f source_run_id="$RELEASE_RUN_ID"',
         '-f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM"',

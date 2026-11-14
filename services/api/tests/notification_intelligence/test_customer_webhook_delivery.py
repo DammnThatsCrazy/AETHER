@@ -8,7 +8,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from repositories.repos import reset_in_memory_stores
+from repositories.repos import ProvidersRepository, reset_in_memory_stores
 from journeys.notification_intelligence.customer_webhook_delivery import (
     CustomerWebhookDeliveryRepository,
     CustomerWebhookDeliveryService,
@@ -70,6 +70,8 @@ async def test_secret_store_returns_reference_and_hash_only(monkeypatch):
         async def find_by_id(self, key):
             return self.rows.get(key)
 
+        find_for_tenant = ProvidersRepository.find_for_tenant
+
     providers = ProviderDouble()
     store = CustomerWebhookSecretStore(providers)
 
@@ -97,6 +99,8 @@ async def test_legacy_raw_provider_secret_is_not_read_in_production(monkeypatch)
     class ProviderDouble:
         async def find_by_id(self, _key):
             return {"tenant_id": "tenant-a", "api_key": "legacy-secret"}
+
+        find_for_tenant = ProvidersRepository.find_for_tenant
 
     monkeypatch.setenv("AETHER_ENV", "production")
     with pytest.raises(ProviderUnavailableError, match="encrypted migration"):

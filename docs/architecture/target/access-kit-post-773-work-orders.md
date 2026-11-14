@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Access Kit work orders after PR #773
 
-**Base:** merged `Development` at PR #773 (`9157f7953`).
+**Baseline refresh:** `Development` at PR #789 (`e43b02379ed5e747ea1bd94d78224459aab92e86`), 2026-10-15.
 **Delivery:** ordered commits on one feature branch and one PR into `Development`.
 **Environment:** this PR does not wake, apply, or deploy staging. Production remains `main`; publication and live customer evidence have separate release gates.
 
@@ -69,16 +69,25 @@ Repository implementation and live proof have different dispositions. The PR des
 ### Action owner disposition
 
 The existing staged graph-mutation route is not exposed as an Access Kit action.
-It has separate `agent:manage` and `agent:approve` gates, durable status, and
-rollback, but its commit path does not resolve or carry a Rights Authority
-decision into `MutationIntent`; objective idempotency does not reject changed
-content for a reused key; and the commit caller must honor an unapplied or
-blocked `GraphMutationGateway` outcome before recording success. Its rollback
-path also uses raw graph drops. These are owner-side contracts, not adapter
-work, so Access Kit does not map those routes into CLI or MCP tools. Delivery
-has durable receipts and status reads, but no customer action-create route with
-the required policy, rights, and approval lifecycle. Continuation create remains
-a resource write, not an external-action dispatcher.
+It has separate `agent:manage` and `agent:approve` gates and durable status. The
+follow-up owner hardening now compares objective request fingerprints when an
+idempotency key is reused, assigns staged edges an action-specific stable replay
+key, records the `GraphMutationGateway` result, and refuses to mark a blocked
+or unapplied outcome committed. The objective key check is still a read-then-
+write operation because `DurableStore` has no atomic conditional insert, so
+simultaneous first requests are not yet protected from creating duplicate
+objectives.
+
+This still does not make the route a governed customer action. Commit does not
+resolve or carry a Rights Authority decision into `MutationIntent`; rollback
+still uses raw graph drops outside the gateway (although an unavailable
+read-back now opens a repair task instead of claiming a verified rollback); and
+`/v1/agent` remains broad operator tooling rather than a customer
+action-create/receipt lifecycle. These owner contracts must be closed before
+Access Kit maps the route into CLI or MCP. Delivery has durable receipts and
+status reads, but no customer action-create route with the required policy,
+rights, and approval lifecycle. Continuation create remains a resource write,
+not an external-action dispatcher.
 
 `enable_access_mcp_oauth` and `enable_access_continuations` default off. The
 continuation option sets `AETHER_CONTINUATION_ENABLED` on the API task only;

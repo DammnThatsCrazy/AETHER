@@ -23,12 +23,13 @@ import os
 import time
 import warnings
 from typing import Any, Optional
+from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError, ForbiddenError, ServiceUnavailableError
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError, ServiceUnavailableError
 from shared.cache.cache import CacheClient, CacheKey, TTL
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
@@ -218,9 +219,49 @@ class BatchPredictionRequest(BaseModel):
     entities: list[dict[str, Any]] = Field(..., min_length=1, max_length=100)
 
 
+class ProfileEvaluationRequest(BaseModel):
+    model_id: str = Field(min_length=1, max_length=128)
+    artifact_version: str = Field(min_length=1, max_length=128)
+    window_start: datetime
+    window_end: datetime
+    split: str = Field(pattern=r"^(evaluation|holdout)$")
+
+
 # ---------------------------------------------------------------------------
 # Payload builders — canonical-ID-based
 # ---------------------------------------------------------------------------
+
+
+@router.post("/model-governance/profile-evaluations")
+async def evaluate_profile_model(body: ProfileEvaluationRequest, request: Request):
+    """Run a tenant-scoped evaluation from exact persisted predictions/outcomes."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    actor_id = getattr(tenant, "user_id", None)
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        raise ForbiddenError("authenticated tenant administrator required")
+    from intelligence.model_governance.evaluations import evaluate_profile_artifact
+    try:
+        result = await evaluate_profile_artifact(
+            tenant.tenant_id, body.model_id, body.artifact_version,
+            window_start=body.window_start, window_end=body.window_end,
+            split=body.split, actor_id=actor_id,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/model-governance/profile-evaluations/{evaluation_id}")
+async def read_profile_model_evaluation(evaluation_id: str, request: Request):
+    """Read exact tenant evaluation samples for a model-governance admin."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    from intelligence.model_governance.evaluations import ModelEvaluationRepository
+    result = await ModelEvaluationRepository().get_evaluation(tenant.tenant_id, evaluation_id)
+    if result is None or result.get("domain") != "profile360":
+        raise NotFoundError("profile model evaluation not found")
+    return APIResponse(data=result).to_dict()
 
 
 def _build_payload(canonical_id: str, entity_id: str, features: dict[str, Any]) -> dict[str, Any]:
@@ -424,12 +465,12 @@ async def predict(
     # 0. Model-governance inference policy gate (§3.9).
     #    Always records a serve_inference consent evidence decision; blocks only
     #    under enforcement (ML_INFERENCE_POLICY_ENFORCE or a fail-closed model).
+    inference_actor_id = getattr(tenant, "user_id", None) or tenant.tenant_id
     try:
         from intelligence.model_governance import inference_policy_gate
-        actor_id = getattr(tenant, "user_id", None) or tenant.tenant_id
         gate = await inference_policy_gate.evaluate(
             tenant_id=tenant.tenant_id,
-            actor_id=actor_id,
+            actor_id=inference_actor_id,
             model_id=canonical_id,
             granted_purposes=body.consent_purposes,
             subject_ref=body.entity_id,
@@ -446,6 +487,10 @@ async def predict(
             )
             raise ForbiddenError(gate.reason or "inference denied: missing consent")
         request.state.inference_policy_decision_id = gate.policy_decision_id
+        request.state.inference_policy_allowed = bool(gate.allowed)
+        request.state.inference_policy_version = getattr(
+            gate.decision, "consent_policy_version", None
+        )
     except ForbiddenError:
         raise
     except Exception as exc:  # governance is additive — never break inference on a gate error
@@ -551,6 +596,51 @@ async def predict(
             prediction["envelope"] = _prediction_envelope(
                 canonical_id, tenant.tenant_id, body.features, body.consent_purposes
             )
+
+            # Persist only explicit, fully governed future-state output. Normal
+            # inference responses today do not include the required state list,
+            # future validity interval, and exact source-event refs, so they
+            # remain ordinary model responses and never become Profile360 facts.
+            try:
+                from identity.profile.prediction_authority import (
+                    record_eligible_profile_prediction,
+                )
+
+                envelope = prediction["envelope"]
+                persisted = await record_eligible_profile_prediction(
+                    tenant_id=tenant.tenant_id,
+                    requested_subject_id=body.entity_id,
+                    actor_id=inference_actor_id,
+                    model_id=canonical_id,
+                    feature_digest=envelope.get("feature_digest"),
+                    feature_schema_hash=envelope.get("feature_schema_hash"),
+                    policy_decision_id=getattr(
+                        request.state, "inference_policy_decision_id", None
+                    ),
+                    policy_version=getattr(
+                        request.state, "inference_policy_version", None
+                    ),
+                    policy_allowed=bool(
+                        getattr(request.state, "inference_policy_allowed", False)
+                    ),
+                    model_result=ml_result,
+                    cache=cache,
+                )
+                metrics.increment(
+                    "ml_profile_prediction_output",
+                    labels={"status": "stored" if persisted.stored else "skipped"},
+                )
+                if not persisted.stored:
+                    logger.debug(
+                        "Profile prediction output not admitted: model=%s reason=%s",
+                        canonical_id,
+                        persisted.reason,
+                    )
+            except Exception as exc:  # governed projection storage is additive
+                logger.debug(
+                    "Profile prediction output authority unavailable: %s",
+                    type(exc).__name__,
+                )
 
             if was_deprecated_alias:
                 prediction["deprecated_alias_used"] = body.model_name

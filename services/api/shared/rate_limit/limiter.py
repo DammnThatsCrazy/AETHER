@@ -18,6 +18,7 @@ Backend:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 from dataclasses import dataclass
@@ -69,6 +70,7 @@ class BurstRateLimiter:
 
     def __init__(self, redis_client: Optional[Any] = None) -> None:
         self._buckets: dict[str, dict] = {}
+        self._scoped: dict[str, tuple[float, int]] = {}
         self._redis: Optional[Any] = redis_client
         self._mode = "in-memory"
 
@@ -145,6 +147,48 @@ end
         if self._redis:
             return await self._check_redis(tenant_id, plan)
         return self._check_memory(tenant_id, plan)
+
+    async def check_scoped(
+        self, scope: str, limit: int, *, window: int = 60,
+    ) -> RateLimitResult:
+        """Count one request against an arbitrary scope with its own per-window limit.
+
+        Used for caps that sit under the tenant pool (for example one credential
+        on one operation). Same Lua script, Redis-or-memory fallback, and fixed
+        window as ``check``. ``limit <= 0`` disables the cap.
+        """
+        now = time.time()
+        window_id = int(now // window)
+        reset_at = float((window_id + 1) * window)
+        if limit <= 0:
+            return RateLimitResult(True, limit, limit, reset_at)
+        key = f"rl:scope:{scope}:{window_id}"
+        count: Optional[int] = None
+        if self._redis:
+            try:
+                result = await self._redis.eval(
+                    self._RATE_LIMIT_LUA, 1, key, str(limit), str(window + 60),
+                )
+                count = int(result[1])
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Redis scoped limit error: {e} — falling back to in-memory")
+        if count is None:
+            if len(self._scoped) >= 10_000:
+                self._scoped = {k: v for k, v in self._scoped.items() if v[0] > now}
+            expires, seen = self._scoped.get(key, (now + window * 2, 0))
+            count = seen + 1
+            self._scoped[key] = (expires, count)
+        if count > limit:
+            return RateLimitResult(False, limit, 0, reset_at, max(1, int(reset_at - now)))
+        return RateLimitResult(True, limit, max(0, limit - count), reset_at)
+
+    @staticmethod
+    def credential_scope(
+        tenant_id: str, credential: str, fallback: str, operation: str,
+    ) -> str:
+        """Scope key for one credential on one operation, without storing the secret."""
+        digest = hashlib.sha256((credential or fallback or "").encode()).hexdigest()[:16]
+        return f"cred:{tenant_id}:{digest}:{operation}"
 
     # Backward-compatible alias for existing callers.
     async def check_async(

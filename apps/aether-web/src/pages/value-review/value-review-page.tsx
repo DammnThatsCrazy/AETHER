@@ -1,16 +1,84 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, formatCount, useTimeContext, type TimeContext } from '@aether/ui';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { EmptyState, LoadingState } from '@aether/ui';
+import { SegmentedTabs } from '@aether-app/components/ae-campaigns-geo-ui';
 import { api } from '@aether-app/lib/api/endpoints';
+import { WINDOWS, asRecord, rangeLabel, str, valueWindows, type Row, type WindowDays } from './value-model';
+import { LoopAndDecisionsSection } from './value-loop-section';
+import { AgentsValueTab, CampaignsTab, CustomersTab, OutcomesTab, OverviewTab, SourcesTab } from './value-tabs';
 
-type Row = Record<string, any>;
-const number = (v: unknown, ctx: TimeContext) => v == null ? '—' : formatCount(Number(v), ctx);
-const money = (v: unknown, ctx: TimeContext) => v == null ? '—' : `$${formatCount(Number(v), ctx)}`;
-const pct = (v: unknown) => v == null ? '—' : `${Math.round(Number(v) * 100)}%`;
-function Metric({ label, value }: { readonly label: string; readonly value: any }) { return <Card><CardContent className="p-4"><div className="text-xs text-text-muted font-mono">{label}</div><div className="text-2xl font-semibold text-text-primary">{value}</div></CardContent></Card>; }
-function List({ title, items }: { readonly title: string; readonly items: string[] }) { return <Card><CardHeader><CardTitle>{title}</CardTitle></CardHeader><CardContent>{items.length ? <ul className="list-disc pl-5 text-sm text-text-secondary">{items.map(item => <li key={item}>{item}</li>)}</ul> : <div className="text-sm text-text-muted">No open items.</div>}</CardContent></Card>; }
+const TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'sources', label: 'Sources' },
+  { key: 'campaigns', label: 'Campaigns' },
+  { key: 'agents', label: 'Agents' },
+  { key: 'customers', label: 'Customers' },
+  { key: 'outcomes', label: 'Outcomes' },
+] as const;
+type TabKey = (typeof TABS)[number]['key'];
 
+/** Tabs whose reads take no date range: they say "all time" instead of following the window. */
+const ALL_TIME_TABS: ReadonlySet<TabKey> = new Set(['customers', 'outcomes']);
+
+/** Per-tab copy for the shared review states, so the title and tabs stay put. */
+const EMPTY_COPY: Record<TabKey, string> = {
+  overview: 'Value review will appear after outcomes are observed.',
+  sources: 'Sources appear here once outcomes, playbooks or integration actions report value.',
+  campaigns: 'Campaign spend against value appears here once value is observed for this workspace.',
+  agents: 'Agent-completed value appears here once value is observed for this workspace.',
+  customers: 'Customers appear here when an outcome with a value is recorded against them.',
+  outcomes: 'The loop from recommendation to outcome appears here once outcomes are observed.',
+};
+
+function isTab(value: string | null): value is TabKey {
+  return TABS.some(t => t.key === value);
+}
+
+function isWindow(value: number): value is WindowDays {
+  return (WINDOWS as readonly number[]).includes(value);
+}
+
+function CompareToggle({ on, onChange }: { readonly on: boolean; readonly onChange: (next: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      data-testid="value-compare"
+      className="ae-focus inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] transition-colors"
+      style={{
+        borderColor: on ? 'var(--ae-blue)' : 'var(--ae-edge)',
+        background: on ? 'var(--ae-blue-tint)' : 'transparent',
+        color: on ? 'var(--ae-blue-ink)' : 'var(--ae-ink)',
+      }}
+    >
+      <span className="relative inline-block h-4 w-7 flex-none rounded-full transition-colors" style={{ background: on ? 'var(--ae-blue)' : 'var(--ae-edge)' }} aria-hidden="true">
+        <span className="absolute top-0.5 h-3 w-3 rounded-full transition-all" style={{ left: on ? 14 : 2, background: 'var(--ae-raised)' }} />
+      </span>
+      Compare previous
+    </button>
+  );
+}
+
+/**
+ * Value (Claude Design handoff: Aether Value). Tenant value review, value
+ * events, the outcome ledger and campaign overviews — each tab is a real read
+ * and says plainly when the backend has nothing for it. One page-wide
+ * 7/30/90-day window scopes every read that accepts a period (value events,
+ * campaign overviews); the outcome-ledger tabs say "all time".
+ */
 export function ValueReviewPage() {
-  const timeCtx = useTimeContext();
+  const [params, setParams] = useSearchParams();
+  const rawTab = params.get('tab');
+  const tab: TabKey = isTab(rawTab) ? rawTab : 'overview';
+  const rawWindow = Number(params.get('window'));
+  const days: WindowDays = isWindow(rawWindow) ? rawWindow : 30;
+  const compare = params.get('compare') === '1';
+  // One anchor per visit, so the current and previous windows (and their cache keys) stay put.
+  const [anchor] = useState(() => new Date());
+  const windows = useMemo(() => valueWindows(days, anchor), [days, anchor]);
+
   const [data, setData] = useState<Row | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +87,7 @@ export function ValueReviewPage() {
     async function load() {
       try {
         const response = await api.valueReview.overview();
-        if (active) setData(response as Row);
+        if (active) setData(asRecord(response));
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -27,14 +95,95 @@ export function ValueReviewPage() {
       }
     }
     void load();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
-  if (loading) return <div className="p-6"><LoadingState lines={6} /></div>;
-  if (error) return <div className="p-6"><EmptyState title="Unable to load Value Review" description={error} /></div>;
-  if (!data || Object.keys(data).length === 0) return <div className="p-6"><EmptyState title="No value evidence yet" description="Value review will appear after outcomes are observed." /></div>;
-  return <div className="space-y-5 p-6"><div><h1 className="text-xl font-bold text-text-primary font-mono">Value Review</h1><p className="text-sm text-text-secondary">A tenant-scoped view of value created, open gaps, and next steps before EBRs and renewals.</p></div>
-    <div className="grid gap-3 md:grid-cols-4"><Metric label="Value Created" value={money(data?.observed_value, timeCtx)} /><Metric label="Expected Value" value={money(data?.expected_value, timeCtx)} /><Metric label="Pending Value" value={money(data?.pending_value, timeCtx)} /><Metric label="Outcome Capture" value={pct(data?.outcome_capture_rate)} /></div>
-    <div className="grid gap-4 md:grid-cols-3"><Metric label="Recommendations Acted Upon" value={number(data.recommendations_acted_upon, timeCtx)} /><Metric label="Outcomes Observed" value={number(data.outcomes_observed, timeCtx)} /><Metric label="Incomplete Loops" value={number(data.incomplete_loops, timeCtx)} /></div>
-    <div className="grid gap-4 lg:grid-cols-2"><List title="Recommended Next Steps" items={data?.recommended_next_steps ?? []} /><List title="Setup Gaps" items={data?.setup_gaps ?? []} /><List title="Integration Gaps" items={data?.integration_gaps ?? []} /><List title="Top Playbooks" items={(data?.top_playbooks ?? []).map((p: any) => String(p.name ?? p.playbook_id ?? p))} /></div>
-  </div>;
+
+  const update = (next: Record<string, string | null>) => {
+    const merged = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(next)) {
+      if (v === null) merged.delete(k);
+      else merged.set(k, v);
+    }
+    setParams(merged, { replace: true });
+  };
+
+  const review = data && Object.keys(data).length > 0 ? data : null;
+  const tenant = str(review?.['tenant_id']) ?? 'tenant';
+  // Compare previous feeds the Overview's tiles and chart; other tabs do not show deltas.
+  const comparing = compare && tab === 'overview';
+  const allTime = ALL_TIME_TABS.has(tab);
+
+  let body: ReactNode;
+  if (loading) {
+    body = <LoadingState lines={6} />;
+  } else if (error) {
+    body = <EmptyState title="Unable to load Value Review" description={error} />;
+  } else if (!review) {
+    body = <EmptyState title="No value evidence yet" description={EMPTY_COPY[tab]} />;
+  } else {
+    body = (
+      <>
+        {tab === 'overview' && <OverviewTab tenant={tenant} review={review} period={windows.current} previousPeriod={windows.previous} compare={comparing} />}
+        {tab === 'sources' && <SourcesTab tenant={tenant} period={windows.current} />}
+        {tab === 'campaigns' && <CampaignsTab tenant={tenant} period={windows.current} />}
+        {tab === 'agents' && <AgentsValueTab />}
+        {tab === 'customers' && <CustomersTab tenant={tenant} />}
+        {tab === 'outcomes' && (
+          <div className="flex min-w-0 flex-col gap-[18px]">
+            <OutcomesTab tenant={tenant} />
+            <LoopAndDecisionsSection />
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-[18px]" data-testid="aether-value">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex max-w-[560px] flex-col gap-1">
+          <h1 className="text-[32px] font-medium leading-tight tracking-[-0.64px]">Value</h1>
+          <span className="text-[14px]" style={{ color: 'var(--ae-mute)' }}>
+            Value created, what produced it, and what is still open before your next review. Influence is observed, not proven causal.
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-col items-start gap-1.5 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            {tab === 'overview' && <CompareToggle on={compare} onChange={next => update({ compare: next ? '1' : null })} />}
+            <SegmentedTabs
+              label="Value window"
+              value={String(days)}
+              onChange={v => update({ window: v })}
+              options={WINDOWS.map(w => ({ value: String(w), label: `${w} days`, testId: `value-window-${w}` }))}
+            />
+          </div>
+          <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }} data-testid="value-range">
+            {rangeLabel(windows.current)}
+            {comparing ? ` · vs ${rangeLabel(windows.previous)}` : ''}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <SegmentedTabs
+          label="Value views"
+          value={tab}
+          onChange={key => update({ tab: key })}
+          options={TABS.map(t => ({ value: t.key, label: t.label, testId: `value-tab-${t.key}` }))}
+          className="self-start"
+        />
+        {allTime && (
+          <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }} data-testid="value-scope-all-time">
+            All time. The outcome ledger takes no date range, so the {days}-day window does not apply to this view.
+          </span>
+        )}
+      </div>
+
+      <div className="ae-rise min-w-0" key={tab}>
+        {body}
+      </div>
+    </div>
+  );
 }

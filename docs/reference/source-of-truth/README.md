@@ -30,3 +30,18 @@ If another doc contradicts a file in this directory, this directory wins.
 | `CONNECTOR_TAXONOMY.md` | Six-layer connector corpus model (`ConnectorClass`/`ConnectorRole`/policies from `base.py`) + derived four-group customer catalog mirror (21 connectors / 7 ad platforms / 5 payment rails / 3 deferred bureaus) |
 | `CONNECTOR_LAKE_POLICY.md` | Default lake/graph/training write policy per connector class, dual-role rule, and governed elevation |
 | `AETHER_END_USER_LIFECYCLE.md` | Canonical end-user lifecycle spec: copy vocabulary, routes, connection-state projection, readiness honesty, experience categories, telemetry, integration data markers, E2E acceptance A–E |
+
+## AETHER 360 blueprint references
+
+The primary and supplemental references have distinct roles in the ongoing
+backend buildout:
+
+| Document | Role |
+|---|---|
+| `AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md` | Acceptance contract for the exact 18 backend 360 product surfaces. Its required slots, subjects, owners, and lenses are the implementation target. |
+| `../../archive/360-blueprint/AETHER_360_COMPLETE_ARCHITECTURAL_BUILDOUT_BLUEPRINT_SUPPLEMENTAL.md` | Preserved supplemental architecture context for shared lenses, projection flow, and supporting subsystems. It contains historical product terminology, frontend scope, and a broader/different surface matrix; it does not replace or expand the backend 18-surface contract. |
+
+The supplemental blueprint remains an archived reference. Apply the repository
+implementation scope and the primary backend contract when its content differs;
+its imperative wording is source material, not a separate repository
+instruction.

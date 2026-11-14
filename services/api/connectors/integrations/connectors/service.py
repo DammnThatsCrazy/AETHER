@@ -116,7 +116,7 @@ class ConnectorService:
 
         # Migrate-on-read from the legacy plaintext ProvidersRepository row.
         try:
-            record = await self._providers_repo().find_by_id(config.secret_ref)
+            record = await self._providers_repo().find_for_tenant(tenant_id, config.secret_ref)
             if record and record.get("api_key"):
                 api_key = record["api_key"]
                 await credential_service.create(tenant_id, config.secret_ref, api_key)

@@ -32,7 +32,7 @@ from typing import Any, Optional
 
 from repositories.repos import DelegationRepository, AgentExecutionRepository
 from shared.common.common import utc_now
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType, user_vertex_id
 from shared.graph.mutation_gateway import GraphMutationGateway
 from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger
@@ -70,7 +70,7 @@ def _capability_vid(tenant_id: str, capability: str) -> str:
 
 
 def _user_vid(tenant_id: str, user_id: str) -> str:
-    return f"{tenant_id}:user:{user_id}"
+    return user_vertex_id(tenant_id, user_id)
 
 
 class AgentLifecycleMapper:
@@ -621,44 +621,56 @@ class AgentLifecycleMapper:
     async def _handle_subagent_spawned(
         self, payload: dict[str, Any], tenant_id: str
     ) -> dict[str, Any]:
-        parent_agent_id = _require(payload, "agent_id")
-        child_agent_id = payload.get("parent_agent_id") or payload.get("beneficiary_actor_id", "")
+        # The spawning actor is the parent; the SDK contract names the spawned
+        # agent ``child_agent_id`` and may repeat the parent as ``parent_agent_id``.
+        parent_agent_id = payload.get("parent_agent_id") or _require(payload, "agent_id")
+        child_agent_id = payload.get("child_agent_id") or ""
+        root_agent_id = payload.get("root_agent_id") or parent_agent_id
         parent_vid = _agent_vid(tenant_id, parent_agent_id)
         edges = []
-        if child_agent_id:
-            child_vid = _agent_vid(tenant_id, child_agent_id)
-            await self._put_vertex(Vertex(
-                vertex_type=VertexType.AGENT,
-                vertex_id=child_vid,
-                properties={
-                    "agent_id": child_agent_id,
-                    "parent_agent_id": parent_agent_id,
-                    "tenant_id": tenant_id,
-                    "spawned_at": payload.get("timestamp", ""),
-                },
-            ))
-            await self._put_edge(Edge(
-                edge_type=EdgeType.SPAWNED_SUBAGENT,
-                from_vertex_id=parent_vid,
-                to_vertex_id=child_vid,
-                properties={"tenant_id": tenant_id, "spawned_at": payload.get("timestamp", "")},
-            ))
-            edges.append({"type": EdgeType.SPAWNED_SUBAGENT, "from": parent_vid, "to": child_vid})
+        if not child_agent_id or child_agent_id == parent_agent_id:
+            return {"status": "subagent_spawn_missing_child", "edges": edges}
+        child_vid = _agent_vid(tenant_id, child_agent_id)
+        await self._put_vertex(Vertex(
+            vertex_type=VertexType.AGENT,
+            vertex_id=child_vid,
+            properties={
+                "agent_id": child_agent_id,
+                "parent_agent_id": parent_agent_id,
+                "root_agent_id": root_agent_id,
+                "tenant_id": tenant_id,
+                "spawned_at": payload.get("timestamp", ""),
+            },
+        ))
+        await self._put_edge(Edge(
+            edge_type=EdgeType.SPAWNED_SUBAGENT,
+            from_vertex_id=parent_vid,
+            to_vertex_id=child_vid,
+            properties={
+                "tenant_id": tenant_id,
+                "spawned_at": payload.get("timestamp", ""),
+                "root_agent_id": root_agent_id,
+            },
+        ))
+        edges.append({"type": EdgeType.SPAWNED_SUBAGENT, "from": parent_vid, "to": child_vid})
 
-            # Persist a delegation record so Profile360 and active_for() can
-            # discover the relationship without querying graph edges directly.
-            delegation_id = payload.get("delegation_id") or f"{tenant_id}:{parent_agent_id}:spawned:{child_agent_id}"
-            existing = await self._delegations.find_by_id(delegation_id)
-            if existing is None:
-                await self._delegations.grant(
-                    delegation_id=delegation_id,
-                    tenant_id=tenant_id,
-                    grantor_entity_id=parent_agent_id,
-                    grantee_entity_id=child_agent_id,
-                    scope={"type": "subagent", "task_id": payload.get("task_id", "")},
-                    starts_at=payload.get("timestamp"),
-                    metadata={"source": "agent_subagent_spawned"},
-                )
+        # Persist a delegation record so Profile360 and active_for() can
+        # discover the relationship without querying graph edges directly.
+        delegation_id = payload.get("delegation_id") or f"{tenant_id}:{parent_agent_id}:spawned:{child_agent_id}"
+        existing = await self._delegations.find_by_id(delegation_id)
+        if existing is None:
+            await self._delegations.grant(
+                delegation_id=delegation_id,
+                tenant_id=tenant_id,
+                grantor_entity_id=parent_agent_id,
+                grantee_entity_id=child_agent_id,
+                scope={"type": "subagent", "task_id": payload.get("task_id", "")},
+                starts_at=payload.get("timestamp"),
+                metadata={
+                    "source": "agent_subagent_spawned",
+                    "root_agent_id": root_agent_id,
+                },
+            )
 
         return {"status": "subagent_spawned", "edges": edges}
 

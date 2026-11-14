@@ -1,7 +1,16 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from billing.billing import routes
 from shared.billing import stripe_client
+from config.settings import StripeBillingConfig
+
+
+def _stripe_config(**overrides):
+    # Built from the real config dataclass (every price field blank) so a new
+    # setting can never be missing from the fake.
+    blank = {name: "" for name in StripeBillingConfig.__dataclass_fields__ if name.startswith("price_")}
+    return replace(StripeBillingConfig(), **{**blank, **overrides})
 
 
 def test_disabled_stripe_capability_is_explicit(monkeypatch):
@@ -16,25 +25,21 @@ def test_disabled_stripe_capability_is_explicit(monkeypatch):
 
 
 def test_enabled_incomplete_stripe_capability_is_degraded(monkeypatch):
-    cfg = type(
-        "StripeConfig",
-        (),
-        {
-            "enabled": True,
-            "secret_key": "",
-            "webhook_secret": "",
-            "price_alpha": "",
-            "price_beta": "",
-            "price_gamma": "",
-            "price_delta": "",
-            "price_epsilon": "",
-            "price_omicron": "",
-            "price_omega": "",
-            "checkout_success_url": "https://app.example/success",
-            "checkout_cancel_url": "https://app.example/cancel",
-            "portal_return_url": "https://app.example/billing",
-        },
-    )()
+    cfg = _stripe_config(
+        enabled=True,
+        secret_key="",
+        webhook_secret="",
+        price_alpha="",
+        price_beta="",
+        price_gamma="",
+        price_delta="",
+        price_epsilon="",
+        price_omicron="",
+        price_omega="",
+        checkout_success_url="https://app.example/success",
+        checkout_cancel_url="https://app.example/cancel",
+        portal_return_url="https://app.example/billing",
+    )
     monkeypatch.setattr(stripe_client.settings, "stripe_billing", cfg)
     monkeypatch.setattr(stripe_client, "STRIPE_SDK_AVAILABLE", True)
 
@@ -47,31 +52,52 @@ def test_enabled_incomplete_stripe_capability_is_degraded(monkeypatch):
 
 
 def test_enabled_pilot_stripe_capability_does_not_require_contract_tier_prices(monkeypatch):
-    cfg = type(
-        "StripeConfig",
-        (),
-        {
-            "enabled": True,
-            "secret_key": "sk_test_example",
-            "webhook_secret": "whsec_example",
-            "price_alpha": "price_alpha",
-            "price_beta": "price_beta",
-            "price_gamma": "price_gamma",
-            "price_delta": "price_delta",
-            "price_epsilon": "",
-            "price_omicron": "",
-            "price_omega": "",
-            "checkout_success_url": "https://app.example/success",
-            "checkout_cancel_url": "https://app.example/cancel",
-            "portal_return_url": "https://app.example/billing",
-        },
-    )()
+    cfg = _stripe_config(
+        enabled=True,
+        secret_key="sk_test_example",
+        webhook_secret="whsec_example",
+        price_alpha="price_alpha",
+        price_beta="price_beta",
+        price_gamma="price_gamma",
+        price_delta="price_delta",
+        price_epsilon="",
+        price_omicron="",
+        price_omega="",
+        checkout_success_url="https://app.example/success",
+        checkout_cancel_url="https://app.example/cancel",
+        portal_return_url="https://app.example/billing",
+    )
     monkeypatch.setattr(stripe_client.settings, "stripe_billing", cfg)
     monkeypatch.setattr(stripe_client, "STRIPE_SDK_AVAILABLE", True)
 
     status = stripe_client.capability_status()
     assert status["status"] == "available"
     assert status["missing"] == []
+    # Annual prices are optional: none configured means every paid tier bills monthly.
+    assert status["annual_plans"] == []
+
+
+def test_configured_annual_prices_are_reported_without_becoming_required(monkeypatch):
+    cfg = _stripe_config(
+        enabled=True,
+        secret_key="sk_test_example",
+        webhook_secret="whsec_example",
+        price_alpha="price_alpha",
+        price_beta="price_beta",
+        price_gamma="price_gamma",
+        price_delta="price_delta",
+        price_beta_annual="price_beta_annual",
+        checkout_success_url="https://app.example/success",
+        checkout_cancel_url="https://app.example/cancel",
+        portal_return_url="https://app.example/billing",
+    )
+    monkeypatch.setattr(stripe_client.settings, "stripe_billing", cfg)
+    monkeypatch.setattr(stripe_client, "STRIPE_SDK_AVAILABLE", True)
+
+    status = stripe_client.capability_status()
+    assert status["status"] == "available"
+    assert status["missing"] == []
+    assert status["annual_plans"] == ["beta"]
 
 
 def test_invoice_serialization_is_provider_independent():

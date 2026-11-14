@@ -16,6 +16,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger
 from shared.observability import trace_request, emit_latency
@@ -128,15 +129,18 @@ async def get_sdk_health(sdk_id: str, request: Request):
 @router.get("/fleet")
 async def get_admin_fleet(request: Request, tenant_id: Optional[str] = None):
     """
-    Admin-only: cross-tenant fleet summary.
+    Admin-only fleet summary.
 
-    Optionally filter by tenant_id. Without it, returns the caller's tenant fleet.
+    Without tenant_id, returns the caller's tenant fleet. Another tenant's
+    tenant_id requires a platform operator.
     """
     ctx = trace_request(request, service="sdk_health")
     caller = request.state.tenant
     caller.require_permission("admin")
 
     target_tenant = tenant_id or caller.tenant_id
+    if target_tenant != caller.tenant_id:
+        require_platform_operator(request)
 
     svc = get_sdk_health_service()
     fleet = await svc.get_fleet_status(target_tenant)

@@ -409,6 +409,91 @@ def build_plan(
     )
 
 
+def build_requested_plan(
+    *,
+    managed_integration_ref: str,
+    tenant_id: str,
+    environment_id: str,
+    desired_revision: str,
+    observed_revision: str,
+    reconcile_sequence: str,
+    changes: Iterable[ChangeSpec],
+    initiator: str,
+    reason: str,
+    integration_kind: str = "sdk_web",
+    source_origin: IntegrationSourceOrigin = "tenant",
+    policy_ref: Optional[str] = None,
+    scope_nodes: Optional[Iterable[ControlTopologyNode]] = None,
+    risk_inputs_override: Optional[RiskInputs] = None,
+    changeset_id: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> ChangeSetPlanView:
+    """Build a ``planned`` ChangeSet for an explicit, already-authorized request.
+
+    This is the requested-change counterpart to :func:`build_plan`: the caller
+    supplies the typed change(s), not drift. It is deliberately narrow — it does
+    not invent a desired state, decide authority, or execute anything. The
+    request is recorded ``planned`` so a later rollout/executor can act on the
+    same §35 guard revisions; a stale request must be recreated rather than
+    applied.
+    """
+    requested = list(changes)
+    if not requested:
+        raise ValueError("a requested ChangeSet needs at least one change")
+
+    created = now or datetime.now(timezone.utc)
+    if scope_nodes is None:
+        scope_nodes = [
+            ControlTopologyNode(
+                managed_integration_id=managed_integration_ref,
+                tenant_id=tenant_id,
+                environment_id=environment_id,
+                integration_kind=integration_kind,
+                source_origin=source_origin,
+            )
+        ]
+    blast_radius = compute_blast_radius(scope_nodes, [])
+
+    if risk_inputs_override is not None:
+        risk_inputs = replace(
+            risk_inputs_override,
+            blast_radius=blast_radius,
+            integration_kind=integration_kind,
+        )
+    else:
+        risk_inputs = RiskInputs(
+            blast_radius=blast_radius,
+            integration_kind=integration_kind,
+            semantic_impact="behavioral",
+            simulation_completeness="none",
+        )
+    risk = assess_risk(risk_inputs)
+
+    plan = ChangeSetPlanView(
+        changeset_id=changeset_id or f"rcs_{uuid.uuid4().hex[:16]}",
+        tenant_id=tenant_id,
+        environment_id=environment_id,
+        integration_scope=[managed_integration_ref],
+        desired_revision=desired_revision,
+        observed_revision=observed_revision,
+        reconcile_sequence=reconcile_sequence,
+        idempotency_key=_idempotency_key(
+            reconcile_sequence=reconcile_sequence,
+            desired_revision=desired_revision,
+            observed_revision=observed_revision,
+        ),
+        changes=requested,
+        reason=reason,
+        initiator=initiator,
+        policy_ref=policy_ref,
+        risk=risk,
+        blast_radius=blast_radius,
+        status="draft",
+        created_at=created,
+    )
+    return with_status(plan, "planned", now=created)
+
+
 def _default_reason(
     records: list[DriftRecord], touched: set[str]
 ) -> str:

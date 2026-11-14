@@ -51,8 +51,7 @@ class WooCommerceAccountAdapter:
                 error_code="site_url_invalid",
                 retryable=False,
                 data={
-                    "detail": "site_url is not a valid public https host "
-                    "(structural gate; resolver-level check required at live-auth time)"
+                    "detail": "site_url is not a valid public https host"
                 },
             )
         return AdapterResult.ok([_site_account(host)])

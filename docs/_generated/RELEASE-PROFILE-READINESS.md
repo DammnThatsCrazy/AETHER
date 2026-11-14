@@ -6,15 +6,15 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 | Profile | Disposition | Required | Impl | Prod | Activation | Env evidence | Deps | Ownership |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Local development | BLOCKED_BY_CODE | 32 | 75% | n/a | 50% | 100% | 100% | 100% |
-| Staging | BLOCKED_BY_CODE | 24 | 91.7% | 91.7% | 62.5% | 0% | 100% | 100% |
+| Local development | BLOCKED_BY_CODE | 33 | 81.8% | n/a | 48.5% | 100% | 100% | 97% |
+| Staging | READY_TO_ACTIVATE | 24 | 100% | 100% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
-| Production | BLOCKED_BY_CODE | 23 | 43.5% | 91.3% | 65.2% | 0% | 100% | 100% |
-| Production (at scale) | BLOCKED_BY_CODE | 22 | 40.9% | 90.9% | 68.2% | 0% | 100% | 100% |
+| Production | BLOCKED_BY_CODE | 23 | 43.5% | 100% | 65.2% | 0% | 100% | 100% |
+| Production (at scale) | BLOCKED_BY_CODE | 22 | 40.9% | 100% | 68.2% | 0% | 100% | 100% |
 
 ## Local development (`local`) — BLOCKED_BY_CODE
 
-- `agentic-x402`: BLOCKED_BY_CODE
+- `agentic-x402`: TECHNICALLY_RELEASE_ELIGIBLE
 - `backend-api`: TECHNICALLY_RELEASE_ELIGIBLE
 - `campaign-intelligence`: TECHNICALLY_RELEASE_ELIGIBLE
 - `card-linked-payments`: BLOCKED_BY_CODE
@@ -39,21 +39,19 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `profile-360`: TECHNICALLY_RELEASE_ELIGIBLE
 - `provider-certification-plane`: TECHNICALLY_RELEASE_ELIGIBLE
 - `push-notification-delivery`: TECHNICALLY_RELEASE_ELIGIBLE
-- `scale-readiness`: BLOCKED_BY_CODE
+- `reconciled-control-plane`: BLOCKED_BY_CODE
+- `scale-readiness`: TECHNICALLY_RELEASE_ELIGIBLE
 - `sdks`: TECHNICALLY_RELEASE_ELIGIBLE
 - `security-compliance`: TECHNICALLY_RELEASE_ELIGIBLE
-- `semantic-intelligence`: BLOCKED_BY_CODE
+- `semantic-intelligence`: TECHNICALLY_RELEASE_ELIGIBLE
 - `smart-contracts-rewards`: TECHNICALLY_RELEASE_ELIGIBLE
 - `stablecoin-intelligence`: BLOCKED_BY_CODE
 - `tenant-import-engine`: TECHNICALLY_RELEASE_ELIGIBLE
 
 **Hard blockers:**
-- agentic-x402: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- agentic-x402: implementation state IMPLEMENTED is below the VERIFIED floor
-- agentic-x402: open repository work: wire the x402 and agent lifecycle mappers to an event consumer
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor
-- card-linked-payments: open repository work: complete runtime integration; complete repository-controlled verification
+- card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
 - derivatives-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - derivatives-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - derivatives-intelligence: open repository work: complete repository-controlled verification + hardening
@@ -63,17 +61,13 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the VERIFIED floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- reconciled-control-plane: implementation completion 80% (< 100% of in-scope repository controls for the Program A+B plus first Program C slice)
+- reconciled-control-plane: open repository work: Program C — execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D — recovery, continuity and interruption reconciliation; Program E — operator command surface for governed transitions; Program F — security/scale review and credentialed staging proof; Program G — staged production activation with rollback evidence
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
 
-## Staging (`staging`) — BLOCKED_BY_CODE
+## Staging (`staging`) — READY_TO_ACTIVATE
 
 - `backend-api`: READY_TO_VALIDATE
 - `campaign-intelligence`: READY_TO_VALIDATE
@@ -94,19 +88,16 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `profile-360`: READY_TO_VALIDATE
 - `provider-certification-plane`: READY_TO_ACTIVATE
 - `push-notification-delivery`: READY_TO_ACTIVATE
-- `scale-readiness`: BLOCKED_BY_CODE
+- `scale-readiness`: READY_TO_ACTIVATE
 - `sdks`: READY_TO_VALIDATE
 - `security-compliance`: READY_TO_VALIDATE
-- `semantic-intelligence`: BLOCKED_BY_CODE
+- `semantic-intelligence`: READY_TO_ACTIVATE
 - `tenant-import-engine`: READY_TO_VALIDATE
 
 **Hard blockers:**
-- agentic-x402: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- agentic-x402: implementation state IMPLEMENTED is below the VERIFIED floor
-- agentic-x402: open repository work: wire the x402 and agent lifecycle mappers to an event consumer
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor
-- card-linked-payments: open repository work: complete runtime integration; complete repository-controlled verification
+- card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
 - derivatives-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - derivatives-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - derivatives-intelligence: open repository work: complete repository-controlled verification + hardening
@@ -116,17 +107,14 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the VERIFIED floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- reconciled-control-plane: implementation completion 80% (< 100% of in-scope repository controls for the Program A+B plus first Program C slice)
+- reconciled-control-plane: open repository work: Program C — execute SDK manifest requests through the RCP rollout and project delivery state back to SDKConfigService; converge Provider Runtime; Program D — recovery, continuity and interruption reconciliation; Program E — operator command surface for governed transitions; Program F — security/scale review and credentialed staging proof; Program G — staged production activation with rollback evidence
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
 
 **External blockers:**
+- agentic-x402: ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)
 - card-linked-payments: CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)
 - connectors-byok: CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)
 - data-lake-feeders: INFRASTRUCTURE_WAITING: Data-Lake Feeders activation waits on an external infra condition. (owner: platform-ops)
@@ -155,13 +143,11 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `identity-resolution`: READY_TO_VALIDATE
 
 **Hard blockers:**
-- agentic-x402: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- agentic-x402: implementation state IMPLEMENTED is below the TURNKEY floor
-- agentic-x402: open repository work: wire the x402 and agent lifecycle mappers to an event consumer
+- agentic-x402: implementation state VERIFIED is below the TURNKEY floor
 - backend-api: implementation state VERIFIED is below the TURNKEY floor
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the TURNKEY floor
-- card-linked-payments: open repository work: complete runtime integration; complete repository-controlled verification
+- card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
 - ci-tests: implementation state VERIFIED is below the TURNKEY floor
 - derivatives-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - derivatives-intelligence: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
@@ -178,20 +164,17 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
+- scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the TURNKEY floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
 - tenant-import-engine: implementation state VERIFIED is below the TURNKEY floor
 
 **External blockers:**
+- agentic-x402: ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)
 - card-linked-payments: CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)
 - connectors-byok: CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)
 - data-lake-feeders: INFRASTRUCTURE_WAITING: Data-Lake Feeders activation waits on an external infra condition. (owner: platform-ops)
@@ -246,14 +229,10 @@ A release profile is only as ready as its weakest **required** capability. The d
 - kyber-operator-console: implementation state VERIFIED is below the TURNKEY floor
 - measurement-attribution: implementation state VERIFIED is below the TURNKEY floor
 - measurement-integrity: implementation state VERIFIED is below the TURNKEY floor
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
+- scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the TURNKEY floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor
 - tenant-import-engine: implementation state VERIFIED is below the TURNKEY floor
 
 **External blockers:**
@@ -302,14 +281,10 @@ A release profile is only as ready as its weakest **required** capability. The d
 - kyber-operator-console: implementation state VERIFIED is below the TURNKEY floor
 - measurement-attribution: implementation state VERIFIED is below the TURNKEY floor
 - measurement-integrity: implementation state VERIFIED is below the TURNKEY floor
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
+- scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the TURNKEY floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor
 - tenant-import-engine: implementation state VERIFIED is below the TURNKEY floor
 
 **External blockers:**

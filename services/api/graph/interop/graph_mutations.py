@@ -31,7 +31,7 @@ def build_topology_mutations(
 
     for gateway in gateways:
         gateway_vid = f"interop_gateway:{gateway['gateway_id']}"
-        chain_vid = f"chain:{gateway.get('native_chain_id', 'unknown')}"
+        chain_vid = _chain_vertex_id(gateway.get("native_chain_id", ""))
         vertices.append(Vertex(
             vertex_id=gateway_vid,
             vertex_type=VertexType.INTEROP_GATEWAY,
@@ -41,11 +41,8 @@ def build_topology_mutations(
                 "gateway_role": gateway.get("gateway_role", "unknown"),
             },
         ))
-        vertices.append(Vertex(
-            vertex_id=chain_vid,
-            vertex_type=VertexType.CHAIN,
-            properties={"tenant_id": PUBLIC_TENANT},
-        ))
+        # ``chain:`` vertices are the platform-owned asset registry's; the
+        # topology only links to them.
         edges.append(_edge(EdgeType.CONNECTS_CHAIN, gateway_vid, chain_vid,
                            PUBLIC_TENANT, gateway.get("gateway_id", "")))
 
@@ -76,7 +73,9 @@ def build_topology_mutations(
 def build_message_mutations(message: dict) -> tuple[list[Vertex], list[Edge]]:
     """Material message links: SENT_VIA_PATH from the originating application
     (or wallet) to the path; SECURED_BY_POLICY when a snapshot is attached.
-    Tenant-scoped for tenant messages, public for public-scope rows."""
+    Tenant-scoped for tenant messages, public for public-scope rows. Only a
+    public-scope row writes the public path/application vertices; a tenant
+    message only links to them."""
     tenant_id = message["tenant_id"]
     path_vid = f"interop_path:{message['path_id']}"
     source = message.get("source") or {}
@@ -85,12 +84,14 @@ def build_message_mutations(message: dict) -> tuple[list[Vertex], list[Edge]]:
         f"interop_application:{origin_application}"
         if origin_application else f"wallet:{source.get('transaction_hash', 'unknown')}"
     )
-    vertices = [Vertex(
-        vertex_id=path_vid,
-        vertex_type=VertexType.INTEROP_PATH,
-        properties={"tenant_id": PUBLIC_TENANT},
-    )]
-    if origin_application:
+    vertices: list[Vertex] = []
+    if tenant_id == PUBLIC_TENANT:
+        vertices.append(Vertex(
+            vertex_id=path_vid,
+            vertex_type=VertexType.INTEROP_PATH,
+            properties={"tenant_id": PUBLIC_TENANT},
+        ))
+    if origin_application and tenant_id == PUBLIC_TENANT:
         vertices.append(Vertex(
             vertex_id=origin_vid,
             vertex_type=VertexType.INTEROP_APPLICATION,
@@ -110,6 +111,12 @@ def build_message_mutations(message: dict) -> tuple[list[Vertex], list[Edge]]:
             message["interop_message_id"],
         ))
     return vertices, edges
+
+
+def _chain_vertex_id(native_chain_id: str) -> str:
+    """The asset registry's CAIP-2 chain vertex id; a numeric id is an EVM chain id."""
+    chain = str(native_chain_id or "unknown")
+    return f"chain:eip155:{chain}" if chain.isdigit() else f"chain:{chain}"
 
 
 def _edge(edge_type: str, from_vid: str, to_vid: str, tenant_id: str,

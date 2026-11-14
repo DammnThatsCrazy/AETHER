@@ -33,6 +33,10 @@ from ingestion.ingestion.validation import (
     scrub_sensitive_fields,
     strip_canonical_entity_id,
 )
+from actions.agentic_observability.provenance import (
+    AgentEvidenceReference,
+    build_agentic_provenance_record,
+)
 from shared.common.common import utc_now
 from shared.events.events import Topic
 from shared.logger.logger import get_logger, metrics
@@ -96,6 +100,7 @@ async def ingest_observation(
     anonymous_id: str | None = None,
     user_id: str | None = None,
     observed_at: str | None = None,
+    agentic_evidence_reference: AgentEvidenceReference | None = None,
     properties: dict | None = None,
     context_extra: dict | None = None,
 ) -> "ObservationIngestResult":
@@ -159,6 +164,26 @@ async def ingest_observation(
         "schema_version": SCHEMA_VERSION,
         "source": _SOURCE,
     }
+    if agentic_evidence_reference is not None:
+        provenance = build_agentic_provenance_record(
+            tenant_id=tenant_id,
+            bronze_event_id=event_id,
+            bronze_schema_version=SCHEMA_VERSION,
+            bronze_event_type=event_name,
+            reference=agentic_evidence_reference,
+            provider_claim=provider_id,
+            observed_at=agentic_evidence_reference.observed_at,
+            received_at=now_iso,
+            ingested_at=now_iso,
+        )
+        if (
+            agentic_evidence_reference.event_type != event_name
+            or agentic_evidence_reference.agent_id != (agent_id or "")
+        ):
+            raise ValueError("agentic evidence reference must match the canonical event actor/type")
+        normalized["agentic_provenance"] = provenance.model_dump(
+            mode="json", by_alias=True, exclude_none=False
+        )
 
     entity_id = agent_id or actor_id or user_id or anonymous_id or session_id or tenant_id
 

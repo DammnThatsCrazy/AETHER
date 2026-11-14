@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [services/api/intelligence/noesis/capability_registry.py]
 canonical_owner: platform@aether
 source_hashes:
-  services/api/intelligence/noesis/capability_registry.py: sha256:546ffefe30f3b64e96603a101345d7bb7cbf533a37375f4d8e0b9e480d4e4170
+  "services/api/intelligence/noesis/capability_registry.py": "sha256:43c9fa3692835cec4e46d377e4f3b1e3d285106d396b52e30f7738eb800394e5"
 ---
 
 # Olympus Intelligence Surfaces

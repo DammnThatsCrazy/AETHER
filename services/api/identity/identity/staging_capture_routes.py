@@ -14,7 +14,22 @@ from identity.identity.scenario_evidence import (
     ScenarioExecutionRequest,
 )
 
-router = APIRouter(prefix="/v1/admin/identity", tags=["Identity Staging Proof"])
+# Tenant-scoped, not /v1/admin: the route registry reserves /v1/admin for
+# platform operators, while these endpoints read and write only the calling
+# tenant's own staging proof evidence (tenant admin permission, staging only).
+router = APIRouter(prefix="/v1/identity", tags=["Identity Staging Proof"])
+
+
+def mount_if_staging(app, environment: str) -> bool:
+    """Mount the proof routes only on a staging deployment.
+
+    The routes also refuse outside staging; mounting only there keeps them off
+    every other deployment's surface. Returns whether they were mounted.
+    """
+    if environment != "staging":
+        return False
+    app.include_router(router)
+    return True
 
 
 def _staging_deployment_id() -> str:

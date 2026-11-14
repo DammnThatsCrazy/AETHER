@@ -225,6 +225,43 @@ def test_web_push_without_location_still_real_id(monkeypatch):
     assert not receipt.external_id.startswith("sim-")
 
 
+@pytest.mark.parametrize("ip", ["10.0.0.5", "169.254.169.254", "100.64.0.1", "64:ff9b::a9fe:a9fe"])
+def test_web_push_rejects_non_public_destination(monkeypatch, ip):
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from actions.delivery.adapters.base import SSRFBlockedError
+
+    _set_env(monkeypatch, Environment.PRODUCTION)
+    send = AsyncMock(side_effect=AssertionError("connection attempted"))
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", (ip, 443))]), \
+         patch.object(httpx.AsyncClient, "send", send):
+        with pytest.raises(SSRFBlockedError):
+            _run(WebPushAdapter().dispatch(
+                {"title": "N"}, {"endpoint": "https://push.example/sub1"}, credential="vapid t=jwt",
+            ))
+    send.assert_not_called()
+
+
+def test_web_push_connects_to_validated_address(monkeypatch):
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    _set_env(monkeypatch, Environment.PRODUCTION)
+    send = AsyncMock(return_value=httpx.Response(201, headers={"Location": "https://push/msg/9"}))
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))]), \
+         patch.object(httpx.AsyncClient, "send", send):
+        receipt = _run(WebPushAdapter().dispatch(
+            {"title": "N"}, {"endpoint": "https://push.example/sub1"}, credential="vapid t=jwt",
+        ))
+    request = send.call_args.args[0]
+    assert request.url.host == "93.184.216.34"
+    assert request.headers["host"] == "push.example"
+    assert receipt.external_id == "webpush:https://push/msg/9"
+
+
 # ── Email real path ─────────────────────────────────────────────────────────
 
 def test_email_maps_message_id(monkeypatch):

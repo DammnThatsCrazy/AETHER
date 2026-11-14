@@ -10,7 +10,8 @@ draft and do not run aggregate gates or dispatch hosted PR CI for every
 intermediate push. Use focused local checks for feedback. Once the blueprint is
 integrated, reviewed, remediated, documented, regenerated, and scoped source
 hashes are refreshed, mark the PR ready for review; the `ready_for_review`
-event starts the single blocking `verification / disposition` authority.
+event starts the single blocking `ci / verdict` authority (draft PRs run
+nothing).
 Specialized workflows run supplementary finalization evidence but are not
 parallel merge blockers. Rerun the terminal authority only after a material
 fix; reserve `make ci-check` and `make release-gate` for broad trusted-main,

@@ -10,7 +10,9 @@ from actions.delivery.adapters.base import (
     ProviderAdapter,
     ProviderError,
     RetryableProviderError,
+    SSRFBlockedError,
 )
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError
 
 
 class DiscordAdapter(ProviderAdapter):
@@ -47,6 +49,10 @@ class DiscordAdapter(ProviderAdapter):
                     ]
                 },
             )
+        except DestinationResolutionError as exc:
+            raise RetryableProviderError(f"Discord POST failed: {exc}") from exc
+        except UnsafeDestinationError as exc:
+            raise SSRFBlockedError(str(exc)) from exc
         except Exception as exc:
             raise RetryableProviderError(f"Discord POST failed: {exc}") from exc
 

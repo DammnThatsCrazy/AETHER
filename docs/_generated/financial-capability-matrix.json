@@ -1,0 +1,1295 @@
+{
+  "domain_surfaces": {
+    "derivatives": {
+      "adapter_domain": "derivatives",
+      "event_vocabulary": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_exposure_snapshot_materialized",
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_order_observed",
+        "derivatives_order_updated_observed",
+        "derivatives_pnl_snapshot_materialized",
+        "derivatives_position_adl_observed",
+        "derivatives_position_closed_observed",
+        "derivatives_position_corrected",
+        "derivatives_position_increased_observed",
+        "derivatives_position_liquidated_observed",
+        "derivatives_position_opened_observed",
+        "derivatives_position_reduced_observed",
+        "derivatives_position_settled_observed",
+        "derivatives_price_observation_recorded",
+        "derivatives_reconciliation_run_completed",
+        "derivatives_reconciliation_variance_detected",
+        "derivatives_reconciliation_variance_resolved",
+        "derivatives_risk_threshold_breached",
+        "derivatives_stream_checkpoint_advanced",
+        "derivatives_stream_gap_detected",
+        "derivatives_stream_gap_recovered",
+        "risk_policy_updated",
+        "trade_approval_requested",
+        "trade_approval_resolved",
+        "trade_intent_created"
+      ],
+      "gated_route_prefixes": [],
+      "owner_path": "services/api/value/derivatives",
+      "release_domain": "derivatives",
+      "requires_event_types": true,
+      "route_prefixes": [
+        "/v1/derivatives"
+      ],
+      "route_registry_prefixes": [
+        "/v1/derivatives"
+      ],
+      "service_classification": [
+        "derivatives"
+      ]
+    },
+    "interop": {
+      "adapter_domain": "interop",
+      "event_vocabulary": [],
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "owner_path": "services/api/graph/interop",
+      "release_domain": "financial",
+      "requires_event_types": false,
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "route_registry_prefixes": [],
+      "service_classification": [
+        "interop"
+      ]
+    },
+    "payments": {
+      "adapter_domain": "payments",
+      "event_vocabulary": [
+        "payment_initiated",
+        "payment_completed",
+        "payment_failed"
+      ],
+      "gated_route_prefixes": [
+        "/v1/integrations"
+      ],
+      "owner_path": "services/api/connectors/integrations/providers/payment_rails",
+      "release_domain": "payments",
+      "requires_event_types": true,
+      "route_prefixes": [
+        "/v1/integrations"
+      ],
+      "route_registry_prefixes": [],
+      "service_classification": [
+        "card_linked_payments",
+        "integrations",
+        "payment_catalog"
+      ]
+    },
+    "prediction_market": {
+      "adapter_domain": "prediction_market",
+      "event_vocabulary": [],
+      "gated_route_prefixes": [],
+      "owner_path": "services/api/value/prediction_markets",
+      "release_domain": "financial",
+      "requires_event_types": false,
+      "route_prefixes": [
+        "/v1/prediction-markets"
+      ],
+      "route_registry_prefixes": [
+        "/v1/prediction-markets"
+      ],
+      "service_classification": [
+        "prediction_markets"
+      ]
+    },
+    "stablecoin_chain": {
+      "adapter_domain": "stablecoin_chain",
+      "event_vocabulary": [
+        "transfer",
+        "mint",
+        "burn",
+        "swap",
+        "bridge_deposit",
+        "bridge_mint",
+        "bridge_burn",
+        "bridge_release",
+        "liquidity_addition",
+        "liquidity_removal",
+        "collateral_deposit",
+        "collateral_withdrawal",
+        "treasury_transfer",
+        "reward",
+        "fee",
+        "unknown_stablecoin_movement"
+      ],
+      "gated_route_prefixes": [],
+      "owner_path": "services/api/value/stablecoins",
+      "release_domain": "stablecoin",
+      "requires_event_types": true,
+      "route_prefixes": [
+        "/v1/stablecoin",
+        "/v1/stablecoins"
+      ],
+      "route_registry_prefixes": [
+        "/v1/stablecoin",
+        "/v1/stablecoins"
+      ],
+      "service_classification": [
+        "stablecoin",
+        "stablecoins"
+      ]
+    }
+  },
+  "generated_from": "services/api/shared/certification/capability_records.py",
+  "records": {
+    "derivatives:drift": {
+      "adapter": "drift",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/derivatives",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "drift",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "derivatives:drift",
+      "release_domain": "derivatives",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/derivatives"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "derivatives"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_price_observation_recorded"
+      ],
+      "supported_operations": [
+        "fills",
+        "funding",
+        "markets",
+        "position",
+        "reference_data"
+      ],
+      "unsupported_operations": []
+    },
+    "derivatives:dydx": {
+      "adapter": "dydx",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/derivatives",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "dydx",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "derivatives:dydx",
+      "release_domain": "derivatives",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/derivatives"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "derivatives"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_order_observed",
+        "derivatives_order_updated_observed",
+        "derivatives_position_adl_observed",
+        "derivatives_position_closed_observed",
+        "derivatives_position_increased_observed",
+        "derivatives_position_liquidated_observed",
+        "derivatives_position_opened_observed",
+        "derivatives_position_reduced_observed",
+        "derivatives_position_settled_observed",
+        "derivatives_price_observation_recorded"
+      ],
+      "supported_operations": [
+        "account_snapshot",
+        "fills",
+        "markets",
+        "orders",
+        "position",
+        "realtime_account_stream",
+        "reference_data"
+      ],
+      "unsupported_operations": []
+    },
+    "derivatives:gmx": {
+      "adapter": "gmx",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/derivatives",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "gmx",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "derivatives:gmx",
+      "release_domain": "derivatives",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/derivatives"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "derivatives"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_price_observation_recorded"
+      ],
+      "supported_operations": [
+        "fills",
+        "funding",
+        "markets",
+        "position",
+        "reference_data"
+      ],
+      "unsupported_operations": []
+    },
+    "derivatives:hyperliquid": {
+      "adapter": "hyperliquid",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "derivatives",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/derivatives",
+      "pagination_model": "cursor",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "hyperliquid",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "derivatives:hyperliquid",
+      "release_domain": "derivatives",
+      "required_credentials": [
+        "read_only_api_key"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/derivatives"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "derivatives"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "websocket",
+      "supported_event_types": [
+        "derivatives_balance_snapshot_observed",
+        "derivatives_collateral_change_observed",
+        "derivatives_fill_observed",
+        "derivatives_funding_payment_observed",
+        "derivatives_margin_snapshot_observed",
+        "derivatives_position_adl_observed",
+        "derivatives_position_closed_observed",
+        "derivatives_position_increased_observed",
+        "derivatives_position_liquidated_observed",
+        "derivatives_position_opened_observed",
+        "derivatives_position_reduced_observed",
+        "derivatives_position_settled_observed",
+        "derivatives_price_observation_recorded"
+      ],
+      "supported_operations": [
+        "account_snapshot",
+        "fills",
+        "funding",
+        "margin_snapshot",
+        "markets",
+        "position",
+        "realtime_account_stream",
+        "reference_data"
+      ],
+      "unsupported_operations": []
+    },
+    "interop:axelar": {
+      "adapter": "axelar",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "interop",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/graph/interop",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "axelar",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "interop:axelar",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "interop"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "execution_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
+      "unsupported_operations": []
+    },
+    "interop:chainlink_ccip": {
+      "adapter": "chainlink_ccip",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "interop",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/graph/interop",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "chainlink_ccip",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "interop:chainlink_ccip",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "interop"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding",
+        "retry_tracking"
+      ],
+      "unsupported_operations": []
+    },
+    "interop:debridge": {
+      "adapter": "debridge",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "interop",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/graph/interop",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "debridge",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "interop:debridge",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "interop"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "intent_observation",
+        "message_observation",
+        "reorg_recovery",
+        "settlement_observation"
+      ],
+      "unsupported_operations": []
+    },
+    "interop:hyperlane": {
+      "adapter": "hyperlane",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "interop",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/graph/interop",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "hyperlane",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "interop:hyperlane",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "interop"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding",
+        "reorg_recovery"
+      ],
+      "unsupported_operations": []
+    },
+    "interop:ibc": {
+      "adapter": "ibc",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "interop",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/graph/interop",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "ibc",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "interop:ibc",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "interop"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "asset_transfer",
+        "attribute_event_observation",
+        "continuity_recovery",
+        "delivery_observation",
+        "historical_backfill",
+        "message_observation",
+        "settlement_observation"
+      ],
+      "unsupported_operations": []
+    },
+    "interop:layerzero": {
+      "adapter": "layerzero_v2",
+      "adapter_version": "1.0.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "interop",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/graph/interop",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "layerzero",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "interop:layerzero",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "interop"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
+      "unsupported_operations": []
+    },
+    "interop:wormhole": {
+      "adapter": "wormhole",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "interop",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/graph/interop",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "wormhole",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "interop:wormhole",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "per_network_json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/interoperability"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "interop"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
+      "unsupported_operations": []
+    },
+    "payments:bridge": {
+      "adapter": "BridgeAdapter",
+      "adapter_version": "1.0.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "payments",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/integrations"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/connectors/integrations/providers/payment_rails",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "bridge",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "payments:bridge",
+      "release_domain": "payments",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/integrations"
+      ],
+      "secret_ref_names": [
+        "payment_bridge"
+      ],
+      "service_classification": [
+        "card_linked_payments",
+        "integrations",
+        "payment_catalog"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
+      "supported_operations": [
+        "bank_deposit",
+        "polling",
+        "refund",
+        "settlement",
+        "webhook"
+      ],
+      "unsupported_operations": []
+    },
+    "payments:coinbase": {
+      "adapter": "CoinbaseAdapter",
+      "adapter_version": "1.0.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "payments",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/integrations"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/connectors/integrations/providers/payment_rails",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "coinbase",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "payments:coinbase",
+      "release_domain": "payments",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/integrations"
+      ],
+      "secret_ref_names": [
+        "payment_coinbase"
+      ],
+      "service_classification": [
+        "card_linked_payments",
+        "integrations",
+        "payment_catalog"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
+      "supported_operations": [
+        "fiat_onramp",
+        "offramp",
+        "polling",
+        "webhook"
+      ],
+      "unsupported_operations": []
+    },
+    "payments:moonpay": {
+      "adapter": "MoonPayAdapter",
+      "adapter_version": "1.0.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "payments",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/integrations"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/connectors/integrations/providers/payment_rails",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "moonpay",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "payments:moonpay",
+      "release_domain": "payments",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/integrations"
+      ],
+      "secret_ref_names": [
+        "payment_moonpay"
+      ],
+      "service_classification": [
+        "card_linked_payments",
+        "integrations",
+        "payment_catalog"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
+      "supported_operations": [
+        "fiat_onramp",
+        "offramp",
+        "polling",
+        "webhook"
+      ],
+      "unsupported_operations": []
+    },
+    "payments:privy": {
+      "adapter": "PrivyAdapter",
+      "adapter_version": "1.0.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "payments",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/integrations"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/connectors/integrations/providers/payment_rails",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "privy",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "payments:privy",
+      "release_domain": "payments",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/integrations"
+      ],
+      "secret_ref_names": [
+        "payment_privy"
+      ],
+      "service_classification": [
+        "card_linked_payments",
+        "integrations",
+        "payment_catalog"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
+      "supported_operations": [
+        "bank_deposit",
+        "crypto_deposit",
+        "fiat_onramp",
+        "webhook"
+      ],
+      "unsupported_operations": []
+    },
+    "payments:stripe_onramp": {
+      "adapter": "StripeOnrampAdapter",
+      "adapter_version": "1.0.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "payments",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [
+        "/v1/integrations"
+      ],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/connectors/integrations/providers/payment_rails",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "stripe_onramp",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "payments:stripe_onramp",
+      "release_domain": "payments",
+      "required_credentials": [
+        "webhook_signing_secret"
+      ],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/integrations"
+      ],
+      "secret_ref_names": [
+        "payment_stripe_onramp"
+      ],
+      "service_classification": [
+        "card_linked_payments",
+        "integrations",
+        "payment_catalog"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "webhook",
+      "supported_event_types": [
+        "payment_completed",
+        "payment_failed",
+        "payment_initiated"
+      ],
+      "supported_operations": [
+        "commerce_payment",
+        "crypto_onramp",
+        "webhook"
+      ],
+      "unsupported_operations": []
+    },
+    "prediction_market:kalshi": {
+      "adapter": "normalize_kalshi_market",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "prediction_market",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/prediction_markets",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "kalshi",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "prediction_market:kalshi",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/prediction-markets"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "prediction_markets"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "as_of_read",
+        "market_payload_normalization",
+        "observation_persistence"
+      ],
+      "unsupported_operations": [
+        "live_market_polling",
+        "order_execution"
+      ]
+    },
+    "prediction_market:polymarket": {
+      "adapter": "normalize_polymarket_market",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "prediction_market",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/prediction_markets",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "polymarket",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "prediction_market:polymarket",
+      "release_domain": "financial",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/prediction-markets"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "prediction_markets"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [],
+      "supported_operations": [
+        "as_of_read",
+        "market_payload_normalization",
+        "observation_persistence"
+      ],
+      "unsupported_operations": [
+        "live_market_polling",
+        "order_execution"
+      ]
+    },
+    "stablecoin_chain:evm": {
+      "adapter": "StablecoinEVMReceiptVerifier",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "stablecoin_chain",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/stablecoins",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "evm",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "stablecoin_chain:evm",
+      "release_domain": "stablecoin",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/stablecoin",
+        "/v1/stablecoins"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "stablecoin",
+        "stablecoins"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "bridge_burn",
+        "bridge_deposit",
+        "bridge_mint",
+        "bridge_release",
+        "burn",
+        "collateral_deposit",
+        "collateral_withdrawal",
+        "fee",
+        "liquidity_addition",
+        "liquidity_removal",
+        "mint",
+        "reward",
+        "swap",
+        "transfer",
+        "treasury_transfer",
+        "unknown_stablecoin_movement"
+      ],
+      "supported_operations": [
+        "finality_confirmation",
+        "receipt_observation"
+      ],
+      "unsupported_operations": []
+    },
+    "stablecoin_chain:svm": {
+      "adapter": "StablecoinSolanaTransactionVerifier",
+      "adapter_version": "0.1.0",
+      "custody_boundary": "no_custody",
+      "deployment_profiles": [
+        "staging"
+      ],
+      "domain": "stablecoin_chain",
+      "evidence_requirements": [],
+      "first_release": true,
+      "gated_route_prefixes": [],
+      "idempotency_model": "unspecified",
+      "owner_path": "services/api/value/stablecoins",
+      "pagination_model": "none",
+      "permissions": [],
+      "production_eligible": false,
+      "provider": "svm",
+      "rate_limit_behavior": "unspecified",
+      "record_id": "stablecoin_chain:svm",
+      "release_domain": "stablecoin",
+      "required_credentials": [],
+      "required_data_rights": [
+        "tenant_lake"
+      ],
+      "required_endpoints": [
+        "json_rpc"
+      ],
+      "retry_classification": "unspecified",
+      "retry_policy": "unspecified",
+      "route_prefixes": [
+        "/v1/stablecoin",
+        "/v1/stablecoins"
+      ],
+      "secret_ref_names": [],
+      "service_classification": [
+        "stablecoin",
+        "stablecoins"
+      ],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "supported_event_types": [
+        "bridge_burn",
+        "bridge_deposit",
+        "bridge_mint",
+        "bridge_release",
+        "burn",
+        "collateral_deposit",
+        "collateral_withdrawal",
+        "fee",
+        "liquidity_addition",
+        "liquidity_removal",
+        "mint",
+        "reward",
+        "swap",
+        "transfer",
+        "treasury_transfer",
+        "unknown_stablecoin_movement"
+      ],
+      "supported_operations": [
+        "finality_confirmation",
+        "transaction_observation"
+      ],
+      "unsupported_operations": []
+    }
+  },
+  "summary": {
+    "by_domain": {
+      "derivatives": 4,
+      "interop": 7,
+      "payments": 5,
+      "prediction_market": 2,
+      "stablecoin_chain": 2
+    },
+    "by_release_domain": {
+      "derivatives": 4,
+      "financial": 9,
+      "payments": 5,
+      "stablecoin": 2
+    },
+    "by_state": {
+      "credential_waiting": 20
+    },
+    "domains": 5,
+    "import_errors": {},
+    "production_eligible": 0,
+    "total": 20
+  },
+  "version": "0.1.0-alpha.0"
+}

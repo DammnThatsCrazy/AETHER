@@ -79,7 +79,11 @@ def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
         handler.setFormatter(JSONFormatter())
         logger.addHandler(handler)
         logger.setLevel(level)
-        logger.propagate = False
+        logger.propagate = True
+
+    root = logging.getLogger()
+    if not root.handlers:
+        root.addHandler(logging.NullHandler())
 
     return logger
 

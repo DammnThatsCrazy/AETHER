@@ -26,12 +26,13 @@ from actions.agent.deployments import (
 from actions.agentic_observability.foundation import require_permission as _require_perm
 from actions.agent_marketplace.models import AgentMarketplaceOrigin
 from repositories.repos import EntityRepository
-from shared.common.common import APIResponse, BadRequestError
+from shared.common.common import APIResponse, BadRequestError, ConflictError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.agent.deployments.routes")
 
 deployments_router = APIRouter(prefix="/v1/agent/deployments", tags=["Agent Deployments"])
+lineage_router = APIRouter(prefix="/v1/agent/agents", tags=["Agent Lineage"])
 kyber_router = APIRouter(
     prefix="/v1/admin/kyber/agent-telemetry", tags=["Kyber Agent Telemetry"]
 )
@@ -83,11 +84,30 @@ def _repo() -> AgentDeploymentRepository:
     return get_deployment_repository()
 
 
+async def _authorize_attestation_key(
+    request: Request, agent_id: str, public_key: str, deployment_id: Optional[str] = None,
+) -> None:
+    """A signing key turns an agent's reports into proof, so ``agent:manage`` is not enough.
+
+    It takes ``admin`` and a named user, and an agent has one key: otherwise anyone able
+    to create a deployment could name another agent and sign events as it.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    if not getattr(tenant, "user_id", None):
+        raise BadRequestError("Registering an attestation key requires an authenticated user")
+    for row in await _repo().list(tenant.tenant_id, agent_id=agent_id):
+        held = row.get("attestation_public_key")
+        if held and held != public_key and row.get("id") != deployment_id:
+            raise ConflictError("Another deployment of this agent holds a different attestation key")
+
+
 # ── Request models ────────────────────────────────────────────────────────────
 
 class DeploymentCreate(BaseModel):
     agent_id: str = Field(..., min_length=1, max_length=256)
     agent_source_namespace: Optional[str] = Field(default=None, max_length=64)
+    attestation_public_key: Optional[str] = Field(default=None, max_length=64)
     display_name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     external_platform: str
@@ -106,6 +126,7 @@ class DeploymentCreate(BaseModel):
 
 
 class DeploymentPatch(BaseModel):
+    attestation_public_key: Optional[str] = Field(default=None, max_length=64)
     display_name: Optional[str] = Field(default=None, min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     metadata: Optional[dict[str, Any]] = None
@@ -130,6 +151,8 @@ async def create_deployment(body: DeploymentCreate, request: Request):
     """Register an external agent deployment for the authenticated tenant."""
     _require_registry_enabled()
     tenant = _tenant(request)
+    if body.attestation_public_key:
+        await _authorize_attestation_key(request, body.agent_id, body.attestation_public_key)
     record = await _repo().create(
         tenant.tenant_id,
         body.model_dump(exclude_none=True),
@@ -186,6 +209,12 @@ async def bind_deployment_agent_identity(
     if not source_namespace or not source_agent_ref:
         raise BadRequestError(
             "Deployment requires agent_source_namespace and agent_id before identity binding"
+        )
+    # A binding makes this deployment's signed events speak as the canonical agent,
+    # so it carries the same gate as registering a key for that agent.
+    if deployment.get("attestation_public_key"):
+        await _authorize_attestation_key(
+            request, body.canonical_agent_entity_id, deployment["attestation_public_key"], deployment_id,
         )
 
     entity = await EntityRepository().find_by_id(body.canonical_agent_entity_id)
@@ -492,6 +521,11 @@ async def patch_deployment(deployment_id: str, body: DeploymentPatch, request: R
     """Update mutable deployment fields (audited)."""
     _require_registry_enabled()
     tenant = _tenant(request)
+    if body.attestation_public_key:
+        existing = await _repo().get(tenant.tenant_id, deployment_id)
+        await _authorize_attestation_key(
+            request, str(existing.get("agent_id")), body.attestation_public_key, deployment_id,
+        )
     changes = body.model_dump(exclude_none=True)
     if not changes:
         raise BadRequestError("No updatable fields provided")
@@ -582,6 +616,265 @@ async def deployment_activity(
     }).to_dict()
 
 
+@lineage_router.get("/{root_agent_ref}/lineage")
+async def agent_spawn_lineage(
+    root_agent_ref: str,
+    request: Request,
+    max_depth: int = Query(default=8, ge=1, le=32),
+):
+    """Orchestrator -> sub-agent tree with per-agent tool/outcome rollups.
+
+    Tenant-scoped and source-reported: the tree says which agent references
+    spawned which, never who controls them.
+    """
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from actions.agent.lineage import read_lineage_facts, source_is_truncated
+
+    try:
+        from dependencies.providers import get_cache
+        from repositories.repos import AnalyticsRepository
+
+        facts = await read_lineage_facts(
+            AnalyticsRepository(get_cache()),
+            tenant_id=tenant.tenant_id,
+            root_agent_ref=root_agent_ref,
+            max_depth=max_depth,
+        )
+        shape = facts["shape"]
+        if source_is_truncated(shape):
+            # A capped read can drop an older root's edges or an agent's older
+            # activity, so an empty or small tree is not proof of absence.
+            shape["source_status"] = "incomplete"
+        else:
+            shape["source_status"] = "available" if shape["totals"]["agent_count"] > 1 else "empty"
+    except Exception as exc:
+        logger.warning(
+            "agent spawn lineage unavailable",
+            extra={"tenant_id": tenant.tenant_id, "error": type(exc).__name__},
+        )
+        shape = {
+            "tenant_id": tenant.tenant_id,
+            "root_agent_ref": root_agent_ref,
+            "source_status": "unavailable",
+            "tree": None,
+        }
+    return APIResponse(data=shape).to_dict()
+
+
+async def _behavior_facts(tenant_id: str, agent_ref: str) -> tuple[list[Any], bool]:
+    """Bounded tenant-scoped Silver facts for one agent and its spawn edges."""
+    from actions.agent.behavior_read_model import load_behavior_facts
+
+    return await load_behavior_facts(tenant_id, agent_ref)
+
+
+async def _agent_source_identity_ids(tenant_id: str, agent_ref: str) -> set[str]:
+    from identity.identity.routes import get_identity_resolver
+
+    repo = getattr(get_identity_resolver(), "_repo", None)
+    if repo is None:
+        return set()
+    return {str(row.get("id")) for row in await repo.list_source_identities_by_identifier(
+        tenant_id, "agent_id", agent_ref, limit=20)}
+
+
+def _review_touches(item: dict[str, Any], source_ids: set[str]) -> bool:
+    return bool(source_ids & ({item.get("identify_source_identity_id")}
+                              | set(item.get("candidate_source_identity_ids") or [])))
+
+
+async def _agent_continuity_reviews(tenant_id: str, agent_ref: str) -> list[dict[str, Any]]:
+    """Open agent continuity review items touching this agent's source identities."""
+    from actions.agent.behavior_read_model import agent_continuity_reviews
+
+    return await agent_continuity_reviews(tenant_id, agent_ref)
+
+
+def _continuity_decision_view(agent_ref: str, item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item.get("id"),
+        "agent_ref": agent_ref,
+        "entry_type": "agent_continuity_candidate",
+        "status": item.get("status"),
+        "decision": item.get("decision"),
+        "reason_codes": item.get("reason_codes", []),
+        "identify_source_identity_id": item.get("identify_source_identity_id"),
+        "candidate_source_identity_ids": item.get("candidate_source_identity_ids", []),
+        "authority": "none",
+        "merge_performed": False,
+    }
+
+
+async def _decide_agent_continuity(agent_ref: str, review_id: str, request: Request,
+                                   decision: str) -> dict[str, Any]:
+    """Record a reviewer decision on one agent continuity item. Never merges.
+
+    The item must be an ``agent_continuity_candidate`` that touches one of this
+    agent's source identities in the caller's tenant; anything else is
+    not-found (no existence leak). Repeating the same decision is idempotent;
+    a different decision on a decided item is a conflict.
+    """
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from identity.identity.pending_review import PendingIdentityReviewRepository
+
+    repo = PendingIdentityReviewRepository()
+    item = await repo.get(tenant.tenant_id, review_id, entry_type="agent_continuity_candidate")
+    if item is None or not _review_touches(item, await _agent_source_identity_ids(tenant.tenant_id, agent_ref)):
+        raise NotFoundError("agent continuity review not found")
+    if item.get("status") == "open":
+        stored = await repo.decide_agent_continuity(
+            tenant_id=tenant.tenant_id, record_id=review_id, decision=decision,
+            decided_by=str(getattr(tenant, "user_id", "") or ""),
+        )
+        if stored is not None:
+            metrics.increment("agent_continuity_review_decided", labels={"decision": decision})
+            return APIResponse(data=_continuity_decision_view(agent_ref, stored)).to_dict()
+        item = await repo.get(tenant.tenant_id, review_id, entry_type="agent_continuity_candidate") or item
+    if item.get("status") == decision:
+        return APIResponse(data=_continuity_decision_view(agent_ref, item)).to_dict()
+    raise ConflictError(f"agent continuity review is already {item.get('status')}")
+
+
+@lineage_router.post("/{agent_ref}/continuity-reviews/{review_id}/confirm")
+async def confirm_agent_continuity(agent_ref: str, review_id: str, request: Request):
+    """Reviewer confirms the deployments report one logical agent. Recorded as
+    review context only: no source identity is merged, bound or relinked."""
+    return await _decide_agent_continuity(agent_ref, review_id, request, "confirmed")
+
+
+@lineage_router.post("/{agent_ref}/continuity-reviews/{review_id}/reject")
+async def reject_agent_continuity(agent_ref: str, review_id: str, request: Request):
+    """Reviewer rejects continuity: the deployments report distinct agents."""
+    return await _decide_agent_continuity(agent_ref, review_id, request, "rejected")
+
+
+@lineage_router.get("/principals/{entity_id}/agents")
+async def principal_agents(entity_id: str, request: Request):
+    """Agents acting for one person, by recorded grant or declared beneficiary.
+
+    A reconciliation view, never an identity merge: the person and each agent
+    stay separate subjects, agent refs stay source-reported, and bounded fact
+    reads are flagged when capped."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.read_models import profile360_agents
+    from repositories.repos import DelegationRepository
+
+    grants = [g for g in await DelegationRepository().find_many(
+        filters={"tenant_id": tenant.tenant_id, "grantor_entity_id": entity_id}, limit=100)
+        if g.get("tenant_id") == tenant.tenant_id and not g.get("revoked_at")]
+    facts, truncated, seen = [], False, set()
+    for ref in sorted({g["grantee_entity_id"] for g in grants if g.get("grantee_entity_id")})[:25]:
+        agent_facts, was_truncated = await _behavior_facts(tenant.tenant_id, ref)
+        # Each load includes spawned descendants' activity and the tenant's spawn
+        # edges, so a child granted alongside its parent would repeat; keep one.
+        for fact in agent_facts:
+            key = (fact.event_id, fact.event_type, fact.agent_ref, fact.child_agent_ref)
+            if key not in seen:
+                seen.add(key)
+                facts.append(fact)
+        truncated = truncated or was_truncated
+    data = profile360_agents(entity_id, facts, grants)
+    data["source_truncated"] = truncated
+    data["agents_capped_at"] = 25
+    return APIResponse(data=data).to_dict()
+
+
+@lineage_router.get("/{agent_ref}/behavior")
+async def agent_behavior_read_model(agent_ref: str, request: Request):
+    """Agent360 behavior read model: rebuildable, evidence-qualified, with what
+    Aether cannot see. Source-reported agent refs; not an identity resolution."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    # Same builder as the agent360 projection provider's behavior sections.
+    from actions.agent.behavior_read_model import build_agent_behavior_read_model
+
+    try:
+        data = await build_agent_behavior_read_model(tenant.tenant_id, agent_ref)
+    except Exception as exc:
+        logger.warning("agent behavior read model unavailable",
+                       extra={"tenant_id": tenant.tenant_id, "error": type(exc).__name__})
+        data = {"agent_ref": agent_ref, "source_status": "unavailable", "sections": None}
+    return APIResponse(data=data).to_dict()
+
+
+class BehaviorSnapshotRequest(BaseModel):
+    window_start: str = Field(min_length=10, max_length=40)
+    window_end: str = Field(min_length=10, max_length=40)
+
+
+@lineage_router.post("/{agent_ref}/behavior/snapshots")
+async def record_behavior_snapshot(agent_ref: str, body: BehaviorSnapshotRequest, request: Request):
+    """Compute and store one window snapshot (a rebuildable cache, not evidence)."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from actions.agent.behavior_read_model import load_window_facts
+    from intelligence.agent_behavior.snapshot_store import BehaviorSnapshotRepository, record_window
+    from shared.temporal.instant import coerce_utc_lenient
+
+    start, end = coerce_utc_lenient(body.window_start), coerce_utc_lenient(body.window_end)
+    if start is None or end is None:
+        raise BadRequestError("window_start and window_end must be ISO-8601 instants")
+    if end <= start:
+        raise BadRequestError("window_end must be after window_start")
+    window = (body.window_start, body.window_end)
+    # Read the requested window itself (paged), not the newest facts, so a busy
+    # agent's recent traffic cannot leave an older window partial. A window too
+    # large to read whole is not stored: a partial snapshot would overwrite a
+    # complete one under the same row key.
+    facts, truncated = await load_window_facts(tenant.tenant_id, agent_ref, window)
+    if truncated:
+        return APIResponse(data={"snapshot": None, "recorded": False,
+                                 "source_truncated": True}).to_dict()
+    snap = await record_window(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref, facts, window)
+    return APIResponse(data={"snapshot": snap, "recorded": True, "source_truncated": False}).to_dict()
+
+
+@lineage_router.get("/{agent_ref}/behavior/drift")
+async def behavior_drift(agent_ref: str, request: Request):
+    """Drift between the two most recent stored windows (needs two windows)."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.snapshot_store import BehaviorSnapshotRepository, drift_over_stored_windows
+
+    drift = await drift_over_stored_windows(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref)
+    return APIResponse(data={"agent_ref": agent_ref, "drift": drift}).to_dict()
+
+
+@lineage_router.get("/{agent_ref}/behavior/calibration")
+async def behavior_calibration(agent_ref: str, request: Request):
+    """Forward interval coverage over stored windows. A stability diagnostic;
+    rates stay uncalibrated (``calibrated`` is always false)."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.snapshot_store import (
+        BehaviorSnapshotRepository, calibration_over_stored_windows,
+    )
+
+    report = await calibration_over_stored_windows(BehaviorSnapshotRepository(), tenant.tenant_id, agent_ref)
+    return APIResponse(data={"agent_ref": agent_ref, "calibration": report}).to_dict()
+
+
+@lineage_router.get("/{agent_ref}/decisions/{decision_id}")
+async def agent_decision_detail(agent_ref: str, decision_id: str, request: Request):
+    """One reconstructed DecisionEnvelope with attribution, responsibility roles
+    and a labelled counterfactual."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from intelligence.agent_behavior.read_models import decision_detail
+    from repositories.repos import DelegationRepository
+
+    facts, _ = await _behavior_facts(tenant.tenant_id, agent_ref)
+    # A historical decision is judged against the grant that applied at the time.
+    grants = await DelegationRepository().history_for(agent_ref, tenant.tenant_id)
+    detail = decision_detail(facts, decision_id, grants=grants)
+    if detail is None or detail["envelope"]["decision_actor"].get("value") != agent_ref:
+        raise NotFoundError("decision not found")
+    return APIResponse(data=detail).to_dict()
+
+
 @deployments_router.get("/{deployment_id}/runs")
 async def list_agent_runs(
     deployment_id: str,
@@ -641,7 +934,9 @@ async def list_agent_runs(
         # query_silver is newest-first: the first row for a run is its latest.
         summary["first_event_at"] = occurred_at or summary["first_event_at"]
         summary["event_count"] += 1
-        event_type = str(row.get("event_name") or row.get("event_type") or "")
+        event_type = str(
+            row.get("source_event_type") or row.get("event_name") or row.get("event_type") or ""
+        )
         if event_type and event_type not in summary["event_types"] and len(summary["event_types"]) < 12:
             summary["event_types"].append(event_type)
 
@@ -715,7 +1010,7 @@ async def explain_agent_run(
             resolved = await resolver.resolve(row)
         return {
             "source_event_id": row.get("source_event_id"),
-            "event_type": row.get("event_name"),
+            "event_type": row.get("source_event_type") or row.get("event_name"),
             "occurred_at": row.get("occurred_at"),
             "evidence_authority": "tenant_source_asserted",
             "task_ref": row.get("task_ref"),

@@ -6,14 +6,27 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/x402/commerce_routes.py, services/api/value/x402/approvals.py, services/api/value/x402/control_plane.py]
+source_files:
+  - services/api/value/x402/commerce_routes.py
+  - services/api/value/x402/approvals.py
+  - services/api/value/x402/control_plane.py
+  - services/api/value/x402/commerce_models.py
+  - services/api/value/x402/commerce_store.py
+  - services/api/repositories/commerce_repos.py
+  - services/api/actions/agent/user_agents.py
+  - services/api/alembic/versions/20261022_execution_approval_decisions.py
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "services/api/value/x402/approvals.py": "sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24"
-  "services/api/value/x402/commerce_routes.py": "sha256:73a9f03a50f3a43b6d17cc2f9e118aec853f6a5d6d2a3c29c1348f66d94d00c4"
-  "services/api/value/x402/control_plane.py": "sha256:4babd8aa29f53920b27d0a5c68e1fb74b1423ab6c52d5a8811272dc5afcb742d"
+  "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
+  "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
+  "services/api/value/x402/approvals.py": "sha256:a91ab84affb2e46db240f218f428dd342539327abc1ce3e896cbc2a7ca523fd3"
+  "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
+  "services/api/value/x402/commerce_routes.py": "sha256:e9cbbefee1efb189141bace31cd793b551089e7263924046fc7846cbc51a55a8"
+  "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
+  "services/api/value/x402/control_plane.py": "sha256:e34019baf9157f945e60c97a56042d31128e1deaffecf0b3b4648a29a6da5ac3"
 ---
 # Aether Agentic Commerce — Control Plane
 
@@ -46,8 +59,25 @@ The Agentic Commerce control plane upgrades Aether's existing x402 capture subsy
 preflight → challenge → policy → approval → authorize → verify → settle → entitle → grant → fulfill
 ```
 
-Every stage persists to the in-memory commerce store, emits a typed event, writes
-one or more graph vertices/edges, and is traceable via `GET /v1/x402/explain/{challenge_id}`.
+Every stage persists through `CommerceStore` (in-memory in local mode and
+tenant-scoped repositories in hosted mode), emits a typed event, writes one or
+more graph vertices/edges, and is traceable via
+`GET /v1/x402/explain/{challenge_id}`.
+
+### Agent execution approval records
+
+An approval request may carry an exact `execution_id` and `execution_action`.
+When an operator decides an execution-bound request, the service appends a
+typed `ApprovalDecision` to `commerce_approval_decisions` and updates the
+mutable approval's `last_decision_id`. In production the decision repository
+uses the tenant-scoped JSONB table created by
+`20261022_execution_approval_decisions`; local mode uses the in-memory adapter.
+The agent execution endpoint revalidates the exact current decision and copies
+its approval and decision IDs onto the server-owned execution record. This is
+an x402 approval join for supported runs, not a general agent authority system
+or evidence that the external action completed. The execution endpoint performs
+admission and bookkeeping only; it does not invoke a tool or resource operation
+and does not produce an invocation receipt.
 
 ## 3. Day-1 GA scope
 
@@ -97,12 +127,13 @@ one or more graph vertices/edges, and is traceable via `GET /v1/x402/explain/{ch
 | Module | Purpose |
 |---|---|
 | `services/api/value/x402/commerce_models.py` | Canonical Pydantic domain models (shared) |
-| `services/api/value/x402/commerce_store.py` | Tenant-isolated in-memory store |
+| `services/api/value/x402/commerce_store.py` | Tenant-isolated store adapter (in-memory locally, repositories in hosted mode) |
 | `services/api/value/x402/control_plane.py` | Lifecycle orchestrator (`X402ControlPlane`) |
 | `services/api/value/x402/resources.py` | `ProtectedResourceRegistry` + Day-1 seeds |
 | `services/api/value/x402/facilitators.py` | Facilitator + asset registries (USDC Base/Solana) |
 | `services/api/value/x402/policies.py` | `PolicyEngine` — enforces mandatory approval |
 | `services/api/value/x402/approvals.py` | `ApprovalService` — full workflow FSM |
+| `services/api/repositories/commerce_repos.py` | Tenant-scoped approval and append-only decision repositories |
 | `services/api/value/x402/verification.py` | Facilitator + local payment verification |
 | `services/api/value/x402/settlement.py` | Settlement FSM (pending→verifying→settled/failed) |
 | `services/api/value/x402/entitlements.py` | Entitlement mint/lookup/reuse/revoke |

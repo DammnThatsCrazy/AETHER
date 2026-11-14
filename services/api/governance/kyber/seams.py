@@ -436,6 +436,16 @@ SEAMS: tuple[Seam, ...] = (
             "gateway; that is what makes parity structural rather than "
             "aspirational.",
     ),
+    Seam(
+        caller="governance.kyber.mirror.service.TenantMirrorService",
+        module="governance.kyber.graph.scoped_gateway",
+        singleton="scoped_tenant_graph_gateway",
+        attribute="read_surface",
+        positional=1,
+        keywords=("tenant_id", "surface", "params"),
+        why="Surfaces that read relational stores reach them through the same "
+            "gate, under a read-only tenant context.",
+    ),
     # ── ops plane → step-up ───────────────────────────────────────────────────
     # The ops plane resolves step-up once and hands it to the command lifecycle,
     # which gates action classes 4 and 5 on a live grant. If this read drifted,

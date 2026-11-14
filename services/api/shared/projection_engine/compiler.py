@@ -133,6 +133,7 @@ class ProjectionCompiler:
             requested_claims=bool(request.includeClaims),
             page=request.page,
             time_range=request.timeRange,
+            as_of=request.asOf,
             incompatible_lenses=tuple(incompatible),
         )
 

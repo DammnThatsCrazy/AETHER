@@ -220,6 +220,9 @@ class SemanticObservation(BaseModel):
     tenant_id: str
     project_id: str | None = None
     source_event_id: str
+    # Set only by the validated SDK event consumer from the backend-stamped
+    # ingestion context. Legacy and manual semantic rows have no trusted scope.
+    source_namespace: str | None = None
     source_activity_id: str | None = None
     source_type: str
     source_platform: str | None = None
@@ -283,6 +286,16 @@ class SemanticObservation(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
+    @field_validator("source_namespace")
+    @classmethod
+    def source_namespace_must_be_explicit(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized or len(normalized) > 256:
+            raise ValueError("source_namespace must be explicit and at most 256 characters")
+        return normalized
+
     @model_validator(mode="after")
     def finalize(self) -> "SemanticObservation":
         if not self.subject_refs:
@@ -299,9 +312,11 @@ class SemanticObservation(BaseModel):
         # observation produced by a new provider version (engine.classify_event
         # stamps the resolved provider's 'id@version') is a NEW observation
         # identity, so reprocessing under a new model is never deduped away.
-        base = "|".join(
+        base_parts = [self.tenant_id]
+        if self.source_namespace is not None:
+            base_parts.append(self.source_namespace)
+        base_parts.extend(
             [
-                self.tenant_id,
                 self.source_event_id,
                 self.source_type,
                 self.primary_subject_ref,
@@ -309,6 +324,7 @@ class SemanticObservation(BaseModel):
                 self.model_version,
             ]
         )
+        base = "|".join(base_parts)
         digest = hashlib.sha256(base.encode()).hexdigest()[:24]
         self.stable_hash = self.stable_hash or digest
         self.idempotency_key = self.idempotency_key or f"semantic:{digest}"

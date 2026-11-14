@@ -31,8 +31,8 @@ async def latest(entity_id: str, request: Request):
     """Latest behavior snapshot for an entity (per-entity row, recomputed)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    record = await _repo.find_by_id(entity_id)
-    if record is None or record.get("tenant_id") != tenant.tenant_id:
+    record = await _repo.find_for_entity(tenant.tenant_id, entity_id)
+    if record is None:
         raise NotFoundError("Behavior profile")
     return APIResponse(data=record).to_dict()
 

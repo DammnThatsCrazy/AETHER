@@ -30,6 +30,10 @@ logger = get_logger("aether.semantic.privacy")
 # Subject-linked semantic tables an erasure/restriction must reach.
 _SILVER_SUBJECT_TABLES = (
     "silver_semantic_observations",
+    "semantic_memory_records",
+    "semantic_context_cards",
+    "semantic_embedding_metadata",
+    "workflow_definition_revisions",
     "silver_sentiment_observations",
     "silver_semantic_entity_mentions",
     "silver_semantic_subject_links",

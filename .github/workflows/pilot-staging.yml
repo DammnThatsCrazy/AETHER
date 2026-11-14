@@ -32,6 +32,17 @@ on:
         options: [full, pilot]
         default: pilot
         required: true
+      identity_verification_secrets_enabled:
+        description: Mount identity verification keys after their Secrets Manager versions are populated
+        type: boolean
+        default: true
+        required: false
+      identity_provider_proof:
+        description: "Live provider-connection identity proof: required, or deferred (skips only the provider steps and records the deferral; the run is not identity-continuity proof)"
+        type: choice
+        options: [required, deferred]
+        default: required
+        required: false
       backend_image_digest:
         description: Immutable backend image digest for the reviewed staging plan
         type: string
@@ -370,6 +381,8 @@ jobs:
       REF_NAME: ${{ github.ref_name }}
       ACTION: ${{ inputs.action }}
       DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
+      IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
+      IDENTITY_PROVIDER_PROOF: ${{ inputs.identity_provider_proof || 'required' }}
       BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
       STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
       ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -383,6 +396,11 @@ jobs:
       MAX_AWAKE_HOURS: ${{ inputs.max_awake_hours }}
       PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
     steps:
+      # Only the shared dispatch/poll helpers are needed here.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
       - name: Dispatch and wait for the selected canonical authority
         shell: bash
         run: |
@@ -408,7 +426,8 @@ jobs:
             # gh returns the created run URL when the dispatch is accepted.
             # Use that exact ID; a before/after list watermark can bind this
             # parent to an unrelated concurrent run on the same ref.
-            dispatch_output="$(gh workflow run "$workflow" --ref "$REF_NAME" "$@" 2>&1)"
+            # The dispatch helper prints any gh failure, then exits 1 (never retries).
+            dispatch_output="$(scripts/ci/dispatch_workflow.sh "$workflow" --ref "$REF_NAME" "$@")" || exit 1
             printf '%s\n' "$dispatch_output"
             run_id="$(printf '%s\n' "$dispatch_output" \
               | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
@@ -419,7 +438,10 @@ jobs:
             DISPATCHED_RUN_ID="$run_id"
             deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
-              status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+              # scripts/ci/run_status.sh retries only a just-dispatched 404,
+              # briefly; any other gh error fails at once, as in the lifecycle.
+              status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "$run_id")" || exit 1
+              if [ "$status" = lookup_pending ]; then sleep 5; continue; fi
               if [ "$status" = completed ]; then
                 conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
                 test "$conclusion" = success || {
@@ -463,6 +485,7 @@ jobs:
               reconcile_pilot_price_secret_state
               dispatch_and_wait terraform-promote.yml \
                 -f profile=staging -f deployment_lane=pilot -f action=plan \
+                -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
                 -f staging_state=awake -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
                 -f ml_image_digest="$ML_IMAGE_DIGEST" -f expected_commit_sha="$INTENDED_RELEASE_SHA"
               ;;
@@ -471,6 +494,7 @@ jobs:
               test -n "$PLAN_CHECKSUM" || { echo '::error::plan_checksum is required for pilot apply'; exit 1; }
               dispatch_and_wait terraform-promote.yml \
                 -f profile=staging -f deployment_lane=pilot -f action=apply \
+                -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
                 -f plan_run_id="$PLAN_RUN_ID" -f plan_checksum="$PLAN_CHECKSUM"
               ;;
             redeploy)
@@ -503,6 +527,8 @@ jobs:
               fi
               dispatch_and_wait staging-lifecycle.yml \
                 -f action=full-rehearsal -f deployment_lane=pilot \
+                -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+                -f identity_provider_proof="$IDENTITY_PROVIDER_PROOF" \
                 -f confirm_runtime_wake=true -f release_run_id="$RELEASE_RUN_ID" \
                 -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" \
                 -f intended_release_sha="$INTENDED_RELEASE_SHA" \
@@ -515,12 +541,14 @@ jobs:
               test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id is required for pilot validate'; exit 1; }
               dispatch_and_wait staging-lifecycle.yml \
                 -f action=validate -f deployment_lane=pilot -f plan_run_id="$PLAN_RUN_ID" \
+                -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
                 -f plan_checksum="$PLAN_CHECKSUM" -f promote_timeout_minutes="$PROMOTE_TIMEOUT_MINUTES"
               ;;
             plan-sleep)
               test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for pilot plan-sleep'; exit 1; }
               dispatch_and_wait staging-lifecycle.yml \
                 -f action=plan-sleep -f deployment_lane=pilot \
+                -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
                 -f backend_image_digest="$BACKEND_IMAGE_DIGEST" -f ml_image_digest="$ML_IMAGE_DIGEST" \
                 -f intended_release_sha="$INTENDED_RELEASE_SHA" -f promote_timeout_minutes="$PROMOTE_TIMEOUT_MINUTES"
               ;;
@@ -528,6 +556,7 @@ jobs:
               test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for pilot apply-sleep'; exit 1; }
               dispatch_and_wait staging-lifecycle.yml \
                 -f action=apply-sleep -f deployment_lane=pilot \
+                -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
                 -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
                 -f ml_image_digest="$ML_IMAGE_DIGEST" -f intended_release_sha="$INTENDED_RELEASE_SHA" \
                 -f promote_timeout_minutes="$PROMOTE_TIMEOUT_MINUTES"

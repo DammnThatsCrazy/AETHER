@@ -196,13 +196,14 @@ def test_get_cross_layer_paths_respects_max_depth() -> None:
         async def run():
             client = GraphClient()
             await client.connect()
-            await client.add_vertex(Vertex(VertexType.USER, "user1"))
+            owner = {"tenant_id": "t1"}
+            await client.add_vertex(Vertex(VertexType.USER, "user1", owner))
             for i in range(5):
                 aid = f"agent-{i}"
-                await client.add_vertex(Vertex(VertexType.AGENT, aid))
+                await client.add_vertex(Vertex(VertexType.AGENT, aid, owner))
                 await client.add_edge(Edge("DELEGATES", "user1", aid))
 
-            paths = await get_cross_layer_paths(client, "user1", max_depth=2)
+            paths = await get_cross_layer_paths(client, "user1", tenant_id="t1", max_depth=2)
             assert len(paths) <= 2, f"Expected at most 2 paths (max_depth=2), got {len(paths)}"
 
         _run(run())

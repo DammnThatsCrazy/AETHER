@@ -37,8 +37,19 @@ _EXPIRED_STATUS = "expired"
 
 # Silver evidence is tombstoned (provenance-preserving); Gold projections are
 # recomputable, so they are deleted and rebuilt by the reducer path on demand.
-_SILVER_TABLES = ("silver_semantic_observations", "silver_sentiment_observations")
+_SILVER_TABLES = (
+    "silver_semantic_observations",
+    "silver_sentiment_observations",
+    "semantic_memory_records",
+    "semantic_context_cards",
+    "semantic_embedding_metadata",
+    "workflow_definition_revisions",
+)
 _GOLD_TABLES = ("gold_entity_semantic_state", "gold_entity_sentiment_state")
+_TABLE_ACTIVE_STATUSES: dict[str, frozenset[str]] = {
+    "semantic_embedding_metadata": frozenset({"reported"}),
+    "workflow_definition_revisions": frozenset({"active"}),
+}
 
 _RETENTION_INTERVAL_S = int(os.getenv("SEMANTIC_RETENTION_INTERVAL_S", str(24 * 3600)))
 
@@ -58,7 +69,15 @@ async def sweep_tenant(tenant_id: str, *, now: Optional[datetime] = None) -> dic
         for retention_class, days in RETENTION_WINDOWS.items():
             cutoff = now - timedelta(days=days)
             count += await repo.tombstone_by_age(
-                tenant_id, cutoff, retention_class=retention_class, status=_EXPIRED_STATUS
+                tenant_id,
+                cutoff,
+                retention_class=retention_class,
+                status=_EXPIRED_STATUS,
+                **(
+                    {"eligible_statuses": _TABLE_ACTIVE_STATUSES[table]}
+                    if table in _TABLE_ACTIVE_STATUSES
+                    else {}
+                ),
             )
         if count:
             tombstoned[table] = count
@@ -81,9 +100,11 @@ async def sweep_tenant(tenant_id: str, *, now: Optional[datetime] = None) -> dic
 
 async def sweep_once() -> list[dict[str, Any]]:
     """One retention pass across every tenant with Silver evidence."""
-    tenants = await SemanticFactRepository(_SILVER_TABLES[0]).distinct_tenants()
+    tenant_ids: set[str] = set()
+    for table in _SILVER_TABLES:
+        tenant_ids.update(await SemanticFactRepository(table).distinct_tenants())
     reports: list[dict[str, Any]] = []
-    for tenant_id in tenants:
+    for tenant_id in sorted(tenant_ids):
         report = await sweep_tenant(tenant_id)
         if report["tombstoned_total"] or report["deleted_total"]:
             metrics.increment("semantic_retention_tombstoned_total", report["tombstoned_total"])

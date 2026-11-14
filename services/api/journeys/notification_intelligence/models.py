@@ -6,9 +6,12 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from journeys.notification_intelligence.projection import MobileNotificationProjection
 
 
 def _utc_now() -> str:
@@ -127,8 +130,8 @@ class IntelligenceNotificationEvent(BaseModel):
     detected_at: str = Field(default_factory=_utc_now)
     expires_at: Optional[str] = None
 
-    def attach_projection(self) -> "IntelligenceNotificationEvent":
-        """Populate the redacted push-projection fields from this record.
+    def attach_projection(self) -> "MobileNotificationProjection":
+        """Populate the redacted push-projection fields from this record and return the projection.
 
         Lazy import avoids a module-level dependency on the projection service.
         The projection is derived/redacted and safe to persist alongside the
@@ -154,7 +157,7 @@ class IntelligenceNotificationEvent(BaseModel):
         self.push_summary = proj.push_summary
         self.push_deep_link_class = proj.push_deep_link_class
         self.push_category = proj.push_category
-        return self
+        return proj
 
 
 def make_dedup_key(source_topic: str, source_event_id: str, tenant_id: str) -> str:

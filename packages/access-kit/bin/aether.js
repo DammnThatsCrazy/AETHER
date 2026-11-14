@@ -22,9 +22,13 @@ Usage:
   aether agents capabilities list [--provider NAME] [--server-name NAME] [--tool-name NAME]
                                   [--limit N] [--offset N] [--json]
   aether agents capabilities show CAPABILITY_ID [--json]
+  aether agents behavior show AGENT_REF [--json]
+  aether agents decisions show AGENT_REF DECISION_ID [--json]
   aether entities list [--entity-type TYPE] [--limit N] [--offset N] [--json]
   aether entities show ENTITY_ID [--json]
   aether entities neighborhood ENTITY_ID [--limit N] [--json]
+  aether experience360 frame get --surface SURFACE --subject-kind KIND --subject-id ID
+                                 [--slots SLOT,SLOT,...] [--as-of RFC3339] [--no-evidence] [--json]
   aether access operations list [--json]
   aether access operations show OPERATION_ID [--json]
   aether access invoke OPERATION_ID [--input-json JSON] [--json]
@@ -68,8 +72,8 @@ function parseArgs(args) {
       parsed.json = true;
       continue;
     }
-    if (arg === '--no-browser') {
-      parsed.options['no-browser'] = true;
+    if (arg === '--no-browser' || arg === '--no-evidence') {
+      parsed.options[arg.slice(2)] = true;
       continue;
     }
     if (arg === '--help' || arg === '-h') continue;
@@ -125,6 +129,8 @@ function printError(error) {
       message: error.message,
       ...(Number.isInteger(error.status) ? { status: error.status } : {}),
       ...(error.code ? { code: error.code } : {}),
+      ...(error.category ? { category: error.category } : {}),
+      ...(Number.isInteger(error.retryAfterSeconds) ? { retry_after_seconds: error.retryAfterSeconds } : {}),
       ...(error.requestId ? { request_id: error.requestId } : {}),
       ...(error.apiRequestId ? { api_request_id: error.apiRequestId } : {}),
       ...(error.interaction ? { interaction: error.interaction } : {}),
@@ -187,6 +193,7 @@ async function main() {
   const needsTenantRead = area === 'account'
     || area === 'entities'
     || area === 'continuations'
+    || area === 'experience360'
     || (area === 'access' && command === 'invoke')
     || (area === 'usage' && command === 'summary')
     || area === 'agents'
@@ -298,6 +305,31 @@ async function main() {
       process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'experience360' && command === 'frame' && subcommand === 'get') {
+    const supported = new Set(['surface', 'subject-kind', 'subject-id', 'slots', 'as-of', 'no-evidence']);
+    if (positionals.length !== 3 || Object.keys(options).some((key) => !supported.has(key))
+        || !options.surface || !options['subject-kind'] || !options['subject-id']) {
+      throw new Error(`Usage: aether experience360 frame get --surface SURFACE --subject-kind KIND --subject-id ID [--slots SLOT,SLOT] [--as-of RFC3339] [--no-evidence] [--json]\n\n${HELP}`);
+    }
+    const input = {
+      surface: options.surface,
+      subject: { kind: options['subject-kind'], id: options['subject-id'] },
+      ...(options.slots ? { requested_slots: options.slots.split(',') } : {}),
+      ...(options['as-of'] ? { as_of: options['as-of'] } : {}),
+      ...(options['no-evidence'] ? { include_evidence: false } : {}),
+    };
+    const result = await invokeAccessOperation('experience360.frame.get', input, process.env);
+    const output = { operation_id: 'experience360.frame.get', data: result.data,
+      ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${terminalText(JSON.stringify(result.data, null, 2))}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
   }
@@ -522,6 +554,25 @@ async function main() {
         ? positiveInteger(options.limit, '--limit', { min: 1, max: 50 })
         : 25,
     });
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${terminalText(JSON.stringify(result.data, null, 2))}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'agents' && ['behavior', 'decisions'].includes(command) && subcommand === 'show') {
+    const decision = command === 'decisions';
+    if (positionals.length !== (decision ? 5 : 4) || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for agents ${command} show.\n\n${HELP}`);
+    }
+    const result = decision
+      ? await invokeAccessOperation('agents.decision', { agent_ref: arg, decision_id: positionals[4] })
+      : await invokeAccessOperation('agents.behavior', { agent_ref: arg });
     const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
     else {

@@ -278,7 +278,10 @@ gate_conditions:
 # --- Shared exception grants -------------------------------------------------
 # Every `externally_blocked` control below references one of these by id. The
 # grants expire; when they do, the checker fails rather than quietly dropping
-# them. owner and approver must differ.
+# them. owner and approver must differ. Both grants were renewed on 2026-10-25
+# through 2027-01-23 after the user confirmed approval for the named CTO and
+# Finance approver roles in the PR #837 task conversation. This renewal does
+# not count the externally blocked controls as verified.
 exceptions:
 
   - id: DR-EX-NO-CLOUD-ACCOUNT
@@ -291,7 +294,7 @@ exceptions:
     owner: platform@aether
     approver: cto@aether
     created: 2026-07-25
-    expires: 2026-10-23
+    expires: 2027-01-23
     mitigation: >-
       Provision the founding-tenant AWS account, run the staging rehearsal
       through .github/workflows/terraform-promote.yml with credentials, and
@@ -307,7 +310,7 @@ exceptions:
     owner: platform@aether
     approver: finance@aether
     created: 2026-07-25
-    expires: 2026-10-23
+    expires: 2027-01-23
     mitigation: >-
       After seven consecutive days of real spend, export Cost Explorer daily
       totals to release-evidence/cost/observed-cost.json and reconcile against

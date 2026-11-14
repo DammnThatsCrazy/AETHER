@@ -18,6 +18,7 @@ from config.settings import WorkerType
 from models.core import AgentTask, TaskResult
 
 from workers.base import BaseWorker
+from workers.outbound import UnsafeDestinationError, fetch_public
 
 logger = logging.getLogger("aether.worker.web_crawler")
 
@@ -57,13 +58,19 @@ class WebCrawlerWorker(BaseWorker):
                 confidence=0.0,
             )
 
-        # -- Fetch the page --------------------------------------------------
+        # -- Fetch the page (public internet addresses only) -----------------
         try:
-            response = httpx.get(
-                url,
-                timeout=_HTTP_TIMEOUT,
-                follow_redirects=True,
-                headers={"User-Agent": _USER_AGENT},
+            with httpx.Client(timeout=_HTTP_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+                response, final_url = fetch_public(client, url)
+        except UnsafeDestinationError as exc:
+            logger.warning(f"Refused crawl of {url}: {exc}")
+            return TaskResult(
+                task_id=task.task_id,
+                worker_type=self.worker_type,
+                success=False,
+                error=f"Target is not a public internet address: {exc}",
+                confidence=0.0,
+                source_attribution=url,
             )
         except httpx.TimeoutException:
             logger.warning(f"Timeout crawling {url}")
@@ -117,7 +124,7 @@ class WebCrawlerWorker(BaseWorker):
             extracted["description"] = description
             extracted["status_code"] = status_code
             extracted["content_length"] = len(response.text)
-            extracted["final_url"] = str(response.url)
+            extracted["final_url"] = final_url
 
             # Confidence: did we get a real title?
             if title and title.strip():
@@ -136,7 +143,7 @@ class WebCrawlerWorker(BaseWorker):
 
         # --- Extract links ---------------------------------------------------
         if "links" in extract_fields or "all" in extract_fields:
-            links = self._extract_links(soup, str(response.url))
+            links = self._extract_links(soup, final_url)
             extracted["links"] = links
             extracted["link_count"] = len(links)
             if links:

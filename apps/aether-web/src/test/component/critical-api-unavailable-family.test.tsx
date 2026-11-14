@@ -78,6 +78,10 @@ const mocks = vi.hoisted(() => ({
   notificationChannelsUpdateConfig: vi.fn(),
 }));
 
+vi.mock('@aether-app/features/agent360', async (original) => ({
+  ...(await original<typeof import('@aether-app/features/agent360')>()),
+  PrincipalAgentLineagePanel: () => null,
+}));
 vi.mock('@aether-app/lib/api/endpoints', () => ({
   api: {
     billing: {
@@ -138,6 +142,12 @@ vi.mock('@aether-app/features/account', () => ({
     error: providerState.account === 'error' ? new Error('billing offline') : null,
   }),
   useMeProfile: () => ({ data: undefined, isLoading: false, error: null }),
+  // /settings (API keys) also shows the API Limits block from the usage read.
+  useUsage: () => ({
+    data: undefined,
+    isLoading: false,
+    error: providerState.settings === 'error' ? 'settings backend offline' : null,
+  }),
   useCreateCheckout: () => ({ mutate: vi.fn(), isLoading: false }),
   useBillingPortal: () => ({ mutate: vi.fn(), isLoading: false }),
   useEnterpriseContact: () => ({ mutate: vi.fn(), isLoading: false }),
@@ -377,6 +387,7 @@ vi.mock('@aether-app/features/users/use-user-profile', () => {
     useUserQuality: query,
     useUserDataFreshness: query,
     useUserWeb2Profile: query,
+    useUserTimeline: query,
   };
 });
 
@@ -509,8 +520,8 @@ const cases: RouteStateCase[] = [
     Page: UsersPage,
     empty: () => mocks.entitiesList.mockResolvedValue({ entities: [] }),
     fail: () => mocks.entitiesList.mockRejectedValue(new Error('entities offline')),
-    emptyText: 'No users found',
-    errorText: 'Failed to load users',
+    emptyText: 'No profiles found',
+    errorText: 'Failed to load profiles',
   },
   {
     route: '/users/user-local',
@@ -639,7 +650,7 @@ const cases: RouteStateCase[] = [
     errorText: 'Unable to load Usage & Plan',
   },
   {
-    route: '/onboarding',
+    route: '/onboarding/implementation',
     Page: OnboardingPage,
     empty: () => { providerState.onboarding = 'empty'; },
     fail: () => { providerState.onboarding = 'error'; },

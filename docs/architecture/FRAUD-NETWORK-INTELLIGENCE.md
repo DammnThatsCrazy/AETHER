@@ -15,8 +15,8 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/api/intelligence/fraud_networks/": "sha256:b8f7d4ac084e4de118d885b2cef1b12d45c066237039600e1e754c2b04d6c8e8"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
+  "services/api/intelligence/fraud_networks/": "sha256:d5e8c0a0e46b89c971588b052c48eb357e6187f5d10b5863f902b1a5d77a4240"
+  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
 ---
 
 # Fraud Network Intelligence
@@ -56,12 +56,26 @@ Detection Pipeline
  │  5. Score cluster risk (0–100)                      │
  │  6. Score confidence (0–1)                          │
  │  7. Persist to FraudNetworkRepository               │
- │  8. Project to graph via GraphMutationGateway       │
+ │  8. Best-effort persist evidence-backed agentic     │
+ │     delegation signals to tenant-scoped Risk360     │
+ │  9. Project to graph via GraphMutationGateway       │
  │     (FRAUD_NETWORK node + MEMBER_OF_FRAUD_NETWORK   │
  │      edges, causality_class=inferred_influence)     │
- │  9. Publish FRAUD_NETWORK_CREATED event             │
+ │ 10. Publish FRAUD_NETWORK_CREATED event             │
  └─────────────────────────────────────────────────────┘
 ```
+
+The Risk360 handoff resolves source agent identifiers through explicit
+tenant-owned identity bindings before persisting assessments under canonical
+Agent entities. It retains detector and binding evidence, leaves inferred
+signals classified as inferred, and omits ambiguous, truncated, unresolved, or
+cross-tenant mappings. It does not turn a delegation match into authority or
+proof of execution. The tenant-owned identity binding must have one consistent,
+valid timezone-aware `identity_bound_at` at or before the detector observation
+time; missing, malformed, conflicting, or future binding times are omitted to
+prevent retroactive attribution.
+The historical join accepts timezone-aware datetime values or ISO 8601 strings
+from the binding store and rejects naive values in either form.
 
 ---
 
@@ -168,6 +182,57 @@ presence 15%, amount 10% (log-scaled).
 | `detect_commerce_abuse` | `commerce_abuse` | orders + refunds by entity |
 
 All detectors are pure functions: no async, no I/O. They return `list[tuple[signal_name, entity_ids, detail_dict]]`.
+
+### Fleet hypotheses (agent swarms)
+
+`fleet_hypothesis.py` / `fleet_routes.py` answer "do these agents share a
+controlling operator?" for an orchestrator that spawned many sub-agents. They
+are separate from the eight detectors above and do not create a fraud network.
+
+- Evidence is graded `observed` (spawn tree, canonical principal delegation) or
+  `inferred` (spawn burst, shared MCP endpoint host, identical tool sequence,
+  overlapping wallet/account targets), each with source event references.
+- Without an observed principal, confidence is capped at 0.55. With a canonical
+  non-spawn delegation to the orchestrator it is capped at 0.90. A delegation
+  proves authority was granted, not intent; `principal_is_not_the_actor` is
+  always listed as a competing explanation.
+- Competing explanations are generated from the evidence (shared third-party
+  infrastructure, same vendor template, legitimate parallel workflow, no human
+  principal observed).
+- Status starts `unconfirmed` or `needs_review` (fleet of 5+, or any member with
+  a Risk360 signal, and confidence >= 0.35). Only `POST .../review` can set
+  `confirmed_by_reviewer` or `rejected_by_reviewer`; confirming needs an
+  observed principal and a written reason. A rebuild keeps a review only while
+  the evidence fingerprint (root, evidence types, linked principals) is
+  unchanged; if the evidence or person link changed since the reviewer decided,
+  the decision is recorded as `superseded` in `review_history` and the hypothesis
+  returns to the builder's status for a fresh review.
+- A person link is only ever made to a grantor the canonical identity authority
+  resolves to an active `human` subject (merge tombstones followed; the
+  surviving id is recorded). Agents, organizations and unresolved ids are not
+  principals. Evidence event references come from the spawn edges traversed into
+  the selected lineage, and a hypothesis built from a capped read carries
+  `source_truncation`.
+- Writes are compare-and-set on `revision` (first write is insert-if-absent), so
+  concurrent reviews and rebuilds cannot overwrite one another, and `created_at`
+  is preserved across both.
+- Routes (under `FEATURE_FRAUD_NETWORKS`): `POST /v1/fraud/fleet-hypotheses/build`
+  (`fraud:evaluate`), `GET /v1/fraud/fleet-hypotheses[/{id}]` (`fraud:read`),
+  `POST /v1/fraud/fleet-hypotheses/{id}/review` (`fraud:evaluate`).
+- **Fraud360 projection** (flag `AETHER_FRAUD360_ENABLED`; `fleet_fraud360.py`).
+  Build and review mirror the hypothesis into a Fraud360 `FraudHypothesis`
+  (`agent_abuse` pattern) on the *canonical* Agent entity; an unresolved or
+  ambiguous identity writes nothing. `claim_state` is `attributed` with a
+  delegation-backed person link, otherwise `inferred`. States move through
+  `FraudHypothesisStateMachine`: unconfirmed -> candidate, needs_review ->
+  under_evaluation, reviewer-confirmed -> investigating, reviewer-rejected ->
+  rejected (grounded in the review record). A reviewer confirming "common
+  operator" is not confirmation of fraud, so the projection never reaches
+  Fraud360 `confirmed`. A record an analyst has moved elsewhere is left alone
+  (`state_diverged`). The response carries `fraud360` with the projection status.
+- Not done: a Risk360 assessment for a hypothesis, and egress/IP evidence (Silver
+  agent facts carry no source address; MCP endpoint host is the only
+  infrastructure signal).
 
 ---
 

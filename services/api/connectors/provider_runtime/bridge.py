@@ -18,6 +18,7 @@ from shared.integration_contracts.events import (
     AetherEvent,
     deterministic_v1_event_id_for_source_record,
 )
+from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
 from shared.logger.logger import get_logger, metrics
 from ingestion.ingestion.bronze_bulk import BronzeSDKEvent, OutboxEvent, ingest_many
 
@@ -38,6 +39,11 @@ class EventBridge:
         """
         if not tenant_id.strip():
             raise ValueError("tenant_id is required")
+        if tenant_id == OLYMPUS_SOURCE_TENANT_ID:
+            # Olympus-scope evidence has no tenant pipeline; the raw record stays
+            # available for governed replay into an Olympus destination.
+            metrics.increment("provider_bridge_olympus_scope_skipped_total")
+            return 0
 
         bronze_rows: list[BronzeSDKEvent] = []
         outbox_rows: list[OutboxEvent] = []

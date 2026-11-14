@@ -13,6 +13,14 @@ from connectors.integrations.data_rights.service import (
     can_write_tenant_lake,
 )
 from connectors.integrations.data_rights.repository import DataRightsGrantRepository
+from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+OLYMPUS = {
+    "tenant_id": OLYMPUS_SOURCE_TENANT_ID,
+    "connector_class": "olympus_provider",
+    "raw_data_owner": "olympus_labs",
+    "source_relationship": "olympus_source",
+}
 
 
 def _make_service() -> DataRightsService:
@@ -24,10 +32,11 @@ def _make_grant_body(**overrides) -> DataRightsGrantCreate:
         "tenant_id": "tenant_abc",
         "source_id": "src_001",
         "connector_id": "dune_api",
-        "connector_class": "olympus_provider",
+        "connector_class": "tenant_byod_data",
         "data_category": "onchain",
         "data_sensitivity": "unclassified",
-        "raw_data_owner": "olympus_labs",
+        "raw_data_owner": "tenant",
+        "source_relationship": "organization_system",
     }
     defaults.update(overrides)
     return DataRightsGrantCreate(**defaults)
@@ -46,7 +55,7 @@ async def test_grant_creation_basic():
 async def test_olympus_provider_baseline_auto_set():
     """Olympus provider sources automatically get olympus_baseline_allowed=True."""
     svc = _make_service()
-    body = _make_grant_body(connector_class="olympus_provider", olympus_baseline_allowed=False)
+    body = _make_grant_body(**OLYMPUS, olympus_baseline_allowed=False)
     grant = await svc.create_grant(body, granted_by_user_id="user_1")
     # olympus_baseline_allowed override: olympus_provider = True regardless of input
     assert grant.olympus_baseline_allowed is True
@@ -56,7 +65,7 @@ async def test_olympus_provider_baseline_auto_set():
 async def test_model_training_default_false():
     """model_training_allowed must default to False even for Olympus providers."""
     svc = _make_service()
-    grant = await svc.create_grant(_make_grant_body(), granted_by_user_id="user_1")
+    grant = await svc.create_grant(_make_grant_body(**OLYMPUS), granted_by_user_id="user_1")
     assert grant.model_training_allowed is False
 
 
@@ -205,7 +214,7 @@ async def test_revoke_blocks_all_use():
     from connectors.integrations.data_rights.models import DataRightsGrantRevoke
     svc = _make_service()
     body = _make_grant_body(
-        connector_class="olympus_provider",
+        **OLYMPUS,
         olympus_baseline_allowed=True,
         model_training_allowed=True,
     )
@@ -239,7 +248,7 @@ async def test_revoke_blocks_all_use():
 async def test_policy_check_olympus_baseline():
     svc = _make_service()
     grant = await svc.create_grant(
-        _make_grant_body(connector_class="olympus_provider"),
+        _make_grant_body(**OLYMPUS),
         granted_by_user_id="user_1",
     )
     result = await svc.check_policy(grant.data_rights_grant_id, "olympus_baseline")
@@ -251,7 +260,7 @@ async def test_policy_check_olympus_baseline():
 async def test_policy_check_model_training_denied():
     svc = _make_service()
     grant = await svc.create_grant(
-        _make_grant_body(connector_class="olympus_provider", model_training_allowed=False),
+        _make_grant_body(**OLYMPUS, model_training_allowed=False),
         granted_by_user_id="user_1",
     )
     result = await svc.check_policy(grant.data_rights_grant_id, "model_training")

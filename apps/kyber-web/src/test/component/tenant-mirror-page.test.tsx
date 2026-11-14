@@ -411,6 +411,25 @@ describe('TenantMirrorPage — parity states', () => {
     expect(screen.queryByText(PARITY_MATCHED_LABEL)).not.toBeInTheDocument();
   });
 
+  it('requires a store surface identifier and sends it on both reads', async () => {
+    mockApi({ parity: PARITY_NOT_RUN });
+    renderPage();
+
+    await userEvent.selectOptions(screen.getByLabelText('Surface'), 'syndicates-syndicateId');
+    await userEvent.type(screen.getByLabelText('Tenant ID'), TENANT);
+    const open = screen.getByRole('button', { name: 'Open mirror' });
+    expect(open).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('syndicate_id'), 'group 1');
+    await userEvent.click(open);
+
+    await waitFor(() => {
+      const paths = restGet.mock.calls.map(call => String(call[0]));
+      expect(paths.some(path => path.endsWith('/mirror/syndicates-syndicateId?syndicate_id=group%201'))).toBe(true);
+      expect(paths.some(path => path.endsWith('/mirror/syndicates-syndicateId/parity?syndicate_id=group%201'))).toBe(true);
+    });
+  });
+
   it('shows the manifest exception reason for a parity-exempt surface', async () => {
     mockApi({});
     renderPage();

@@ -87,7 +87,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # Curated vocabularies
 # ---------------------------------------------------------------------------
 
-# Union of every canonicalAuthorities value across the 18-projection registry.
+# Curated union of technical-projection and direct product-provider authorities.
 # Alphabetized. Kept here so an authority can never silently drift out of the
 # curated plane; additions to a projection must land here (or be declared
 # pending) in the same change.
@@ -98,44 +98,71 @@ AUTHORITY_INDEX = frozenset(
         "agent_entities",
         "agent_entity",
         "agent_executions",
+        "ai_execution_facts",
+        "analytics_events",
+        "authenticated_tenant_permission",
         "attribution_credits",
+        "attribution_runs",
+        "behavioral_signals",
+        "bronze_sdk_events",
         "campaign_facts",
+        "campaign_population_link_events",
         "campaign_touchpoints",
+        "canonical_activity",
+        "canonical_conversions",
         "cluster_definitions",
         "cluster_membership",
         "cohort_membership",
         "commerce",
+        "commerce_order_payment_ledger",
+        "commerce_intent_authority",
+        "commerce_product_offer_graph",
         "communication",
         "communication_facts",
         "computation",
+        "consent_policy_decisions",
         "connection_config",
         "connection_permissions",
         "context_capsules",
         "credential_readiness",
         "currency_value_normalization",
+        "delegations",
         "deployments",
         "economic",
         "economic_facts",
         "entities",
         "entity_graph",
+        "entity_identity",
         "entity_registry",
+        "entity_wallets",
         "episode_facts",
+        "episode_journey_authority_records",
         "evidence",
         "events",
         "execution_facts",
+        "flow_trace_paths",
+        "flow_traces",
         "fraud_synthesis",
         "geo_observations",
+        "geo_temporal_timezone_assertions",
+        "gold_temporal_heatmap",
         "graph",
+        "graph_edges",
         "graph_motifs",
         "graph_snapshots",
         "identity",
+        "identity_clusters_v2",
+        "identity_source_identities",
+        "influence_propagation",
         "ingestion_health",
         "infrastructure_facts",
         "infrastructure_state",
         "journeys",
+        "journey_steps",
         "locations",
         "managed_integration_lifecycle",
         "measurement_contract",
+        "model_artifact_registry",
         "model_governance",
         "mutation_history",
         "observations",
@@ -144,22 +171,51 @@ AUTHORITY_INDEX = frozenset(
         "payments",
         "population",
         "population_definitions",
+        "profile_prediction_outputs",
+        "provider_connections",
         "provider_health",
         "provider_registry",
         "relationship_facts",
+        "relationship_fidelity",
+        "relationship_predicate_registry",
         "resources",
+        "revenue_adjustments",
+        "risk_assessments",
+        "risk_intervention_records",
         "risk_outputs",
+        "risk_signals",
+        "risk_signals",
+        "semantic_context_cards",
+        "semantic_embedding_metadata",
+        "semantic_memory_graph",
+        "semantic_memory_records",
+        "silver_semantic_observations",
+        "silver_exposure_facts",
+        "silver_commerce_flow_facts",
         "social_observations",
+        "social_relationship_evidence_events",
+        "spend_records",
         "source_coverage",
         "source_facts",
         "source_provenance",
         "source_schema",
+        "support_callback_events",
+        "support_callbacks",
+        "support_case_agent_assignment_events",
+        "support_case_context_events",
+        "support_cases",
+        "support_case_events",
+        "support_case_subjects",
         "sync_state",
         "temporal",
         "temporal_kernel",
+        "targeting_leakage_findings",
+        "tenant_contract_profiles",
         "tools",
         "touchpoints",
+        "transfers",
         "validity_state",
+        "workflow_definition_revisions",
     }
 )
 
@@ -212,14 +268,102 @@ _OUTPUT_SECTIONS = frozenset(
     {
         "summary",
         "state",
+        "financial_risk",
         "timeline",
         "evidence",
         "interactions",
+        "journeys",
+        "anomalies",
+        "normalization",
+        "stages",
+        "paths",
+        "sessions",
         "outcomes",
         "findings",
+        "influence",
+        "propagation",
         "health",
         "coverage",
         "deployments",
+        "episode_context",
+        "policy_boundary",
+        "agent_spawned_agents",
+        "agent_delegations",
+        "support_case_summary",
+        "support_conversation_history",
+        "support_callbacks",
+        "support_participants",
+        "support_sla",
+        "support_journey_links",
+        "support_agents",
+        "support_resolution",
+        "support_evidence_trace",
+        "thread_summary",
+        "message_inventory",
+        "participants",
+        "profile_links",
+        "journey_links",
+        "response_events",
+        "agent_authorship",
+        "syndicates",
+        "signal_summary",
+        "source_inventory",
+        "classification",
+        "quality",
+        "normalization",
+        "linked_entities",
+        "campaign_links",
+        "risk_flags",
+        "risk_edges",
+        "relationships",
+        "freshness",
+        "evidence_trace",
+        "semantic_summary",
+        "memories",
+        "cards",
+        "topics",
+        "embeddings_meta",
+        "source_links",
+        "decay",
+        "conflicts",
+        "policy_state",
+        "product_offer_summary",
+        "catalog_links",
+        "exposures",
+        "intent",
+        "cart_checkout",
+        "purchase",
+        "availability_price",
+        "value",
+        "risk",
+        "workflow_summary",
+        "journey_attribution",
+        "likely_next_states",
+        "triggers",
+        "runs",
+        "actors",
+        "approvals",
+        "agent_steps",
+        "actions",
+        "social_contagion",
+        "trust_edges",
+        "failures",
+        # Agent behavioral intelligence (WO-110): derived, rebuildable
+        # behavior read-model sections composed into Agent 360.
+        "behavior",
+        "behavior_decisions",
+        "behavior_journey",
+        "behavior_influence",
+        "behavior_authority",
+        "behavior_value",
+        "behavior_risk",
+        "behavior_trust",
+        "behavior_market",
+        "behavior_observability",
+        # Delegation lineage from the derived principal <-> agent read model.
+        "lineage",
+        # Value 360 agent-mediated activity (WO-092).
+        "agent_mediated_activity",
     }
 )
 
@@ -325,6 +469,112 @@ _PENDING_REQUIRED_KEYS = ("id", "kind", "reason", "resolvesInProjection")
 # canonical id spaces (spine plane, projection registry, metric registry,
 # surface registry).
 _PENDING_KINDS = frozenset({"spine", "projection", "metric", "surface"})
+
+# The product catalog is a separate namespace from the technical projection
+# registry. A product surface may compose one or more providers, but must not
+# be inferred from the projection rows or their UI ``surfaceIds``.
+EXPECTED_PRODUCT_360_SURFACE_IDS = frozenset(
+    {
+        "account360",
+        "agent360",
+        "campaign360",
+        "commerce360",
+        "communications360",
+        "episode360",
+        "execution360",
+        "identity360",
+        "journey360",
+        "location360",
+        "memory360",
+        "profile360",
+        "risk360",
+        "signals360",
+        "social360",
+        "support360",
+        "value360",
+        "workflow360",
+    }
+)
+# Direct product-surface providers are a separate namespace from technical
+# projection providers. Keep this allowlist tied to the code-wired paths that
+# currently exist; adding a row here requires the corresponding frame-runtime
+# call path and focused integration coverage.
+EXPECTED_DIRECT_PROVIDER_BINDINGS = {
+    "account360": [
+        {
+            "providerClass": "Account360Provider",
+            "providerKind": "surface_frame_provider",
+            "bindingStatus": "runtime_wired",
+            "subjectKinds": ["entity"],
+            "domainSlotIds": [
+                "account_summary",
+                "members",
+                "agents",
+                "profiles",
+                "risk",
+                "journeys",
+                "contracts",
+            ],
+            "canonicalAuthorityRefs": [
+                "commerce",
+                "entities",
+                "entity_registry",
+                "graph",
+                "identity",
+                "journeys",
+                "risk_outputs",
+                "tenant_contract_profiles",
+            ],
+            "implementationRef": "services/api/identity/account360_provider.py",
+            "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
+        }
+    ],
+    "identity360": [
+        {
+            "providerClass": "Identity360Provider",
+            "providerKind": "surface_authority_reader",
+            "bindingStatus": "runtime_wired",
+            "subjectKinds": ["agent", "entity", "source"],
+            "domainSlotIds": [
+                "identifier_inventory",
+                "namespace_map",
+                "match_evidence",
+                "conflicts",
+                "confidence",
+                "aliases",
+                "devices_sessions",
+                "wallets",
+                "policy_redactions",
+                "evidence_trace",
+            ],
+            "canonicalAuthorityRefs": [
+                "entities",
+                "entity_registry",
+                "entity_wallets",
+                "evidence",
+                "identity",
+                "provider_registry",
+                "source_provenance",
+            ],
+            "implementationRef": "services/api/identity/identity/identity360_provider.py",
+            "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
+        }
+    ],
+}
+EXPERIENCE_360_FRAME_STATES = frozenset(
+    {
+        "ready",
+        "partial",
+        "empty",
+        "missing",
+        "unknown",
+        "suppressed",
+        "stale",
+        "degraded",
+        "unavailable",
+        "conflicted",
+    }
+)
 
 # ── Projection engine (A8) constants ─────────────────────────────────────────
 
@@ -576,16 +826,6 @@ def _find_cycles(edges: dict[str, set[str]]) -> list[list[str]]:
     return unique
 
 
-def _cycle_has_optional_edge(cycle: list[str], optional_edges: dict[str, set[str]]) -> bool:
-    """True if any edge of the cycle is an optional projection dependency."""
-    for i in range(len(cycle)):
-        src = cycle[i]
-        dst = cycle[(i + 1) % len(cycle)]
-        if dst in optional_edges.get(src, set()):
-            return True
-    return False
-
-
 def _format_optional_cycle_path(cycle: list[str], optional_edges: dict[str, set[str]]) -> str:
     """Render a cycle path with an ``(optional)`` marker on each optional edge.
 
@@ -602,6 +842,32 @@ def _format_optional_cycle_path(cycle: list[str], optional_edges: dict[str, set[
         else:
             segments.append(dst)
     return " -> ".join(segments)
+
+
+def _cycle_through_optional_edge(
+    source: str, target: str, edges: dict[str, set[str]]
+) -> list[str] | None:
+    """Find a shortest cycle containing one declared optional edge.
+
+    The general DFS cycle detector reports representative paths only. An
+    optional edge can therefore participate in a real cycle without appearing
+    in those paths. Search back from its target so every cyclic optional edge
+    receives a diagnostic. The registry is small, and sorted neighbors keep
+    warning paths stable across runs.
+    """
+    queue: list[list[str]] = [[target]]
+    visited = {target}
+    for path in queue:
+        node = path[-1]
+        if node == source:
+            cycle = [source, *path[:-1]]
+            first = cycle.index(min(cycle))
+            return cycle[first:] + cycle[:first]
+        for neighbor in sorted(edges.get(node, ())):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append([*path, neighbor])
+    return None
 
 
 def _pending_ids(p: dict) -> set[str]:
@@ -839,26 +1105,30 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
             Violation("dependency_dag", "error", f"dependency cycle: {path}", cycle[0])
         )
 
-    # Union cycles (required ∪ optional) that exist only through an optional
-    # edge are benign → warning: the lazy runtime degrades missing optional deps
-    # to not_applicable, so a union cycle is never an ordering deadlock. Each
-    # warning labels the optional edge(s) with an ``(optional)`` marker.
+    # Union cycles (required ∪ optional) that exist through an optional edge
+    # are benign → warning: the lazy runtime degrades missing optional deps to
+    # not_applicable. Check each optional edge, since one representative cycle
+    # per component can conceal other participating optional edges.
     union_edges = {
         pid: set(required_edges.get(pid, ())) | set(optional_edges.get(pid, ()))
         for pid in ids
     }
-    for cycle in _find_cycles(union_edges):
-        if not _cycle_has_optional_edge(cycle, optional_edges):
-            continue  # fully-required cycle already reported as an error above
-        path = _format_optional_cycle_path(cycle, optional_edges)
-        violations.append(
-            Violation(
-                "dependency_dag",
-                "warning",
-                f"dependency cycle (via optional edge): {path}",
-                cycle[0],
+    reported_cycles: set[tuple[str, ...]] = set()
+    for source in sorted(optional_edges):
+        for target in sorted(optional_edges[source]):
+            cycle = _cycle_through_optional_edge(source, target, union_edges)
+            if cycle is None or tuple(cycle) in reported_cycles:
+                continue
+            reported_cycles.add(tuple(cycle))
+            path = _format_optional_cycle_path(cycle, optional_edges)
+            violations.append(
+                Violation(
+                    "dependency_dag",
+                    "warning",
+                    f"dependency cycle (via optional edge): {path}",
+                    cycle[0],
+                )
             )
-        )
 
     for p in projections:
         pid = p.get("id")
@@ -1603,12 +1873,751 @@ def validate_outcome_registry(reg: dict, ctx: Optional[dict] = None) -> list[Vio
     return violations
 
 
+def validate_product_surface_catalog(reg: dict) -> list[Violation]:
+    """Validate the 18-product 360 catalog and its projection crosswalk.
+
+    Product surfaces are a distinct catalog from technical projection
+    providers. ``catalog_only`` bindings state only that an explicit mapping
+    exists; provider implementation metadata is copied from the projection
+    registry and is not a readiness claim.
+    """
+    violations: list[Violation] = []
+    version = reg.get("productSurfaceCatalogVersion")
+    if not isinstance(version, str) or not version:
+        violations.append(
+            Violation(
+                "product_surface_catalog",
+                "error",
+                "productSurfaceCatalogVersion must be a non-empty string",
+            )
+        )
+
+    frame_states = reg.get("experience360FrameStates")
+    if (
+        not isinstance(frame_states, list)
+        or not all(isinstance(state, str) for state in frame_states)
+        or set(frame_states) != EXPERIENCE_360_FRAME_STATES
+    ):
+        violations.append(
+            Violation(
+                "product_surface_catalog",
+                "error",
+                "experience360FrameStates must contain the canonical frame lifecycle states",
+            )
+        )
+
+    surfaces = reg.get("productSurfaces")
+    if not isinstance(surfaces, list) or not surfaces:
+        return violations + [
+            Violation(
+                "product_surface_catalog",
+                "error",
+                "productSurfaces must be a non-empty catalog array",
+            )
+        ]
+
+    projections_raw = reg.get("projections")
+    projections = {
+        row.get("id"): row
+        for row in projections_raw
+        if isinstance(row, dict) and isinstance(row.get("id"), str)
+    } if isinstance(projections_raw, list) else {}
+    surface_ids = [row.get("id") if isinstance(row, dict) else None for row in surfaces]
+    valid_ids = {item for item in surface_ids if isinstance(item, str)}
+    if len(valid_ids) != len(surfaces):
+        violations.append(
+            Violation(
+                "product_surface_catalog",
+                "error",
+                "product surface ids must be strings and unique",
+            )
+        )
+    if valid_ids != EXPECTED_PRODUCT_360_SURFACE_IDS or len(surfaces) != 18:
+        violations.append(
+            Violation(
+                "product_surface_catalog",
+                "error",
+                "productSurfaces must contain exactly the registered 18 product 360 ids",
+            )
+        )
+
+    catalog_contract_states = {
+        "draft_pending_source_alignment",
+        "reconstructed_pending_source_alignment",
+        "source_aligned",
+    }
+    for surface in surfaces:
+        if not isinstance(surface, dict):
+            violations.append(
+                Violation("product_surface_catalog", "error", "each product surface must be an object")
+            )
+            continue
+        sid = surface.get("id") if isinstance(surface.get("id"), str) else None
+        if sid is not None and not re.fullmatch(r"[a-z][A-Za-z0-9]*360", sid):
+            violations.append(
+                Violation("product_surface_catalog", "error", "product surface id must be lower camel case ending in 360", sid)
+            )
+        for field in ("displayName", "description"):
+            if not isinstance(surface.get(field), str) or not surface[field].strip():
+                violations.append(
+                    Violation("product_surface_catalog", "error", f"{field} must be a non-empty string", sid)
+                )
+        if surface.get("contractStatus") not in catalog_contract_states:
+            violations.append(
+                Violation("product_surface_catalog", "error", "contractStatus must be a recognized source-alignment state", sid)
+            )
+        subject_kinds = surface.get("subjectKinds")
+        if (
+            not isinstance(subject_kinds, list)
+            or not subject_kinds
+            or not all(isinstance(kind, str) and kind in set(reg.get("subjectKinds", [])) for kind in subject_kinds)
+            or len(set(subject_kinds)) != len(subject_kinds)
+        ):
+            violations.append(
+                Violation("product_surface_catalog", "error", "subjectKinds must be unique registered subject kinds", sid)
+            )
+
+        slots = surface.get("domainSlots")
+        if not isinstance(slots, list) or not slots:
+            violations.append(
+                Violation("product_surface_catalog", "error", "domainSlots must be a non-empty array", sid)
+            )
+            slots = []
+        slot_ids: set[str] = set()
+        slot_authorities: set[str] = set()
+        aggregate_bindings: dict[str, str] = {}
+        aggregate_capabilities: set[str] = set()
+        direct_provider_bindings = surface.get("directProviderBindings", [])
+        direct_authorities_by_slot: dict[str, set[str]] = {}
+        if isinstance(direct_provider_bindings, list):
+            for direct_binding in direct_provider_bindings:
+                if not isinstance(direct_binding, dict):
+                    continue
+                direct_slot_ids = direct_binding.get("domainSlotIds")
+                direct_authorities = direct_binding.get("canonicalAuthorityRefs")
+                if not isinstance(direct_slot_ids, list) or not isinstance(direct_authorities, list):
+                    continue
+                authority_set = {
+                    authority
+                    for authority in direct_authorities
+                    if isinstance(authority, str) and authority in AUTHORITY_INDEX
+                }
+                for direct_slot_id in direct_slot_ids:
+                    if isinstance(direct_slot_id, str):
+                        direct_authorities_by_slot.setdefault(direct_slot_id, set()).update(
+                            authority_set
+                        )
+        for slot in slots:
+            if not isinstance(slot, dict):
+                violations.append(
+                    Violation("product_surface_catalog", "error", "each domain slot must be an object", sid)
+                )
+                continue
+            slot_id = slot.get("id")
+            if not isinstance(slot_id, str) or not _LOWER_SNAKE_RE.fullmatch(slot_id) or slot_id in slot_ids:
+                violations.append(
+                    Violation("product_surface_catalog", "error", f"invalid or duplicate domain slot id {slot_id!r}", sid)
+                )
+            if isinstance(slot_id, str):
+                slot_ids.add(slot_id)
+            if slot.get("requirement") not in {"required", "optional"}:
+                violations.append(
+                    Violation("product_surface_catalog", "error", "domain slot requirement must be required or optional", sid)
+                )
+            if not isinstance(slot.get("description"), str) or not slot["description"].strip():
+                violations.append(
+                    Violation("product_surface_catalog", "error", "domain slot description must be non-empty", sid)
+                )
+            required_metadata = slot.get("requiredFrameMetadata", [])
+            if (
+                not isinstance(required_metadata, list)
+                or not all(
+                    item in {"slotActorAttribution", "slotAuthorityDecision"}
+                    for item in required_metadata
+                )
+                or len(set(required_metadata)) != len(required_metadata)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "requiredFrameMetadata must list unique supported frame metadata requirements",
+                        sid,
+                    )
+                )
+            authorities = slot.get("canonicalAuthorityRefs")
+            if (
+                not isinstance(authorities, list)
+                or not authorities
+                or not all(isinstance(authority, str) and authority in AUTHORITY_INDEX for authority in authorities)
+                or len(set(authorities)) != len(authorities)
+            ):
+                violations.append(
+                    Violation("product_surface_catalog", "error", "canonicalAuthorityRefs must be unique registered authorities", sid)
+                )
+                authorities = []
+            slot_authorities.update(authorities)
+
+            bindings = slot.get("projectionBindings")
+            if not isinstance(bindings, list):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "projectionBindings must be an array",
+                        sid,
+                    )
+                )
+                continue
+            direct_authorities = direct_authorities_by_slot.get(slot_id, set())
+            if "partialImplementationReason" in slot and (
+                not isinstance(slot["partialImplementationReason"], str)
+                or not slot["partialImplementationReason"].strip()
+                or not (bindings or direct_authorities)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "partialImplementationReason requires a bound slot and non-empty reason",
+                        sid,
+                    )
+                )
+            if not bindings:
+                if direct_authorities:
+                    if slot.get("unboundReason") is not None:
+                        violations.append(
+                            Violation(
+                                "product_surface_catalog",
+                                "error",
+                                "unboundReason is invalid when a direct provider is bound to the slot",
+                                sid,
+                            )
+                        )
+                    if isinstance(authorities, list) and not set(authorities).issubset(
+                        direct_authorities
+                    ):
+                        violations.append(
+                            Violation(
+                                "product_surface_catalog",
+                                "error",
+                                "domain slot authorities lack a bound direct provider",
+                                sid,
+                            )
+                        )
+                else:
+                    unbound_reason = slot.get("unboundReason")
+                    if not isinstance(unbound_reason, str) or not unbound_reason.strip():
+                        violations.append(
+                            Violation(
+                                "product_surface_catalog",
+                                "error",
+                                "an unbound slot must declare its implementation gap in unboundReason",
+                                sid,
+                            )
+                        )
+                continue
+            if slot.get("unboundReason") is not None:
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "unboundReason is valid only when no projection or direct provider is bound",
+                        sid,
+                    )
+                )
+            slot_projection_ids: set[str] = set()
+            slot_provider_authorities: set[str] = set(direct_authorities)
+            for binding in bindings:
+                if not isinstance(binding, dict):
+                    violations.append(
+                        Violation("product_surface_catalog", "error", "slot projection binding must be an object", sid)
+                    )
+                    continue
+                projection_id = binding.get("projectionId")
+                provider = projections.get(projection_id) if isinstance(projection_id, str) else None
+                if provider is None:
+                    violations.append(
+                        Violation("product_surface_catalog", "error", f"unknown projection binding {projection_id!r}", sid)
+                    )
+                    continue
+                if projection_id in slot_projection_ids:
+                    violations.append(
+                        Violation("product_surface_catalog", "error", f"duplicate projection binding {projection_id!r} in slot", sid)
+                    )
+                slot_projection_ids.add(projection_id)
+                role = binding.get("role")
+                if role not in {"primary", "supporting"}:
+                    violations.append(
+                        Violation("product_surface_catalog", "error", "projection binding role must be primary or supporting", sid)
+                    )
+                binding_subject_kinds = binding.get("subjectKinds")
+                provider_subject_kinds = set(provider.get("subjectKinds", []))
+                surface_subject_kinds = (
+                    set(subject_kinds) if isinstance(subject_kinds, list) else set()
+                )
+                if (
+                    not isinstance(binding_subject_kinds, list)
+                    or not all(
+                        isinstance(kind, str)
+                        and kind in surface_subject_kinds
+                        and kind in provider_subject_kinds
+                        for kind in binding_subject_kinds
+                    )
+                    or len(set(binding_subject_kinds)) != len(binding_subject_kinds)
+                ):
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            f"subjectKinds for {projection_id!r} must be unique declared surface and provider subject kinds",
+                            sid,
+                        )
+                    )
+                current_role = aggregate_bindings.get(projection_id)
+                aggregate_bindings[projection_id] = (
+                    "primary" if role == "primary" or current_role == "primary" else "supporting"
+                )
+                slot_provider_authorities.update(provider.get("canonicalAuthorities", []))
+                sections = binding.get("sectionIds")
+                declared_sections = set(provider.get("outputSections", []))
+                if (
+                    not isinstance(sections, list)
+                    or not all(isinstance(section, str) for section in sections)
+                    or len(set(sections)) != len(sections)
+                    or set(sections) - declared_sections
+                ):
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            f"sectionIds for {projection_id!r} must be unique declared outputSections",
+                            sid,
+                        )
+                    )
+                elif not sections and declared_sections:
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            f"sectionIds for {projection_id!r} cannot be empty while outputSections are declared",
+                            sid,
+                        )
+                    )
+            required_claim_projection_ids = slot.get("requiredClaimProjectionIds", [])
+            if (
+                not isinstance(required_claim_projection_ids, list)
+                or not all(
+                    isinstance(projection_id, str) and projection_id
+                    for projection_id in required_claim_projection_ids
+                )
+                or len(set(required_claim_projection_ids)) != len(required_claim_projection_ids)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "requiredClaimProjectionIds must list unique bound projection ids",
+                        sid,
+                    )
+                )
+            elif set(required_claim_projection_ids) - slot_projection_ids:
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "requiredClaimProjectionIds must be included in the slot projection bindings",
+                        sid,
+                    )
+                )
+            if isinstance(authorities, list):
+                missing_authorities = set(authorities) - slot_provider_authorities
+                declared_gap = slot.get("unboundCanonicalAuthorityRefs", [])
+                if (
+                    not isinstance(declared_gap, list)
+                    or not all(isinstance(ref, str) for ref in declared_gap)
+                    or len(set(declared_gap)) != len(declared_gap)
+                    or set(declared_gap) != missing_authorities
+                ):
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            f"unboundCanonicalAuthorityRefs must exactly list authorities without a bound provider: {sorted(missing_authorities)}",
+                            sid,
+                        )
+                    )
+                if missing_authorities and not (
+                    isinstance(slot.get("authorityGapReason"), str)
+                    and slot["authorityGapReason"].strip()
+                ):
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            "a partially bound slot must explain its unbound authorities",
+                            sid,
+                        )
+                    )
+                if not missing_authorities and slot.get("authorityGapReason") is not None:
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            "authorityGapReason is invalid when all authorities are bound",
+                            sid,
+                        )
+                    )
+
+        if not isinstance(direct_provider_bindings, list):
+            violations.append(
+                Violation(
+                    "product_surface_catalog",
+                    "error",
+                    "directProviderBindings must be an array when declared",
+                    sid,
+                )
+            )
+            direct_provider_bindings = []
+        if direct_provider_bindings != EXPECTED_DIRECT_PROVIDER_BINDINGS.get(sid, []):
+            violations.append(
+                Violation(
+                    "product_surface_catalog",
+                    "error",
+                    "directProviderBindings must match the registered runtime-wired surface paths",
+                    sid,
+                )
+            )
+        direct_provider_classes: set[str] = set()
+        for binding in direct_provider_bindings:
+            if not isinstance(binding, dict):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct surface provider binding must be an object",
+                        sid,
+                    )
+                )
+                continue
+            provider_class = binding.get("providerClass")
+            if (
+                not isinstance(provider_class, str)
+                or not re.fullmatch(r"[A-Z][A-Za-z0-9]*", provider_class)
+                or provider_class in direct_provider_classes
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct provider classes must be unique class names",
+                        sid,
+                    )
+                )
+            elif isinstance(provider_class, str):
+                direct_provider_classes.add(provider_class)
+            if binding.get("providerKind") not in {
+                "surface_authority_reader",
+                "surface_frame_provider",
+            }:
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct provider kind must describe a surface authority reader or frame provider",
+                        sid,
+                    )
+                )
+            if binding.get("bindingStatus") != "runtime_wired":
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct provider status must attest only a runtime-wired call path",
+                        sid,
+                    )
+                )
+            direct_authority_refs = binding.get("canonicalAuthorityRefs")
+            if (
+                not isinstance(direct_authority_refs, list)
+                or not direct_authority_refs
+                or not all(
+                    isinstance(authority, str) and authority in AUTHORITY_INDEX
+                    for authority in direct_authority_refs
+                )
+                or len(set(direct_authority_refs)) != len(direct_authority_refs)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct provider canonicalAuthorityRefs must be unique registered authorities",
+                        sid,
+                    )
+                )
+            direct_subject_kinds = binding.get("subjectKinds")
+            if (
+                not isinstance(direct_subject_kinds, list)
+                or not direct_subject_kinds
+                or not all(
+                    isinstance(kind, str)
+                    and isinstance(subject_kinds, list)
+                    and kind in subject_kinds
+                    for kind in direct_subject_kinds
+                )
+                or len(set(direct_subject_kinds)) != len(direct_subject_kinds)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct provider subjectKinds must be unique declared surface subject kinds",
+                        sid,
+                    )
+                )
+            direct_slot_ids = binding.get("domainSlotIds")
+            if (
+                not isinstance(direct_slot_ids, list)
+                or not direct_slot_ids
+                or not all(isinstance(slot_id, str) and slot_id in slot_ids for slot_id in direct_slot_ids)
+                or len(set(direct_slot_ids)) != len(direct_slot_ids)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct provider domainSlotIds must be unique declared surface slots",
+                        sid,
+                    )
+                )
+            for ref_field in ("implementationRef", "runtimeBindingRef"):
+                ref_value = binding.get(ref_field)
+                if (
+                    not isinstance(ref_value, str)
+                    or not ref_value.startswith("services/api/")
+                    or not ref_value.endswith(".py")
+                ):
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            f"direct provider {ref_field} must be a repository-relative backend source path",
+                            sid,
+                        )
+                    )
+
+        projection_bindings = surface.get("projectionBindings")
+        if not isinstance(projection_bindings, list):
+            violations.append(
+                Violation("product_surface_catalog", "error", "surface projectionBindings must be an array", sid)
+            )
+            projection_bindings = []
+        declared_top: dict[str, dict] = {}
+        for binding in projection_bindings:
+            if not isinstance(binding, dict):
+                violations.append(
+                    Violation("product_surface_catalog", "error", "surface projection binding must be an object", sid)
+                )
+                continue
+            projection_id = binding.get("projectionId")
+            provider = projections.get(projection_id) if isinstance(projection_id, str) else None
+            if provider is None:
+                violations.append(
+                    Violation("product_surface_catalog", "error", f"unknown surface projection binding {projection_id!r}", sid)
+                )
+                continue
+            if projection_id in declared_top:
+                violations.append(
+                    Violation("product_surface_catalog", "error", f"duplicate surface projection binding {projection_id!r}", sid)
+                )
+            declared_top[projection_id] = binding
+            if binding.get("bindingStatus") != "catalog_only":
+                violations.append(
+                    Violation("product_surface_catalog", "error", "initial projection binding status must be catalog_only", sid)
+                )
+            if binding.get("providerImplementationState") != provider.get("implementationState"):
+                violations.append(
+                    Violation("product_surface_catalog", "error", f"provider implementation state for {projection_id!r} must mirror the projection registry", sid)
+                )
+            aggregate_capabilities.update(provider.get("capabilityKeys", []))
+        if set(declared_top) != set(aggregate_bindings):
+            violations.append(
+                Violation("product_surface_catalog", "error", "top-level projectionBindings must equal the domain-slot binding union", sid)
+            )
+        for projection_id, role in aggregate_bindings.items():
+            if declared_top.get(projection_id, {}).get("role") != role:
+                violations.append(
+                    Violation("product_surface_catalog", "error", f"top-level role for {projection_id!r} must reflect its slot roles", sid)
+                )
+
+        truth = surface.get("sourceOfTruth")
+        if not isinstance(truth, dict) or truth.get("ownsCanonicalTruth") is not False:
+            violations.append(
+                Violation("product_surface_catalog", "error", "sourceOfTruth must declare ownsCanonicalTruth=false", sid)
+            )
+        else:
+            truth_authorities = truth.get("canonicalAuthorities")
+            if not isinstance(truth_authorities, list) or set(truth_authorities) != slot_authorities:
+                violations.append(
+                    Violation("product_surface_catalog", "error", "sourceOfTruth authorities must equal the domain-slot authority union", sid)
+                )
+            if not isinstance(truth.get("prohibitedOwnership"), list) or not truth["prohibitedOwnership"]:
+                violations.append(
+                    Violation("product_surface_catalog", "error", "sourceOfTruth must list prohibited truth ownership", sid)
+                )
+
+        freshness = surface.get("freshnessPolicy")
+        if (
+            not isinstance(freshness, dict)
+            or freshness.get("required") is not True
+            or freshness.get("sourceTimestamps") != "preserve"
+            or freshness.get("missingTimestamp") != "unknown"
+            or freshness.get("onStale") != "mark_affected_slots_stale"
+            or freshness.get("requirementStatus") != "contract_requirement_not_provider_attestation"
+        ):
+            violations.append(
+                Violation("product_surface_catalog", "error", "freshnessPolicy must require freshness and preserve explicit missing/stale state", sid)
+            )
+        elif freshness.get("maxAgeSeconds") is not None and (
+            not isinstance(freshness.get("maxAgeSeconds"), int) or freshness["maxAgeSeconds"] <= 0
+        ):
+            violations.append(
+                Violation("product_surface_catalog", "error", "maxAgeSeconds must be null or a positive integer", sid)
+            )
+
+        policy = surface.get("policyBehavior")
+        if (
+            not isinstance(policy, dict)
+            or policy.get("tenantScopeRequired") is not True
+            or policy.get("authorizationBeforeRead") is not True
+            or policy.get("policyEvaluation") != "per_projection_before_composition"
+            or policy.get("historicalConsentEvaluation") != "required_when_applicable"
+            or policy.get("redactionBehavior") != "suppress_disallowed_slot_without_inference"
+            or policy.get("requirementStatus") != "contract_requirement_not_provider_attestation"
+        ):
+            violations.append(
+                Violation("product_surface_catalog", "error", "policyBehavior must describe tenant-first governed reads and non-inferential redaction", sid)
+            )
+
+        capabilities = surface.get("backendCapabilities")
+        required_capabilities = {
+            "experience360.frame.compose",
+            "experience360.tenant_scope.enforce",
+            "experience360.policy.evaluate",
+            "experience360.freshness.evaluate",
+            "experience360.evidence.provenance",
+        }
+        if (
+            not isinstance(capabilities, dict)
+            or not isinstance(capabilities.get("required"), list)
+            or not all(isinstance(capability, str) for capability in capabilities.get("required", []))
+            or not required_capabilities.issubset(set(capabilities.get("required", [])))
+            or not isinstance(capabilities.get("projectionCapabilityKeys"), list)
+            or not all(isinstance(capability, str) for capability in capabilities.get("projectionCapabilityKeys", []))
+            or set(capabilities.get("projectionCapabilityKeys", [])) != aggregate_capabilities
+            or capabilities.get("providerCapabilityStatus") != "registry_requirements_not_route_attestation"
+        ):
+            violations.append(
+                Violation("product_surface_catalog", "error", "backendCapabilities must list frame requirements and the bound providers' capability keys", sid)
+            )
+
+        lens_contract = surface.get("lensContract")
+        if (
+            surface.get("contractStatus") == "source_aligned"
+            and isinstance(lens_contract, dict)
+            and lens_contract.get("sourceAlignmentStatus") != "source_aligned"
+        ):
+            violations.append(
+                Violation(
+                    "product_surface_catalog",
+                    "error",
+                    "source-aligned surface must have a source-aligned lensContract",
+                    sid,
+                )
+            )
+        if (
+            not isinstance(lens_contract, dict)
+            or not isinstance(lens_contract.get("lensIds"), list)
+            or not all(isinstance(lens_id, str) for lens_id in lens_contract.get("lensIds", []))
+            or len(set(lens_contract.get("lensIds", []))) != len(lens_contract.get("lensIds", []))
+            or lens_contract.get("sourceAlignmentStatus")
+            not in {"pending_source_alignment", "source_aligned"}
+        ):
+            violations.append(
+                Violation("product_surface_catalog", "error", "lensContract must declare unique lens ids and an explicit alignment state", sid)
+            )
+        elif lens_contract.get("sourceAlignmentStatus") == "source_aligned":
+            blueprint = surface.get("blueprintContract")
+            blueprint_lens_ids = blueprint.get("requiredLensIds") if isinstance(blueprint, dict) else None
+            lens_ids = lens_contract["lensIds"]
+            if (
+                not isinstance(blueprint_lens_ids, list)
+                or not all(isinstance(lens_id, str) for lens_id in blueprint_lens_ids)
+                or lens_ids != blueprint_lens_ids
+                or lens_contract.get("expectedCount") != len(blueprint_lens_ids)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "source-aligned lensContract must match blueprint requiredLensIds and expectedCount",
+                        sid,
+                    )
+                )
+            blueprint_slot_ids = (
+                blueprint.get("requiredSlotIds") if isinstance(blueprint, dict) else None
+            )
+            required_slot_ids = [
+                slot.get("id")
+                for slot in slots
+                if isinstance(slot, dict) and slot.get("requirement") == "required"
+            ]
+            if (
+                not isinstance(blueprint_slot_ids, list)
+                or required_slot_ids != blueprint_slot_ids
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "source-aligned required domain slots must match blueprint requiredSlotIds in order",
+                        sid,
+                    )
+                )
+        elif sid == "agent360":
+            blueprint = surface.get("blueprintContract")
+            blueprint_required_ids = (
+                blueprint.get("requiredSlotIds") if isinstance(blueprint, dict) else None
+            )
+            actual_required_ids = {
+                slot.get("id")
+                for slot in slots
+                if isinstance(slot, dict) and slot.get("requirement") == "required"
+            }
+            if (
+                lens_contract.get("expectedCount") != 8
+                or not isinstance(blueprint_required_ids, list)
+                or len(blueprint_required_ids) != 11
+                or actual_required_ids != set(blueprint_required_ids)
+            ):
+                violations.append(
+                    Violation("product_surface_catalog", "error", "Agent 360 must preserve the recovered 11-slot and 8-lens counts", sid)
+                )
+        elif lens_contract.get("expectedCount") is not None:
+            violations.append(
+                Violation("product_surface_catalog", "error", "unverified non-Agent lens counts must remain unset", sid)
+            )
+
+    return violations
+
+
 def validate_all(reg: dict, ctx: Optional[dict] = None) -> list[Violation]:
     """Run every rule group and return a flat, deterministically sorted list."""
     if ctx is None:
         ctx = load_context()
     results = (
         validate_registry_schema(reg)
+        + validate_product_surface_catalog(reg)
         + validate_dependency_dag(reg)
         + validate_cross_registry(reg, ctx)
         + validate_inventory(reg, ctx)

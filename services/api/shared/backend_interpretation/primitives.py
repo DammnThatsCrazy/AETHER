@@ -20,14 +20,14 @@ Three carriers:
   evidence lineage AND model/policy derivation lineage (gap row 26 / outcome
   store returns ``None`` today). It can be projected FROM a measurement
   :class:`~journeys.measurement.outcome.contracts.Outcome` (same state ladder)
-  but adds the subject + derivation + exact-money columns the canonical outcome
-  read currently drops.
+  but adds a graph ``EntityRef`` or distinct product-context subject, plus the
+  derivation and exact-money columns the canonical outcome read currently drops.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -111,6 +111,22 @@ class ContractSpineModel(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
+class OutcomeContextRef(ContractSpineModel):
+    """Exact measurement context reference that is not a graph entity.
+
+    Outcome truth can be scoped directly to a campaign, episode, journey, or
+    population. These references intentionally remain distinct from
+    :class:`EntityRef`: a journey is not a graph vertex merely because an
+    outcome is measured about it.
+    """
+
+    kind: Literal["campaign", "episode", "journey", "population"]
+    id: str
+
+
+OutcomeSubjectRef = Union[EntityRef, OutcomeContextRef]
+
+
 class ValidityWindow(ContractSpineModel):
     """When a relationship fact is (and stays) true.
 
@@ -183,6 +199,16 @@ class EpisodeRecord(ContractSpineModel):
     title: Optional[str] = None
     occurred_from: Optional[str] = None
     occurred_to: Optional[str] = None
+    # Exact canonical journey touchpoint IDs explicitly linked by an episode
+    # writer. ``None`` means the source predates or does not provide this
+    # reference inventory; ``[]`` means the writer explicitly recorded none.
+    # Attribution credits remain a separate authority and are never inferred
+    # from these journey touchpoint references.
+    journey_touchpoint_ids: Optional[list[str]] = None
+    # Stable journey IDs explicitly supplied by an episode writer. This is an
+    # episode-to-journey association, not an inferred subject/time join and not
+    # proof that the episode population is complete for the journey.
+    journey_id: Optional[str] = None
     outcome_ids: list[str] = Field(default_factory=list)
     observation_ids: list[str] = Field(default_factory=list)
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
@@ -202,13 +228,15 @@ class OutcomeTruthRecord(ContractSpineModel):
     ``evidence_refs`` entry. ``state`` uses the Outcome finality-ladder values
     (no second enum); exact money is carried as ``value_amount`` /
     ``value_currency`` DECIMAL strings (``None`` amount is a typed
-    ``value_state`` absence, never a silent ``0.0``).
+    ``value_state`` absence, never a silent ``0.0``). ``subject`` retains a
+    graph ``EntityRef`` for existing callers or an ``OutcomeContextRef`` for an
+    exact product context such as a journey.
     """
 
     outcome_id: str
     tenant_id: str
     definition_ref: str
-    subject: Optional[EntityRef] = None
+    subject: Optional[OutcomeSubjectRef] = None
     state: str = "unknown"  # OutcomeState ladder values (validated below)
     achieved_at: Optional[str] = None
     value_amount: Optional[str] = None
@@ -219,6 +247,10 @@ class OutcomeTruthRecord(ContractSpineModel):
     policy_version: Optional[str] = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     source_event_ids: list[str] = Field(default_factory=list)
+    prediction_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    prediction_label_contract_version: Optional[str] = Field(
+        default=None, min_length=1, max_length=128
+    )
     observed_at: Optional[str] = None
     updated_at: str = Field(default_factory=utc_now_iso)
     superseded_by: Optional[str] = None
@@ -227,8 +259,7 @@ class OutcomeTruthRecord(ContractSpineModel):
     def validate_vocab(cls, value: str) -> None:
         if value not in OUTCOME_STATES:
             raise ValueError(
-                f"state {value!r} is not an Outcome ladder member "
-                f"(allowed: {OUTCOME_STATES})"
+                f"state {value!r} is not an Outcome ladder member (allowed: {OUTCOME_STATES})"
             )
 
 

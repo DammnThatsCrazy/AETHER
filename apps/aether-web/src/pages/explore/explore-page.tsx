@@ -1,289 +1,113 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import type { GraphContext, GraphObjectRef } from '@aether/shared/graph-context-contract';
-import {
-  GraphContextBar,
-  GraphTimeRail,
-  GraphWorkspaceFrame,
-  NoesisContextStrip,
-  allBlueprintLenses,
-  FilterBar,
-  FilterBuilder,
-  resolveLensAvailability,
-  useExplorationFilters,
-  useGraph,
-  useGraphActions,
-  useGraphContext,
-  useGraphHistory,
-} from '@aether/ui/exploration';
-import { GraphPage } from '@aether-app/pages/graph/graph-page';
-import { deriveGraphMaturity, useTenantReadiness } from '@aether-app/features/activation/use-tenant-readiness';
-import type { LensResolution } from '@aether/ui/exploration';
-import type { GraphEdge, GraphNode } from '@aether-app/components/graph/graph-canvas';
-import type { GraphCluster } from '@aether-app/features/graph/use-graph-data';
-import { ExploreSnapshotControls } from '@aether-app/features/graph/explore-snapshot-controls';
-
-function temporalLabel(context: GraphContext): string {
-  const temporal = context.temporal;
-  if (temporal.mode === 'as_of') return temporal.as_of ? `As of ${temporal.as_of}` : 'Point-in-time graph';
-  if (temporal.mode === 'compare') return temporal.compare_to ? `Compared with ${temporal.compare_to}` : 'Comparison graph';
-  if (temporal.mode === 'relative') return `Relative ${temporal.field}`;
-  return `Window · ${temporal.field}`;
-}
-
-interface ScopeLabels {
-  readonly tenant: string;
-  readonly workspace: string;
-  readonly environment: string;
-  readonly account?: string;
-  readonly organization?: string;
-}
-
-function scopeLabels(context: GraphContext): ScopeLabels {
-  const scope = context.scope;
-  return {
-    tenant: scope.tenant_id,
-    workspace: scope.workspace_id,
-    environment: scope.environment_id,
-    ...(scope.account_id ? { account: scope.account_id } : {}),
-    ...(scope.organization_id ? { organization: scope.organization_id } : {}),
-  };
-}
-
-function GraphMaturityPanel() {
-  const { data, isLoading, error } = useTenantReadiness();
-
-  let body: ReactNode;
-  if (isLoading && !data) {
-    body = <p data-testid="graph-maturity-loading">Checking graph foundations…</p>;
-  } else if (error) {
-    body = <p data-testid="graph-maturity-error">Graph foundation readiness could not be checked.</p>;
-  } else if (!data) {
-    body = <p data-testid="graph-maturity-unavailable">Graph foundation readiness is unavailable.</p>;
-  } else {
-    const maturity = deriveGraphMaturity(data);
-    if (maturity.state === 'no_data') {
-      body = (
-        <div data-testid="graph-maturity-no-data">
-          <p>The graph needs observed events and links before it can mature.</p>
-          <Link className="mt-1 inline-block text-accent underline hover:text-text-primary" to="/activate">
-            Connect a source in Activation
-          </Link>
-        </div>
-      );
-    } else if (maturity.state === 'building') {
-      body = (
-        <div data-testid="graph-maturity-building">
-          <p>Graph foundations are building — {maturity.blocking.length} check{maturity.blocking.length === 1 ? '' : 's'} still blocking verification.</p>
-          <ul className="mt-1 list-inside list-disc" aria-label="Blocking graph foundation checks">
-            {maturity.blocking.map((check) => <li key={check}>{check}</li>)}
-          </ul>
-        </div>
-      );
-    } else {
-      body = <p data-testid="graph-maturity-ready">Graph foundations are verified.</p>;
-    }
-  }
-
-  return (
-    <section data-testid="graph-maturity-panel" className="mb-3 rounded border border-border-subtle p-3 text-xs text-text-secondary">
-      <p className="font-medium text-text-primary">Graph maturity</p>
-      <div className="mt-1">{body}</div>
-    </section>
-  );
-}
-
-function lensStatusLabel(resolution: LensResolution): string {
-  if (resolution.availability === 'available') return 'Available';
-  if (resolution.availability === 'not_entitled') return 'Not included';
-  if (resolution.availability === 'unauthorized') return 'No access';
-  return resolution.entry?.pending ? 'Pending engine binding' : 'Not ready';
-}
-
-function LensDock({ objectKind }: {
-  readonly objectKind: string;
-}) {
-  const { population, addFilter, removeFilterAt, setPopulation } = useExplorationFilters();
-  const resolutions = useMemo(() => allBlueprintLenses().map((lens) => resolveLensAvailability(lens.id, {
-    objectKind,
-    surfaceId: 'graph',
-    // Capability and readiness facts are intentionally absent here: the
-    // registry resolver must represent those lenses as not-ready, never infer
-    // entitlement from the presence of a UI control.
-    temporalMode: 'window',
-  })), [objectKind]);
-  return (
-    <div className="p-3 text-xs text-text-secondary">
-      <GraphMaturityPanel />
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-medium text-text-primary">Graph lenses</p>
-        <span className="text-[10px] text-text-muted" data-testid="lens-object-kind">{objectKind}</span>
-      </div>
-      <p className="mt-1">Registered lens availability for this graph context.</p>
-      <details className="mt-3 rounded border border-border-subtle bg-surface-raised/40" data-testid="graph-query-controls">
-        <summary className="cursor-pointer px-2 py-1.5 font-medium text-text-primary">Query builder</summary>
-        <div className="space-y-2 border-t border-border-subtle p-2">
-          <FilterBar
-            population={population}
-            onRemove={removeFilterAt}
-            onClear={() => setPopulation(null)}
-          />
-          <FilterBuilder surface="graph" onAdd={addFilter} />
-        </div>
-      </details>
-      <div className="mt-3 space-y-1" role="list" aria-label="Registered graph lenses">
-        {resolutions.map((resolution) => {
-          const entry = resolution.entry;
-          if (!entry) return null;
-          return (
-            <div
-              key={resolution.lensId}
-              role="listitem"
-              data-lens-availability={resolution.availability}
-              className="flex w-full items-center justify-between rounded border border-border-subtle px-2 py-1.5 text-left"
-            >
-              <span>{entry.displayName}</span>
-              <span className="ml-2 text-[10px] text-text-muted">{lensStatusLabel(resolution)}</span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-2 text-[10px] text-text-muted">Unavailable lenses stay visible with their registry state.</p>
-    </div>
-  );
-}
+import { useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import type { GraphObjectRef } from '@aether/shared/graph-context-contract';
+import { useGraphActions, useGraphContext } from '@aether/ui/exploration';
+import type { GraphNode } from '@aether-app/components/graph/graph-canvas';
+import { ExploreAdvancedView } from './explore-advanced-view';
+import { ExploreNetworkView } from './explore-network-view';
+import { useExploreGraphRead } from './explore-read';
+import { ExploreTraceView, type TraceVisual } from './explore-trace-view';
 
 /**
- * Graph-first tenant exploration workspace. GraphPage is deliberately
- * composed rather than reimplemented: its existing loading, empty, error,
- * partial/truth, table, path, canvas, and first-click inspector behavior is
- * the graph workspace's source of truth.
+ * Graph (`/explore`; Claude Design handoff: Aether Explore → Graph, Aether
+ * Graph Trace). One route, three views chosen by `?view=`:
+ *
+ * - default: the network view — toolbar, principal cards, inspector, path strip;
+ * - `view=trace`: the flow, globe, lenses and replay, scoped to `entity` when
+ *   present (`tv=globe|flow|both` picks the visual);
+ * - `view=advanced`: the Entity Graph explorer, registered lenses, query
+ *   builder and snapshots (GraphPage composed as before).
+ *
+ * Existing deep links keep working: `entity` / `selected_entity` scope the
+ * network view (and still deep-select inside the advanced explorer), `cluster`
+ * and every graph-context parameter are left in place for GraphPage and the
+ * graph provider.
  */
 export function ExplorePage() {
-  const navigate = useNavigate();
-  // GraphContextProvider is the host authority for tenant/workspace and
-  // environment identity. This route is intentionally not renderable without
-  // that provider; no route or deployment label can stand in for its scope.
+  const [params, setParams] = useSearchParams();
   const context = useGraphContext();
-  const graph = useGraph();
-  const history = useGraphHistory();
   const actions = useGraphActions();
-  const [noesisExpanded, setNoesisExpanded] = useState(false);
+  const view = params.get('view');
+  const scopeId = params.get('entity') ?? params.get('selected_entity');
 
-  const labels = useMemo(() => scopeLabels(context), [context]);
-  const currentFocus = context.selection.focused;
-  const historyEntries = history.entries;
-  const currentTemporalLabel = temporalLabel(context);
-  const selectedObjectKind = currentFocus?.kind ?? 'entity';
-  const navigateWithContext = useCallback(() => {
-    const query = graph.toQuery();
-    navigate(query ? `/explore?${query}` : '/explore');
-  }, [graph, navigate]);
-  const selectGraphObject = useCallback((object: Pick<GraphObjectRef, 'id' | 'kind'>) => {
+  const update = useCallback((mutate: (next: URLSearchParams) => void) => {
+    const next = new URLSearchParams(params);
+    mutate(next);
+    setParams(next);
+  }, [params, setParams]);
+
+  const setView = useCallback((value: string | null, extra?: (next: URLSearchParams) => void) => update(next => {
+    if (value) next.set('view', value);
+    else next.delete('view');
+    if (value !== 'trace') next.delete('tv');
+    extra?.(next);
+  }), [update]);
+
+  const setScope = useCallback((id: string | null) => update(next => {
+    next.delete('selected_entity');
+    if (id) next.set('entity', id);
+    else next.delete('entity');
+  }), [update]);
+
+  const selectObject = useCallback((node: Pick<GraphNode, 'id' | 'kind'>) => {
     const ref = {
       tenant_id: context.scope.tenant_id,
       environment_id: context.scope.environment_id,
-      kind: object.kind,
-      id: object.id,
+      kind: node.kind,
+      id: node.id,
     } satisfies GraphObjectRef;
     actions.selectObject(ref);
     actions.focusObject(ref);
-    actions.appendHistory({
-      object: ref,
-      action: 'select',
-      occurred_at: new Date().toISOString(),
-    });
-    navigateWithContext();
-  }, [actions, context.scope.environment_id, context.scope.tenant_id, navigateWithContext]);
-  const handleObjectSelected = useCallback((node: GraphNode) => {
-    selectGraphObject(node);
-  }, [selectGraphObject]);
-  const handleClusterSelected = useCallback((cluster: GraphCluster) => {
-    selectGraphObject({ id: cluster.id, kind: 'cluster' });
-  }, [selectGraphObject]);
-  const handleEdgeSelected = useCallback((edge: GraphEdge) => {
-    selectGraphObject({ id: edge.id, kind: 'edge' });
-  }, [selectGraphObject]);
+  }, [actions, context.scope.environment_id, context.scope.tenant_id]);
 
-  function moveThroughHistory(direction: 'previous' | 'next') {
-    const next = direction === 'previous'
-      ? actions.previousFocus(currentFocus)
-      : actions.nextFocus(currentFocus);
-    if (!next) return;
-    actions.focusObject(next);
-    navigateWithContext();
+  if (view === 'advanced') {
+    return <ExploreAdvancedView onBack={() => setView(null)} />;
+  }
+  return <ExploreReadViews view={view} scopeId={scopeId} params={params} setView={setView} setScope={setScope} selectObject={selectObject} />;
+}
+
+/** Views drawn from the page's one graph read (kept apart so the advanced explorer does not double-read). */
+function ExploreReadViews({ view, scopeId, params, setView, setScope, selectObject }: {
+  readonly view: string | null;
+  readonly scopeId: string | null;
+  readonly params: URLSearchParams;
+  readonly setView: (value: string | null, extra?: (next: URLSearchParams) => void) => void;
+  readonly setScope: (id: string | null) => void;
+  readonly selectObject: (node: Pick<GraphNode, 'id' | 'kind'>) => void;
+}) {
+  const snapshot = useExploreGraphRead();
+  const openTrace = (id: string | null, visual: TraceVisual) => setView('trace', next => {
+    next.set('tv', visual);
+    next.delete('selected_entity');
+    if (id) next.set('entity', id);
+  });
+
+  if (view === 'trace') {
+    const tv = params.get('tv');
+    const visual: TraceVisual = tv === 'flow' || tv === 'both' ? tv : 'globe';
+    return (
+      <ExploreTraceView
+        snapshot={snapshot}
+        scopeId={scopeId}
+        visual={visual}
+        onVisual={(v) => openTrace(scopeId, v)}
+        onBack={() => setView(null)}
+        onShowInGraph={(node) => {
+          selectObject(node);
+          setView(null, next => { next.delete('selected_entity'); next.set('entity', node.id); });
+        }}
+      />
+    );
   }
 
-  const contextBar = (
-    <GraphContextBar
-      workspaceLabel={labels.workspace}
-      environmentLabel={labels.environment}
-      timeLabel={currentTemporalLabel}
-    />
-  );
-  const historyPosition = currentFocus
-    ? historyEntries.findIndex((entry) => entry.object.id === currentFocus.id) + 1
-    : historyEntries.length;
-  const timeRail = (
-    <GraphTimeRail
-      context={context}
-      temporal={context.temporal}
-      historyPosition={historyPosition}
-      historyCount={historyEntries.length}
-      onPrevious={() => moveThroughHistory('previous')}
-      onNext={() => moveThroughHistory('next')}
-    />
-  );
-  const noesisStrip = (
-    <NoesisContextStrip
-      contextChips={[
-        labels.workspace,
-        labels.environment,
-        currentTemporalLabel,
-        ...(currentFocus ? [`Focus · ${currentFocus.kind}:${currentFocus.id}`] : []),
-      ]}
-      expanded={noesisExpanded}
-      onToggle={() => setNoesisExpanded((expanded) => !expanded)}
-    >
-      {noesisExpanded && (
-        <div data-testid="noesis-context-expanded" className="flex flex-wrap items-center gap-2 py-2 text-xs text-text-secondary">
-          <span>Noesis opens with this graph context. Query and context handoff remain read-only until an explicit action is chosen.</span>
-          <button
-            type="button"
-            className="text-accent underline hover:text-text-primary"
-            onClick={() => {
-              const query = graph.toQuery();
-              navigate(query ? `/noesis?${query}` : '/noesis');
-            }}
-          >
-            Open Noesis
-          </button>
-        </div>
-      )}
-    </NoesisContextStrip>
-  );
-
   return (
-    <div data-testid="explore-page" className="h-full">
-      <GraphWorkspaceFrame
-        contextBar={contextBar}
-        lensDock={(
-          <LensDock objectKind={selectedObjectKind} />
-        )}
-        canvas={(
-          <GraphPage
-            embedded
-            onObjectSelected={handleObjectSelected}
-            onClusterSelected={handleClusterSelected}
-            onEdgeSelected={handleEdgeSelected}
-          />
-        )}
-        timeRail={timeRail}
-        noesisStrip={noesisStrip}
-      />
-      <div className="mt-3">
-        <ExploreSnapshotControls />
-      </div>
-    </div>
+    <ExploreNetworkView
+      snapshot={snapshot}
+      scopeId={scopeId}
+      onScope={setScope}
+      onSelectObject={selectObject}
+      onOpenTrace={openTrace}
+      onOpenAdvanced={() => setView('advanced')}
+    />
   );
 }

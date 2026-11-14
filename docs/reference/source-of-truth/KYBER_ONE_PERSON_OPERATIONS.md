@@ -27,6 +27,14 @@ Kyber/operator objective → backend dispatch → durable run record
 → timeline/checkpoint/review output → operator approval → governed commit
 ```
 
+Objective submission binds a tenant-scoped idempotency key to the semantic
+request content. An exact retry returns the existing objective; reusing the key
+with changed goal, type, severity, priority, or payload returns a conflict. The
+current shared-store interface does not provide an atomic create-if-absent
+operation for the objective key, so simultaneous first submissions can still
+race and require a storage-level uniqueness follow-up before this is treated as
+cross-instance exactly-once creation.
+
 ## Worker execution bridge
 
 - `services/api/actions/agent/worker_bridge.py` publishes objective steps to the Agent
@@ -61,13 +69,19 @@ Kyber/operator objective → backend dispatch → durable run record
 - Commit runs **only after an explicit operator approval** of a review batch;
   there is no path from staged → committed that skips approval.
 - Each approved mutation is validated (`GraphWriteValidator`, mutation-class
-  checks, edge idempotency keys) and — when CIS is enabled — evaluated by the
-  CIS mutation gateway; quarantine-band mutations become `quarantined`, never
-  committed.
+  checks, staged-action-specific edge idempotency keys) and — when CIS is
+  enabled — evaluated by the CIS mutation gateway; quarantine-band mutations
+  become `quarantined`, never committed. The commit owner records the graph
+  gateway outcome and advances status/version only when that outcome says the
+  write was applied.
 - Per-mutation transitions `approved → committed | quarantined | failed_commit
-  | rolled_back` are transaction-safe and fully audited; partial batch
-  failures are reported per-mutation, never as silent partial success.
-  `rollback_mutation` records `rolled_back` with best-effort inverse ops.
+  | rolled_back` are durably audited; partial batch failures are reported
+  per-mutation, never as silent partial success. Commit still does not resolve
+  or carry Rights Authority ancestry, and the global mutation-gateway setting
+  may leave graph-ledger enforcement off. `rollback_mutation` still uses raw
+  graph drop operations outside the gateway; an unavailable verification read
+  now opens a repair task instead of reporting `rolled_back`. Neither path is
+  ready to serve as a customer-facing governed action.
 - Rejected batches never commit anything.
 
 ## Durable briefings, alerts, and Catalyst/Cycle
@@ -115,7 +129,9 @@ Redis/durable backing is missing (`shared/store.py` invariant).
 - `make ops-readiness` (`scripts/ops_readiness.py`): flags present +
   default-OFF, ops modules importable, runtime stores reachable, worker
   bridge fails closed in hosted mode, mutation commit approval-gated,
-  all six source-of-truth docs present. Wired into `make release-gate`
+  all six source-of-truth docs present, and
+  `infra/aws/terraform/profiles/production.tfvars` pins at least one
+  `platform_operator_tenant_ids` entry. Wired into `make release-gate`
   after repo consistency and strict production status.
 - Backend suites: `BE/tests/one_person_ops/` (dispatch idempotency,
   lifecycle-state dispatch blocks, kill switch, fail-closed bridge, worker

@@ -6,13 +6,21 @@ visibility: P
 audience: [dev-senior, dev-junior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py]
+source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py, services/api/journeys/comms/repository.py, services/api/journeys/communication360/observations.py]
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR Communication360 repository diff: bounded participant and exact-reference reads do not change webhook signature validation, endpoint ownership, or ingestion procedure."
 source_hashes:
-  "services/api/connectors/integrations/connectors/routes.py": "sha256:f3f63c100a16ead6edf6c8806c5d7f74e12c01f16b72be83eaf99165088f7826"
+  "services/api/connectors/integrations/connectors/routes.py": "sha256:d537cd13e0607f0d8e9c9db85797bdfcf42cb450815883dee6a44c8cca987a5e"
   "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
-  "services/api/journeys/comms/ingest.py": "sha256:5d3bb421d821198b564cd5ad5faa940d4de4de334711c186043366bf2623ad68"
-  "services/api/journeys/comms/routes.py": "sha256:c82539c0f35ba7c15a8c1a517a7ce26f1b20da5e16eba019ed9771fcd73259e8"
+  "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
+  "services/api/journeys/comms/repository.py": "sha256:ce8230d0d3f362eb838f12d97c37346dd10f8c98ec29e07d6c1029c90d74de5d"
+  "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
+  "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
+  "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
+  "services/api/journeys/communication360/repository.py": "sha256:acd4fe9dd547ff1092511e4571910085494ba818c03d7d8efa2fe1576867b989"
 ---
 
 # Generic Signed Communications Webhook
@@ -64,7 +72,12 @@ Tenant administrators mint and manage endpoints for each comms connector:
 The legacy header-based connector webhook route
 (`POST /v1/integrations/webhooks/{connector}` with `X-Aether-Tenant-ID`) is
 **permanently denied for comms connectors**; it remains only for non-comms
-connectors. Configure your comms provider to POST to the minted
+connectors. Shopify deliveries on that route never use the tenant header: the
+tenant comes from the shop domain (`X-Shopify-Shop-Domain`, else the body
+`domain`; the two must agree when both are present), which must match exactly
+one enabled Shopify binding whose own secret then verifies the HMAC over the
+raw body. Every denial on the legacy route returns the same generic
+`400`. Configure your comms provider to POST to the minted
 `/comms/{connector}/{endpoint_id}` URL instead.
 
 ## Endpoint
@@ -113,6 +126,31 @@ rejected and counted (`comms_webhook_signature_failures_total`).
 - `recipient_email` transits in memory only: it is hashed to a tenant-scoped
   alias before any storage (ADR-C10). Prefer sending `recipient_alias_id`
   (a hash you obtained from Aether) when possible.
+- An event may include a typed `participant_roster` assertion containing an
+  opaque `conversation_id`, `provider_account_id`, explicit completeness
+  state/evidence, and participant `bindings`. Each binding carries a provider
+  recipient/profile ID, role, validity interval, and metadata-only evidence;
+  optional principal identities and provider delegation references remain
+  source claims. A complete roster must include an expected binding count,
+  completeness evidence, and a validity start for every binding.
+- Participant rosters are accepted only when a tenant webhook secret is
+  configured and the request HMAC verifies. The server creates the authoring
+  actor context; caller JSON cannot supply it. Every provider identity must
+  resolve through the exact tenant/provider/account identity mapping before
+  role facts are written. HMAC authenticates the submitting source; it does
+  not independently verify participant identity or role. Provider conversation
+  IDs are not canonical Conversation IDs. An optional explicit `membership`
+  names `conversation_id`, `external_thread_id` and evidence; the writer
+  atomically persists canonical Conversation membership and role bindings,
+  rejecting conflicting reassignment. Optional `context_links` records exact
+  campaign, source, profile, journey and episode references with evidence.
+  Bounded latest-roster and membership reads can expose participant evidence,
+  but do not establish full message coverage, historical membership or freshness.
+- For connector-originated events, canonical sender/recipient identities and
+  consent receipts are resolved by server-side authorities. Provider payload
+  fields cannot set canonical entity IDs or consent state. Missing identity
+  bindings remain unresolved; missing or non-matching consent evidence remains
+  unknown and is handled by the applicable fail-closed policy.
 - Up to 500 events per request.
 - Idempotency: `provider + external_id` dedupes replays end to end.
 
@@ -127,6 +165,7 @@ POST /v1/comms/replies
   "in_reply_to": "<msg-5@esp>",
   "references": ["<msg-5@esp>"],
   "provider_thread_id": "th-1",
+  "provider_account_id": "account-1",
   "received_at": "2026-07-01T12:34:00Z",
   "raw_evidence_ref": "s3://…"           // reference only — bodies are never accepted
 }]}
@@ -136,6 +175,24 @@ Correlation priority: `In-Reply-To` → `References` → provider thread →
 external message id → reply-to token (`replies+<token>@…`). Automated
 responses (DSN, out-of-office, mail loops) are detected and excluded from
 engagement while remaining recorded as facts.
+
+Communication360 target evidence is narrower than this correlation hierarchy:
+only explicit `In-Reply-To` references with exact provider account and thread
+scope resolve to a unique evidence-backed Silver target no later than the reply.
+Consistent lifecycle observations of one message count as one target, anchored
+to its earliest observation. Conflicting direction or sender, or a repeated
+origin state (sent, received, replied), remain ambiguous, and more than 100 facts
+for one message ID is an incomplete read.
+The reply's own message ID remains separate from its target. Missing scope,
+invalid, ambiguous or incomplete reads remain unknown; association does not prove
+causal response, sender identity, actor authority or complete provider history.
+
+Qualifying Silver facts also produce a durable provider-thread observation in the
+same database transaction. Communication360 groups observed messages by exact
+provider/account/thread and can report explicit durable reply associations
+without creating synthetic acts. Source-linked inventory requires bounded exact
+canonical-reference and Silver rejoins. These observations do not create
+canonical Conversation membership, identity or delegation authority.
 
 ## Signed click tokens
 

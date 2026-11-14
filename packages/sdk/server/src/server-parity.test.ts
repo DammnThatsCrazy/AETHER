@@ -264,6 +264,26 @@ describe('server SDK — recursive scrubber (cycle/depth safe)', () => {
     expect(out.cards[0].brand).toBe('visa');
   });
 
+  it('keeps authorization reference ids but still redacts auth credentials', () => {
+    const out = scrubSensitiveFields({
+      authorizationId: 'appr-1',
+      authorization_ref: 'appr-2',
+      authorization: 'Bearer abc',
+      authToken: 't',
+      auth: { password: 'p' },
+      authorizationIdNested: 'x',
+      nested: { authorizationId: { token: 'leak' } },
+    }) as any;
+    expect(out.authorizationId).toBe('appr-1');
+    expect(out.authorization_ref).toBe('appr-2');
+    expect(out.authorization).toBe('[REDACTED]');
+    expect(out.authToken).toBe('[REDACTED]');
+    expect(out.auth).toBe('[REDACTED]');
+    expect(out.authorizationIdNested).toBe('[REDACTED]');
+    // Only a string reference is exempt; an object under the key is still redacted.
+    expect(out.nested.authorizationId).toBe('[REDACTED]');
+  });
+
   it('tolerates a cyclic payload without throwing and still redacts', () => {
     const cyclic: Record<string, unknown> = { secret: 'x' };
     cyclic.self = cyclic;

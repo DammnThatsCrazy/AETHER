@@ -22,6 +22,7 @@ from config.settings import WorkerType
 from models.core import AgentTask, TaskResult
 
 from workers.base import BaseWorker
+from workers.outbound import UnsafeDestinationError, fetch_public
 
 logger = logging.getLogger("aether.worker.profile_enricher")
 
@@ -179,10 +180,9 @@ class ProfileEnricherWorker(BaseWorker):
         try:
             with httpx.Client(
                 timeout=_HTTP_TIMEOUT,
-                follow_redirects=True,
                 headers={"User-Agent": "Aether-Enricher/1.0"},
             ) as client:
-                resp = client.get(url)
+                resp, _ = fetch_public(client, url)
                 resp.raise_for_status()
                 html = resp.text
                 sources.append("web_domain")
@@ -244,6 +244,8 @@ class ProfileEnricherWorker(BaseWorker):
             )
         except httpx.RequestError as exc:
             logger.warning(f"Request error fetching {url}: {exc}")
+        except UnsafeDestinationError as exc:
+            logger.warning(f"Refused enrichment fetch of {url}: {exc}")
 
         return filled, sources
 

@@ -265,11 +265,44 @@ before alarms will deliver notifications.
 
 ### 2. Inject secret values
 
-The Secrets Manager stubs are created empty. Populate them:
+The Secrets Manager stubs are created empty. The bootstrap script creates the
+generated secret values and preserves them on a normal rerun:
+
+```bash
+python scripts/bootstrap_aws_secrets.py --env staging
+```
+
+It initializes `aether/identity-verification-token-key` and its `-previous`
+companion to the same random value. On first deployment, use a reviewed plan
+with `identity_verification_secrets_enabled=false` so ECS task definitions do
+not reference unpopulated stubs. After bootstrapping, create a new reviewed
+plan with `identity_verification_secrets_enabled=true`; the promotion workflow
+checks both AWSCURRENT versions before applying the task definitions. If the
+other secrets are already populated, initialize only this pair with:
+
+```bash
+python scripts/bootstrap_aws_secrets.py --env staging --only-identity-verification-keys
+```
+
+When rotating, provide both the new active value and old active value through a
+secure env file. The bootstrap writes the previous-key companion first, then
+the active key. Other provider-owned values can be added from the Stripe or
+Google dashboards.
+
+For manual single-secret setup, populate them:
 
 ```bash
 aws secretsmanager put-secret-value \
   --secret-id aether/jwt-secret \
+  --secret-string 'REPLACE_WITH_SECURE_RANDOM_256BIT_KEY'
+
+# Set both identity verification secrets to the same initial random value.
+# During a key change, keep the old value in the -previous secret.
+aws secretsmanager put-secret-value \
+  --secret-id aether/identity-verification-token-key-previous \
+  --secret-string 'REPLACE_WITH_THE_SAME_INITIAL_KEY'
+aws secretsmanager put-secret-value \
+  --secret-id aether/identity-verification-token-key \
   --secret-string 'REPLACE_WITH_SECURE_RANDOM_256BIT_KEY'
 
 aws secretsmanager put-secret-value \

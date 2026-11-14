@@ -49,12 +49,12 @@ public final class AetherHealthAgent {
     private let appVersion: String
     private let heartbeatIntervalSec: TimeInterval
     private let manifestRefreshSec: TimeInterval
-    /// HMAC-SHA256 secret used to verify manifest signatures (Truth Kernel §2.9).
+    /// Base64url SPKI P-256 public key used to verify manifest signatures (Truth
+    /// Kernel §2.9; print it with `python scripts/sdk_manifest_public_key.py`).
     /// When set, unsigned or invalid-signature manifests are rejected and the
-    /// last-known-good manifest is kept (fail-closed). Source: the tenant's
-    /// SDK_CONFIG_SECRET, provisioned out-of-band and never shipped in the app
-    /// bundle in plaintext for production tenants.
-    private let manifestVerificationKey: String?
+    /// last-known-good manifest is kept (fail-closed). A public key is safe to
+    /// ship in the app. When unset, manifests are applied without verification.
+    private let manifestPublicKey: String?
 
     private var heartbeatTimer: Timer?
     private var manifestTimer: Timer?
@@ -83,7 +83,7 @@ public final class AetherHealthAgent {
         appVersion: String = "",
         heartbeatIntervalSec: TimeInterval = 60,
         manifestRefreshSec: TimeInterval = 300,
-        manifestVerificationKey: String? = nil
+        manifestPublicKey: String? = nil
     ) {
         self.endpoint = endpoint
         self.apiKey = apiKey
@@ -91,7 +91,7 @@ public final class AetherHealthAgent {
         self.appVersion = appVersion
         self.heartbeatIntervalSec = heartbeatIntervalSec
         self.manifestRefreshSec = manifestRefreshSec
-        self.manifestVerificationKey = manifestVerificationKey
+        self.manifestPublicKey = manifestPublicKey
         self.sdkId = Self.loadOrCreateSdkId(defaults: defaults)
     }
 
@@ -184,18 +184,15 @@ public final class AetherHealthAgent {
         request.timeoutInterval = 5.0
 
         URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
-            guard let self = self,
-                  let data = data,
-                  let manifest = try? JSONDecoder().decode(SDKManifest.self, from: data) else { return }
+            guard let self = self, let data = data else { return }
 
-            // Signature gate (Truth Kernel §2.9): when a verification key is
-            // configured, reject unsigned/invalid manifests and keep the last
-            // known-good config (fail-closed). Without a key, apply as before.
-            if let key = self.manifestVerificationKey, !key.isEmpty {
-                guard self.verifyManifestSignature(manifest, key: key) else {
-                    self.log("Manifest signature verification failed — keeping last-known-good config")
-                    return
-                }
+            // The backend wraps the manifest in an APIResponse envelope; intake
+            // unwraps it and applies the signature gate (Truth Kernel §2.9). It
+            // returns nil for an absent, unsigned or invalid manifest when a public
+            // key is configured, so the last-known-good config is kept (fail-closed).
+            guard let manifest = ManifestIntake.accept(data, publicKey: self.manifestPublicKey) else {
+                self.log("Manifest absent or rejected — keeping last-known-good config")
+                return
             }
 
             let previousVersion = self.configVersion
@@ -213,52 +210,6 @@ public final class AetherHealthAgent {
 
     /// Return the currently cached (verified, if a key is configured) manifest.
     public func getManifest() -> SDKManifest? { currentManifest }
-
-    // MARK: - Manifest Signature Verification (§2.9)
-
-    /// Verify a manifest's HMAC-SHA256 signature over its canonical serialization
-    /// using `key` (hex-encoded signature, constant-time comparison). Returns
-    /// false for an empty signature or empty key so callers fail closed.
-    public func verifyManifestSignature(_ manifest: SDKManifest, key: String) -> Bool {
-        guard !manifest.signature.isEmpty, !key.isEmpty else { return false }
-        let canonical = Self.canonicalManifestString(manifest)
-        let mac = HMAC<SHA256>.authenticationCode(
-            for: Data(canonical.utf8),
-            using: SymmetricKey(data: Data(key.utf8))
-        )
-        let expected = mac.map { String(format: "%02x", $0) }.joined()
-        return Self.constantTimeEquals(expected, manifest.signature.lowercased())
-    }
-
-    /// Deterministic canonical serialization of the signed manifest fields
-    /// (signature excluded). Top-level fields and feature keys are sorted so the
-    /// SDK and the backend signer produce byte-identical input.
-    static func canonicalManifestString(_ m: SDKManifest) -> String {
-        let features = m.features.keys.sorted()
-            .map { "\($0)=\(m.features[$0]! ? "true" : "false")" }
-            .joined(separator: ",")
-        let fields: [(String, String)] = [
-            ("features", features),
-            ("manifest_version", m.manifest_version),
-            ("min_sdk_version", m.min_sdk_version),
-            ("published_at", m.published_at),
-            ("rollout_percentage", String(m.rollout_percentage)),
-            ("schema_version", m.schema_version),
-        ]
-        return fields.sorted { $0.0 < $1.0 }
-            .map { "\($0.0)=\($0.1)" }
-            .joined(separator: "|")
-    }
-
-    /// Length-checked, constant-time string comparison (avoids early-exit timing
-    /// leaks when comparing signatures).
-    static func constantTimeEquals(_ a: String, _ b: String) -> Bool {
-        let ab = Array(a.utf8), bb = Array(b.utf8)
-        guard ab.count == bb.count else { return false }
-        var diff: UInt8 = 0
-        for i in 0..<ab.count { diff |= ab[i] ^ bb[i] }
-        return diff == 0
-    }
 
     private func log(_ message: String) {
         #if DEBUG

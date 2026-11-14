@@ -154,7 +154,9 @@ These are measurements, each tied to a ledger row.
   any PR that adds a settings field nothing reads. `ML_MODE` is the one remaining
   unread field; the release profiles pin it, so it goes with that profile
   dimension. Rows `delivery-unread-settings-flags` and
-  `delivery-unread-settings-flags-pending`.
+  `delivery-unread-settings-flags-pending`. `DELIVERY_WEBHOOK_SIGNING_SECRET`
+  followed later: callbacks now verify only with the delivering channel's own
+  secret, so the platform-wide fallback had no reader and was deleted.
 - **Backend code nothing mounts.** Import-graph reachability from `main.py`, the
   packages loaded by name and every script, workflow or Dockerfile that names a
   module (descriptive registries, docs, tests and a script's path or checklist
@@ -171,7 +173,9 @@ These are measurements, each tied to a ledger row.
   `config/backend_reachability.yaml` against ledger row
   `product-backend-unmounted-code-pending`, and
   `scripts/validate_backend_reachability.py` fails any PR that adds a module
-  nothing reaches or leaves a stale allowlist entry. Rows
+  nothing reaches or leaves a stale allowlist entry. The read-only rights lineage
+  trace (`tenancy.rights_authority.source_lineage`) is listed there: tested, but
+  no route or worker consumes it yet. Rows
   `product-backend-unmounted-code` and `product-backend-unmounted-code-pending`.
 - **Two handlers on one URL.** `tests/unit/test_route_conflicts.py` froze 7
   duplicates but compared path-parameter names literally, so it could not see
@@ -362,3 +366,8 @@ Each step is its own PR on `Development` and states what it makes deletable.
    and a shared semantic core.
 8. Bind a class to frontend apps and shared packages, then re-measure with
    `--report` on both validators.
+
+
+## Backend reachability update
+
+`connectors.managed_integrations.rollout_repository` is now reachable; it was removed from the unreachable allowlist.

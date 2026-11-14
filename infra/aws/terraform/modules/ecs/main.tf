@@ -363,6 +363,26 @@ locals {
   # Pilot billing is direct Aether Checkout + Portal billing, not the deferred
   # Kyber revops/provider-sync surface. URLs are derived from the canonical
   # Aether origin so a plan cannot point a paid pilot at a local default.
+  # config/release/feature_flags/staging.yaml lists, under
+  # runtime.flags.task_environment, the default-off flags staging tasks must
+  # set to true (the Identity Continuity runtime for staging proof). Reading
+  # the manifest keeps it the single source: settings.py defaults these off,
+  # so the manifest alone used to leave staging with identity resolution
+  # disabled. Production keeps the source defaults.
+  staging_identity_runtime_flags = yamldecode(
+    file("${path.module}/../../../../../config/release/feature_flags/staging.yaml")
+  ).runtime.flags.task_environment
+  identity_runtime_environment = var.deployment_profile == "staging" ? [
+    for flag in local.staging_identity_runtime_flags : { name = flag, value = "true" }
+  ] : []
+
+  # Binds runtime evidence (the staging identity proof capture answers 503
+  # without it) to the image this revision runs. Delivery's cloned revisions
+  # replace it with the digest they deliver, so both sources agree.
+  deployment_identity_environment = [
+    { name = "AETHER_DEPLOYMENT_ID", value = var.backend_image_digest },
+  ]
+
   stripe_runtime_environment = [
     { name = "DEPLOYMENT_LANE", value = var.deployment_lane },
     { name = "STRIPE_BILLING_ENABLED", value = var.stripe_billing_enabled ? "true" : "false" },
@@ -439,22 +459,26 @@ locals {
 
   # Secret name → container env var name mapping for backend.
   # lookup() tolerates missing keys so terraform import can evaluate the
-  # graph before every secret is in state; the apply workflow validates
-  # all secrets exist before any task definition is created.
+  # graph before every secret is in state. Identity verification keys are
+  # mounted only after the operator has populated both AWSCURRENT versions;
+  # the promotion workflow checks this metadata before accepting the opt-in.
   backend_secrets = merge(
     {
-      JWT_SECRET                  = lookup(var.secret_arns, "jwt-secret", "")
-      BYOK_ENCRYPTION_KEY         = lookup(var.secret_arns, "byok-encryption-key", "")
-      DATABASE_URL_SECRET         = lookup(var.secret_arns, "db-password", "")
-      STRIPE_SECRET_KEY           = lookup(var.secret_arns, "stripe-secret-key", "")
-      STRIPE_WEBHOOK_SECRET       = lookup(var.secret_arns, "stripe-webhook-secret", "")
-      ORACLE_SIGNER_PRIVATE_KEY   = lookup(var.secret_arns, "oracle-signer-private-key", "")
-      WATERMARK_SECRET_KEY        = lookup(var.secret_arns, "watermark-secret-key", "")
-      CANARY_SECRET_SEED          = lookup(var.secret_arns, "canary-secret-seed", "")
-      EXTRACTION_CANARY_SEED      = lookup(var.secret_arns, "extraction-canary-seed", "")
-      SDK_CONFIG_SECRET           = lookup(var.secret_arns, "sdk-config-secret", "")
-      FIRST_ADMIN_BOOTSTRAP_TOKEN = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
+      JWT_SECRET                       = lookup(var.secret_arns, "jwt-secret", "")
+      BYOK_ENCRYPTION_KEY              = lookup(var.secret_arns, "byok-encryption-key", "")
+      DATABASE_URL_SECRET              = lookup(var.secret_arns, "db-password", "")
+      STRIPE_SECRET_KEY                = lookup(var.secret_arns, "stripe-secret-key", "")
+      STRIPE_WEBHOOK_SECRET            = lookup(var.secret_arns, "stripe-webhook-secret", "")
+      ORACLE_SIGNER_PRIVATE_KEY        = lookup(var.secret_arns, "oracle-signer-private-key", "")
+      WATERMARK_SECRET_KEY             = lookup(var.secret_arns, "watermark-secret-key", "")
+      CANARY_SECRET_SEED               = lookup(var.secret_arns, "canary-secret-seed", "")
+      EXTRACTION_CANARY_SEED           = lookup(var.secret_arns, "extraction-canary-seed", "")
+      SDK_CONFIG_SECRET                = lookup(var.secret_arns, "sdk-config-secret", "")
+      FIRST_ADMIN_BOOTSTRAP_TOKEN      = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
     },
+    var.identity_verification_secrets_enabled ? {
+      IDENTITY_VERIFICATION_TOKEN_KEY = lookup(var.secret_arns, "identity-verification-token-key", "")
+    } : {},
     # Full staging keeps the two workforce credentials in the ECS execution
     # role's secret injection set. Pilot deliberately omits them; the backend
     # runtime contract above disables the workforce plane in that lane.
@@ -486,13 +510,17 @@ locals {
     var.enable_elasticache ? {
       REDIS_PASSWORD = lookup(var.secret_arns, "redis-auth-token", "")
     } : {},
-    # Companion secrets for zero-downtime rotation window.
-    # Populated by the rotation Lambda in setSecret phase; empty until first rotation.
+    # Companion secrets for zero-downtime rotation windows.
+    # Identity verification's companion is retained while existing evidence
+    # still depends on the previous key and is operator-populated.
     lookup(var.companion_secret_arns, "jwt-secret-previous", null) != null ? {
       JWT_SECRET_PREVIOUS = var.companion_secret_arns["jwt-secret-previous"]
     } : {},
     lookup(var.companion_secret_arns, "byok-encryption-key-previous", null) != null ? {
       BYOK_ENCRYPTION_KEY_PREVIOUS = var.companion_secret_arns["byok-encryption-key-previous"]
+    } : {},
+    var.identity_verification_secrets_enabled && lookup(var.companion_secret_arns, "identity-verification-token-key-previous", null) != null ? {
+      IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS = var.companion_secret_arns["identity-verification-token-key-previous"]
     } : {},
   )
 
@@ -598,9 +626,12 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "ANALYTICS_BACKEND", value = var.analytics_backend },
           { name = "ML_SERVING_URL", value = var.ml_serving_url },
           { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
+          { name = "PLATFORM_OPERATOR_TENANT_IDS", value = join(",", [for t in var.platform_operator_tenant_ids : trimspace(t)]) },
         ],
         concat(
           local.kyber_runtime_environment,
+          local.identity_runtime_environment,
+          local.deployment_identity_environment,
           local.stripe_runtime_environment_with_urls,
           local.email_runtime_environment,
           local.self_signup_runtime_environment,
@@ -827,6 +858,8 @@ resource "aws_ecs_task_definition" "runtime_service" {
       ],
       concat(
         local.kyber_runtime_environment,
+        local.identity_runtime_environment,
+        local.deployment_identity_environment,
         local.stripe_runtime_environment_with_urls,
         local.email_runtime_environment,
         local.self_signup_runtime_environment,

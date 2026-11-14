@@ -9,6 +9,26 @@ since_version: "0.1.0"
 source_files: [services/api/identity/identity/models.py, services/api/identity/identity/routes.py, services/api/identity/identity/schemas.py, services/api/identity/identity/signals.py, services/api/identity/identity/resolver.py, services/api/identity/identity/repository.py, services/api/identity/identity/ingestion_worker.py, services/api/identity/identity/source_identity_registry.py, services/api/identity/identity/verification.py, services/api/identity/identity/verification_repository.py, services/api/identity/identity/evidence.py, services/api/identity/identity/resolution_replay.py, services/api/identity/identity/hashing.py, services/api/ingestion/ingestion/batch.py, services/api/workers/runtime/consumer_specs.py, services/api/repositories/repos.py, services/api/intelligence/analytics/routes.py, services/api/identity/profile/composer.py, services/api/identity/profile/aggregator.py]
 canonical_owner: identity@aether
 last_synced_commit: 4764707
+source_hashes:
+  "services/api/identity/identity/evidence.py": "sha256:6eda2d11a057700067396c1e89f6f8c2a5fe7d34985bb358ab4ae03ca5a9f670"
+  "services/api/identity/identity/hashing.py": "sha256:87d8eb92c18c811561e2e6202c34b0674a68d1db6cbee3df1bc04bb8adcd43c3"
+  "services/api/identity/identity/ingestion_worker.py": "sha256:a861b2e6094cd0ddb271f058e3f6bb63a132afc9e72c7c0d37ff88fc6139664d"
+  "services/api/identity/identity/models.py": "sha256:8d348fd95b8292492d6bde461e6215da52cd802252bfe7e473c839ec529783ee"
+  "services/api/identity/identity/repository.py": "sha256:2910514ae55a950f4688fdfb370279780a7dcd6a459ed6601e63ff7e1a3164c0"
+  "services/api/identity/identity/resolution_replay.py": "sha256:4d156fdef25942e5e51973ea5cc7f32440cf12534f993eebbe36be80f377070e"
+  "services/api/identity/identity/resolver.py": "sha256:de0bda7de3013ddc65cb3451ef8dab8af231ba1a3970421171bcf24640c68d83"
+  "services/api/identity/identity/routes.py": "sha256:6efdac3329d61025d290a590bb53107fa702f8fd2f794189e131d7dec96cdcb6"
+  "services/api/identity/identity/schemas.py": "sha256:824ccc8a4798572e4bdc280dcc0b11cce3a151836e6252d03c3a9a86481e08c0"
+  "services/api/identity/identity/signals.py": "sha256:58912180329dd296317cda10c493935b0a988a5db4137670b9fd0d785f5bfa52"
+  "services/api/identity/identity/source_identity_registry.py": "sha256:c784a3d512611554e7f8c1fbf784c8ec953adbdd420d0ff24af22139d6ace03c"
+  "services/api/identity/identity/verification.py": "sha256:59fa97e3e3d47b89b0ab4ba2416414fc1e41fc293f4d12c5bd02edc91067c278"
+  "services/api/identity/identity/verification_repository.py": "sha256:b9ecd39d1502a0ba19954518a432a64997cc0c74ec4256f51816b38d88bb08eb"
+  "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
+  "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
+  "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
+  "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
+  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Identity Resolution
 
@@ -204,6 +224,14 @@ challenge-time key control, not exclusive ownership, custody, or authorization
 to transact. Sui transaction execution remains separate, and Sui wallet-signing
 formats are not supported by this proof API.
 
+The challenge and verify routes accept an optional `tenant_app_key` containing
+an SDK site ID. A tenant-wide secret credential can select only an active site
+registered to that tenant; a site-bound credential can select only a site in
+its authenticated binding. The resulting identity namespace is
+`site:<site_id>`, matching SDK batch ingestion. A tenant-wide credential with
+no selector uses `tenant:<tenant_id>`. The verify request must resolve to the
+same namespace recorded in the challenge.
+
 ## Resolution replay and revision
 
 New evidence can arrive after the fact. `services/api/identity/identity/resolution_replay.py`
@@ -214,6 +242,30 @@ unbound global replay. Replay is asynchronous, tenant- and component-scoped,
 and idempotent on
 `{tenant_id}:{trigger_id}:{policy_version}`, so a duplicate verification
 callback can never double-merge.
+
+`POST /v1/identity/evidence/{evidence_id}/replay` retries an active evidence
+record with `write` permission, and is unavailable while the resolution kill
+switch is off. Replay jobs use an atomic claim: a concurrent retry receives
+`in_progress` without running the resolver again, while a failed job can be
+claimed for retry. Evidence with an elapsed or malformed `expires_at` is marked
+expired and cannot be replayed. Evidence is bound to a canonical entity only
+for accepted `create`, `link`, or `merge` decisions; `candidate`, `reject`, and
+`blocked` decisions never persist a canonical entity binding. The API returns
+stable public error codes, including `verification_evidence_expired`, and
+withholds internal replay exception details.
+
+Wallet evidence stores its replay subject as tenant-bound authenticated
+ciphertext. Ciphertexts are versioned with a key ID. During key rotation, set
+the new active key and ID and retain the previous key and its ID until encrypted
+evidence has been re-encrypted or expired. The configured key ID is tried
+first, followed by the other active/previous key during the overlap window.
+Existing unversioned ciphertext is also decrypted with the configured
+active/previous key pair. Wallet evidence
+created before subject ciphertext was introduced has no recoverable subject:
+successful prior replay jobs return their cached result; otherwise replay
+returns `reverification_required`, and a new wallet proof must be collected.
+Revocation remains successful for such a legacy row, but replay is skipped and
+logged because the old subject cannot be safely inferred.
 
 Each identity topology change increments a monotonic `resolution_revision` on the
 surviving subject and is carried on the `IDENTITY_MERGED` event, giving
@@ -357,8 +409,11 @@ All routes are under prefix `/v1/identity`.
 | `GET` | `/v1/identity/verification/email/callback` | write | Scanner-safe magic-link landing — validates the token only; never consumes or creates evidence. |
 | `POST` | `/v1/identity/verification/email/challenges/{challenge_id}/consume` | write | One-time consumption of a validated magic link; produces evidence. |
 | `POST` | `/v1/identity/verification/oidc` | write | Validate a trusted OIDC/SSO `email_verified` claim (issuer allowlist + audience) into evidence. |
+| `POST` | `/v1/identity/verification/wallet/challenges` | write | Issue a chain-scoped wallet ownership challenge bound to current consent and the authenticated tenant/site namespace. |
+| `POST` | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | write | Verify and atomically consume a wallet challenge; issue encrypted, durable evidence and trigger scoped replay. |
 | `GET` | `/v1/identity/entities/{canonical_entity_id}/evidence` | read | List verification evidence for an entity (operator-facing, redacted). |
-| `POST` | `/v1/identity/evidence/{evidence_id}/revoke` | write | Revoke verification evidence; triggers resolution replay. |
+| `POST` | `/v1/identity/evidence/{evidence_id}/replay` | write | Retry resolution from active, unexpired evidence; resolver internal errors remain retryable, while legacy wallet evidence returns a cached completed result or requires reverification. |
+| `POST` | `/v1/identity/evidence/{evidence_id}/revoke` | write | Revoke verification evidence and remove its proof-derived verified alias when no unexpired active proof remains. Revoked proof is never replayed as affirmative verification; cleanup failures return an error for retry, and prior entity merges require the explicit identity split workflow to reverse. |
 
 ### SIWX session binding
 

@@ -205,3 +205,23 @@ async def test_service_secret_resolves_from_vault():
         )
     )
     assert resolved == "xoxb-test-token"
+
+
+@pytest.mark.asyncio
+async def test_service_legacy_secret_ignores_other_tenant_vault_row():
+    from repositories.repos import ProvidersRepository
+    from connectors.integrations.connectors.base import ConnectorConfig
+    from shared.credentials.service import credential_service
+
+    vault = ProvidersRepository()
+    await vault.insert("ref:other_tenant:slack", {"tenant_id": "other_tenant", "api_key": "xoxb-other"})
+    await vault.insert("ref:untagged:slack", {"api_key": "xoxb-untagged"})
+
+    svc = ConnectorService()
+    for ref in ("ref:other_tenant:slack", "ref:untagged:slack"):
+        config = ConnectorConfig(
+            tenant_id="own_tenant", connector_type="slack", secret_ref=ref,  # type: ignore[arg-type]
+            enabled=True, secret_configured=True,
+        )
+        assert await svc._resolve_secret(config) is None
+        assert await credential_service.reveal("own_tenant", ref) is None

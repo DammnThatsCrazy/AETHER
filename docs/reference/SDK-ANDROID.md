@@ -14,10 +14,10 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:c7a6eae4a0bfa818735859b25830f17367213e4b25c9e30448b6e3415da0bcba"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:0f65cda990c9aa4559dc08fced6a7cbeac7c1c26f411dab1439bef8accf81bfe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
+  "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
+  "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -342,7 +342,7 @@ data class AetherConfig(
     val flushIntervalMs: Long = 5000L,
     val modules: ModuleConfig = ModuleConfig(),
     val privacy: PrivacyConfig = PrivacyConfig(),
-    val manifestVerificationKey: String? = null, // HMAC-SHA256 secret; when set,
+    val manifestPublicKey: String? = null,   // base64url P-256 public key; when set,
                                              // unsigned/invalid remote manifests
                                              // are rejected (last-known-good kept)
     val autoResumeJourney: Boolean = true,   // Call /sdk/identity/resolve on init
@@ -505,6 +505,8 @@ does not inherit the actor's namespace. Consent and
 active tenant deployment validation still apply. Other wrapper/type-exposed
 events are not publicly SDK-emittable under the current registry contract.
 
+Separately, the 37 agent behavior taxonomy types added for agent behavioral intelligence (objectives, decisions, candidates, authorization, tool retry/switch, execution, quotes and transactions, information and memory references) are `sdkEmitable` for the server agent SDK. Ingestion accepts them, and `agent_subagent_spawned`, only with a validated deployment context; see the [external agent telemetry plane](source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md).
+
 ## x402 Lifecycle Emitters
 
 ```kotlin
@@ -558,6 +560,12 @@ Journey lifecycle parity with the web SDK: `startJourney`, `pauseJourney`,
 `resumeJourney`, `continueJourney`, `checkpointJourney`, `completeJourney`,
 `abandonJourney`, `getCurrentJourney`. The active journey snapshot is stamped
 on every event's context.
+
+`createJourneyHandoff(ttlSeconds?)` (suspend) returns a single-use `JourneyHandoffToken` for the
+current journey, to be handed to another device as `aether_handoff=<token>`;
+`redeemJourneyHandoff(token)` continues a journey from one. Both return `null` on any failure
+and a redemption is an `explicit_handoff` link that never merges identities. Requires the
+backend flag `JOURNEY_HANDOFF_ENABLED` and identity-link consent.
 
 ## Reward Event Types (A6)
 

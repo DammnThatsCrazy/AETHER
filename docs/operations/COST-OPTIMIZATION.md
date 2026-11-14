@@ -20,7 +20,7 @@ source_hashes:
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
   "scripts/release/check_cost_policy.py": "sha256:1fd906153be98a14c66a4abcf176a8ecd7259b9af4945bd14e9af50305654916"
   "scripts/release/check_cost_policy_terraform.py": "sha256:d5dcbd7547d76dad5c46ea611d282c2652970a60aa9d420eb2b80641a0fa0469"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:65fd84d8350eb6cc329d68dd837bfed2283117c3579aefbbb6687699218a0c40"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:5c86750b929f371b4486f633be72b7cbbca53b264184e6df7c9e64ba420138ba"
 ---
 
 # Cost Optimization
@@ -43,7 +43,11 @@ instance class inside an allowed resource type), so both gates are required.
 For the pilot staging lane, the plan checker also rejects ECS-service
 replacement or capacity-provider-strategy drift, autoscaling-target
 replacement or identity/role drift, workflow-managed tag drift, and Auth0
-mutations outside the preserved Aether path before an apply is dispatched.
+mutations outside the preserved Aether path (the web client and, since the
+owner-approved CLI addition, the `aether_cli` client, credentials, grant and DB
+connection; deleting or replacing any of them is still rejected) before an apply
+is dispatched. Boolean root variables are read from Terraform's raw plan form
+(`TF_VAR_*` values are recorded as the strings `"true"`/`"false"`).
 Staging desired counts and both autoscaling bounds must match exactly one
 declared awake/asleep state; asleep bounds are `0..0`. It also requires one
 canonical owner for the retained staging

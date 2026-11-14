@@ -10,10 +10,10 @@ source_files: [services/api/intelligence/noesis/service.py, services/api/intelli
 source_hashes:
   "packages/ui/core/src/components/noesis-workspace.tsx": "sha256:27b447f218b3972453d3ce78d5f6bf4b7c0b0955294b079064611fe071d93fb6"
   "services/api/intelligence/noesis/flags.py": "sha256:6069ab729ca23b7a1d4c2be58ef12b39b7761ee7c96d35c0db8253158253f877"
-  "services/api/intelligence/noesis/models.py": "sha256:acfdf6d9368c68ccd7820f22654014242ef04bc3db362a843efd42d059019c42"
+  "services/api/intelligence/noesis/models.py": "sha256:8074780a825f74e9bfbb7de48517e42a9e235ea52a3f68b6d4bddca200795700"
   "services/api/intelligence/noesis/provider.py": "sha256:a391409eba9cc92102f93082ded535354fad7c73ba34f4c7e4c7d7444b930244"
-  "services/api/intelligence/noesis/routes.py": "sha256:c92b4fcdf40733cca6ea33c3a4945e0df912d366b3fc6bf8187c739d296d1162"
-  "services/api/intelligence/noesis/service.py": "sha256:5a7360182491137d7f53e1072173896024dc07ae3c8b230d35a517ecc76e5b06"
+  "services/api/intelligence/noesis/routes.py": "sha256:aab16a72c04293078fb629ed0d15518e19a6a681ae4081293599ec3be3d6ea76"
+  "services/api/intelligence/noesis/service.py": "sha256:81aee501e9730ff10210e3514fa14bf0f25e8193322ba0e43d56f08a5c49cdb2"
 ---
 
 # Noesis
@@ -24,7 +24,7 @@ Noesis is Aether's graph-native natural-language intelligence layer. It exposes 
 
 ## GA contract
 
-### Supported intents (30)
+### Supported intents (35)
 
 The allowlist in `models.py::SUPPORTED_INTENTS` covers the ten original GA
 intents plus the read-only domain families added since. Every intent is
@@ -105,6 +105,19 @@ relabels an assessment or hypothesis; absent data returns an honest
 surface), and a disabled plane surfaces a `service_disabled` NoesisError in the
 response.
 
+**Agent Behavioral Intelligence** (read-only, flag-gated — default OFF)
+
+| Intent | Description |
+|---|---|
+| `agent_behavior` | Explain one agent's observed behavior from the Agent360 behavior read model: what it usually does, reconstructed decisions, and what Aether cannot see. Agent refs are source-reported; this is not an identity resolution. Requires the external agent registry (`external_agent_telemetry.enabled` or `.registry_enabled`) and the caller's `agent:manage` permission |
+
+`agent_behavior` is served by `services/api/intelligence/noesis/adapters/agent_behavior_adapter.py`,
+which builds the read model with the same bounded Silver read and governance
+inputs as `GET /v1/agent/agents/{agent_ref}/behavior`. A disabled registry
+returns `service_disabled`, a caller without `agent:manage` gets `forbidden`
+(nothing is read), and fleet-wide scope or a missing agent ref asks the user to refine.
+No observed facts gives `sufficient=False`, which does not mean the agent is inactive.
+
 Any prompt that does not match a supported intent falls back to a safe refinement response. Unsupported intents never execute.
 
 ### Unsupported behavior
@@ -170,7 +183,9 @@ All rejections return a safe `NoesisResponse` with intent `rejected` and a clear
 
 ## Tenant isolation and RBAC
 
-Noesis reads `request.state.tenant`, requires the existing `read` permission, and computes an effective tenant scope before planning. Aether requests always use the authenticated tenant and reject any different `tenant_id`. Kyber requests may only query another tenant when the caller is an admin or has operator-style permission. Repository filters and graph result filtering are applied with the effective tenant id before composing the answer.
+Noesis reads `request.state.tenant`, requires the existing `read` permission, and computes an effective tenant scope before planning. Aether requests always use the authenticated tenant and reject any different `tenant_id`. Kyber requests may only query another tenant when the caller is a Kyber operator. Repository filters and graph result filtering are applied with the effective tenant id before composing the answer; a graph vertex with no tenant tag is treated as outside every tenant.
+
+Conversations belong to the caller that started them. Turns and the conversation index are keyed by the caller's own tenant and user id plus the `conversation_id`, so `GET /v1/noesis/conversations` and `GET /v1/noesis/conversations/{conversation_id}` return only the caller's own conversations, and a query only extends a conversation the caller owns. An operator querying another tenant keeps the conversation under the operator's tenant and user, never in the target tenant's namespace.
 
 ## LLM text-to-query seam
 

@@ -5,7 +5,7 @@ section: operations
 visibility: P
 audience: [buyer, dev-senior, ops, security]
 status: beta
-since_version: "8.12.0"
+since_version: "0.1.0"
 estimated_read_minutes: 2
 toc_depth: 2
 canonical_owner: platform@aether

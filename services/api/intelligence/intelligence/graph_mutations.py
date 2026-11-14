@@ -8,9 +8,20 @@ append-only mutation ledger (nodes as ``node_versioned``, edges as
 """
 from __future__ import annotations
 
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.graph import (
+    Edge,
+    EdgeType,
+    GraphClient,
+    Vertex,
+    VertexOwnershipError,
+    VertexType,
+    tenant_vertex_id,
+)
 from shared.graph.mutation_gateway import GraphMutationGateway
 from shared.graph.mutation_intents import edge_intent, vertex_intent
+from shared.logger.logger import get_logger, metrics
+
+logger = get_logger("aether.intelligence.graph")
 
 _ACTOR = "intelligence_projector"
 
@@ -25,20 +36,35 @@ _EVIDENCE_VERTEX_TYPES = {
     "policy": VertexType.POLICY_DECISION,
 }
 
+#: Evidence ids the recommendation families derive from names every tenant
+#: shares (``policy:{family}``, ``profile360:{entity}``, ``graph:{entity}``).
+_DERIVED_EVIDENCE_PREFIXES = ("policy:", "profile360:", "graph:")
+
 
 async def _upsert_reference_vertex(
     gateway: GraphMutationGateway,
     vertex_id: str,
     vertex_type: str,
     tenant_id: str,
+    kind: str,
     properties: dict | None = None,
-) -> None:
-    await gateway.apply(vertex_intent(
-        Vertex(vertex_type, vertex_id, {"tenant_id": tenant_id, **(properties or {})}),
-        operation="node_versioned",
-        tenant_id=tenant_id,
-        actor_id=_ACTOR,
-    ))
+) -> bool:
+    """Write a vertex the recommendation links to; ``False`` when another owner holds the id."""
+    try:
+        await gateway.apply(vertex_intent(
+            Vertex(vertex_type, vertex_id, {"tenant_id": tenant_id, **(properties or {})}),
+            operation="node_versioned",
+            tenant_id=tenant_id,
+            actor_id=_ACTOR,
+        ))
+    except VertexOwnershipError:
+        logger.warning(
+            "recommendation graph link skipped: %s vertex %s is owned by another scope (tenant %s)",
+            kind, vertex_id, tenant_id,
+        )
+        metrics.increment("intelligence_graph_vertex_conflict_total", labels={"kind": kind})
+        return False
+    return True
 
 
 async def upsert_recommendation_graph(graph: GraphClient, recommendation: dict) -> None:
@@ -61,8 +87,9 @@ async def upsert_recommendation_graph(graph: GraphClient, recommendation: dict) 
         actor_id=_ACTOR,
     ))
     source_id = recommendation.get("entity_id") or recommendation.get("population_id")
-    if source_id:
-        await _upsert_reference_vertex(gateway, source_id, VertexType.ENTITY, tenant_id)
+    if source_id and await _upsert_reference_vertex(
+        gateway, source_id, VertexType.ENTITY, tenant_id, "entity",
+    ):
         await gateway.apply(edge_intent(
             # HAS_RECOMMENDATION is an A2H edge — enforce-mode validation
             # requires consent_purpose; "personalization" is the registry
@@ -72,16 +99,23 @@ async def upsert_recommendation_graph(graph: GraphClient, recommendation: dict) 
             tenant_id=tenant_id, actor_id=_ACTOR, subject_kind="entity", subject_id=source_id,
         ))
     for ev in recommendation.get("evidence", []):
-        evidence_id = ev.get("source_id") or ev.get("evidence_id")
-        if not evidence_id:
+        source = ev.get("source_id") or ev.get("evidence_id")
+        if not source:
             continue
-        await _upsert_reference_vertex(
+        source = str(source)
+        evidence_id = (
+            tenant_vertex_id(tenant_id, source)
+            if source.startswith(_DERIVED_EVIDENCE_PREFIXES) else source
+        )
+        if not await _upsert_reference_vertex(
             gateway,
             evidence_id,
             _EVIDENCE_VERTEX_TYPES.get(ev.get("source_type"), VertexType.EXTERNAL_DATA),
             tenant_id,
-            {"source_type": ev.get("source_type")},
-        )
+            "evidence",
+            {"source_type": ev.get("source_type"), "source_id": source},
+        ):
+            continue
         await gateway.apply(edge_intent(
             # SUPPORTED_BY is an A2H edge — consent_purpose required in enforce.
             Edge(
@@ -95,7 +129,7 @@ async def upsert_recommendation_graph(graph: GraphClient, recommendation: dict) 
                 },
             ),
             tenant_id=tenant_id, actor_id=_ACTOR, subject_kind="recommendation", subject_id=rec_id,
-            evidence_refs=[str(evidence_id)],
+            evidence_refs=[source],
         ))
 
 

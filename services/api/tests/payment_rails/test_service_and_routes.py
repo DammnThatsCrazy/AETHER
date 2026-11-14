@@ -21,6 +21,7 @@ from shared.common.common import BadRequestError, NotFoundError  # noqa: E402
 from connectors.integrations.providers.payment_rails.base import (  # noqa: E402
     get_payment_rails_vault,
 )
+from connectors.integrations.providers.payment_rails import ADAPTERS  # noqa: E402
 from connectors.integrations.providers.payment_rails.service import (  # noqa: E402
     PaymentRailsService,
     provider_enabled,
@@ -245,6 +246,71 @@ class TestReconciliation:
         health = await service.health(tenant_id)
         assert {h.provider for h in health} == {"privy", "stripe", "coinbase", "moonpay", "bridge"}
         assert all(h.status == "not_configured" for h in health)
+        assert all(h.observation_status == "not_configured" for h in health)
+
+    async def test_health_configured_never_observed_is_unknown_not_healthy(self, service):
+        tenant_id = _tenant()
+        await get_payment_rails_vault().store_key(
+            tenant_id, "payment_moonpay", "payment", "whsec_x"
+        )
+        health = await service.health(tenant_id)
+        moonpay = next(h for h in health if h.provider == "moonpay")
+        assert moonpay.configured is True
+        assert moonpay.observation_status == "never_observed"
+        assert moonpay.status == "unknown"
+        assert moonpay.sessions_observed_24h == 0
+
+    async def test_health_observed_webhook_is_observed(self, service):
+        tenant_id = _tenant()
+        await _signed_webhook(service, tenant_id, _moonpay_body("tx-health", "completed"))
+        health = await service.health(tenant_id)
+        moonpay = next(h for h in health if h.provider == "moonpay")
+        assert moonpay.observation_status == "observed"
+        assert moonpay.status == "healthy"
+        assert moonpay.sessions_observed_24h == 1
+
+    async def test_health_successful_poll_without_activity_is_observed(self, service):
+        tenant_id = _tenant()
+        await get_payment_rails_vault().store_key(
+            tenant_id, "payment_moonpay", "payment", "whsec_x"
+        )
+        await service.repos.accounts.upsert(tenant_id, "moonpay", {
+            "last_poll_at": "2026-07-09T00:00:00+00:00",
+            "provider_poll_health": "ok",
+        })
+        health = await service.health(tenant_id)
+        moonpay = next(h for h in health if h.provider == "moonpay")
+        assert moonpay.observation_status == "observed"
+        assert moonpay.status == "healthy"
+        assert moonpay.sessions_observed_24h == 0
+
+    async def test_health_rejected_webhook_without_signal_is_error_not_unknown(
+        self, service, monkeypatch
+    ):
+        tenant_id = _tenant()
+
+        async def _configured_context(_tenant_id: str, enabled: bool) -> dict:
+            return {
+                "provider": "moonpay",
+                "configured": True,
+                "enabled": enabled,
+                "webhook_supported": True,
+                "polling_supported": True,
+                "credential_ref": "masked",
+            }
+
+        monkeypatch.setattr(ADAPTERS["moonpay"], "health_context", _configured_context)
+        await service.repos.audit.record(tenant_id, {
+            "id": "a-health",
+            "tenant_id": tenant_id,
+            "provider": "moonpay",
+            "action": "webhook_rejected",
+            "occurred_at": "2099-01-01T00:00:00+00:00",
+        })
+        health = await service.health(tenant_id)
+        moonpay = next(h for h in health if h.provider == "moonpay")
+        assert moonpay.observation_status == "never_observed"
+        assert moonpay.status == "error"
 
 
 class TestTenantIsolation:

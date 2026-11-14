@@ -105,3 +105,24 @@ async def test_tenant_safe_routes_and_admin_permission():
     assert "internal_notes" not in response["data"]["plan"]
     with pytest.raises(ForbiddenError):
         await kyber_revops_overview(Request(Tenant("operator", perms=[])))
+
+
+async def test_value_created_route_reads_a_period_without_crashing():
+    from billing.billing.routes import list_value_created
+    from billing.billing.revops import ValueCreatedEventRepository
+
+    repo = ValueCreatedEventRepository()
+    for event_id, when in (("v_in", "2026-05-10T00:00:00+00:00"), ("v_out", "2026-01-01T00:00:00+00:00")):
+        await repo.insert(event_id, ValueCreatedEvent(
+            value_event_id=event_id, tenant_id="t_value", source_type="outcome", source_id=event_id,
+            value_type="retained_revenue", value_amount=10.0, occurred_at=when,
+        ).model_dump())
+
+    request = Request(Tenant("t_value"))
+    windowed = await list_value_created(request, start="2026-05-01T00:00:00+00:00", end="2026-06-01T00:00:00+00:00")
+    assert [i["value_event_id"] for i in windowed["data"]["items"]] == ["v_in"]
+    assert windowed["data"]["truncated"] is False
+
+    unbounded = await list_value_created(request)
+    assert unbounded["data"]["count"] == 2
+    assert unbounded["data"]["truncated"] is False

@@ -215,6 +215,28 @@ def test_publishable_key_without_a_declared_site_is_rejected():
         assert _hook()(request, "/v1/batch", _PUBLISHABLE) is None
 
 
+def test_publishable_key_reaches_journey_handoff_posts_for_its_own_site_only():
+    """Cross-device handoff is issued and redeemed with the same site-bound key
+    the SDKs ingest with; nothing else under the prefix, and no other site."""
+    post = _req()
+    post.method = "POST"
+    post.headers = {"X-Aether-Site": "site_a"}
+    other_site = _req()
+    other_site.method = "POST"
+    other_site.headers = {"X-Aether-Site": "site_b"}
+    undeclared = _req()
+    undeclared.method = "POST"
+    read = _req()
+    read.headers = {"X-Aether-Site": "site_a"}
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        assert _hook()(post, "/sdk/journey-handoff", _PUBLISHABLE) is None
+        assert _hook()(post, "/sdk/journey-handoff/redeem", _PUBLISHABLE) is None
+        assert _is_denial(_hook()(other_site, "/sdk/journey-handoff", _PUBLISHABLE))
+        assert _is_denial(_hook()(undeclared, "/sdk/journey-handoff/redeem", _PUBLISHABLE))
+        # The tenant read of handoff records is not an SDK surface.
+        assert _is_denial(_hook()(read, "/sdk/journey-handoff/journeys/jrn-1", _PUBLISHABLE))
+
+
 def test_unbound_publishable_credential_fails_closed():
     """The mint path never issues an unbound publishable key, so one reaching
     the edge means the binding was lost. Granting it tenant-wide reach then

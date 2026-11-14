@@ -20,11 +20,12 @@ Surfaces asserted:
                              filters by tenant;
   * commerce settlement    — settlement events are tenant-scoped for reads and
                              cross-tenant mutation raises ``KeyError``;
-  * commerce fee report    — ``PaymentRecord`` carries ``tenant_id``, the
+  * commerce fee report    — ``PaymentRecord`` carries ``tenant_id`` and the
                              service scopes ``get_fee_elimination_report`` /
-                             ``get_agent_spend`` by it, and the routes thread
-                             the caller's tenant in, so the fee report / agent
-                             spend never leak another tenant's payments.
+                             ``get_agent_spend`` by it (service level here; the
+                             routes threading the caller's tenant in are
+                             covered by ``tests/security/
+                             test_cross_tenant_id_reads.py``).
 """
 
 from __future__ import annotations

@@ -11,8 +11,8 @@ source_hashes:
   "services/api/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
   "services/api/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
   "services/api/alembic/versions/20261010_economic_operation_journey_refs.py": "sha256:78479dca594fb9ac8f2ce19f317de933afae3ed1211d8c0c45120c9b023ea87a"
-  "services/api/journeys/measurement/engine/journey_compiler.py": "sha256:1277ef95c3e047d7ab1b6ff04f20f2018d6a0c49dc644e4c6977232f66ca701f"
-  "services/api/journeys/measurement/repositories/activity_repo.py": "sha256:fa144dfc1aa0ddeffbb55b3f93707267bd5b7a95f852a445316adf373149ae9e"
+  "services/api/journeys/measurement/engine/journey_compiler.py": "sha256:e19e0ed8d20553b74053595a4e812c6a765da53eb86315d8bd63ccb591243293"
+  "services/api/journeys/measurement/repositories/activity_repo.py": "sha256:d692dd25c2dbb502add186fd6c8b0183c4cd48383d7b17079242aaee1de32751"
   "services/api/journeys/measurement/repositories/journey_step_repo.py": "sha256:b6ae724521d9e8aea583549eba3db22d38ca1ef50bcc1be190e0be8eecda9d0d"
 ---
 
@@ -28,6 +28,11 @@ attribution (the `canonical_activity.surface` column + partial index) requires
 The exact-reference economic-operation link requires
 `20261010_economic_operation_journey_refs` to add the nullable,
 tenant-indexed `canonical_activity.commerce_order_ref` column.
+Economic360 reads campaign and profile commerce activity only when the same
+tenant-scoped activity row carries the canonical subject key and exact order
+reference. Journey reads use the persisted journey-version step references;
+episode payment evidence remains unknown until an exact episode-to-order
+authority is available.
 
 ```bash
 cd "services/api"

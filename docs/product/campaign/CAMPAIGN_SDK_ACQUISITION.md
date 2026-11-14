@@ -8,10 +8,10 @@ status: experimental
 since_version: 0.1.0
 source_files: [packages/shared/acquisition-evidence.ts, packages/sdk/web/src/types.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/tracking/traffic-source-tracker.ts]
 source_hashes:
-  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
-  "packages/sdk/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
+  "packages/sdk/web/src/index.ts": "sha256:40b7cd21b1d10ed068e057f249964ceb67fd8f0be088df67205eea50ae96e8d7"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
-  "packages/sdk/web/src/types.ts": "sha256:d124245b75221272b787f67b08000fb6d4ddf4db5d61f0ccc45d91ffc779585b"
+  "packages/sdk/web/src/types.ts": "sha256:ff3735a8abe9e88a71285646732366c2a071912089608ec84c87ed35aa7ab5cb"
+  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
 ---
 
 # Campaign SDK Acquisition Evidence

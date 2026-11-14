@@ -8,11 +8,14 @@ status: stable
 since_version: 0.1.0
 source_files: [services/api/repositories/typed_repo.py, services/api/ingestion/silver/dispatcher.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py]
 canonical_owner: platform@aether
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR dispatcher diff: the new CommerceFlowProjector is a separate observation-only cart/checkout projector and does not change stablecoin, derivatives, or interop Silver/Gold ownership."
 source_hashes:
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py": "sha256:3f3951246bed211847eabf45fd2dc2e6bac882f9fad2c6375a595c7d2149f0db"
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py": "sha256:ff433ea1c35069666694aee0f0a2a6cef369cf97b0f77ad5c9eb578f6913caea"
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py": "sha256:33c4eb1dab69dd4a98201761df37c8de1a6a3006f190937920751135308fc2fa"
-  "services/api/ingestion/silver/dispatcher.py": "sha256:91649997a908ec2894c0097e513dba14c6a7e4d5c39a6519159bf0593e3d01fb"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:2d6b6441ecd52e2313d377bfed557ea955be035d1e4cede37e80200a80e1939c"
   "services/api/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
 ---
 
@@ -51,6 +54,11 @@ canonical economic projector has run and is never the canonical-activity
 owner for an event. (The Social Silver plane's six observation-only
 social projectors are registered after it; they too are never
 canonical-activity owners.)
+
+The Commerce360 buildout also registers `CommerceFlowProjector` for
+source-reported cart and checkout events with an explicit product or offer ID.
+It stores bounded flow facts for later tenant-owned catalog verification; a
+cart or checkout observation is not a purchase or payment conclusion.
 
 `_ALL_PROJECTORS` is not the whole of what the dispatcher does per
 result. After each successful projection it also fires **out-of-band,

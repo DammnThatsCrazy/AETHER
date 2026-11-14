@@ -51,6 +51,8 @@ const { nativeMethods, platformRef } = vi.hoisted(() => ({
     completeJourney:            vi.fn(),
     abandonJourney:             vi.fn(),
     checkpointJourney:          vi.fn(),
+    createJourneyHandoff:       vi.fn(async (): Promise<unknown> => null),
+    redeemJourneyHandoff:       vi.fn(async (): Promise<unknown> => null),
     flush:                      vi.fn(),
     reset:                      vi.fn(),
     getConsentState:            vi.fn(async () => ({
@@ -450,6 +452,42 @@ describe('Aether RN bridge — consent onUpdate', () => {
     const unsub = Aether.consent.onUpdate(callback);
     expect(typeof unsub).toBe('function');
     unsub(); // call cleanup to cover the return function
+  });
+});
+
+describe('Aether RN bridge — journey handoff', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('createJourneyHandoff passes the ttl and maps the native token', async () => {
+    nativeMethods.createJourneyHandoff.mockResolvedValueOnce({
+      token: 'hnd_abc', handoffId: 'hof_1', expiresAt: '2026-10-23T10:10:00Z',
+    });
+    const out = await Aether.createJourneyHandoff({ ttlSeconds: 120 });
+    expect(nativeMethods.createJourneyHandoff).toHaveBeenCalledWith(120);
+    expect(out).toEqual({ token: 'hnd_abc', handoffId: 'hof_1', expiresAt: '2026-10-23T10:10:00Z' });
+  });
+
+  it('createJourneyHandoff resolves null for no token, a bad shape, or a native error', async () => {
+    expect(await Aether.createJourneyHandoff()).toBeNull();
+    expect(nativeMethods.createJourneyHandoff).toHaveBeenCalledWith(0);
+    nativeMethods.createJourneyHandoff.mockResolvedValueOnce({ handoffId: 'x' });
+    expect(await Aether.createJourneyHandoff()).toBeNull();
+    nativeMethods.createJourneyHandoff.mockRejectedValueOnce(new Error('boom'));
+    expect(await Aether.createJourneyHandoff()).toBeNull();
+  });
+
+  it('redeemJourneyHandoff returns only an explicit, non-merging link', async () => {
+    nativeMethods.redeemJourneyHandoff.mockResolvedValueOnce({
+      handoffId: 'hof_1', journeyId: 'j-9', linkBasis: 'explicit_handoff', identityMerge: 'not_performed',
+      fromSessionId: 'web-1', fromPlatform: 'web', toSessionId: 'mob-1', toPlatform: 'ios',
+      redeemedAt: '2026-10-23T10:00:00Z',
+    });
+    const link = await Aether.redeemJourneyHandoff('hnd_abc');
+    expect(nativeMethods.redeemJourneyHandoff).toHaveBeenCalledWith('hnd_abc');
+    expect(link).toMatchObject({ journeyId: 'j-9', linkBasis: 'explicit_handoff', identityMerge: 'not_performed' });
+    nativeMethods.redeemJourneyHandoff.mockResolvedValueOnce({ journeyId: 'j-9', linkBasis: 'inferred' });
+    expect(await Aether.redeemJourneyHandoff('hnd_abc')).toBeNull();
+    expect(await Aether.redeemJourneyHandoff('')).toBeNull();
   });
 });
 

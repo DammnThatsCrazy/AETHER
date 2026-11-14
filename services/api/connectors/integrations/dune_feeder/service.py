@@ -53,6 +53,9 @@ def _iso_now() -> str:
 # ---------------------------------------------------------------------------
 
 class FeederConfigRepository(BaseRepository):
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("dune_feeder_configs")
 
@@ -221,6 +224,9 @@ class PromotionService:
 # ---------------------------------------------------------------------------
 
 class FeederRunRepository(BaseRepository):
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("dune_feeder_runs")
 

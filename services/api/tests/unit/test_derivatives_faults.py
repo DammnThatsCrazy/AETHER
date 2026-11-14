@@ -597,6 +597,9 @@ async def test_build_read_only_adapter_binds_credential_and_auth_headers():
         http_transport=httpx.MockTransport(handler),
         sleeper=_noop_sleeper,
         account_ref="0xdeadbeef",
+        # Entitlement is out of scope here; the default would consult billing and
+        # fail closed for a tenant with no entitlement row.
+        entitlement_check=lambda tenant_id: True,
     )
     assert adapter._auth_headers == {"Authorization": "Bearer sekret-key"}
     # The resolved credential never carries a mutating authority.

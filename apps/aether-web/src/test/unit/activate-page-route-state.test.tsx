@@ -73,7 +73,7 @@ function renderActivate() {
   );
 }
 
-describe("/activation — ActivatePage route states", () => {
+describe("/activation/guided — ActivatePage route states", () => {
   beforeEach(() => {
     state.status = {
       data: null,

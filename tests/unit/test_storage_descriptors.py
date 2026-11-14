@@ -373,10 +373,33 @@ def test_every_persistent_type_has_a_policy():
     gate = _load_gate_module()
     inventory = gate.persistent_resource_inventory(ROOT)
     policy_types = _policy_resource_types()
-    missing = sorted(inventory - policy_types)
+    # Tables that predate literal create_table discovery are baselined, shrink-only.
+    missing = sorted(inventory - policy_types - gate.uncovered_baseline(ROOT))
     assert not missing, f"persistent types with NO storage policy: {missing}"
     stale = sorted(policy_types - inventory)
     assert not stale, f"policies not mapping to any persistent type: {stale}"
+
+
+def test_literal_create_table_calls_are_discovered_as_persistent_resources():
+    """``op.create_table("name", ...)`` used to be invisible to the gate, so a
+    table created that way could ship with no retention or delete policy."""
+    gate = _load_gate_module()
+    tables = gate.alembic_table_names(ROOT)
+    assert "semantic_memory_records" in tables
+    assert "experiments" in tables
+
+
+def test_uncovered_baseline_is_shrink_only():
+    gate = _load_gate_module()
+    baseline = gate.uncovered_baseline(ROOT)
+    inventory = gate.persistent_resource_inventory(ROOT)
+    policy_types = _policy_resource_types()
+    assert baseline, "baseline file should list the pre-existing uncovered tables"
+    assert baseline <= inventory, f"baseline names that are not persistent resources: {sorted(baseline - inventory)}"
+    assert not (baseline & policy_types), (
+        f"baseline entries that now have a policy must be removed: {sorted(baseline & policy_types)}"
+    )
+    assert "semantic_memory_records" not in baseline, "semantic tables are covered, not baselined"
 
 
 def test_inventory_derives_from_repo_not_a_hardcoded_list():

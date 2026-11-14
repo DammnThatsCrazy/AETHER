@@ -13,9 +13,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/api/governance/admin/routes.py": "sha256:448866155ff0ffee0857e0843e3ac9c25dec4c32a9a1c30ba1b749e3eb4c168c"
+  "services/api/governance/admin/routes.py": "sha256:7229a73876d927926fe1ac82741d0e058b215538a9e7c23a3c9a84509c0cbfe8"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "services/api/intelligence/intelligence/routes.py": "sha256:355eb639eb8cf03f9a79903ae67b1665b688e2fc095536e8d8bd44b2c06fcc18"
+  "services/api/intelligence/intelligence/routes.py": "sha256:60d5307836ffcd38c784710b60689c803347d7a3dbb0f7608a64ba66ef150241"
 ---
 # Kyber Strategic Observability
 
@@ -41,7 +41,9 @@ The aggregate routes also apply the graph boundary before capping results:
 neighbours are accepted only when their normalized `tenantId`/`tenant_id`
 ownership marker matches the requested tenant. Missing ownership is not treated
 as a wildcard, and action-delivery metrics distinguish queued plans and failed
-connectors from provider-confirmed delivery.
+connectors from provider-reported delivery receipts. A receipt or
+signature-verified callback is delivery evidence; neither independently verifies
+an external effect.
 
 ## Packaging command extensions
 

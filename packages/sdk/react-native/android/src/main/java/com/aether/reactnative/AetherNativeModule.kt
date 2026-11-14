@@ -3,10 +3,12 @@ package com.aether.reactnative
 import com.aether.sdk.Aether
 import com.aether.sdk.AetherConfig
 import com.aether.sdk.IdentityData
+import com.aether.sdk.ManifestSignature
 import com.aether.sdk.ModuleConfig
 import com.aether.sdk.PrivacyConfig
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import org.json.JSONObject
 
 class AetherNativeModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -42,6 +44,9 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
                 gdprMode = privacy?.getBoolean("gdprMode") ?: false,
                 anonymizeIP = privacy?.getBoolean("anonymizeIP") ?: true
             ),
+            // Base64url P-256 public key; the native health agent then verifies the
+            // manifests it fetches (fail-closed). Absent => applied unverified.
+            manifestPublicKey = if (config.hasKey("manifestPublicKey")) config.getString("manifestPublicKey") else null,
             onJourneyResumed = { anonymousId, userId ->
                 reactContext.runOnUiQueueThread {
                     sendEvent("AetherJourneyResumed", Arguments.createMap().apply {
@@ -109,6 +114,22 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(null)
     }
 
+
+    /**
+     * Verify a remote-config manifest (JSON text, `signature` included) against a
+     * base64url P-256 public key with the shared ES256 verifier. Hermes has no
+     * WebCrypto, so the JS manifest path delegates here. Resolves false on any
+     * error (fail closed).
+     */
+    @ReactMethod
+    fun verifyManifest(manifestJson: String, publicKey: String, promise: Promise) {
+        val verified = try {
+            ManifestSignature.verify(JSONObject(manifestJson), publicKey)
+        } catch (_: Exception) {
+            false
+        }
+        promise.resolve(verified)
+    }
 
     @ReactMethod
     fun startJourney(nameOrType: String, properties: ReadableMap) {
@@ -227,6 +248,55 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun resolveDeferredHandoff(identifier: String, promise: Promise) {
         promise.resolve(null)
+    }
+
+    /** Resolves a `{ token, handoffId, expiresAt }` map, or null when no handoff could be created. */
+    @ReactMethod
+    fun createJourneyHandoff(ttlSeconds: Double, promise: Promise) {
+        Thread {
+            try {
+                val ttl = if (ttlSeconds > 0) ttlSeconds.toInt() else null
+                val result = kotlinx.coroutines.runBlocking { Aether.createJourneyHandoff(ttl) }
+                if (result == null) {
+                    promise.resolve(null)
+                } else {
+                    promise.resolve(Arguments.createMap().apply {
+                        putString("token", result.token)
+                        putString("handoffId", result.handoffId)
+                        putString("expiresAt", result.expiresAt)
+                    })
+                }
+            } catch (e: Exception) {
+                promise.resolve(null)
+            }
+        }.start()
+    }
+
+    /** Resolves the verified `explicit_handoff` link, or null for every failure. */
+    @ReactMethod
+    fun redeemJourneyHandoff(token: String, promise: Promise) {
+        Thread {
+            try {
+                val link = kotlinx.coroutines.runBlocking { Aether.redeemJourneyHandoff(token) }
+                if (link == null) {
+                    promise.resolve(null)
+                } else {
+                    promise.resolve(Arguments.createMap().apply {
+                        putString("handoffId", link.handoffId)
+                        putString("journeyId", link.journeyId)
+                        putString("linkBasis", link.linkBasis)
+                        putString("identityMerge", link.identityMerge)
+                        putString("fromSessionId", link.fromSessionId)
+                        putString("fromPlatform", link.fromPlatform)
+                        putString("toSessionId", link.toSessionId)
+                        putString("toPlatform", link.toPlatform)
+                        putString("redeemedAt", link.redeemedAt)
+                    })
+                }
+            } catch (e: Exception) {
+                promise.resolve(null)
+            }
+        }.start()
     }
 
     @ReactMethod

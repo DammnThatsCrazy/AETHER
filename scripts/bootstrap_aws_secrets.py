@@ -44,6 +44,8 @@ Secret paths (stored as individual SecretString, matching Terraform):
     aether/extraction-canary-seed
     aether/oracle-signer-private-key
     aether/sdk-config-secret
+    aether/identity-verification-token-key
+    aether/identity-verification-token-key-previous
     aether/first-admin-bootstrap-token (manual — one-time staging bootstrap)
     aether/stripe-secret-key          (manual — from Stripe Dashboard)
     aether/stripe-webhook-secret      (manual — from Stripe Dashboard)
@@ -72,6 +74,8 @@ _ENV_VAR_TO_SECRET_PATH: dict[str, str] = {
     "CANARY_SECRET_SEED": "canary-secret-seed",
     "EXTRACTION_CANARY_SEED": "extraction-canary-seed",
     "SDK_CONFIG_SECRET": "sdk-config-secret",
+    "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS": "identity-verification-token-key-previous",
+    "IDENTITY_VERIFICATION_TOKEN_KEY": "identity-verification-token-key",
     "ORACLE_SIGNER_PRIVATE_KEY": "oracle-signer-private-key",
     "FIRST_ADMIN_BOOTSTRAP_TOKEN": "first-admin-bootstrap-token",
     "STRIPE_SECRET_KEY": "stripe-secret-key",
@@ -98,6 +102,8 @@ _AUTO_GENERATED = {
     "CANARY_SECRET_SEED",
     "EXTRACTION_CANARY_SEED",
     "SDK_CONFIG_SECRET",
+    "IDENTITY_VERIFICATION_TOKEN_KEY",
+    "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS",
     "ORACLE_SIGNER_PRIVATE_KEY",
 }
 
@@ -146,9 +152,12 @@ def _generate_eth_private_key() -> str:
 
 
 def _generate_all() -> dict[str, str]:
+    identity_verification_key = secrets.token_urlsafe(64)
     return {
         "JWT_SECRET": secrets.token_urlsafe(64),
         "BYOK_ENCRYPTION_KEY": _generate_fernet_key(),
+        "IDENTITY_VERIFICATION_TOKEN_KEY": identity_verification_key,
+        "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS": identity_verification_key,
         "WATERMARK_SECRET_KEY": secrets.token_urlsafe(32),
         "CANARY_SECRET_SEED": secrets.token_urlsafe(32),
         "EXTRACTION_CANARY_SEED": secrets.token_urlsafe(32),
@@ -260,6 +269,7 @@ def run(
     skip_manual: bool,
     kms_key_id: Optional[str],
     rotate_generated: bool = False,
+    only_identity_verification_keys: bool = False,
 ) -> None:
     try:
         import boto3
@@ -286,6 +296,21 @@ def run(
         explicit_values.update(file_vals)
     explicit_values.update(set_overrides)
     values.update(set_overrides)
+    identity_key_envs = {
+        "IDENTITY_VERIFICATION_TOKEN_KEY",
+        "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS",
+    }
+    if (
+        "IDENTITY_VERIFICATION_TOKEN_KEY" in explicit_values
+        and (
+            "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS" not in explicit_values
+            or not values.get("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS")
+        )
+    ):
+        raise SystemExit(
+            "ERROR: set both IDENTITY_VERIFICATION_TOKEN_KEY and "
+            "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS when changing the active key"
+        )
     _validate_manual_values(values)
 
     tags = [
@@ -308,6 +333,8 @@ def run(
     skipped: list[str] = []
 
     for env_var, path_suffix in _ENV_VAR_TO_SECRET_PATH.items():
+        if only_identity_verification_keys and env_var not in identity_key_envs:
+            continue
         value = values.get(env_var, "")
         secret_path = f"{prefix}{path_suffix}"
 
@@ -331,9 +358,15 @@ def run(
             tags,
             effective_kms_key_id,
             preserve_existing=(
-                env_var in _AUTO_GENERATED
-                and env_var not in explicit_values
-                and not rotate_generated
+                (
+                    env_var in identity_key_envs
+                    and env_var not in explicit_values
+                )
+                or (
+                    env_var in _AUTO_GENERATED
+                    and env_var not in explicit_values
+                    and not rotate_generated
+                )
             ),
         )
         if action != "preserved":
@@ -410,6 +443,10 @@ def main() -> None:
         "--rotate-generated", action="store_true",
         help="Explicitly rotate existing auto-generated secrets; default bootstrap preserves them.",
     )
+    parser.add_argument(
+        "--only-identity-verification-keys", action="store_true",
+        help="Populate only the active and previous identity-verification keys after Terraform creates their metadata.",
+    )
     args = parser.parse_args()
 
     set_overrides = _parse_set_args(args.set_args)
@@ -422,6 +459,7 @@ def main() -> None:
         skip_manual=args.skip_manual,
         kms_key_id=args.kms_key_id,
         rotate_generated=args.rotate_generated,
+        only_identity_verification_keys=args.only_identity_verification_keys,
     )
 
 

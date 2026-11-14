@@ -28,9 +28,9 @@ async def recompute_signals_for_entity(
     """
     behavior_repo = behavior_repo or BehaviorProfileRepository()
     signal_repo = signal_repo or SignalRepository()
-    profile = await behavior_repo.find_by_id(entity_id)
+    profile = await behavior_repo.find_for_entity(tenant_id, entity_id)
     now = datetime.now(timezone.utc).isoformat()
-    if profile is None or profile.get("tenant_id") != tenant_id:
+    if profile is None:
         return {
             "entity_id": entity_id,
             "status": "completed",
@@ -79,7 +79,7 @@ async def recompute_signals_for_entity(
             row.get("projection_source") == "behavior_profile_translator"
             and row.get("signal_id") not in current_generated_ids
         ):
-            await signal_repo.delete(row["signal_id"])
+            await signal_repo.delete(row["id"])
 
     return {
         "entity_id": entity_id,

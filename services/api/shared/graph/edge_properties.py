@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import hashlib
 
+from shared.agent_lineage.vocabulary import RELATIONSHIP_STATUSES
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # REQUIRED EDGE PROPERTY KEYS
@@ -37,6 +39,9 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
     "scope_hash",
     "consent_purpose",
     "source_event_id",
+    # Agent-lineage edge semantics (see LINEAGE_EDGE_PROPERTIES below):
+    "relationship_confidence", "authority_ref", "observed_at",
+    "source_namespace", "relationship_status", "resolution_method",
     # Bitemporal valid-time (external truth window):
     "valid_to",          # ISO-8601; when this fact stops being true in the world
     "recorded_at",       # ISO-8601; when Aether first recorded this edge (system-time)
@@ -63,6 +68,86 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
     "region_type",           # REGION_TYPES value carried on a located-at Region edge
     "coarse_cell",           # H3 cell string when location precision is cell-granular
 })
+
+# Agent-lineage edge semantics (High-Cardinality Agent Lineage work order §30).
+# Durable semantic edges only (spawn / delegation / authorization / principal /
+# deployment / on-behalf-of): every principal<->agent relationship retains its
+# evidence (invariant 13). ``valid_from`` / ``valid_to`` are the bitemporal
+# fields above; the rest are carried here. Mirrors LINEAGE_EDGE_PROPERTIES in
+# packages/shared/graph-contract.ts.
+LINEAGE_EDGE_PROPERTIES: tuple[str, ...] = (
+    "evidence_refs",            # list[str]: ids of the evidence rows grounding the edge
+    "relationship_confidence",  # float in [0.0, 1.0] as string; None when not assessed
+    "authority_ref",            # delegation / mandate / approval record the edge rests on
+    "valid_from",
+    "valid_to",
+    "observed_at",              # ISO-8601; when the relationship was last observed
+    "source_namespace",         # namespace of the reporting source
+    "relationship_status",      # RELATIONSHIP_STATUSES
+    "resolution_method",        # LINEAGE_RESOLUTION_METHODS
+)
+
+# How a lineage relationship was established. Only ``deterministic``,
+# ``authority_record`` and ``attested`` can establish principal control; the
+# rest are claims or weak signals and must stay labelled as such.
+LINEAGE_RESOLUTION_METHODS: tuple[str, ...] = (
+    "deterministic",
+    "authority_record",
+    "attested",
+    "provider_asserted",
+    "tenant_declared",
+    "source_reported",
+    "probabilistic",
+    "manual",
+)
+
+LINEAGE_EDGE_PROPERTY_KEYS: frozenset[str] = frozenset(LINEAGE_EDGE_PROPERTIES)
+
+
+def build_lineage_edge_properties(
+    *,
+    evidence_refs: list[str],
+    resolution_method: str,
+    relationship_status: str = "unknown",
+    relationship_confidence: float | None = None,
+    authority_ref: str = "",
+    observed_at: str = "",
+    source_namespace: str = "",
+    valid_to: str = "",
+) -> dict:
+    """Return the lineage edge properties to merge into ``build_edge_properties``.
+
+    Fails closed: an edge without evidence, or with a status / resolution
+    method outside the vocabulary, is rejected rather than written. Unknown
+    confidence is omitted (never defaulted to a number) so unknown never
+    becomes a value.
+    """
+    refs = [r for r in evidence_refs if isinstance(r, str) and r.strip()]
+    if not refs:
+        raise ValueError("lineage edges must retain at least one evidence ref")
+    if relationship_status not in RELATIONSHIP_STATUSES:
+        raise ValueError(f"unknown relationship_status {relationship_status!r}")
+    if resolution_method not in LINEAGE_RESOLUTION_METHODS:
+        raise ValueError(f"unknown resolution_method {resolution_method!r}")
+    props: dict = {
+        "evidence_refs": refs,
+        "relationship_status": relationship_status,
+        "resolution_method": resolution_method,
+    }
+    if relationship_confidence is not None:
+        if not 0.0 <= relationship_confidence <= 1.0:
+            raise ValueError("relationship_confidence must be within [0.0, 1.0]")
+        props["relationship_confidence"] = str(relationship_confidence)
+    if authority_ref:
+        props["authority_ref"] = authority_ref
+    if observed_at:
+        props["observed_at"] = observed_at
+    if source_namespace:
+        props["source_namespace"] = source_namespace
+    if valid_to:
+        props["valid_to"] = valid_to
+    return props
+
 
 # Valid causality classes — prediction edges must NOT use direct_cause
 # unless backed by a held-out experiment (experiment_incremental or above).

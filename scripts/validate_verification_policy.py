@@ -33,8 +33,8 @@ def validate(path: Path = POLICY) -> list[str]:
         errors.append("schema_version must be 1")
     if top.get("authority") != "verification":
         errors.append("authority must be verification")
-    if top.get("status_check") != "verification / disposition":
-        errors.append("status_check must be the stable 'verification / disposition' check")
+    if top.get("status_check") != "ci / verdict":
+        errors.append("status_check must be the stable 'ci / verdict' check")
 
     normal = _mapping(top.get("normal_pr"), "normal_pr", errors)
     if normal.get("blocking") is not True:
@@ -49,10 +49,12 @@ def validate(path: Path = POLICY) -> list[str]:
         errors.append("normal_pr.finalization_event must be ready_for_review")
     if normal.get("draft_required_for_intermediate_work") is not True:
         errors.append("normal_pr.draft_required_for_intermediate_work must be true")
-    if normal.get("blocking_workflow") != ".github/workflows/repo-consistency.yml":
+    if normal.get("authority_pr_types") != ["opened", "synchronize", "reopened", "ready_for_review"]:
         errors.append(
-            "normal_pr.blocking_workflow must be .github/workflows/repo-consistency.yml"
+            "normal_pr.authority_pr_types must be [opened, synchronize, reopened, ready_for_review]"
         )
+    if normal.get("blocking_workflow") != ".github/workflows/ci.yml":
+        errors.append("normal_pr.blocking_workflow must be .github/workflows/ci.yml")
 
     shadow = _mapping(top.get("shadow"), "shadow", errors)
     if shadow.get("enabled") not in (True, False):

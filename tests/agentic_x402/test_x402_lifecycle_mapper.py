@@ -93,7 +93,8 @@ async def test_x402_payment_settled_writes_settlement(monkeypatch):
         await mapper.handle_event(
             "x402_payment_settled",
             {"settlement_event_id": "se-002", "payment_intent_id": "pi-002",
-             "agent_id": AGENT, "amount": "3.00", "currency": "USDC"},
+             "agent_id": AGENT, "amount": "3.00", "currency": "USDC",
+             "metadata": {"source_authority": "x402_commerce"}},
             TENANT,
         )
         rows = await se_repo.list_for_intent("pi-002", TENANT)
@@ -132,7 +133,8 @@ async def test_x402_payment_failed_writes_failure(monkeypatch):
             "x402_payment_failed",
             {"settlement_event_id": "se-003", "payment_intent_id": "pi-003",
              "agent_id": AGENT, "amount": "1.00", "currency": "USDC",
-             "failure_reason": "insufficient_funds"},
+             "failure_reason": "insufficient_funds",
+             "metadata": {"source_authority": "x402_commerce"}},
             TENANT,
         )
         rows = await se_repo.list_for_intent("pi-003", TENANT)

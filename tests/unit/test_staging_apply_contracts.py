@@ -213,6 +213,40 @@ def test_staging_plan_trust_is_limited_to_reviewed_github_subjects() -> None:
     }
 
 
+def test_staging_delivery_trust_admits_the_staging_branch_build() -> None:
+    """The delivery build job presents ``ref:refs/heads/staging`` (it has no environment).
+
+    AetherStagingDeploy is managed outside Terraform; this manifest is the reviewed
+    copy of its trust policy. Dropping the branch subject makes every staging push
+    fail at "Configure AWS credentials" with AssumeRoleWithWebIdentity denied.
+    """
+    trust = json.loads(
+        (ROOT / "config/staging_application_delivery_trust_policy.json").read_text(encoding="utf-8")
+    )
+    assert len(trust["Statement"]) == 1
+    statement = trust["Statement"][0]
+    assert statement["Effect"] == "Allow"
+    assert statement["Action"] == "sts:AssumeRoleWithWebIdentity"
+    assert statement["Condition"]["StringEquals"] == {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+    }
+    subjects = set(statement["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"])
+    assert subjects == {
+        "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
+        "repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging",
+        "repo:DammnThatsCrazy/AETHER:environment:staging",
+        "repo:DammnThatsCrazy/AETHER:environment:staging-terraform",
+    }
+    # Same subjects as the plan role, so one delivery run can use both.
+    plan = json.loads((ROOT / "config/staging_plan_trust_policy.json").read_text(encoding="utf-8"))
+    plan_subjects = set(
+        plan["Statement"][0]["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"]
+    )
+    assert subjects == plan_subjects
+    # No wildcard subject and no pull-request subject may ever assume the deploy role.
+    assert not any("*" in sub or sub.endswith(":pull_request") for sub in subjects)
+
+
 def test_staging_apply_rejects_free_plan_before_any_mutation() -> None:
     """The Free account Aurora restriction must fail before IAM or Terraform writes."""
     text = PROMOTE.read_text(encoding="utf-8")
@@ -1278,6 +1312,9 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
         "lambda:CreateFunction",
         "iam:CreateRole",
         "events:PutRule",
+        # Terraform re-reads rule tags after every PutRule; without this a
+        # schedule-state change fails the apply (sleep apply 43361395192).
+        "events:ListTagsForResource",
         "logs:PutRetentionPolicy",
         "amplify:CreateApp",
         "amplify:TagResource",
@@ -1393,6 +1430,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "events:PutTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:RemoveTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:TagResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:ListTagsForResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "logs:CreateLogGroup": [
             "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
             "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*",
@@ -1525,3 +1563,49 @@ def test_dns_zone_modes_are_mutually_exclusive() -> None:
     block = main[start:main.index("\n}\n", start)]
     assert 'condition     = var.product_dns_zone_id == ""' in block
     assert "mutually exclusive" in block
+
+
+def test_staging_lifecycle_trust_policy_covers_every_assuming_job() -> None:
+    """AetherStagingLifecycle is managed outside Terraform; its trust policy is
+    mirrored here. Every job that assumes the role must present a subject the
+    mirror trusts, or the run stops at AssumeRoleWithWebIdentity (the nightly
+    staging-lifecycle failures from 2026-11-03 were exactly this: dispatches from
+    merged staging present ref:refs/heads/staging)."""
+    trust = json.loads(
+        (ROOT / "config/staging_lifecycle_trust_policy.json").read_text(encoding="utf-8")
+    )
+    assert len(trust["Statement"]) == 1
+    statement = trust["Statement"][0]
+    assert statement["Effect"] == "Allow"
+    assert statement["Action"] == "sts:AssumeRoleWithWebIdentity"
+    assert statement["Condition"]["StringEquals"] == {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+    }
+    subjects = set(statement["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"])
+    assert not any("*" in sub or sub.endswith(":pull_request") for sub in subjects)
+
+    repo = "repo:DammnThatsCrazy/AETHER"
+    required: set[str] = set()
+    for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job in (workflow.get("jobs") or {}).values():
+            if "secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN" not in json.dumps(
+                [s.get("with", {}).get("role-to-assume") for s in job.get("steps", [])]
+            ):
+                continue
+            environment = job.get("environment")
+            if isinstance(environment, dict):
+                environment = environment.get("name")
+            if environment and "${{" not in str(environment):
+                required.add(f"{repo}:environment:{environment}")
+            elif environment:
+                # deploy.yml selects `staging` for every lifecycle-role path.
+                required.add(f"{repo}:environment:staging")
+            else:
+                # Environment-less jobs present the branch they run from.
+                if path.name == "staging-ttl-guard.yml":
+                    required.add(f"{repo}:ref:refs/heads/main")
+                else:
+                    required.add(f"{repo}:ref:refs/heads/staging")
+    assert required, "no workflow job assumes the lifecycle role"
+    assert required <= subjects, f"lifecycle trust policy is missing {sorted(required - subjects)}"

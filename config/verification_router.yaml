@@ -98,12 +98,14 @@ checks:
     command: [python, scripts/validate_frontend_reachability.py]
     runtime_budget_seconds: 10
   # A new settings field, a deleted reader, or a change to the allowlist can each
-  # leave a flag that nothing reads, so this runs in every PR-lane plan too.
+  # leave a flag that nothing reads, so this runs in every PR-lane plan too. The
+  # validator parses production Python across the repo and needs more headroom on
+  # cold hosted runners than the previous 30-second budget allowed.
   settings_flags:
     owner: platform
     risk: high
     command: [python, scripts/validate_settings_flags.py]
-    runtime_budget_seconds: 30
+    runtime_budget_seconds: 60
   # Any backend change can orphan a module, and any ledger change can strand an
   # allowlist row, so the reachability check also runs in every PR-lane plan.
   backend_reachability:
@@ -152,10 +154,12 @@ domains:
     paths: [services/api/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
     # Component suites are the ordinary-PR authority. The aggregate backend
     # suite remains registered for regression/release lanes only.
-    checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
+    checks: [backend-identity, backend-semantic, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
     path_checks:
       services/api/identity/identity/**: [backend-identity]
       services/api/ingestion/ingestion/**: [backend-ingestion]
+      services/api/intelligence/semantic_intelligence/**: [backend-semantic]
+      services/api/tests/semantic_intelligence/**: [backend-semantic]
       services/api/journeys/campaign/**: [backend-campaigns]
       services/api/identity/profile/**: [backend-profile360]
       services/api/workers/profile360_workers/**: [backend-profile360]
@@ -253,7 +257,6 @@ global_scopes:
       - scripts/universal_fast.py
       - scripts/validate_ci_performance_policy.py
       - scripts/validate_execution_plan.py
-      - scripts/verify_candidate_evidence.py
       - scripts/validate_ci_execution_contracts.py
       - scripts/lib/verification_router.py
       - scripts/lib/impact_graph.py

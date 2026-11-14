@@ -136,6 +136,9 @@ describe('Identity review queue recovery states', () => {
     render(<IdentityReviewQueue />);
 
     expect(screen.getByText('No open identity reviews')).toBeInTheDocument();
+    // The page title is a real heading: the live staging evidence locates
+    // the page by role, and a <span> title failed rehearsal run 43465549658.
+    expect(screen.getByRole('heading', { level: 1, name: 'Review Queue' })).toBeInTheDocument();
     expect(screen.getByText(/no conflicts or late-binding candidates awaiting review/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /approve|reject/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Unable to load review queue.')).not.toBeInTheDocument();

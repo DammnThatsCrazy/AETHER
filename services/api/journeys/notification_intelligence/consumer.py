@@ -184,6 +184,9 @@ async def _create_notification_delivery_jobs(notif: Any, intent_repo: Any = None
 
         tenant_id = notif.tenant_id
         notif_id = notif.notification_id
+        if not tenant_id:
+            logger.warning("no_tenant_skip_delivery notification=%s", notif_id)
+            return
         severity = notif.severity.value if hasattr(notif.severity, "value") else str(notif.severity)
 
         channels = await _ch_repo.list_for_tenant(tenant_id, active_only=True)
@@ -307,6 +310,12 @@ def attach_notification_consumers(
     _lifecycle = LifecycleEngine(repo=_repo, producer=producer)
 
     async def _handle(event: Event) -> None:
+        if not event.tenant_id:
+            # No tenant means no audience: never fan out to tenant-less channels.
+            topic_val = event.topic.value if hasattr(event.topic, "value") else str(event.topic)
+            logger.warning("notification_dropped_no_tenant topic=%s event=%s", topic_val, event.event_id)
+            metrics.increment("aether_notifications_dropped_total", labels={"reason": "missing_tenant"})
+            return
         notif = _normalise(event)
         if notif is None:
             return

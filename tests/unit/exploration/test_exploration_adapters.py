@@ -34,6 +34,7 @@ def test_every_backed_surface_has_an_adapter():
         "profile360",
         "risk360",
         "social360",
+        "support360",
         "temporal360",
         "timeline",
     }

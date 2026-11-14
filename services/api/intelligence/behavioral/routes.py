@@ -61,9 +61,10 @@ async def entity_signals(
     limit: int = Query(50, ge=1, le=500),
 ):
     """Get persisted signals for an entity, optionally filtered by family."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
 
-    signals = await signal_repo.get_signals_for_entity(entity_id, family, limit)
+    signals = await signal_repo.for_tenant(tenant.tenant_id).get_signals_for_entity(entity_id, family, limit)
     return APIResponse(data={
         "entity_id": entity_id,
         "signals": signals,
@@ -94,12 +95,10 @@ async def behavioral_summary(request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
 
+    signals_for = signal_repo.for_tenant(tenant.tenant_id)
     family_counts = {}
     for family in SignalFamily:
-        signals = await signal_repo.find_many(
-            filters={"signal_family": family.value, "tenant_id": tenant.tenant_id},
-            limit=10000,
-        )
+        signals = await signals_for.find_many(filters={"signal_family": family.value}, limit=10000)
         family_counts[family.value] = len(signals)
 
     total = sum(family_counts.values())

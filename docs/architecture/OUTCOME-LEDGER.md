@@ -13,9 +13,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/api/identity/profile/routes.py": "sha256:db152bc22effffbb626e2de110e7b369c05be76efd543316045fabd54066b70a"
+  "services/api/identity/profile/routes.py": "sha256:8b085907602875b4bdad089fdbc084f1d5308c4559fb5678d2a836eb8134c589"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "services/api/intelligence/intelligence/routes.py": "sha256:355eb639eb8cf03f9a79903ae67b1665b688e2fc095536e8d8bd44b2c06fcc18"
+  "services/api/intelligence/intelligence/routes.py": "sha256:60d5307836ffcd38c784710b60689c803347d7a3dbb0f7608a64ba66ef150241"
 ---
 # Outcome Ledger
 
@@ -37,7 +37,19 @@ Action and graph evidence remains tenant-safe at the boundary: graph
 neighbours are filtered before aggregation limits, and an action dispatch is
 reserved idempotently before a connector can be called. A queued plan or a
 failed connector is represented as such; the ledger does not turn it into an
-observed delivery or fabricate provider evidence.
+observed delivery or fabricate provider evidence. Outcome observations retain
+their source provenance: tenant-submitted delivery outcome events are
+`caller_asserted`, while provider callback events are eligible for verified
+callback evidence only after signature verification and exact receipt/resource
+binding. A provider receipt or verified callback still does not establish an
+independently verified external effect.
+
+Every collection is read up to a limit (500 by default, the `limit` query
+parameter on `GET /v1/intelligence/outcome-ledger`) with a one-row probe past
+it. That route returns a `completeness` block: `limit`, `complete`, and a
+per-collection `truncated` map. When `complete` is false the totals, rankings
+and rates cover only the first `limit` rows of the truncated collections, and
+the tenant Value page says so instead of presenting them as the whole ledger.
 
 Outcome observations retain optional finding and investigation provenance when
 they originate from a finding-backed loop, while aggregation continues to use

@@ -24,7 +24,7 @@ from __future__ import annotations
 import os
 from enum import Enum
 
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType, tenant_of
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.graph.layers")
@@ -341,6 +341,12 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
 
     # ── A2A — agentic observability: MCP, inbox, x402, external accounts ──
     EdgeType.AGENT_ACTED_ON_BEHALF_OF: RelationshipLayer.A2A,
+    # High-cardinality lineage: identity hierarchy (definition → deployment →
+    # instance) is agent-internal; principal/supervision edges cross H2A.
+    EdgeType.DEPLOYED_AS: RelationshipLayer.A2A,
+    EdgeType.INSTANTIATED_AS: RelationshipLayer.A2A,
+    EdgeType.PRINCIPAL_OF: RelationshipLayer.H2A,
+    EdgeType.SUPERVISES: RelationshipLayer.H2A,
     EdgeType.AGENT_CONNECTED_VIA_MCP: RelationshipLayer.A2A,
     EdgeType.AGENT_GENERATED_TRADE_INTENT: RelationshipLayer.A2A,
     EdgeType.AGENT_HAS_INBOX: RelationshipLayer.A2A,
@@ -671,16 +677,23 @@ A2A_VERTEX_TYPES = frozenset({
 # QUERY HELPERS
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _in_tenant(vertices: list[Vertex], tenant_id: str) -> list[Vertex]:
+    """Only ``tenant_id``'s vertices; an untagged vertex belongs to no tenant."""
+    if not tenant_id:
+        raise ValueError("a tenant_id is required to read graph neighbours")
+    return [v for v in vertices if tenant_of(v.properties) == tenant_id]
+
+
 async def get_layer_subgraph(
     graph_client: GraphClient,
     user_id: str,
     layer: RelationshipLayer,
-    tenant_id: str = "",
+    tenant_id: str,
     max_hops: int = 2,
     max_results: int = 200,
 ) -> dict:
     """
-    Get the subgraph for a specific relationship layer starting from a user vertex.
+    Get ``tenant_id``'s subgraph for a relationship layer starting from a user vertex.
     Returns dict with 'vertices' and 'edges' lists.
 
     max_hops limits BFS depth (default 2). max_results caps total vertex count.
@@ -708,13 +721,11 @@ async def get_layer_subgraph(
         for vid in frontier:
             if len(vertices) >= max_results:
                 break
-            neighbors = await graph_client.get_neighbors(vid, direction="both")
+            neighbors = _in_tenant(await graph_client.get_neighbors(vid, direction="both"), tenant_id)
             for neighbor in neighbors:
                 if neighbor.vertex_id in visited:
                     continue
                 if neighbor.vertex_type not in allowed_vertex_types:
-                    continue
-                if tenant_id and neighbor.properties.get("tenant_id", tenant_id) != tenant_id:
                     continue
                 visited.add(neighbor.vertex_id)
                 vertices.append(neighbor)
@@ -738,7 +749,7 @@ async def get_layer_subgraph(
 async def get_cross_layer_paths(
     graph_client: GraphClient,
     user_id: str,
-    tenant_id: str = "",
+    tenant_id: str,
     max_depth: int = 3,
 ) -> list[dict]:
     """
@@ -750,12 +761,12 @@ async def get_cross_layer_paths(
     paths: list[dict] = []
 
     # Step 1: Find agents launched/delegated by user (H2A layer)
-    agents = await graph_client.get_neighbors(
+    agents = _in_tenant(await graph_client.get_neighbors(
         user_id, edge_type=EdgeType.DELEGATES, direction="out"
-    )
-    launched = await graph_client.get_neighbors(
+    ), tenant_id)
+    launched = _in_tenant(await graph_client.get_neighbors(
         user_id, edge_type=EdgeType.LAUNCHED_BY, direction="in"
-    )
+    ), tenant_id)
     all_agents = {a.vertex_id: a for a in agents + launched}
 
     # Step 2: For each agent, find A2A and A2H connections up to max_depth
@@ -763,26 +774,26 @@ async def get_cross_layer_paths(
         if depth >= max_depth:
             break
 
-        hired = await graph_client.get_neighbors(
+        hired = _in_tenant(await graph_client.get_neighbors(
             agent_id, edge_type=EdgeType.HIRED, direction="out"
-        )
-        consumed = await graph_client.get_neighbors(
+        ), tenant_id)
+        consumed = _in_tenant(await graph_client.get_neighbors(
             agent_id, edge_type=EdgeType.CONSUMES, direction="out"
-        )
-        deployed = await graph_client.get_neighbors(
+        ), tenant_id)
+        deployed = _in_tenant(await graph_client.get_neighbors(
             agent_id, edge_type=EdgeType.DEPLOYED, direction="out"
-        )
+        ), tenant_id)
 
         # A2H: agent-initiated interactions back to humans
-        notified = await graph_client.get_neighbors(
+        notified = _in_tenant(await graph_client.get_neighbors(
             agent_id, edge_type=EdgeType.NOTIFIES, direction="out"
-        )
-        delivered = await graph_client.get_neighbors(
+        ), tenant_id)
+        delivered = _in_tenant(await graph_client.get_neighbors(
             agent_id, edge_type=EdgeType.DELIVERS_TO, direction="out"
-        )
-        escalated = await graph_client.get_neighbors(
+        ), tenant_id)
+        escalated = _in_tenant(await graph_client.get_neighbors(
             agent_id, edge_type=EdgeType.ESCALATES_TO, direction="out"
-        )
+        ), tenant_id)
 
         if hired or consumed or deployed or notified or delivered or escalated:
             path_entry: dict = {

@@ -44,14 +44,14 @@ def _mock_getaddrinfo(ip: str):
 ])
 def test_ssrf_private_ips_blocked(ip):
     """Private and loopback IPs must be rejected by validate_webhook_url."""
-    with patch("actions.delivery.security.socket.getaddrinfo", return_value=_mock_getaddrinfo(ip)):
+    with patch("socket.getaddrinfo", return_value=_mock_getaddrinfo(ip)):
         with pytest.raises(SSRFBlockedError):
             validate_webhook_url("https://example.com/hook")
 
 
 def test_ssrf_public_url_passes():
     """A URL resolving to a public IP must pass SSRF validation."""
-    with patch("actions.delivery.security.socket.getaddrinfo", return_value=_mock_getaddrinfo("93.184.216.34")):
+    with patch("socket.getaddrinfo", return_value=_mock_getaddrinfo("93.184.216.34")):
         # Should not raise
         validate_webhook_url("https://example.com/hook")
 
@@ -59,7 +59,7 @@ def test_ssrf_public_url_passes():
 def test_ssrf_allow_private_bypasses_check():
     """allow_private=True skips DNS resolution and accepts private URLs."""
     # No socket.getaddrinfo call should be made
-    with patch("actions.delivery.security.socket.getaddrinfo", side_effect=Exception("should not be called")):
+    with patch("socket.getaddrinfo", side_effect=Exception("should not be called")):
         validate_webhook_url("http://10.0.0.1/internal", allow_private=True)
 
 

@@ -121,7 +121,7 @@ export function Providers({ children }: ProvidersProps) {
     <ErrorBoundary>
       <AetherAuth0Provider>
         <BrowserRouter basename={APP_BASENAME || '/'}>
-          <ThemeProvider storageKey="aether-theme">
+          <ThemeProvider storageKey="aether-theme" defaultTheme="light">
             <TimeProvider>
               <ToastProvider>
                 <AuthProvider>

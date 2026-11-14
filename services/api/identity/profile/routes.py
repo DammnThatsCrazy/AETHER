@@ -59,6 +59,7 @@ from shared.logger.logger import get_logger, metrics
 from shared.privacy.consent_enforcement import ConsentDeniedError, require_consent
 
 from identity.profile.aggregator import Profile360Aggregator
+from actions.agent_lineage.service import ServiceSummaryReader
 from identity.profile.composer import ProfileComposer
 from identity.profile.intelligence import IntelligenceAggregator
 from identity.profile.resolver import ProfileResolver
@@ -92,6 +93,7 @@ def _get_composer(
             graph=graph,
             cache=cache,
             resolver=_resolver,
+            lineage_reader=ServiceSummaryReader(),
         )
     return _composer
 
@@ -567,8 +569,8 @@ async def get_behavior(user_id: str, request: Request):
     """Latest derived behavior snapshot (automation_ratio, decision_latency, ...)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    record = await _behavior_repo.find_by_id(user_id)
-    if record is None or record.get("tenant_id") != tenant.tenant_id:
+    record = await _behavior_repo.find_for_entity(tenant.tenant_id, user_id)
+    if record is None:
         # Return an empty-but-shaped response rather than 404 — derived data
         # may simply not have been computed yet.
         return APIResponse(data={
@@ -618,8 +620,8 @@ async def get_predictions(user_id: str, request: Request):
     """
     tenant = request.state.tenant
     tenant.require_permission("read")
-    record = await _behavior_repo.find_by_id(user_id)
-    if record is None or record.get("tenant_id") != tenant.tenant_id:
+    record = await _behavior_repo.find_for_entity(tenant.tenant_id, user_id)
+    if record is None:
         return APIResponse(data={
             "user_id": user_id,
             "predicted_next": None,

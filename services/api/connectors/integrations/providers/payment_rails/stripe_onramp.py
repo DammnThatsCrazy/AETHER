@@ -17,7 +17,7 @@ from connectors.integrations.providers.payment_rails.base import (
     PaymentRailAdapter,
     sum_amounts,
 )
-from connectors.integrations.providers.payment_rails.models import FundingSession
+from connectors.integrations.providers.payment_rails.models import FundingSession, PaymentRail
 
 
 class StripeOnrampAdapter(PaymentRailAdapter):
@@ -84,7 +84,33 @@ class StripeOnrampAdapter(PaymentRailAdapter):
         details = session.get("transaction_details") or {}
         fees = details.get("fees") or {}
         session_meta = session.get("metadata") or {}
-        tx_hash = details.get("transaction_hash") or details.get("transaction_id")
+        tx_hash = details.get("transaction_hash")
+        source_amount = _str(details.get("source_amount"))
+        source_currency = _upper(details.get("source_currency"))
+        metadata: dict[str, str] = {}
+        order_ref = _safe_reference(
+            session_meta.get("aether_order_ref") or session_meta.get("commerce_order_ref")
+            if isinstance(session_meta, dict)
+            else None,
+            limit=512,
+        )
+        if order_ref and source_amount and source_currency:
+            try:
+                source_amount_value = Decimal(source_amount)
+            except (InvalidOperation, ValueError):
+                source_amount_value = None
+            if (
+                source_amount_value is not None
+                and source_amount_value.is_finite()
+                and len(source_currency) == 3
+                and source_currency.isascii()
+                and source_currency.isalpha()
+            ):
+                metadata = {
+                    "commerce_order_ref": order_ref,
+                    "commerce_payment_amount": format(source_amount_value, "f"),
+                    "commerce_payment_currency": source_currency,
+                }
 
         return FundingSession(
             tenant_id=tenant_id,
@@ -100,7 +126,7 @@ class StripeOnrampAdapter(PaymentRailAdapter):
             journey_id=session_meta.get("journey_id"),
             campaign_id=session_meta.get("campaign_id"),
             fiat_currency=_upper(details.get("source_currency")),
-            source_amount=_str(details.get("source_amount")),
+            source_amount=source_amount,
             destination_asset=_upper(details.get("destination_currency")),
             destination_chain=details.get("destination_network"),
             destination_amount=_str(details.get("destination_amount")),
@@ -113,6 +139,7 @@ class StripeOnrampAdapter(PaymentRailAdapter):
             tx_hash=_str(tx_hash),
             idempotency_key=f"stripe:{session_id}",
             occurred_at=event.occurred_at,
+            metadata=metadata,
         )
 
     @staticmethod
@@ -148,7 +175,7 @@ class StripeOnrampAdapter(PaymentRailAdapter):
             tenant_id=tenant_id,
             provider="stripe",
             flow_type="commerce_payment",
-            rail="stripe",
+            rail=_payment_rail(intent),
             status="completed",
             provider_status="succeeded",
             actor_kind="service",
@@ -215,6 +242,22 @@ def _safe_reference(value: Any, *, limit: int = 512) -> str | None:
     ):
         return None
     return reference
+
+
+def _payment_rail(intent: dict[str, Any]) -> PaymentRail:
+    """Use Stripe's explicit PaymentIntent method type when it is unambiguous."""
+    method_types = intent.get("payment_method_types")
+    if not isinstance(method_types, list) or len(method_types) != 1:
+        return "stripe"
+    method = str(method_types[0] or "").strip().lower()
+    rails: dict[str, PaymentRail] = {
+        "card": "card",
+        "us_bank_account": "ach",
+        "ach_debit": "ach",
+        "sepa_debit": "sepa",
+        "bank_transfer": "bank_transfer",
+    }
+    return rails.get(method, "stripe")
 
 
 def _stripe_minor_to_major(value: Any, currency: str) -> str | None:

@@ -162,7 +162,7 @@ def release_web_sdk(
         ("Publish npm",      f"cd packages/sdk/web && npm publish --access public {npm_tag} || true"),
         ("Upload CDN",       "aws s3 sync packages/sdk/web/dist/ s3://cdn.aether.network/ --acl public-read || true"),
         ("CDN latest",       "aws s3 sync packages/sdk/web/dist/ s3://cdn.aether.network/latest/ --acl public-read || true"),
-        ("Extract data modules", "cd packages/sdk/web && python ../../infra/cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
+        ("Extract data modules", "python infra/cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
         ("Publish manifests", f"python infra/cicd/aether-cicd/stages/sdk/manifest_publisher.py --version {new_version} || true"),
         ("Git tag",          f"git tag sdk-web-v{new_version} && git push origin sdk-web-v{new_version} || true"),
     ]

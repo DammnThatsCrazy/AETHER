@@ -149,7 +149,7 @@ def test_operator_continuations_deny_unauthenticated_requests() -> None:
 
 def test_create_is_scoped_to_operator():
     resp = _run(operator_routes.create_operator_continuation(
-        payload=_input(), context=_ctx("op-1")
+        payload=_input(), idempotency_key=None, context=_ctx("op-1")
     ))
     data = resp.data
     assert data["id"].startswith("cont_")
@@ -172,7 +172,7 @@ def test_create_is_idempotent():
 
 def test_recent_and_get_scoped_to_operator():
     created = _run(operator_routes.create_operator_continuation(
-        payload=_input(id="c1"), context=_ctx("op-1")
+        payload=_input(id="c1"), idempotency_key=None, context=_ctx("op-1")
     )).data
     got = _run(operator_routes.get_operator_continuation(
         continuation_id="c1", context=_ctx("op-1")
@@ -186,7 +186,7 @@ def test_recent_and_get_scoped_to_operator():
 
 def test_operator_scope_isolates_other_operators():
     _run(operator_routes.create_operator_continuation(
-        payload=_input(id="c1"), context=_ctx("op-1")
+        payload=_input(id="c1"), idempotency_key=None, context=_ctx("op-1")
     ))
     # Row absent from op-2's scope reads as a 404, never as a cross-scope leak.
     with pytest.raises(NotFoundError):
@@ -206,7 +206,7 @@ def test_get_absent_is_404():
 
 def test_update_own_bumps_revision():
     _run(operator_routes.create_operator_continuation(
-        payload=_input(id="c1"), context=_ctx("op-1")
+        payload=_input(id="c1"), idempotency_key=None, context=_ctx("op-1")
     ))
     upd = ContinuationUpdate(
         source_client="mobile_ios", surface="graph",
@@ -232,7 +232,7 @@ def test_update_foreign_continuation_is_404():
 
 def test_delete_own_and_absent_is_404():
     _run(operator_routes.create_operator_continuation(
-        payload=_input(id="c1"), context=_ctx("op-1")
+        payload=_input(id="c1"), idempotency_key=None, context=_ctx("op-1")
     ))
     out = _run(operator_routes.delete_operator_continuation(
         continuation_id="c1", context=_ctx("op-1")
@@ -254,7 +254,7 @@ def test_delete_foreign_continuation_is_404():
 
 def test_handoff_mints_deep_link_token():
     _run(operator_routes.create_operator_continuation(
-        payload=_input(id="c1"), context=_ctx("op-1")
+        payload=_input(id="c1"), idempotency_key=None, context=_ctx("op-1")
     ))
     sel = _run(operator_routes.handoff_operator_continuation(
         payload=HandoffRequest(mode="explicit", resource_ids=["a", "b"]),
@@ -284,7 +284,7 @@ def test_flag_off_404(monkeypatch):
     )
     with pytest.raises(NotFoundError):
         _run(operator_routes.create_operator_continuation(
-            payload=_input(), context=_ctx("op-1")
+            payload=_input(), idempotency_key=None, context=_ctx("op-1")
         ))
 
 
@@ -296,7 +296,7 @@ def test_create_emits_sync_change_with_operator_scope(monkeypatch):
 
     monkeypatch.setattr(operator_routes, "enqueue_sync_change", _fake)
     created = _run(operator_routes.create_operator_continuation(
-        payload=_input(id="c1"), context=_ctx("op-1")
+        payload=_input(id="c1"), idempotency_key=None, context=_ctx("op-1")
     )).data
     assert captured["scope_key"] == "o:op-1"
     assert captured["principal_id"] == "op-1"

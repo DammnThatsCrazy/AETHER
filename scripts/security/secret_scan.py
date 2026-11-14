@@ -44,7 +44,8 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 # placeholder — never skip a whole line, so a real key with an inline comment
 # like `# example prod value` is still reported.
 PLACEHOLDER_RE = re.compile(
-    r"(?i)(placeholder|change[-_]?me|example|dummy|redacted|your[-_]?(api|secret|token|key)|x{6,}|\.\.\.)"
+    r"(?i)(placeholder|change[-_]?me|change[-_]?in[-_]?prod(uction)?|test[-_]?vector|example|dummy|redacted"
+    r"|your[-_]?(api|secret|token|key)|x{6,}|\.\.\.)"
 )
 
 

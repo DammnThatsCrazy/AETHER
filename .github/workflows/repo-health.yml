@@ -1,10 +1,8 @@
 name: Repo Health
 
 on:
-  # Draft PR pushes are an accumulation phase; advisory PR signals start only
-  # when the completed change is explicitly marked ready for review.
-  pull_request:
-    types: [ready_for_review]
+  # Pull requests are verified by ci.yml (`ci / verdict`); this workflow keeps
+  # only trusted-branch, nightly and on-demand health signals.
   push:
     branches:
       - main
@@ -18,9 +16,8 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # Finalized PRs retain only the lightweight docs/size signals. Main gets
-  # bounded integration; broad regression runs nightly or on explicit dispatch
-  # and is never a second PR authority.
+  # Main gets bounded integration; broad regression runs nightly or on explicit
+  # dispatch and is never a PR authority.
   group: repo-health-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
@@ -54,34 +51,6 @@ jobs:
               - 'docs/archive/legacy-architecture/aws-deployment/**'
               - 'apps/kyber-web/src/features/ml/**'
               - 'apps/kyber-web/src/pages/ml/**'
-
-  pr-size:
-    # Warn (non-blocking) when a PR exceeds 600 meaningful lines changed.
-    # Generated artifacts, lockfiles, and docs stamps are excluded from the count.
-    # Runs on finalized PRs only; draft pushes and pushes to main skip this check.
-    if: github.event_name == 'pull_request'
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      BASE_REF: ${{ github.base_ref }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Count meaningful lines changed
-        run: |
-          CHANGED=$(git diff --shortstat "origin/${BASE_REF}...HEAD" -- \
-            ':!docs/_generated/**' \
-            ':!docs/REPO-INDEX.md' \
-            ':!docs/AUTOMATION.md' \
-            ':!package-lock.json' \
-            ':!**/package-lock.json' \
-            | awk '/insertion|deletion/{for(i=1;i<=NF;i++) if($i~/^[0-9]+$/ && ($(i+1)~/^insertion/ || $(i+1)~/^deletion/)) sum+=$i} END{print sum+0}' || echo 0)
-          echo "Meaningful lines changed: ${CHANGED}"
-          if [ "${CHANGED}" -gt 600 ]; then
-            echo "::warning::PR changes ${CHANGED} lines (soft limit: 600 excluding generated/lockfiles). Consider splitting into smaller PRs for easier review."
-          fi
 
   lint-docs:
     # Read-only advisory signal — runs on finalized PRs and trusted non-PR events.
@@ -227,8 +196,10 @@ jobs:
             > release-evidence/main-integration.json
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         if: always()
         with:
+          retention-days: 7
           name: main-integration-evidence
           path: release-evidence/
           if-no-files-found: error
@@ -601,6 +572,8 @@ jobs:
           printf '{"sha":"%s","job":"validate"}\n' "$GITHUB_SHA" > release-evidence/repo-health-validate.json
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
+          retention-days: 7
           name: repo-health-validate-evidence
           path: release-evidence/repo-health-validate.json

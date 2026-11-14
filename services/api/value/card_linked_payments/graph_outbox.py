@@ -348,6 +348,7 @@ class CardLinkedGraphOutboxWorker:
         from shared.graph.mutation_intents import edge_intent, vertex_intent
 
         from value.card_linked_payments.graph_projector import (
+            PLATFORM_TENANT,
             build_catalog_mutations,
             build_flow_mutations,
         )
@@ -366,8 +367,9 @@ class CardLinkedGraphOutboxWorker:
             )
             if entity is None:
                 return  # unknown program → nothing to project (terminal success)
+            # Catalog vertices are platform reference data, written as platform.
+            tenant_id = PLATFORM_TENANT
             vertices, edges = build_catalog_mutations(
-                tenant_id,
                 {
                     "slug": entity.slug,
                     "display_name": entity.display_name,

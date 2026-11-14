@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Iterable, Optional
 
 from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, ForbiddenError, RateLimitedError, ServiceUnavailableError, utc_now
-from shared.graph.graph import GraphClient, Vertex
+from shared.graph.graph import GraphClient, Vertex, tenant_of
 from shared.logger.logger import get_logger, metrics
 from governance.security.audit_ledger import AuditLedger
 from repositories.repos import (
@@ -58,6 +58,9 @@ class Scope:
     effective_tenant_id: str
     cross_tenant: bool
     debug_allowed: bool
+    #: Caller holds ``agent:manage`` — required by the ``agent_behavior``
+    #: intent, mirroring the Agent360 behavior HTTP route.
+    agent_manage: bool = False
 
 
 #: Explicit fleet-wide request tokens. Fleet mode is opted into through the
@@ -129,7 +132,7 @@ class NoesisService:
         if body.conversation_id:
             try:
                 history = await self.conversation_store.get_recent(
-                    body.conversation_id, scope.effective_tenant_id
+                    body.conversation_id, tenant.tenant_id, user_id=tenant.user_id or "",
                 )
             except ConversationStoreUnavailable as exc:
                 logger.warning("Noesis conversation history unavailable: %s", exc)
@@ -190,11 +193,12 @@ class NoesisService:
         if body.conversation_id and response.intent not in ("rejected", "unsupported"):
             await self.conversation_store.append(
                 body.conversation_id,
-                scope.effective_tenant_id,
+                tenant.tenant_id,
                 body.message,
                 response.intent,
                 response.mode,
                 response.answer,
+                user_id=tenant.user_id or "",
             )
 
         return response
@@ -243,7 +247,7 @@ class NoesisService:
             if body.conversation_id:
                 try:
                     history = await self.conversation_store.get_recent(
-                        body.conversation_id, scope.effective_tenant_id
+                        body.conversation_id, tenant.tenant_id, user_id=tenant.user_id or "",
                     )
                 except ConversationStoreUnavailable as exc:
                     logger.warning("Noesis conversation history unavailable: %s", exc)
@@ -287,11 +291,12 @@ class NoesisService:
             if body.conversation_id and response.intent not in ("rejected", "unsupported"):
                 await self.conversation_store.append(
                     body.conversation_id,
-                    scope.effective_tenant_id,
+                    tenant.tenant_id,
                     body.message,
                     response.intent,
                     response.mode,
                     response.answer,
+                    user_id=tenant.user_id or "",
                 )
 
             yield _sse({"type": "complete", **response.model_dump(mode="json", exclude_none=True)})
@@ -392,6 +397,10 @@ class NoesisService:
             metrics.increment("noesis_rejected", labels={"reason": entry.rejection_reason or "unknown"})
 
     def _resolve_scope(self, body: NoesisQueryRequest, tenant: TenantContext) -> Scope:
+        scope = self._resolve_tenant_scope(body, tenant)
+        return replace(scope, agent_manage=tenant.has_permission("agent:manage"))
+
+    def _resolve_tenant_scope(self, body: NoesisQueryRequest, tenant: TenantContext) -> Scope:
         """Resolve the tenant boundary a Noesis query may read across.
 
         Authorization here used to accept ``tenant.role == Role.ADMIN`` (or the
@@ -503,6 +512,14 @@ class NoesisService:
         if any(k in low for k in ("contradict", "contradiction", "contradictory", "conflict", "conflicting", "conflicts", "inconsistent", "inconsistency", "disagree", "reconcile", "reconcil", "alignment between")):
             if "risk" in low and "fraud" in low:
                 candidates.append(("risk_fraud_contradiction_lookup", 0.88))
+        # Agent Behavioral Intelligence (read-only Agent360 behavior read model;
+        # requires agent:manage). Placed with a margin over agent_lookup (0.8).
+        if "agent" in low and any(k in low for k in (
+            "behavior", "behaviour", "behave", "usually do", "usually does",
+            "tend to do", "tends to", "habit", "decisions", "decided",
+            "what decision", "cannot see", "can't see", "blind spot",
+        )):
+            candidates.append(("agent_behavior", 0.87))
         if any(k in low for k in ("risk", "cluster", "abnormal", "anomalous", "fraud", "risky", "suspicious", "anomaly", "anomalies")):
             candidates.append(("risk_cluster_lookup", 0.76))
         if "wallet" in low or _WALLET_RE.search(text):
@@ -740,6 +757,8 @@ class NoesisService:
             "risk_fraud_contradiction_lookup",
         ):
             return await self._risk_fraud_dispatch(plan, scope)
+        if plan.intent == "agent_behavior":
+            return await self._agent_behavior_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -768,10 +787,9 @@ class NoesisService:
         fetched_at = utc_now()
         vertex = await self._graph_cb.call(self.graph.get_vertex(plan.target), None)
         if vertex:
-            vtid = vertex.properties.get("tenant_id")
             if scope.cross_tenant and not scope.effective_tenant_id:
                 pass
-            elif vtid not in (scope.effective_tenant_id, None, ""):
+            elif tenant_of(vertex.properties) != scope.effective_tenant_id:
                 vertex = None
         depth = int(plan.filters.get("depth", 1))
         if depth > 1 and self.flags.multi_hop_enabled:
@@ -781,7 +799,7 @@ class NoesisService:
         if scope.cross_tenant and not scope.effective_tenant_id:
             safe_neighbors = list(neighbors)
         else:
-            safe_neighbors = [v for v in neighbors if v.properties.get("tenant_id") in (scope.effective_tenant_id, None, "")]
+            safe_neighbors = [v for v in neighbors if tenant_of(v.properties) == scope.effective_tenant_id]
         edges = await self._graph_cb.call(self.graph.get_edges(plan.target, direction="both"), []) if vertex else []
         visible_node_ids = {v.vertex_id for v in ([vertex] if vertex else []) + safe_neighbors}
         nodes = [self._vertex_to_node(v) for v in ([vertex] if vertex else []) + safe_neighbors]
@@ -1320,6 +1338,56 @@ class NoesisService:
             ],
             sufficient=bool(result.get("sufficient", True)),
             insufficient_reason=None if result.get("sufficient", True) else "No matching Risk360/Fraud360 observations in tenant scope",
+        )
+        return self._response(
+            plan, result.get("answer", ""), result.get("results", []), [],
+            evidence=evidence, scope=scope,
+        )
+
+    async def _agent_behavior_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to the Agent360 behavior read model (WO-115).
+
+        Same gates as ``GET /v1/agent/agents/{agent_ref}/behavior``: the
+        external agent registry must be enabled and the caller must hold
+        ``agent:manage``. Fleet-wide scope is refused (the read model is one
+        tenant's). Noesis never writes facts or resolves agent identity.
+        """
+        from config.settings import settings as app_settings
+
+        from .adapters.agent_behavior_adapter import agent_behavior
+
+        def _error(code: str, answer: str, message: str) -> NoesisResponse:
+            return NoesisResponse(
+                answer=answer, mode="deterministic", intent=plan.intent,
+                confidence=plan.confidence, warnings=[message],
+                error=NoesisError(code=code, message=message),
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        cfg = app_settings.external_agent_telemetry
+        if not (cfg.enabled or cfg.registry_enabled):
+            return _error("service_disabled",
+                          "Agent Behavioral Intelligence is not enabled for this deployment.",
+                          "Agent behavior Noesis queries are feature-flagged off.")
+        if not scope.agent_manage:
+            return _error("forbidden",
+                          "Explaining agent behavior requires the agent:manage permission.",
+                          "Missing permission: agent:manage")
+        if not scope.effective_tenant_id:
+            return self._ambiguous(plan, "Which tenant's agent should I explain? Agent behavior is tenant-scoped.")
+        if not plan.target:
+            return self._ambiguous(plan, "Which agent should I explain? Name an agent ref, e.g. 'agent ag_123'.")
+
+        result = await agent_behavior(scope.effective_tenant_id, plan.target)
+        fetched_at = utc_now()
+        sufficient = bool(result.get("sufficient"))
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="agent_behavior", resource_type=source, fetched_at=fetched_at)
+                for source in result.get("sources", [])
+            ],
+            sufficient=sufficient,
+            insufficient_reason=None if sufficient else f"No observed behavior for agent {plan.target} in tenant scope",
         )
         return self._response(
             plan, result.get("answer", ""), result.get("results", []), [],

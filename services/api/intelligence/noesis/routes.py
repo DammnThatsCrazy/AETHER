@@ -198,12 +198,14 @@ def _conversation_source_status(degraded: bool, items: list) -> str:
 
 @router.get("/conversations")
 async def list_conversations(request: Request, graph: GraphClient = Depends(get_graph)):
-    """List recent Noesis conversations for the authenticated tenant scope."""
+    """List the caller's own recent Noesis conversations."""
     from .conversation import NoesisConversationStore
     tenant = request.state.tenant
     store = NoesisConversationStore()
     try:
-        conversations = await store.list_for_tenant(tenant.tenant_id, limit=20)
+        conversations = await store.list_for_tenant(
+            tenant.tenant_id, limit=20, user_id=tenant.user_id or "",
+        )
         degraded = False
     except Exception as exc:  # noqa: BLE001 — degrade with an honest status
         logger.warning("Noesis conversation list unavailable", extra={"error": str(exc)})
@@ -218,12 +220,14 @@ async def list_conversations(request: Request, graph: GraphClient = Depends(get_
 
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str, request: Request, graph: GraphClient = Depends(get_graph)):
-    """Retrieve a specific Noesis conversation by ID."""
+    """Retrieve one of the caller's own Noesis conversations by ID."""
     from .conversation import NoesisConversationStore
     tenant = request.state.tenant
     store = NoesisConversationStore()
     try:
-        messages = await store.get_recent(conversation_id, tenant.tenant_id, limit=50)
+        messages = await store.get_recent(
+            conversation_id, tenant.tenant_id, limit=50, user_id=tenant.user_id or "",
+        )
         degraded = False
     except Exception as exc:  # noqa: BLE001 — degrade with an honest status
         logger.warning("Noesis conversation get unavailable", extra={"error": str(exc)})

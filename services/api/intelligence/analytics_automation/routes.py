@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from intelligence.analytics_automation.pipeline import AnalyticsPipeline
@@ -28,8 +28,16 @@ logger = get_logger("aether.analytics_automation.routes")
 
 router = APIRouter(prefix="/v1/automation", tags=["analytics_automation"])
 
-# Singleton pipeline instance (production: injected via DI container)
-_pipeline = AnalyticsPipeline()
+# One in-process pipeline per tenant: campaign ids are tenant-chosen, so a
+# shared pipeline would merge two tenants' "default" campaigns.
+_pipelines: dict[str, AnalyticsPipeline] = {}
+
+
+def _pipeline_for(request: Request) -> AnalyticsPipeline:
+    tenant_id = request.state.tenant.tenant_id
+    if tenant_id not in _pipelines:
+        _pipelines[tenant_id] = AnalyticsPipeline()
+    return _pipelines[tenant_id]
 
 
 # =============================================================================
@@ -121,6 +129,7 @@ class InsightResponse(BaseModel):
 @router.post("/ingest", response_model=IngestEventResponse)
 async def ingest_event(
     body: IngestEventRequest,
+    request: Request,
     api_key: str = Depends(require_api_key_raw),
 ) -> IngestEventResponse:
     """Process an event through the full automation pipeline.
@@ -137,7 +146,7 @@ async def ingest_event(
         "properties": body.properties,
     }
 
-    result = await _pipeline.ingest_event(event_dict)
+    result = await _pipeline_for(request).ingest_event(event_dict)
 
     logger.info(
         "Automation ingest: api_key=%s type=%s campaign=%s reward=%s",
@@ -160,11 +169,12 @@ async def ingest_event(
 @router.get("/metrics/{campaign_id}", response_model=CampaignMetricsResponse)
 async def get_campaign_metrics(
     campaign_id: str,
+    request: Request,
     hours: int = Query(default=24, ge=1, le=720, description="Lookback period in hours"),
     api_key: str = Depends(require_api_key_raw),
 ) -> CampaignMetricsResponse:
     """Retrieve aggregated metrics for a specific campaign."""
-    metrics = await _pipeline.get_campaign_metrics(campaign_id, hours=hours)
+    metrics = await _pipeline_for(request).get_campaign_metrics(campaign_id, hours=hours)
     data = metrics.to_dict()
 
     return CampaignMetricsResponse(
@@ -180,17 +190,19 @@ async def get_campaign_metrics(
 
 @router.get("/overview", response_model=PlatformOverviewResponse)
 async def get_platform_overview(
+    request: Request,
     hours: int = Query(default=24, ge=1, le=720, description="Lookback period in hours"),
     api_key: str = Depends(require_api_key_raw),
 ) -> PlatformOverviewResponse:
     """Retrieve a cross-platform analytics overview combining Web2 and Web3 data."""
-    overview = await _pipeline.get_platform_overview(hours=hours)
+    overview = await _pipeline_for(request).get_platform_overview(hours=hours)
 
     return PlatformOverviewResponse(**overview)
 
 
 @router.get("/insights", response_model=list[InsightResponse])
 async def get_insights(
+    request: Request,
     api_key: str = Depends(require_api_key_raw),
 ) -> list[InsightResponse]:
     """Retrieve automated insights including anomaly detection results.
@@ -198,11 +210,12 @@ async def get_insights(
     Runs the anomaly detection engine and returns both newly detected anomalies
     and previously generated insights.
     """
+    pipeline = _pipeline_for(request)
     # Run anomaly detection to surface any new issues
-    new_anomalies = await _pipeline.detect_anomalies()
+    new_anomalies = await pipeline.detect_anomalies()
 
     # Combine with existing insights (last 50)
-    all_insights = _pipeline._insights[-50:]
+    all_insights = pipeline._insights[-50:]
 
     return [
         InsightResponse(
@@ -219,6 +232,7 @@ async def get_insights(
 @router.post("/report/{campaign_id}")
 async def generate_campaign_report(
     campaign_id: str,
+    request: Request,
     api_key: str = Depends(require_api_key_raw),
 ) -> dict[str, Any]:
     """Generate a comprehensive campaign performance report.
@@ -226,7 +240,7 @@ async def generate_campaign_report(
     Includes ROI calculation, channel breakdown, fraud analysis,
     recent insights, and detailed metric windows.
     """
-    report = await _pipeline.generate_report(campaign_id)
+    report = await _pipeline_for(request).generate_report(campaign_id)
 
     logger.info(
         "Report generated: campaign=%s events=%d conversions=%d",

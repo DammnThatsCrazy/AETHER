@@ -608,3 +608,37 @@ def test_v1_and_v2_attach_equivalent_gateway_stamped_sdk_envelopes():
     assert persisted["outbox_envelope"] == v1_envelope
     assert persisted["envelope"]["provenance"]["credential_class"] == "PUBLIC_CLIENT"
     assert persisted["envelope"]["quality"]["validation_state"] == "gateway:accepted"
+
+
+def test_v1_and_v2_stamp_credential_platform_and_namespace_on_sdk_source():
+    tenant = _FakeTenant("tenant-x")
+    tenant.credential_platform = "ios"
+    sources = []
+    with fresh(enabled=False) as b:
+        _enable_observation_envelope(b)
+        _patch_v1_deps(b.batch)
+        producer = _FakeProducer()
+        body = _mk_body(b.batch, ["source-v1"], event_type="track")
+        body.consents = ["analytics"]
+        _run(b.batch.ingest_batch(_FakeRequest(tenant), body, producer=producer))
+        sources.append(producer.published[0].payload["observation_envelope"]["source"])
+
+    with fresh(enabled=True) as b:
+        _enable_observation_envelope(b)
+        real_ingest_many = b.batch.ingest_many
+
+        async def _capture(records, outbox_events):
+            sources.append(records[0].payload["observation_envelope"]["source"])
+            return await real_ingest_many(records, outbox_events)
+
+        b.batch.ingest_many = _capture
+        body = _mk_body(b.batch, ["source-v2"], event_type="track")
+        body.consents = ["analytics"]
+        _run(b.batch.ingest_batch(_FakeRequest(tenant), body, producer=_FakeProducer()))
+
+    assert len(sources) == 2
+    for source in sources:
+        assert source["source_type"] == "sdk"
+        assert source["source_relationship"] == "first_party_application"
+        assert source["source_provider"] == "ios"
+        assert source["source_instance"] == "tenant:tenant-x"

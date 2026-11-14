@@ -12,7 +12,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/operational-intelligence.ts": "sha256:5631f8e8a9ad38167c7ea545837ab0259b3fa3e360af331fb7055d8fe9326d34"
   "services/api/graph/operational_intelligence/models.py": "sha256:815062a32e218e8835f81cddb4957ceb69b48d18c7cf8d81647ed4439c696e66"
-  "services/api/graph/operational_intelligence/routes.py": "sha256:a98fadd526c69af53319e550b08ab6792d5cd798331a99cff478571cee065417"
+  "services/api/graph/operational_intelligence/routes.py": "sha256:6f4463ec781f438b10fe4358bbaf190f66c226c8616ed2d25101566408b9c3bc"
   "services/api/shared/graph/path_scoring.py": "sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07"
   "services/api/shared/graph/traversal.py": "sha256:535bf5ced5e37f83b65d40a9fb74f5aaf63daf36d6ad9dc769e4fd0469fb8718"
 ---

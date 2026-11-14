@@ -51,6 +51,7 @@ from ingestion.ingestion.bronze_bulk import (
     OutboxEvent,
     ingest_many,
 )
+from ingestion.ingestion.observation_envelope import sdk_source_provider
 from ingestion.ingestion.ingestion_observability import (
     record_degraded,
     record_stage,
@@ -118,7 +119,12 @@ SCHEMA_VERSION = "1.0.0"
 
 
 def _attach_observation_envelope(
-    normalized: dict[str, Any], *, batch_id: str, tenant_id: str
+    normalized: dict[str, Any],
+    *,
+    batch_id: str,
+    tenant_id: str,
+    source_provider: Optional[str] = None,
+    source_instance: Optional[str] = None,
 ) -> None:
     """Add the flag-gated Envelope-B projection consistently to V1 and V2 SDK intake.
 
@@ -135,7 +141,9 @@ def _attach_observation_envelope(
         from ingestion.ingestion.gateway import validate_and_stamp
 
         adapter = SdkIngressAdapter()
-        envelope = adapter.build_observation_envelope(normalized)
+        envelope = adapter.build_observation_envelope(
+            normalized, source_provider=source_provider, source_instance=source_instance
+        )
         if envelope is None:
             metrics.increment(
                 "ingestion_observation_envelope_skipped_total",
@@ -412,6 +420,7 @@ async def ingest_batch(
             producer=producer,
             declared_site=declared_site,
             request_id=getattr(request.state, "request_id", None),
+            credential_platform=getattr(tenant, "credential_platform", None),
         )
         # The /v1/batch handler keeps returning the plain BatchResponse dict
         # (ingest_events returns the model); ingest_events is the shared spine the
@@ -491,6 +500,7 @@ async def ingest_events(
     producer: EventProducer,
     declared_site: str | None = None,
     request_id: str | None = None,
+    credential_platform: Optional[str] = None,
 ) -> BatchResponse:
     """Canonical V1 ingestion spine over a sequence of SDK events.
 
@@ -570,9 +580,11 @@ async def ingest_events(
                 normalized["sdk_tier"] = _advisory
             if server_context is not None:
                 normalized["server_context"] = server_context
-            _stamp_identity_namespace(normalized, tenant_id, declared_site)
+            namespace = _stamp_identity_namespace(normalized, tenant_id, declared_site)
             _attach_observation_envelope(
-                normalized, batch_id=batch_id, tenant_id=tenant_id
+                normalized, batch_id=batch_id, tenant_id=tenant_id,
+                source_provider=sdk_source_provider(credential_platform),
+                source_instance=namespace,
             )
             accepted_events.append(Event(
                 topic=Topic.SDK_EVENTS_VALIDATED,
@@ -869,11 +881,13 @@ async def _ingest_batch_v2(
             normalized["sdk_tier"] = _advisory
         if server_context is not None:
             normalized["server_context"] = server_context
-        _stamp_identity_namespace(normalized, tenant.tenant_id, declared_site)
+        namespace = _stamp_identity_namespace(normalized, tenant.tenant_id, declared_site)
         # Keep the transactional path on the same additive Envelope-B adoption
         # contract as V1; the default-off flag preserves existing payloads.
         _attach_observation_envelope(
-            normalized, batch_id=batch_id, tenant_id=tenant.tenant_id
+            normalized, batch_id=batch_id, tenant_id=tenant.tenant_id,
+            source_provider=sdk_source_provider(getattr(tenant, "credential_platform", None)),
+            source_instance=namespace,
         )
 
         entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
@@ -1240,7 +1254,7 @@ def _strip_canonical_entity_id(obj: Any) -> Any:
 
 def _stamp_identity_namespace(
     normalized: dict[str, Any], tenant_id: str, declared_site: Optional[str]
-) -> None:
+) -> str:
     """Stamp the authenticated site as identity scope; discard caller scope."""
     context = dict(normalized.get("context") or {})
     # The route policy requires X-Aether-Site to match the publishable key's
@@ -1250,6 +1264,7 @@ def _stamp_identity_namespace(
         f"site:{declared_site}" if declared_site else f"tenant:{tenant_id}"
     )
     normalized["context"] = context
+    return context["identity_namespace"]
 
 
 def _scrub_sensitive_fields(

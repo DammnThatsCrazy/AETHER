@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator, Optional
 
 from shared.common.common import ConflictError
+from shared.integration_contracts.source_relationship import UNCLASSIFIED
 
 IMPORT_RIGHTS_PURPOSE = "tenant_import_commit"
 IMPORT_RIGHTS_USES = (
@@ -20,6 +21,7 @@ IMPORT_RIGHTS_USES = (
     ("write_tenant_graph", "tenant_internal"),
     ("tenant_insights", "tenant_internal"),
 )
+IMPORT_SOURCE_RELATIONSHIPS = frozenset({"personal_account", "organization_system", UNCLASSIFIED})
 
 
 @dataclass(frozen=True)
@@ -226,6 +228,15 @@ class ImportRightsAdmission:
         if len(grant_refs) != 1 or not source:
             reasons.append("source_grant_missing_or_ambiguous")
         grant_ref = next(iter(grant_refs)) if len(grant_refs) == 1 else None
+        if grant_ref is not None:
+            try:
+                grant = await service.get_grant(grant_ref, tenant_id=tenant_id)
+            except Exception:
+                reasons.append("rights_authority_unavailable")
+            else:
+                relationship = str(getattr(grant, "source_relationship", "") or UNCLASSIFIED)
+                if grant is None or relationship not in IMPORT_SOURCE_RELATIONSHIPS:
+                    reasons.append("source_relationship_mismatch")
         evidence = self._evidence(
             tenant_id, import_id, commit_id, source, principal, decisions,
             source_grant_ref=grant_ref,

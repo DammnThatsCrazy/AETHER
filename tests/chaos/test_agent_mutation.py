@@ -41,6 +41,9 @@ class FakeGraph:
         self.fail_with = fail_with
         self.fail_drop = fail_drop
 
+    async def get_vertex(self, vertex_id):
+        return None
+
     async def add_vertex(self, vertex):
         if self.fail_with:
             raise self.fail_with
@@ -56,6 +59,9 @@ class FakeGraph:
         self.queries.append(gremlin)
         if self.fail_drop and "drop()" in gremlin:
             raise RuntimeError("neptune drop timeout")
+        if gremlin.endswith(".count()"):
+            # Post-rollback read-back: a failed drop leaves the artifact present.
+            return [1 if self.fail_drop else 0]
         return []
 
 

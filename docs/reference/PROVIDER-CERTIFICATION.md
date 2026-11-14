@@ -15,7 +15,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
   "services/api/connectors/providers/routes.py": "sha256:49308bb682d1347fb244676eaf438349c42b961d87561900ba24f20549cee523"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
   "services/api/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
@@ -30,6 +30,11 @@ rejects identity, manifest, and capability-honesty violations, while
 environment availability and readiness remain manifest/evidence declarations
 and tenant data rights are a separate raw-data admission gate. This
 spec documents the harness, its checks, and how to read its output.
+
+Experience360's `Source360Provider` and `Connection360Provider` are separate,
+read-only Intelligence Projection providers. They consume UPR-owned data and
+do not implement `ProviderPlugin`; their projection `implementationState` is
+not a UPR certification or credential-readiness result.
 
 ## 1. Entry point
 
@@ -89,7 +94,9 @@ body. Tenant-use permissions default to false and must be granted explicitly.
 The canonical grant service persists grants and lifecycle events through its
 migration-owned repository; staging and production admission additionally
 requires the database and schema to be available. Missing, ambiguous, revoked,
-expired, or cross-tenant grants fail closed. Certification must not be used to
+expired, or cross-tenant grants fail closed. Operator-onboarded sources (partner
+feeds, Olympus-licensed sources) are admitted by their own rights-source class
+through the same gate; certification grants none of them. Certification must not be used to
 infer tenant consent, storage rights, graph authority, or production readiness.
 
 ## 4. How a dishonest plugin fails

@@ -39,11 +39,17 @@ from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from config.settings import AgenticObservabilityIngestionConfig, settings  # noqa: E402
+from actions.agent.agent360_provider import RepositoryAgent360Source  # noqa: E402
 from repositories.agentic_observability_repos import AgentActivityRepository  # noqa: E402
 from repositories.repos import _IN_MEMORY_STORES, reset_in_memory_stores  # noqa: E402
 from actions.agentic_observability.pipeline import (  # noqa: E402
     compute_event_id,
     ingest_observation,
+)
+from actions.agentic_observability.provenance import (  # noqa: E402
+    AgentEvidenceReference,
+    AgenticProvenanceQuery,
+    read_agentic_provenance_records,
 )
 from ingestion.ingestion.workers import _bus_payload_to_sdk_envelope  # noqa: E402
 from ingestion.silver.dispatcher import SilverDispatcher  # noqa: E402
@@ -292,6 +298,73 @@ def test_route_tools_delegates_to_spine_when_flag_on(spine_on):
     assert data["graph_projection_status"] == "queued"
     assert len(_bronze()) == 1
     assert len(_outbox()) == 1
+    bronze_row = next(iter(_bronze().values()))
+    provenance = bronze_row["payload"]["agentic_provenance"]
+    assert provenance["tenant_id"] == "tenant-a"
+    assert provenance["agent_id"] == "agent-1"
+    assert provenance["bronze_event_id"] == data["observation_id"]
+    assert provenance["evidence_ref"]["source"] == "obs_agent_tools"
+    assert provenance["evidence_ref"]["id"]
+    assert provenance["source_provider_claim_state"] == "missing"
+    assert provenance["source_identity_state"] == "unresolved"
+    assert provenance["source_trust"] == "unknown"
+    assert provenance["freshness_state"] == "undated"
+    compat_rows = list(_IN_MEMORY_STORES["obs_agent_tools"].values())
+    assert len(compat_rows) == 1
+    assert compat_rows[0]["canonical_event_id"] == data["observation_id"]
+    assert compat_rows[0]["canonical_event_schema_version"] == provenance[
+        "bronze_schema_version"
+    ]
+    query = AgenticProvenanceQuery(
+        bronze_event_id=compat_rows[0]["canonical_event_id"],
+        bronze_schema_version=compat_rows[0]["canonical_event_schema_version"],
+        evidence_ref=AgentEvidenceReference(
+            tenant_id="tenant-a",
+            agent_id="agent-1",
+            source="obs_agent_tools",
+            id=compat_rows[0]["id"],
+            observed_at=None,
+            event_type="agent_tool_invocation_observed",
+        ),
+    )
+    batch = _run(
+        read_agentic_provenance_records(
+            tenant_id="tenant-a",
+            queries=[query],
+        )
+    )
+    assert not batch.scope_mismatch
+    assert len(batch.rows) == 1
+    assert batch.rows[0]["bronze_event_id"] == data["observation_id"]
+    adapter_batch = _run(
+        RepositoryAgent360Source.__new__(RepositoryAgent360Source).agentic_provenance(
+            "tenant-a", "agent-1", [query], 1
+        )
+    )
+    assert not adapter_batch.scope_mismatch
+    assert adapter_batch.rows == batch.rows
+    foreign_batch = _run(
+        read_agentic_provenance_records(tenant_id="tenant-b", queries=[query])
+    )
+    assert foreign_batch.rows == []
+    assert foreign_batch.scope_mismatch
+
+
+def test_route_agent_activity_binds_source_agent_and_canonical_bronze(spine_on):
+    response = _client().post("/v1/observability/agent/events", json=_agent_event())
+    assert response.status_code == 201, response.text
+    data = response.json()
+    activity_rows = list(_IN_MEMORY_STORES["obs_agent_activities"].values())
+    assert len(activity_rows) == 1
+    activity = activity_rows[0]
+    assert activity["agent_id"] == "agent-1"
+    assert activity["canonical_event_id"] == data["observation_id"]
+
+    bronze_row = next(iter(_bronze().values()))
+    provenance = bronze_row["payload"]["agentic_provenance"]
+    assert provenance["evidence_ref"]["source"] == "obs_agent_activities"
+    assert provenance["evidence_ref"]["id"] == activity["observation_id"]
+    assert provenance["bronze_event_id"] == activity["canonical_event_id"]
 
 
 def test_route_mcp_delegates_to_spine_when_flag_on(spine_on):

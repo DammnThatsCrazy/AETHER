@@ -51,6 +51,8 @@ from shared.geo.models import LocationFact, Region
 # Provenance marker stored on every capsule-derived location fact. The store and
 # the reader use it to recognize capsule rows so the read guard applies.
 CAPSULE_LOCATION_PROVIDER = "context_capsule"
+# Bump only when the canonical field/precision/role mapping below changes.
+CAPSULE_LOCATION_NORMALIZATION_VERSION = "context_capsule_location_fact.v1"
 
 # Finest precision class a capsule observation can ground. Coarse cells live on
 # the H3 scheme; finer-than-cell claims need a coordinate, which capsules never
@@ -217,6 +219,7 @@ def capsule_location_fact(
         source_observation_id=observation.observation_id,
         provider=CAPSULE_LOCATION_PROVIDER,
         precision_state="full",
+        normalization_version=CAPSULE_LOCATION_NORMALIZATION_VERSION,
     )
 
 
@@ -282,6 +285,7 @@ def normalise_capsule_fact_row(stored: dict) -> dict:
 
 __all__ = [
     "CAPSULE_LOCATION_PROVIDER",
+    "CAPSULE_LOCATION_NORMALIZATION_VERSION",
     "DEFAULT_ROLE",
     "MAX_CAPSULE_PRECISION",
     "SEMANTIC_ROLE",

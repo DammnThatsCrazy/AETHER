@@ -19,12 +19,12 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
-  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
-  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
+  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
+  "services/api/workers/runtime/roles.py": "sha256:9dc895c61c99ce3bcf81c979bc4b195a2e230822233ab178159a48379f6d4f0b"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
+  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
 ---
 
 # Backend Execution Model
@@ -47,7 +47,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
 | `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
-| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). Also the Rights Authority retention deletion executor (`rights_deletion_executor` — one periodic sweep that executes the pending `delete_at_expiry` impact rows the retention seam only schedules; default OFF). |
+| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, the daily Access Kit audit-versus-usage reconciliation (`access_reconciliation`, read-only, logs gaps), SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). Also the Rights Authority retention deletion executor (`rights_deletion_executor` — one periodic sweep that executes the pending `delete_at_expiry` impact rows the retention seam only schedules; default OFF). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → loop-worker mapping lives in `services/api/workers/runtime/roles.py`; canonical
@@ -56,6 +56,16 @@ The catalog observer is registered only when
 `AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` is true (default OFF); the API mounts
 the read endpoint when either the catalog observer or deployment registry is
 enabled.
+
+The API also mounts `support_cases_router` at `/v1/support/cases`. This is a
+request-path evidence ingress, not a worker role: authenticated tenant callers
+need `write` permission and an exact verified provider connection before an
+allow-listed support case lifecycle event is accepted.
+
+The API mounts the tenant-scoped Social360 evidence router and Workflow
+definition router as request-path authorities. These additions do not create
+new runtime roles; they persist governed evidence and versioned definitions for
+the 360 read providers.
 
 The stream worker also projects public SDK x402 request and intent stages through
 `services/api/ingestion/ingestion/lifecycle_worker.py` into the canonical durable lifecycle
@@ -240,6 +250,16 @@ depending on an operator manually draining a queue:
   depth as a gauge; replay stays an explicit operator action.
 - **`credential_expiry_sweep`** (`maintenance`) — tombstones expired PREVIOUS
   credential versions across tenants once their rotation-overlap window closes.
+- **`journey_handoff_sweep`** (`maintenance`) — hard-deletes cross-device
+  journey handoff rows older than 90 days (they hold anonymous IDs). Runs even
+  when `JOURNEY_HANDOFF_ENABLED` is off so disabling the feature never strands
+  rows.
+- **`agent_behavior_jobs`** (`maintenance`, `AETHER_AGENT_BEHAVIOR_JOBS_ENABLED`,
+  default off) — per active deployment agent, records the last complete UTC day
+  as a stored behavior snapshot, compares the two latest stored windows for
+  drift, and persists a deterministic Risk360 assessment when the behavior
+  evidence yields signals. Derived, rebuildable writes only; one failing agent
+  never stops a pass. Not `required`: a stalled pass leaves the last snapshots.
 
 Every loop is cancellation-safe and isolates a failing tick (one bad tick logs
 and continues rather than killing the supervised loop). The `/v1/ready`

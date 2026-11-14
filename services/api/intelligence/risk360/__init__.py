@@ -60,6 +60,9 @@ from .contracts import (
     RiskAssessment,
     RiskAssessmentRun,
     RiskComponent,
+    RiskPoisoningEvidence,
+    RiskPoisoningLifecycleEvent,
+    RiskInterventionRecord,
     RiskSignal,
     RiskVector,
 )
@@ -70,13 +73,25 @@ from .provider import (
     PROJECTION_ID,
     READ_CAPABILITY,
     RepositoryRiskSourceReader,
+    RiskAnomalyEventRead,
     Risk360Provider,
     RiskSourceReader,
     build_projection_request,
     register_provider,
 )
 from .routes import create_router, router
-from .store import RiskAssessmentRepository, RiskSignalRepository
+from .store import (
+    RiskAssessmentRepository,
+    RiskPoisoningEvidenceConflict,
+    RiskPoisoningEvidenceRead,
+    RiskPoisoningEvidenceReadIncomplete,
+    RiskPoisoningEvidenceRepository,
+    RiskInterventionConflict,
+    RiskInterventionRead,
+    RiskInterventionReadIncomplete,
+    RiskInterventionRepository,
+    RiskSignalRepository,
+)
 
 # Phase 5 — convergence + evaluation runtime.
 from .exposure import (
@@ -124,6 +139,9 @@ __all__ = [
     "ExposureAssessment",
     "RiskAssessment",
     "RiskAssessmentRun",
+    "RiskPoisoningEvidence",
+    "RiskPoisoningLifecycleEvent",
+    "RiskInterventionRecord",
     # Dimension registry
     "RiskDimension",
     "RISK_DIMENSIONS",
@@ -132,12 +150,21 @@ __all__ = [
     # Storage
     "RiskSignalRepository",
     "RiskAssessmentRepository",
+    "RiskPoisoningEvidenceRepository",
+    "RiskPoisoningEvidenceRead",
+    "RiskPoisoningEvidenceConflict",
+    "RiskPoisoningEvidenceReadIncomplete",
+    "RiskInterventionRepository",
+    "RiskInterventionRead",
+    "RiskInterventionConflict",
+    "RiskInterventionReadIncomplete",
     # Provider (Phase 4)
     "EXPLORE_CAPABILITY",
     "OUTPUT_SECTIONS",
     "PROJECTION_ID",
     "READ_CAPABILITY",
     "RepositoryRiskSourceReader",
+    "RiskAnomalyEventRead",
     "Risk360Provider",
     "RiskSourceReader",
     "build_projection_request",

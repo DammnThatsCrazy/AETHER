@@ -55,7 +55,8 @@ function renderLogin() {
         <MemoryRouter initialEntries={['/login']}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/settings" element={<div data-testid="settings-page">settings</div>} />
+            {/* With no ?redirect, login lands on the tenant root, which resolves to onboarding or Home. */}
+            <Route path="/" element={<div data-testid="tenant-root">tenant root</div>} />
           </Routes>
         </MemoryRouter>
       </AuthProvider>
@@ -105,7 +106,7 @@ describe('Login flow — trust-plane session model', () => {
     });
     expect(sessionStorage.getItem(SESSION_EXPIRY_KEY)).toBeTruthy();
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
-    expect(await screen.findByTestId('settings-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('tenant-root')).toBeInTheDocument();
   });
 
   it('keeps the legacy api_key path working when the flag is off', async () => {
@@ -117,7 +118,7 @@ describe('Login flow — trust-plane session model', () => {
       expect(sessionStorage.getItem(SESSION_KEY)).toBe('ak_legacy_key');
     });
     expect(sessionStorage.getItem(SESSION_TOKEN_KEY)).toBeNull();
-    expect(await screen.findByTestId('settings-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('tenant-root')).toBeInTheDocument();
   });
 
   it('shows the auth error when the response has no credential at all', async () => {

@@ -90,21 +90,22 @@ export function CountStat({ label, value, reasons, partialReason, hint, testId }
   return (
     <div
       data-testid={testId ?? statTestId(label)}
-      className="bg-surface-raised border border-border-default rounded-md px-4 py-3"
+      className="flex flex-col gap-0.5 rounded-[14px] px-3.5 py-3"
+      style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge-soft)' }}
     >
-      <dt className="text-xs text-text-secondary">{label}</dt>
-      <dd className="mt-0.5 text-xl font-semibold text-text-primary flex flex-wrap items-center gap-2">
-        {unknown ? <UnknownValue /> : <span>{value}</span>}
+      <dt className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>{label}</dt>
+      <dd className="flex flex-wrap items-center gap-2 text-[22px] font-medium tracking-[-0.33px]">
+        {unknown ? <UnknownValue /> : <span className="ae-mono">{value}</span>}
         {!unknown && partialReason ? <PartialLabel reason={partialReason} /> : null}
       </dd>
       {unknown ? (
-        <p className="text-[11px] text-text-secondary mt-1">
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--ae-mute)' }}>
           {explained.length > 0
             ? `Not computed — ${explained.join('; ')}`
             : 'Not computed — this value could not be determined. Unknown is not zero.'}
         </p>
       ) : null}
-      {!unknown && hint ? <p className="text-[11px] text-text-muted mt-1">{hint}</p> : null}
+      {!unknown && hint ? <p className="mt-1 text-[11px]" style={{ color: 'var(--ae-faint)' }}>{hint}</p> : null}
     </div>
   );
 }
@@ -127,16 +128,17 @@ export function UnknownNotice({
     <div
       role="note"
       data-unknown="true"
-      className="border border-warning/40 bg-warning/10 rounded-md px-3 py-2.5"
+      className="rounded-xl px-3.5 py-2.5"
+      style={{ background: 'var(--ae-amber-tint)' }}
     >
-      <p className="text-xs font-semibold text-warning">{title}</p>
-      {detail ? <p className="text-xs text-text-secondary mt-1">{detail}</p> : null}
+      <p className="text-[12px] font-medium" style={{ color: 'var(--ae-amber)' }}>{title}</p>
+      {detail ? <p className="mt-1 text-[12px]" style={{ color: 'var(--ae-ink)' }}>{detail}</p> : null}
       {entries.length > 0 ? (
         <>
-          <p className="text-[11px] text-text-secondary mt-2">Missing inputs:</p>
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--ae-mute)' }}>Missing inputs:</p>
           <ul className="mt-0.5 space-y-0.5 list-disc list-inside">
             {entries.map(entry => (
-              <li key={entry} className="text-[11px] text-text-secondary">
+              <li key={entry} className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>
                 {describeMissingInput(entry)}
               </li>
             ))}
@@ -157,11 +159,11 @@ export function PartialNotice({
 }) {
   if (reasons.length === 0) return null;
   return (
-    <div role="note" data-partial="true" className="border border-warning/40 bg-warning/10 rounded-md px-3 py-2.5">
-      <p className="text-xs font-semibold text-warning">{title}</p>
+    <div role="note" data-partial="true" className="rounded-xl px-3.5 py-2.5" style={{ background: 'var(--ae-amber-tint)' }}>
+      <p className="text-[12px] font-medium" style={{ color: 'var(--ae-amber)' }}>{title}</p>
       <ul className="mt-1 space-y-0.5 list-disc list-inside">
         {reasons.map(reason => (
-          <li key={reason} className="text-[11px] text-text-secondary">{reason}</li>
+          <li key={reason} className="text-[11px]" style={{ color: 'var(--ae-ink)' }}>{reason}</li>
         ))}
       </ul>
     </div>
@@ -214,7 +216,7 @@ export function RiskLevelCounts({
   }
   const entries = Object.entries(byLevel);
   if (entries.length === 0) {
-    return <span className="text-xs text-text-muted">No risk levels observed</span>;
+    return <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>No risk levels observed</span>;
   }
   return (
     <span className="flex flex-wrap items-center gap-1.5">
@@ -242,14 +244,64 @@ export function Section({
   readonly children: ReactNode;
 }) {
   return (
-    <section aria-labelledby={`${id}-heading`} className="space-y-3">
-      <div>
-        <h2 id={`${id}-heading`} className="text-base font-semibold text-text-primary">
+    <section aria-labelledby={`${id}-heading`} className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <h2 id={`${id}-heading`} className="text-[18px] font-medium tracking-[-0.2px]">
           {title}
         </h2>
-        {description ? <p className="text-xs text-text-secondary mt-0.5">{description}</p> : null}
+        {description ? <p className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>{description}</p> : null}
       </div>
       {children}
     </section>
   );
+}
+
+/** A glass card with a real heading, used for each read on the Agents page. */
+export function AccessCard({
+  title,
+  aside,
+  children,
+  testId,
+}: {
+  readonly title: ReactNode;
+  readonly aside?: ReactNode;
+  readonly children: ReactNode;
+  readonly testId?: string | undefined;
+}) {
+  return (
+    <div className="ae-card flex min-w-0 flex-col gap-3 rounded-[20px] px-5 py-[18px]" data-testid={testId}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[14px] font-medium">{title}</h3>
+        {aside}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Coarse recency bucket from an observed timestamp. Derived, never a status claim. */
+export type Recency = 'today' | 'week' | 'quiet' | 'unknown';
+
+export function recencyOf(iso: string | null | undefined, now: number = Date.now()): Recency {
+  if (!iso) return 'unknown';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 'unknown';
+  const age = now - t;
+  if (age <= 86_400_000) return 'today';
+  if (age <= 7 * 86_400_000) return 'week';
+  return 'quiet';
+}
+
+export function relativeTime(iso: string | null | undefined, now: number = Date.now()): string {
+  if (!iso) return 'not recorded';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  const mins = Math.round((now - t) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 60) return `${days}d ago`;
+  return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }

@@ -6,6 +6,8 @@ import {
 import {
   AgentMarketplaceCatalogPanel,
   AgentRunEvidencePanel,
+  AgentBehaviorPanel,
+  AgentLineagePanel,
   useAgent360,
 } from '@aether-app/features/agent360';
 
@@ -172,7 +174,9 @@ export function Agent360Page() {
         </CardContent>
       </Card>
 
+      <AgentLineagePanel agentId={agentId} />
       <AgentMarketplaceCatalogPanel />
+      <AgentBehaviorPanel agentRef={agentId} />
       <AgentRunEvidencePanel agentId={agentId} />
     </main>
   );

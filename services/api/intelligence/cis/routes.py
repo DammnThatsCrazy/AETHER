@@ -4,7 +4,7 @@ Exposes graph health, mutation stream, contamination forensics,
 retrieval observatory, reasoning chain data, and operator workflows.
 
 All endpoints are tenant-scoped and require authentication.
-Admin endpoints additionally require Role.ADMIN.
+Cross-tenant endpoints additionally require a platform operator.
 """
 
 from __future__ import annotations
@@ -20,7 +20,10 @@ from pydantic import BaseModel
 from dependencies.providers import get_clickhouse, get_cis_hub, get_producer
 from shared.logger.logger import get_logger
 from shared.events.events import Event, Topic
-from shared.auth.auth import Role
+from governance.security.request_context import (
+    is_platform_operator_request,
+    require_platform_operator,
+)
 
 logger = get_logger("aether.cis.routes")
 
@@ -31,15 +34,6 @@ def _require_tenant(request: Request) -> str:
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    return tenant.tenant_id
-
-
-def _require_admin(request: Request) -> str:
-    tenant = getattr(request.state, "tenant", None)
-    if tenant is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    if getattr(tenant, "role", None) not in (Role.ADMIN, "admin"):
-        raise HTTPException(status_code=403, detail="Admin role required")
     return tenant.tenant_id
 
 
@@ -92,8 +86,8 @@ async def get_health(request: Request) -> dict[str, Any]:
 
 @router.get("/health/global")
 async def get_global_health(request: Request) -> dict[str, Any]:
-    """All-tenant health distribution. Admin only."""
-    _require_admin(request)
+    """All-tenant health distribution. Platform operators only."""
+    require_platform_operator(request)
     ch = get_clickhouse()
     try:
         from intelligence.cis.engines.health_engine import GlobalHealthAggregator
@@ -431,11 +425,9 @@ async def get_tenant_governance(
     request: Request,
     target_tenant_id: str,
 ) -> dict[str, Any]:
-    """Full governance state for a tenant. Admins can query any tenant."""
+    """Full governance state for a tenant. Platform operators can query any tenant."""
     caller_tenant = _require_tenant(request)
-    tenant = getattr(request.state, "tenant", None)
-    is_admin = getattr(tenant, "role", None) in (Role.ADMIN, "admin")
-    if not is_admin and caller_tenant != target_tenant_id:
+    if caller_tenant != target_tenant_id and not is_platform_operator_request(request):
         raise HTTPException(status_code=403, detail="Cannot query other tenant's governance")
     try:
         from repositories.repos import get_pool

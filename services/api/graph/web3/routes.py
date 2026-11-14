@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
 
@@ -668,6 +669,7 @@ async def coverage_health(request: Request) -> dict:
 async def seed_registries_endpoint(request: Request) -> dict:
     """Seed all registries with initial data. Idempotent."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     from graph.web3.seed import seed_registries
     counts = await seed_registries(
         chain_reg, protocol_reg, app_reg, token_reg, venue_reg, governance_reg,

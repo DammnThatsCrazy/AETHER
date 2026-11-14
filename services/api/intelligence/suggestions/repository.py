@@ -31,6 +31,11 @@ class SuggestionRepository(BaseRepository):
         data = json.loads(suggestion.model_dump_json())
         return await self.insert(suggestion.id, data)
 
+    async def create_if_absent(self, suggestion: Suggestion) -> bool:
+        """Insert only if no row holds this id; False means a concurrent create won."""
+        data = json.loads(suggestion.model_dump_json())
+        return await self.insert_if_absent(suggestion.id, data, suggestion.tenant_id)
+
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
@@ -141,6 +146,7 @@ class SuggestionRepository(BaseRepository):
         from_status: str,
         to_status: str,
         audit_event: dict,
+        patch: Optional[dict] = None,
     ) -> dict:
         record = await self.get_or_fail(suggestion_id, tenant_id)
         if record["status"] != from_status:
@@ -148,10 +154,23 @@ class SuggestionRepository(BaseRepository):
             raise BadRequestError(
                 f"Expected status {from_status!r} but found {record['status']!r}"
             )
-        record["status"] = to_status
-        record["updated_at"] = utc_now().isoformat()
-        record.setdefault("audit_trail", []).append(audit_event)
-        return await self.update(suggestion_id, record)
+        # Compare-and-set: the write applies only if the row still has the status
+        # and revision this transition was validated against, so two concurrent
+        # callers cannot both pass the check above and both win.
+        expected = {"status": from_status}
+        if record.get("updated_at"):
+            expected["updated_at"] = record["updated_at"]
+        updated = dict(record)
+        updated.update(patch or {})
+        updated["status"] = to_status
+        updated.setdefault("audit_trail", [])
+        updated["audit_trail"] = [*updated["audit_trail"], audit_event]
+        if not await self.replace_if_matches(suggestion_id, updated, tenant_id, expected):
+            from shared.common.common import ConflictError
+            raise ConflictError(
+                f"Suggestion {suggestion_id!r} changed concurrently; re-read and retry"
+            )
+        return updated
 
     async def append_audit(
         self, suggestion_id: str, tenant_id: str, audit_event: dict

@@ -246,6 +246,7 @@ export interface PaymentRailHealth {
   reconciliation_conflicts: number;
   last_event_at?: string;
   last_poll_at?: string;
-  status: 'healthy' | 'degraded' | 'not_configured' | 'error';
+  observation_status: 'observed' | 'never_observed' | 'not_configured';
+  status: 'healthy' | 'degraded' | 'not_configured' | 'error' | 'unknown';
   computed_at: string;
 }

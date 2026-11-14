@@ -13,7 +13,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -47,7 +47,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -526,6 +526,22 @@
         "AETHER_DATA_QUALITY_ENABLED",
         "KYBER_INTELLIGENCE_QUALITY_ENABLED"
       ]
+    },
+    {
+      "path": "docs/architecture/HIGH-CARDINALITY-AGENT-LINEAGE.md",
+      "title": "High-Cardinality Agent Lineage",
+      "slug": "architecture/high-cardinality-agent-lineage",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "security"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0",
+      "canonical_owner": "graph@aether"
     },
     {
       "path": "docs/architecture/IDENTITY-RESOLUTION.md",
@@ -1014,6 +1030,45 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/agent-behavior/00-current-architecture-map.md",
+      "title": "Agent Behavioral Intelligence — Current Architecture Map (WO-000)",
+      "slug": "architecture/agent-behavior/current-architecture-map",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/agent-behavior/01-golden-scenarios.md",
+      "title": "Agent Behavioral Intelligence — Golden Scenarios (WO-002)",
+      "slug": "architecture/agent-behavior/golden-scenarios",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/agent-behavior/02-work-order-status.md",
+      "title": "Agent Behavioral Intelligence — Work-Order Status",
+      "slug": "architecture/agent-behavior/work-order-status",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
       "path": "docs/architecture/blueprints/SDK_PRODUCTIZATION_CLOSE_OUT_AND_CERTIFICATION_BLUEPRINT.md",
       "title": "SDK Productization Close-Out Blueprint",
       "slug": "blueprints/sdk-close-out",
@@ -1125,6 +1180,22 @@
       ],
       "status": "experimental",
       "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/blueprints/commerce360-intent-authority.md",
+      "title": "Commerce360 Intent Authority",
+      "slug": "concepts/commerce360-intent-authority",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "commerce@aether"
     },
     {
       "path": "docs/architecture/blueprints/communication360.md",
@@ -1355,6 +1426,38 @@
       "status": "experimental",
       "since_version": "0.1.0",
       "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/architecture/blueprints/support360-callback-authority.md",
+      "title": "Support360 Callback Schedule and Execution Authority",
+      "slug": "concepts/support360-callback-authority",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "support@aether"
+    },
+    {
+      "path": "docs/architecture/blueprints/support360.md",
+      "title": "Support 360 Backend Blueprint",
+      "slug": "blueprints/support360",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2038,6 +2141,162 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-001-bounded-intelligence-domain.md",
+      "title": "ADR-AB-001: Agent behavior is a bounded intelligence domain, not a platform",
+      "slug": "decisions/agent-behavior/adr-ab-001-bounded-intelligence-domain",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-002-behavior-model-is-derived.md",
+      "title": "ADR-AB-002: AgentBehaviorModel is derived and rebuildable",
+      "slug": "decisions/agent-behavior/adr-ab-002-behavior-model-is-derived",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-003-decision-envelope-immutable.md",
+      "title": "ADR-AB-003: DecisionEnvelope is evidence-qualified and immutable after closure",
+      "slug": "decisions/agent-behavior/adr-ab-003-decision-envelope-immutable",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-004-opportunity-envelope.md",
+      "title": "ADR-AB-004: OpportunityEnvelope separates availability from preference",
+      "slug": "decisions/agent-behavior/adr-ab-004-opportunity-envelope",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-005-responsibility-roles-separate.md",
+      "title": "ADR-AB-005: Actor, authority, decision and execution roles are separate",
+      "slug": "decisions/agent-behavior/adr-ab-005-responsibility-roles-separate",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-006-no-chain-of-thought.md",
+      "title": "ADR-AB-006: Chain-of-thought is neither required nor treated as evidence",
+      "slug": "decisions/agent-behavior/adr-ab-006-no-chain-of-thought",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-007-internal-vs-observed-agents.md",
+      "title": "ADR-AB-007: Internal Aether agents are separate from observed agents",
+      "slug": "decisions/agent-behavior/adr-ab-007-internal-vs-observed-agents",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-008-inference-never-writes-facts.md",
+      "title": "ADR-AB-008: Behavioral inference never writes back into canonical facts",
+      "slug": "decisions/agent-behavior/adr-ab-008-inference-never-writes-facts",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-009-unknown-and-not-observed.md",
+      "title": "ADR-AB-009: Unknown and not-observed semantics are mandatory",
+      "slug": "decisions/agent-behavior/adr-ab-009-unknown-and-not-observed",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-010-placement-follows-current-owners.md",
+      "title": "ADR-AB-010: Schema paths follow current post-#734 ownership",
+      "slug": "decisions/agent-behavior/adr-ab-010-placement-follows-current-owners",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/ADR-AB-011-trust-under-risk.md",
+      "title": "ADR-AB-011: Agent trust and reputation live under Risk, kept apart",
+      "slug": "decisions/agent-behavior/adr-ab-011-trust-under-risk",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/architecture/decisions/agent-behavior/README.md",
+      "title": "Agent Behavioral Intelligence — ADR index",
+      "slug": "decisions/agent-behavior",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
       "path": "docs/architecture/integration-control-plane/ARCHITECTURE_DECISIONS.md",
       "title": "Integration Control Plane — Architecture Decisions",
       "slug": "architecture/integration-control-plane-decisions",
@@ -2259,6 +2518,19 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/target/access-kit-360-w0-matrix.md",
+      "title": "Access Kit × 360 — W0 Ownership and Evidence Matrix",
+      "slug": "access-kit-360-w0-matrix",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/target/access-kit-post-773-work-orders.md",
       "title": "Access Kit Post-773 Work Orders",
       "slug": "access-kit-post-773-work-orders",
@@ -2268,6 +2540,32 @@
         "architect",
         "dev-senior",
         "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/access-kit-w4-limits-contract.md",
+      "title": "Access Kit × 360 — W4 Limits and Metering Contract",
+      "slug": "access-kit-w4-limits-contract",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/access-kit-w5-action-owner-survey.md",
+      "title": "Access Kit × 360 — W5 Action Owner Audit",
+      "slug": "access-kit-w5-action-owner-survey",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
       ],
       "status": "experimental",
       "since_version": "0.1.0"
@@ -2388,6 +2686,19 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/target/source-authority.md",
+      "title": "Source Relationship and Source Authority",
+      "slug": "source-relationship-authority",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/target/source-intake-and-access-kit-work-orders.md",
       "title": "Source Intake and Access Kit Convergence Work Orders",
       "slug": "source-intake-access-kit-convergence",
@@ -2425,6 +2736,66 @@
         "architect"
       ],
       "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/engineering/ci-v2/architecture.md",
+      "title": "CI V2 Architecture",
+      "slug": "engineering/ci-v2-architecture",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/engineering/ci-v2/baseline.md",
+      "title": "CI V2 Baseline",
+      "slug": "engineering/ci-v2-baseline",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/engineering/ci-v2/migration-runbook.md",
+      "title": "CI V2 Branch Migration Runbook",
+      "slug": "engineering/ci-v2-migration-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/engineering/ci-v2/parity-report.md",
+      "title": "CI V2 Parity Report",
+      "slug": "engineering/ci-v2-parity-report",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/engineering/ci-v2/test-retirement-ledger.md",
+      "title": "CI V2 Retirement Ledger",
+      "slug": "engineering/ci-v2-retirement-ledger",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
       "since_version": "0.1.0"
     },
     {
@@ -3113,20 +3484,6 @@
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "ml@aether"
-    },
-    {
-      "path": "docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md",
-      "title": "Operational Intelligence — Stub vs. Production Audit",
-      "slug": "operations/operational-intelligence-audit",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "dev-senior",
-        "architect",
-        "ops"
-      ],
-      "status": "stable",
-      "since_version": "0.1.0"
     },
     {
       "path": "docs/operations/OPERATIONS-RUNBOOK.md",
@@ -4187,6 +4544,42 @@
       ],
       "status": "experimental",
       "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/operations/readiness/FINANCIAL_CAPABILITY_REGISTRY.md",
+      "title": "Financial Capability Registry",
+      "slug": "readiness/financial-capability-registry",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/operations/readiness/FINANCIAL_OBSERVABILITY_BASELINE.md",
+      "title": "Financial Observability Baseline Manifest",
+      "slug": "readiness/financial-observability-baseline",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/operations/readiness/LEAN_PRODUCTION_READINESS_DOSSIER.md",
@@ -6797,6 +7190,19 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/product/productization/agent-lineage-scale-proof-ledger.md",
+      "title": "Agent Lineage Scale Proof Ledger",
+      "slug": "operations/agent-lineage-scale-proof-ledger",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
       "path": "docs/product/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
       "title": "Adapter Capability Matrix",
       "slug": "productization/economic-interoperability-intelligence/adapter-capability-matrix",
@@ -7534,7 +7940,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7552,7 +7958,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7570,7 +7976,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "integrations@aether"
@@ -7587,7 +7993,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7605,7 +8011,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "product@aether"
@@ -7621,7 +8027,7 @@
         "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "revenue@olympus"
@@ -7638,7 +8044,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7656,7 +8062,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
@@ -7673,7 +8079,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "marketing@olympus"
@@ -7690,7 +8096,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "marketing@olympus"
@@ -7707,7 +8113,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "marketing@olympus"
@@ -7725,7 +8131,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
@@ -7743,7 +8149,7 @@
         "compliance"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "legal@olympus"
@@ -7760,7 +8166,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -7777,7 +8183,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -7796,7 +8202,7 @@
         "compliance"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -7813,7 +8219,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "identity@aether"
@@ -7831,7 +8237,7 @@
         "compliance"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
@@ -7848,7 +8254,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7864,7 +8270,7 @@
         "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7881,7 +8287,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 2,
       "canonical_owner": "strategy@olympus"
@@ -7897,7 +8303,7 @@
         "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7915,7 +8321,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7933,7 +8339,7 @@
         "ai"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7950,7 +8356,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -7968,7 +8374,7 @@
         "security"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -7986,7 +8392,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "strategy@olympus"
@@ -8005,7 +8411,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -8024,7 +8430,7 @@
         "exec"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
@@ -9325,6 +9731,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/reference/api/value360-model-evaluation.md",
+      "title": "Value360 Attribution Confidence Evaluation",
+      "slug": "api/value360-model-evaluation",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/reference/api/webhooks.md",
       "title": "Webhooks",
       "slug": "api/webhooks",
@@ -10058,7 +10480,7 @@
         "exec"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 20,
       "canonical_owner": "platform@aether"
     },
@@ -10074,7 +10496,7 @@
         "exec"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "canonical_owner": "platform@aether"
     },
@@ -10225,6 +10647,22 @@
       ],
       "status": "stable",
       "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/reference/sdks/manifest-signing.md",
+      "title": "SDK Manifest Signing",
+      "slug": "sdks/manifest-signing",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
     },
     {
       "path": "docs/reference/sdks/overview.md",

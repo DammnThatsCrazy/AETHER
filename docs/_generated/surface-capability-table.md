@@ -38,6 +38,7 @@ Contract version: `1.0.0`
 | `profile360` | `entity`, `time`, `geography`, `device`, `campaign`, `economic`, `risk`, `truth` | `window`, `as_of`, `relative` | `table`, `timeline` | no | yes | no | no | yes |
 | `risk360` | `entity`, `time`, `graph`, `risk`, `truth` | `window`, `as_of`, `relative` | `table`, `graph` | yes | yes | yes | yes | yes |
 | `social360` | `entity`, `time`, `social`, `relationship`, `incentive`, `source`, `evidence`, `path`, `narrative` | `window`, `as_of`, `relative` | `table`, `graph` | yes | no | yes | no | yes |
+| `support360` | `entity`, `time`, `source`, `evidence`, `truth` | `window` | `table`, `timeline` | no | no | no | no | no |
 | `temporal360` | `entity`, `time`, `truth` | `window`, `as_of`, `compare`, `relative` | `timeline`, `table` | yes | yes | yes | yes | yes |
 | `temporal_observatory` | `entity`, `time`, `truth` | `window`, `as_of`, `compare`, `relative` | `timeline`, `table` | no | yes | no | yes | yes |
 | `timeline` | `entity`, `time`, `device`, `campaign`, `truth` | `window`, `as_of`, `relative` | `timeline`, `table` | no | no | yes | no | yes |

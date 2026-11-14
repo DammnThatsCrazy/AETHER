@@ -60,18 +60,20 @@ jobs:
 
           runs_url = (
               f"https://api.github.com/repos/{repo}/actions/workflows/"
-              "repo-consistency.yml/runs?event=pull_request&status=completed&per_page=100"
+              "ci.yml/runs?event=pull_request&status=completed&per_page=100"
           )
           workflow_runs = get(runs_url).get("workflow_runs", [])
           samples = []
           for run in workflow_runs:
-              # The cutover authority exists only in runs that contain both of
-              # these exact jobs. Older pre-cutover runs are ignored naturally.
+              # Superseded runs are cancelled by the concurrency group, and draft
+              # runs skip `classify`; neither measures the authority.
+              if run.get("conclusion") not in ("success", "failure"):
+                  continue
               jobs = get(run["jobs_url"]).get("jobs", [])
               by_name = {job.get("name"): job for job in jobs}
-              impact = by_name.get("Classify change (impact authority)")
-              disposition = by_name.get("verification / disposition")
-              if not impact or not disposition:
+              impact = by_name.get("classify")
+              disposition = by_name.get("ci / verdict")
+              if not impact or not disposition or impact.get("conclusion") != "success":
                   continue
               if not impact.get("started_at") or not disposition.get("completed_at"):
                   continue

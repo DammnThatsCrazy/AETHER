@@ -22,7 +22,8 @@ def test_connector_class_values():
     assert ConnectorClass.BYOK_GATEWAY.value == "byok_gateway"
     assert ConnectorClass.ACTION_NOTIFIER.value == "action_notifier"
     assert ConnectorClass.DUAL_ROLE.value == "dual_role"
-    assert len(list(ConnectorClass)) == 5
+    assert ConnectorClass.PARTNER_FEED.value == "partner_feed"
+    assert len(list(ConnectorClass)) == 6
 
 
 def test_lake_write_policy_values():

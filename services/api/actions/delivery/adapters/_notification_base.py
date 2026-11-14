@@ -28,6 +28,7 @@ from typing import Any, Awaitable, Callable, Optional
 from config.settings import Environment, settings
 from shared.credentials.service import byok_ref
 from shared.logger.logger import get_logger
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError, send_public_request
 
 from actions.delivery.adapters.base import (
     AdapterReceipt,
@@ -35,6 +36,7 @@ from actions.delivery.adapters.base import (
     ProviderAdapter,
     ProviderError,
     RetryableProviderError,
+    SSRFBlockedError,
 )
 
 logger = get_logger("aether.delivery.adapters.notification")
@@ -50,40 +52,34 @@ Transport = Callable[
 _FAKE_ALLOWED_ENVS = (Environment.LOCAL, Environment.DEV)
 
 
-async def _aiohttp_transport(
+async def _public_transport(
     method: str, url: str, headers: dict[str, str], body: bytes
 ) -> tuple[int, dict[str, Any]]:
-    """Default live transport — POSTs to the real provider via aiohttp.
+    """Default live transport — sends to the provider's validated public address.
 
-    Only exercised in a deployed environment with a real credential; unit tests
-    inject a stub transport instead. Response headers are folded into the returned
-    dict under ``_headers`` (lower-cased) so header-carried ids (APNs ``apns-id``,
-    Web Push ``location``) survive the generic signature.
+    Web Push endpoints come from subscriptions, so every destination is resolved,
+    required to be public, and connected to by the validated address; redirects
+    are not followed. Unit tests inject a stub transport instead. Response headers
+    are folded into the returned dict under ``_headers`` (lower-cased) so
+    header-carried ids (APNs ``apns-id``, Web Push ``location``) survive the
+    generic signature.
     """
     try:
-        import aiohttp
-    except ImportError as exc:  # pragma: no cover - deploy-only path
-        raise ConfigurationError(
-            "aiohttp is required for live notification delivery"
-        ) from exc
-
-    async with aiohttp.ClientSession() as session:  # pragma: no cover - deploy-only
-        async with session.request(
-            method,
-            url,
-            headers=headers,
-            data=body,
-            timeout=aiohttp.ClientTimeout(total=15),
-        ) as resp:
-            status = resp.status
-            try:
-                data = await resp.json(content_type=None)
-            except Exception:
-                data = {}
-            if not isinstance(data, dict):
-                data = {"_raw": data}
-            data["_headers"] = {k.lower(): v for k, v in resp.headers.items()}
-            return status, data
+        resp = await send_public_request(
+            method, url, headers=headers, content=body, timeout=15.0, max_redirects=0
+        )
+    except DestinationResolutionError as exc:
+        raise RetryableProviderError(str(exc)) from exc
+    except UnsafeDestinationError as exc:
+        raise SSRFBlockedError(str(exc)) from exc
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {"_raw": data}
+    data["_headers"] = {k.lower(): v for k, v in resp.headers.items()}
+    return resp.status_code, data
 
 
 class NotificationProviderAdapter(ProviderAdapter):
@@ -93,7 +89,7 @@ class NotificationProviderAdapter(ProviderAdapter):
     credential_slot: str = ""
 
     def __init__(self, transport: Optional[Transport] = None) -> None:
-        self._transport: Transport = transport or _aiohttp_transport
+        self._transport: Transport = transport or _public_transport
 
     # ── credential / fake / production guard ─────────────────────────────
     @property

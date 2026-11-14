@@ -19,10 +19,12 @@ gaps, update ownership-required and authored documentation surfaces, regenerate
 generated/sync-managed docs, review source-linked docs, refresh only the
 reviewed source hashes, and run focused checks. Then mark the PR ready for
 review. The `ready_for_review` event starts the single normal PR authority,
-`.github/workflows/repo-consistency.yml`, whose terminal status is
-`verification / disposition`. Specialized PR workflows use that same
-finalization event for supplementary evidence; they are not independent merge
-blockers. A failed terminal authority may be rerun after a material fix.
+`.github/workflows/ci.yml`, whose terminal status is `ci / verdict`; it then
+reruns on every new head SHA. Draft pull requests run nothing: the verdict job
+skips them, so keep work in draft until finalization. Specialized PR workflows
+use the `ready_for_review` event for supplementary evidence; they are not
+independent merge blockers. A failed terminal authority may be rerun after a
+material fix.
 
 Exceptions are limited to security-critical analysis, migration or
 infrastructure plan validation, or an explicitly requested diagnostic; record

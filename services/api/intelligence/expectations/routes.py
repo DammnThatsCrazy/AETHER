@@ -62,9 +62,10 @@ async def expectation_summary(request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
 
+    signals_for = signal_repo.for_tenant(tenant.tenant_id)
     type_counts = {}
     for st in SignalType:
-        signals = await signal_repo.get_signals_by_type(st.value, tenant.tenant_id, limit=1000)
+        signals = await signals_for.get_signals_by_type(st.value, limit=1000)
         type_counts[st.value] = len(signals)
 
     total = sum(type_counts.values())
@@ -99,9 +100,10 @@ async def top_contradictions(
         SignalType.MODEL_CONTRADICTION.value,
     ]
 
+    signals_for = signal_repo.for_tenant(tenant.tenant_id)
     all_contradictions = []
     for ct in contradiction_types:
-        signals = await signal_repo.get_signals_by_type(ct, tenant.tenant_id, limit=limit)
+        signals = await signals_for.get_signals_by_type(ct, limit=limit)
         all_contradictions.extend(signals)
 
     # Sort by confidence (highest first)
@@ -119,14 +121,11 @@ async def source_silence_view(request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
 
-    silence = await signal_repo.get_signals_by_type(
-        SignalType.SOURCE_SILENCE.value, tenant.tenant_id, limit=500
-    )
+    signals_for = signal_repo.for_tenant(tenant.tenant_id)
+    silence = await signals_for.get_signals_by_type(SignalType.SOURCE_SILENCE.value, limit=500)
     real_absence = []
     for st in [SignalType.MISSING_EXPECTED_ACTION.value, SignalType.MISSING_EXPECTED_EDGE.value]:
-        real_absence.extend(
-            await signal_repo.get_signals_by_type(st, tenant.tenant_id, limit=500)
-        )
+        real_absence.extend(await signals_for.get_signals_by_type(st, limit=500))
 
     return APIResponse(data={
         "source_silence_count": len(silence),
@@ -144,9 +143,10 @@ async def source_silence_view(request: Request):
 @router.get("/group/{population_id}")
 async def group_expectations(population_id: str, request: Request):
     """Group expectation view — signals for a population/cohort."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
 
-    signals = await signal_repo.get_signals_for_population(population_id)
+    signals = await signal_repo.for_tenant(tenant.tenant_id).get_signals_for_population(population_id)
     type_counts = {}
     for s in signals:
         st = s.get("signal_type", "unknown")
@@ -163,9 +163,10 @@ async def group_expectations(population_id: str, request: Request):
 @router.get("/group/{population_id}/gaps")
 async def group_gaps(population_id: str, request: Request):
     """Missing expected behaviors for a group."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
 
-    signals = await signal_repo.get_signals_for_population(population_id)
+    signals = await signal_repo.for_tenant(tenant.tenant_id).get_signals_for_population(population_id)
     gaps = [s for s in signals if s.get("signal_type") in (
         SignalType.MISSING_EXPECTED_ACTION.value,
         SignalType.MISSING_EXPECTED_EDGE.value,
@@ -205,9 +206,12 @@ async def entity_signals(
     limit: int = Query(50, ge=1, le=500),
 ):
     """Get signals for an entity, optionally filtered by type."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
 
-    signals = await signal_repo.get_signals_for_entity(entity_id, signal_type, limit)
+    signals = await signal_repo.for_tenant(tenant.tenant_id).get_signals_for_entity(
+        entity_id, signal_type, limit
+    )
     return APIResponse(data={
         "entity_id": entity_id,
         "signals": signals,
@@ -225,7 +229,7 @@ async def explain_entity(
     tenant = request.state.tenant
     tenant.require_permission("read")
 
-    signals = await signal_repo.get_signals_for_entity(entity_id, limit=20)
+    signals = await signal_repo.for_tenant(tenant.tenant_id).get_signals_for_entity(entity_id, limit=20)
 
     if not signals:
         # Run a scan first
@@ -279,9 +283,10 @@ async def trigger_scan(
 @router.get("/signal/{signal_id}")
 async def get_signal(signal_id: str, request: Request):
     """Get signal details with full provenance."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
 
-    signal = await signal_repo.find_by_id(signal_id)
+    signal = await signal_repo.for_tenant(tenant.tenant_id).find_by_id(signal_id)
     if not signal:
         raise NotFoundError("Expectation signal")
 

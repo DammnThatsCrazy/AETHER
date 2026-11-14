@@ -160,7 +160,7 @@ export const IdentityReviewQueue: FC<{ readonly className?: string; readonly chi
       <div className={`flex flex-col bg-surface-base ${className}`}>
         <header className="flex h-14 items-center border-b border-surface-border bg-surface-surface px-4">
           <div className="flex items-center gap-2">
-            <span className="text-text-primary text-sm font-medium">Review Queue</span>
+            <h1 className="text-text-primary text-sm font-medium">Review Queue</h1>
             <span className="text-text-secondary text-xs">/ Conflicts and Late-Binding Candidates</span>
           </div>
         </header>

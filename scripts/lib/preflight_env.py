@@ -44,6 +44,7 @@ DYNAMODB_CACHE_TABLE_VAR = "DYNAMODB_CACHE_TABLE"
 REQUIRED_SECRET_VARS = (
     "JWT_SECRET",              # AuthConfig.jwt_secret
     "SDK_CONFIG_SECRET",       # SDK config signing secret (Settings.__post_init__)
+    "IDENTITY_VERIFICATION_TOKEN_KEY",  # identity evidence / wallet subject binding
     "WATERMARK_SECRET_KEY",    # ModelExtractionDefenseConfig.watermark_secret_key
     "CANARY_SECRET_SEED",      # ModelExtractionDefenseConfig.canary_secret_seed
     "EXTRACTION_CANARY_SEED",  # ExtractionMeshConfig.canary_secret_seed

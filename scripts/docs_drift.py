@@ -95,12 +95,20 @@ SYNC_MANAGED = {
     DOCS_ROOT / "REPO-INDEX.md",
 }
 
+# Unmarked source-linked docs are reported from every authored doc, including
+# the SKIP_DIRS ones the drift check itself never reads.
+NON_AUTHORED_DIRS = {
+    DOCS_ROOT / "archive",
+    DOCS_ROOT / "_generated",
+    DOCS_ROOT / "_templates",
+}
+
 
 class DriftError(Exception):
     """A doc references a path that doesn't exist (always fatal)."""
 
 
-def tracked_docs() -> list[Path]:
+def tracked_docs(skip_dirs: set[Path] = SKIP_DIRS) -> list[Path]:
     result = subprocess.run(
         ["git", "ls-files", "docs/**.md", "docs/**.mdx", "docs/*.md", "docs/*.mdx"],
         capture_output=True,
@@ -112,7 +120,7 @@ def tracked_docs() -> list[Path]:
         if not line:
             continue
         path = ROOT / line
-        if any(skip in path.parents for skip in SKIP_DIRS):
+        if any(skip in path.parents for skip in skip_dirs):
             continue
         if path in SYNC_MANAGED:
             continue
@@ -512,6 +520,20 @@ def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list
     if not latest_doc:
         return False
     return is_ancestor(latest_source, latest_doc)
+
+
+def is_unmarked(path: Path) -> bool:
+    """Source-linked doc with neither source_hashes nor last_synced_commit: never drift-checked."""
+    fm = extract_frontmatter(path.read_text(encoding="utf-8"))
+    if fm is None:
+        return False
+    sources = fm.get("source_files")
+    return (
+        isinstance(sources, list)
+        and bool(sources)
+        and "source_hashes" not in fm
+        and not fm.get("last_synced_commit")
+    )
 
 
 def check_doc(path: Path) -> dict:
@@ -933,8 +955,11 @@ def main() -> int:
     missing_reports = [r for r in reports if r["missing_paths"]]
     stale_reports = [r for r in reports if r["stale"] and r["path"] not in backlog]
     backlogged_reports = [r for r in reports if r["stale"] and r["path"] in backlog]
+    unmarked = [str(p.relative_to(ROOT)) for p in tracked_docs(NON_AUTHORED_DIRS) if is_unmarked(p)]
+    scanned_unmarked = {r["path"] for r in reports if not r["missing_paths"]} & set(unmarked)
     clean_count = (
         len(reports) - len(missing_reports) - len(stale_reports) - len(backlogged_reports)
+        - len(scanned_unmarked)
     )
 
     # Shrink-only: a backlog entry whose doc is clean (someone reviewed it) or
@@ -951,8 +976,15 @@ def main() -> int:
         f"{clean_count} clean, "
         f"{len(stale_reports)} stale (advisory), "
         f"{len(backlogged_reports)} in the documented review backlog, "
+        f"{len(unmarked)} unmarked (advisory), "
         f"{len(missing_reports)} with missing source paths."
     )
+
+    if unmarked:
+        print()
+        print("UNMARKED (advisory; source_files without source_hashes, never drift-checked):")
+        for path in unmarked:
+            print(f"  - {path}")
 
     if stale_reports:
         print()

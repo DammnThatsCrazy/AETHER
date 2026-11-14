@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -69,7 +70,11 @@ REVIEWED_EVIDENCE = (
 
 
 def _workflow(name: str) -> str:
-    return (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+    # The shared helper is the dispatch command: treat it as `gh workflow run` so
+    # every dispatch assertion (including the no-dispatch-from-a-timer guard)
+    # still covers helper calls.
+    text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+    return text.replace("scripts/ci/dispatch_workflow.sh", "gh workflow run")
 
 
 def _workflow_yaml(name: str) -> dict:
@@ -2144,7 +2149,78 @@ def test_rehearsal_primary_tenant_is_entitled_to_the_capabilities_it_checks():
     )["run"]
     assert 'create_tenant("Primary", "enterprise")' in run
     assert '], "enterprise")' in run
-    assert 'create_tenant("Isolation", "free")' in run
+
+
+def test_rehearsal_isolation_peer_plan_grants_identity_resolution():
+    # Rehearsal run 43357241871 got 403 from POST /v1/identity/resolve: the
+    # peer was a free (alpha) tenant, and the Unification service gives alpha
+    # no access. Check the peer's key tier against the real service catalog.
+    run = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")
+        if s.get("name") == "Bootstrap run-scoped rehearsal tenants and API keys"
+    )["run"]
+    assert 'call("POST", "/v1/identity/resolve"' in run
+    tenant = re.search(r'create_tenant\("Isolation", "(\w+)"\)', run)
+    key = re.search(r'create_key\(peer_id, "Isolation", \[[^\]]*\], "(\w+)"\)', run)
+    assert tenant and key, "isolation peer bootstrap shape changed"
+    assert tenant.group(1) == key.group(1)
+    backend = str(ROOT / "services" / "api")
+    original_path, original_mods = list(sys.path), set(sys.modules)
+    sys.path.insert(0, backend)
+    try:
+        from shared.auth.auth import APIKeyTier, legacy_tier_to_plan
+        from shared.plans.service_catalog import check_plan_access, resolve_service
+
+        service = resolve_service("/v1/identity/resolve")
+        assert service is not None
+        plan = legacy_tier_to_plan(APIKeyTier(key.group(1)))
+        assert check_plan_access(plan, service) is not None, (
+            f"{key.group(1)} ({plan.value}) cannot call /v1/identity/resolve"
+        )
+    finally:
+        sys.path[:] = original_path
+        for name in set(sys.modules) - original_mods:
+            sys.modules.pop(name, None)
+
+
+def test_rehearsal_playwright_steps_run_only_their_spec():
+    # `pnpm run e2e -- --reporter=line <spec>` forwarded a literal `--`;
+    # Playwright then ran all 32 tests against the live UI. The fixture run
+    # also needs @aether/shared built for Vite to resolve it.
+    steps = {s.get("name"): s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")}
+    deps = next(s for s in steps.values() if s.get("id") == "identity_ui_dependencies")["run"]
+    # Run 43365158651: Vite then failed on @aether/web, and the reporter on
+    # @aether/proof-runner. Every workspace package they import is built.
+    # Run 43380069776: the CI pnpm ignored `<pkg>...` for these "*" workspace
+    # links. Every package is installed by name, and each build layer must
+    # come after the layers its workspace dependencies live in.
+    install, _, builds = deps.partition("pnpm --filter '@aether/shared' run build")
+    assert builds, "the @aether/shared build no longer runs first"
+    layers = [["@aether/shared"]] + [
+        re.findall(r"--filter '([^']+)'", line)
+        for line in builds.splitlines() if "run build" in line
+    ]
+    position = {name: index for index, layer in enumerate(layers) for name in layer}
+    manifests = {
+        "@aether/web": "packages/sdk/web",
+        "@aether/proof-contracts": "tests/e2e/proof/packages/contracts",
+        "@aether/proof-fixtures": "tests/e2e/proof/packages/fixtures",
+        "@aether/proof-runner": "tests/e2e/proof/packages/runner",
+    }
+    for name, directory in manifests.items():
+        assert name in position, f"{name} is not built"
+        assert f"--filter '{name}'" in install, f"{name} is not installed"
+        manifest = json.loads((ROOT / directory / "package.json").read_text())
+        for dependency in {**manifest.get("dependencies", {}), **manifest.get("devDependencies", {})}:
+            if dependency in position:
+                assert position[dependency] < position[name], f"{name} builds before {dependency}"
+    for name, spec in (
+        ("Run identity UI evidence with fixture API", "identity-continuity.spec.ts"),
+        ("Run authenticated live staging identity UI evidence", "identity-continuity-live.spec.ts"),
+    ):
+        run = steps[name]["run"]
+        assert "run e2e --" not in run
+        assert f"exec playwright test --reporter=line src/test/e2e/{spec}" in run
 
 
 def test_rehearsal_ingestion_probes_fail_fast_on_per_event_rejection():
@@ -2168,3 +2244,239 @@ def test_standalone_plan_wake_surfaces_the_apply_wake_inputs():
     assert 'plan_run_id=${PLAN_RUN_ID} plan_checksum=${checksum}' in run
     assert "GITHUB_STEP_SUMMARY" in run
     assert run.index("GITHUB_STEP_SUMMARY") > run.index('checksum="$(sha256sum reviewed.tfplan')
+
+
+def test_identity_provider_proof_deferral_is_opt_in_narrow_and_recorded() -> None:
+    """Deferring the live provider proof must be explicit (default required), skip
+    only the provider-connection steps, and leave evidence that the run is not
+    identity-continuity proof. The pilot wrapper must pass the choice through."""
+    for name in (LIFECYCLE, "pilot-staging.yml"):
+        doc = _workflow_yaml(name)
+        inputs = (doc.get(True) or doc["on"])["workflow_dispatch"]["inputs"]
+        assert inputs["identity_provider_proof"]["options"] == ["required", "deferred"], name
+        assert inputs["identity_provider_proof"]["default"] == "required", name
+
+    doc = _workflow_yaml(LIFECYCLE)
+    gated = "inputs.identity_provider_proof != 'deferred'"
+    preflight = {s.get("name"): s for s in _steps(doc, "preflight-rehearsal-inputs")}
+    assert gated in preflight["Validate identity provider inputs before wake planning"]["if"]
+    assert "deferred" in preflight["Record deferred identity provider proof"]["if"]
+
+    rehearse = {s.get("name"): s for s in _steps(doc, "rehearse")}
+    # The capture step binds the live scenario run summary, so it belongs to
+    # the deferred provider-proof chain (run 43452018367 failed it on the
+    # missing summary).
+    for step in ("Bootstrap run-scoped provider connection for identity reimport",
+                 "Run live identity continuity scenarios",
+                 "Capture identity continuity evidence",
+                 "Collect and validate identity continuity staging proof pack"):
+        assert gated in rehearse[step]["if"], step
+    evidence = rehearse["Record deferred identity provider proof evidence"]
+    assert "deferred" in evidence["if"]
+    assert '"counts_as_identity_continuity_proof": False' in evidence["run"]
+    # Nothing else in the rehearsal may key off the deferral.
+    others = [n for n, s in rehearse.items() if "identity_provider_proof" in str(s.get("if", ""))]
+    assert sorted(others) == sorted([
+        "Record deferred identity provider proof evidence",
+        "Bootstrap run-scoped provider connection for identity reimport",
+        "Run live identity continuity scenarios",
+        "Capture identity continuity evidence",
+        "Collect and validate identity continuity staging proof pack",
+    ])
+    assert '-f identity_provider_proof="$IDENTITY_PROVIDER_PROOF"' in _workflow("pilot-staging.yml")
+
+
+def test_identity_key_mount_shape_reaches_every_rehearsal_contract_check() -> None:
+    """First-time setup wakes with identity_verification_secrets_enabled=false
+    before the keys exist. Every task-definition contract check on the rehearsal
+    path must honour that input, as terraform-promote does; otherwise the
+    documented first-time path can never pass the pre-wake or delivery check."""
+    lifecycle = _workflow(LIFECYCLE)
+    deploy = _workflow("deploy.yml")
+    for name, text in ((LIFECYCLE, lifecycle), ("deploy.yml", deploy), ("terraform-promote.yml",
+                                                                         _workflow("terraform-promote.yml"))):
+        calls = text.split("check_staging_task_definition_contract.py")[1:]
+        assert calls, name
+        for call in calls:
+            assert "--identity-verification-secrets-enabled" in call.split("\n\n")[0].split("python ")[0], name
+    assert 'IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}' in lifecycle
+    assert '-f identity_verification_secrets_enabled="${IDENTITY_VERIFICATION_SECRETS_ENABLED:-true}"' in lifecycle
+    deploy_inputs = (_workflow_yaml("deploy.yml").get(True) or _workflow_yaml("deploy.yml")["on"])[
+        "workflow_dispatch"]["inputs"]
+    assert deploy_inputs["identity_verification_secrets_enabled"]["default"] == "true"
+
+
+def test_pilot_wrapper_tolerates_a_briefly_unreadable_dispatched_run() -> None:
+    """GitHub can answer Not Found for a run it just created; the wrapper must
+    retry within a bounded window instead of failing a healthy rehearsal
+    (pilot run 43314557878). It uses the same helper as the lifecycle, which
+    retries only a 404 and fails every other error at once."""
+    text = _workflow("pilot-staging.yml")
+    helper = text[text.index("dispatch_and_wait() {"):text.index("reconcile_pilot_price_secret_state() {")]
+    assert 'status="$(scripts/ci/run_status.sh "$GITHUB_REPOSITORY" "$run_id")" || exit 1' in helper
+    assert 'if [ "$status" = lookup_pending ]; then sleep 5; continue; fi' in helper
+    assert "visible_by" not in helper
+
+
+def test_reconcile_imports_a_live_amplify_branch_terraform_does_not_own() -> None:
+    """A live staging Amplify branch without a Terraform owner made the reviewed
+    apply fail ("branch staging already exists", promotion run 43346276563).
+    Every reconcile must import it at its canonical address, import-only."""
+    text = _workflow("staging-state-reconcile.yml")
+    step = text[text.index("- name: Import only the known staging resources"):]
+    step = step[:step.index("\n      - name:", 10)] if "\n      - name:" in step[10:] else step
+    assert "aws amplify get-branch --app-id \"$app_id\" --branch-name staging" in step
+    assert 'aws_amplify_branch.main[\\"${app_key}\\"]' in step
+    assert '"$branch_address" "${app_id}/staging"' in step
+    assert 'grep -Fxq "$branch_address" "$state_list_file"' in step  # skip when already owned
+
+
+@pytest.mark.parametrize("aws_mode, expect_rc, expect_import", [
+    ("exists", 0, True), ("missing", 0, False), ("denied", 1, False),
+])
+def test_amplify_branch_probe_fails_on_errors_other_than_not_found(tmp_path, aws_mode, expect_rc, expect_import):
+    # Only NotFoundException means "nothing to import". An AccessDenied or a
+    # throttle used to read as "absent", so the reconcile passed and the next
+    # apply failed again on "branch staging already exists".
+    text = _workflow("staging-state-reconcile.yml")
+    start = text.index('            if aws amplify get-branch --app-id "$app_id"')
+    end = text.index("\n            fi\n", start) + len("\n            fi\n")
+    block = "\n".join(line[12:] for line in text[start:end].splitlines())
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "aws").write_text(
+        "#!/bin/bash\ncase \"$AWS_MODE\" in\n"
+        "  exists) exit 0;;\n"
+        "  missing) echo 'An error occurred (NotFoundException) when calling GetBranch' >&2; exit 254;;\n"
+        "  denied) echo 'An error occurred (AccessDeniedException) when calling GetBranch' >&2; exit 254;;\n"
+        "esac\n")
+    (bin_dir / "terraform").write_text("#!/bin/bash\necho imported >> \"$RUNNER_TEMP/imports\"\n")
+    for tool in ("aws", "terraform"):
+        (bin_dir / tool).chmod(0o755)
+    script = "set -euo pipefail\napp_id=app1\nbranch_address=addr\nBACKEND_IMAGE_DIGEST=sha256:x\n" + block
+    result = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True,
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "AWS_MODE": aws_mode,
+             "RUNNER_TEMP": str(tmp_path)},
+    )
+    assert result.returncode == expect_rc, result.stderr
+    assert (tmp_path / "imports").exists() is expect_import
+    if aws_mode == "denied":
+        assert "AccessDeniedException" in result.stderr
+
+
+def test_aurora_minor_version_drift_cannot_block_an_apply() -> None:
+    """AWS auto-upgraded staging Aurora 16.8 -> 16.13 and the apply then tried to
+    "upgrade" back to 16.8, which AWS rejects. engine_version must track the live
+    minor release and be ignored after creation."""
+    module = (ROOT / "infra/aws/terraform/modules/aurora/main.tf").read_text(encoding="utf-8")
+    cluster = module[module.index('resource "aws_rds_cluster" "this"'):]
+    cluster = cluster[:cluster.index("\nresource ")]
+    assert 'engine_version = "16.13"' in cluster
+    assert "ignore_changes  = [engine_version]" in cluster
+    assert "prevent_destroy = true" in cluster
+
+
+def test_nightly_drift_schedule_is_off_while_staging_sleeps() -> None:
+    """The asleep-shape gate rejects any enabled staging schedule. The ML drift
+    rule had no state switch, so no sleep plan could pass (rehearsal fail-safe
+    sleep in lifecycle run 43349946026). Its state must follow staging_state."""
+    module = (ROOT / "infra/aws/terraform/modules/ml_drift_lambda/main.tf").read_text(encoding="utf-8")
+    rule = module[module.index('resource "aws_cloudwatch_event_rule" "nightly_drift"'):]
+    rule = rule[:rule.index("\n}\n")]
+    assert 'state = var.enabled ? "ENABLED" : "DISABLED"' in rule
+    variables = (ROOT / "infra/aws/terraform/modules/ml_drift_lambda/variables.tf").read_text(encoding="utf-8")
+    assert 'variable "enabled"' in variables and "default     = true" in variables
+    root = (ROOT / "infra/aws/terraform/main.tf").read_text(encoding="utf-8")
+    call = root[root.index('module "ml_drift_lambda"'):]
+    call = call[:call.index("\n}\n")]
+    assert "enabled = local.staging_state_multiplier > 0" in call
+
+
+def test_sleep_drain_has_no_text_split_task_stop_after_convergence() -> None:
+    # Rehearsal run 43349946026 failed its fail-safe sleep with "not
+    # authorized to perform ecs:StopTask on resource task/[": a leftover tail
+    # re-split the JSON task list as tab-separated text and tried to stop the
+    # literal "[" token. Task stops belong only to the jq-parsed convergence
+    # loop, and nothing may run after its final failure guard.
+    doc = _workflow_yaml("staging-lifecycle.yml")
+    step = next(
+        s for s in _steps(doc, "sleep")
+        if s.get("name") == "Enforce zero capacity bounds and wait for staging to drain"
+    )
+    script = step["run"]
+    assert script.count("aws ecs stop-task") == 1
+    assert "jq -r '.[]?' .artifacts/sleep/tasks-before.json" in script
+    assert 'printf \'%s\' "$task_arns_raw" | tr' not in script
+    assert "task_stop_count" not in script
+    tail = script.rstrip().rsplit("exit 1", 1)[1]
+    assert tail.strip() == "fi", f"code after the final failure guard: {tail!r}"
+    for key in ("scaled_to_zero", "tasks_stopped"):
+        assert script.count(f"printf '{key}=%s\\n'") == 1, key
+
+
+def test_every_dispatched_run_poll_tolerates_a_brief_not_found():
+    # Rehearsal run 43387214569: the sleep plan wait read the run it had just
+    # dispatched, got `gh: Not Found (HTTP 404)` 0.3 s later, and set -e ended
+    # the step. Every status poll goes through scripts/ci/run_status.sh, which
+    # retries only a 404 within a bounded window (tested behaviourally in
+    # test_ci_dispatch_helpers.py); no workflow keeps its own copy.
+    for name in (LIFECYCLE, "pilot-staging.yml", "staging-business-hours.yml"):
+        text = _workflow(name)
+        raw = re.findall(r'gh api "repos/\$\{\w+\}/actions/runs/\$\{\w+\}" --jq \'\.status\'', text)
+        assert not raw, f"{name}: status read bypasses scripts/ci/run_status.sh: {raw}"
+        assert "scripts/ci/run_status.sh" in text, name
+    assert _workflow(LIFECYCLE).count('"$(scripts/ci/run_status.sh "') == 7
+
+def test_live_identity_ui_evidence_expects_the_routes_the_ui_calls():
+    # The tenant UI reads /v1/identity/{activation-status,review-queue}; the
+    # live spec expected the platform-operator /v1/admin/identity/* paths and
+    # could never pass for a tenant admin session.
+    endpoints = (ROOT / "apps/aether-web/src/lib/api/endpoints.ts").read_text(encoding="utf-8")
+    spec = (ROOT / "apps/aether-web/src/test/e2e/identity-continuity-live.spec.ts").read_text(encoding="utf-8")
+    for path in ("/v1/identity/activation-status", "/v1/identity/review-queue"):
+        assert path in endpoints
+        assert f"'{path}'" in spec
+    assert "/v1/admin/identity/activation-status" not in spec
+    assert "/v1/admin/identity/review-queue" not in spec
+    for source in (spec, (ROOT / "scripts/identity_staging_capture.py").read_text(encoding="utf-8"),
+                   (ROOT / "scripts/identity_continuity_staging_scenarios.py").read_text(encoding="utf-8")):
+        assert "/v1/admin/identity/staging-proof" not in source
+        assert "/v1/identity/staging-proof-capture" in source
+
+
+def test_identity_evidence_key_can_read_capabilities_and_capture_waits_for_scenarios():
+    # Run 43452018367: the evidence key held only "admin", which does not
+    # imply "read", so the live UI's GET /v1/capabilities answered 403 and the
+    # identity surfaces rendered as disabled. The capture step then failed on
+    # the scenario summary the deferred provider proof never produces.
+    steps = {s.get("name"): s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")}
+    bootstrap = steps["Bootstrap run-scoped rehearsal tenants and API keys"]["run"]
+    mint = re.search(r'identity_capture_key = create_key\(\s*mine_id, "Identity Evidence", (\[[^\]]*\]), "enterprise"\)', bootstrap)
+    assert mint, "identity evidence key mint changed shape"
+    assert {"read", "write", "admin"} <= set(re.findall(r'"(\w+)"', mint.group(1)))
+    capture = steps["Capture identity continuity evidence"]["if"]
+    assert "inputs.identity_provider_proof != 'deferred'" in capture
+    deferred = steps["Record deferred identity provider proof evidence"]["run"]
+    assert '"Capture identity continuity evidence"' in deferred
+
+
+def test_every_captured_workflow_dispatch_reports_its_failure():
+    # Run 43462809460: `dispatch_output="$(gh workflow run ... 2>&1)"` failed,
+    # set -e ended the step inside the substitution, and the captured gh error
+    # was never printed. Every dispatch goes through
+    # scripts/ci/dispatch_workflow.sh, which prints the failure and exits 1
+    # without retrying (tested behaviourally in test_ci_dispatch_helpers.py).
+    for name in (LIFECYCLE, "pilot-staging.yml", "staging-business-hours.yml"):
+        text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+        assert "gh workflow run" not in text, f"{name}: dispatch bypasses scripts/ci/dispatch_workflow.sh"
+        assert "scripts/ci/dispatch_workflow.sh" in text, name
+    for name in ("pilot-staging.yml", "staging-business-hours.yml"):
+        steps = [s for job in _workflow_yaml(name)["jobs"].values() for s in job.get("steps") or []]
+        users = [s for s in steps if "scripts/ci/" in str(s.get("run", ""))]
+        assert users, name
+        job = next(j for j in _workflow_yaml(name)["jobs"].values()
+                   if any("scripts/ci/" in str(s.get("run", "")) for s in j.get("steps") or []))
+        checkout = next(s for s in job["steps"] if "actions/checkout" in str(s.get("uses", "")))
+        assert "scripts/ci" in checkout["with"]["sparse-checkout"], name
+

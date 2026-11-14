@@ -45,6 +45,10 @@ PaymentRail = Literal[
     "fiat", "stripe", "coinbase", "moonpay", "bridge", "bank_transfer",
     "card", "ach", "wire", "sepa", "onchain", "x402",
 ]
+PAYMENT_RAIL_VALUES: tuple[PaymentRail, ...] = (
+    "fiat", "stripe", "coinbase", "moonpay", "bridge", "bank_transfer",
+    "card", "ach", "wire", "sepa", "onchain", "x402",
+)
 
 FundingSessionStatus = Literal[
     "initiated", "submitted", "pending", "completed",
@@ -266,5 +270,6 @@ class PaymentRailHealth(BaseModel):
     reconciliation_conflicts: int = 0
     last_event_at: Optional[str] = None
     last_poll_at: Optional[str] = None
-    status: Literal["healthy", "degraded", "not_configured", "error"] = "not_configured"
+    observation_status: Literal["observed", "never_observed", "not_configured"]
+    status: Literal["healthy", "degraded", "not_configured", "error", "unknown"] = "not_configured"
     computed_at: str = Field(default_factory=utc_now_iso)

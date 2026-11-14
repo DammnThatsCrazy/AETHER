@@ -133,6 +133,7 @@ async def mint_api_key(
             permissions=permissions,
             key_class=key_class,
             site_ids=bound_sites,
+            platform=platform,
         )
     except Exception as e:  # noqa: BLE001 — a cache miss must not fail issuance
         logger.warning(f"Failed to register key in auth cache: {e}")

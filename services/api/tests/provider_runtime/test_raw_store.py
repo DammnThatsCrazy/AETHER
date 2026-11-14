@@ -91,7 +91,7 @@ async def test_missing_rights_denies_before_full_raw_payload_is_persisted():
     with pytest.raises(ProviderRawRightsDenied) as excinfo:
         await store.ingest([record])
 
-    assert str(excinfo.value) == "provider raw record has no current tenant rights admission"
+    assert str(excinfo.value) == "provider raw record has no current rights admission"
     assert "source-pii-canary" not in str(excinfo.value)
     rows = await repository.find_many(
         filters={

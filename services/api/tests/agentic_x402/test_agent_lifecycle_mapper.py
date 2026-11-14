@@ -130,7 +130,7 @@ async def test_subagent_spawned_links_parent_to_child():
         "agent_subagent_spawned",
         {
             "agent_id": PARENT_AGENT,
-            "parent_agent_id": AGENT,  # field name the mapper actually reads
+            "child_agent_id": AGENT,
         },
         TENANT,
     )
@@ -156,7 +156,7 @@ async def test_subagent_spawned_creates_delegation_record():
         "agent_subagent_spawned",
         {
             "agent_id": PARENT_AGENT,
-            "parent_agent_id": AGENT,
+            "child_agent_id": AGENT,
             "task_id": "task-xyz",
         },
         TENANT,
@@ -182,7 +182,7 @@ async def test_subagent_spawned_idempotent_delegation():
         delegations=delegations,
         executions=AgentExecutionRepository(),
     )
-    payload = {"agent_id": PARENT_AGENT, "parent_agent_id": AGENT}
+    payload = {"agent_id": PARENT_AGENT, "child_agent_id": AGENT}
     await mapper.handle_event("agent_subagent_spawned", payload, TENANT)
     await mapper.handle_event("agent_subagent_spawned", payload, TENANT)
     granted = await delegations.find_many(
@@ -190,6 +190,45 @@ async def test_subagent_spawned_idempotent_delegation():
         limit=10,
     )
     assert len(granted) == 1, "Duplicate delegation rows created on repeated spawn"
+
+
+@pytest.mark.asyncio
+async def test_subagent_spawned_sdk_shape_links_child_not_self():
+    """SDK payloads repeat the parent as parent_agent_id; that must not become the child."""
+    mapper = _make_mapper()
+    result = await mapper.handle_event(
+        "agent_subagent_spawned",
+        {
+            "agent_id": PARENT_AGENT,
+            "parent_agent_id": PARENT_AGENT,
+            "child_agent_id": AGENT,
+            "root_agent_id": "agent-root",
+        },
+        TENANT,
+    )
+    assert result["status"] == "subagent_spawned"
+    edge = result["edges"][0]
+    assert edge["from"] == f"{TENANT}:agent:{PARENT_AGENT}"
+    assert edge["to"] == f"{TENANT}:agent:{AGENT}"
+    child = _vertices(mapper)[f"{TENANT}:agent:{AGENT}"]
+    assert child.properties["root_agent_id"] == "agent-root"
+
+
+@pytest.mark.asyncio
+async def test_subagent_spawned_without_child_writes_nothing():
+    delegations = DelegationRepository()
+    mapper = AgentLifecycleMapper(
+        graph_client=GraphClient(),
+        delegations=delegations,
+        executions=AgentExecutionRepository(),
+    )
+    result = await mapper.handle_event(
+        "agent_subagent_spawned",
+        {"agent_id": PARENT_AGENT, "parent_agent_id": PARENT_AGENT},
+        TENANT,
+    )
+    assert result["status"] == "subagent_spawn_missing_child"
+    assert not await delegations.find_many(filters={"tenant_id": TENANT}, limit=10)
 
 
 @pytest.mark.asyncio

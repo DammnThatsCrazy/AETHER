@@ -65,6 +65,37 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+/** Mirrors services/api/value/economic/routes.py TenantEconomicOverviewResponse. */
+const economicAmountSchema = z.object({
+  usd_amount: z.number().nullish(),
+  native_amount: z.number().nullish(),
+  native_currency: z.string().nullish(),
+}).passthrough();
+
+const tenantEconomicOverviewSchema = z.object({
+  tenant_id: z.string(),
+  total_value_observed: economicAmountSchema.nullish(),
+  web2_revenue: economicAmountSchema.nullish(),
+  campaign_spend: economicAmountSchema.nullish(),
+  attributed_revenue: economicAmountSchema.nullish(),
+  agent_spend: economicAmountSchema.nullish(),
+  entity_count: z.number().nullish(),
+  warnings: z.array(z.object({ code: z.string(), message: z.string(), severity: z.string() }).passthrough()).nullish(),
+  computed_at: z.string().nullish(),
+}).passthrough();
+
+export type TenantEconomicOverview = z.infer<typeof tenantEconomicOverviewSchema>;
+export type EconomicWindow = '24h' | '7d' | '30d' | '90d';
+
+const campaignListSchema = z.object({
+  data: z.array(z.unknown()),
+  pagination: z.object({
+    limit: z.number().optional(),
+    next_cursor: z.string().nullish(),
+    has_more: z.boolean().optional(),
+  }).optional(),
+});
+
 const tenantReadinessCheckSchema = z.object({
   name: z.string(),
   status: z.enum(['pending', 'passed', 'failed', 'not_applicable']),
@@ -91,7 +122,9 @@ const apiKeySchema = z.object({
   name: z.string(),
   tier: z.string(),
   permissions: z.array(z.string()),
-  platform: z.string().nullable(),
+  // Keys minted by the activation flow are stored without a platform tag;
+  // read an absent field as "no platform" rather than rejecting the page.
+  platform: z.string().nullish(),
   last_used_at: z.string().nullable(),
 });
 
@@ -475,6 +508,12 @@ export const api = {
     nextSteps: () => restClient.get('/v1/value-review/next-steps', wrap(unknownSchema)).then(r => r.data),
   },
 
+  // ── Tenant economic overview (attributed revenue + campaign spend) ────────
+  economic: {
+    overview: (window: EconomicWindow = '7d') =>
+      restClient.get(`/v1/economic/overview${buildQS({ window })}`, wrap(tenantEconomicOverviewSchema)).then(r => r.data),
+  },
+
   economicOperations: {
     journey: (journeyId: string, asOf?: string) =>
       restClient.get(
@@ -855,7 +894,15 @@ export const api = {
   // ── Campaigns ──────────────────────────────────────────────────────────────
   campaigns: {
     list: (params?: { status?: string; limit?: number; offset?: number; origin?: string; platform?: string; mapping_quality?: string }) =>
-      restClient.get(`/v1/campaigns${buildQS({ ...params })}`, wrap(z.object({ campaigns: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
+      // GET /v1/campaigns is keyset-paginated and returns { data: [...], pagination }
+      // without the APIResponse status envelope. `total` is the page length; use
+      // `has_more` to tell a full count from a first page.
+      restClient.get(`/v1/campaigns${buildQS({ ...params })}`, campaignListSchema).then(r => ({
+        campaigns: r.data,
+        total: r.data.length,
+        has_more: r.pagination?.has_more === true,
+        next_cursor: r.pagination?.next_cursor ?? null,
+      })),
 
     get: (campaignId: string) =>
       restClient.get(`/v1/campaigns/${campaignId}`, wrap(unknownSchema)).then(r => r.data),
@@ -1338,11 +1385,16 @@ export const api = {
   entities: {
     /** List entities scoped to this tenant. type='user' returns all tracked users. */
     list: (params?: { type?: string; limit?: number; offset?: number; order_by?: string }) =>
-      restClient.get(`/v1/entities${buildQS({ ...params })}`, wrap(z.object({ entities: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
-
-    /** Full-text search across entity fields — name, email, wallet address, device ID. */
-    search: (q: string, type?: string, limit = 50) =>
-      restClient.get(`/v1/entities/search${buildQS({ q, type, limit })}`, wrap(z.object({ results: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
+      // The route returns { entities, count, next_offset? } — `count` is the page size.
+      restClient.get(`/v1/entities${buildQS({ ...params })}`, wrap(z.object({
+        entities: z.array(z.unknown()),
+        count: z.number().optional(),
+        next_offset: z.number().nullish(),
+      }))).then(r => ({
+        entities: r.data.entities,
+        total: r.data.count ?? r.data.entities.length,
+        has_more: typeof r.data.next_offset === 'number',
+      })),
 
     /** Single entity summary. */
     get: (entityId: string) =>
@@ -1827,7 +1879,7 @@ export const api = {
         period_end: string;
         events_used: number;
         events_quota: number;
-        rpm_peak: number;
+        rpm_peak: number | null;
         rpm_limit: number;
         overage_events: number;
         days_remaining: number;
@@ -2003,8 +2055,9 @@ export const api = {
     invoicePreviews: () =>
       restClient.get('/v1/billing/invoice-previews', wrap(unknownSchema)).then(r => r.data),
 
-    valueCreated: () =>
-      restClient.get('/v1/billing/value-created', wrap(unknownSchema)).then(r => r.data),
+    /** `start`/`end` (ISO) scope the read to a period; the response then reports `truncated`. */
+    valueCreated: (params?: { start?: string; end?: string }) =>
+      restClient.get(`/v1/billing/value-created${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
 
 
   },

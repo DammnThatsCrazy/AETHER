@@ -408,3 +408,20 @@ async def test_expired_lease_can_redeliver_at_least_once():
     assert stats.published == 1
     assert len(producer.events) == 2
     assert len(_rows("bronze_sdk_events")) == len(_rows("event_outbox")) == 1
+
+
+@pytest.mark.asyncio
+async def test_olympus_scope_events_never_enter_the_tenant_pipeline():
+    from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
+
+    with mock.patch(
+        "ingestion.ingestion.validation.evaluate_ingress_decision", return_value=(True, None, [])
+    ), mock.patch.object(bridge_module.metrics, "increment") as increment:
+        accepted = await EventBridge().ingest_events(
+            OLYMPUS_SOURCE_TENANT_ID, [_event(tenant_id=OLYMPUS_SOURCE_TENANT_ID)],
+        )
+
+    assert accepted == 0
+    increment.assert_called_once_with("provider_bridge_olympus_scope_skipped_total")
+    assert _rows("bronze_sdk_events") == []
+    assert _rows("event_outbox") == []

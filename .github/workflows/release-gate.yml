@@ -1,0 +1,35 @@
+name: release-gate
+
+# On-demand `make release-gate` plus the staging preflight self-test. Moved out of
+# the retired repo-consistency workflow unchanged; it was already dispatch-only.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Bootstrap full release toolchain
+        run: make bootstrap
+      - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - run: npm ci --ignore-scripts
+      - name: Release gate
+        run: make release-gate
+      - name: Staging preflight (dry-run self-test)
+        run: python scripts/staging_preflight.py --dry-run

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -63,6 +63,9 @@ class WalletVerificationChallengeRequest(BaseModel):
     """Issue a proof tied to one consented anonymous identity subject."""
 
     anonymous_id: str = Field(..., min_length=1, max_length=512)
+    tenant_app_key: Optional[str] = Field(
+        None, description="Authenticated app scope used to bind the SDK identity alias"
+    )
     wallet_address: str = Field(..., min_length=1, max_length=512)
     chain_namespace: str = Field(..., min_length=1, max_length=128)
 
@@ -331,6 +334,24 @@ class IdentityHealthResponse(BaseModel):
     resolver_error_rate: float = 0.0
     graph_write_error_rate: float = 0.0
     tenant_id: Optional[str] = None
+
+
+_EnvelopeData = TypeVar("_EnvelopeData")
+
+
+class IdentityEnvelope(BaseModel, Generic[_EnvelopeData]):
+    """The ``APIResponse(...).to_dict()`` envelope around an identity payload.
+
+    Identity routes return the standard envelope, so their ``response_model``
+    must describe it. Declaring the bare payload model made FastAPI validate
+    the envelope against it and answer 500 for every request (staging
+    rehearsal run 43365158651, ``POST /v1/identity/resolve``).
+    """
+
+    data: _EnvelopeData
+    status: Literal["success"] = "success"
+    timestamp: str
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class IdentityHealthEnvelope(BaseModel):

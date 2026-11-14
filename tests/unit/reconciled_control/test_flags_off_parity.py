@@ -66,10 +66,12 @@ def test_toggling_flags_on_is_reflected_in_flag_reads(rcp_flags) -> None:
 
 
 def test_operator_router_is_read_only() -> None:
-    # Phase-0-3 scope discipline: no POST/PUT/PATCH/DELETE anywhere on the
-    # managed-integrations operator surface. Six GETs only (managed
+    # Scope discipline: no POST/PUT/PATCH/DELETE anywhere on the
+    # managed-integrations operator surface. Nine GETs only (managed
     # integrations list/detail, Phase-1 change-sets list/detail, Phase-3
-    # approvals + action-required review lists).
+    # approvals + action-required review lists, Program-A authority map, and
+    # the Program-B durable activation state/evidence reads — transitions stay
+    # on the service, not a write route).
     from connectors.managed_integrations.routes import admin_router
 
     methods: set[str] = set()
@@ -77,7 +79,7 @@ def test_operator_router_is_read_only() -> None:
         route_methods = getattr(route, "methods", None) or set()
         methods |= {str(m).upper() for m in route_methods}
     assert methods == {"GET"}
-    assert len(admin_router.routes) == 6
+    assert len(admin_router.routes) == 9
 
 
 def test_operator_router_prefix_is_admin_kyber() -> None:
@@ -87,9 +89,10 @@ def test_operator_router_prefix_is_admin_kyber() -> None:
 
 
 def test_literal_routes_precede_the_id_capture_route() -> None:
-    # ``/change-sets``, ``/approvals`` and ``/action-required`` are literals
-    # that must not be swallowed by the ``/{managed_integration_id}`` capture
-    # route, so they must be declared first.
+    # ``/change-sets``, ``/approvals``, ``/action-required``, ``/authority`` and
+    # ``/activation*`` are literals that must not be swallowed by the
+    # ``/{managed_integration_id}`` capture route, so they must be declared
+    # first.
     from connectors.managed_integrations.routes import admin_router
 
     prefix = "/v1/admin/kyber/managed-integrations"

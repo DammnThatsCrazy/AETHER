@@ -18,6 +18,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from shared.integration_contracts.events import RawProviderRecord, verify_checksum
+from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.provider_runtime.replay")
@@ -447,7 +448,9 @@ class ProviderRawReplayService:
                     event_ids.add(event.event_id)
                 if scope.dry_run:
                     admitted = 0
-                    for event in result.events:
+                    # Mirrors the bridge: Olympus-scope events never enter the tenant pipeline.
+                    events = [] if scope.tenant_id == OLYMPUS_SOURCE_TENANT_ID else result.events
+                    for event in events:
                         if await self._bridge()._consent_allows(scope.tenant_id, event):
                             admitted += 1
                     accepted = 0

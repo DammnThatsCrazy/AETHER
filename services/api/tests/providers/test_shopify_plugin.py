@@ -408,6 +408,32 @@ def test_webhook_verify_no_secret_or_header_fails(orders: list[dict]) -> None:
     assert not adapter.verify(raw_body, {}, "synth-webhook-secret")
 
 
+def test_webhook_shop_domain_prefers_header_and_requires_agreement() -> None:
+    domain_of = ShopifyWebhookAdapter.shop_domain_from_payload
+    header = {"X-Shopify-Shop-Domain": SHOP_DOMAIN.upper()}
+    assert domain_of({"id": 1}, headers=header) == SHOP_DOMAIN
+    assert domain_of({"domain": SHOP_DOMAIN}, headers={}) == SHOP_DOMAIN
+    assert domain_of({"domain": SHOP_DOMAIN}, headers=header) == SHOP_DOMAIN
+    for payload, headers in (
+        ({"domain": "other-shop.myshopify.com"}, header),
+        ({"id": 1}, {}),
+        ({"id": 1}, {"X-Shopify-Shop-Domain": "https://other-host.test"}),
+        ({"domain": "not-a-shop.test"}, header),
+    ):
+        with pytest.raises(ValueError):
+            domain_of(payload, headers=headers)
+
+
+def test_stored_shop_domain_normalizes_scheme_slash_and_case() -> None:
+    from connectors.providers.shopify.auth import _stored_shop_domain
+
+    assert _stored_shop_domain("https://Synth-Demo.myshopify.com/") == SHOP_DOMAIN
+    assert _stored_shop_domain(" synth-demo.myshopify.com/ ") == SHOP_DOMAIN
+    assert _stored_shop_domain("http://synth-demo.myshopify.com") is None
+    assert _stored_shop_domain("https://synth-demo.example.com") is None
+    assert _stored_shop_domain(None) is None
+
+
 def test_webhook_parse_emits_order_record(orders: list[dict]) -> None:
     envelope = {
         "id": 7000100001,
@@ -1058,6 +1084,55 @@ async def test_account_discovery_missing_domain() -> None:
     result = await ShopifyAccountAdapter().discover_accounts(_context(credential=None, config={}))
     assert result.success is False
     assert result.status == AdapterStatus.PERMANENT_ERROR
+
+
+def _shop_lookup(monkeypatch: pytest.MonkeyPatch, handler) -> None:
+    import connectors.providers.shopify.account as acct_mod
+
+    monkeypatch.setattr(
+        acct_mod, "_http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(503, AdapterStatus.RETRYABLE_ERROR), (429, AdapterStatus.RATE_LIMITED)],
+)
+async def test_account_discovery_transient_shop_lookup_failure_is_retryable(
+    monkeypatch: pytest.MonkeyPatch, status: int, expected: AdapterStatus,
+) -> None:
+    _shop_lookup(monkeypatch, lambda request: httpx.Response(status, json={}))
+    result = await ShopifyAccountAdapter().discover_accounts(_context())
+    assert result.success is False
+    assert result.status == expected
+    assert result.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_account_discovery_unreachable_shop_is_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    _shop_lookup(monkeypatch, handler)
+    result = await ShopifyAccountAdapter().discover_accounts(_context())
+    assert result.success is False
+    assert result.status == AdapterStatus.RETRYABLE_ERROR
+    assert result.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_account_discovery_live_shop_carries_its_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    _shop_lookup(
+        monkeypatch,
+        lambda request: httpx.Response(200, json={"shop": {"id": 548380009, "name": "Synth"}}),
+    )
+    result = await ShopifyAccountAdapter().discover_accounts(_context())
+    assert result.success is True
+    assert result.data[0].external_id == "548380009"
 
 
 # ── Payload tolerance ───────────────────────────────────────────────────────

@@ -35,6 +35,9 @@ class RecordingGraph:
         self.vertices = {}
         self.edges = []
 
+    async def get_vertex(self, vertex_id):
+        return self.vertices.get(vertex_id)
+
     async def upsert_vertex(self, vertex):
         self.vertices[vertex.vertex_id] = vertex
         return vertex.vertex_id

@@ -126,6 +126,11 @@ class SemanticFactRepository:
                     self._store[existing_id] = {**fact}
                     return self._store[existing_id]
                 return self._store[existing_id]
+            if self.mode == _SILVER_MODE and record_id in self._store:
+                # PostgreSQL's primary key rejects this distinct idempotency
+                # key. The local fallback must not overwrite another tenant's
+                # immutable Silver row that happened to reuse the same ID.
+                raise ValueError("semantic_fact_primary_key_conflict")
             self._store[record_id] = {**fact}
             return self._store[record_id]
 
@@ -338,6 +343,7 @@ class SemanticFactRepository:
         *,
         retention_class: Optional[str] = None,
         status: str = "expired",
+        eligible_statuses: frozenset[str] = _ACTIVE_STATUS_VALUES,
     ) -> int:
         """Retention age-out: mark rows with occurred_at <= cutoff as ``status``.
 
@@ -347,13 +353,15 @@ class SemanticFactRepository:
         (mirrors the consent-restriction primitives above).
         """
         pool = await self._pool()
-        # Only age rows that are still ACTIVE — never overwrite a consent_restricted
-        # (or deleted/superseded) status, which would erase the retraction signal.
+        # Only age table-appropriate active rows. Never overwrite a restricted,
+        # deleted, or superseded status, which would erase the retraction signal.
+        if not eligible_statuses:
+            return 0
         if pool is None:
             count = 0
             for rid in self._age_victims_inmem(tenant_id, cutoff, retention_class):
                 current = (self._store[rid].get("data") or {}).get("status")
-                if current is not None and current not in _ACTIVE_STATUS_VALUES:
+                if current is not None and current not in eligible_statuses:
                     continue
                 self._store[rid].setdefault("data", {})["status"] = status
                 count += 1
@@ -362,9 +370,9 @@ class SemanticFactRepository:
             "tenant_id = $1",
             "occurred_at IS NOT NULL",
             "occurred_at <= $2",
-            "(data->>'status' IS NULL OR data->>'status' IN ('classified', 'partial'))",
+            "(data->>'status' IS NULL OR data->>'status' = ANY($3::text[]))",
         ]
-        params: list[Any] = [tenant_id, cutoff]
+        params: list[Any] = [tenant_id, cutoff, sorted(eligible_statuses)]
         if retention_class is not None:
             params.append(retention_class)
             conditions.append(f"data->>'retention_class' = ${len(params)}")
@@ -524,24 +532,85 @@ class SemanticFactRepository:
             rows = await conn.fetch(sql, *params)
         return [json.loads(r["data"]) for r in rows]
 
-    async def find_by_source_event(
-        self, tenant_id: str, source_event_id: str
+    async def find_by_ids(
+        self,
+        tenant_id: str,
+        record_ids: list[str] | tuple[str, ...],
+        *,
+        subject: Optional[str] = None,
     ) -> list[dict[str, Any]]:
+        """Resolve exact fact IDs inside one tenant and optional subject scope.
+
+        The fact payload is returned with its indexed tenant, subject, and row ID
+        attached, so callers can verify the persisted columns against the JSONB
+        contract before using a provenance reference. A caller-supplied ID never
+        widens the tenant or subject predicate.
+        """
+        if not tenant_id:
+            raise ValueError("find_by_ids requires a non-empty tenant_id")
+        ids = list(dict.fromkeys(str(value) for value in record_ids if str(value)))
+        if not ids:
+            return []
         pool = await self._pool()
         if pool is None:
-            return [
-                row.get("data", {})
-                for row in self._store.values()
+            matches = []
+            wanted = set(ids)
+            for record_id, row in self._store.items():
+                if row.get("tenant_id") != tenant_id or record_id not in wanted:
+                    continue
+                if subject is not None and _row_subject(row) != subject:
+                    continue
+                data = dict(row.get("data") or {})
+                data.setdefault("tenant_id", row.get("tenant_id"))
+                data.setdefault("subject_ref", _row_subject(row))
+                data.setdefault("record_id", record_id)
+                matches.append(data)
+            return matches
+
+        conditions = ["tenant_id = $1", "id = ANY($2::text[])"]
+        params: list[Any] = [tenant_id, ids]
+        if subject is not None:
+            conditions.append("subject_ref = $3")
+            params.append(subject)
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT id, tenant_id, subject_ref, data FROM {self.table_name} "
+                f"WHERE {' AND '.join(conditions)} ORDER BY id ASC",
+                *params,
+            )
+        matches = []
+        for row in rows:
+            data = json.loads(row["data"])
+            data.setdefault("tenant_id", row["tenant_id"])
+            data.setdefault("subject_ref", row["subject_ref"])
+            data.setdefault("record_id", row["id"])
+            matches.append(data)
+        return matches
+
+    async def find_by_source_event(
+        self, tenant_id: str, source_event_id: str, *, limit: Optional[int] = None
+    ) -> list[dict[str, Any]]:
+        if limit is not None and limit < 1:
+            raise ValueError("limit must be positive")
+        pool = await self._pool()
+        if pool is None:
+            matches = [
+                (record_id, row.get("data", {}))
+                for record_id, row in self._store.items()
                 if row.get("tenant_id") == tenant_id
                 and row.get("source_event_id") == source_event_id
             ]
+            matches.sort(key=lambda item: item[0])
+            return [data for _, data in matches[:limit]]
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
+            query = (
                 f"SELECT data FROM {self.table_name} "
-                "WHERE tenant_id = $1 AND source_event_id = $2",
-                tenant_id,
-                source_event_id,
+                "WHERE tenant_id = $1 AND source_event_id = $2 ORDER BY id ASC"
             )
+            if limit is None:
+                rows = await conn.fetch(query, tenant_id, source_event_id)
+            else:
+                rows = await conn.fetch(query + " LIMIT $3", tenant_id, source_event_id, limit)
         return [json.loads(r["data"]) for r in rows]
 
     async def aggregate_counts(self, tenant_id: Optional[str] = None) -> dict[str, Any]:

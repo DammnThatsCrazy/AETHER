@@ -18,14 +18,17 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "3906b500a"
+    reason: "Reviewed the 360 PR main.py diff: it mounts Social360 evidence and Workflow definition routers. Universal Provider Runtime connection, credential, and webhook mounts are unchanged."
 source_hashes:
-  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
-  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
-  "services/api/connectors/providers/": "sha256:50aef438d20a0f7f3e03428136faa636fb9bfeebc7f434b30b8735a047b22198"
-  "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
-  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
+  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
+  "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
+  "services/api/connectors/providers/": "sha256:99c4564cb3100b0cb0b2b3e58d602a2c638665a5b2dd829efae4737239457349"
+  "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
+  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
-  "services/api/shared/integration_contracts/": "sha256:54a124b718666f272272a9845ada4e8720cce2b81981b981db40a4e88674149e"
+  "services/api/shared/integration_contracts/": "sha256:c0bc85bcebb1c5a7b4f2fcdd57dce8d3137c07d0db1be200da8c296a295e63a6"
   "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
 ---
 
@@ -51,6 +54,16 @@ The layer map:
 | Runtime service | `services/api/connectors/provider_runtime/` | Registry → orchestrator → pipeline → engines → API; registers, certifies, and executes plugins |
 | Plugin modules | `services/api/connectors/providers/*/` | One package per provider capability (reference: `services/api/connectors/providers/shopify/`) |
 | Legacy compat | `services/api/connectors/provider_runtime/legacy.py` (`LegacyConnectorPlugin`) | Exposes every existing `BaseConnector` as a plugin with zero code changes |
+
+### Intelligence Projection consumers
+
+`Source360Provider` and `Connection360Provider` read tenant-scoped UPR source,
+connection, credential-presence, and sync-run state for Experience360 frames.
+They are read-only Intelligence Projection providers, separate from the UPR
+`ProviderPlugin` registry and its certification lifecycle. They do not invoke
+connectors, create source events, mutate connection state, or change the UPR
+feature flags. A 360 frame can therefore report unknown or degraded provider
+context without enabling connector execution.
 
 ## Components
 
@@ -242,6 +255,23 @@ database and required schema are available, and fails closed when they are not.
 Omitted use permissions default to false. This persistence change does not
 enable the provider runtime or alter environment flags.
 
+**Admission by rights-source class.** The grant's `connector_class` chooses the
+retention use: `tenant_byod_data` retains to `tenant_lake`, `olympus_provider`
+to `olympus_baseline` only when the grant tenant is the reserved `olympus` scope
+(otherwise it is denied), and `partner_feed` to `olympus_baseline` when the grant
+tenant is the reserved `olympus` scope, otherwise `tenant_lake`. Every other
+class is denied. The grant's `source_relationship` is descriptive and can only
+deny: an inconsistent relationship and class pairing refuses admission, and a
+consistent one authorizes nothing. Legacy grants without a relationship
+(`unclassified`) still admit only as `tenant_byod_data`. The source scope is
+`provider-account:{connection_id}:{account_id}` for records naming an account;
+accountless records resolve to `provider-stream:{connection_id}:{stream_id}`
+only when the capability manifest declares that stream. The event bridge never
+forwards `olympus`-scope evidence into the tenant pipeline, and a replay dry run
+counts such events as not admitted; the evidence stays in raw storage for
+governed replay. The revocation fence below applies to every class.
+See `docs/architecture/target/source-authority.md`.
+
 **Revocation fence.** Admission decides at one instant and Bronze is written
 later. `RawProviderRecordStore` therefore holds the admitting grant
 (`ProviderRawRightsAdmission.hold_grant`) across the final grant re-read, the
@@ -274,6 +304,12 @@ opaque refs scoped to tenant, provider identity, and connection. Persisted
 legacy tenant/provider refs remain resolvable for existing connections, but
 new writes do not reuse or rewrite them. This credential boundary does not
 grant raw-data retention rights.
+
+Operator fleet views may enumerate credential-version **presence and lifecycle
+state** across tenants (provider, tenant, environment, slot, state) to
+distinguish configured-but-never-observed sources. Such inventory reads return
+only safe metadata — never secret material, masked values, or connection
+payloads — and are operator-gated.
 
 ## Feature flag & wiring
 
@@ -372,7 +408,7 @@ manifest-driven UI (WS3) are all shipped in this follow-on program. SDK
 event-registry convergence (WS4) remains tracker-only — its merge stays
 deferred to a dedicated convergence program.
 
-**WS8 hardening scope:** the six host-bearing legacy connectors (Shopify, Salesforce, PostHog, Jira, Zendesk, Dune) and the Braze connector now validate tenant-supplied base URLs against provider allowlists (fail-closed). Intentional consequences: self-hosted PostHog on custom domains, Salesforce instances outside `*.salesforce.com` / `*.force.com`, and explicit `:443` in URLs are now denied; Salesforce `*.lightning.force.com` and `*.my.salesforce.com` remain covered. Empty-label and resolver-IP spellings are rejected by the shared seam.
+**WS8 hardening scope:** the six host-bearing legacy connectors (Shopify, Salesforce, PostHog, Jira, Zendesk, Dune) and the Braze connector now validate tenant-supplied base URLs against provider allowlists (fail-closed). Intentional consequences: self-hosted PostHog on custom domains, Salesforce instances outside `*.salesforce.com` / `*.force.com`, and explicit `:443` in URLs are now denied; Salesforce `*.lightning.force.com` and `*.my.salesforce.com` remain covered. Empty-label and resolver-IP spellings are rejected by the shared seam. WooCommerce is the one native plugin whose host is tenant-supplied (`site_url`, empty allowlist); beyond the structural gate, every live WooCommerce request resolves the host, requires every address to be public, and connects only to a validated address via `shared.security.ssrf.send_public_request`. A non-public answer is a permanent `site_url_not_public`; a host that does not resolve is a retryable `site_url_unresolved`.
 
 - **Not built in this program**: SDK event-registry convergence only — the
   dotted `commerce.*` types stay runtime-domain (mirroring the `comms`

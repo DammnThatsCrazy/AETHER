@@ -1,12 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from shared.common.common import APIResponse, NotFoundError, ForbiddenError
+from config.settings import Environment, settings
+from shared.auth.auth import Permissions
+from shared.common.common import APIResponse, NotFoundError, ForbiddenError, UnauthorizedError
 from governance.security.request_context import require_kyber_operator
+from governance.security.request_context import tenant_actor
 from .service import get_semantic_service
+from .memory_authorities import (
+    SemanticContextCard,
+    SemanticContextCardRepository,
+    SemanticEmbeddingMetadata,
+    SemanticEmbeddingMetadataRepository,
+)
 
 router = APIRouter(prefix="/v1/semantic", tags=["Semantic Sentiment Intelligence"])
 kyber_router = APIRouter(
@@ -39,29 +49,94 @@ class ObservationCreate(BaseModel):
     occurred_at: str | None = Field(default=None, description="ISO 8601 source event timestamp")
 
 
+class ContextCardCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    card_id: str = Field(min_length=8, max_length=128)
+    subject_ref: str = Field(min_length=1, max_length=512)
+    card_kind: Literal["summary", "profile", "preference", "operational"]
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = Field(min_length=1, max_length=2000)
+    source_memory_ids: list[str] = Field(min_length=1, max_length=20)
+    policy_decision_ref: str = Field(min_length=1, max_length=256)
+
+
+class EmbeddingMetadataCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    embedding_id: str = Field(min_length=8, max_length=128)
+    subject_ref: str = Field(min_length=1, max_length=512)
+    card_ids: list[str] = Field(min_length=1, max_length=20)
+    provider_id: str = Field(min_length=1, max_length=128)
+    model_id: str = Field(min_length=1, max_length=128)
+    model_version: str = Field(min_length=1, max_length=128)
+    dimensions: int = Field(ge=1, le=65_536)
+    vector_store: str = Field(min_length=1, max_length=128)
+    namespace: str = Field(min_length=1, max_length=256)
+    vector_ref: str = Field(min_length=1, max_length=512)
+    producer_receipt_id: str = Field(min_length=1, max_length=256)
+    policy_decision_ref: str = Field(min_length=1, max_length=256)
+    observed_at: datetime
+
+
 def tenant_id(request: Request) -> str:
+    """The authenticated tenant, never a caller-supplied one.
+
+    Outside local development a request with no authenticated tenant is refused;
+    the ``x-tenant-id`` header and the ``local_tenant`` default exist only so a
+    developer can exercise the API without credentials. A header can name any
+    tenant, so it must never decide which tenant's data a request reads or writes.
+    """
     tenant = getattr(request.state, "tenant", None)
-    return (
-        getattr(tenant, "tenant_id", None) or request.headers.get("x-tenant-id") or "local_tenant"
-    )
+    authenticated = getattr(tenant, "tenant_id", None)
+    if authenticated:
+        return authenticated
+    if settings.env is Environment.LOCAL:
+        return request.headers.get("x-tenant-id") or "local_tenant"
+    raise UnauthorizedError("authentication required")
+
+
+# The same serving-state attributes the route-policy middleware enforces on every
+# request; checking them here keeps the handlers safe if that layer is ever
+# bypassed or in observe mode. ``TenantContext`` carries no ``is_suspended``.
+_SERVING_STATE_ATTRS = (
+    "tenant_status", "organization_status", "membership_status", "credential_status",
+)
+
+
+def _require_serving_tenant(tenant: Any) -> None:
+    if getattr(tenant, "is_suspended", False) or any(
+        getattr(tenant, attr, "active") != "active" for attr in _SERVING_STATE_ATTRS
+    ):
+        raise ForbiddenError("Tenant account is suspended")
+
+
+def _require_access(request: Request, permission: str) -> None:
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        return  # tenant_id() refuses an unauthenticated request outside local development
+    _require_serving_tenant(tenant)
+    check = getattr(tenant, "require_permission", None)
+    if callable(check):
+        check(permission)
 
 
 def require_write_access(request: Request) -> None:
-    tenant = getattr(request.state, "tenant", None)
-    if tenant is not None and getattr(tenant, "is_suspended", False):
-        raise ForbiddenError("Tenant account is suspended")
+    _require_access(request, Permissions.WRITE)
 
 
 def require_read_access(request: Request) -> None:
-    tenant = getattr(request.state, "tenant", None)
-    if tenant is not None and getattr(tenant, "is_suspended", False):
-        raise ForbiddenError("Tenant account is suspended")
+    _require_access(request, Permissions.READ)
 
 
 def require_operator(request: Request) -> None:
-    tenant = getattr(request.state, "tenant", None)
-    if not (tenant and getattr(tenant, "is_admin", False)):
-        raise ForbiddenError("Kyber semantic operation requires operator scope")
+    """Defense in depth behind the router's ``require_kyber_operator`` dependency.
+
+    Kyber operators are identified by workforce session or the configured
+    operator grant, not by any attribute on the tenant, so this defers to the
+    canonical gate rather than re-deriving who an operator is.
+    """
+    require_kyber_operator(request)
 
 
 @router.post("/observations")
@@ -77,6 +152,46 @@ async def create_observation(body: ObservationCreate, request: Request):
             "data_freshness": "fresh",
         }
     ).to_dict()
+
+
+@router.post("/memory/cards")
+async def create_context_card(body: ContextCardCreate, request: Request):
+    """Persist an exact-memory-linked card under the authenticated tenant actor."""
+    require_write_access(request)
+    actor = tenant_actor(request)
+    if not actor.tenant_id:
+        raise UnauthorizedError("authenticated tenant required")
+    record = SemanticContextCard(
+        **body.model_dump(),
+        tenant_id=actor.tenant_id,
+        actor_ref=actor.actor_id,
+        created_at=datetime.now(timezone.utc),
+    )
+    try:
+        stored = await SemanticContextCardRepository().create(record)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return APIResponse(data=stored.model_dump(mode="json")).to_dict()
+
+
+@router.post("/memory/embeddings/metadata")
+async def create_embedding_metadata(body: EmbeddingMetadataCreate, request: Request):
+    """Persist producer-reported metadata tied to exact cards and policy."""
+    require_write_access(request)
+    actor = tenant_actor(request)
+    if not actor.tenant_id:
+        raise UnauthorizedError("authenticated tenant required")
+    record = SemanticEmbeddingMetadata(
+        **body.model_dump(),
+        tenant_id=actor.tenant_id,
+        actor_ref=actor.actor_id,
+        created_at=datetime.now(timezone.utc),
+    )
+    try:
+        stored = await SemanticEmbeddingMetadataRepository().create(record)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return APIResponse(data=stored.model_dump(mode="json")).to_dict()
 
 
 @router.get("/observations/{observation_id}")

@@ -319,14 +319,14 @@ def test_catalog_declares_one_normal_pr_merge_authority():
     """Specialized finalization checks do not create parallel PR blockers."""
     catalog = yaml.safe_load((ROOT / "config/required_release_checks.yaml").read_text())
     branch = catalog["branch_protection"]
-    assert branch["normal_pr_authority"] == "verification-disposition"
-    assert branch["normal_pr_status"] == "verification / disposition"
+    assert branch["normal_pr_authority"] == "ci-verdict"
+    assert branch["normal_pr_status"] == "ci / verdict"
     blockers = [
         row["id"] for row in catalog["checks"]
         if row.get("blocks_pr_merge") is True
         or row.get("blocks_pr_merge_when_paths_touched") is True
     ]
-    assert blockers == ["verification-disposition"]
+    assert blockers == ["ci-verdict"]
 
 
 def test_validator_rejects_universal_merge_block_on_path_filtered_workflow(tmp_path):

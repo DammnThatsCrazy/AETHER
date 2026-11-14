@@ -11,7 +11,7 @@ source_files: [services/ml/common/model_registry.py, services/ml/common/artifact
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:5ee5ceb622f995d8e3797226ab7b185a1f2bed6b7e49a22b18ec88a8a3ea9ad3"
+  ".github/workflows/repo-health.yml": "sha256:1ef1036fd95b794296b848347ef8bac011a0be5e98f85e270eaffb66ffdd66d5"
   "infra/aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
   "infra/local/docker-compose.yml": "sha256:71bfda6ac3eb75b3f568828ab1246405f239e94f5b6d5481880dc2c6084a52b0"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
@@ -174,9 +174,9 @@ attack, and rollback events. Rules in
 
 **CI (G26):** ML path coverage in the verification registries includes
 `ml_serving/`, `model_extraction_defense/`, `infra/`, `docs/archive/legacy-architecture/aws-deployment/`,
-and Kyber ML frontend paths. Once a PR is finalized (`ready_for_review`), normal
-PR verification selects the registered ML suite only when the Impact Graph
-identifies ML impact; draft pushes remain an implementation phase. The broad
+and Kyber ML frontend paths. Once a PR is non-draft (`ready_for_review`), normal
+PR verification (`ci / verdict`) selects the registered ML suite only when the
+changed paths affect ML; draft pushes remain an implementation phase. The broad
 ML runner is reserved for scheduled or explicitly dispatched regression.
 
 **CI job:** the scheduled/manual `ml-tests` job is split into three named steps:

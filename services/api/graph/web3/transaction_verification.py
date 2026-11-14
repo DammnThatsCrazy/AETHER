@@ -360,7 +360,9 @@ def _sui_chain_identifiers_match(expected: str, actual: str) -> bool:
     actual_clean = actual.strip()
     if not expected_clean or not actual_clean:
         return False
-    if expected_clean.lower() == actual_clean.lower():
+    # Full Sui chain identifiers use case-sensitive Base58. Only the compact
+    # eight-character hexadecimal seed form is case-insensitive.
+    if expected_clean == actual_clean:
         return True
 
     expected_is_short_hex = len(expected_clean) == 8 and all(
@@ -369,6 +371,8 @@ def _sui_chain_identifiers_match(expected: str, actual: str) -> bool:
     actual_is_short_hex = len(actual_clean) == 8 and all(
         char in "0123456789abcdefABCDEF" for char in actual_clean
     )
+    if expected_is_short_hex and actual_is_short_hex:
+        return expected_clean.lower() == actual_clean.lower()
     if expected_is_short_hex:
         actual_bytes = _decode_base58(actual_clean)
         return actual_bytes is not None and actual_bytes[:4].hex() == expected_clean.lower()
@@ -376,9 +380,7 @@ def _sui_chain_identifiers_match(expected: str, actual: str) -> bool:
         expected_bytes = _decode_base58(expected_clean)
         return expected_bytes is not None and expected_bytes[:4].hex() == actual_clean.lower()
 
-    expected_bytes = _decode_base58(expected_clean)
-    actual_bytes = _decode_base58(actual_clean)
-    return expected_bytes is not None and expected_bytes == actual_bytes
+    return False
 
 
 def _sui_addresses_match(expected: str, actual: str) -> bool:

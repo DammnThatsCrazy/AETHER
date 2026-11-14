@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, field_validator
+from governance.security.request_context import tenant_actor
 
 from shared.common.common import (
     APIResponse, BadRequestError, ConflictError, NotFoundError,
@@ -32,6 +33,12 @@ from journeys.campaign.ad_source_links import (
     set_source_enabled,
 )
 from journeys.campaign.exploration import CampaignPopulationExplorer
+from journeys.campaign.campaign_population_links import (
+    CampaignPopulationLinkAuthority,
+    CampaignPopulationLinkAuthorityError,
+    CampaignPopulationLinkConflict,
+    CampaignPopulationLinkInput,
+)
 from journeys.measurement.connectors.ad_accounts import (
     is_ad_account_family,
     run_credential_test,
@@ -214,6 +221,45 @@ async def get_campaign(campaign_id: str, request: Request):
         raise NotFoundError("Campaign")
     metrics.increment("campaigns_read")
     return APIResponse(data=campaign).to_dict()
+
+
+@router.post("/{campaign_id}/population-links")
+async def record_campaign_population_link(
+    campaign_id: str,
+    body: CampaignPopulationLinkInput,
+    request: Request,
+):
+    """Record an explicit campaign-to-population association event.
+
+    Tenant and actor are always taken from authenticated request context. The
+    authority resolves the exact canonical campaign and population records
+    before it accepts the event.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    actor = tenant_actor(request)
+    try:
+        event = await CampaignPopulationLinkAuthority().record(
+            tenant.tenant_id,
+            campaign_id,
+            body,
+            actor_id=actor.actor_id,
+            actor_type=str(actor.actor_type),
+        )
+    except CampaignPopulationLinkConflict as exc:
+        raise ConflictError("Campaign population link event conflicts with an existing event") from exc
+    except CampaignPopulationLinkAuthorityError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(
+        data={
+            "accepted": True,
+            "link_event_id": event["link_event_id"],
+            "campaign_id": event["campaign_id"],
+            "population_id": event["population_id"],
+            "event_type": event["event_type"],
+            "effective_at": event["effective_at"],
+        }
+    ).to_dict()
 
 
 @router.patch("/{campaign_id}")

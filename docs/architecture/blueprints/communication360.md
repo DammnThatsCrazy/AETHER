@@ -36,9 +36,77 @@ blueprint captured in
 > per-phase record is the
 > [program ledger](../plans/COMMUNICATION_360_PHASES.md).
 
+> **Participant authoring update (2026-10-23):** the projection remains
+> read-only, while the existing signed `/v1/comms/webhook` ingress can now
+> author typed `participant_binding` facts into the existing
+> `communication360_facts` authority. The writer requires a valid tenant
+> webhook HMAC, explicit roster coverage, evidence for each role, and exact
+> tenant/provider/account identity mappings. It does not create canonical
+> Conversation membership or delegation authority; those joins remain partial
+> until their canonical authorities provide them.
+
 ---
 
 ## What it is
+
+### Explicit reply associations (2026-11-05)
+
+Inbound normalization preserves the reply's own provider message ID separately
+from its explicit `In-Reply-To` target. The target reference and correlation
+method persist in the Silver payload. Communication360 uses a bounded lookup
+scoped to tenant, provider, provider account and provider thread; only a unique,
+evidence-backed target occurring no later than the reply is associated.
+Malformed, mixed-scope, self-referencing, ambiguous or truncated reads remain
+unknown. This is an observed provider-reported reply association, separate from
+sender identity and authority. It proves neither causality nor complete response
+coverage, provider history or freshness. No new route or database column is added.
+
+### Durable provider-thread observations (2026-11-05)
+
+The Silver communication writer persists a `provider_thread` observation beside
+each qualifying message in the same PostgreSQL transaction. Replay uses the
+persisted first-write row, not replacement account or source fields. The
+observation binds tenant, provider, account, thread, message and Silver fact IDs,
+event time and evidence. It is a provider-reported association, not canonical
+Conversation membership or a participant roster.
+
+Communication360 groups observed messages only within that exact provider/account/
+thread scope and orders them by event time. Source-subject reads first select
+exact canonical source references, then perform a bounded Silver message rejoin
+and revalidate all observation fields. Missing, duplicate, mismatched, malformed,
+unavailable or truncated joins withhold the linked inventory. Backing outages
+remain unavailable rather than becoming available-empty reads. Durable Silver
+replies can expose exact `In-Reply-To` associations without manufacturing a
+communication act or verified author. The catalog routes source subjects to the
+thread, message, response and evidence slots. Explicit authenticated membership
+can additionally join these observations to canonical Conversations. History
+completeness, freshness, current authority and causal outcomes remain unknown.
+
+### Canonical membership and isolated product slots (2026-11-06)
+
+Signed webhook rosters may explicitly name a canonical Conversation and its
+provider/account/external-thread membership. The authenticated writer atomically
+persists the Conversation, membership and participant-role evidence; conflicting
+reassignment fails closed. Bounded readers revalidate scope, actor, event,
+timestamps, provenance, evidence and the latest roster. External thread IDs are
+never canonical Conversation aliases. Profile reads require an exact canonical
+profile/entity identity; episode and journey reads require explicit references.
+
+The production registry binds each of the eleven required product slots to its
+namesake isolated output section. Message, thread, profile, campaign, episode,
+agent, journey and source subjects use their exact canonical source paths.
+Risk is restricted to resolved agent, source and profile subjects; no message,
+thread, campaign, episode or journey risk is inferred through association.
+Denied sibling slots cannot trigger their secondary-authority reads.
+
+An isolated section may expose bounded observed evidence as available while its
+content retains degraded or partial domain coverage and explicit reasons. This
+preserves reply associations and evidence traces through frame composition
+without promoting them to complete provenance or verified outcomes.
+
+Available membership or participant evidence describes bounded current-store
+observations, not historical membership replay, upstream authorship, freshness,
+full history, causal outcomes or current action authority.
 
 Communication360 is Aether's **communication and information-flow projection** —
 a `sequence_360` over canonical communication truth for subjects of kind
@@ -55,9 +123,12 @@ Projection Plane's shared contracts (`ProjectionRequest` → `ProjectionResult`)
 
 It is NOT an email dashboard, a Mailchimp/Klaviyo wrapper, a transcript store, a
 second attribution engine, or a second system of record (ADR-010,
-`ownsCanonicalTruth: false`). It never writes: `graphMutationPolicy: read_only`;
-there is no write path at all. It is the communication and information-flow
-projection of the Unified Intelligence Graph.
+`ownsCanonicalTruth: false`). The projection itself never writes and retains
+`graphMutationPolicy: read_only`. The existing comms ingress may author the
+typed participant facts described below under the `communication_facts`
+authority; it does not mutate the graph or make Communication360 a truth owner.
+It is the communication and information-flow projection of the Unified
+Intelligence Graph.
 
 ## Why
 
@@ -83,7 +154,7 @@ phases 2–6 and flipped in-lane (status note above).
 
 ## How it works
 
-### Canonical sources (read-only)
+### Canonical sources and participant authoring boundary
 
 | Section | Canonical source read |
 |---|---|
@@ -99,6 +170,47 @@ Every read is defensive: an unavailable backing source degrades its section
 leaks exception detail. `requiresDimensionState`, `requiresFreshness`, and
 `requiresLimitations` are honored — a Communication360 result without dimension
 state, freshness, and limitations is incomplete.
+
+#### Typed provider participant roster
+
+`POST /v1/comms/webhook` accepts an optional top-level `participant_roster` on a
+communication event. This is the only participant-roster writer in this slice.
+The request must have a configured tenant webhook secret and a valid
+`X-Aether-Signature` / `X-Aether-Timestamp`; signature verification establishes
+source authenticity only. It never establishes who a participant is.
+
+Each roster names a provider conversation and account, an explicit state
+(`complete`, `partial`, or `unknown`), and role bindings. Every binding must
+carry one or more opaque provider evidence references with source and observed
+time. A `complete` roster must also give a matching expected binding count,
+completeness evidence, and a validity start time for every role. A `partial`
+roster must include evidence for the incompleteness. Partial and unknown
+rosters stay partial in the read model.
+
+For each participant and optional principal, ingress resolves the exact
+provider recipient/profile key through the tenant/provider/account-scoped
+`ProviderIdentity` authority. The binding is rejected if the match is absent,
+ambiguous, unverified, shared-mailbox, stale/provisional, or not tenant-owned.
+Provider-supplied canonical IDs, message endpoints, names, and webhook
+signatures are never used as participant identity. Provider grant references
+remain source claims until the delegation authority resolves them.
+
+After the communication consent decision passes and the Bronze event is
+durable, the writer atomically upserts one idempotent
+`communication360_facts(kind="participant_binding")` row per role. Each row
+preserves tenant, provider/account/source IDs, exact identity-binding IDs,
+provider conversation scope, event ID/type/time, server-derived actor and
+credential class, observed role validity, evidence, HMAC provenance, roster
+coverage, and the ingress redaction/policy outcome. The existing JSONB fact
+table already includes this kind, so no schema migration is needed.
+
+The provider reads only the canonical entity-bound participant rows and
+surfaces their role evidence. It does not promote a provider conversation ID
+to a canonical `Conversation`, nor infer complete message coverage from the
+roster. A complete latest roster can support a bounded available `participants`
+slot only with explicit provider-thread-to-canonical-Conversation membership and
+exact identity evidence. Incomplete, conflicting or unknown rosters remain
+partial; neither roster nor membership establishes full message coverage.
 
 ### Epistemic honesty (message ≠ information; inference ≠ fact)
 

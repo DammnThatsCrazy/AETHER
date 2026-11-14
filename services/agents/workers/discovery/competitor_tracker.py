@@ -25,6 +25,7 @@ from config.settings import WorkerType
 from models.core import AgentTask, TaskResult
 
 from workers.base import BaseWorker
+from workers.outbound import UnsafeDestinationError, fetch_public, resolve_public_addresses
 
 logger = logging.getLogger("aether.worker.competitor_tracker")
 
@@ -74,6 +75,17 @@ class CompetitorTrackerWorker(BaseWorker):
                 confidence=0.0,
             )
 
+        try:
+            resolve_public_addresses(f"https://{domain}")
+        except UnsafeDestinationError as exc:
+            return TaskResult(
+                task_id=task.task_id,
+                worker_type=self.worker_type,
+                success=False,
+                error=f"Target is not a public internet address: {exc}",
+                confidence=0.0,
+            )
+
         logger.info(
             f"Tracking competitor {domain} "
             f"({len(watch_pages)} pages, entity={entity_id})"
@@ -90,7 +102,6 @@ class CompetitorTrackerWorker(BaseWorker):
 
         client = httpx.Client(
             timeout=_HTTP_TIMEOUT,
-            follow_redirects=True,
             headers={"User-Agent": _USER_AGENT},
         )
 
@@ -176,8 +187,8 @@ class CompetitorTrackerWorker(BaseWorker):
         Returns dict with 'snapshot' and optional 'change_info', or None on error.
         """
         try:
-            resp = client.get(url)
-        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            resp, final_url = fetch_public(client, url)
+        except (httpx.TimeoutException, httpx.RequestError, UnsafeDestinationError) as exc:
             logger.warning(f"Failed to fetch {url}: {exc}")
             return None
 
@@ -197,7 +208,7 @@ class CompetitorTrackerWorker(BaseWorker):
 
         snapshot: dict[str, Any] = {
             "path": path,
-            "url": str(resp.url),
+            "url": final_url,
             "status_code": resp.status_code,
             "content_hash": new_hash,
             "content_length": len(content),
@@ -211,7 +222,7 @@ class CompetitorTrackerWorker(BaseWorker):
             diff_summary = self._generate_diff_summary(content, path)
             change_info = {
                 "path": path,
-                "url": str(resp.url),
+                "url": final_url,
                 "old_hash": prev_hash,
                 "new_hash": new_hash,
                 "diff_summary": diff_summary,
@@ -298,8 +309,8 @@ class CompetitorTrackerWorker(BaseWorker):
 
         for url in careers_urls:
             try:
-                resp = client.get(url)
-            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                resp, _ = fetch_public(client, url)
+            except (httpx.TimeoutException, httpx.RequestError, UnsafeDestinationError) as exc:
                 logger.debug(f"Failed to fetch careers page {url}: {exc}")
                 continue
 

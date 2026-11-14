@@ -54,7 +54,7 @@ only when marked ready for review.
 ## The Development build
 
 The same app also holds one persistent branch, `development`, deployed by
-`development-web.yml` on every push to `Development` that touches the Aether
+`development-web.yml` on every push to `development` that touches the Aether
 app or its shared packages (`https://development.<preview domain>`). It is built
 the same way as a preview and shares the preview role, which is scoped to the
 `pr-*` branches and the one `development` branch. The hourly sweep ignores it:

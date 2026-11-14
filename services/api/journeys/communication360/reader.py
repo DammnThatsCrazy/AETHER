@@ -26,8 +26,8 @@ This module defines the narrow read seam the provider depends on:
 
 Imports stay light and side-effect free: constructing a source never opens a
 connection (the repositories only touch their backing pool when a read is
-called), and every read is wrapped so a failure returns ``[]`` / ``False`` —
-the provider degrades, it never raises and never fabricates.
+called). Read failures propagate to the provider's failure-isolation boundary,
+which degrades the affected surface rather than fabricating an available zero.
 """
 
 from __future__ import annotations
@@ -35,15 +35,19 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from typing import Any, Optional
+from urllib.parse import quote
 
 from repositories.repos import get_pool
 
 # These imports load repository modules only — no connection is opened until a
 # read is actually issued (and reads fall back to in-memory stores when the
 # pool is None, so no database is required to run or test the reader).
-from journeys.comms.contracts import CommunicationState
+from journeys.comms.contracts import CommunicationState, MessageCategory
 from journeys.comms.repository import CommsFactsRepository
-from journeys.communication360.contracts import CommunicationMessage
+from journeys.communication360.contracts import (
+    CommunicationConsentEvidence,
+    CommunicationMessage,
+)
 from journeys.communication360.repository import Communication360FactsRepository
 from graph.operational_intelligence.models import EvidenceRef
 from shared.contracts_models.epistemic import EpistemicStatus
@@ -63,8 +67,8 @@ class CommunicationSource:
 
     Implementations MUST be tenant-scoped and defensive. The provider trusts
     nothing and re-filters every returned row by the requesting tenant, but a
-    source that cannot reach its backing store returns ``[]`` / ``False`` —
-    never raises, never fabricates. An EMPTY result from a reachable source is a
+    source that cannot reach its backing store must raise or return an explicit
+    incomplete read, never an available empty result. An EMPTY result from a reachable source is a
     valid *available* zero; an UNAVAILABLE source is reported through
     :meth:`available`.
     """
@@ -74,6 +78,7 @@ class CommunicationSource:
         tenant_id: str,
         *,
         campaign_id: Optional[str] = None,
+        participant_entity_id: Optional[str] = None,
         since: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[CommunicationMessage]:
@@ -89,6 +94,17 @@ class CommunicationSource:
         limit: Optional[int] = None,
     ) -> list[dict[str, Any]]:
         """Raw fact rows for the tenant, optionally filtered by ``kind``."""
+        raise NotImplementedError
+
+    async def reply_targets(
+        self, tenant_id: str, provider: str, provider_account_id: str,
+        external_thread_id: str, external_message_id: str,
+    ) -> tuple[list[CommunicationMessage], bool]:
+        raise NotImplementedError
+
+    async def messages_by_ids(
+        self, tenant_id: str, message_ids: list[str], *, limit: int,
+    ) -> tuple[list[CommunicationMessage], bool]:
         raise NotImplementedError
 
     async def available(self, tenant_id: str) -> bool:
@@ -122,6 +138,23 @@ def _coerce_communication_state(value: Any) -> Optional[CommunicationState]:
         return value
     try:
         return CommunicationState(str(value))
+    except ValueError:
+        return None
+
+
+def _coerce_message_category(value: Any) -> Optional[MessageCategory]:
+    """Preserve a recognized silver category as its canonical enum member.
+
+    An absent or unrecognized source value remains ``None``. The category is a
+    typed source fact here; this mapper does not infer purpose, consent, or
+    authorization from it.
+    """
+    if value is None:
+        return None
+    if isinstance(value, MessageCategory):
+        return value
+    try:
+        return MessageCategory(str(value))
     except ValueError:
         return None
 
@@ -170,16 +203,78 @@ def _coerce_evidence_refs(row: dict[str, Any]) -> list[EvidenceRef]:
     return refs
 
 
+def _consent_evidence(row: dict[str, Any]) -> CommunicationConsentEvidence:
+    """Map only stored server-owned historical consent lineage.
+
+    This reader never re-evaluates the latest consent receipt and never derives
+    consent from the source message category.
+    """
+    purpose = _first_present(row, "consent_purpose")
+    receipt_id = _first_present(row, "consent_snapshot_id")
+    subject_id = _first_present(row, "consent_subject_id")
+    identity_binding_id = _first_present(row, "consent_identity_binding_id")
+    binding_id = _first_present(row, "recipient_identity_binding_id")
+    authority = _first_present(row, "consent_authority")
+    recorded = bool(
+        row.get("consent_evaluation_state") == "recorded"
+        and authority == "server_consent_authority"
+        and purpose
+        and receipt_id
+        and subject_id
+        and identity_binding_id
+        and identity_binding_id == binding_id
+        and _first_present(row, "recipient_entity_id") == subject_id
+    )
+    if not recorded:
+        return CommunicationConsentEvidence(state="unknown", purpose=purpose)
+
+    observed_at = _first_present(row, "received_at", "occurred_at")
+    refs = [
+        EvidenceRef(
+            id=receipt_id,
+            type="event",
+            source="governance.consent.authority",
+            observedAt=observed_at,
+            uri=f"store://consent_receipts/{receipt_id}",
+        ),
+        EvidenceRef(
+            id=identity_binding_id,
+            type="entity",
+            source="comms_provider_identities",
+            observedAt=observed_at,
+            uri=f"store://comms_provider_identities/{identity_binding_id}",
+        ),
+    ]
+    return CommunicationConsentEvidence(
+        state="recorded",
+        purpose=purpose,
+        receipt_id=receipt_id,
+        subject_entity_id=subject_id,
+        identity_binding_id=identity_binding_id,
+        evidence_refs=refs,
+    )
+
+
 def to_message(row: dict[str, Any]) -> CommunicationMessage:
     """Map one silver row dict idempotently onto the frozen CommunicationMessage.
 
     The same row always maps to the same message: ``fact_id`` -> ``fact_id``,
     ``message_id``/``canonical_activity_key`` -> canonical ``message_id``,
-    ``communication_state`` string -> the typed value (or None when the string
-    is not a member of :class:`CommunicationState`). Comm can only report what
-    the row observed, so ``claim_state`` is capped at ``EpistemicStatus.OBSERVED``.
+    ``communication_state`` and ``message_category`` strings -> their typed
+    values (or None when a source value is not a canonical member). The
+    category remains a source fact; no purpose, consent, or authorization is
+    inferred. Comm can only report what the row observed, so ``claim_state`` is
+    capped at ``EpistemicStatus.OBSERVED``.
     """
     tenant_id = _first_present(row, "tenant_id") or ""
+    payload = row.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            payload = None
+    if not isinstance(payload, dict):
+        payload = {}
     fact_id = _first_present(row, "fact_id")
     message_id = _first_present(row, "message_id", "canonical_activity_key")
     if message_id is None:
@@ -188,25 +283,70 @@ def to_message(row: dict[str, Any]) -> CommunicationMessage:
         message_id = f"fact:{fact_id}" if fact_id else f"silver:{tenant_id}"
 
     occurred_at = _first_present(row, "occurred_at", "received_at") or ""
+    recipient_binding_id = _first_present(row, "recipient_identity_binding_id")
+    recipient_entity_id = (
+        _first_present(row, "recipient_entity_id") if recipient_binding_id else None
+    )
+    sender_binding_id = _first_present(row, "sender_identity_binding_id")
+    sender_entity_id = (
+        _first_present(row, "sender_entity_id")
+        if sender_binding_id or not _first_present(row, "source_connector_id")
+        else None
+    )
+    sender_identity_ref = (
+        EvidenceRef(
+            id=sender_binding_id,
+            type="entity",
+            source=_first_present(row, "sender_identity_evidence_source")
+            or "agent_deployment_identity_bindings",
+            observedAt=_first_present(row, "received_at", "occurred_at"),
+            uri=f"store://agent_identity_bindings/{quote(sender_binding_id, safe='')}",
+        )
+        if sender_binding_id
+        else None
+    )
+    recipient_identity_ref = (
+        EvidenceRef(
+            id=recipient_binding_id,
+            type="entity",
+            source="comms_provider_identities",
+            observedAt=_first_present(row, "received_at", "occurred_at"),
+            uri=f"store://comms_provider_identities/{quote(recipient_binding_id, safe='')}",
+        )
+        if recipient_binding_id
+        else None
+    )
     return CommunicationMessage(
         message_id=message_id,
         tenant_id=tenant_id,
         fact_id=fact_id,
         provider=_first_present(row, "provider"),
+        provider_account_id=_first_present(row, "provider_account_id"),
         provider_event_id=_first_present(row, "provider_event_id"),
         external_message_id=_first_present(row, "external_message_id"),
         external_thread_id=_first_present(row, "external_thread_id"),
+        reply_to_external_message_id=(
+            _first_present(row, "reply_to_external_message_id")
+            or payload.get("reply_to_external_message_id")
+        ),
+        reply_correlation_method=payload.get("reply_correlation_method"),
         channel=_first_present(row, "channel") or "email",
         direction=_first_present(row, "direction"),
+        message_category=_coerce_message_category(row.get("message_category")),
         communication_state=_coerce_communication_state(row.get("communication_state")),
-        sender_entity_id=_first_present(row, "sender_entity_id"),
-        recipient_entity_id=_first_present(row, "recipient_entity_id"),
+        sender_entity_id=sender_entity_id,
+        sender_identity_binding_id=sender_binding_id,
+        sender_identity_evidence_ref=sender_identity_ref,
+        recipient_entity_id=recipient_entity_id,
+        recipient_identity_binding_id=recipient_binding_id,
+        recipient_identity_evidence_ref=recipient_identity_ref,
         recipient_alias_id=_first_present(row, "recipient_alias_id"),
         subject=None,
         content_ref=None,
         campaign_id=_first_present(row, "campaign_id"),
         occurred_at=occurred_at,
         received_at=_first_present(row, "received_at"),
+        consent_evidence=_consent_evidence(row),
         claim_state=EpistemicStatus.OBSERVED,
         evidence_refs=_coerce_evidence_refs(row),
     )
@@ -237,8 +377,8 @@ class SilverCommsSource:
     the same two backings the repository uses — the module in-memory store
     when the pool is ``None`` (mirroring ``services/api/journeys/comms/routes.py``) and the
     ``silver_comms_facts`` table through ``get_pool()`` when one exists. The
-    adapter never raises: a failed backing read returns ``[]`` and
-    :meth:`available` reports the store unreachable.
+    adapter propagates backing failures to the provider, while bounded joins
+    return an explicit incomplete result for malformed or truncated evidence.
     """
 
     def __init__(self, repo: Optional[CommsFactsRepository] = None) -> None:
@@ -251,21 +391,24 @@ class SilverCommsSource:
         tenant_id: str,
         *,
         campaign_id: Optional[str] = None,
+        participant_entity_id: Optional[str] = None,
         since: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[CommunicationMessage]:
-        rows = await self._rows(tenant_id, campaign_id=campaign_id, since=since, limit=limit)
+        rows = await self._rows(
+            tenant_id,
+            campaign_id=campaign_id,
+            participant_entity_id=participant_entity_id,
+            since=since,
+            limit=limit,
+        )
         # Provider-side tenant guard is server-authoritative; a misbehaving
         # store can never leak another tenant's messages through this source.
-        rows = [r for r in rows if str(r.get("tenant_id", "")) == str(tenant_id)]
         messages = []
         for row in rows:
-            if not isinstance(row, dict):
-                continue
-            try:
-                messages.append(to_message(row))
-            except Exception:  # noqa: BLE001 - skip an un-mappable row, never crash
-                continue
+            if not isinstance(row, dict) or str(row.get("tenant_id", "")) != str(tenant_id):
+                raise ValueError("communication message read scope invalid")
+            messages.append(to_message(row))
         return messages
 
     async def facts(
@@ -286,12 +429,58 @@ class SilverCommsSource:
         rows = await self._rows(tenant_id, campaign_id=None, since=since, limit=limit)
         if kind is not None:
             rows = [
-                r for r in rows
+                r
+                for r in rows
                 if str(r.get("source_event_type") or "") == kind
                 or str(r.get("communication_state") or "") == kind
                 or str(r.get("message_category") or "") == kind
             ]
         return [r for r in rows if str(r.get("tenant_id", "")) == str(tenant_id)]
+
+    async def messages_by_ids(
+        self, tenant_id: str, message_ids: list[str], *, limit: int,
+    ) -> tuple[list[CommunicationMessage], bool]:
+        rows, complete = await self._repo.messages_by_ids(tenant_id, message_ids, limit=limit)
+        if complete is not True or not isinstance(rows, list):
+            return [], False
+        messages: list[CommunicationMessage] = []
+        for row in rows:
+            if (
+                not isinstance(row, dict) or row.get("tenant_id") != tenant_id
+                or row.get("message_id") not in message_ids
+            ):
+                return [], False
+            try:
+                messages.append(to_message(row))
+            except Exception:
+                return [], False
+        return messages, True
+
+    async def reply_targets(
+        self, tenant_id: str, provider: str, provider_account_id: str,
+        external_thread_id: str, external_message_id: str,
+    ) -> tuple[list[CommunicationMessage], bool]:
+        rows, complete = await self._repo.reply_targets(
+            tenant_id, provider, provider_account_id, external_thread_id,
+            external_message_id, limit=2,
+        )
+        messages: list[CommunicationMessage] = []
+        for row in rows:
+            if not isinstance(row, dict) or any(
+                row.get(field) != expected
+                for field, expected in (
+                    ("tenant_id", tenant_id), ("provider", provider),
+                    ("provider_account_id", provider_account_id),
+                    ("external_thread_id", external_thread_id),
+                    ("external_message_id", external_message_id),
+                )
+            ):
+                return [], False
+            try:
+                messages.append(to_message(row))
+            except Exception:  # noqa: BLE001 - malformed target remains unresolved
+                return [], False
+        return messages, complete
 
     async def available(self, tenant_id: str) -> bool:
         """True when the silver backing responds (even with zero rows).
@@ -319,23 +508,35 @@ class SilverCommsSource:
         tenant_id: str,
         *,
         campaign_id: Optional[str] = None,
+        participant_entity_id: Optional[str] = None,
         since: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[dict[str, Any]]:
-        """Tenant-scoped silver rows, chronological ascending. Never raises."""
-        try:
-            pool = await get_pool()
-        except Exception:  # noqa: BLE001 - backing unavailable -> []
-            return []
+        """Tenant-scoped silver rows, chronological ascending; failures propagate."""
+        pool = await get_pool()
         if pool is None:
-            return self._memory_rows(tenant_id, campaign_id=campaign_id, since=since, limit=limit)
-        return await self._db_rows(pool, tenant_id, campaign_id=campaign_id, since=since, limit=limit)
+            return self._memory_rows(
+                tenant_id,
+                campaign_id=campaign_id,
+                participant_entity_id=participant_entity_id,
+                since=since,
+                limit=limit,
+            )
+        return await self._db_rows(
+            pool,
+            tenant_id,
+            campaign_id=campaign_id,
+            participant_entity_id=participant_entity_id,
+            since=since,
+            limit=limit,
+        )
 
     @staticmethod
     def _memory_rows(
         tenant_id: str,
         *,
         campaign_id: Optional[str],
+        participant_entity_id: Optional[str],
         since: Optional[str],
         limit: Optional[int],
     ) -> list[dict[str, Any]]:
@@ -344,9 +545,15 @@ class SilverCommsSource:
         from journeys.comms.repository import _local_facts  # noqa: WPS433
 
         rows = [
-            r for r in _local_facts.values()
+            r
+            for r in _local_facts.values()
             if str(r.get("tenant_id", "")) == str(tenant_id)
             and (campaign_id is None or str(r.get("campaign_id") or "") == str(campaign_id))
+            and (
+                participant_entity_id is None
+                or str(r.get("sender_entity_id") or "") == str(participant_entity_id)
+                or str(r.get("recipient_entity_id") or "") == str(participant_entity_id)
+            )
             and (since is None or str(r.get("occurred_at") or "") >= str(since))
         ]
         rows.sort(key=lambda r: (str(r.get("occurred_at") or ""), str(r.get("fact_id") or "")))
@@ -360,6 +567,7 @@ class SilverCommsSource:
         tenant_id: str,
         *,
         campaign_id: Optional[str],
+        participant_entity_id: Optional[str],
         since: Optional[str],
         limit: Optional[int],
     ) -> list[dict[str, Any]]:
@@ -368,6 +576,10 @@ class SilverCommsSource:
         if campaign_id is not None:
             params.append(str(campaign_id))
             where.append(f"campaign_id = ${len(params)}")
+        if participant_entity_id is not None:
+            params.append(str(participant_entity_id))
+            marker = f"${len(params)}"
+            where.append(f"(sender_entity_id = {marker} OR recipient_entity_id = {marker})")
         if since is not None:
             since_dt = _as_utc(since)
             if since_dt is not None:
@@ -381,11 +593,8 @@ class SilverCommsSource:
         if limit is not None:
             params.append(max(0, int(limit)))
             sql += f" LIMIT ${len(params)}"
-        try:
-            async with pool.acquire() as conn:
-                records = await conn.fetch(sql, *params)
-        except Exception:  # noqa: BLE001 - backing unavailable -> degrade
-            return []
+        async with pool.acquire() as conn:
+            records = await conn.fetch(sql, *params)
         return [dict(r) for r in records]
 
 
@@ -411,6 +620,7 @@ class CanonicalFactSource:
         tenant_id: str,
         *,
         campaign_id: Optional[str] = None,
+        participant_entity_id: Optional[str] = None,
         since: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[CommunicationMessage]:
@@ -424,12 +634,12 @@ class CanonicalFactSource:
         since: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[dict[str, Any]]:
-        try:
-            rows = await self._repo.query(tenant_id, kind=kind, since=since, limit=limit)
-        except Exception:  # noqa: BLE001 - backing unavailable -> degrade
-            return []
-        # Tenant-scoped by the repo; re-filter defensively (trust nothing).
-        return [r for r in rows if str(r.get("tenant_id", "")) == str(tenant_id)]
+        rows = await self._repo.query(tenant_id, kind=kind, since=since, limit=limit)
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict) or row.get("tenant_id") != tenant_id for row in rows
+        ):
+            raise ValueError("canonical communication fact read scope invalid")
+        return rows
 
     async def available(self, tenant_id: str) -> bool:
         try:
@@ -437,6 +647,25 @@ class CanonicalFactSource:
             return True
         except Exception:  # noqa: BLE001 - unreachable backing -> unavailable
             return False
+
+    async def source_facts(
+        self, tenant_id: str, source_id: str, *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return await self._repo.facts_for_exact_reference(
+            tenant_id, "source", source_id, limit=limit,
+        )
+
+    async def subject_facts(
+        self, tenant_id: str, subject_kind: str, subject_id: str, *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return await self._repo.facts_for_exact_reference(
+            tenant_id, subject_kind, subject_id, limit=limit,
+        )
+
+    async def conversation_context(
+        self, tenant_id: str, scopes: list[tuple[str, str, str]], *, limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return await self._repo.conversation_context(tenant_id, scopes, limit=limit)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

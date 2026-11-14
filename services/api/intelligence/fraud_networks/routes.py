@@ -148,6 +148,37 @@ def _to_response(row: dict) -> FraudNetworkResponse:
     )
 
 
+async def _persist_agentic_risk(
+    *,
+    tenant_id: str,
+    network_id: str,
+    detector_results: list[Any],
+    evidence_refs: list[EvidenceRef],
+    observed_at: str,
+) -> None:
+    """Best-effort handoff from persisted network evidence into Risk360."""
+    try:
+        from intelligence.fraud_networks.risk360_projection import (
+            persist_agentic_delegation_assessments,
+        )
+
+        await persist_agentic_delegation_assessments(
+            tenant_id=tenant_id,
+            detector_results=detector_results,
+            evidence_refs=evidence_refs,
+            observed_at=observed_at,
+        )
+    except Exception as exc:  # noqa: BLE001 - keep fraud-network writes available
+        logger.warning(
+            "fraud_network_risk360_assessment_persistence_failed",
+            extra={
+                "tenant_id": tenant_id,
+                "network_id": network_id,
+                "error": str(exc),
+            },
+        )
+
+
 async def _run_detection_pipeline(
     tenant_id: str,
     anchor_entity_ids: list[str],
@@ -342,6 +373,13 @@ async def build_network(
         "metadata": body.metadata,
     }
     await _networks.create(network)
+    await _persist_agentic_risk(
+        tenant_id=body.tenant_id,
+        network_id=network_id,
+        detector_results=detector_results,
+        evidence_refs=evidence_refs,
+        observed_at=now,
+    )
 
     # Persist members
     for m in member_dicts:
@@ -595,6 +633,13 @@ async def refresh_network(
         "evidence_refs": [e.model_dump() for e in evidence_refs],
         "updated_at": now,
     })
+    await _persist_agentic_risk(
+        tenant_id=tenant_id,
+        network_id=network_id,
+        detector_results=detector_results,
+        evidence_refs=evidence_refs,
+        observed_at=now,
+    )
     await producer.publish(Event(
         topic=Topic.FRAUD_NETWORK_REFRESHED,
         tenant_id=tenant_id,
