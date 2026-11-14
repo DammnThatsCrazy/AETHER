@@ -122,6 +122,9 @@ class CorrelationEngine:
         stored = await self._observations.save(obs, provider=provider, kind=kind)
         result = IngestResult(observation_id=obs.observation_id, source_role=obs.source_role, duplicate=not stored)
         if not stored:
+            # A redelivery completes any graph projection a transient outage left
+            # unfinished; observation existence alone is not projection success.
+            await self._retry_incomplete_projections(obs.tenant_id, obs.observation_id, result)
             return result
 
         index_keys = join_index_keys(obs, self._verifier)
@@ -150,7 +153,44 @@ class CorrelationEngine:
                 continue
             verdict_id, new = await self._verdicts.record(obs.tenant_id, obs, other, verdict)
             decision = LinkDecision(other_observation_id=other_id, verdict_id=verdict_id, verdict=verdict, newly_recorded=new)
-            if new and verdict.status == "linked":
-                decision.projection = await self._projector.project(obs, other, verdict, verdict_id)
+            if verdict.status == "linked" and (
+                    new or not _projection_complete(await self._verdicts.get(obs.tenant_id, verdict_id))):
+                decision.projection = await self._project(obs, other, verdict, verdict_id)
             result.decisions.append(decision)
         return result
+
+    async def _project(self, left: CorrelationObservation, right: CorrelationObservation,
+                       verdict: Any, verdict_id: str) -> dict[str, Any]:
+        try:
+            report = await self._projector.project(left, right, verdict, verdict_id)
+        except Exception as exc:  # noqa: BLE001 - recorded as failed and retried on redelivery
+            report = {"graph_projection_status": "failed", "graph_mutations_persisted": 0,
+                      "error_type": type(exc).__name__}
+        await self._verdicts.mark_projection(left.tenant_id, verdict_id, report)
+        return report
+
+    async def _retry_incomplete_projections(self, tenant_id: str, observation_id: str,
+                                            result: "IngestResult") -> None:
+        from shared.integration_contracts.correlation import CorrelationVerdict
+
+        fields = set(CorrelationVerdict.model_fields)
+        for row in await self._verdicts.for_observation(tenant_id, observation_id):
+            if row.get("status") != "linked" or _projection_complete(row):
+                continue
+            left = await self._observations.get_observation(tenant_id, row["left_observation_id"])
+            right = await self._observations.get_observation(tenant_id, row["right_observation_id"])
+            if left is None or right is None:
+                continue
+            verdict = CorrelationVerdict.model_validate({k: v for k, v in row.items() if k in fields})
+            other = right.observation_id if left.observation_id == observation_id else left.observation_id
+            decision = LinkDecision(other_observation_id=other, verdict_id=row["verdict_id"], verdict=verdict,
+                                    newly_recorded=False)
+            decision.projection = await self._project(left, right, verdict, row["verdict_id"])
+            result.decisions.append(decision)
+
+
+_COMPLETE_PROJECTIONS = frozenset({"persisted", "not_applicable"})
+
+
+def _projection_complete(row: Optional[dict[str, Any]]) -> bool:
+    return bool(row) and row.get("graph_projection_status") in _COMPLETE_PROJECTIONS

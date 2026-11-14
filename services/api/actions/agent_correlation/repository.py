@@ -145,6 +145,23 @@ class CorrelationVerdictRepository(BaseRepository):
         })
         return row_id, True
 
+    async def get(self, tenant_id: str, verdict_id: str) -> Optional[dict[str, Any]]:
+        row = await self.find_by_id(verdict_id)
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
+
+    async def mark_projection(self, tenant_id: str, verdict_id: str, report: dict[str, Any]) -> None:
+        """Durable projection checkpoint on the verdict row. The decision itself
+        stays immutable; only the graph-projection outcome fields change, so a
+        failed or partial projection is retried on the next delivery."""
+        await self.update(verdict_id, {
+            "tenant_id": tenant_id,
+            "graph_projection_status": report.get("graph_projection_status"),
+            "graph_mutations_persisted": report.get("graph_mutations_persisted", 0),
+            "graph_projection_attempts": int(
+                ((await self.get(tenant_id, verdict_id)) or {}).get("graph_projection_attempts") or 0) + 1,
+            "graph_projected_at": _iso(datetime.now(timezone.utc)),
+        })
+
     async def for_observation(self, tenant_id: str, observation_id: str) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for side in ("left_observation_id", "right_observation_id"):

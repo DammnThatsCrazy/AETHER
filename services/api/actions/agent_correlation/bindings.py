@@ -66,6 +66,12 @@ def _parse_requested(raw: Optional[Mapping[str, Any]]) -> dict[str, AccountBindi
     return out
 
 
+def verified_in_other_realm(verified: Mapping[tuple[str, str, str], AccountBinding], family: str,
+                            account_key: str, realm: str) -> bool:
+    """True when ``account_key`` is verified for ``family`` only in another realm."""
+    return any(f == family and k == account_key and r != realm for f, r, k in verified)
+
+
 class BindingResolver:
     def __init__(self, *, accounts: Any = None, connections: Any = None, declared: Any = None) -> None:
         self._accounts = accounts
@@ -86,8 +92,10 @@ class BindingResolver:
             self._connections = ProviderConnectionRepository()
         return self._connections
 
-    async def verified_accounts(self, tenant_id: str) -> dict[tuple[str, str], AccountBinding]:
-        out: dict[tuple[str, str], AccountBinding] = {}
+    async def verified_accounts(self, tenant_id: str) -> dict[tuple[str, str, str], AccountBinding]:
+        """Verified bindings keyed ``(family, realm, account_key)``: one provider
+        account ID can be verified in both the live and the test realm."""
+        out: dict[tuple[str, str, str], AccountBinding] = {}
         for connection in await self._connection_repo().list_for_tenant(tenant_id, limit=200):
             if (
                 connection.tenant_id != tenant_id
@@ -112,7 +120,7 @@ class BindingResolver:
                     realm in _REALMS,
                 )):
                     continue
-                out[(family, str(account.external_id))] = AccountBinding(
+                out[(family, str(realm), str(account.external_id))] = AccountBinding(
                     source_account_key=str(account.external_id),
                     source_account_realm=str(realm),
                     verification_ref=account.account_id,
@@ -122,7 +130,7 @@ class BindingResolver:
     async def resolve(self, tenant_id: str, requested: Optional[Mapping[str, Any]] = None) -> ResolvedBindings:
         verified = await self.verified_accounts(tenant_id)
         families_verified: dict[str, list[AccountBinding]] = {}
-        for (family, _key), binding in verified.items():
+        for (family, _realm, _key), binding in verified.items():
             families_verified.setdefault(family, []).append(binding)
 
         declared: dict[str, AccountBinding] = {}
@@ -130,11 +138,12 @@ class BindingResolver:
             declared = await self._declared.all_for(tenant_id)
 
         def scoped(family: str, candidate: AccountBinding, *, strict: bool) -> Optional[AccountBinding]:
-            match = verified.get((family, candidate.source_account_key))
+            match = verified.get((family, candidate.source_account_realm, candidate.source_account_key))
             if match is not None:
-                if match.source_account_realm != candidate.source_account_realm:
-                    raise MappingError(f"{family} account is verified for a different realm")
                 return match
+            if verified_in_other_realm(verified, family, candidate.source_account_key,
+                                       candidate.source_account_realm):
+                raise MappingError(f"{family} account is verified for a different realm")
             if family in families_verified:
                 if strict:
                     raise MappingError(f"{family} account is not a verified connection for this tenant")

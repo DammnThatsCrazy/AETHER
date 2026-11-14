@@ -44,9 +44,10 @@ class MapperContext:
     # records name provider objects without account scope; a binding supplies
     # it so a tool result can match the system-of-record object exactly.
     account_bindings: Mapping[str, AccountBinding] = field(default_factory=dict)
-    # (provider_family, account_key) -> verified binding, for records that name
-    # their own account (a payment event's connected account).
-    verified_accounts: Mapping[tuple[str, str], AccountBinding] = field(default_factory=dict)
+    # (provider_family, realm, account_key) -> verified binding, for records that
+    # name their own account (a payment event's connected account). The realm is
+    # part of the key: one account ID can be verified in both live and test.
+    verified_accounts: Mapping[tuple[str, str, str], AccountBinding] = field(default_factory=dict)
 
     def binding_for(self, family: str, account_key: Optional[str], realm: str) -> Optional[AccountBinding]:
         """The binding for an account a record names itself.
@@ -57,12 +58,12 @@ class MapperContext:
         """
         if not account_key:
             return self.account_bindings.get(family)
-        verified = self.verified_accounts.get((family, account_key))
+        verified = self.verified_accounts.get((family, realm, account_key))
         if verified is not None:
-            if verified.source_account_realm != realm:
-                raise MappingError(f"{family} account {account_key!r} is verified for a different realm")
             return verified
-        if any(f == family for f, _ in self.verified_accounts):
+        if any(f == family and k == account_key for f, _r, k in self.verified_accounts):
+            raise MappingError(f"{family} account {account_key!r} is verified for a different realm")
+        if any(f == family for f, _r, _k in self.verified_accounts):
             raise MappingError(f"{family} account {account_key!r} is not a verified connection for this tenant")
         return AccountBinding(source_account_key=account_key, source_account_realm=realm)
 

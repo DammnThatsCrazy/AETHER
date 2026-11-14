@@ -174,13 +174,15 @@ class CorrelationService:
 
     async def declare_binding(self, tenant_id: str, family: str, account_key: str, realm: str) -> dict[str, Any]:
         """Record a tenant-declared account; refused when it contradicts verified scope."""
+        from actions.agent_correlation.bindings import verified_in_other_realm
+
         verified = await self.resolver.verified_accounts(tenant_id)
-        families = {f for f, _ in verified}
-        match = verified.get((family, account_key))
+        families = {f for f, _r, _k in verified}
+        match = verified.get((family, realm, account_key))
+        if match is None and verified_in_other_realm(verified, family, account_key, realm):
+            raise MappingError(f"{family} account is verified for a different realm")
         if family in families and match is None:
             raise MappingError(f"{family} has verified accounts; declare one of them or connect this account")
-        if match is not None and match.source_account_realm != realm:
-            raise MappingError(f"{family} account is verified for a different realm")
         await self.bindings.put(tenant_id, family, account_key, realm)
         return {"provider_family": family, "source_account_realm": realm, "verified": match is not None}
 

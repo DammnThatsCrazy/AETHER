@@ -243,3 +243,56 @@ async def test_revoked_failed_or_unverified_connections_do_not_verify(service, t
 async def test_verified_accounts_are_tenant_scoped(service, tenant_id) -> None:
     await connect_verified_account(tenant_id + "_other", account_key=STORE)
     assert await service.resolver.verified_accounts(tenant_id) == {}
+
+
+@pytest.mark.asyncio
+async def test_live_and_test_realms_of_one_account_both_stay_verified(service, tenant_id) -> None:
+    await connect_verified_account(tenant_id, family="stripe", account_key="acct_1", realm="live")
+    await connect_verified_account(tenant_id, family="stripe", account_key="acct_1", realm="test")
+    verified = await service.resolver.verified_accounts(tenant_id)
+    assert {("stripe", "live", "acct_1"), ("stripe", "test", "acct_1")} <= set(verified)
+    for livemode, event_id in ((True, "evt_live"), (False, "evt_test")):
+        out = await service.ingest_record(tenant_id, "stripe", "event", {
+            "id": event_id, "type": "charge.succeeded", "created": int(T0.timestamp()),
+            "livemode": livemode, "account": "acct_1",
+            "data": {"object": {"object": "charge", "id": f"ch_{event_id}Abcdefgh"}},
+        })
+        assert out and out[0]["duplicate"] is False
+    # Declaring the account in either realm matches its verified connection.
+    for realm in ("live", "test"):
+        assert (await service.declare_binding(tenant_id, "stripe", "acct_1", realm))["verified"] is True
+
+
+class _FlakyProjector:
+    def __init__(self) -> None:
+        self.down = True
+        self.calls = 0
+
+    async def project(self, left, right, verdict, verdict_id):
+        self.calls += 1
+        if self.down:
+            return {"graph_projection_status": "failed", "graph_mutations_persisted": 0}
+        return {"graph_projection_status": "persisted", "graph_mutations_persisted": 2}
+
+
+@pytest.mark.asyncio
+async def test_a_redelivery_completes_a_projection_a_graph_outage_left_failed(service, tenant_id) -> None:
+    projector = _FlakyProjector()
+    service.engine._projector = projector  # noqa: SLF001 - test seam
+    task = await service.register_task(tenant_id, agent_platform="xai_grok")
+    call = {"agent_platform": "xai_grok", "call_id": "c7", "correlation_token": task["correlation_token"],
+            "occurred_at": iso(0), "output": "ok"}
+    first = await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
+    linked = [l for l in first[0]["links"] if l["status"] == "linked"]
+    assert linked and all(l["graph_projection_status"] == "failed" for l in linked)
+    projector.down = False
+    again = await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
+    assert again[0]["duplicate"] is True
+    retried = [l for l in again[0]["links"] if l["status"] == "linked"]
+    assert retried and all(l["graph_projection_status"] == "persisted" for l in retried)
+    row = await service.engine._verdicts.get(tenant_id, retried[0]["verdict_id"])  # noqa: SLF001
+    assert row["graph_projection_status"] == "persisted" and row["graph_projection_attempts"] == 2
+    # Once complete, a further redelivery projects nothing.
+    calls = projector.calls
+    third = await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
+    assert third[0]["links"] == [] and projector.calls == calls
