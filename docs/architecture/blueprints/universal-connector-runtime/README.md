@@ -26,6 +26,7 @@ This blueprint turns the Shopify and commerce ingestion proposal into a buildabl
 3. [Commerce reference slice](commerce-reference-slice.md) — Shopify streams, provider versus SDK/payment authority, end-to-end customer loop, fixtures, and product evidence.
 4. [Migration and delivery](migration-and-delivery.md) — ordered work packages, per-provider and per-tenant cutover, shadow comparison, certification, rollback, operations, and evidence gates.
 5. [Provider outbox rollout](provider-outbox-rollout.md) — relay startup, delivery evidence, replay limits, and promotion blockers for the implemented bridge.
+6. [Agent source roles](agent-source-roles.md) — per-stream source roles (agent runtime, tool bridge, system of record, network observer, authority issuer), role-pair join rules, and the Aether correlation token that make agent platforms and business systems modular.
 
 Existing authorities remain in force: [Universal Provider Runtime](../../UNIVERSAL-PROVIDER-RUNTIME.md), [provider migration](../../../operations/PROVIDER-MIGRATION.md), [provider certification](../../../reference/PROVIDER-CERTIFICATION.md), [SDK and universal ingestion alignment](../sdk-universal-ingestion-alignment.md), [connector taxonomy](../../../reference/source-of-truth/CONNECTOR_TAXONOMY.md), and [ADR-009](../../decisions/ADR-009-universal-provider-runtime.md). This blueprint specifies changes to those systems; it does not silently replace their implemented contracts.
 

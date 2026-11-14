@@ -1510,6 +1510,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/blueprints/universal-connector-runtime/agent-source-roles.md",
+      "title": "Agent Source Roles and Cross-Role Correlation",
+      "slug": "blueprints/universal-connector-runtime/agent-source-roles",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/blueprints/universal-connector-runtime/canonical-contracts.md",
       "title": "Universal Connector Runtime Canonical Contracts",
       "slug": "blueprints/universal-connector-runtime/canonical-contracts",

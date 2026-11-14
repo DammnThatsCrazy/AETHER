@@ -20,7 +20,7 @@ source_hashes:
   "services/api/shared/integration_contracts/catalog.py": "sha256:76a954865823c7b8d0b9aac98787ed4ea1b0dbcbde1e99f6c58a07025971b63c"
   "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
   "services/api/shared/integration_contracts/manifest.py": "sha256:88f1a5c8f3a8fa5d6b0e53d9277c26dab7e6ef1681caa4ef1a52085e9e038658"
-  "services/api/shared/integration_contracts/streams.py": "sha256:b3258eda634a1fab93ea43b924f0261447cae7fa63bd8c3bedfad79b0db5d676"
+  "services/api/shared/integration_contracts/streams.py": "sha256:cea0cdc53f61bbb90b57a627cd69f032d7cc8d1e2899b4099f04d2cf52ab36ac"
 ---
 
 # Provider Manifest Spec
@@ -129,6 +129,19 @@ capability-level behavior. A descriptor (`schema_version="1"`) names a stable
 OAuth scopes, optional cursor scheme and webhook topics, and backfill and
 incremental flags. Its output must appear in the parent manifest's
 `data_outputs`.
+
+A descriptor may also declare an optional `source_role`: `agent_runtime`,
+`tool_bridge`, `system_of_record`, `network_observer`, or
+`authority_issuer` (`services/api/shared/integration_contracts/source_roles.py`).
+The role records what the stream proves, independent of the vendor. One
+provider can play several roles through several streams; it never declares a
+role at the vendor level. When a role is declared, the descriptor rejects a
+`domain_pack` the role cannot emit: runtime, bridge, and observer streams emit
+only `agent_activity`, authority streams emit only `authority`, and
+system-of-record streams emit domain facts but neither of those two packs.
+Untagged descriptors keep validating unchanged. The Shopify order streams
+declare `system_of_record`. Cross-role joins are described in the
+[agent source roles blueprint](blueprints/universal-connector-runtime/agent-source-roles.md).
 
 Registration validates unique stream IDs/topics, cursor and webhook claims,
 OAuth scope coverage, aggregate sync/webhook flags, and whether the plugin
