@@ -51,7 +51,7 @@ source_hashes:
   ".github/workflows/pilot-staging.yml": "sha256:36ebc8a80d84008b4b55c2fd562b28aa67f6a02e08478de9e4a4cbd77897a07a"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:e828d5d39464bd4d694c287cd0362d9e8de81a510a0c97efc788a7a36e4b2234"
-  ".github/workflows/staging-lifecycle.yml": "sha256:7a1ca755a832d43137268b2d50ea032f241fa79aa0a57cb187099402e4f186a6"
+  ".github/workflows/staging-lifecycle.yml": "sha256:0db514d43bfd3d5e63d963f79f9fcd06d7bacbe19c1b469879d9416c01d148ea"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
@@ -249,7 +249,7 @@ gh workflow run staging-lifecycle.yml \
 |---|---|---|
 | `action` | `validate` | one of the six above |
 | `ml_image_digest` | — | required for wake or sleep **plans** only when the selected profile has `remote_ml: true`; optional for inline-ML profiles such as staging |
-| `backend_image_digest` | — | ignored when `release_run_id` is supplied |
+| `backend_image_digest` | — | ignored when `release_run_id` is supplied. A standalone `apply-sleep` without it reconciles to the digest the `AETHER-staging-backend` service is registered with (delivery pins it by digest), which is how the scheduled business-hours sleep runs; it fails closed if that image is not pinned by digest |
 | `release_run_id` | — | required for `full-rehearsal`; must be a successful `.github/workflows/deploy.yml` build-only or deployed run with a successful immutable-build job |
 | `release_manifest_checksum` | — | required for `full-rehearsal` |
 | `plan_run_id` | — | required for a standalone `validate` / `apply-wake` |
