@@ -24,8 +24,9 @@ reviewed_source_commits:
   - {'commit': 'fcfe08b7b', 'reason': 'Reviewed V1/V2 SDK batch observation-envelope parity. Both storage branches preserve the flat normalized event contract and add the same optional Envelope-B projection only when adoption is enabled; no route or response schema changed.'}
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
+  - {'commit': 'b8530123', 'reason': 'Reviewed atomic objective idempotency claims in services/api/actions/agent/runtime_repository.py. Retry and changed-content conflict semantics are unchanged; simultaneous first submissions now create one objective. No change to this document is needed.'}
 source_hashes:
-  "services/api/actions/": "sha256:4225cc7d237065008204eb2691bbd4d78eb896e608150944bbc5468a0d19b876"
+  "services/api/actions/": "sha256:a2fdbf45fc4318fadf08eea3f900064a4ae363e5e322e9ca0fc5bea8a1cd8a9d"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"

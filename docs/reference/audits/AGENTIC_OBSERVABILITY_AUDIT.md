@@ -12,13 +12,14 @@ reviewed_source_commits:
     reason: "Reviewed fa28339e9 and 9b7d55daa: malformed or padded Agent360 authority identifiers and Workflow360 action join identifiers fail closed; exact Tool evidence is required. Updated the current-state notes below."
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and Workflow360 incomplete action-read coverage behavior; partial observations do not establish effects."
+  - {'commit': 'b8530123', 'reason': 'Reviewed atomic objective idempotency claims in services/api/actions/agent/runtime_repository.py. Retry and changed-content conflict semantics are unchanged; simultaneous first submissions now create one objective. No change to this document is needed.'}
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/contracts/intelligence-projection-registry.json": "sha256:1dcf0c126f477760a98c6877653edd4a9a19bb4d1ba78f5b94a77ef15bf51d1b"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
-  "services/api/actions/agent/": "sha256:025cce7ed567fc62907c183fb866619b04601dacf01811c76ca8e2ac081b9e03"
+  "services/api/actions/agent/": "sha256:6d608038ac937c6cfa42a24c9cfd90c3f5de6755da05639c4d8ca76faadd2970"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
