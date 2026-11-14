@@ -154,12 +154,24 @@ class CanonicalEvent:
     timestamp: str
     properties: dict[str, Any]
 
-    def to_batch_event(self, *, session_id: str, anonymous_id: str) -> dict[str, Any]:
+    def to_batch_event(
+        self, *, session_id: str, anonymous_id: str,
+        deployment_context: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """A ``BaseEvent``: ``id``, ``sessionId`` and ``anonymousId`` are required
-        and unknown keys are rejected, so ``message_id`` is sent as ``id``."""
-        return {"id": self.message_id, "type": self.type, "timestamp": self.timestamp,
-                "sessionId": session_id, "anonymousId": anonymous_id,
-                "properties": self.properties}
+        and unknown keys are rejected, so ``message_id`` is sent as ``id``.
+
+        Agent behavior events are accepted only from a validated deployment, so
+        the deployment context is sent as ``context.agentDeployment``; without
+        it ingestion rejects them as ``deployment_context_invalid``."""
+        event: dict[str, Any] = {
+            "id": self.message_id, "type": self.type, "timestamp": self.timestamp,
+            "sessionId": session_id, "anonymousId": anonymous_id,
+            "properties": self.properties,
+        }
+        if deployment_context:
+            event["context"] = {"agentDeployment": dict(deployment_context)}
+        return event
 
 
 def _message_id(adapter: str, source_id: str, canonical_type: str, phase: Optional[str] = None) -> str:
@@ -287,20 +299,48 @@ ADAPTERS: dict[str, Callable[[dict[str, Any]], list[CanonicalEvent]]] = {
 }
 
 
+def _deployment_context(
+    record: dict[str, Any], explicit: Optional[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    """The agent deployment context: the keyword argument, else the record's
+    ``context.agentDeployment`` (or ``context.agent_deployment``)."""
+    context = explicit
+    if context is None:
+        record_context = record.get("context")
+        if isinstance(record_context, dict):
+            context = record_context.get("agentDeployment") or record_context.get("agent_deployment")
+    if context is None:
+        return None
+    if not isinstance(context, dict):
+        raise AdapterError("agent deployment context must be an object")
+    if not (context.get("deploymentId") or context.get("deployment_id")):
+        raise AdapterError("agent deployment context needs a deploymentId")
+    return context
+
+
 def map_runtime_record(
     adapter_class: str, record: dict[str, Any], *,
     session_id: Optional[str] = None, anonymous_id: Optional[str] = None,
+    deployment_context: Optional[dict[str, Any]] = None,
 ) -> list[dict[str, Any]]:
     """Map one native runtime record to canonical ``/v1/batch`` events.
 
     The batch contract requires a session and an anonymous identity on every
     event. They come from the keyword arguments or, failing that, the record's
-    ``sessionId`` / ``anonymousId``; a record with neither is rejected."""
+    ``sessionId`` / ``anonymousId``; a record with neither is rejected.
+
+    Agent behavior events are accepted only with a validated deployment
+    context. It comes from ``deployment_context`` or, failing that, the
+    record's ``context.agentDeployment``, and is emitted as
+    ``context.agentDeployment``. A context without a ``deploymentId`` is
+    rejected here rather than at ingestion."""
     if adapter_class not in ADAPTERS:
         raise AdapterError(f"unknown adapter class {adapter_class!r}")
     session = session_id or record.get("sessionId")
     anonymous = anonymous_id or record.get("anonymousId")
     if not session or not anonymous:
         raise AdapterError("a runtime record needs a session id and an anonymous id for /v1/batch")
-    return [e.to_batch_event(session_id=str(session), anonymous_id=str(anonymous))
+    deployment = _deployment_context(record, deployment_context)
+    return [e.to_batch_event(session_id=str(session), anonymous_id=str(anonymous),
+                             deployment_context=deployment)
             for e in ADAPTERS[adapter_class](record)]

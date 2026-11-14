@@ -126,9 +126,10 @@ aether/
 ├── packages/                  Shared code, clients and contracts
 │   ├── shared/                Canonical contracts (packages/shared/contracts/) and shared types
 │   ├── contracts/             Contract policy, delivery contracts, smart contracts
-│   ├── sdk/                   web, server, python, ios, android, react-native, mobile-core
+│   ├── sdk/                   web/ server/ python/ ios/ android/ react-native/ mobile-core/
+│   │                          examples/ playground/
 │   ├── access-kit/            Agent / CLI / MCP access package
-│   ├── ui/                    Brand, core, marketing and mobile UI primitives
+│   ├── ui/                    brand/ core/ marketing/ mobile/ UI primitives
 │   └── config/                Shared TypeScript configuration
 │
 ├── services/                  Backend runtimes
@@ -137,10 +138,13 @@ aether/
 │   │   ├── connectors/  ingestion/   source + intake, evidence, normalization
 │   │   ├── identity/                 resolution
 │   │   ├── graph/                    graph
-│   │   ├── intelligence/  journeys/  value/  actions/    intelligence, outcomes
+│   │   ├── intelligence/  journeys/  value/  actions/  services/   intelligence, outcomes
 │   │   ├── governance/               consent, diagnostics, operator surfaces
 │   │   ├── replay/  workers/         replay, projections, background work
-│   │   └── shared/  middleware/  repositories/  alembic/ cross-cutting + migrations
+│   │   ├── shared/  middleware/  repositories/  dependencies/  config/   cross-cutting
+│   │   ├── alembic/                  database migrations
+│   │   ├── docs/                     service-local docs (observability)
+│   │   └── tests/                    backend test suites
 │   ├── ml/                    ML models, training, serving
 │   ├── agents/                Internal agent workers and controller
 │   └── compliance/            GDPR / SOC 2 services
@@ -150,7 +154,7 @@ aether/
 │   ├── local/                 Local docker-compose stack
 │   ├── kafka/  clickhouse/    Streaming and analytics definitions
 │   ├── observability/         Prometheus, Grafana, Loki, Alertmanager
-│   ├── cicd/  lambda/        Pipeline stages and Lambda handlers
+│   ├── cicd/  lambda/         Pipeline stages and Lambda handlers
 │   ├── model-runtime/         Model runtime stack
 │   ├── integration/           Durable integration stack
 │   └── legacy-staging/        Retained staging bootstrap material
@@ -158,6 +162,7 @@ aether/
 ├── tests/                     Cross-cutting test suites
 │   ├── unit/  integration/  e2e/  contracts/  sdk/  security/
 │   ├── graph/  identity/  ingestion/  journeys/  lenses/  value/  campaigns/  connectors/
+│   ├── agentic_x402/  payment_rails/  semantic_sentiment/
 │   └── fixtures/  mocks/  load/  chaos/  readiness/  prod_equivalent/
 │
 ├── docs/                      Documentation
@@ -167,11 +172,16 @@ aether/
 │   ├── reference/             API, contracts, connectors, SDKs and source-of-truth docs
 │   ├── engineering/           Engineering notes, including CI v2
 │   ├── archive/               Retired material (legacy names live only here)
+│   ├── _templates/            Page templates for the docs site
 │   └── _generated/            Generated artifacts (never edited by hand)
 │
 ├── config/                    Machine-readable policy: deployment profiles, CI, readiness, IAM contracts
 ├── scripts/                   Repository tooling: validators, generators, release and staging tools
-└── .github/                   Workflows (ci.yml is the single PR authority) and templates
+├── .github/                   Workflows (ci.yml is the single PR authority) and templates
+├── .artifacts/                Checked-in readiness and data-truth evidence written by tooling
+├── .claude/  .codex/          Agent configuration (see AGENTS.md and CLAUDE.md)
+├── .devcontainer/             Dev container definition
+└── (root files)               See "The root, explained" below
 ```
 
 Backend domain packages are top-level import names under `services/api/` (for example `identity`, `graph`, `value`).

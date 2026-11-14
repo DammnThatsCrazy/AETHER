@@ -263,3 +263,27 @@ def test_correlated_action_keeps_currency_from_an_earlier_phase():
     value = agent360_behavior(facts, "agent-1")["sections"]["value"]["data"]
     assert [r["currency"] for r in value["actions"]] == ["USD"]
     assert [(t["currency"], t["amount"]) for t in value["totals"]] == [("USD", "60.00")]
+
+
+def test_daily_limit_orders_spends_by_instant_not_timestamp_text():
+    # "…10:00:00Z" sorts after "…10:00:00.200000Z" as text, which hid the
+    # earlier spend and classified the second purchase inside the limit.
+    grant = {**GRANT, "scope": {**GRANT["scope"], "daily_limit": "100.00",
+                                "human_approval_threshold": None}}
+    first = act("p1", amount="60.00", at="2026-10-22T10:00:00Z")
+    second = act("p2", amount="60.00", at="2026-10-22T10:00:00.200000Z")
+    assert check_action(first, [grant], [first, second]).status == INSIDE
+    r = check_action(second, [grant], [first, second])
+    assert r.status == OUTSIDE and "daily_limit_exceeded" in r.reasons
+
+
+def test_daily_limit_buckets_by_normalized_utc_day():
+    grant = {**GRANT, "scope": {**GRANT["scope"], "daily_limit": "100.00",
+                                "human_approval_threshold": None}}
+    # 2026-10-21T23:30-02:00 is 2026-10-22T01:30Z: the same UTC day.
+    first = act("p1", amount="60.00", at="2026-10-21T23:30:00-02:00")
+    second = act("p2", amount="60.00", at="2026-10-22T09:00:00Z")
+    assert "daily_limit_exceeded" in check_action(second, [grant], [first, second]).reasons
+    # 2026-10-22T01:00+02:00 is 2026-10-21T23:00Z: the previous UTC day.
+    other_day = act("p3", amount="60.00", at="2026-10-22T01:00:00+02:00")
+    assert check_action(second, [grant], [other_day, second]).status == INSIDE
