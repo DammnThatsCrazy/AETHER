@@ -235,6 +235,7 @@ from journeys.traffic.deferred_attribution import router as deferred_attribution
 from intelligence.fraud.routes import router as fraud_router
 from value.attribution.routes import router as attribution_router
 from value.attribution.apple_postbacks import router as apple_postbacks_router
+from journeys.traffic.apple_ads_attribution import router as apple_ads_attribution_router
 from value.rewards.routes import router as rewards_router
 from value.rewards.operator_routes import router as rewards_operator_router
 from graph.oracle.routes import router as oracle_router
@@ -865,6 +866,7 @@ def create_app() -> FastAPI:
     app.include_router(attribution_router)
     app.include_router(deferred_attribution_router)  # /v1/attribution/deferred — deterministic iOS handoffs
     app.include_router(apple_postbacks_router)       # /v1/attribution/apple-postbacks — campaign-level platform evidence
+    app.include_router(apple_ads_attribution_router) # /v1/attribution/apple-ads — user-level Apple Ads token exchange (flag-gated)
     app.include_router(rewards_router)
     # Kyber operator reward surfaces (/v1/admin/kyber/rewards/health +
     # /v1/admin/kyber/tenants/{tenant_id}/{campaigns,decisions,actions,audit}).

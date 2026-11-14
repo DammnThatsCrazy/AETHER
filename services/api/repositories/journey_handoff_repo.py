@@ -49,6 +49,14 @@ JOURNEY_HANDOFF_INDEXES = [
     "ON journey_handoffs (expires_at)",
 ]
 
+# alembic 20261114_journey_handoff_continuation (same parity test).
+JOURNEY_HANDOFF_CONTINUATION_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS ix_journey_handoffs_source_anon "
+    "ON journey_handoffs (tenant_id, source_anonymous_id) WHERE state = 'redeemed'",
+    "CREATE INDEX IF NOT EXISTS ix_journey_handoffs_redeemed_anon "
+    "ON journey_handoffs (tenant_id, redeemed_anonymous_id) WHERE state = 'redeemed'",
+]
+
 # Redeemed/expired rows are kept this long for the per-journey audit listing.
 RETAIN_DAYS = 90
 
@@ -90,7 +98,7 @@ class JourneyHandoffRepository:
             self._pool = await get_pool()
         if self._pool is not None and not self._tables_ensured:
             await self._pool.execute(JOURNEY_HANDOFFS_DDL)
-            for idx in JOURNEY_HANDOFF_INDEXES:
+            for idx in [*JOURNEY_HANDOFF_INDEXES, *JOURNEY_HANDOFF_CONTINUATION_INDEXES]:
                 await self._pool.execute(idx)
             self._tables_ensured = True
         return self._pool
@@ -241,6 +249,38 @@ class JourneyHandoffRepository:
             "SELECT * FROM journey_handoffs WHERE tenant_id=$1 AND state='redeemed' AND "
             "(source_session_id = ANY($2::text[]) OR redeemed_session_id = ANY($2::text[])) "
             "LIMIT $3",
+            tenant_id, sorted(wanted), limit,
+        )
+        return [_public(dict(r)) for r in rows]
+
+    async def redeemed_for_anonymous_ids(
+        self, tenant_id: str, anonymous_ids: list[str], limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """Redeemed handoffs where either end is one of ``anonymous_ids`` (tenant-scoped).
+
+        Ordered oldest first so callers that walk the continuation graph pick a
+        deterministic root.
+        """
+        wanted = {a for a in anonymous_ids if a}
+        if not wanted:
+            return []
+        pool = await self._backend()
+        if pool is None:
+            async with _mem_lock():
+                rows = [
+                    _public(r) for r in _MEM.values()
+                    if r["tenant_id"] == tenant_id and r["state"] == "redeemed"
+                    and (
+                        r["source_anonymous_id"] in wanted
+                        or r.get("redeemed_anonymous_id") in wanted
+                    )
+                ]
+            rows.sort(key=lambda r: (str(r["created_at"]), str(r["handoff_id"])))
+            return rows[:limit]
+        rows = await pool.fetch(
+            "SELECT * FROM journey_handoffs WHERE tenant_id=$1 AND state='redeemed' AND "
+            "(source_anonymous_id = ANY($2::text[]) OR redeemed_anonymous_id = ANY($2::text[])) "
+            "ORDER BY created_at, handoff_id LIMIT $3",
             tenant_id, sorted(wanted), limit,
         )
         return [_public(dict(r)) for r in rows]

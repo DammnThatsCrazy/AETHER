@@ -1985,6 +1985,10 @@ class ClientSyncConfig:
 class MobileConfig:
     # Mobile gateway (/v1/mobile — installations + push subscriptions). Default OFF.
     enabled: bool = _env_bool("AETHER_MOBILE_ENABLED", False)
+    # Apple Ads attribution-token exchange (/v1/attribution/apple-ads). Default
+    # OFF: the backend calls Apple's AdServices API with the token the iOS SDK
+    # reads from AAAttribution, so enable it only where that egress is allowed.
+    apple_ads_attribution_enabled: bool = _env_bool("AETHER_APPLE_ADS_ATTRIBUTION_ENABLED", False)
 
 
 @dataclass(frozen=True)
@@ -2048,6 +2052,11 @@ class IdentityContinuityConfig:
     agent_resolution_enabled: bool = _env_bool("AGENT_IDENTITY_RESOLUTION_ENABLED", False)
     # Server-issued cross-device journey handoff tokens (mobile -> web).
     journey_handoff_enabled: bool = _env_bool("JOURNEY_HANDOFF_ENABLED", False)
+    # Recompile the journey of each identity that receives new canonical
+    # activity (debounced per identity, process-local). Without it a journey
+    # only rebuilds on identity restatement, comms, privacy, repair, a redeemed
+    # handoff or an operator rebuild, so late events never reach it.
+    journey_activity_rebuild_enabled: bool = _env_bool("JOURNEY_ACTIVITY_REBUILD_ENABLED", False)
 
 
 @dataclass(frozen=True)

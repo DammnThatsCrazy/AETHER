@@ -79,6 +79,7 @@ export type EntryMethod =
   | 'ios_universal_link'
   | 'ios_custom_url'
   | 'ios_adattributionkit'
+  | 'ios_apple_ads_attribution'
   | 'push_notification'
   | 'email_link'
   | 'qr_code'
@@ -164,6 +165,7 @@ export const ENTRY_METHODS: readonly EntryMethod[] = [
   'ios_universal_link',
   'ios_custom_url',
   'ios_adattributionkit',
+  'ios_apple_ads_attribution',
   'push_notification',
   'email_link',
   'qr_code',
