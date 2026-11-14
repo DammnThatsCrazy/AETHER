@@ -17,17 +17,29 @@ source_files:
   - services/api/actions/agent_correlation/routes.py
   - services/api/actions/agent_correlation/projection.py
   - services/api/actions/agent_correlation/mappers/__init__.py
+  - services/api/actions/agent_correlation/bindings.py
+  - services/api/actions/agent_correlation/certification/runner.py
+  - services/api/actions/agent_correlation/certification/record.py
+  - services/api/actions/agent_correlation/certification/recorders.py
+  - services/api/actions/agent_correlation/certification/fixtures.py
+  - scripts/certify_agent_correlation.py
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
+  "scripts/certify_agent_correlation.py": "sha256:9d0bd1ef8e4e9100182487db07425f4acdb041bb55376b807d9f6dc4e3dcc5af"
+  "services/api/actions/agent_correlation/bindings.py": "sha256:b345e8c5d707735c35965c9b802576495f5a9b220e3587a4377a4fff164827d6"
+  "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:9729a8ba0ac510aea96a8fb55451899c27a72936a925244b379a384b14d0fc5a"
+  "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
+  "services/api/actions/agent_correlation/certification/recorders.py": "sha256:0aa5369877374e69deb1920b6e0147f200b5021b2cf604adb1a1f13a9d52b064"
+  "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
   "services/api/actions/agent_correlation/engine.py": "sha256:c1a15719a8245a5713bf0c758ae7780eb1490f2d14bda7f33e7770bfc82e4e51"
   "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
   "services/api/actions/agent_correlation/mcp_server.py": "sha256:b20c135f39ae243eb5df8073f45df2a69c5ae8e00b635b2a84dd72ba3e6f4cde"
   "services/api/actions/agent_correlation/projection.py": "sha256:533ba53fd6932921a34e84667f6c7461eec8099906893da7f1852698ddbeb4bc"
-  "services/api/actions/agent_correlation/routes.py": "sha256:b1457740c2470506aedb2051f01770418ffa88cecd986fca98958dcc2f13ee4d"
-  "services/api/actions/agent_correlation/service.py": "sha256:09373956b510ae5d417f0f0b93dbaa5b68d5e933e53fadc65fad58eb907f0de5"
-  "services/api/shared/integration_contracts/correlation.py": "sha256:aece1cedf50ba6638d1dbdcb3406c5a2c5564592d42476182470a330d2527b6f"
+  "services/api/actions/agent_correlation/routes.py": "sha256:6cc7bbf489ed282446b32fddbf8d8ca348aa26286b8173fb0160d723de5e7067"
+  "services/api/actions/agent_correlation/service.py": "sha256:6756cb8aadd411875e3b1d37a1a0cbc79f704af3cc3803ae0f2efaf9fe361c60"
+  "services/api/shared/integration_contracts/correlation.py": "sha256:3e0ab93ccd0bc9a1148f26e79aa4720fbc47f9cbdadf7d55b2db0a6e774dbb30"
   "services/api/shared/integration_contracts/correlation_token.py": "sha256:bdc1861aad5f6d2afcb6f07ad0f9ab67e3f28bca7cfea49b11dda2aa0d0c9ae7"
   "services/api/shared/integration_contracts/source_roles.py": "sha256:002bcc66f8960fec8b92f7d63f8e665cd1a20b6679957bd9459be8d8d81d94ae"
   "services/api/shared/integration_contracts/streams.py": "sha256:cea0cdc53f61bbb90b57a627cd69f032d7cc8d1e2899b4099f04d2cf52ab36ac"
@@ -47,9 +59,16 @@ source_hashes:
 - **Interfaces:** REST routes and an MCP endpoint, mounted by default
   (`AGENT_CORRELATION_ENABLED`).
 
-The mappers read each vendor's documented record shapes; none is certified
-against a live provider account yet. Token issuance needs
-`AGENT_CORRELATION_TOKEN_KEYS`.
+Account bindings come from verified provider connections where they exist
+(see [Verified bindings](#verified-bindings)). Certification against
+provider sandboxes is built (see [Sandbox certification](#sandbox-certification)),
+and `stripe/event` is `sandbox_certified` from a real Stripe sandbox event
+(`payment_intent.created`, API version `2026-03-25.dahlia`), read through the
+Stripe connector. That recording showed that newer events name the owning
+account in `context`, and the mapper now reads it. The other vendor kinds
+report `uncertified` in `config/agent_correlation_certification.json` until
+their sandboxes are recorded. Token issuance
+needs `AGENT_CORRELATION_TOKEN_KEYS`.
 
 ## Why roles, not vendors
 
@@ -249,6 +268,75 @@ When a record arrives, the engine:
 The chain view lists, for each role, a gap message when no observation of that
 role is linked. An answer never implies coverage it does not have.
 
+## Verified bindings
+
+A binding scopes provider object IDs to an account.
+`actions/agent_correlation/bindings.py` resolves bindings from the provider
+runtime's own records, using the same rule `object_refs` applies. An account
+counts as verified only when all of these hold:
+
+- The account and its connection belong to the tenant and share the provider
+  identity.
+- The connection was verified and is not revoked, disabled, failed, or waiting
+  for reauthorization.
+- The account is one the connection selected.
+- Its external ID and realm are recorded.
+
+A verified binding carries the account record as its `verification_ref`, and
+every object ref scoped by it carries `account_verification_ref`.
+
+| Situation | Effect |
+|---|---|
+| Object match where either side's scope is verified | `shared_object_ref`, `DETERMINISTIC_BINDING`, `linked` |
+| Object match where neither scope is verified | `declared_object_ref`, `TENANT_DECLARED`, `candidate` |
+| Family has verified accounts; a request or declaration names another account | Rejected (`422`) |
+| Family has verified accounts; the realm differs | Rejected |
+| Family has one verified account | It becomes the default for agent-side object IDs |
+
+`GET /account-bindings` shows each family's effective binding and whether a
+verified connection backs it. Today the provider runtime holds connections for
+the commerce providers, Shopify among them. Stripe, Ramp, and Cloudflare
+bindings are tenant-declared, so their object matches grade `TENANT_DECLARED`.
+Token matches are unaffected: the token's MAC binds it to the tenant.
+
+## Sandbox certification
+
+A mapper kind is certified only by payloads the provider itself returned from a
+sandbox account:
+
+1. `python scripts/certify_agent_correlation.py record --provider <name>` runs
+   the provider's recorder. Each recorder creates test activity and reads back
+   the provider's own records:
+   - **Stripe:** the account must report `livemode: false` first. The recorder
+     creates a $1.00 PaymentIntent and a refund carrying a certification token,
+     then reads their events.
+   - **Shopify:** a draft product with the token as a tag, its inventory level,
+     and an existing order if there is one. The product is deleted afterwards.
+   - **Ramp:** read-only transactions and limits.
+   - **Cloudflare:** read-only AI Gateway logs.
+   - **OpenAI Agents:** one traced agent turn, when `openai-agents` is
+     installed.
+2. Each payload is mapped, then scrubbed to the fields mappers read. Free text
+   is reduced to tokens and provider object IDs, so fixtures hold no customer
+   data. If the scrubbed payload would map differently, the recording fails.
+   The link decisions the payload made live against the certification task are
+   stored with it, along with a certification-only key so they replay.
+3. `python scripts/certify_agent_correlation.py replay` re-maps every fixture
+   and writes `config/agent_correlation_certification.json`.
+
+| Status | Meaning |
+|---|---|
+| `sandbox_certified` | Recorded fixtures exist and all replay |
+| `failed` | A recorded fixture no longer maps the same way |
+| `uncertified` | No recording yet |
+| `not_recordable` | No provider read API returns this record (Cloudflare request rows come from tenant exports) |
+| `first_party` | Aether's own MCP surface |
+
+A test fails when a committed fixture stops replaying or the committed report
+is stale. `GET /catalog` shows each kind's status. Credentials are read from
+the environment variables listed in the script, or injected by a credential
+proxy. Missing credentials skip a provider; they never certify it.
+
 ## Delivery sequence
 
 | Step | Outcome | Exit evidence |
@@ -258,8 +346,8 @@ role is linked. An answer never implies coverage it does not have.
 | 3. Aether MCP bridge (done) | Agents register tasks and receive tokens; keys from `AGENT_CORRELATION_TOKEN_KEYS` | An end-to-end test registers a task over MCP, stamps the token into Stripe metadata, and links it |
 | 4. Projection (done) | `linked` verdicts become `CORRELATED_ACROSS_SOURCES` edges through the graph mutation gateway | Projected edges pass the graph write validator; candidates never project |
 | 5. Vendors per role (done for six) | Shopify, Stripe, Ramp, Cloudflare, OpenAI Agents, Aether MCP | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
-| 6. Live certification | Run each mapper against a sandbox account of its provider and pin the record shapes | Recorded sandbox payloads replayed in tests |
-| 7. Verified bindings | Derive account bindings from verified provider connections instead of tenant declarations | Bindings carry the connection's account verification reference |
+| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` certified from a real sandbox event; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
+| 7. Verified bindings (done) | Bindings from verified provider connections; declared scopes graded `TENANT_DECLARED` | Tests cover verified, declared, spoofed, realm-mismatched, revoked, and cross-tenant cases |
 
 Step 5 is the modularity test. A vendor that needs a change outside its own
 module means the abstraction is leaking.

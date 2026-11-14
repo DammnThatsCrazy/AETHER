@@ -41,6 +41,7 @@ JoinKeyKind = Literal[
     "shared_object_ref",
     "provider_signed_request",
     "provider_actor_ref",
+    "declared_object_ref",
     "infrastructure_ref",
     "time_window",
 ]
@@ -52,6 +53,7 @@ JOIN_KEY_EVIDENCE: Mapping[str, str] = MappingProxyType({
     "shared_object_ref": "DETERMINISTIC_BINDING",
     "provider_signed_request": "CRYPTOGRAPHICALLY_ATTESTED",
     "provider_actor_ref": "PROVIDER_ASSERTED",
+    "declared_object_ref": "TENANT_DECLARED",
     "infrastructure_ref": "INFRASTRUCTURE_CORRELATED",
     "time_window": "TEMPORALLY_CORRELATED",
 })
@@ -65,13 +67,13 @@ def _pair(a: str, b: str) -> frozenset[str]:
 # table has no rule and yields ``no_rule``; it never falls back to timing.
 JOIN_RULES: Mapping[frozenset[str], tuple[str, ...]] = MappingProxyType({
     _pair("agent_runtime", "system_of_record"): (
-        "aether_correlation_token", "shared_object_ref", "provider_actor_ref", "time_window",
+        "aether_correlation_token", "shared_object_ref", "provider_actor_ref", "declared_object_ref", "time_window",
     ),
     _pair("tool_bridge", "system_of_record"): (
-        "aether_correlation_token", "shared_object_ref", "provider_actor_ref", "time_window",
+        "aether_correlation_token", "shared_object_ref", "provider_actor_ref", "declared_object_ref", "time_window",
     ),
     _pair("agent_runtime", "tool_bridge"): (
-        "aether_correlation_token", "shared_object_ref", "infrastructure_ref", "time_window",
+        "aether_correlation_token", "shared_object_ref", "declared_object_ref", "infrastructure_ref", "time_window",
     ),
     _pair("network_observer", "agent_runtime"): (
         "aether_correlation_token", "provider_signed_request", "infrastructure_ref", "time_window",
@@ -84,7 +86,7 @@ JOIN_RULES: Mapping[frozenset[str], tuple[str, ...]] = MappingProxyType({
         "aether_correlation_token", "provider_actor_ref", "time_window",
     ),
     _pair("authority_issuer", "tool_bridge"): ("aether_correlation_token", "provider_actor_ref"),
-    _pair("authority_issuer", "system_of_record"): ("shared_object_ref", "provider_actor_ref"),
+    _pair("authority_issuer", "system_of_record"): ("shared_object_ref", "provider_actor_ref", "declared_object_ref"),
 })
 
 CorrelationStatus = Literal["linked", "candidate", "rejected", "no_rule"]
@@ -103,10 +105,15 @@ def _nonblank(value: str) -> str:
 class ObservedObjectRef(_Model):
     """A provider object as an observation names it.
 
-    Unlike ``SourceObjectRef`` this carries no account verification reference:
-    an agent-side record can name an object it touched, but only the
-    system-of-record stream proves the account. A match therefore requires the
-    full scope: family, realm, account, object type, and object ID.
+    A match requires the full scope: family, realm, account, object type, and
+    object ID (``scope_key``). ``account_verification_ref`` names the verified
+    provider account record the scope was resolved from (a selected account on
+    a verified connection of the same tenant). It is evidence about the scope,
+    not part of it: a ref scoped by a verified account and one scoped by a
+    tenant declaration of the same account still name the same object. Only a
+    match where at least one side's scope is verified is a deterministic
+    binding; otherwise the account rests on the tenant's word
+    (``declared_object_ref``, ``TENANT_DECLARED``).
     """
 
     provider_family: str
@@ -114,6 +121,11 @@ class ObservedObjectRef(_Model):
     source_account_key: str
     object_type: str
     object_id: str
+    account_verification_ref: Optional[str] = None
+
+    @property
+    def scope_key(self) -> tuple[str, str, str, str, str]:
+        return (self.provider_family, self.source_account_realm, self.source_account_key, self.object_type, self.object_id)
 
     @field_validator("provider_family", "source_account_key", "object_type", "object_id")
     @classmethod
@@ -244,8 +256,21 @@ def correlate(
                     reason="conflicting_correlation_tokens",
                 )
 
-    if "shared_object_ref" in eligible and near and set(left.object_refs) & set(right.object_refs):
-        matched.append("shared_object_ref")
+    if near and "shared_object_ref" in eligible:
+        left_scopes: dict[tuple[str, ...], bool] = {}
+        for ref in left.object_refs:
+            left_scopes[ref.scope_key] = left_scopes.get(ref.scope_key, False) or bool(ref.account_verification_ref)
+        verified_match = declared_match = False
+        for ref in right.object_refs:
+            if ref.scope_key in left_scopes:
+                if left_scopes[ref.scope_key] or ref.account_verification_ref:
+                    verified_match = True
+                else:
+                    declared_match = True
+        if verified_match:
+            matched.append("shared_object_ref")
+        elif declared_match and "declared_object_ref" in eligible:
+            matched.append("declared_object_ref")
 
     if "provider_signed_request" in eligible:
         ls, rs = left.signed_request, right.signed_request

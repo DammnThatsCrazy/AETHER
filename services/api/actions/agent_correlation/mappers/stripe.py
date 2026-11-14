@@ -11,7 +11,6 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from actions.agent_correlation.mappers._common import (
-    AccountBinding,
     MapperContext,
     MappingError,
     find_tokens,
@@ -43,12 +42,20 @@ def map_event(ctx: MapperContext, record: Mapping[str, Any]) -> list[Correlation
     object_id = str(require(obj, "id"))
     occurred = parse_time(record.get("created"), field_name="created")
 
+    realm = "live" if record.get("livemode") is True else "test"
     bound = ctx.account_bindings.get(FAMILY)
-    account_key = opt_str(record.get("account")) or (bound.source_account_key if bound else None)
+    # Connect events name the connected account in ``account``; newer API
+    # versions also name the owning account in ``context``.
+    account_key = (
+        opt_str(record.get("account"))
+        or opt_str(record.get("context"))
+        or (bound.source_account_key if bound else None)
+    )
     if account_key is None:
         raise MappingError("a stripe account binding or event.account is required")
-    realm = "live" if record.get("livemode") is True else "test"
-    binding = AccountBinding(source_account_key=account_key, source_account_realm=realm)
+    binding = ctx.binding_for(FAMILY, account_key, realm)
+    if binding is None:  # pragma: no cover - account_key is set above
+        raise MappingError("a stripe account binding or event.account is required")
 
     refs = [stripe_ref(binding, object_type, object_id)]
     for linked_field, linked_type in (("payment_intent", "payment_intent"), ("charge", "charge")):

@@ -59,6 +59,7 @@ def map_transaction(ctx: MapperContext, record: Mapping[str, Any]) -> list[Corre
             source_account_key=binding.source_account_key,
             object_type="card_transaction",
             object_id=txn_id,
+            account_verification_ref=binding.verification_ref,
         ),),
         correlation_tokens=find_tokens(record.get("memo")),
         actor_refs=_card_actors(record),

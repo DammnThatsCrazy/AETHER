@@ -6,6 +6,7 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional
 
+from actions.agent_correlation.bindings import BindingResolver, ResolvedBindings
 from actions.agent_correlation.engine import CorrelationEngine
 from actions.agent_correlation.keys import CorrelationKeyring
 from actions.agent_correlation.mappers import AccountBinding, MapperContext, MappingError, map_record
@@ -68,18 +69,6 @@ class AccountBindingRepository(BaseRepository):
         }
 
 
-def _parse_bindings(raw: Optional[Mapping[str, Any]]) -> dict[str, AccountBinding]:
-    out: dict[str, AccountBinding] = {}
-    for family, value in (raw or {}).items():
-        if not isinstance(value, Mapping) or not str(value.get("source_account_key") or "").strip():
-            raise MappingError(f"account binding for {family!r} needs source_account_key")
-        realm = str(value.get("source_account_realm") or "live")
-        if realm not in _REALMS:
-            raise MappingError("source_account_realm must be live or test")
-        out[str(family)] = AccountBinding(str(value["source_account_key"]).strip(), realm)
-    return out
-
-
 class CorrelationService:
     def __init__(
         self,
@@ -92,6 +81,7 @@ class CorrelationService:
         keys: Optional[CorrelationKeyIndexRepository] = None,
         verdicts: Optional[CorrelationVerdictRepository] = None,
         bindings: Optional[AccountBindingRepository] = None,
+        resolver: Optional[BindingResolver] = None,
     ) -> None:
         self.keyring = keyring
         self.observations = observations or CorrelationObservationRepository()
@@ -99,6 +89,7 @@ class CorrelationService:
         self.verdicts = verdicts or CorrelationVerdictRepository()
         self.tasks = tasks or CorrelationTaskRepository()
         self.bindings = bindings or AccountBindingRepository()
+        self.resolver = resolver or BindingResolver(declared=self.bindings)
         self.engine = engine or CorrelationEngine(
             token_verifier=keyring.verifier() if keyring else None,
             time_window=time_window,
@@ -168,15 +159,34 @@ class CorrelationService:
         *,
         account_bindings: Optional[Mapping[str, Any]] = None,
     ) -> list[dict[str, Any]]:
-        bindings = await self.bindings.all_for(tenant_id)
-        bindings.update(_parse_bindings(account_bindings))
-        ctx = MapperContext(tenant_id=tenant_id, account_bindings=bindings)
+        resolved = await self.resolver.resolve(tenant_id, account_bindings)
+        ctx = MapperContext(
+            tenant_id=tenant_id, account_bindings=resolved.defaults, verified_accounts=resolved.verified
+        )
         observations = map_record(provider, kind, ctx, record)
         results = []
         for obs in observations:
             result = await self.engine.ingest(obs, provider=provider, kind=kind)
             results.append(result.summary())
         return results
+
+    # ── account bindings ─────────────────────────────────────────────────
+
+    async def declare_binding(self, tenant_id: str, family: str, account_key: str, realm: str) -> dict[str, Any]:
+        """Record a tenant-declared account; refused when it contradicts verified scope."""
+        verified = await self.resolver.verified_accounts(tenant_id)
+        families = {f for f, _ in verified}
+        match = verified.get((family, account_key))
+        if family in families and match is None:
+            raise MappingError(f"{family} has verified accounts; declare one of them or connect this account")
+        if match is not None and match.source_account_realm != realm:
+            raise MappingError(f"{family} account is verified for a different realm")
+        await self.bindings.put(tenant_id, family, account_key, realm)
+        return {"provider_family": family, "source_account_realm": realm, "verified": match is not None}
+
+    async def binding_status(self, tenant_id: str) -> list[dict[str, Any]]:
+        resolved: ResolvedBindings = await self.resolver.resolve(tenant_id)
+        return resolved.describe()
 
     # ── explanation ──────────────────────────────────────────────────────
 

@@ -171,3 +171,12 @@ def test_mcp_route_handles_batches_and_notifications(client) -> None:
     ]).json()
     assert [r["id"] for r in batch] == [1, 2]
     assert client.post(url, content=b"{not json", headers={"content-type": "application/json"}).status_code == 400
+
+
+def test_stripe_reads_the_owning_account_from_context() -> None:
+    """Found by sandbox certification: newer events name the account in ``context``."""
+    (obs,) = map_record("stripe", "event", MapperContext(tenant_id="t1"), {
+        "id": "evt_c", "created": 1793832998, "livemode": False, "context": "acct_ctx",
+        "data": {"object": {"object": "payment_intent", "id": "pi_cAbcdefghij"}},
+    })
+    assert obs.object_refs[0].source_account_key == "acct_ctx"

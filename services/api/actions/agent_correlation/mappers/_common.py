@@ -21,19 +21,50 @@ class MappingError(ValueError):
 
 @dataclass(frozen=True)
 class AccountBinding:
-    """The tenant's verified account for one provider family on this connection."""
+    """The tenant's account for one provider family.
+
+    ``verification_ref`` is the verified provider account record the binding
+    came from (see ``actions.agent_correlation.bindings``). ``None`` means the
+    account rests on the tenant's declaration.
+    """
 
     source_account_key: str
     source_account_realm: str = "live"
+    verification_ref: Optional[str] = None
+
+    @property
+    def verified(self) -> bool:
+        return bool(self.verification_ref)
 
 
 @dataclass(frozen=True)
 class MapperContext:
     tenant_id: str
-    # provider_family -> account the tenant connected. Agent-side records name
-    # provider objects without account scope; a binding supplies it so a tool
-    # result can match the system-of-record object exactly.
+    # provider_family -> the default account for that family. Agent-side
+    # records name provider objects without account scope; a binding supplies
+    # it so a tool result can match the system-of-record object exactly.
     account_bindings: Mapping[str, AccountBinding] = field(default_factory=dict)
+    # (provider_family, account_key) -> verified binding, for records that name
+    # their own account (a payment event's connected account).
+    verified_accounts: Mapping[tuple[str, str], AccountBinding] = field(default_factory=dict)
+
+    def binding_for(self, family: str, account_key: Optional[str], realm: str) -> Optional[AccountBinding]:
+        """The binding for an account a record names itself.
+
+        A verified account wins. When the family has verified accounts and the
+        record names a different one, the record is rejected rather than
+        scoped to an account the tenant never verified.
+        """
+        if not account_key:
+            return self.account_bindings.get(family)
+        verified = self.verified_accounts.get((family, account_key))
+        if verified is not None:
+            if verified.source_account_realm != realm:
+                raise MappingError(f"{family} account {account_key!r} is verified for a different realm")
+            return verified
+        if any(f == family for f, _ in self.verified_accounts):
+            raise MappingError(f"{family} account {account_key!r} is not a verified connection for this tenant")
+        return AccountBinding(source_account_key=account_key, source_account_realm=realm)
 
 
 def parse_time(value: Any, *, field_name: str) -> datetime:
@@ -125,6 +156,7 @@ def shopify_ref(binding: AccountBinding, object_type: str, object_id: str) -> Ob
         source_account_key=binding.source_account_key,
         object_type=object_type,
         object_id=str(object_id),
+        account_verification_ref=binding.verification_ref,
     )
 
 
@@ -135,6 +167,7 @@ def stripe_ref(binding: AccountBinding, object_type: str, object_id: str) -> Obs
         source_account_key=binding.source_account_key,
         object_type=object_type,
         object_id=str(object_id),
+        account_verification_ref=binding.verification_ref,
     )
 
 

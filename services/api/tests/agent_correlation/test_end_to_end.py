@@ -14,7 +14,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from actions.agent_correlation.mappers import MappingError
 from actions.agent_correlation.mcp_server import handle_jsonrpc
+from tests.agent_correlation.conftest import connect_verified_account
 
 T0 = datetime.now(timezone.utc).replace(microsecond=0)
 STORE = "acme.myshopify.com"
@@ -35,7 +37,8 @@ async def _mcp(service, tenant_id, name, arguments):
 
 @pytest.mark.asyncio
 async def test_grok_bot_task_links_across_every_vendor(service, tenant_id, projector) -> None:
-    await service.bindings.put(tenant_id, "shopify", STORE, "live")
+    # The merchant's Shopify store is a verified provider-runtime connection.
+    account_ref = await connect_verified_account(tenant_id, account_key=STORE)
     await service.bindings.put(tenant_id, "ramp", "biz_1", "live")
 
     # 1. The Grok bot registers its task through Aether's MCP endpoint.
@@ -54,12 +57,13 @@ async def test_grok_bot_task_links_across_every_vendor(service, tenant_id, proje
         "occurred_at": iso(5),
     })
 
-    # 3. Shopify's webhook arrives: the change is attributed to a staff account.
+    # 3. Shopify's webhook arrives on the verified connection: the change names a staff account.
     shop = await service.ingest_record(tenant_id, "shopify", "inventory_level", {
         "inventory_item_id": 55, "location_id": 7, "available": 40, "updated_at": iso(8),
         "admin_graphql_api_id": "gid://shopify/InventoryLevel/991?inventory_item_id=55",
         "user_id": 4242,
-    })
+    }, account_bindings={"shopify": {"source_account_key": STORE}})
+    assert account_ref
     shop_links = shop[0]["links"]
     tool_link = next(l for l in shop_links if l["other_observation_id"] == "aether_mcp:tool_call:xai_grok:call_1")
     assert tool_link["status"] == "linked"
@@ -73,6 +77,7 @@ async def test_grok_bot_task_links_across_every_vendor(service, tenant_id, proje
         "data": {"object": {"object": "payment_intent", "id": "pi_3AbcDefGhi", "metadata": {"aether_correlation": token}}},
     })
     pay_link = next(l for l in stripe[0]["links"] if l["other_observation_id"] == f"aether_mcp:task:{task_ref}")
+    # The token is MAC-verified for this tenant, so no account verification is needed.
     assert pay_link["status"] == "linked" and pay_link["key_kind"] == "aether_correlation_token"
 
     # 5. Ramp: the limit the agent's card runs under, then the spend on that card.
@@ -148,7 +153,14 @@ async def test_openai_export_links_trace_tools_and_stripe(service, tenant_id) ->
         "livemode": True, "data": {"object": {"object": "refund", "id": "re_1Abcdefghij", "charge": "ch_1Abcdefghij"}},
     })
     span_link = next(l for l in refund[0]["links"] if l["other_observation_id"] == "openai:span:span_1")
-    assert span_link["status"] == "linked" and span_link["key_kind"] == "shared_object_ref"
+    # Stripe has no verified provider-runtime connection here, so the refund's
+    # account rests on the tenant's declaration: an exact ID match, graded as such.
+    assert span_link["status"] == "candidate"
+    assert span_link["key_kind"] == "declared_object_ref"
+    assert span_link["evidence_class"] == "TENANT_DECLARED"
+    # The trace's token still binds the tool call to the task exactly.
+    trace_links = (await service.chain_for_task(tenant_id, task["task_ref"]))["proven_links"]
+    assert any(l["key_kind"] == "aether_correlation_token" for l in trace_links)
 
 
 @pytest.mark.asyncio
@@ -186,3 +198,48 @@ async def test_tenants_never_link(service, tenant_id) -> None:
     })
     assert out[0]["links"] == []
     assert await service.chain_for_task(other_tenant, task["task_ref"]) is None
+
+
+@pytest.mark.asyncio
+async def test_declared_shopify_account_links_only_as_tenant_declared(service, tenant_id) -> None:
+    await service.declare_binding(tenant_id, "shopify", STORE, "live")
+    task = await service.register_task(tenant_id, agent_platform="xai_grok")
+    await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", {
+        "agent_platform": "xai_grok", "call_id": "c1", "correlation_token": task["correlation_token"],
+        "occurred_at": iso(0), "output": "gid://shopify/Product/77",
+    })
+    shop = await service.ingest_record(tenant_id, "shopify", "product", {"id": 77, "updated_at": iso(3)})
+    link = next(l for l in shop[0]["links"] if l["other_observation_id"] == "aether_mcp:tool_call:xai_grok:c1")
+    assert link["status"] == "candidate" and link["evidence_class"] == "TENANT_DECLARED"
+    status = await service.binding_status(tenant_id)
+    assert status == [{"provider_family": "shopify", "source_account_realm": "live", "verified": False,
+                       "binding_source": "tenant_declared"}]
+
+
+@pytest.mark.asyncio
+async def test_unverified_account_cannot_be_named_when_verified_ones_exist(service, tenant_id) -> None:
+    await connect_verified_account(tenant_id, account_key=STORE)
+    with pytest.raises(MappingError, match="not a verified connection"):
+        await service.ingest_record(tenant_id, "shopify", "product", {"id": 1, "updated_at": iso(0)},
+                                    account_bindings={"shopify": {"source_account_key": "evil.myshopify.com"}})
+    with pytest.raises(MappingError, match="verified accounts"):
+        await service.declare_binding(tenant_id, "shopify", "evil.myshopify.com", "live")
+    with pytest.raises(MappingError, match="different realm"):
+        await service.ingest_record(tenant_id, "shopify", "product", {"id": 1, "updated_at": iso(0)},
+                                    account_bindings={"shopify": {"source_account_key": STORE,
+                                                                  "source_account_realm": "test"}})
+    status = await service.binding_status(tenant_id)
+    assert status[0]["verified"] is True and status[0]["binding_source"] == "verified_connection"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("state", "verified"), [("revoked", True), ("failed", True), ("connected", False)])
+async def test_revoked_failed_or_unverified_connections_do_not_verify(service, tenant_id, state, verified) -> None:
+    await connect_verified_account(tenant_id, account_key=STORE, state=state, verified=verified)
+    assert await service.resolver.verified_accounts(tenant_id) == {}
+
+
+@pytest.mark.asyncio
+async def test_verified_accounts_are_tenant_scoped(service, tenant_id) -> None:
+    await connect_verified_account(tenant_id + "_other", account_key=STORE)
+    assert await service.resolver.verified_accounts(tenant_id) == {}

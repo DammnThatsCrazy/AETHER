@@ -68,7 +68,12 @@ class AccountBindingRequest(BaseModel):
 async def correlation_catalog(request: Request) -> dict[str, Any]:
     require_permission(request, "read")
     active_tenant_id(request)
-    return {"providers": catalog(), "token_issuance_available": get_service().keyring is not None}
+    from actions.agent_correlation.certification.runner import load_report
+
+    report = load_report() or {}
+    status = {(r["provider"], r["kind"]): r.get("status", "unknown") for r in report.get("kinds", [])}
+    providers = [{**row, "certification": status.get((row["provider"], row["kind"]), "unknown")} for row in catalog()]
+    return {"providers": providers, "token_issuance_available": get_service().keyring is not None}
 
 
 @router.post(f"{PREFIX}/tasks", status_code=201)
@@ -108,8 +113,19 @@ async def put_account_binding(family: str, req: AccountBindingRequest, request: 
     tenant_id = active_tenant_id(request)
     if not family.isidentifier() or not family.islower():
         raise HTTPException(status_code=422, detail="family must be a lowercase identifier")
-    await get_service().bindings.put(tenant_id, family, req.source_account_key, req.source_account_realm)
-    return {"provider_family": family, "source_account_realm": req.source_account_realm}
+    try:
+        return await get_service().declare_binding(
+            tenant_id, family, req.source_account_key, req.source_account_realm
+        )
+    except MappingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get(f"{PREFIX}/account-bindings")
+async def list_account_bindings(request: Request) -> dict[str, Any]:
+    """Each family's effective binding and whether a verified connection backs it."""
+    require_permission(request, "read")
+    return {"bindings": await get_service().binding_status(active_tenant_id(request))}
 
 
 @router.get(f"{PREFIX}/tasks/{{task_ref}}/chain")

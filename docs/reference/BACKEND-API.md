@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:ee3e83b14d26779718de426817cec4cfcaaa3045453decb9c415570b86228b9f"
+  "services/api/actions/": "sha256:ba6f074778b02800ad5f3be9a25e193dbd77d14e741a801ee2bf749251cebf5e"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
@@ -4042,9 +4042,10 @@ Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABL
 
 - `POST /tasks` registers an agent task and returns a correlation token (requires `AGENT_CORRELATION_TOKEN_KEYS`; otherwise `503`).
 - `POST /observations/{provider}/{kind}` maps one vendor record (`shopify`, `stripe`, `ramp`, `cloudflare`, `openai`, `aether_mcp`) and returns its link decisions. A record the mapper cannot read returns `422`.
-- `PUT /account-bindings/{family}` declares the tenant's provider account.
+- `PUT /account-bindings/{family}` declares the tenant's provider account; when the family has verified provider connections, only one of those accounts is accepted (`422` otherwise).
+- `GET /account-bindings` lists each family's effective binding and whether a verified connection backs it.
 - `GET /tasks/{task_ref}/chain` and `GET /observations/{observation_id}/chain` return the evidence-graded chain with explicit gaps.
-- `GET /catalog` lists the mapped providers and roles.
+- `GET /catalog` lists the mapped providers and roles, with each kind's sandbox certification status from `config/agent_correlation_certification.json`.
 - `POST /mcp` is an MCP endpoint (JSON-RPC 2.0) with the `aether_register_task`, `aether_report_tool_call`, `aether_report_outcome`, and `aether_get_task_chain` tools.
 
 Only links with proof-class evidence project to the graph, as `CORRELATED_ACROSS_SOURCES` edges. See `docs/architecture/blueprints/universal-connector-runtime/agent-source-roles.md`.
