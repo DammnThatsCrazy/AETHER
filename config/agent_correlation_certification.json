@@ -77,9 +77,9 @@
       "status": "uncertified"
     },
     {
-      "fixtures": 1,
+      "fixtures": 2,
       "kind": "event",
-      "last_recorded_at": "2026-11-14T23:24:20+00:00",
+      "last_recorded_at": "2026-11-14T23:50:03+00:00",
       "provider": "stripe",
       "provider_api": [
         "{\"api_version\": \"2026-03-25.dahlia\", \"host\": \"api.stripe.com\", \"via\": \"stripe_connector_read\"}"

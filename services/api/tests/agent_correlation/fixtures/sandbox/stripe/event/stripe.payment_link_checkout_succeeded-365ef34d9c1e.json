@@ -1,0 +1,78 @@
+{
+  "account_bindings": {},
+  "certification": {
+    "companions": [
+      {
+        "actor_refs": [],
+        "correlation_tokens": [
+          "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        ],
+        "infrastructure_refs": [],
+        "object_refs": [],
+        "observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "occurred_at": "2026-11-14T23:13:42Z",
+        "provider_family": "aether_certification",
+        "schema_version": "1",
+        "signed_request": null,
+        "source_role": "agent_runtime",
+        "tenant_id": "aether_certification"
+      }
+    ],
+    "key_b64": "2GAznibPJupHxFC48otqM99T2ug107zxMZX2PVbQM1c",
+    "key_id": "cert",
+    "tenant_id": "aether_certification"
+  },
+  "expected": {
+    "links": [
+      {
+        "evidence_class": "DETERMINISTIC_BINDING",
+        "key_kind": "aether_correlation_token",
+        "observation_id": "stripe:evt_3UbqYgG4IgWgDCUX08C512I1",
+        "other_observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "status": "linked"
+      }
+    ],
+    "object_types": [
+      "payment_intent"
+    ],
+    "observation_count": 1,
+    "observation_digest": "d428aadabb2faa8a3ff36be77e62a0fa9adcdf07f55f4b3c7bed20d50d3b019c",
+    "roles": [
+      "system_of_record"
+    ],
+    "tokens": 1
+  },
+  "kind": "event",
+  "origin": "sandbox_recorded",
+  "provider": "stripe",
+  "provider_api": {
+    "api_version": "2026-03-25.dahlia",
+    "host": "api.stripe.com",
+    "via": "stripe_connector_read"
+  },
+  "realm": "test",
+  "record": {
+    "api_version": "2026-03-25.dahlia",
+    "context": "acct_1TOploG4IgWgDCUX",
+    "created": 1794699634,
+    "data": {
+      "object": {
+        "description": "",
+        "id": "pi_3UbqYgG4IgWgDCUX0p5vNIcB",
+        "livemode": false,
+        "metadata": {
+          "aether_correlation": "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        },
+        "object": "payment_intent",
+        "status": "succeeded"
+      }
+    },
+    "id": "evt_3UbqYgG4IgWgDCUX08C512I1",
+    "livemode": false,
+    "type": "payment_intent.succeeded"
+  },
+  "record_sha256": "365ef34d9c1e70f12ddb5b2e41a5cad4fe973eae911f897d2a75d5c88d95f855",
+  "recorded_at": "2026-11-14T23:50:03+00:00",
+  "recorder": "stripe.payment_link_checkout_succeeded",
+  "schema_version": "1"
+}

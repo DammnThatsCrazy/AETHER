@@ -62,9 +62,15 @@ source_hashes:
 Account bindings come from verified provider connections where they exist
 (see [Verified bindings](#verified-bindings)). Certification against
 provider sandboxes is built (see [Sandbox certification](#sandbox-certification)),
-and `stripe/event` is `sandbox_certified` from a real Stripe sandbox event
-(`payment_intent.created`, API version `2026-03-25.dahlia`), read through the
-Stripe connector. That recording showed that newer events name the owning
+and `stripe/event` is `sandbox_certified` from two real Stripe sandbox events
+read through the Stripe connector (API version `2026-03-25.dahlia`):
+
+- an existing `payment_intent.created`;
+- a `payment_intent.succeeded` from a $1.00 test-card payment on a sandbox
+  payment link. The link's PaymentIntent metadata carried a certification
+  token, and the payment joined the certification task by
+  `aether_correlation_token` (`DETERMINISTIC_BINDING`); replay reproduces that
+  link. That recording showed that newer events name the owning
 account in `context`, and the mapper now reads it. The other vendor kinds
 report `uncertified` in `config/agent_correlation_certification.json` until
 their sandboxes are recorded. Token issuance
@@ -346,7 +352,7 @@ proxy. Missing credentials skip a provider; they never certify it.
 | 3. Aether MCP bridge (done) | Agents register tasks and receive tokens; keys from `AGENT_CORRELATION_TOKEN_KEYS` | An end-to-end test registers a task over MCP, stamps the token into Stripe metadata, and links it |
 | 4. Projection (done) | `linked` verdicts become `CORRELATED_ACROSS_SOURCES` edges through the graph mutation gateway | Projected edges pass the graph write validator; candidates never project |
 | 5. Vendors per role (done for six) | Shopify, Stripe, Ramp, Cloudflare, OpenAI Agents, Aether MCP | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
-| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` certified from a real sandbox event; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
+| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` certified from real sandbox events, including the token round trip on a test payment; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
 | 7. Verified bindings (done) | Bindings from verified provider connections; declared scopes graded `TENANT_DECLARED` | Tests cover verified, declared, spoofed, realm-mismatched, revoked, and cross-tenant cases |
 
 Step 5 is the modularity test. A vendor that needs a change outside its own
