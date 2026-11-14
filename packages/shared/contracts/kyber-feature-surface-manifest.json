@@ -475,6 +475,22 @@
       ]
     },
     {
+      "feature_id": "patterns",
+      "aether_route": "/patterns",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/patterns",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
       "feature_id": "syndicates",
       "aether_route": "/syndicates",
       "tenant_parity_required": true,

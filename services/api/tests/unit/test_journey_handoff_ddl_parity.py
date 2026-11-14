@@ -46,4 +46,4 @@ def test_continuation_indexes_match_migration():
             except (ValueError, TypeError):
                 pass
     assert consts["JOURNEY_HANDOFF_CONTINUATION_INDEXES"] == JOURNEY_HANDOFF_CONTINUATION_INDEXES
-    assert consts["down_revision"] == "20261107_merge_rcp_activation_lineage_heads"
+    assert consts["down_revision"] == "20261114_pattern_discovery_stores"

@@ -1,7 +1,7 @@
 """journey handoffs: anonymous-id indexes for handoff continuation scope
 
 Revision ID: 20261114_journey_handoff_continuation
-Revises: 20261107_merge_rcp_activation_lineage_heads
+Revises: 20261114_pattern_discovery_stores
 Create Date: 2026-11-14
 
 The journey compiler walks redeemed handoffs by anonymous ID on either end to
@@ -15,7 +15,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261114_journey_handoff_continuation"
-down_revision = "20261107_merge_rcp_activation_lineage_heads"
+down_revision = "20261114_pattern_discovery_stores"
 branch_labels = None
 depends_on = None
 
