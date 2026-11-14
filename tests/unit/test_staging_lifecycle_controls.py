@@ -2570,3 +2570,41 @@ def test_release_lookup_errors_fall_back_for_sleep_and_stop_a_wake(tmp_path, cas
     )
     assert result.returncode == expected_exit, result.stdout + result.stderr
     assert not out.exists() or "backend_digest" not in out.read_text()
+
+
+@pytest.mark.parametrize("written", ["c" * 64, "sha256:" + "c" * 64])
+def test_release_lookup_accepts_the_checksum_format_delivery_writes(tmp_path, written):
+    """release_manifest.py --write-checksum writes bare hex, but the lookup
+    required a sha256: prefix, so every real release was rejected: the scheduled
+    wake could not start and the scheduled sleep could not reconcile (business
+    hours run 43556251961)."""
+    import os
+    import subprocess
+
+    digest = "sha256:" + "d" * 64
+    stub = f"""#!/bin/sh
+case "$*" in
+  *workflows/deploy.yml/runs*) echo "101 {_RELEASE_SHA}" ;;
+  *runs/101/artifacts*) echo 7 ;;
+  "run download"*) mkdir -p release; printf '%s\\n' '{written}' > release/release.json.sha256
+                   echo '{{"artifacts":{{"backend_image":{{"digest":"{digest}"}}}}}}' > release/release.json ;;
+esac
+"""
+    doc = _workflow_yaml(BUSINESS_HOURS)
+    run = next(step["run"] for job in doc["jobs"].values() for step in job["steps"]
+               if step.get("name") == "Find the newest approved release built from staging")
+    (tmp_path / "gh").write_text(stub)
+    (tmp_path / "gh").chmod(0o755)
+    out = tmp_path / "out"
+    for transition in ("wake", "sleep"):
+        out.unlink(missing_ok=True)
+        result = subprocess.run(
+            ["bash", "-c", run], capture_output=True, text=True, cwd=tmp_path,
+            env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "TRANSITION": transition,
+                 "REPO": "o/r", "GITHUB_OUTPUT": str(out)},
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        outputs = dict(line.split("=", 1) for line in out.read_text().splitlines())
+        assert outputs["checksum"] == "sha256:" + "c" * 64
+        assert outputs["backend_digest"] == digest
+        assert outputs["release_sha"] == _RELEASE_SHA
