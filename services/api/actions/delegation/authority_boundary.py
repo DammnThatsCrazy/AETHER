@@ -25,9 +25,11 @@ an absent constraint is "not constrained", not "violated":
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Optional
+
+from shared.temporal.instant import coerce_utc_lenient
 
 AUTHORITY_SCOPES = (
     "read_email", "send_email", "purchase", "trade_asset", "transfer_asset",
@@ -54,14 +56,22 @@ def _resource_matches(pattern: str, resource: str) -> bool:
 
 
 def _ts(value: Any) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        return value
-    if not value:
+    """The value as a UTC instant (naive input assumed UTC), or ``None``."""
+    if value in (None, ""):
         return None
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
+    moment = coerce_utc_lenient(value)
+    return None if moment is None else moment.astimezone(timezone.utc)
+
+
+def _spend_order(act: "ObservedAction") -> Optional[tuple[datetime, str]]:
+    """Chronological key for a spend: parsed UTC instant, then event id.
+
+    Timestamp text does not sort chronologically (``10:00:00Z`` sorts after
+    ``10:00:00.200000Z``; offsets compare by digits), so daily-limit checks
+    order and bucket spends by the normalized instant, as ``fact_order`` does
+    for agent facts."""
+    moment = _ts(act.occurred_at)
+    return None if moment is None else (moment, act.event_id)
 
 
 @dataclass(frozen=True)
@@ -156,13 +166,16 @@ def check_action(
     grants = [g for g in grants if g.get("grantee_entity_id") in (act.actor_ref, None)]
     if not grants:
         return BoundaryResult(UNKNOWN, None, ["no_recorded_grant"], evidence=[act.event_id])
-    day = (act.occurred_at or "")[:10]
-    spent = sum(
-        (_dec(p.amount) or Decimal(0) for p in prior_actions
-         if p.actor_ref == act.actor_ref and (p.occurred_at or "")[:10] == day
-         and (p.occurred_at or "") < (act.occurred_at or "") and p.event_id != act.event_id),
-        Decimal(0),
-    )
+    spent = Decimal(0)
+    key = _spend_order(act)
+    if key is not None:
+        day = key[0].date()  # UTC calendar day of the normalized instant
+        for p in prior_actions:
+            if p.actor_ref != act.actor_ref or p.event_id == act.event_id:
+                continue
+            prior_key = _spend_order(p)
+            if prior_key is not None and prior_key[0].date() == day and prior_key < key:
+                spent += _dec(p.amount) or Decimal(0)
     best: Optional[BoundaryResult] = None
     for grant in sorted(grants, key=lambda g: str(g.get("delegation_id") or "")):
         active = grant_active_at(grant, act.occurred_at)

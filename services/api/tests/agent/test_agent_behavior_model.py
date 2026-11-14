@@ -239,3 +239,25 @@ def test_a_derived_switch_after_an_abandoned_retry_is_kept():
     assert [(r["tool"], r["basis"]) for r in ep["retries"]] == [("A", "derived")]
     assert [(s["from_tool"], s["to_tool"], s["basis"]) for s in ep["switches"]] == [("A", "B", "derived")]
     assert ep["resolution"]["strategy"] == "switch"
+
+
+def test_numbered_attempts_on_the_same_tool_count_separately():
+    """Codex review on #871: deduplicating by tool alone collapsed
+    failed(A, 1) -> invoked(A, 2) -> invoked(A, 3) into one retry when the
+    intermediate result was missing; the reported attempt number tells them apart."""
+    fs = facts(
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "failed", "attempt": 1}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "invoked", "attempt": 2}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "invoked", "attempt": 3}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "t", "toolName": "A", "status": "succeeded", "attempt": 3}),
+    )
+    [ep] = failure_resolution(fs)
+    assert [r["basis"] for r in ep["retries"]] == ["derived", "derived"]
+    # An unnumbered notice and the numbered invocation it announces are one attempt.
+    announced = facts(
+        ("agent_tool_invocation_observed", "a", {"taskId": "u", "toolName": "A", "status": "failed", "attempt": 1}),
+        ("agent_tool_retried", "a", {"taskId": "u", "toolName": "A"}),
+        ("agent_tool_invocation_observed", "a", {"taskId": "u", "toolName": "A", "status": "succeeded", "attempt": 2}),
+    )
+    [ep] = failure_resolution(announced)
+    assert [r["basis"] for r in ep["retries"]] == ["observed"]
