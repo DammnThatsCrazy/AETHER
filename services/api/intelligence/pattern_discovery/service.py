@@ -19,14 +19,19 @@ from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
 
 from .baselines import PatternBaselineRepository
-from .contracts import PATTERN_KINDS, QUEUE_STATUSES, STATUS_DEPRECATED, STATUS_PROMOTED
+from .contracts import (
+    KIND_NOVEL_MOTIF, KIND_TRAFFIC_ANOMALY, PATTERN_KINDS, QUEUE_STATUSES, STATUS_DEPRECATED,
+    STATUS_PROMOTED,
+)
 from .detectors import DETECTORS
 from .engine import new_run_id, run_discovery
-from .extraction import extract_payload
-from .projections import entity_context, promote_to_risk, similar_patterns
+from .extraction import extract_events, extract_payload
+from .graph import project_promotion, revoke_promotion, tenant_graph_edges
+from .ml import score_windows
+from .projections import consent_allows, entity_context, promote_to_risk, similar_patterns
 from .registry import (
     PatternDiscoveryRunRepository, PatternFeedbackRepository, PatternRegistryRepository,
-    apply_deprecation, apply_promotion, apply_review, mark_unseen,
+    apply_deprecation, apply_promotion, apply_review, mark_unseen, merge_duplicate,
 )
 
 logger = get_logger("aether.pattern_discovery.service")
@@ -38,6 +43,21 @@ def _config():
     return settings.pattern_discovery
 
 
+def _advances(last: Optional[str], current: str, window_hours: int) -> bool:
+    """Fold a run into the baseline only once its window has moved on by at
+    least half a window. Overlapping scheduled runs over mostly the same events
+    would otherwise count one stretch of activity many times (and make an
+    ongoing pattern look "familiar" within hours)."""
+    if not last:
+        return True
+    from shared.temporal.instant import coerce_utc_lenient
+
+    a, b = coerce_utc_lenient(last), coerce_utc_lenient(current)
+    if a is None or b is None:
+        return True
+    return (b - a).total_seconds() >= window_hours * 3600 / 2
+
+
 class PatternDiscoveryService:
     def __init__(self, *, registry: Optional[PatternRegistryRepository] = None,
                  baselines: Optional[PatternBaselineRepository] = None,
@@ -45,7 +65,10 @@ class PatternDiscoveryService:
                  runs: Optional[PatternDiscoveryRunRepository] = None,
                  event_reader: Optional[Any] = None,
                  risk_store: Optional[Any] = None,
-                 subject_resolver: Optional[Any] = None) -> None:
+                 subject_resolver: Optional[Any] = None,
+                 consent_reader: Optional[Any] = None,
+                 graph_client: Optional[Any] = None,
+                 ml_client: Optional[Any] = None) -> None:
         self.registry = registry or PatternRegistryRepository()
         self.baselines = baselines or PatternBaselineRepository()
         self.feedback = feedback or PatternFeedbackRepository()
@@ -53,6 +76,9 @@ class PatternDiscoveryService:
         self._event_reader = event_reader
         self._risk_store = risk_store
         self._resolver = subject_resolver
+        self._consent = consent_reader
+        self._graph = graph_client
+        self._ml_client = ml_client
 
     # ── Evidence ─────────────────────────────────────────────────────────────
     async def _read_events(self, tenant_id: str, window_hours: int, max_events: int) -> tuple[list[dict], dict]:
@@ -95,12 +121,35 @@ class PatternDiscoveryService:
         baseline = await self.baselines.get(tenant_id)
         feedback = await self.feedback.aggregate(tenant_id)
         run_id = new_run_id(tenant_id)
-        result = run_discovery(tenant_id, rows, baseline=baseline, feedback=feedback, edges=edges,
-                               kinds=kinds, run_id=run_id)
+        extraction = extract_events(rows, tenant_id)
+
+        graph_edges = list(edges or [])
+        if edges is None and cfg.graph_motifs_enabled and (not kinds or KIND_NOVEL_MOTIF in kinds):
+            graph_edges, coverage["graph"] = await tenant_graph_edges(tenant_id, self._graph)
+        else:
+            coverage["graph"] = {"graph": "inline" if edges is not None else "disabled", "edges": len(graph_edges)}
+
+        ml_scores: dict[str, float] = {}
+        if cfg.ml_scoring_enabled and (not kinds or KIND_TRAFFIC_ANOMALY in kinds) and extraction.events:
+            ml_scores, coverage["ml"] = await score_windows(extraction, self._ml_client)
+        else:
+            coverage["ml"] = {"status": "disabled"}
+
+        prior = [r for r in await self.registry.scan(tenant_id, limit=2_000)
+                 if r.get("status") not in (STATUS_DEPRECATED, "duplicate", "benign")]
+        result = run_discovery(tenant_id, rows, baseline=baseline, feedback=feedback, edges=graph_edges,
+                               kinds=kinds, run_id=run_id, extraction=extraction,
+                               ml_window_scores=ml_scores, prior_patterns=prior)
 
         saved: list[dict[str, Any]] = []
+        merged = 0
         for record in result.records:
-            saved.append(await self.registry.upsert_detected(record))
+            stored = await self.registry.upsert_detected(record)
+            saved.append(stored)
+            if stored.get("status") == "duplicate" and stored.get("duplicate_of"):
+                target = await self.registry.mutate(
+                    tenant_id, stored["duplicate_of"], lambda row, dup=stored: merge_duplicate(row, dup))
+                merged += bool(target)
         seen = {r["pattern_id"] for r in result.records}
         aged = deprecated = 0
         for existing in await self.registry.scan(tenant_id):
@@ -112,8 +161,19 @@ class PatternDiscoveryService:
             aged += 1
             if updated and updated.get("status") == STATUS_DEPRECATED:
                 deprecated += 1
-        if rows:
-            await self.baselines.save(tenant_id, result.apply_to_baseline)
+        baseline_updated = False
+        window_end = result.stats.get("window_end")
+        if rows and window_end and _advances(baseline.get("last_window_end"), window_end, window_hours):
+            def fold(current: dict[str, Any]) -> dict[str, Any]:
+                out = result.apply_to_baseline(current)
+                out["last_window_end"] = window_end
+                return out
+
+            await self.baselines.save(tenant_id, fold)
+            baseline_updated = True
+        elif rows:
+            coverage["baseline"] = {"status": "skipped_overlapping_window",
+                                    "last_window_end": baseline.get("last_window_end"), "window_end": window_end}
 
         by_status: dict[str, int] = {}
         for r in saved:
@@ -131,9 +191,10 @@ class PatternDiscoveryService:
             "patterns_detected": len(saved),
             "patterns_by_status_after_merge": by_status,
             "pattern_ids": [r["pattern_id"] for r in saved][:500],
+            "duplicates_merged": merged,
             "aged_patterns": aged,
             "auto_deprecated": deprecated,
-            "baseline_updated": bool(rows),
+            "baseline_updated": baseline_updated,
         }
         await self.runs.save_run(run)
         metrics.increment("pattern_discovery_runs_total", labels={"tenant_scoped": "true"})
@@ -173,7 +234,38 @@ class PatternDiscoveryService:
         return row
 
     async def entity_context(self, tenant_id: str, entity_key: str) -> dict[str, Any]:
-        return entity_context(entity_key, await self.registry.for_entity(tenant_id, entity_key, limit=200))
+        """Advisory context, released only with an affirmative analytics consent receipt."""
+        allowed, receipt, reason = await consent_allows(tenant_id, entity_key, reader=self._consent)
+        if not allowed:
+            return {"entity": entity_key, "withheld": True, "reason_code": reason, "advisory": True,
+                    "claim_state": "inferred", "emerging_patterns": [], "reviewed_patterns": [],
+                    "unresolved_identity_overlaps": [], "co_implicated_entities": [],
+                    "kinds": [], "risk_categories": [], "counts": {"open": 0, "reviewed": 0, "total": 0}}
+        ctx = entity_context(entity_key, await self.registry.for_entity(tenant_id, entity_key, limit=200))
+        ctx["withheld"] = False
+        ctx["consent_receipt_id"] = receipt
+        return ctx
+
+    async def section(self, tenant_id: str, entity_key: str, surface: str) -> dict[str, Any]:
+        """Profile 360 / Agent 360 / Risk 360 section for one entity (consent-gated)."""
+        from .sections import SECTIONS
+
+        builder = SECTIONS[surface]
+        allowed, receipt, reason = await consent_allows(tenant_id, entity_key, reader=self._consent)
+        if not allowed:
+            out = builder(entity_key, [])
+            out.update({"withheld": True, "reason_code": reason})
+            return out
+        # A profile id may be a raw user id or a canonical entity id: read both keys.
+        kind, _, ident = entity_key.partition(":")
+        keys = [entity_key] + ([f"entity:{ident}"] if surface == "profile360" and kind == "user" else [])
+        rows: dict[str, dict[str, Any]] = {}
+        for key in keys:
+            for row in await self.registry.for_entity(tenant_id, key, limit=200):
+                rows.setdefault(row["pattern_id"], row)
+        out = builder(entity_key, list(rows.values()))
+        out.update({"withheld": False, "consent_receipt_id": receipt})
+        return out
 
     async def stats(self, tenant_id: str) -> dict[str, Any]:
         from .scoring import calibration_factors, suppressed_families
@@ -224,6 +316,9 @@ class PatternDiscoveryService:
         )
         if updated is not None:
             await self.feedback.record(tenant_id, updated, reviewer_id=reviewer_id, verdict=verdict, reason=reason)
+            if verdict == "duplicate" and duplicate_of:
+                await self.registry.mutate(tenant_id, duplicate_of,
+                                           lambda row, dup=updated: merge_duplicate(row, dup))
             metrics.increment("pattern_discovery_reviews_total", labels={"verdict": verdict})
         return updated
 
@@ -236,13 +331,19 @@ class PatternDiscoveryService:
         outcomes: list[dict[str, Any]] = []
         risk_status = "disabled"
         if _config().risk_promotion_enabled:
-            outcomes = await promote_to_risk(updated, resolver=self._resolver, store=self._risk_store)
+            outcomes = await promote_to_risk(updated, resolver=self._resolver, store=self._risk_store,
+                                             consent_reader=self._consent)
             risk_status = "written" if any(o["status"] == "written" for o in outcomes) else "no_resolvable_subjects"
+
+        graph_report: dict[str, Any] = {"status": "disabled"}
+        if _config().graph_promotion_enabled:
+            graph_report = await project_promotion(updated, outcomes, self._graph)
 
         def record_outcomes(row: dict[str, Any]) -> dict[str, Any]:
             promotion = dict(row.get("promotion") or {})
             promotion["risk_signals"] = outcomes
             promotion["risk_projection"] = risk_status
+            promotion["graph_projection"] = graph_report
             row["promotion"] = promotion
             return row
 
@@ -251,8 +352,21 @@ class PatternDiscoveryService:
         return final
 
     async def deprecate(self, tenant_id: str, pid: str, *, actor: str, reason: str) -> Optional[dict[str, Any]]:
-        return await self.registry.mutate(tenant_id, pid,
-                                          lambda row: apply_deprecation(row, actor=actor, reason=reason))
+        """Deprecate; a promoted pattern's graph memberships are soft-revoked too.
+        Its Risk360 signals stay: they are attributed history the risk plane owns."""
+        updated = await self.registry.mutate(tenant_id, pid,
+                                             lambda row: apply_deprecation(row, actor=actor, reason=reason))
+        if updated is not None and (updated.get("promotion") or {}).get("graph_projection", {}).get("status") == "projected":
+            report = await revoke_promotion(updated, self._graph)
+
+            def note(row: dict[str, Any]) -> dict[str, Any]:
+                promotion = dict(row.get("promotion") or {})
+                promotion["graph_revocation"] = report
+                row["promotion"] = promotion
+                return row
+
+            updated = await self.registry.mutate(tenant_id, pid, note)
+        return updated
 
 
 _service: Optional[PatternDiscoveryService] = None

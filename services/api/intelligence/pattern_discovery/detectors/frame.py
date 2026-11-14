@@ -44,6 +44,8 @@ class DiscoveryFrame:
     config: DetectorConfig = field(default_factory=DetectorConfig)
     external_edges: list[dict[str, Any]] = field(default_factory=list)
     known_motif_signatures: frozenset = frozenset()
+    #: ``{hour_iso: score}`` from the ML anomaly model (supplied by the service).
+    ml_window_scores: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.events: list[ExtractedEvent] = [e for e in self.extraction.events if e.entity]
@@ -80,6 +82,34 @@ class DiscoveryFrame:
     def token_rates(self) -> dict[str, float]:
         counts = Counter(e.token for e in self.events)
         return {t: c / self.window_hours for t, c in counts.items()}
+
+    def segment_rates(self) -> dict[str, float]:
+        """Events/hour per ``dimension=value|token``."""
+        counts: Counter = Counter()
+        for e in self.events:
+            for dim, val in e.segments.items():
+                counts[f"{dim}={val}|{e.token}"] += 1
+        return {k: c / self.window_hours for k, c in counts.items()}
+
+    def hour_of_week_rates(self, max_tokens: int = 300) -> dict[str, dict[int, float]]:
+        """Per token: mean events per clock hour for each hour-of-week slot the
+        window covers (zero-activity hours inside the window count as zero)."""
+        if self.window_start is None:
+            return {}
+        start = self.window_start.replace(minute=0, second=0, microsecond=0)
+        hours = int((self.window_end - start).total_seconds() // 3600) + 1
+        if hours > 24 * 28:
+            return {}
+        slot_hours: Counter = Counter()
+        for i in range(hours):
+            h = start + timedelta(hours=i)
+            slot_hours[h.weekday() * 24 + h.hour] += 1
+        per: dict[str, Counter] = defaultdict(Counter)
+        for e in self.events:
+            if e.ts:
+                per[e.token][e.ts.weekday() * 24 + e.ts.hour] += 1
+        top = sorted(per, key=lambda t: -sum(per[t].values()))[:max_tokens]
+        return {t: {slot: per[t].get(slot, 0) / n for slot, n in slot_hours.items()} for t in top}
 
     def entities_share_ok(self, n: int) -> bool:
         if self.entity_count <= 0:

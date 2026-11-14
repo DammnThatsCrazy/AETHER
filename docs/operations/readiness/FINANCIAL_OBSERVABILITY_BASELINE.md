@@ -32,13 +32,13 @@ source_hashes:
   "config/readiness/features/interoperability-intelligence.yaml": "sha256:99f3bd9c8f300ddaf4acddc0f8fa1ca1398c40a85714f23ea838c9990b0b2293"
   "config/readiness/features/payment-rail-observability.yaml": "sha256:35f8b2e23e1f314c1019e034ecea6e4c18505b5b30f4dd306c5b7dd9c5aea608"
   "config/readiness/features/stablecoin-intelligence.yaml": "sha256:5c29163de8ee74d854a0b0d51f7dd96dcfc0d27a05f3bb1d3b82fd9b7549f14e"
-  "config/storage_policies.yaml": "sha256:4a44084cac17fff5155b4fc04bf4e36fc3fee1bae95fba683b8cdb55ada9b066"
+  "config/storage_policies.yaml": "sha256:89c15e41e0de21335973835b9bef7e3a56c156ba2f12342ec7bd52fdb0ff18c6"
   "docs/_generated/adapter-certification-matrix.json": "sha256:30c99f26bb77d405851ce92caa915c358988e140e290808a21d538f594fdc7de"
-  "services/api/config/settings.py": "sha256:a4894768d226d29813ac9b1b4e75b4e040e303dfb546d8a66b568fd1432a7655"
-  "services/api/main.py": "sha256:832ff34ca99d9e46ed0c1eca0ef43338525630affd1cd763ab1189065f2d9994"
+  "services/api/config/settings.py": "sha256:f58b720298a4277ce0a59b6325682a2f059182866886101a2f43ef5a1e4df12f"
+  "services/api/main.py": "sha256:f2d3b001381a97639dfdd7574e85f6ce4718eaa9cd00b1c45ab22801734b46b8"
   "services/api/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
+  "services/api/workers/runtime/specs.py": "sha256:bed3da6f0117ac5a47f856c6405b6e2553bf0ad568c740e5716d14f3c0b9b884"
 ---
 
 # Financial Observability Baseline Manifest

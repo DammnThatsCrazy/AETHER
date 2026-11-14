@@ -122,6 +122,38 @@ def signals_from_pattern(artifact: Any, *, subject_kind: str, subject_id: str, t
 
 
 Resolver = Callable[[str, str], Awaitable[Optional[tuple[str, str]]]]
+ConsentReader = Callable[..., Awaitable[Any]]
+CONSENT_PURPOSE = "analytics"
+
+
+async def consent_allows(tenant_id: str, entity_key: str, *, subject_id: Optional[str] = None,
+                         reader: Optional[ConsentReader] = None) -> tuple[bool, Optional[str], Optional[str]]:
+    """``(allowed, receipt_id, reason_code)`` for processing an entity's patterns.
+
+    Uses the authoritative server consent store, fail-closed, exactly like the
+    Agent 360 Risk360 read. ``subject_id`` (a resolved canonical id) wins over
+    the raw key; ``anon:`` keys are evaluated as anonymous ids. Anything the
+    authority cannot evaluate is a denial.
+    """
+    if reader is None:
+        from governance.consent.authority import evaluate_consent_with_receipt
+
+        reader = evaluate_consent_with_receipt
+    kind, _, ident = entity_key.partition(":")
+    anon = ident if kind == "anon" and not subject_id else None
+    subject = subject_id or (ident if kind != "anon" else None)
+    try:
+        result = await reader(tenant_id=tenant_id, subject_id=subject, anonymous_id=anon,
+                              purpose=CONSENT_PURPOSE)
+    except Exception as exc:  # noqa: BLE001 - fail closed
+        logger.warning("pattern_discovery.consent_lookup_failed",
+                       extra={"tenant_id": tenant_id, "error_type": type(exc).__name__})
+        return False, None, "consent_lookup_failed"
+    allowed = getattr(result, "allowed", False) is True
+    receipt = getattr(result, "receipt_id", None)
+    if allowed and isinstance(receipt, str) and receipt.strip():
+        return True, receipt, None
+    return False, None, getattr(result, "reason_code", None) or "consent_not_granted"
 
 
 async def resolve_subject(tenant_id: str, entity_key: str) -> Optional[tuple[str, str]]:
@@ -149,12 +181,15 @@ async def resolve_subject(tenant_id: str, entity_key: str) -> Optional[tuple[str
 
 
 async def promote_to_risk(pattern: dict[str, Any], *, resolver: Optional[Resolver] = None,
-                          store: Optional[Any] = None) -> list[dict[str, Any]]:
+                          store: Optional[Any] = None,
+                          consent_reader: Optional[ConsentReader] = None) -> list[dict[str, Any]]:
     """Write attributed Risk360 signals for every resolvable affected subject.
 
     Returns one outcome row per affected entity: ``written`` (with signal ids),
     ``unresolved_subject`` or ``failed``. A failure on one subject never stops
-    the others.
+    the others. Each resolved subject also needs an affirmative analytics
+    consent receipt (``consent_withheld`` otherwise), as Agent 360 requires
+    before it reads Risk360.
     """
     if pattern.get("status") not in SIGNAL_STATUSES:
         raise ValueError("only promoted or reviewer-confirmed patterns produce risk signals")
@@ -174,13 +209,19 @@ async def promote_to_risk(pattern: dict[str, Any], *, resolver: Optional[Resolve
         if subject is None:
             outcomes.append({"entity": key, "status": "unresolved_subject"})
             continue
+        allowed, receipt, reason = await consent_allows(tenant_id, key, subject_id=subject[1],
+                                                        reader=consent_reader)
+        if not allowed:
+            outcomes.append({"entity": key, "status": "consent_withheld", "reason_code": reason})
+            continue
         try:
             signals = pattern_risk_signals(pattern, subject_kind=subject[0], subject_id=subject[1],
                                            source_entity_key=key)
             for sig in signals:
                 await store.upsert_scoped(tenant_id, sig.signal_id, sig.model_dump(mode="json"))
             outcomes.append({"entity": key, "status": "written", "subject_kind": subject[0],
-                             "subject_id": subject[1], "signal_ids": [s.signal_id for s in signals]})
+                             "subject_id": subject[1], "consent_receipt_id": receipt,
+                             "signal_ids": [s.signal_id for s in signals]})
         except Exception as exc:  # noqa: BLE001
             logger.warning("pattern_discovery.risk_write_failed",
                            extra={"tenant_id": tenant_id, "error_type": type(exc).__name__})

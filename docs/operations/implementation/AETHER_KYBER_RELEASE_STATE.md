@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:a014adb603a1fb8b56f4653bdc3e8708a410fd8d4e35ec838af9b984d26a6b99"
+  "scripts/production_status.py": "sha256:dcf36a012fc9a8cf32ccf243ccc046bbb56b8befbd43a64a3d12a95539bf3a05"
 ---
 
 # AETHER × Kyber Release State
@@ -175,8 +175,10 @@ with evidence paths.
 | payment rail observability | 3 |
 | semantic intelligence | 2 |
 | card-linked payment rails | 2 |
+| pattern discovery | 2 |
 
-**Overall: ~3.77 / 5 — pre-production.** Three areas sit at 5 (Profile 360,
+**Overall: ~3.68 / 5 — pre-production** (was ~3.77 before pattern discovery joined the
+scorecard at 2/5 on 2026-11-14 — denominator growth, not a regression). Three areas sit at 5 (Profile 360,
 customer frontend, campaign intelligence). Most core surfaces are 4
 (release-ready with minor gaps, tested against in-memory/local fallbacks). The
 economic domains (stablecoin/derivatives/interop/payment-rail) sit at 3, and the

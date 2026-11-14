@@ -59,6 +59,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/geo/:level/:geoId` | geographic drilldown | no | A | A | A | A | I | `geo-data-truth.test.tsx` |
 | `/signals` | notification inbox, alert rules, digest preferences | no | A | A | A | A | I | `signals-page.test.tsx` |
 | `/risk` | agent capability findings, investigations, data quality | no | A | A | A | A | I | `risk-page.test.tsx` |
+| `/patterns` | `/v1/intelligence/patterns*` | no | A | A | A | A | A | `pattern-discovery-surfaces.test.tsx` |
 | `/syndicates` | population groups and discovered graph clusters | no | A | A | A | A | I | `syndicates-page.test.tsx` |
 | `/syndicates/:syndicateId` | population group, rules and members | no | I | A | A | A | I | `syndicates-page.test.tsx` |
 | `/relationships` | graph traverse and path reads | no | A | A | A | A | I | `relationships-page.test.tsx` |
@@ -195,15 +196,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 166 data-bearing route patterns above: 77 Aether and
+The denominator is the 167 data-bearing route patterns above: 78 Aether and
 89 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 36 / 166 (21.7%) | tracked for every route |
-| Empty-state assertions | 151 / 166 (91.0%) | at least 90% overall |
-| Error/unavailable assertions | 132 / 166 (79.5%) | 100% of critical routes |
-| Populated-state assertions | 66 / 166 (39.8%) | tracked for every route |
+| Explicit loading-state assertions | 37 / 167 (22.2%) | tracked for every route |
+| Empty-state assertions | 152 / 167 (91.0%) | at least 90% overall |
+| Error/unavailable assertions | 133 / 167 (79.6%) | 100% of critical routes |
+| Populated-state assertions | 67 / 167 (40.1%) | tracked for every route |
 | Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

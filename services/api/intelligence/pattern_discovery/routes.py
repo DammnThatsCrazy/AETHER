@@ -16,6 +16,10 @@ Endpoints:
     POST /v1/intelligence/patterns/{pattern_id}/promote  promote to Risk360 (admin)
     POST /v1/intelligence/patterns/{pattern_id}/deprecate
 
+    GET  /v1/profile/{user_id}/patterns                  Profile 360 discovered-pattern section
+    GET  /v1/agent/{agent_id}/patterns                   Agent 360 discovered-pattern section
+    GET  /v1/risk360/{kind}/{id}/patterns                Risk 360 pattern findings
+
     GET  /v1/kyber/patterns/queue                        operator discovery queue
     GET  /v1/kyber/patterns/stats
     POST /v1/kyber/patterns/runs
@@ -44,6 +48,9 @@ from .registry import LifecycleError
 from .service import get_service
 
 router = APIRouter(prefix="/v1/intelligence/patterns", tags=["Pattern Discovery"])
+profile_router = APIRouter(prefix="/v1/profile", tags=["Profile 360"])
+agent_router = APIRouter(prefix="/v1/agent", tags=["Agent"])
+risk_router = APIRouter(prefix="/v1/risk360", tags=["Risk 360"])
 kyber_router = APIRouter(
     prefix="/v1/kyber/patterns",
     tags=["Kyber Pattern Discovery"],
@@ -212,6 +219,43 @@ async def promote_pattern(pattern_id: str, body: PromoteRequest, request: Reques
 async def deprecate_pattern(pattern_id: str, body: DeprecateRequest, request: Request):
     tenant_id, actor = _tenant(request, Permissions.WRITE)
     return _ok(await _deprecate(tenant_id, pattern_id, body, actor))
+
+
+# ── 360 sections ─────────────────────────────────────────────────────────────
+
+_RISK_SUBJECT_KINDS = {"entity": "entity", "user": "user", "agent": "agent", "wallet": "wallet",
+                       "anon": "anon", "session": "session"}
+
+
+def _ref(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw or len(raw) > 400 or "/" in raw:
+        raise BadRequestError("invalid entity id")
+    return raw
+
+
+@profile_router.get("/{user_id}/patterns")
+async def profile_patterns(user_id: str, request: Request):
+    """Discovered patterns involving this profile (Profile 360 section)."""
+    tenant_id, _ = _tenant(request, Permissions.READ)
+    return _ok(await get_service().section(tenant_id, f"user:{_ref(user_id)}", "profile360"))
+
+
+@agent_router.get("/{agent_id}/patterns")
+async def agent_patterns(agent_id: str, request: Request):
+    """Discovered patterns involving this agent (Agent 360 section)."""
+    tenant_id, _ = _tenant(request, Permissions.READ)
+    return _ok(await get_service().section(tenant_id, f"agent:{_ref(agent_id)}", "agent360"))
+
+
+@risk_router.get("/{subject_kind}/{subject_id}/patterns")
+async def risk_patterns(subject_kind: str, subject_id: str, request: Request):
+    """Pattern-based findings for a Risk 360 subject."""
+    tenant_id, _ = _tenant(request, Permissions.READ)
+    kind = _RISK_SUBJECT_KINDS.get(subject_kind)
+    if kind is None:
+        raise BadRequestError(f"subject_kind must be one of {sorted(_RISK_SUBJECT_KINDS)}")
+    return _ok(await get_service().section(tenant_id, f"{kind}:{_ref(subject_id)}", "risk360"))
 
 
 # ── Kyber operator routes ────────────────────────────────────────────────────

@@ -51,6 +51,11 @@ _LABELS = {
 _ATTR_FEATURES = {"device", "ip", "wallet", "payment_instrument", "email"}
 
 
+def _cohort(entity: str) -> str:
+    kind = entity.split(":", 1)[0]
+    return {"user": "human", "entity": "human", "anon": "anonymous", "session": "anonymous"}.get(kind, kind)
+
+
 def _features(events) -> dict[str, float]:
     f: dict[str, float] = {}
     hours = {(e.ts.date(), e.ts.hour) for e in events if e.ts}
@@ -80,30 +85,44 @@ def _features(events) -> dict[str, float]:
 
 
 def detect_outliers(frame: DiscoveryFrame) -> DetectorOutput:
+    """Robust outliers *within each cohort*: agents are compared with agents,
+    people with people, anonymous traffic with anonymous traffic. A cohort
+    smaller than ``outlier_min_population`` is not scored."""
     cfg = frame.config
-    if len(frame.by_entity) < cfg.outlier_min_population:
-        return DetectorOutput(NAME, [], {}, {"population": len(frame.by_entity), "reported": 0})
     feats = {e: _features(evs) for e, evs in frame.by_entity.items()}
-    names = sorted({k for f in feats.values() for k in f})
-    stats = {}
-    for name in names:
-        values = [f[name] for f in feats.values() if name in f]
-        if len(values) >= cfg.outlier_min_population and len(set(values)) > 1:
-            stats[name] = robust_stats(values)
+    cohorts: dict[str, list[str]] = defaultdict(list)
+    for entity in feats:
+        cohorts[_cohort(entity)].append(entity)
     groups: dict[tuple[str, ...], list[tuple[str, dict]]] = defaultdict(list)
-    for entity, f in feats.items():
-        extreme = {}
-        for name, (med, sigma) in stats.items():
-            if name not in f or f[name] < _FLOORS.get(name, 0.0):
-                continue
-            z = (f[name] - med) / sigma
-            if z >= cfg.outlier_z:
-                extreme[name] = round(z, 2)
-        if extreme:
-            groups[tuple(sorted(extreme))].append((entity, {n: (f[n], extreme[n]) for n in extreme}))
+    cohort_stats: dict[str, dict[str, tuple[float, float]]] = {}
+    for cohort, members in cohorts.items():
+        if len(members) < cfg.outlier_min_population:
+            continue
+        stats = {}
+        names = sorted({k for m in members for k in feats[m]})
+        for name in names:
+            values = [feats[m][name] for m in members if name in feats[m]]
+            if len(values) >= cfg.outlier_min_population and len(set(values)) > 1:
+                stats[name] = robust_stats(values)
+        cohort_stats[cohort] = stats
+        for entity in members:
+            f = feats[entity]
+            extreme = {}
+            for name, (med, sigma) in stats.items():
+                if name not in f or f[name] < _FLOORS.get(name, 0.0):
+                    continue
+                z = (f[name] - med) / sigma
+                if z >= cfg.outlier_z:
+                    extreme[name] = round(z, 2)
+            if extreme:
+                groups[(cohort, *sorted(extreme))].append((entity, {n: (f[n], extreme[n]) for n in extreme}))
+    if not cohort_stats:
+        return DetectorOutput(NAME, [], {}, {"population": len(feats), "reported": 0})
 
     patterns: list[RawPattern] = []
     for key in sorted(groups, key=lambda k: (-len(groups[k]), k))[: cfg.max_patterns_per_detector]:
+        cohort, features = key[0], key[1:]
+        stats = cohort_stats[cohort]
         members = sorted(groups[key])
         ents = [m for m, _ in members]
         if not frame.entities_share_ok(len(ents)):
@@ -111,18 +130,19 @@ def detect_outliers(frame: DiscoveryFrame) -> DetectorOutput:
         evs = [ev for e in ents for ev in frame.by_entity[e]]
         first, last = bounds(evs)
         top_z = max(z for _m, d in members for _v, z in d.values())
-        labels = [_LABELS.get(k, k) for k in key]
-        attr_types = [k.replace("distinct_", "") for k in key if k.replace("distinct_", "") in _ATTR_FEATURES]
+        labels = [_LABELS.get(k, k) for k in features]
+        attr_types = [k.replace("distinct_", "") for k in features if k.replace("distinct_", "") in _ATTR_FEATURES]
+        key = features
         patterns.append(RawPattern(
             kind=KIND_OUTLIER,
-            signature={"extreme_features": list(key)},
-            title=f"Extreme {' + '.join(labels)}",
+            signature={"extreme_features": list(key), "cohort": cohort},
+            title=f"Extreme {' + '.join(labels)} among {cohort} entities",
             summary=(f"{plural(len(ents), 'entity')} are extreme on {', '.join(labels)} "
-                     f"(robust z up to {top_z:.1f} against {len(feats)} entities)."),
+                     f"(robust z up to {top_z:.1f} against {len(cohorts[cohort])} {cohort} entities)."),
             affected_entities=ents,
             evidence=[
                 EvidenceItem("feature_extremes", "observed", 0.1, {
-                    "population": len(feats),
+                    "population": len(cohorts[cohort]), "cohort": cohort,
                     "population_median": {k: round(stats[k][0], 3) for k in key},
                     "entities": [{"entity": m, "values": {n: {"value": round(v, 3), "robust_z": z} for n, (v, z) in d.items()}}
                                  for m, d in members[:20]],
@@ -144,10 +164,11 @@ def detect_outliers(frame: DiscoveryFrame) -> DetectorOutput:
                  "note": "Unresolved identity can fold several real people into one entity, inflating its counts."},
             ],
             novelty=1.0,
-            baseline={"population": len(feats), "max_robust_z": top_z},
+            baseline={"population": len(cohorts[cohort]), "cohort": cohort, "max_robust_z": top_z},
             episode_count=len(evs),
             detector=NAME,
         ))
     return DetectorOutput(NAME, patterns, {}, {
-        "population": len(feats), "features": len(stats), "groups": len(groups), "reported": len(patterns),
+        "population": len(feats), "cohorts": {c: len(m) for c, m in cohorts.items()},
+        "groups": len(groups), "reported": len(patterns),
     })

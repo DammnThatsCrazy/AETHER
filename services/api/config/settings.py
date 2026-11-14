@@ -1436,15 +1436,25 @@ class FraudIntelligenceConfig:
 class PatternDiscoveryConfig:
     """Governed discovery of unknown patterns (intelligence/pattern_discovery).
 
-    ``enabled`` mounts the tenant and Kyber routes. Discovery never writes
-    canonical graph facts; ``risk_promotion_enabled`` controls whether a
-    reviewer's promotion also writes attributed Risk360 signals.
+    ``enabled`` mounts the tenant and Kyber routes. Discovery itself never
+    writes canonical graph facts. ``risk_promotion_enabled`` /
+    ``graph_promotion_enabled`` control what a reviewer's promotion writes
+    (attributed Risk360 signals / governed RiskCluster membership edges).
+    ``graph_motifs_enabled`` lets motif discovery read the tenant's canonical
+    graph; ``ml_scoring_enabled`` scores hourly traffic windows with the ML
+    ``anomaly_detection`` model; ``scheduler_enabled`` runs discovery for
+    every active tenant every ``scheduler_interval_minutes``.
     """
 
     enabled: bool = _env_bool("AETHER_PATTERN_DISCOVERY_ENABLED", False)
     window_hours: int = _env_int("PATTERN_DISCOVERY_WINDOW_HOURS", 72)
     max_events: int = _env_int("PATTERN_DISCOVERY_MAX_EVENTS", 50_000)
     risk_promotion_enabled: bool = _env_bool("AETHER_PATTERN_RISK_PROMOTION_ENABLED", True)
+    graph_promotion_enabled: bool = _env_bool("AETHER_PATTERN_GRAPH_PROMOTION_ENABLED", True)
+    graph_motifs_enabled: bool = _env_bool("PATTERN_DISCOVERY_GRAPH_MOTIFS_ENABLED", True)
+    ml_scoring_enabled: bool = _env_bool("PATTERN_DISCOVERY_ML_ENABLED", False)
+    scheduler_enabled: bool = _env_bool("PATTERN_DISCOVERY_SCHEDULER_ENABLED", False)
+    scheduler_interval_minutes: int = _env_int("PATTERN_DISCOVERY_INTERVAL_MINUTES", 360)
 
 
 # ---------------------------------------------------------------------------

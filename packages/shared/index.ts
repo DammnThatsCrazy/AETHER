@@ -199,3 +199,8 @@ export * from './data-rights';
 // ADR-011 Spine Composition Kernel — generated registry twin
 // (packages/shared/contracts/spine-registry.json → scripts/generate_platform_contracts.py).
 export * from './spine-registry';
+
+// Pattern Discovery & Unstructured Evidence Intelligence — frontend-safe twin of
+// services/api/intelligence/pattern_discovery/contracts.py (vocabulary parity
+// asserted by tests/unit/test_pattern_discovery_contract_parity.py).
+export * from './pattern-discovery';

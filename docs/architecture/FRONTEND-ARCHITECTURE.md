@@ -45,8 +45,8 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:f1507936d4e5dfc07c939c4d6a2140e498ec881d8420dbe316138efcf50ae7bc"
-  "apps/kyber-web/src/": "sha256:6e8b1a304dda32396010653c911c7cdde1bc18f2a1637de27f95786adf35674f"
+  "apps/aether-web/src/": "sha256:90aaaed4b37d3c51aad7bfe98cd55b67ec9edb2211edebd931337c5e5a9cdf81"
+  "apps/kyber-web/src/": "sha256:929e0e686409ea3365dada5734e1fd120bff444caba32dc5a43b63d017da549b"
   "packages/ui/core/src/": "sha256:02a14d802d773a5b7e255fa0d1b0e1c661d5fa106b3892e5370f3ecf339a5805"
 ---
 
@@ -148,6 +148,7 @@ the root.
   quota or price bar.
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
 - **Governed 360 frame slots** — `ExperienceFramePanel` reads one frame from `POST /v1/experience360/frames` through `restClient` and renders each slot's state, requirement, reason codes, limitations, evidence-reference count, and policy disposition exactly as the server sent them. Unknown state words are shown verbatim, and slot `content` is never rendered (`features/experience-frame/`). It is mounted as the Campaign 360 "Frame" tab (surface `campaign360`, subject kind `campaign`). There is no Kyber twin: the route is bound to the authenticated tenant.
+- **Discovered patterns** (gated on the `pattern_discovery_enabled` capability) — Profile 360 overview and Agent 360 pages render the consent-gated pattern sections (`/v1/profile|agent|risk360/.../patterns`), the Risk overview shows the open discovery queue, and `/patterns` is the tenant review page (`features/pattern-discovery/`)
 - **Continue-on-phone** — continuation creation, recent mobile activity, and resume surfaces backed by the `/v1/continuations` and `/v1/client-sync` planes (`features/continuation/`)
 
 **Kyber (internal operator console) contains:**

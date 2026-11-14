@@ -350,20 +350,82 @@ def _amount_of(properties: dict[str, Any]) -> Optional[float]:
     return None
 
 
+def entity_is_agent(entity: Optional[str]) -> bool:
+    return bool(entity and entity.startswith("agent:"))
+
+
 def entity_of(row: dict[str, Any]) -> Optional[str]:
-    """The acting entity of a row as ``kind:id`` (identity hints, not resolution)."""
+    """The acting entity of a row as ``kind:id`` (identity hints, not resolution).
+
+    An agent acting on a person's behalf is the actor: when a row carries an
+    agent id, the agent is the entity and the person becomes its principal
+    (see :func:`principal_of`)."""
     props = row.get("properties") if isinstance(row.get("properties"), dict) else {}
-    for key, kind in (("canonical_entity_id", "entity"), ("user_id", "user")):
-        if row.get(key):
-            return f"{kind}:{row[key]}"
     for key in ("agent_id", "agent_ref"):
         if row.get(key) or props.get(key):
             return f"agent:{row.get(key) or props.get(key)}"
+    for key, kind in (("canonical_entity_id", "entity"), ("user_id", "user")):
+        if row.get(key):
+            return f"{kind}:{row[key]}"
     if row.get("anonymous_id"):
         return f"anon:{row['anonymous_id']}"
     if row.get("session_id"):
         return f"session:{row['session_id']}"
     return None
+
+
+def principal_of(row: dict[str, Any], entity: Optional[str]) -> Optional[str]:
+    """The person an agent acts for, when the row says so."""
+    if not entity or not entity.startswith("agent:"):
+        return None
+    props = row.get("properties") if isinstance(row.get("properties"), dict) else {}
+    for key, kind in (("canonical_entity_id", "entity"), ("user_id", "user")):
+        if row.get(key):
+            return f"{kind}:{row[key]}"
+    for key in ("principal_id", "principal", "on_behalf_of", "delegated_by", "owner_id"):
+        val = props.get(key)
+        if isinstance(val, (str, int)) and not isinstance(val, bool) and str(val).strip():
+            return f"user:{val}"
+    return None
+
+
+_BOT_UA = re.compile(r"(bot|crawler|spider|curl|python-requests|go-http-client|headless|wget|scrapy|httpclient)",
+                     re.IGNORECASE)
+_GEO_KEYS = ("country", "country_code", "geo.country", "geo.country_code", "location.country", "region")
+_APP_KEYS = ("app_id", "application", "app", "client", "client_id", "sdk_name", "platform")
+_AGENT_TYPE_KEYS = ("agent_type", "agent_framework", "framework", "model", "agent_kind")
+_TOOL_KEYS = ("tool_name", "tool", "function_name", "function", "action_name")
+_LATENCY_KEYS = ("latency_ms", "duration_ms", "response_time_ms", "elapsed_ms")
+
+
+def _first(leaves: dict[str, Any], keys: tuple[str, ...]) -> Optional[str]:
+    for key in keys:
+        val = leaves.get(key)
+        if isinstance(val, (str, int)) and not isinstance(val, bool) and str(val).strip():
+            return str(val).strip()[:64]
+    return None
+
+
+def segments_of(row: dict[str, Any], entity: Optional[str], leaves: dict[str, Any], source: str) -> dict[str, str]:
+    """Segment dimensions used for segmented baselines.
+
+    ``entity_kind`` (human / agent / anonymous cohort), ``application``,
+    ``geography`` and, for agents, ``agent_type``. Missing dimensions are
+    absent, never guessed."""
+    seg: dict[str, str] = {}
+    if entity:
+        seg["entity_kind"] = entity.split(":", 1)[0]
+    app = _first(leaves, _APP_KEYS) or (source if source not in ("unknown", "sdk") else None)
+    if app:
+        seg["application"] = app.lower()
+    geo = _first(leaves, _GEO_KEYS)
+    if geo and len(geo) <= 3:
+        seg["geography"] = geo.upper()
+    if entity and entity.startswith("agent:"):
+        at = _first(leaves, _AGENT_TYPE_KEYS)
+        if at:
+            seg["agent_type"] = at.lower()
+    return seg
 
 
 @dataclass
@@ -392,6 +454,12 @@ class ExtractedEvent:
     attributes: list[Attribute] = field(default_factory=list)
     counterparties: list[tuple[str, str]] = field(default_factory=list)
     templates: list[str] = field(default_factory=list)
+    segments: dict[str, str] = field(default_factory=dict)
+    tool: Optional[str] = None
+    principal: Optional[str] = None
+    session_id: Optional[str] = None
+    is_bot: bool = False
+    latency_ms: Optional[float] = None
 
 
 @dataclass
@@ -614,7 +682,21 @@ def extract_events(rows: Iterable[dict[str, Any]], tenant_id: str) -> Extraction
                 attrs.append(Attribute(attr_type, _stored_value(tenant_id, attr_type, raw),
                                        path, "text_token", 0.6))
         outcome = outcome_of(event_type, props)
-        token = event_type + (f"!{outcome}" if outcome else "")
+        flat = {p: v for p, v in leaves}
+        tool = _first(flat, _TOOL_KEYS) if ("tool" in event_type.lower() or "function" in event_type.lower()
+                                           or entity_is_agent(entity)) else None
+        token = (f"tool:{tool.lower()}" if tool else event_type) + (f"!{outcome}" if outcome else "")
+        principal = principal_of(row, entity)
+        if principal and ("DELEGATED_BY", principal) not in counterparties:
+            counterparties.append(("DELEGATED_BY", principal))
+        ua = next((v for p, v in leaves if isinstance(v, str) and _key_hint(p) == "user_agent"), None) \
+            or (row.get("user_agent") if isinstance(row.get("user_agent"), str) else None)
+        latency = None
+        for key in _LATENCY_KEYS:
+            val = flat.get(key)
+            if isinstance(val, (int, float)) and not isinstance(val, bool) and val >= 0:
+                latency = float(val)
+                break
         if not outcome and templates and any(k in event_type.lower() for k in ("error", "log", "exception", "message")):
             token = f"{event_type}#{templates[0]}"
         dedup: dict[str, Attribute] = {}
@@ -628,6 +710,9 @@ def extract_events(rows: Iterable[dict[str, Any]], tenant_id: str) -> Extraction
             entity=entity, ts=ts, event_type=event_type, source=source, token=token,
             outcome=outcome, amount=_amount_of(props), attributes=list(dedup.values()),
             counterparties=list(dict.fromkeys(counterparties))[:20], templates=templates,
+            segments=segments_of(row, entity, flat, source), tool=tool.lower() if tool else None,
+            principal=principal, session_id=str(row["session_id"]) if row.get("session_id") else None,
+            is_bot=bool(ua and _BOT_UA.search(ua)), latency_ms=latency,
         )
         staged.append((ev, group, leaves))
 

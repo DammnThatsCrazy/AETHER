@@ -85,3 +85,23 @@ class FakeRiskStore:
     async def upsert_scoped(self, tenant_id, natural_id, data):
         self.rows[(tenant_id, natural_id)] = data
         return data
+
+
+class ConsentResult:
+    def __init__(self, allowed, receipt_id=None, reason_code=None):
+        self.allowed, self.receipt_id, self.reason_code = allowed, receipt_id, reason_code
+
+
+def consent_reader(denied: frozenset = frozenset()):
+    """Grants analytics consent to every subject except ``denied`` ids."""
+    calls = []
+
+    async def reader(*, tenant_id, subject_id, anonymous_id, purpose):
+        calls.append((tenant_id, subject_id, anonymous_id, purpose))
+        ident = subject_id or anonymous_id
+        if ident in denied:
+            return ConsentResult(False, reason_code="consent_receipt_missing")
+        return ConsentResult(True, receipt_id=f"rcpt-{ident}")
+
+    reader.calls = calls
+    return reader

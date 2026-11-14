@@ -29,6 +29,7 @@ Rules:
 from __future__ import annotations
 
 import copy
+import json
 from datetime import datetime
 from typing import Any, Callable, Optional
 
@@ -161,7 +162,15 @@ def merge_redetection(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[s
     status = existing.get("status", STATUS_CANDIDATE)
     now = utc_now().isoformat()
     if status in SYSTEM_STATUSES:
-        pass  # the funnel recomputes freely
+        # The funnel recomputes, but a queued pattern stays queued until a
+        # reviewer acts or it goes stale: recurrence lowers novelty, and that
+        # must not silently pull an unreviewed item out of the queue.
+        if status == STATUS_NEEDS_REVIEW and record["status"] == STATUS_CANDIDATE:
+            record["status"] = STATUS_NEEDS_REVIEW
+            record["priority"] = existing.get("priority", record["priority"])
+            record["queued_since"] = existing.get("queued_since") or existing.get("detected_at")
+        elif record["status"] == STATUS_NEEDS_REVIEW:
+            record["queued_since"] = existing.get("queued_since") or now
     elif status == STATUS_DEPRECATED:
         record["review_history"].append({
             "decision": "revived", "reason": "re_detected_after_deprecation",
@@ -263,6 +272,42 @@ def apply_deprecation(record: dict[str, Any], *, actor: str, reason: str, automa
     return updated
 
 
+def merge_duplicate(target: dict[str, Any], duplicate: dict[str, Any]) -> dict[str, Any]:
+    """Fold a pattern reviewers marked duplicate into the pattern it duplicates.
+
+    The target gains the duplicate's affected entities (bounded), occurrence
+    support and observation window, and records the duplicate's id, so later
+    re-detections of the duplicate signature strengthen the canonical pattern
+    instead of re-entering the queue. Idempotent per duplicate fingerprint."""
+    updated = copy.deepcopy(target)
+    dup_id = duplicate["pattern_id"]
+    seen = {d["pattern_id"]: d for d in updated.get("duplicates") or []}
+    if seen.get(dup_id, {}).get("evidence_fingerprint") == duplicate.get("evidence_fingerprint"):
+        return updated
+    keys = list(dict.fromkeys([*(updated.get("affected_entity_keys") or []),
+                               *(duplicate.get("affected_entity_keys") or [])]))
+    added = len(keys) - len(updated.get("affected_entity_keys") or [])
+    updated["affected_entity_keys"] = keys[:MAX_AFFECTED_ENTITIES]
+    updated["affected_entities"] = [entity_ref(k) for k in updated["affected_entity_keys"]]
+    updated["affected_entity_count"] = int(updated.get("affected_entity_count") or 0) + max(0, added)
+    updated["affected_entities_truncated"] = len(keys) > MAX_AFFECTED_ENTITIES
+    updated["entity_kinds"] = sorted({k.split(":", 1)[0] for k in updated["affected_entity_keys"]})
+    updated["occurrence_count"] = int(updated.get("occurrence_count") or 0) + (
+        0 if dup_id in seen else int(duplicate.get("occurrence_count") or 0))
+    for field_name, pick in (("first_observed_at", min), ("last_observed_at", max)):
+        values = [v for v in (updated.get(field_name), duplicate.get(field_name)) if v]
+        updated[field_name] = pick(values) if values else None
+    seen[dup_id] = {"pattern_id": dup_id, "kind": duplicate.get("kind"),
+                    "evidence_fingerprint": duplicate.get("evidence_fingerprint"),
+                    "merged_at": utc_now().isoformat()}
+    updated["duplicates"] = list(seen.values())
+    updated["review_history"] = [*updated.get("review_history", []), {
+        "decision": "merged_duplicate", "duplicate_pattern_id": dup_id,
+        "entities_added": max(0, added), "at": utc_now().isoformat(),
+    }]
+    return updated
+
+
 def mark_unseen(record: dict[str, Any], run_id: str) -> dict[str, Any]:
     """A run that did not re-observe the pattern. Open patterns go stale."""
     updated = copy.deepcopy(record)
@@ -340,16 +385,32 @@ class PatternRegistryRepository(BaseRepository):
     async def list_patterns(self, tenant_id: str, *, statuses: Optional[set[str]] = None,
                             kind: Optional[str] = None, min_confidence: float = 0.0,
                             limit: int = 50, offset: int = 0) -> tuple[list[dict[str, Any]], int]:
-        rows = await self.scan(tenant_id, kind=kind)
-        rows = [r for r in rows if (not statuses or r.get("status") in statuses)
-                and float(r.get("confidence") or 0) >= min_confidence]
+        if statuses:
+            # One indexed (tenant, status) read per status instead of a tenant scan.
+            rows = [r for st in sorted(statuses) for r in await self.scan(tenant_id, status=st, kind=kind)]
+        else:
+            rows = await self.scan(tenant_id, kind=kind)
+        rows = [r for r in rows if float(r.get("confidence") or 0) >= min_confidence]
         prio = {"high": 0, "normal": 1, "low": 2}
         rows.sort(key=lambda r: (prio.get(r.get("priority"), 3), -float(r.get("severity_score") or 0),
                                  -float(r.get("confidence") or 0), r.get("pattern_id", "")))
         return rows[offset: offset + limit], len(rows)
 
     async def for_entity(self, tenant_id: str, entity_key: str, limit: int = 50) -> list[dict[str, Any]]:
-        rows = [r for r in await self.scan(tenant_id) if entity_key in (r.get("affected_entity_keys") or [])]
+        """Patterns implicating one entity. On PostgreSQL this is a GIN-indexed
+        ``data->'affected_entity_keys' ? $2`` lookup; in memory it filters."""
+        pool = await self._ensure_pool()
+        if pool is not None:
+            await self._ensure_table()
+            records = await pool.fetch(
+                "SELECT data FROM discovered_patterns WHERE tenant_id = $1 "
+                "AND data->'affected_entity_keys' ? $2 LIMIT $3",
+                tenant_id, entity_key, max(1, min(int(limit) * 4, 2_000)),
+            )
+            rows = [json.loads(r["data"]) if isinstance(r["data"], str) else dict(r["data"]) for r in records]
+            rows = [r for r in rows if r.get("tenant_id") == tenant_id]
+        else:
+            rows = [r for r in await self.scan(tenant_id) if entity_key in (r.get("affected_entity_keys") or [])]
         rows.sort(key=lambda r: (-float(r.get("severity_score") or 0), r.get("pattern_id", "")))
         return rows[:limit]
 

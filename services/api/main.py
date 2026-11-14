@@ -1313,11 +1313,17 @@ def create_app() -> FastAPI:
     # ── Pattern Discovery & Unstructured Evidence Intelligence (flagged) ──
     if settings.pattern_discovery.enabled:
         from intelligence.pattern_discovery.routes import (
+            agent_router as pattern_agent_router,
             kyber_router as pattern_kyber_router,
+            profile_router as pattern_profile_router,
+            risk_router as pattern_risk_router,
             router as pattern_discovery_router,
         )
         app.include_router(pattern_discovery_router)
         app.include_router(pattern_kyber_router)
+        app.include_router(pattern_profile_router)
+        app.include_router(pattern_agent_router)
+        app.include_router(pattern_risk_router)
         logger.info("Pattern Discovery: routes mounted (/v1/intelligence/patterns + /v1/kyber/patterns)")
     else:
         logger.info("Pattern Discovery: disabled (set AETHER_PATTERN_DISCOVERY_ENABLED=true to enable)")

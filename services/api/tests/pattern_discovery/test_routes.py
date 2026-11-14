@@ -14,7 +14,7 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import Permissions, Role, TenantContext
 from shared.common.common import AetherError
 
-from .scenarios import T, FakeEventReader, FakeRiskStore, fraud_ring, normal_traffic
+from .scenarios import T, FakeEventReader, FakeRiskStore, consent_reader, fraud_ring, normal_traffic
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +22,8 @@ def _isolate():
     reset_in_memory_stores()
     set_service(PatternDiscoveryService(event_reader=FakeEventReader(normal_traffic(2, 2) + fraud_ring(2)),
                                         risk_store=FakeRiskStore(),
-                                        subject_resolver=_resolver))
+                                        subject_resolver=_resolver,
+                                        consent_reader=consent_reader()))
     yield
     set_service(None)
     reset_in_memory_stores()

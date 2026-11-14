@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from datetime import timedelta
 
-from ..baselines import token_expected_rate
+from ..baselines import seasonal_expected_rate, token_expected_rate
 from ..contracts import KIND_LOCKSTEP, KIND_TEMPORAL_BURST, EvidenceItem, RawPattern
 from .base import DetectorOutput
 from .frame import (
@@ -59,9 +60,18 @@ def detect_temporal(frame: DiscoveryFrame) -> DetectorOutput:
             lam = (total - top) / max(n_buckets - 1, 1) if n_buckets > 1 else 0.0
             lam = max(lam, 0.5)
             source = "same_window_excluding_peak"
+        def expected(bucket: int) -> float:
+            if source == "same_window_excluding_peak":
+                return lam
+            when = frame.window_start + timedelta(seconds=bucket * width)
+            seasonal = seasonal_expected_rate(frame.baseline, token, when.weekday() * 24 + when.hour)
+            return seasonal * width / 3600.0 if seasonal is not None and seasonal > 0 else lam
+
+        bucket_lam = {b: expected(b) for b in counts}
+        seasonal_used = any(abs(bucket_lam[b] - lam) > 1e-12 for b in counts)
         flagged = sorted(
             b for b, k in counts.items()
-            if k >= cfg.burst_min_events and k >= 3 * lam and poisson_sf(k, lam) <= cfg.burst_max_p
+            if k >= cfg.burst_min_events and k >= 3 * bucket_lam[b] and poisson_sf(k, bucket_lam[b]) <= cfg.burst_max_p
         )
         if not flagged:
             continue
@@ -77,7 +87,10 @@ def detect_temporal(frame: DiscoveryFrame) -> DetectorOutput:
             continue
         bursts_found += len(runs)
         peak = max(flagged, key=lambda b: counts[b])
-        p = poisson_sf(counts[peak], lam)
+        lam_peak = bucket_lam[peak]
+        p = poisson_sf(counts[peak], lam_peak)
+        if seasonal_used:
+            source = "seasonal_baseline"
         first, last = bounds(evs)
         strength = min(0.45, 0.04 * -math.log10(max(p, 1e-300)))
         patterns.append(RawPattern(
@@ -86,7 +99,7 @@ def detect_temporal(frame: DiscoveryFrame) -> DetectorOutput:
             title=f"Burst of {token}",
             summary=(f"{plural(len(evs), 'event')} of {token} from {plural(len(ents), 'entity')} in "
                      f"{plural(len(runs), 'burst')}; peak {counts[peak]} per {width // 60} min vs "
-                     f"{lam:.2f} expected."),
+                     f"{lam_peak:.2f} expected."),
             affected_entities=ents,
             evidence=[
                 EvidenceItem("event_burst", "observed", 0.15, {
@@ -94,7 +107,7 @@ def detect_temporal(frame: DiscoveryFrame) -> DetectorOutput:
                     "bucket_seconds": width,
                 }, event_refs(evs)),
                 EvidenceItem("improbable_rate", "inferred", strength, {
-                    "peak_count": counts[peak], "expected_per_bucket": round(lam, 4),
+                    "peak_count": counts[peak], "expected_per_bucket": round(lam_peak, 4),
                     "poisson_tail_p": p, "expected_rate_source": source,
                 }),
             ],
@@ -106,8 +119,8 @@ def detect_temporal(frame: DiscoveryFrame) -> DetectorOutput:
                 {"id": "campaign_or_launch", "note": "Marketing sends, launches and drops create legitimate spikes."},
                 {"id": "backfill_or_replay", "note": "Ingestion replays and batch imports compress old activity into minutes."},
             ],
-            novelty=1.0 if prior_rate is None else min(1.0, max(0.0, 1 - lam / max(counts[peak], 1))),
-            baseline={"expected_per_bucket": round(lam, 4), "peak": counts[peak], "source": source},
+            novelty=1.0 if prior_rate is None else min(1.0, max(0.0, 1 - lam_peak / max(counts[peak], 1))),
+            baseline={"expected_per_bucket": round(lam_peak, 4), "peak": counts[peak], "source": source},
             episode_count=len(runs),
             detector=NAME,
         ))

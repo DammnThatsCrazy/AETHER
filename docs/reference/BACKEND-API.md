@@ -29,16 +29,16 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:a928f782d01f2b695684f82b53c8da66674cc936d256cacf8570662484f4b3bd"
-  "services/api/governance/": "sha256:1fa42276acc1c8c489d2f0f4a7ab325c9fa4c0b2d7fd7318bb6cd2726f41d3db"
+  "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
   "services/api/identity/": "sha256:a52e1403d9780c9ab1a9c409c9f89a54d4f22c9667c5e58b5f35981bf5408d2a"
   "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
-  "services/api/intelligence/": "sha256:27f1743a4a19b513f0917710daa6e3dca7f2b1c849cb898abd751b34be32f6af"
+  "services/api/intelligence/": "sha256:2b8badc86204e4c39c82fd2143d4c8a7d3e2fa7396ad061fdf3af34bae8d75cb"
   "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
-  "services/api/workers/": "sha256:a6c6b55338c45947832201ac3cfa3d006fa3f6ef029501bf29856755eae0b3b1"
+  "services/api/workers/": "sha256:73be6e15b6c4166b99420797ee05a2182e7549f341f3e9f0b1329bfee2113b4d"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -3980,19 +3980,20 @@ Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handof
 
 ### Pattern discovery (flag `AETHER_PATTERN_DISCOVERY_ENABLED`)
 
-Discovers patterns nobody defined in advance from raw and semi-structured evidence. Every pattern is an `inferred` candidate with capped confidence and competing explanations; only a reviewer verdict leaves the funnel. See `docs/architecture/PATTERN-DISCOVERY.md`.
+Discovers patterns nobody defined in advance from raw and semi-structured evidence. Every pattern is an `inferred` candidate with capped confidence and competing explanations; only a reviewer verdict leaves the funnel. Kinds: `sequence`, `shared_attribute_cluster`, `behavioral_cohort`, `temporal_burst`, `lockstep`, `behavioral_outlier`, `novel_motif`, `schema_drift`, `segment_shift`, `agent_spawn_anomaly`, `agent_tool_signature`, `agent_interaction_cluster`, `traffic_anomaly`, `cross_domain`. See `docs/architecture/PATTERN-DISCOVERY.md`.
 
 - `GET /v1/intelligence/patterns` — `read`. Filters `status`, `queue=true` (needs_review + unresolved), `kind`, `min_confidence`, `limit`, `offset`; ordered by priority, severity, confidence.
-- `GET /v1/intelligence/patterns/stats` and `GET /v1/intelligence/patterns/runs` — `read`. Counts by status/kind, analyst calibration per kind, suppressed families, baseline health; recent runs with coverage and per-detector stats.
-- `POST /v1/intelligence/patterns/runs` — `write`. Body `{window_hours?, max_events?, kinds?, events?, edges?, include_store?}`. Reads the tenant's recent events (truncation reported in `coverage`), plus optional inline evidence (rows naming another tenant are rejected), upserts patterns, ages open patterns it did not re-observe, and folds the run into the tenant baseline.
+- `GET /v1/intelligence/patterns/stats` and `GET /v1/intelligence/patterns/runs` — `read`. Counts by status/kind, analyst calibration per kind, suppressed families, baseline health; recent runs with coverage (event store, graph, ML, baseline) and per-detector stats including `threshold_tuning`.
+- `POST /v1/intelligence/patterns/runs` — `write`. Body `{window_hours?, max_events?, kinds?, events?, edges?, include_store?}`. Reads the tenant's recent events (truncation reported in `coverage`), the tenant's canonical graph edges for motif discovery (unless `edges` is supplied or `PATTERN_DISCOVERY_GRAPH_MOTIFS_ENABLED=false`), ML window scores when `PATTERN_DISCOVERY_ML_ENABLED`, plus optional inline evidence (rows naming another tenant are rejected). Upserts patterns, correlates with still-active patterns from earlier runs, merges re-detected duplicates, ages open patterns it did not re-observe, and folds the run into the tenant baseline only when its window has advanced at least half a window (`coverage.baseline` reports a skip).
 - `POST /v1/intelligence/patterns/extract` — `read`. Schema-on-read preview of one payload: typed attributes (sensitive values hashed), counterparties, message templates, field profile. Nothing is stored.
-- `GET /v1/intelligence/patterns/entities/{kind:id}` — `read`. Advisory emerging-pattern context for one entity (open and reviewed patterns, identity-overlap candidates, co-implicated entities).
-- `GET /v1/intelligence/patterns/{id}` — `read`. Full record with evidence, competing explanations, review history, cross-domain members and similar patterns.
-- `POST /v1/intelligence/patterns/{id}/review` — `write`. `{verdict: valid|malicious|benign|duplicate|unresolved, reason (>=10 chars), duplicate_of?}`. Also recorded as analyst feedback that calibrates the detector kind.
-- `POST /v1/intelligence/patterns/{id}/promote` — `admin`. Only from `confirmed_valid` / `confirmed_malicious` with unchanged evidence. Writes `attributed` Risk360 signals for canonical subjects (unresolvable subjects are reported, never guessed) unless `AETHER_PATTERN_RISK_PROMOTION_ENABLED=false`.
-- `POST /v1/intelligence/patterns/{id}/deprecate` — `write`.
+- `GET /v1/intelligence/patterns/entities/{kind:id}` — `read`. Advisory emerging-pattern context for one entity; withheld (`withheld: true`, `reason_code`) without an affirmative analytics consent receipt.
+- `GET /v1/profile/{user_id}/patterns`, `GET /v1/agent/{agent_id}/patterns`, `GET /v1/risk360/{subject_kind}/{subject_id}/patterns` — `read`. Profile 360 / Agent 360 / Risk 360 pattern sections (consent-gated like the entity context; `subject_kind` one of `entity`, `user`, `agent`, `wallet`, `anon`, `session`).
+- `GET /v1/intelligence/patterns/{id}` — `read`. Full record with evidence, competing explanations, review history, merged duplicates, cross-domain members and similar patterns.
+- `POST /v1/intelligence/patterns/{id}/review` — `write`. `{verdict: valid|malicious|benign|duplicate|unresolved, reason (>=10 chars), duplicate_of?}`. Recorded as analyst feedback that calibrates the kind and, with five or more verdicts, tunes its detector threshold. A `duplicate` verdict merges the pattern into `duplicate_of`.
+- `POST /v1/intelligence/patterns/{id}/promote` — `admin`. Only from `confirmed_valid` / `confirmed_malicious` with unchanged evidence. Writes `attributed` Risk360 signals for canonical, consented subjects (others reported as `unresolved_subject` / `consent_withheld`) and a governed `RiskCluster` vertex with `MEMBER_OF_CLUSTER` edges for those subjects (`AETHER_PATTERN_RISK_PROMOTION_ENABLED`, `AETHER_PATTERN_GRAPH_PROMOTION_ENABLED`).
+- `POST /v1/intelligence/patterns/{id}/deprecate` — `write`. A promoted pattern's graph memberships are soft-revoked; its Risk360 signals remain.
 - Kyber operator routes `GET /v1/kyber/patterns/queue`, `GET /v1/kyber/patterns/stats`, `GET /v1/kyber/patterns/{id}`, `POST /v1/kyber/patterns/runs`, `POST /v1/kyber/patterns/{id}/review|promote|deprecate` take `tenant_id` as a query parameter and record the operator as `kyber:<actor>` in review history.
-
+- Durable job `pattern_discovery.run` (enqueued per tenant by the `pattern_discovery_sweep` worker when `PATTERN_DISCOVERY_SCHEDULER_ENABLED`) runs one pass with the configured window.
 
 ## Agentic Observability Layer
 

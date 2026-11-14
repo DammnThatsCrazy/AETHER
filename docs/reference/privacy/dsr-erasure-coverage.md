@@ -9,11 +9,11 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/services/social360/evidence_authority.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "config/storage_policies.yaml": "sha256:4a44084cac17fff5155b4fc04bf4e36fc3fee1bae95fba683b8cdb55ada9b066"
+  "config/storage_policies.yaml": "sha256:89c15e41e0de21335973835b9bef7e3a56c156ba2f12342ec7bd52fdb0ff18c6"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
-  "services/api/governance/consent/erasure_jobs.py": "sha256:e7209845abf90683109a52f895142862b5c8a421f80bf427cb4a90c4143c9a96"
-  "services/api/governance/consent/erasure_planes.py": "sha256:dd529398d1e0d3b60bb8c61bf6371aa241ef63bdaa57738993ab823c8b57cf9e"
-  "services/api/governance/dsr_propagation/models.py": "sha256:132e4816b38b5abe03ba6105b92836da2380fe728e522afdd282e05fc0f8efc5"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:e0b9e76e905e638364aad7261a8b4089dfbffeef5a1333eb2e75e7c57819d910"
+  "services/api/governance/consent/erasure_planes.py": "sha256:918908b643b9d1e52d86f3d93877a465e4343b7b071380945d32f9fb01afd5ea"
+  "services/api/governance/dsr_propagation/models.py": "sha256:683b034c7907cb8dc0d3eb8007c43202d9e435f0981264bf1c8eb695be75103e"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
   "services/api/services/social360/evidence_authority.py": "sha256:0b4d377d5a8b0316e11f9cabc13f0fa69c62aac9fc4d7ac313e42d1b38647322"
@@ -103,6 +103,7 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `risk_intervention_records` | `risk_intervention_records` | hard delete exact tenant rows whose subject or actor ID equals a subject ref; legal holds respected | rows deleted |
 | `social_relationship_evidence_events` | `social_relationship_evidence_events` | hard delete exact tenant assertions naming the subject as the indexed subject, source, target, a path participant, or the authenticated actor; legal holds respected | rows deleted |
 | `agent_lineage_projection` | `principal_agent_lineage`, `principal_agent_lineage_summary`, `principal_agent_lineage_clusters`, `agent_lineage_nodes`, `agent_lineage_restatements`, `agent_lineage_principal_bindings`, `agent_lineage_adjudications`, `delegations`, fan-out `risk_signals` | hard delete rows naming a subject ref as principal, agent, grantor or grantee; `agent_configs` rows owned by the subject keep the agent but lose the owner. Legal holds are checked on each affected row's id and counterparty, and on the subject's refs against every table named here, and any hold skips the plane. `agent_configs` rows naming the subject as the agent are deleted, and `asserted_by_entity_id` and `revoked_by_entity_id` are cleared on rows that stay. The erase bumps `agent_lineage_tenant_state`, so every worker discards its older fold and an in-flight write fails and rebuilds from erased evidence. A full rebuild then runs in the same step, removing derived copies such as parent and root references and cluster labels. The `active_for` delegation cache is invalidated for each affected grantee. `Delegation` graph vertices projected from deleted grants are tombstoned with their parties blanked and their edges revoked | rows deleted across the tables |
+| `pattern_discovery` | `discovered_patterns`, `pattern_discovery_runs` | redact exact subject refs (`user:`, `anon:`, `entity:`, `agent:`, `session:` keys or the bare id) from affected entities, evidence details, review history and promotion outcomes, re-derive the evidence fingerprint; patterns left with fewer than two affected entities and run records listing a redacted pattern are hard deleted. A legal hold on `discovered_patterns` for any subject ref skips the plane. `pattern_feedback` and `pattern_discovery_baselines` carry no subject key | patterns redacted + patterns deleted + runs deleted |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a

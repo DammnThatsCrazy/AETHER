@@ -27,6 +27,11 @@ KIND_OUTLIER = "behavioral_outlier"
 KIND_NOVEL_MOTIF = "novel_motif"
 KIND_SCHEMA_DRIFT = "schema_drift"
 KIND_CROSS_DOMAIN = "cross_domain"
+KIND_SEGMENT_SHIFT = "segment_shift"
+KIND_AGENT_SPAWN = "agent_spawn_anomaly"
+KIND_AGENT_TOOL_SIGNATURE = "agent_tool_signature"
+KIND_AGENT_INTERACTION = "agent_interaction_cluster"
+KIND_TRAFFIC_ANOMALY = "traffic_anomaly"
 
 PATTERN_KINDS: tuple[str, ...] = (
     KIND_SEQUENCE,
@@ -37,6 +42,11 @@ PATTERN_KINDS: tuple[str, ...] = (
     KIND_OUTLIER,
     KIND_NOVEL_MOTIF,
     KIND_SCHEMA_DRIFT,
+    KIND_SEGMENT_SHIFT,
+    KIND_AGENT_SPAWN,
+    KIND_AGENT_TOOL_SIGNATURE,
+    KIND_AGENT_INTERACTION,
+    KIND_TRAFFIC_ANOMALY,
     KIND_CROSS_DOMAIN,
 )
 
@@ -53,6 +63,11 @@ CONFIDENCE_CAPS: dict[str, float] = {
     KIND_OUTLIER: 0.65,
     KIND_NOVEL_MOTIF: 0.7,
     KIND_SCHEMA_DRIFT: 0.9,
+    KIND_SEGMENT_SHIFT: 0.7,
+    KIND_AGENT_SPAWN: 0.7,
+    KIND_AGENT_TOOL_SIGNATURE: 0.75,
+    KIND_AGENT_INTERACTION: 0.75,
+    KIND_TRAFFIC_ANOMALY: 0.6,
     KIND_CROSS_DOMAIN: 0.85,
 }
 

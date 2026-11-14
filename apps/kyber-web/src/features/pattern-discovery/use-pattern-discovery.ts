@@ -1,24 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@kyber/lib/api';
+import type { PatternKind, PatternVerdict } from '@aether/shared';
 import type { DiscoveredPatternDetail, DiscoveredPatternList } from '@kyber/lib/api/endpoints';
 
 export type { DiscoveredPatternDetail, DiscoveredPatternList, DiscoveredPatternSummary } from '@kyber/lib/api/endpoints';
 
-/** Analyst verdicts the backend accepts (`ReviewRequest.verdict`). */
-export const PATTERN_VERDICTS = ['valid', 'malicious', 'benign', 'duplicate', 'unresolved'] as const;
-export type PatternVerdict = (typeof PATTERN_VERDICTS)[number];
+/** Typed against the shared contract (packages/shared/pattern-discovery.ts), whose
+ *  parity with the backend is asserted by tests/unit/test_pattern_discovery_contract_parity.py;
+ *  a value outside the shared vocabulary fails the typecheck. */
+export type { PatternKind, PatternVerdict } from '@aether/shared';
 
-/** Statuses an operator can filter the queue by. Empty = the open review queue. */
-export const PATTERN_STATUS_FILTERS = [
-  '',
-  'candidate',
-  'confirmed_valid',
-  'confirmed_malicious',
-  'benign',
-  'duplicate',
-  'promoted',
-  'deprecated',
-] as const;
+export const PATTERN_VERDICTS = ['valid', 'malicious', 'benign', 'duplicate', 'unresolved'] as const satisfies readonly PatternVerdict[];
 
 export const PATTERN_KINDS = [
   'sequence',
@@ -29,7 +21,25 @@ export const PATTERN_KINDS = [
   'behavioral_outlier',
   'novel_motif',
   'schema_drift',
+  'segment_shift',
+  'agent_spawn_anomaly',
+  'agent_tool_signature',
+  'agent_interaction_cluster',
+  'traffic_anomaly',
   'cross_domain',
+] as const satisfies readonly PatternKind[];
+
+/** Statuses an operator can filter the queue by. Empty = the open review queue. */
+export const PATTERN_STATUS_FILTERS = [
+  '',
+  'candidate',
+  'confirmed_valid',
+  'confirmed_malicious',
+  'benign',
+  'duplicate',
+  'unresolved',
+  'promoted',
+  'deprecated',
 ] as const;
 
 function message(e: unknown): string {

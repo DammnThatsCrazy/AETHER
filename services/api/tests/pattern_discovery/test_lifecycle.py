@@ -21,7 +21,7 @@ from intelligence.pattern_discovery.service import PatternDiscoveryService
 from repositories.repos import reset_in_memory_stores
 from shared.contracts_models.epistemic import EpistemicStatus
 
-from .scenarios import T, FakeEventReader, FakeRiskStore, fraud_ring, normal_traffic, ring_keys
+from .scenarios import T, FakeEventReader, FakeRiskStore, consent_reader, fraud_ring, normal_traffic, ring_keys
 
 
 @pytest.fixture(autouse=True)
@@ -165,12 +165,13 @@ def test_entity_context_is_advisory():
 
 # ── Service workflow ─────────────────────────────────────────────────────────
 
-def _service(rows, risk_store=None, resolver=None):
+def _service(rows, risk_store=None, resolver=None, consent=None):
     async def default_resolver(tenant_id, key):
         return ("entity", key.split(":", 1)[1]) if key.startswith("user:r") else None
 
     return PatternDiscoveryService(event_reader=FakeEventReader(rows), risk_store=risk_store or FakeRiskStore(),
-                                   subject_resolver=resolver or default_resolver)
+                                   subject_resolver=resolver or default_resolver,
+                                   consent_reader=consent or consent_reader())
 
 
 @pytest.mark.asyncio
@@ -271,3 +272,152 @@ async def test_repository_reads_are_copies():
     got = await repo.get(T, rec["pattern_id"])
     got["status"] = "promoted"
     assert (await repo.get(T, rec["pattern_id"]))["status"] == rec["status"]
+
+
+@pytest.mark.asyncio
+async def test_promotion_withholds_signals_without_consent():
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2), consent=consent_reader(frozenset({"r0", "r1"})))
+    await svc.run(T)
+    pid = (await svc.list_patterns(T, kind=KIND_SHARED_ATTRIBUTE))["items"][0]["pattern_id"]
+    await svc.review(T, pid, reviewer_id="a", verdict="malicious", reason="shared card farm confirmed")
+    promoted = await svc.promote(T, pid, reviewer_id="a", reason="promote with partial consent")
+    by_entity = {o["entity"]: o for o in promoted["promotion"]["risk_signals"]}
+    assert by_entity["user:r0"]["status"] == "consent_withheld"
+    assert by_entity["user:r2"]["status"] == "written" and by_entity["user:r2"]["consent_receipt_id"] == "rcpt-r2"
+    assert not any(row["subject_id"] in ("r0", "r1") for row in svc._risk_store.rows.values())
+
+
+@pytest.mark.asyncio
+async def test_entity_context_is_withheld_without_consent():
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2), consent=consent_reader(frozenset({"r3"})))
+    await svc.run(T)
+    denied = await svc.entity_context(T, "user:r3")
+    assert denied["withheld"] is True and denied["emerging_patterns"] == []
+    granted = await svc.entity_context(T, "user:r4")
+    assert granted["withheld"] is False and granted["emerging_patterns"]
+
+
+@pytest.mark.asyncio
+async def test_consent_lookup_failure_fails_closed():
+    async def broken(**kwargs):
+        raise RuntimeError("consent store down")
+
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2), consent=broken)
+    await svc.run(T)
+    ctx = await svc.entity_context(T, "user:r3")
+    assert ctx["withheld"] is True and ctx["reason_code"] == "consent_lookup_failed"
+
+
+# ── DSR erasure ──────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_erasure_redacts_the_subject_and_drops_patterns_it_would_reidentify(monkeypatch):
+    from intelligence.pattern_discovery.erasure import erase_pattern_discovery
+
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2))
+    await svc.run(T)
+    before = {r["pattern_id"]: r for r in await svc.registry.scan(T)}
+    named = [p for p in before.values() if "user:r0" in p["affected_entity_keys"]]
+    assert named
+    result = await erase_pattern_discovery(T, frozenset({"r0"}))
+    assert result["status"] == "completed" and result["records_impacted"] >= len(named)
+    after = {r["pattern_id"]: r for r in await svc.registry.scan(T)}
+    import json as _json
+    for pid in [p["pattern_id"] for p in named]:
+        row = after.get(pid)
+        if row is None:
+            continue  # deleted: fewer than two entities remained
+        assert "user:r0" not in row["affected_entity_keys"]
+        assert '"user:r0"' not in _json.dumps(row)
+        assert row["affected_entity_count"] == before[pid]["affected_entity_count"] - 1
+        assert row["erasure_redactions"] == 1
+    # Another subject's patterns are untouched; another tenant is untouched.
+    untouched = [p for p in before.values() if "user:r0" not in p["affected_entity_keys"]]
+    for p in untouched:
+        assert after[p["pattern_id"]]["affected_entity_keys"] == p["affected_entity_keys"]
+    again = await erase_pattern_discovery(T, frozenset({"r0"}))
+    assert again["records_impacted"] == 0
+
+
+@pytest.mark.asyncio
+async def test_erasure_deletes_patterns_left_with_one_entity():
+    from intelligence.pattern_discovery.erasure import erase_pattern_discovery
+
+    repo = PatternRegistryRepository()
+    rec = dict(_by_kind(_ring_records(), KIND_SEQUENCE))
+    rec["affected_entity_keys"] = ["user:r0", "user:r1"]
+    rec["affected_entities"] = [{"kind": "user", "id": "r0", "key": "user:r0"}, {"kind": "user", "id": "r1", "key": "user:r1"}]
+    rec["affected_entity_count"] = 2
+    await repo.upsert_detected(rec)
+    out = await erase_pattern_discovery(T, frozenset({"r0"}))
+    assert out["detail"]["patterns_deleted"] == 1
+    assert await repo.get(T, rec["pattern_id"]) is None
+
+
+@pytest.mark.asyncio
+async def test_erasure_respects_legal_hold(monkeypatch):
+    from intelligence.pattern_discovery import erasure
+    from shared.storage import lifecycle
+
+    async def hold(self, tenant_id, resource_type, subject_ref=None):
+        return {"hold_id": "h1", "reason": "litigation"} if subject_ref == "user:r0" else None
+
+    monkeypatch.setattr(lifecycle.StorageLifecycle, "active_hold", hold)
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2))
+    await svc.run(T)
+    before = await svc.registry.scan(T)
+    out = await erasure.erase_pattern_discovery(T, frozenset({"r0"}))
+    assert out["status"] == "skipped_legal_hold"
+    assert await svc.registry.scan(T) == before
+
+
+@pytest.mark.asyncio
+async def test_pattern_discovery_is_a_registered_dsr_component():
+    from governance.consent import erasure_planes
+    from governance.dsr_propagation.models import DSR_COMPONENTS
+
+    assert "pattern_discovery" in DSR_COMPONENTS
+    assert any("pattern_discovery" in comps for _n, comps, _p in erasure_planes.ENTITY_PLANES)
+
+
+@pytest.mark.asyncio
+async def test_erasure_scrubs_refs_embedded_in_signature_title_and_summary():
+    from intelligence.pattern_discovery.erasure import erase_pattern_discovery
+
+    repo = PatternRegistryRepository()
+    rec = dict(_by_kind(_ring_records(), KIND_SEQUENCE))
+    rec["pattern_id"] = f"{T}:pat:spawn-test"
+    rec["signature"] = {"parent": "agent:orch"}
+    rec["title"] = "Sub-agent spawning anomaly at agent:orch"
+    rec["summary"] = "agent:orch spawned 12 sub-agents; principals: user:p1"
+    rec["affected_entity_keys"] = ["agent:orch", "agent:w1", "agent:w2"]
+    rec["affected_entities"] = [{"kind": "agent", "id": i, "key": f"agent:{i}"} for i in ("orch", "w1", "w2")]
+    rec["affected_entity_count"] = 3
+    await repo.upsert_detected(rec)
+    await erase_pattern_discovery(T, frozenset({"orch"}))
+    row = await repo.get(T, rec["pattern_id"])
+    import json as _json
+    assert "agent:orch" not in _json.dumps(row)
+    assert row["signature_hash"] == rec["signature_hash"]
+    assert row["title"] == "Sub-agent spawning anomaly at [erased]"
+
+
+def test_a_queued_pattern_stays_queued_when_its_novelty_decays():
+    rec = _by_kind(_ring_records(), KIND_SEQUENCE)
+    assert rec["status"] == STATUS_NEEDS_REVIEW
+    familiar = dict(rec, status="candidate", priority="low", last_run_id="r2")
+    merged = merge_redetection(rec, familiar)
+    assert merged["status"] == STATUS_NEEDS_REVIEW and merged["queued_since"]
+
+
+@pytest.mark.asyncio
+async def test_overlapping_windows_fold_into_the_baseline_once():
+    svc = _service(normal_traffic(2, 2) + fraud_ring(2))
+    first = await svc.run(T)
+    second = await svc.run(T)  # same events, same window end
+    assert first["baseline_updated"] is True
+    assert second["baseline_updated"] is False
+    assert second["coverage"]["baseline"]["status"] == "skipped_overlapping_window"
+    assert (await svc.baselines.get(T))["runs"] == 1
+    svc._event_reader = FakeEventReader(normal_traffic(5, 5))  # three days later
+    assert (await svc.run(T))["baseline_updated"] is True

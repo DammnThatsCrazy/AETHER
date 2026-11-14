@@ -28,8 +28,14 @@ MIN_JACCARD = 0.4
 
 
 def correlate(patterns: list[RawPattern], ids: list[str], config: DetectorConfig,
-              confidences: list[float]) -> DetectorOutput:
-    """``ids`` / ``confidences`` are parallel to ``patterns`` (scored members)."""
+              confidences: list[float], current_count: int | None = None) -> DetectorOutput:
+    """``ids`` / ``confidences`` are parallel to ``patterns`` (scored members).
+
+    The first ``current_count`` patterns come from this run; the rest are
+    still-active patterns persisted by earlier runs (cross-run correlation). A
+    composite must include at least one current-run member, so earlier
+    agreement is never re-reported on its own."""
+    current_count = len(patterns) if current_count is None else current_count
     idx = [i for i, p in enumerate(patterns) if p.kind not in (KIND_SCHEMA_DRIFT, KIND_CROSS_DOMAIN)]
     sets = {i: set(patterns[i].affected_entities) for i in idx}
     uf = _UnionFind()
@@ -53,7 +59,7 @@ def correlate(patterns: list[RawPattern], ids: list[str], config: DetectorConfig
     out: list[RawPattern] = []
     for members in sorted(groups.values(), key=lambda g: (-len(g), g)):
         kinds = sorted({patterns[i].kind for i in members})
-        if len(kinds) < 2:
+        if len(kinds) < 2 or not any(i < current_count for i in members):
             continue
         counts: dict[str, int] = defaultdict(int)
         for i in members:
@@ -84,7 +90,9 @@ def correlate(patterns: list[RawPattern], ids: list[str], config: DetectorConfig
                 EvidenceItem("independent_detector_agreement", "inferred",
                              min(0.5, 0.15 * len(kinds) + 0.1 * (sum(jac) / len(jac) if jac else 0)), {
                                  "kinds": kinds,
+                                 "cross_run": any(i >= current_count for i in members),
                                  "members": [{"pattern_id": ids[i], "kind": patterns[i].kind,
+                                              "from_earlier_run": i >= current_count,
                                               "title": patterns[i].title, "confidence": confidences[i],
                                               "entities": len(sets[i])} for i in members],
                                  "mean_jaccard": round(sum(jac) / len(jac), 3) if jac else None,

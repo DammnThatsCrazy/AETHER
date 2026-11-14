@@ -51,19 +51,19 @@ source_hashes:
   "services/api/actions/delivery/outcome_processor.py": "sha256:01f7965be2c0bb762072bc1d3ac206c30b24004771434e915e500aeb17f05f80"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:a4894768d226d29813ac9b1b4e75b4e040e303dfb546d8a66b568fd1432a7655"
+  "services/api/config/settings.py": "sha256:f58b720298a4277ce0a59b6325682a2f059182866886101a2f43ef5a1e4df12f"
   "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:c28174b77ad8d85507bc88aa05af038e059939035411cbaa77c336757ef59757"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
-  "services/api/main.py": "sha256:832ff34ca99d9e46ed0c1eca0ef43338525630affd1cd763ab1189065f2d9994"
+  "services/api/main.py": "sha256:f2d3b001381a97639dfdd7574e85f6ce4718eaa9cd00b1c45ab22801734b46b8"
   "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
-  "services/api/workers/runtime/roles.py": "sha256:9dc895c61c99ce3bcf81c979bc4b195a2e230822233ab178159a48379f6d4f0b"
-  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
+  "services/api/workers/runtime/roles.py": "sha256:976796e657b941759e2aceeb1658cb89866c615fc95023bf334de29ae1369181"
+  "services/api/workers/runtime/specs.py": "sha256:bed3da6f0117ac5a47f856c6405b6e2553bf0ad568c740e5716d14f3c0b9b884"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -688,7 +688,8 @@ These services mount conditionally in `main.py` based on feature flags:
 FEATURE_FRAUD_NETWORKS=true    → mounts services/api/intelligence/fraud_networks router at /v1/fraud/networks
 FEATURE_FLOW_TRACE=true        → mounts services/api/value/flow_trace router at /v1/flow-trace
 FEATURE_RISK_OVERLAYS=true     → mounts services/api/graph/risk_overlay router at /v1/risk-overlay
-AETHER_PATTERN_DISCOVERY_ENABLED=true → mounts services/api/intelligence/pattern_discovery routers at /v1/intelligence/patterns and /v1/kyber/patterns
+AETHER_PATTERN_DISCOVERY_ENABLED=true → mounts services/api/intelligence/pattern_discovery routers at /v1/intelligence/patterns, /v1/kyber/patterns and the /v1/profile|agent|risk360/.../patterns sections
+PATTERN_DISCOVERY_SCHEDULER_ENABLED=true → the pattern_discovery_sweep worker (materializer role) enqueues one pattern_discovery.run job per tenant every PATTERN_DISCOVERY_INTERVAL_MINUTES
 ```
 
 ### Enabling

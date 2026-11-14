@@ -6,8 +6,12 @@ from typing import Callable
 
 from ..contracts import (
     KIND_BEHAVIORAL_COHORT, KIND_LOCKSTEP, KIND_NOVEL_MOTIF, KIND_OUTLIER, KIND_SCHEMA_DRIFT,
-    KIND_SEQUENCE, KIND_SHARED_ATTRIBUTE, KIND_TEMPORAL_BURST,
+    KIND_SEQUENCE, KIND_SHARED_ATTRIBUTE, KIND_TEMPORAL_BURST, KIND_SEGMENT_SHIFT, KIND_AGENT_SPAWN,
+    KIND_AGENT_TOOL_SIGNATURE, KIND_AGENT_INTERACTION, KIND_TRAFFIC_ANOMALY,
 )
+from .agents import detect_agents
+from .ml_windows import detect_traffic_anomalies, window_features
+from .segments import detect_segment_shifts
 from .attributes import detect_shared_attributes
 from .base import DetectorOutput
 from .cohorts import detect_behavioral_cohorts
@@ -28,9 +32,12 @@ DETECTORS: dict[str, tuple[Callable[[DiscoveryFrame], DetectorOutput], frozenset
     "temporal": (detect_temporal, frozenset({KIND_TEMPORAL_BURST, KIND_LOCKSTEP})),
     "outliers": (detect_outliers, frozenset({KIND_OUTLIER})),
     "motifs": (detect_motifs, frozenset({KIND_NOVEL_MOTIF})),
+    "segments": (detect_segment_shifts, frozenset({KIND_SEGMENT_SHIFT})),
+    "agents": (detect_agents, frozenset({KIND_AGENT_SPAWN, KIND_AGENT_TOOL_SIGNATURE, KIND_AGENT_INTERACTION})),
+    "ml_windows": (detect_traffic_anomalies, frozenset({KIND_TRAFFIC_ANOMALY})),
 }
 
 __all__ = [
     "DETECTORS", "DetectorConfig", "DetectorOutput", "DiscoveryFrame", "correlate",
-    "known_motif_signatures",
+    "known_motif_signatures", "window_features",
 ]
