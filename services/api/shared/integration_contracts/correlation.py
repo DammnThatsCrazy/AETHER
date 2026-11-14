@@ -74,10 +74,10 @@ JOIN_RULES: Mapping[frozenset[str], tuple[str, ...]] = MappingProxyType({
         "aether_correlation_token", "shared_object_ref", "infrastructure_ref", "time_window",
     ),
     _pair("network_observer", "agent_runtime"): (
-        "provider_signed_request", "infrastructure_ref", "time_window",
+        "aether_correlation_token", "provider_signed_request", "infrastructure_ref", "time_window",
     ),
     _pair("network_observer", "tool_bridge"): (
-        "provider_signed_request", "infrastructure_ref", "time_window",
+        "aether_correlation_token", "provider_signed_request", "infrastructure_ref", "time_window",
     ),
     _pair("network_observer", "system_of_record"): ("infrastructure_ref", "time_window"),
     _pair("authority_issuer", "agent_runtime"): (

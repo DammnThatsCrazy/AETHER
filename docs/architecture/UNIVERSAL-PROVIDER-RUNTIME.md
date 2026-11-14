@@ -28,7 +28,7 @@ source_hashes:
   "services/api/connectors/providers/shopify/": "sha256:3d9cd3b533fb526c24f93af1d921164f29699f4ad7ae59803dce62b5597958f2"
   "services/api/main.py": "sha256:6647f3160e499a6449f1689e3031debf56031a3abfd57885e0292510b26fac59"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
-  "services/api/shared/integration_contracts/": "sha256:54c331b1a5b0ec0dde536e618f79ce8b858079b077216b63211c2d53b455e1f0"
+  "services/api/shared/integration_contracts/": "sha256:e5c449fa81ac669fbf1c1ca39743161df2c88ed5d8c2ce73ed0145c30a001b99"
   "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
 ---
 

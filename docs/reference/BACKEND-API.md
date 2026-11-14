@@ -4036,6 +4036,19 @@ Discovers patterns nobody defined in advance from raw and semi-structured eviden
 
 Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABLED=true` (default true for local compatibility). Subsystems are separately controlled by `AGENTIC_MCP_OBSERVABILITY_ENABLED`, `AGENTIC_EXTERNAL_ACCOUNTS_ENABLED`, `AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED`, and `AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED`. Authenticated tenant context is authoritative: request-body `tenant_id`/`tenantId` may not override it, and mismatches return HTTP 403.
 
+### Agent correlation
+
+`AGENT_CORRELATION_ENABLED` (default true) mounts the cross-role agent correlation routes under `/v1/observability/agent/correlation`:
+
+- `POST /tasks` registers an agent task and returns a correlation token (requires `AGENT_CORRELATION_TOKEN_KEYS`; otherwise `503`).
+- `POST /observations/{provider}/{kind}` maps one vendor record (`shopify`, `stripe`, `ramp`, `cloudflare`, `openai`, `aether_mcp`) and returns its link decisions. A record the mapper cannot read returns `422`.
+- `PUT /account-bindings/{family}` declares the tenant's provider account.
+- `GET /tasks/{task_ref}/chain` and `GET /observations/{observation_id}/chain` return the evidence-graded chain with explicit gaps.
+- `GET /catalog` lists the mapped providers and roles.
+- `POST /mcp` is an MCP endpoint (JSON-RPC 2.0) with the `aether_register_task`, `aether_report_tool_call`, `aether_report_outcome`, and `aether_get_task_chain` tools.
+
+Only links with proof-class evidence project to the graph, as `CORRELATED_ACROSS_SOURCES` edges. See `docs/architecture/blueprints/universal-connector-runtime/agent-source-roles.md`.
+
 Graph projection is currently best-effort until the durable outbox ships. Responses distinguish mutations built from mutations actually persisted; `graph_mutations_queued` is retained for compatibility and equals the persisted count, not a fake queued count.
 
 ### Agentic Account / MCP / Tool Observability

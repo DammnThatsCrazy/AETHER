@@ -27,6 +27,8 @@ describe('graph-contract', () => {
       expect(EDGE_LAYER_MAP.CORRELATED_WITH_ECONOMIC_RECORD).toBe('EXCLUDED');
       expect(classifyEdgeType('REFERENCES_DELEGATION_RECORD')).toBeNull();
       expect(classifyEdgeType('CORRELATED_WITH_ECONOMIC_RECORD')).toBeNull();
+      expect(EDGE_LAYER_MAP.CORRELATED_ACROSS_SOURCES).toBe('EXCLUDED');
+      expect(classifyEdgeType('CORRELATED_ACROSS_SOURCES')).toBeNull();
     });
 
     it('returns null for unknown edge types', () => {

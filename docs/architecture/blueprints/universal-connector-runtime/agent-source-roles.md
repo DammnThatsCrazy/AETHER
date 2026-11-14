@@ -11,11 +11,23 @@ source_files:
   - services/api/shared/integration_contracts/correlation.py
   - services/api/shared/integration_contracts/correlation_token.py
   - services/api/shared/integration_contracts/streams.py
+  - services/api/actions/agent_correlation/engine.py
+  - services/api/actions/agent_correlation/service.py
+  - services/api/actions/agent_correlation/mcp_server.py
+  - services/api/actions/agent_correlation/routes.py
+  - services/api/actions/agent_correlation/projection.py
+  - services/api/actions/agent_correlation/mappers/__init__.py
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/api/shared/integration_contracts/correlation.py": "sha256:466dea8b14bb0795db7b5177a0dbc9e488f66840d3fe512d8a9cff95b91cb684"
+  "services/api/actions/agent_correlation/engine.py": "sha256:c1a15719a8245a5713bf0c758ae7780eb1490f2d14bda7f33e7770bfc82e4e51"
+  "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
+  "services/api/actions/agent_correlation/mcp_server.py": "sha256:b20c135f39ae243eb5df8073f45df2a69c5ae8e00b635b2a84dd72ba3e6f4cde"
+  "services/api/actions/agent_correlation/projection.py": "sha256:533ba53fd6932921a34e84667f6c7461eec8099906893da7f1852698ddbeb4bc"
+  "services/api/actions/agent_correlation/routes.py": "sha256:b1457740c2470506aedb2051f01770418ffa88cecd986fca98958dcc2f13ee4d"
+  "services/api/actions/agent_correlation/service.py": "sha256:09373956b510ae5d417f0f0b93dbaa5b68d5e933e53fadc65fad58eb907f0de5"
+  "services/api/shared/integration_contracts/correlation.py": "sha256:aece1cedf50ba6638d1dbdcb3406c5a2c5564592d42476182470a330d2527b6f"
   "services/api/shared/integration_contracts/correlation_token.py": "sha256:bdc1861aad5f6d2afcb6f07ad0f9ab67e3f28bca7cfea49b11dda2aa0d0c9ae7"
   "services/api/shared/integration_contracts/source_roles.py": "sha256:002bcc66f8960fec8b92f7d63f8e665cd1a20b6679957bd9459be8d8d81d94ae"
   "services/api/shared/integration_contracts/streams.py": "sha256:cea0cdc53f61bbb90b57a627cd69f032d7cc8d1e2899b4099f04d2cf52ab36ac"
@@ -23,11 +35,21 @@ source_hashes:
 
 # Agent source roles and cross-role correlation
 
-**State:** contract foundation implemented: source roles on stream descriptors,
-role-pair join rules, and the Aether correlation token, with unit tests. No
-provider beyond Shopify declares roles yet. No runtime path calls the join
-rules, and no verdict reaches the graph. The rollout steps below are targets,
-not claims that any agent platform is connected.
+**State:** implemented end to end in the API, with unit and route tests:
+
+- **Contracts:** source roles on stream descriptors, role-pair join rules, and
+  the Aether correlation token.
+- **Runtime:** vendor mappers for Shopify, Stripe, Ramp, Cloudflare, OpenAI
+  Agents, and the Aether MCP channel, plus stored tasks, observations, join
+  keys, and append-only verdicts.
+- **Correlation:** an engine that correlates every new observation and a
+  projector that writes only proven links to the graph.
+- **Interfaces:** REST routes and an MCP endpoint, mounted by default
+  (`AGENT_CORRELATION_ENABLED`).
+
+The mappers read each vendor's documented record shapes; none is certified
+against a live provider account yet. Token issuance needs
+`AGENT_CORRELATION_TOKEN_KEYS`.
 
 ## Why roles, not vendors
 
@@ -70,17 +92,18 @@ The evidence classes are `PRINCIPAL_EVIDENCE_CLASSES` from
 introduced. `cap_evidence(role, cls)` clamps a stream's self-reported evidence
 to its role ceiling and never strengthens it.
 
-A vendor plays the roles its streams declare. Mapping the vendors in scope is
-a design target; each needs the provider's actual API, scopes, and rights
-confirmed before its module is built:
+A vendor plays the roles its streams declare. The runtime maps these today
+(see [Runtime](#runtime)); live certification against each provider's sandbox
+is still open:
 
-| Vendor | Streams by role (target) |
+| Vendor | Streams by role |
 |---|---|
-| Shopify | `system_of_record` (orders, inventory, products: the order streams are tagged today); `authority_issuer` (app and connector access grants) |
-| Stripe | `system_of_record` (payments, refunds, disputes); `authority_issuer` (restricted key scopes) |
+| Shopify | `system_of_record` (orders, inventory, products); `authority_issuer` (app and connector access grants) |
+| Stripe | `system_of_record` (payments, refunds, disputes) |
 | Ramp | `system_of_record` (card transactions, bills); `authority_issuer` (card limits, spend policies, approvals) |
 | Cloudflare | `network_observer` (AI gateway logs and agent traffic on tenant-owned zones) |
-| OpenAI, Grok | `agent_runtime` (run, task, and tool-call records the tenant can export or emit); `tool_bridge` where the tenant hosts the MCP server |
+| OpenAI | `agent_runtime` (traces) and `tool_bridge` (function spans) from the tenant's tracing export |
+| Grok and other platforms | `agent_runtime` and `tool_bridge` through the Aether MCP endpoint |
 | Aether MCP | `tool_bridge` (first-party; issues correlation tokens) |
 
 ## Stream contract
@@ -181,15 +204,62 @@ connector.
 | + the same correlation token on the bot's task and the store note | `linked` by token, even hours apart |
 | + write-access grant naming the connector's client | `candidate` `PROVIDER_ASSERTED` link to the authority; `VERIFIED_AUTHORITY` needs the issuer's own record |
 
+## Runtime
+
+`services/api/actions/agent_correlation/` holds the runtime. Every route is
+tenant-scoped through the authenticated tenant context and observation-only.
+
+| Route (`/v1/observability/agent/correlation`) | Purpose |
+|---|---|
+| `POST /tasks` | Register an agent task; returns the token and where to stamp it per system |
+| `POST /observations/{provider}/{kind}` | Map one vendor record and correlate it; returns each link decision |
+| `PUT /account-bindings/{family}` | Declare the tenant's account for a provider family (scopes agent-side object IDs) |
+| `GET /tasks/{task_ref}/chain`, `GET /observations/{id}/chain` | The evidence-graded chain: observations in time order, proven links, unproven links, and gaps |
+| `GET /catalog` | Mapped providers, kinds, and roles; whether token issuance is available |
+| `POST /mcp` | MCP endpoint (JSON-RPC 2.0, streamable HTTP with JSON responses) |
+
+The MCP endpoint offers four tools to any agent platform that accepts a custom
+MCP server: `aether_register_task`, `aether_report_tool_call`,
+`aether_report_outcome`, and `aether_get_task_chain`. Grok bots report this
+way, because Grok exposes no public telemetry API.
+
+| Provider / kind | Role | Record read | Join keys produced |
+|---|---|---|---|
+| `shopify` / `order`, `inventory_level`, `product` | `system_of_record` | Admin webhook payloads | Exact object refs; `shopify_app:` and `shopify_staff:` actors; tokens in the order note, note attributes, or tags |
+| `shopify` / `access_grant` | `authority_issuer` | The connection's capture of an app or connector approval | App and staff actors |
+| `stripe` / `event` | `system_of_record` | PaymentIntent, Charge, Refund, Dispute events | Exact object refs (realm from `livemode`); tokens in metadata or description |
+| `ramp` / `transaction` | `system_of_record` | Card transaction | Exact object ref; `ramp_card:` and `ramp_user:` actors; token in memo |
+| `ramp` / `limit` | `authority_issuer` | Limit or spend program | Card and holder actors; token in display name |
+| `cloudflare` / `ai_gateway_log` | `network_observer` | AI Gateway log | Token in metadata; gateway log ref |
+| `cloudflare` / `http_request` | `network_observer` | Tenant-exported request row (`RayID`, `EdgeStartTimestamp`, signature nonce and check) | Signed request; Ray ID |
+| `openai` / `export` | `agent_runtime`, `tool_bridge` | Agents tracing export batch | Trace token inherited by its function spans; object IDs in function input and output |
+| `aether_mcp` / `task_registered`, `tool_call_reported`, `outcome_reported` | `agent_runtime`, `tool_bridge` | Aether MCP tool calls | Token; object IDs in input and output; signature nonce |
+
+When a record arrives, the engine:
+
+1. Stores it. A repeated delivery is a no-op.
+2. Indexes its join keys: verified task refs, object refs, signed request IDs,
+   actors, infrastructure refs, and its time bucket.
+3. Finds candidates that share a key or fall in an adjacent bucket, capped at
+   500.
+4. Runs the join rules.
+5. Appends linked, candidate, and conflicting verdicts.
+6. Projects new linked verdicts.
+
+The chain view lists, for each role, a gap message when no observation of that
+role is linked. An answer never implies coverage it does not have.
+
 ## Delivery sequence
 
 | Step | Outcome | Exit evidence |
 |---|---|---|
-| 1. Contracts (this change) | Roles on streams, role/pack rules, join rules, token | Unit tests for role validation, every verdict path, token tamper/expiry/tenant cases, and the no-vendor-names guard |
-| 2. Persistence | Store verdicts as append-only decision records keyed by tenant and both observation IDs, with the policy version | Replay produces identical verdicts; no graph write yet |
-| 3. Aether MCP bridge | Agents register tasks and receive tokens; key custody through the credential broker | Token issued, stamped into a sandbox payment's metadata, and joined |
-| 4. Projection | A projector turns `linked` verdicts into lineage relationships (`INVOKED`, `PRODUCED_EFFECT`, `AUTHORIZED`) through the graph mutation gateway | Graph shows each edge's evidence class and verification state; candidates stay out of proof views |
-| 5. Second vendor per role | Add one more agent runtime, network observer, and authority issuer | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
+| 1. Contracts (done) | Roles on streams, role/pack rules, join rules, token | Unit tests for role validation, every verdict path, token tamper/expiry/tenant cases, and the no-vendor-names guard |
+| 2. Persistence (done) | Append-only verdicts keyed by tenant, observation pair, policy version, and outcome | Repeated deliveries and repeated decisions write nothing new |
+| 3. Aether MCP bridge (done) | Agents register tasks and receive tokens; keys from `AGENT_CORRELATION_TOKEN_KEYS` | An end-to-end test registers a task over MCP, stamps the token into Stripe metadata, and links it |
+| 4. Projection (done) | `linked` verdicts become `CORRELATED_ACROSS_SOURCES` edges through the graph mutation gateway | Projected edges pass the graph write validator; candidates never project |
+| 5. Vendors per role (done for six) | Shopify, Stripe, Ramp, Cloudflare, OpenAI Agents, Aether MCP | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
+| 6. Live certification | Run each mapper against a sandbox account of its provider and pin the record shapes | Recorded sandbox payloads replayed in tests |
+| 7. Verified bindings | Derive account bindings from verified provider connections instead of tenant declarations | Bindings carry the connection's account verification reference |
 
 Step 5 is the modularity test. A vendor that needs a change outside its own
 module means the abstraction is leaking.

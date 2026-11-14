@@ -1504,6 +1504,24 @@ class AgenticObservabilityConfig:
 
 
 @dataclass(frozen=True)
+class AgentCorrelationConfig:
+    """Cross-role agent correlation (agent runtime / tool bridge / system of
+    record / network observer / authority issuer).
+
+    ``token_keys`` is a comma-separated ``key_id:base64url_secret`` list; the
+    first entry signs new correlation tokens and every entry verifies, so a key
+    rotates by prepending the new key and dropping the old one after its tokens
+    expire. Each secret must decode to at least 32 bytes. With no keys the
+    routes still accept observations but cannot issue or verify tokens.
+    """
+    enabled: bool = _env_bool("AGENT_CORRELATION_ENABLED", True)
+    token_keys: tuple[str, ...] = field(
+        default_factory=lambda: tuple(_env_list("AGENT_CORRELATION_TOKEN_KEYS"))
+    )
+    time_window_seconds: int = _env_int("AGENT_CORRELATION_TIME_WINDOW_SECONDS", 300)
+
+
+@dataclass(frozen=True)
 class AgenticObservabilityIngestionConfig:
     """Routes agentic observations through the canonical durable ingestion spine
     (typed Bronze + event_outbox → relay → SilverDispatcher → projectors) instead
@@ -2205,6 +2223,9 @@ class Settings:
 
     # Agentic Intelligence observability rollout flags
     agentic_observability: AgenticObservabilityConfig = field(default_factory=AgenticObservabilityConfig)
+
+    # Cross-role agent correlation (source roles, join rules, correlation tokens)
+    agent_correlation: AgentCorrelationConfig = field(default_factory=AgentCorrelationConfig)
 
     # Agentic observation ingestion through the canonical durable spine (default OFF)
     agentic_observability_ingestion: AgenticObservabilityIngestionConfig = field(

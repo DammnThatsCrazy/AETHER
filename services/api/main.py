@@ -1384,6 +1384,9 @@ def create_app() -> FastAPI:
         if agentic_flags.communication_enabled:
             from actions.agent_comm_observability.routes import router as comm_obs_router
             app.include_router(comm_obs_router, tags=["Agent Comm Observability"])
+        if settings.agent_correlation.enabled:
+            from actions.agent_correlation.routes import router as agent_correlation_router
+            app.include_router(agent_correlation_router, tags=["Agent Correlation"])
         if agentic_flags.external_accounts_enabled:
             from connectors.external_account_observability.routes import router as ext_account_obs_router
             app.include_router(ext_account_obs_router, tags=["External Account Observability"])
