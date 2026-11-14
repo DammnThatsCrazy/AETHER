@@ -28,6 +28,7 @@ class BindingSilverAgentActivityReader:
         from actions.agent_marketplace.identity_binding import AgentDeploymentIdentityBindingRepository
         from dependencies.providers import get_cache
         from intelligence.agent_behavior.facts import normalize_rows
+        from intelligence.agent_behavior.read_models import distinct_actions
         from intelligence.agent_behavior.responsibility import decompose
         from repositories.repos import AnalyticsRepository
 
@@ -51,8 +52,11 @@ class BindingSilverAgentActivityReader:
             exact = [r for r in rows[:_FACT_LIMIT]
                      if r.get("deployment_id") == binding.get("source_deployment_id")]
             facts.extend(normalize_rows(exact, tenant_id))
-        actions = [f for f in facts if f.amount is not None and f.currency
-                   and f.event_type.startswith(_VALUE_EVENTS)]
+        # Lifecycle phases of one purchase (initiated -> authorized -> settled,
+        # correlated by source references) are one monetary action; attributing
+        # each phase would multiply its amount. Separate purchases stay distinct.
+        actions = distinct_actions([f for f in facts if f.amount is not None and f.currency
+                                    and f.event_type.startswith(_VALUE_EVENTS)])
         refs = {b["source_agent_ref"] for b in bindings}
         result = attribute(
             [{"event_id": f.event_id, "amount": str(f.amount), "currency": f.currency,

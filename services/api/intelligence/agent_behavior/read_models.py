@@ -125,9 +125,12 @@ def _economic_key(f: AgentFact) -> Optional[tuple[str, str]]:
 _ATTRIBUTION_REFS = ("decision_ref", "objective_ref", "authorization_ref", "currency")
 
 
-def _distinct_actions(actions: list[AgentFact]) -> list[AgentFact]:
+def distinct_actions(actions: list[AgentFact]) -> list[AgentFact]:
     """One representative per correlated action: its most final phase, carrying
-    attribution references reported only on earlier phases."""
+    attribution references reported only on earlier phases.
+
+    Shared with Value 360's agent activity reader so a purchase reported as
+    initiated -> authorized -> settled is attributed once, not per phase."""
     import dataclasses
 
     groups: dict[Any, list[AgentFact]] = {}
@@ -184,7 +187,7 @@ def _governance(facts: list[AgentFact], agent_ref: str, model: dict[str, Any],
               for i, a in enumerate(observed)]
     value = attribute(
         [{"event_id": f.event_id, "amount": str(f.amount), "currency": f.currency,
-          "roles": decompose(f, facts, grants=grants)} for f in _distinct_actions(actions)],
+          "roles": decompose(f, facts, grants=grants)} for f in distinct_actions(actions)],
         agent_refs={f.agent_ref for f in facts if f.agent_ref},
     )
     adversarial = adversarial_signals(mine, checks)

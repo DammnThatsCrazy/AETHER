@@ -99,3 +99,27 @@ async def test_reader_failure_degrades():
                                    agent_activity_reader=Boom())
     sec = _section(await provider.project(*_req("agent", "ent-agent-1")))
     assert sec.state == "degraded" and "diagnostic" not in str(sec.content)
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_phases_of_one_purchase_are_attributed_once():
+    """Codex review on #867: initiated -> authorized -> settled phases of one
+    USD 40 purchase were each attributed, reporting USD 120."""
+    from actions.agent_marketplace.identity_binding import AgentDeploymentIdentityBindingRepository
+
+    await AgentDeploymentIdentityBindingRepository().bind(
+        tenant_id=T, source_namespace="vendor.runtime", source_agent_ref="buyer",
+        canonical_agent_entity_id="ent-agent-1", bound_by="admin", source_deployment_id="dep-1")
+    purchase = {"actionId": "act-1", "amount": "40.00", "currency": "USD"}
+    await _persist("buyer", "dep-1", [
+        ("agent_transaction_initiated", purchase),
+        ("agent_transaction_authorized", purchase),
+        ("agent_transaction_settled", purchase),
+        # A separate purchase of the same amount stays its own action.
+        ("agent_transaction_initiated", {**purchase, "actionId": "act-2"}),
+    ])
+    provider = Economic360Provider(_Sources(), agent_identity_reader=_CanonicalAgent())
+    sec = _section(await provider.project(*_req("agent", "ent-agent-1")))
+    assert sec.state == "available"
+    totals = {(t["currency"], t["finality"]): t["amount"] for t in sec.content["attribution"]["totals"]}
+    assert totals == {("USD", "reported"): "80.00"}
