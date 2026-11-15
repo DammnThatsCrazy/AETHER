@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:b71f250a3fc16797858f1ad58f62c0acdc06c4fbce2c39dda9d690f24acdca62"
+  "scripts/production_status.py": "sha256:34645c3d56ea9fde425c2fd76036e67fe8b274c5b4c1997599279a6c96a9f17d"
 ---
 
 # AETHER Productization Audit
@@ -225,8 +225,9 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | semantic intelligence | 2 |
 | card-linked payment rails | 2 |
 | pattern discovery | 2 |
+| Access Kit (MCP / CLI / API) | 3 |
 
-**Overall: ~3.68/5 — pre-production** (canonical live figure from
+**Overall: ~3.66/5 — pre-production** (canonical live figure from
 `make production-status`; this table is a dated excerpt of the full scorecard).
 The 2026-11-14 pass added **pattern discovery at 2/5 (partial/pilot)**: a
 complete, flag-gated discovery plane (schema-on-read extraction, segmented and
@@ -237,6 +238,14 @@ erasure, consent gates, Risk360 and graph promotion, scheduler, Kyber and
 Aether surfaces) held at 2 because no detector has measured precision on production
 data. Like the semantic intelligence addition, the lower average is honest
 denominator growth, not a regression in any existing area.
+The 2026-11-15 pass added **Access Kit (MCP / CLI / API) at 3/5
+(pre-production)**: one closed read-operation table behind the CLI, local and
+hosted MCP and the Node client; named Profile360 reads (identifier search in
+the request body, frame, slots, evidence) with per-slot source-watermark
+freshness; delegated MCP OAuth with an exact read allowlist and an opt-in
+read-only host-registration path; and staging wake/sleep coverage for the
+hosted MCP. It stays at 3 until the W3 real-tenant certification runs in
+staging and the hosted MCP is deployed (two pre-production blockers).
 A W3C trace-context seam (correlation-id + traceparent propagation across the
 jobs platform, no-op unless `AETHER_OTEL_ENABLED`) landed with a matching
 declared pre-production blocker: no OpenTelemetry SDK/exporter is integrated,
