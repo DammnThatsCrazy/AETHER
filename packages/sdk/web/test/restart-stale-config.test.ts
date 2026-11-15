@@ -46,4 +46,44 @@ describe('restart and late /v1/config responses', () => {
     expect(load).toHaveBeenCalledTimes(1);
     expect(load.mock.calls[0][0][0].id).toBe('new');
   });
+
+  it('does not resume a journey redeemed for the previous install', async () => {
+    let respond!: (body: unknown) => void;
+    (globalThis as any).fetch = vi.fn((url: string) => {
+      if (String(url).endsWith('/sdk/journey-handoff/redeem')) {
+        return new Promise((resolve) => {
+          respond = (body) => resolve({ ok: true, status: 200, json: async () => body } as any);
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: null, accepted: 0, duplicates: 0, rejected: 0 }), text: async () => '{}' } as any);
+    });
+
+    aether.init(CONFIG('pk_old'));
+    const redeemed = aether.redeemJourneyHandoff('tok_old');
+    aether.destroy();
+    aether.init(CONFIG('pk_new'));
+    respond({ data: { link_basis: 'explicit_handoff', journey_id: 'journey_old', handoff_id: 'h1' } });
+
+    expect(await redeemed).toBeNull();
+    expect(aether.getCurrentJourney()?.journeyId).not.toBe('journey_old');
+  });
+
+  it('does not resolve the previous install\'s identity under the new key', async () => {
+    const resolveCalls: { key: string; body: any }[] = [];
+    (globalThis as any).fetch = vi.fn(async (url: string, init?: any) => {
+      if (String(url).endsWith('/sdk/identity/resolve')) {
+        resolveCalls.push({ key: init?.headers?.['x-api-key'], body: JSON.parse(init.body) });
+      }
+      return { ok: true, status: 200, json: async () => ({ resolved: false, data: null, accepted: 0, duplicates: 0, rejected: 0 }), text: async () => '{}' } as any;
+    });
+
+    aether.init(CONFIG('pk_old'));
+    aether.hydrateIdentity({ userId: 'old-user', traits: {} } as any);
+    // The email hash / resolve continuation is async; restart before it runs.
+    aether.destroy();
+    aether.init(CONFIG('pk_new'));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(resolveCalls.filter((c) => c.key === 'pk_new' && c.body.user_id === 'old-user')).toHaveLength(0);
+  });
 });

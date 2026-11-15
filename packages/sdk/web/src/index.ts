@@ -352,6 +352,7 @@ class AetherSDK implements AetherSDKInterface {
    */
   async redeemJourneyHandoff(token: string): Promise<JourneyHandoffLink | null> {
     if (!this.config || !this.identityManager || !token) return null;
+    const generation = this.initGeneration;
     const sessionId = this.sessionManager?.getSession()?.id;
     if (!sessionId) return null;
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
@@ -368,6 +369,9 @@ class AetherSDK implements AetherSDKInterface {
       });
       if (!res.ok) return null;
       const body = await res.json() as { data?: Record<string, any> };
+      // Redeemed for an instance destroy() has since replaced: do not resume
+      // the old journey into the new install.
+      if (generation !== this.initGeneration) return null;
       const d = body.data;
       if (!d || d.link_basis !== 'explicit_handoff' || !d.journey_id) return null;
       const side = (x: Record<string, string> | undefined) => ({
@@ -490,7 +494,11 @@ class AetherSDK implements AetherSDKInterface {
     if (this.config?.autoResumeJourney !== false) {
       const newUserId = identity.userId !== priorUserId ? identity.userId : undefined;
       if (newUserId || data.email) {
+        // Captured before the async hash: identity data from this init must not
+        // be resolved under a replacement install's key.
+        const generation = this.initGeneration;
         this._hashEmail(data.email).then((emailHash) => {
+          if (generation !== this.initGeneration) return;
           if (emailHash === this._lastEmailHash && !newUserId) return;
           if (emailHash !== undefined) this._lastEmailHash = emailHash;
           this.resolveIdentity({ wallets: identity.wallets, userId: newUserId, emailHash }).catch(() => {});
@@ -520,12 +528,15 @@ class AetherSDK implements AetherSDKInterface {
 
   async flush(): Promise<void> {
     if (!this.eventQueue) return;
-    this.healthAgent?.setLastFlushStatus('flushing');
+    // Report on the agent this flush started under, not a replacement created
+    // by a destroy()/init() while it was in flight.
+    const agent = this.healthAgent;
+    agent?.setLastFlushStatus('flushing');
     try {
       await this.eventQueue.flush();
-      this.healthAgent?.setLastFlushStatus('success');
+      agent?.setLastFlushStatus('success');
     } catch (e) {
-      this.healthAgent?.setLastFlushStatus('failed');
+      agent?.setLastFlushStatus('failed');
       throw e;
     }
   }
@@ -769,7 +780,12 @@ class AetherSDK implements AetherSDKInterface {
     },
     recordReceipt: async (input: CanonicalConsentReceiptInput) => {
       if (!this.config) throw new Error('Aether SDK is not initialized');
+      const generation = this.initGeneration;
       const receipt = await buildCanonicalConsentReceipt(input);
+      // Never record one install's consent under a replacement install's key.
+      if (generation !== this.initGeneration || !this.config) {
+        throw new Error('Aether SDK was restarted while recording consent; record it again');
+      }
       const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
       const response = await fetch(`${endpoint}/v1/consent/records`, {
         method: 'POST',

@@ -44,8 +44,8 @@ stable release; it is not a production-readiness claim.
   (see `sdks/manifest-signing`).
 - The **server** SDK (`packages/sdk/server`) and the **Python** envelope builder
   (`packages/sdk/python`) are not columns here. By default the server SDK keeps a
-  bounded in-process queue; setting `durable: true` or `spoolPath` selects the
-  disk-backed `DurableEventQueue`, which persists accepted events and replays
+  bounded in-process queue; setting `spoolPath` selects the disk-backed
+  `DurableEventQueue` (`durable: true` alone throws), which persists accepted events and replays
   them at startup. The server SDK only forwards consent as an ingestion hint.
   The Python package has no client-side emit pipeline.
 - The runtime-behaviour rows (observe, consent gating, batching, manifest fetch

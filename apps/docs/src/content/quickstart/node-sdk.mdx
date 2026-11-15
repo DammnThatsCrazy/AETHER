@@ -113,19 +113,26 @@ inside a long-running service.
 ### Durable delivery <Preview />
 
 For a long-running process where losing a batch on crash or restart is
-unacceptable, enable the disk-backed durable queue. Spooled events survive a
-process restart and are replayed automatically:
+unacceptable, enable the disk-backed durable queue by giving it a spool file.
+Spooled events survive a process restart and are replayed automatically:
 
 ```typescript
 const aether = new AetherServerSDK({
   writeKey: process.env.AETHER_WRITE_KEY!,
-  durable: true,
+  // Must be on storage that survives restarts: local disk on a VM, or a
+  // mounted volume (EFS, a Kubernetes persistent volume) for containers.
+  spoolPath: '/var/lib/myapp/aether-spool.jsonl',
   onSpoolDrop: (info) => logger.error('aether spool full', info),
 });
 
 aether.isDurable();     // true
 aether.spoolHealthy();  // true | false | null (null when durability is off)
 ```
+
+`durable: true` without a `spoolPath` throws: the SDK does not fall back to the
+OS temp directory, which containers and serverless platforms discard on
+restart. On AWS Lambda there is no durable local disk, so don't rely on a spool
+there; `await aether.flush()` before each handler returns instead.
 
 ## Health and batch results
 
