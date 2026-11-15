@@ -172,10 +172,10 @@ services/ml/                    ML training + serving
 services/agents/                Autonomous agent workers (internal)
 services/compliance/            GDPR/SOC 2 controls
 security/                       Model extraction defense package
-packages/shared/                       @aether/shared — canonical TypeScript contracts
+packages/shared/                       @olympuslabs/aether-shared — canonical TypeScript contracts
 packages/ui/                           @aether/ui — shared React component library
-packages/sdk/web/                          @aether/web — Web SDK
-packages/sdk/react-native/                 @aether/react-native — React Native SDK
+packages/sdk/web/                          @olympuslabs/aether-web — Web SDK
+packages/sdk/react-native/                 @olympuslabs/aether-react-native — React Native SDK
 apps/aether-web/                       Customer web app (React 19 + Vite, port 5175)
 apps/kyber-web/                        Operator console (React 19 + Vite, port 5174)
 packages/contracts/smart-contracts/       EVM and multi-chain smart contracts

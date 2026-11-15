@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { NativeModules } from 'react-native';
-import type { FeatureFlag } from '@aether/shared/feature-flag-types';
+import type { FeatureFlag } from '@olympuslabs/aether-shared/feature-flag-types';
 
 export type { FeatureFlag };
 

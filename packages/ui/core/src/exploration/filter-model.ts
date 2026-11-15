@@ -7,13 +7,13 @@
 import type {
   FilterDisposition,
   ApplicabilityReport,
-} from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
 import type {
   FilterExpression,
   FilterGroup,
   FilterOperator,
-} from '@aether/shared/graph-contract';
-import type { FilterFieldDataType } from '@aether/shared/filter-fields';
+} from '@olympuslabs/aether-shared/graph-contract';
+import type { FilterFieldDataType } from '@olympuslabs/aether-shared/filter-fields';
 import {
   getFilterField,
   isKnownField,

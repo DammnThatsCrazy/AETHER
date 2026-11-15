@@ -902,7 +902,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     run(
         [sys.executable, "scripts/validate_sdk_distribution_artifacts.py"],
-        name="SDK distribution artifacts (@aether/web build wiring and declared outputs)",
+        name="SDK distribution artifacts (@olympuslabs/aether-web build wiring and declared outputs)",
         results=results,
         stop_on_failure=stop,
         remediation=(
@@ -1227,7 +1227,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="SDK import boundary (client SDK surfaces must not import backend/legacy internals)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep SDK client surfaces thin — talk to api.aether.io / ingest.aether.so; never import backend internals or the archived ingestion/lake duplicates (shrink scripts/allowlists/sdk_internal_import_allowlist.json only)",
+        remediation="keep SDK client surfaces thin — talk to api.aether.network; never import backend internals or the archived ingestion/lake duplicates (shrink scripts/allowlists/sdk_internal_import_allowlist.json only)",
     )
     run(
         [sys.executable, "scripts/validate_model_governance.py"],
@@ -1299,13 +1299,13 @@ def main(argv: Sequence[str] | None = None) -> None:
             skip("npm ci", "no package-lock.json at root", results)
 
         # Build packages/shared before typecheck — its dist/ is gitignored and required
-        # by Kyber/Aether TypeScript imports of @aether/shared. Mirrors what the
+        # by Kyber/Aether TypeScript imports of @olympuslabs/aether-shared. Mirrors what the
         # dedicated typescript CI job does (npm run build --workspace=packages/shared).
         shared_pkg = ROOT / "packages" / "shared"
         if shared_pkg.exists():
             run(
                 ["npm", "run", "build", "--workspace=packages/shared"],
-                name="npm build @aether/shared (pre-typecheck)",
+                name="npm build @olympuslabs/aether-shared (pre-typecheck)",
                 results=results,
                 stop_on_failure=stop,
                 remediation="fix TypeScript compilation errors in packages/shared",

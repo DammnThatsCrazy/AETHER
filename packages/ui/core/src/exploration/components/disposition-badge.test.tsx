@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { FilterDisposition } from '@aether/shared/exploration-contract';
+import type { FilterDisposition } from '@olympuslabs/aether-shared/exploration-contract';
 import { FilterDispositionBadge, dispositionStyle } from './disposition-badge';
 
 const FOUR: FilterDisposition[] = ['applied', 'translated', 'unsupported', 'suppressed'];

@@ -7,7 +7,7 @@
  *
  * Validates:
  *  - HTTP batch ingestion against POST /v1/batch
- *  - Direct SDK usage via @aether/web (if DOM available)
+ *  - Direct SDK usage via @olympuslabs/aether-web (if DOM available)
  *  - Correct canonical event envelope per docs/reference/api/ingestion.md
  */
 
@@ -102,7 +102,7 @@ function buildEvent(
     ...(userId ? { userId } : {}),
     properties,
     context: {
-      library: { name: '@aether/web', version: SDK_VERSION },
+      library: { name: '@olympuslabs/aether-web', version: SDK_VERSION },
       surface: 'web',
       schemaVersion: '1.0.0',
       sequence: { event: 0 },
@@ -304,14 +304,14 @@ async function runHttpBatchTest(): Promise<boolean> {
 // ── Direct SDK test (skip if DOM unavailable) ──────────────────────────────────
 
 async function runDirectSdkTest(): Promise<void> {
-  console.log('\n── FPS-040: Direct @aether/web SDK test ──');
+  console.log('\n── FPS-040: Direct @olympuslabs/aether-web SDK test ──');
 
   try {
     // Dynamic import — may fail in Node without DOM
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { default: aether } = await import('@aether/web') as any;
+    const { default: aether } = await import('@olympuslabs/aether-web') as any;
 
-    console.log('[FPS-040] ✓ @aether/web imported successfully.');
+    console.log('[FPS-040] ✓ @olympuslabs/aether-web imported successfully.');
 
     // Initialize the SDK
     aether.init({

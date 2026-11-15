@@ -19,7 +19,7 @@ import {
 import type {
   ExplorationSnapshot,
   ExplorationSnapshotComparison,
-} from "@aether/shared/exploration-contract";
+} from "@olympuslabs/aether-shared/exploration-contract";
 import { isFeatureEnabled } from "@aether-app/lib/featureFlags";
 
 type SnapshotListItem = Omit<ExplorationSnapshot, "result" | "context">;

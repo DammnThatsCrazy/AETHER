@@ -58,7 +58,7 @@ describe.skipIf(!API_KEY)('FPS-201: Graph Write Tests', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'identify',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       identity: { anonymous_id: 'anon_graph_001', user_id: 'user_graph_001' },
       timestamp: new Date().toISOString(),
       properties: {
@@ -92,7 +92,7 @@ describe.skipIf(!API_KEY)('FPS-201: Graph Write Tests', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       identity: { anonymous_id: 'anon_graph_001' },
       timestamp: new Date().toISOString(),
       properties: {
@@ -138,7 +138,7 @@ describe.skipIf(!API_KEY)('FPS-201: Graph Write Tests', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       identity: { anonymous_id: 'anon_graph_idem_001' },
       timestamp: new Date().toISOString(),
       properties: {

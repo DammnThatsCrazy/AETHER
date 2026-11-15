@@ -1,10 +1,10 @@
 // packages/sdk/web/src/react.tsx
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { AetherSDKInterface } from '@aether/web';
-import type { ConsentState } from '@aether/shared/consent';
+import type { AetherSDKInterface } from '@olympuslabs/aether-web';
+import type { ConsentState } from '@olympuslabs/aether-shared/consent';
 
 // The singleton is imported lazily so SSR bundles don't instantiate it.
-// '@aether/web' is marked external so this import resolves correctly from dist/react.js.
+// '@olympuslabs/aether-web' is marked external so this import resolves correctly from dist/react.js.
 let _instance: AetherSDKInterface | null = null;
 
 interface AetherContextValue {
@@ -24,7 +24,7 @@ export function AetherProvider({ config, children }: AetherProviderProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     // Import via package name so the resolved path is dist/aether.esm.js, not dist/index.js.
-    import('@aether/web').then(({ default: aether }) => {
+    import('@olympuslabs/aether-web').then(({ default: aether }) => {
       _instance = aether;
       aether.init(config);
       setSdk(aether);

@@ -9,7 +9,7 @@ import type {
   RelationshipPath,
   PathExplanation,
   PathClassification,
-} from '@aether/shared/operational-intelligence';
+} from '@olympuslabs/aether-shared/operational-intelligence';
 
 const CLASSIFICATION_CONFIG: Record<PathClassification, { label: string; variant: 'default' | 'success' | 'warning' | 'danger' | 'info'; icon: string }> = {
   observed:         { label: 'Observed',        variant: 'success',  icon: '●' },

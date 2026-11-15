@@ -12,12 +12,12 @@ import type { SemanticContextEnvelope } from './context/SemanticContext';
 import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
 import { RNFeedback } from './modules/Feedback';
-import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
-import type { AcquisitionEvidence } from '@aether/shared/acquisition-evidence';
+import type { ConsentState, ConsentPurpose } from '@olympuslabs/aether-shared/consent';
+import type { AcquisitionEvidence } from '@olympuslabs/aether-shared/acquisition-evidence';
 import {
   buildCanonicalConsentReceipt,
   type CanonicalConsentReceiptInput,
-} from '@aether/shared/consent-receipt';
+} from '@olympuslabs/aether-shared/consent-receipt';
 
 export type { AcquisitionEvidence };
 
@@ -622,7 +622,7 @@ const Aether = {
     async recordReceipt(input: CanonicalConsentReceiptInput) {
       if (!activeConfig) throw new Error('Aether SDK is not initialized');
       const receipt = await buildCanonicalConsentReceipt(input);
-      const endpoint = activeConfig.endpoint ?? 'https://api.aether.io';
+      const endpoint = activeConfig.endpoint ?? 'https://api.aether.network';
       const response = await fetch(`${endpoint}/v1/consent/records`, {
         method: 'POST',
         headers: {

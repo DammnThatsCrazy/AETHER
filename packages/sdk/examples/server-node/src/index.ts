@@ -1,6 +1,6 @@
 // =============================================================================
 // packages/sdk/examples/server-node/src/index.ts
-// Node.js server SDK example using @aether/server
+// Node.js server SDK example using @olympuslabs/aether-server
 // =============================================================================
 // Demonstrates the server-side first-value journey:
 //   init → heartbeat → track event → identify → commerce → flush →
@@ -8,8 +8,8 @@
 // =============================================================================
 
 import 'dotenv/config';
-import { AetherServerSDK } from '@aether/server';
-import type { BatchHealth } from '@aether/server';
+import { AetherServerSDK } from '@olympuslabs/aether-server';
+import type { BatchHealth } from '@olympuslabs/aether-server';
 
 // ---------------------------------------------------------------------------
 // Config — read from env, with staging/local differentiation

@@ -4,8 +4,8 @@ import { ReportingValueDisplay, buildReportingValueRender } from './reporting-va
 import type { DisplayCurrencyQuote, ReportingValuationLike } from './reporting-value';
 
 // Component tests render with react-dom/server and resolve canonical asset
-// metadata through @aether/shared/financial-assets — they run in the full CI
-// install (react + @aether/shared present).
+// metadata through @olympuslabs/aether-shared/financial-assets — they run in the full CI
+// install (react + @olympuslabs/aether-shared present).
 
 function markup(
   value: ReportingValuationLike | null | undefined,

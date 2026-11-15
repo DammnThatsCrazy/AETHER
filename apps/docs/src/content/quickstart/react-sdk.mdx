@@ -13,7 +13,7 @@ toc_depth: 3
 
 # Getting Started with the React SDK
 
-The React bindings live inside `@aether/web` (import from `@aether/web/react`)
+The React bindings live inside `@olympuslabs/aether-web` (import from `@olympuslabs/aether-web/react`)
 and wrap the same underlying SDK described in the
 [Web SDK quickstart](/doc/quickstart/web-sdk) with a provider and a handful
 of hooks — `AetherProvider`, `useAether`, `useIdentity`, `useConsentState`,
@@ -22,10 +22,10 @@ and `useScreenOrPageTracking`.
 ## Install
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
-No separate package — the React entry point ships inside `@aether/web`.
+No separate package — the React entry point ships inside `@olympuslabs/aether-web`.
 
 ## Wrap your app
 
@@ -33,7 +33,7 @@ No separate package — the React entry point ships inside `@aether/web`.
 Next.js / SSR apps) and initializes it once, on mount:
 
 ```tsx
-import { AetherProvider } from '@aether/web/react';
+import { AetherProvider } from '@olympuslabs/aether-web/react';
 
 export default function App({ children }: { children: React.ReactNode }) {
   return (
@@ -56,7 +56,7 @@ without a null check.
 ## Use the SDK from components
 
 ```tsx
-import { useAether } from '@aether/web/react';
+import { useAether } from '@olympuslabs/aether-web/react';
 
 function UpgradeButton() {
   const aether = useAether();
@@ -74,19 +74,19 @@ function UpgradeButton() {
 ```
 
 `useAether()` returns the same `AetherSDKInterface` singleton you'd get from
-`import aether from '@aether/web'` — `track`, `observe`, `hydrateIdentity`,
+`import aether from '@olympuslabs/aether-web'` — `track`, `observe`, `hydrateIdentity`,
 `consent`, `wallet`, `commerce`, and the rest of the surface documented in the
 [Web SDK guide](/doc/quickstart/web-sdk) are all available.
 
 ## Track route changes
 
-`@aether/web`'s auto-discovery module already tracks SPA navigation for most
+`@olympuslabs/aether-web`'s auto-discovery module already tracks SPA navigation for most
 routers via `history.pushState`/`replaceState`. For app frameworks that don't
 go through those APIs (or when you want an explicit, named page view), use
 `useScreenOrPageTracking`:
 
 ```tsx
-import { useScreenOrPageTracking } from '@aether/web/react';
+import { useScreenOrPageTracking } from '@olympuslabs/aether-web/react';
 
 function PricingPage() {
   useScreenOrPageTracking('Pricing');
@@ -97,7 +97,7 @@ function PricingPage() {
 ## Read identity and consent state
 
 ```tsx
-import { useIdentity, useConsentState } from '@aether/web/react';
+import { useIdentity, useConsentState } from '@olympuslabs/aether-web/react';
 
 function AccountBadge() {
   const identity = useIdentity();

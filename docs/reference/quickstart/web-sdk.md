@@ -13,7 +13,7 @@ toc_depth: 3
 
 # Getting Started with the Web SDK
 
-`@aether/web` is Aether's browser SDK. It captures page views, custom events,
+`@olympuslabs/aether-web` is Aether's browser SDK. It captures page views, custom events,
 e-commerce signals, wallet activity, and performance metrics from a single
 `init()` call, and ships them through a consent-aware, batched event queue.
 
@@ -41,7 +41,7 @@ warns if a secret key is pasted there instead.
 Prefer a build-time dependency? Install from npm:
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ## Initialize
@@ -51,7 +51,7 @@ to configure the SDK from JavaScript rather than attributes — call `init()`
 yourself, as early as possible on the page:
 
 ```typescript
-import aether from '@aether/web';
+import aether from '@olympuslabs/aether-web';
 
 aether.init({
   apiKey: 'pk_YOUR_PUBLISHABLE_KEY',

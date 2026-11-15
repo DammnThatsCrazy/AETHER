@@ -1,5 +1,5 @@
 import { Badge, formatInstant, type TimeContext } from '@aether/ui';
-import type { AgentDeploymentStatus, ExternalPlatform } from '@aether/shared';
+import type { AgentDeploymentStatus, ExternalPlatform } from '@olympuslabs/aether-shared';
 
 export const OBSERVABILITY_COPY =
   'Aether observes deployments — it does not publish, host, or execute agents.';

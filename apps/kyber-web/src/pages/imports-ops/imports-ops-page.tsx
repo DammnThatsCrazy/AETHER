@@ -10,7 +10,7 @@ import {
   useTimeContext,
   type TimeContext,
 } from '@aether/ui';
-import type { ImportStatus } from '@aether/shared';
+import type { ImportStatus } from '@olympuslabs/aether-shared';
 import { PageWrapper } from '@kyber/components/layout';
 import { useImportsTimeline } from '@kyber/features/imports-ops';
 import type { ImportSessionRecord } from '@kyber/features/imports-ops';

@@ -17,7 +17,7 @@ The Aether iOS SDK is a thin observation client that captures observations from 
 Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/DammnThatsCrazy/aether-ios-sdk", from: "0.1.0-alpha.0")
+.package(url: "https://github.com/DammnThatsCrazy/aether-ios.git", from: "0.1.0-alpha.0")
 ```
 
 ## Capabilities

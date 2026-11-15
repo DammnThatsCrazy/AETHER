@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 
 import { EventEnvelope } from '@aether/proof-contracts';
 import { trackEventFixture, identifyEventFixture, conversionEventFixture } from '@aether/proof-fixtures';
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 // Top-level DOM shims before SDK evaluation
 if (typeof globalThis.screen === 'undefined') (globalThis as any).screen = { width: 1920, height: 1080, colorDepth: 24 } as any;
 if (typeof globalThis.window !== 'undefined' && !(globalThis.window as any).screen) (globalThis.window as any).screen = (globalThis as any).screen;

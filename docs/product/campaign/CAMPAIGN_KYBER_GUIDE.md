@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [services/api/journeys/measurement/routes/kyber.py, services/api/journeys/traffic/repair.py, apps/kyber-web/src/pages/measurement/campaign-registry-health-page.tsx, apps/kyber-web/src/pages/measurement/kyber-measurement-ops-page.tsx]
 source_hashes:
   "apps/kyber-web/src/pages/measurement/campaign-registry-health-page.tsx": "sha256:d4eefb1bd8be378b9648b5eab417465556d3c4f6adb371f37f71932d88f28241"
-  "apps/kyber-web/src/pages/measurement/kyber-measurement-ops-page.tsx": "sha256:b7f4cedd7f2db749e18a41c66017922fedf6afec7a713e0ccb4578e0b7e64c97"
+  "apps/kyber-web/src/pages/measurement/kyber-measurement-ops-page.tsx": "sha256:f0549cb401a7429d814a7fed00b4cb317cda3485adf5f9c84269fac6616443a9"
   "services/api/journeys/measurement/routes/kyber.py": "sha256:c5099fa9fda2a8158cb896ce583a0f56d7c1b12d03def1c780f5f046a50253a2"
   "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
 ---

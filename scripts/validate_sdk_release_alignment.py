@@ -23,10 +23,10 @@ for rel in package_paths:
     if version != VERSION:
         fail(f'{rel} version {version} != root {VERSION}')
 
-rn_dep = json.loads(text('packages/sdk/react-native/package.json'))['dependencies']['@aether/shared']
-web_dep = json.loads(text('packages/sdk/web/package.json'))['dependencies']['@aether/shared']
+rn_dep = json.loads(text('packages/sdk/react-native/package.json'))['dependencies']['@olympuslabs/aether-shared']
+web_dep = json.loads(text('packages/sdk/web/package.json'))['dependencies']['@olympuslabs/aether-shared']
 for rel, dep in [('packages/sdk/react-native/package.json', rn_dep), ('packages/sdk/web/package.json', web_dep)]:
-    if dep != f'^{VERSION}': fail(f'{rel} @aether/shared dependency {dep} != ^{VERSION}')
+    if dep != f'^{VERSION}': fail(f'{rel} @olympuslabs/aether-shared dependency {dep} != ^{VERSION}')
 
 version_patterns = {
     'packages/shared/sdk-version.ts': [f"SDK_VERSION = '{VERSION}'"],

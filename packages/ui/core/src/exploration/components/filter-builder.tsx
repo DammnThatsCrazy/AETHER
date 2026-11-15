@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { ExplorationSurfaceId } from '@aether/shared/surface-capabilities';
-import type { FilterExpression, FilterOperator } from '@aether/shared/graph-contract';
+import type { ExplorationSurfaceId } from '@olympuslabs/aether-shared/surface-capabilities';
+import type { FilterExpression, FilterOperator } from '@olympuslabs/aether-shared/graph-contract';
 import { Button } from '../../components/button';
 import { Select } from '../../components/select';
 import { Input } from '../../components/input';

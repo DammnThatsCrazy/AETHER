@@ -54,7 +54,7 @@ describe('AetherServerSDK', () => {
 
 describe('consent registry parity', () => {
   it('covers exactly the registry purpose vocabulary, deny-by-default', async () => {
-    const { CONSENT_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } = await import('@aether/shared/consent');
+    const { CONSENT_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } = await import('@olympuslabs/aether-shared/consent');
     const sdk = new AetherServerSDK({ apiKey: 'test-key', endpoint: 'http://localhost' });
     const consent = sdk.getConsent() as unknown as Record<string, boolean>;
     // The hand-written copy of this vocabulary shipped 9 of 12 purposes;

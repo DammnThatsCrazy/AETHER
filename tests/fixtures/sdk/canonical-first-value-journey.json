@@ -87,7 +87,7 @@
   "source": {
     "platform": "web",
     "data_type": "journey",
-    "sdk": "@aether/web",
+    "sdk": "@olympuslabs/aether-web",
     "environment": "staging",
     "surface": "marketing_site"
   },
@@ -102,7 +102,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -117,7 +117,7 @@
       "source": {
         "platform": "web",
         "data_type": "config",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -138,7 +138,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -154,7 +154,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -175,7 +175,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -188,7 +188,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -209,7 +209,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -224,7 +224,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -245,7 +245,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -275,7 +275,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -296,7 +296,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -318,7 +318,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -339,7 +339,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -361,7 +361,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -382,7 +382,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001" },
@@ -402,7 +402,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -423,7 +423,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
@@ -445,7 +445,7 @@
       "source": {
         "platform": "web",
         "data_type": "identity",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -466,7 +466,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
@@ -490,7 +490,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -511,7 +511,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
@@ -565,7 +565,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -586,7 +586,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
@@ -619,7 +619,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -640,7 +640,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
@@ -672,7 +672,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },
@@ -693,7 +693,7 @@
       "workspace_id": "proof-lab",
       "platform_id": "web",
       "environment": "staging",
-      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "sdk": { "name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0" },
       "session": { "session_id": "sess_fvj_001" },
       "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
       "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
@@ -737,7 +737,7 @@
       "source": {
         "platform": "web",
         "data_type": "event",
-        "sdk": "@aether/web",
+        "sdk": "@olympuslabs/aether-web",
         "environment": "staging",
         "surface": "marketing_site"
       },

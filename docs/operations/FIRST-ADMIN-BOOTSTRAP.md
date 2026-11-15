@@ -31,7 +31,7 @@ reviewed_source_commits:
   - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
-  ".github/workflows/staging-lifecycle.yml": "sha256:08b0ef49779fb2c3081c4b44da0b840e8b5a45be652c829ca03ff60b96af2c4e"
+  ".github/workflows/staging-lifecycle.yml": "sha256:6497327dc1b07a876c3371db5dd5ccdb59fa48879337818b4473a7d319dac6a3"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:f0500e7d769c491ae522cd617b42c960ceaca0ea2cf4e7e2bee06a153bcafed4"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"

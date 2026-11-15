@@ -19,11 +19,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 
-import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@aether/shared';
+import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@olympuslabs/aether-shared';
 // Registry-generated purpose sets — hand-written copies here drifted to 9 of
 // the registry's 12 purposes before being replaced with the canonical source.
-import { CONSENT_PURPOSES as ALL_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } from '@aether/shared/consent';
-import type { EventType } from '@aether/shared';
+import { CONSENT_PURPOSES as ALL_PURPOSES, EXPLICIT_OPT_IN_PURPOSES } from '@olympuslabs/aether-shared/consent';
+import type { EventType } from '@olympuslabs/aether-shared';
 import { EventQueue } from './queue';
 import { DurableEventQueue } from './durable-queue';
 import type { EventQueueLike, SpoolFullInfo } from './durable-queue';
@@ -55,7 +55,7 @@ export { makeServerClient } from './client';
 // Disk-backed durable queue (Reliability Phase 2 program §2). The standalone
 // class is milestone M4; M5 wires it into AetherServerSDK below as an opt-in
 // queue with startup replay and a documented disk-space bound. Re-exported so
-// package consumers can also use it directly — @aether/server's package.json
+// package consumers can also use it directly — @olympuslabs/aether-server's package.json
 // "exports" map has no deep-import subpath, so without these lines the class
 // and its option types would be unreachable outside this package.
 export { DurableEventQueue } from './durable-queue';
@@ -78,7 +78,7 @@ export {
 export type { AgentEventEnvelope } from './agentic';
 
 
-const DEFAULT_ENDPOINT = 'https://ingest.aether.so/v1/batch';
+const DEFAULT_ENDPOINT = 'https://api.aether.network/v1/batch';
 
 export class AetherServerSDK {
   // application stays optional-valued: Required<> would strip its undefined,
@@ -131,7 +131,7 @@ export class AetherServerSDK {
       flushAt: config.flushAt ?? 100,
       flushInterval: config.flushInterval ?? 5000,
       maxQueueSize: config.maxQueueSize ?? 1000,
-      userAgent: config.userAgent ?? '@aether/server',
+      userAgent: config.userAgent ?? '@olympuslabs/aether-server',
       onBatchResult: config.onBatchResult ?? (() => { /* no-op */ }),
     };
     this.consent = this.buildConsentState(config.consent ?? {});
@@ -238,7 +238,7 @@ export class AetherServerSDK {
         // every event to its origin plane. Stamped for all server-SDK events.
         surface: 'server',
         // Envelope schema version this emitter conforms to (single source:
-        // CONTRACT_SCHEMA_VERSION in @aether/shared).
+        // CONTRACT_SCHEMA_VERSION in @olympuslabs/aether-shared).
         schemaVersion: CONTRACT_SCHEMA_VERSION,
         // Host OS identity in the canonical envelope shape.
         operatingSystem: { name: os.type(), version: os.release() },
@@ -447,4 +447,4 @@ export class AetherServerSDK {
 // because agent-telemetry extends AetherServerSDK from this module.
 export { AgentTelemetryClient, attestAgentEvent, validateAgentDeploymentContext } from './agent-telemetry';
 export type { AgentTelemetryConfig } from './agent-telemetry';
-export type { AgentDeploymentContext } from '@aether/shared';
+export type { AgentDeploymentContext } from '@olympuslabs/aether-shared';

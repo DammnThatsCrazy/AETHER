@@ -3,8 +3,8 @@
 #
 # Build context is the REPOSITORY ROOT (npm workspaces monorepo). The app lives
 # at apps/kyber-web and depends on three workspace packages:
-#   @aether/shared -> packages/shared
-#   @aether/web    -> packages/sdk/web
+#   @olympuslabs/aether-shared -> packages/shared
+#   @olympuslabs/aether-web    -> packages/sdk/web
 #   @aether/ui     -> packages/ui/core
 #
 # Referenced from the root infra/local/docker-compose.yml `kyber` service as:

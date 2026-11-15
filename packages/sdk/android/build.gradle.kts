@@ -1,7 +1,10 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+import com.vanniktech.maven.publish.SonatypeHost
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("maven-publish")
+    id("com.vanniktech.maven.publish")
 }
 
 android {
@@ -58,45 +61,60 @@ dependencies {
     testImplementation("org.json:json:20240303")
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            groupId = "com.aether"
-            artifactId = "sdk-android"
-            version = project.properties["sdkVersion"] as String
+// Published to Maven Central as com.olympuslabsml:aether-android.
+// The Kotlin package stays com.aether.sdk (Maven coordinates and code packages
+// are independent; see docs/reference/SDK-ANDROID.md).
+//
+// CI supplies credentials and the signing key as Gradle properties via env:
+//   ORG_GRADLE_PROJECT_mavenCentralUsername / ORG_GRADLE_PROJECT_mavenCentralPassword
+//   ORG_GRADLE_PROJECT_signingInMemoryKey / ORG_GRADLE_PROJECT_signingInMemoryKeyPassword
+// Signing is only configured when a key is present, so `publishToMavenLocal`
+// (sdk-release-validation, local builds) works without secrets. Maven Central
+// rejects unsigned uploads, so a real publish without the key fails loudly.
+mavenPublishing {
+    coordinates(
+        groupId = "com.olympuslabsml",
+        artifactId = "aether-android",
+        version = project.properties["sdkVersion"] as String,
+    )
 
-            afterEvaluate {
-                from(components["release"])
-            }
+    configure(
+        AndroidSingleVariantLibrary(
+            variant = "release",
+            sourcesJar = true,
+            publishJavadocJar = true,
+        )
+    )
 
-            pom {
-                name.set("Aether Android SDK")
-                description.set("Aether analytics, feature flags, and identity SDK for Android")
-                url.set("https://github.com/DammnThatsCrazy/AETHER")
-                licenses {
-                    license {
-                        name.set("UNLICENSED")
-                    }
-                }
-                developers {
-                    developer {
-                        id.set("aether")
-                        name.set("Aether")
-                        email.set("sdk@aether.io")
-                    }
-                }
-            }
-        }
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+
+    if (project.hasProperty("signingInMemoryKey")) {
+        signAllPublications()
     }
 
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/DammnThatsCrazy/AETHER")
-            credentials {
-                username = System.getenv("GITHUB_ACTOR") ?: ""
-                password = System.getenv("GITHUB_TOKEN") ?: ""
+    pom {
+        name.set("Aether Android SDK")
+        description.set("Aether event collection, identity, consent, and attribution SDK for Android")
+        inceptionYear.set("2024")
+        url.set("https://github.com/DammnThatsCrazy/AETHER")
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("repo")
             }
+        }
+        developers {
+            developer {
+                id.set("olympuslabs")
+                name.set("Olympus Labs")
+                url.set("https://olympuslabsml.com")
+            }
+        }
+        scm {
+            url.set("https://github.com/DammnThatsCrazy/AETHER")
+            connection.set("scm:git:git://github.com/DammnThatsCrazy/AETHER.git")
+            developerConnection.set("scm:git:ssh://git@github.com/DammnThatsCrazy/AETHER.git")
         }
     }
 }

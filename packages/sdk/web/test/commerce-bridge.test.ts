@@ -14,7 +14,7 @@ import {
   SDK_SIGNAL_SCHEMA_VERSION,
   type AetherEvent,
   type OrderSnapshot,
-} from '@aether/shared/commerce-bridge';
+} from '@olympuslabs/aether-shared/commerce-bridge';
 
 function makeEvent(overrides: Partial<AetherEvent> = {}): AetherEvent {
   return {

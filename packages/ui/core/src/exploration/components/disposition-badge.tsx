@@ -1,4 +1,4 @@
-import type { FilterDisposition } from '@aether/shared/exploration-contract';
+import type { FilterDisposition } from '@olympuslabs/aether-shared/exploration-contract';
 import { Badge } from '../../components/badge';
 
 type BadgeVariant = 'success' | 'info' | 'warning' | 'danger' | 'default';

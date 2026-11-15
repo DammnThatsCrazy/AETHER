@@ -14,7 +14,7 @@ describe('FPS-091: Parity Track', () => {
     expect(envelope.platform_id).toBe(platform);
     expect(envelope.environment).toBeDefined();
     expect(envelope.event_type).toBeDefined();
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('0.1.0-alpha.0');
     expect(envelope.identity.anonymous_id).toBeDefined();
     expect(typeof envelope.timestamp).toBe('string');
@@ -28,7 +28,7 @@ describe('FPS-091: Parity Track', () => {
 
   it('should validate iOS track event shape (shared fixture)', () => {
     const envelope = trackEventFixture as unknown as EventEnvelope;
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
   });
 
   it('should validate Android track event shape is same contract', () => {
@@ -46,7 +46,7 @@ describe('FPS-091: Parity Track', () => {
     expect(envelope.platform_id).toBe('web');
     expect(envelope.environment).toBe('staging');
     expect(envelope.event_type).toBe('page');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
   });
 });

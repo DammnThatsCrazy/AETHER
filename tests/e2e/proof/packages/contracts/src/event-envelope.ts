@@ -1,7 +1,7 @@
-import type { EventType, EventContext } from '@aether/shared/events';
-import type { ConsentState } from '@aether/shared/consent';
-import type { Provenance, ActorKind } from '@aether/shared/provenance';
-import type { PlatformType } from '@aether/shared/contextual';
+import type { EventType, EventContext } from '@olympuslabs/aether-shared/events';
+import type { ConsentState } from '@olympuslabs/aether-shared/consent';
+import type { Provenance, ActorKind } from '@olympuslabs/aether-shared/provenance';
+import type { PlatformType } from '@olympuslabs/aether-shared/contextual';
 import type { SourceClassification } from './source-classification';
 
 /** SDK/library that produced the event. */

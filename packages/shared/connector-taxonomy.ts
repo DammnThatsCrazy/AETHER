@@ -8,7 +8,7 @@
  *        services/api/connectors/integrations/connectors/base.py
  *      (ConnectorClass, ConnectorRole, ImplementationStatus, ...) plus the
  *      provider-corpus intelligence-source coverage shape. Consumed via the
- *      @aether/shared barrel; reproduced verbatim by the generator.
+ *      @olympuslabs/aether-shared barrel; reproduced verbatim by the generator.
  *
  *   2. PROVIDER / CATEGORY MIRROR (generated) — a pure TypeScript mirror of the
  *      unified integration catalog derived from

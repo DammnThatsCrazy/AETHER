@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SDK_VERSION } from '@aether/shared';
+import { SDK_VERSION } from '@olympuslabs/aether-shared';
 import type { ActivationStatus } from '@aether-app/features/activation/use-activation';
 import {
   authenticationLabel,
@@ -10,6 +10,7 @@ import {
   platformsFor,
   sdkIdsForPlatforms,
   sdkKeyLabel,
+  snippetFor,
   sourceRowState,
   stageStatuses,
   workspaceSlug,
@@ -103,16 +104,49 @@ describe('SDK fleet helpers', () => {
   it('uses the canonical native install coordinates and shared SDK version', () => {
     const android = SDK_OPTIONS.find(sdk => sdk.id === 'android')?.snippet ?? '';
     const ios = SDK_OPTIONS.find(sdk => sdk.id === 'ios')?.snippet ?? '';
-    expect(android).toContain(`implementation("io.aether:sdk-android:${SDK_VERSION}")`);
-    expect(ios).toContain(`pod 'AetherSDK', '= ${SDK_VERSION}'`);
+    expect(android).toContain(`implementation("com.olympuslabsml:aether-android:${SDK_VERSION}")`);
+    expect(ios).toContain(`pod 'AetherSDK', '${SDK_VERSION}'`);
+    expect(ios).toContain('https://github.com/DammnThatsCrazy/aether-ios.git');
+  });
+
+  it('pins every npm install line to the shared SDK version', () => {
+    for (const sdk of SDK_OPTIONS) {
+      const installs = sdk.snippet.split('\n').filter(line => line.startsWith('npm install'));
+      for (const line of installs) expect(line).toContain(`@${SDK_VERSION}`);
+    }
+  });
+
+  it('fills snippets with the full revealed key so a copy runs unedited', () => {
+    const ios = SDK_OPTIONS.find(sdk => sdk.id === 'ios')!;
+    const react = SDK_OPTIONS.find(sdk => sdk.id === 'react')!;
+    const key = 'ak_live_0123456789abcdefghijklmnop';
+    const iosSnippet = snippetFor(ios, { key }, null);
+    expect(iosSnippet).toContain(`AetherConfig(apiKey: "${key}")`);
+    expect(iosSnippet).not.toContain('…');
+    const reactSnippet = snippetFor(react, { key: 'pk_live_abcdefghijklmnopqrstuvwxyz', siteId: 'site_9' }, null);
+    expect(reactSnippet).toContain("apiKey: 'pk_live_abcdefghijklmnopqrstuvwxyz', siteId: 'site_9'");
+  });
+
+  it('uses key-class placeholders before a key is issued and prefers the server CDN tag for web', () => {
+    const web = SDK_OPTIONS.find(sdk => sdk.id === 'web')!;
+    const android = SDK_OPTIONS.find(sdk => sdk.id === 'android')!;
+    expect(snippetFor(web, null, 'site_1')).toContain("apiKey: 'pk_YOUR_PUBLISHABLE_KEY', siteId: 'site_1'");
+    expect(snippetFor(android, null, null)).toContain('AetherConfig(apiKey = "YOUR_API_KEY")');
+    const tag = '<script async src="https://cdn.aether.network/v1.js" data-key="pk_x" data-site="site_1"></script>';
+    expect(snippetFor(web, { key: 'pk_x', siteId: 'site_1', snippet: tag }, null)).toBe(tag);
+  });
+
+  it('never inlines the server secret key', () => {
+    const server = SDK_OPTIONS.find(sdk => sdk.id === 'server')!;
+    expect(snippetFor(server, { key: 'ak_live_secret' }, null)).not.toContain('ak_live_secret');
   });
 
   it('ships snippets that import what they use', () => {
     const byId = Object.fromEntries(SDK_OPTIONS.map(sdk => [sdk.id, sdk.snippet]));
-    expect(byId['react']).toContain("import { AetherProvider } from '@aether/web/react';");
-    expect(byId['react-native']).toContain("import { AetherProvider } from '@aether/react-native';");
-    expect(byId['server']).toContain("import { AetherServerSDK } from '@aether/server';");
-    expect(byId['web']).toContain("import aether from '@aether/web';");
+    expect(byId['react']).toContain("import { AetherProvider } from '@olympuslabs/aether-web/react';");
+    expect(byId['react-native']).toContain("import { AetherProvider } from '@olympuslabs/aether-react-native';");
+    expect(byId['server']).toContain("import { AetherServerSDK } from '@olympuslabs/aether-server';");
+    expect(byId['web']).toContain("import aether from '@olympuslabs/aether-web';");
   });
 
   it('gives every SDK its own key label', () => {

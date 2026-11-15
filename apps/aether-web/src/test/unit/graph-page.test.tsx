@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import type { RelationshipPath } from '@aether/shared/operational-intelligence';
+import type { RelationshipPath } from '@olympuslabs/aether-shared/operational-intelligence';
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
   api: {

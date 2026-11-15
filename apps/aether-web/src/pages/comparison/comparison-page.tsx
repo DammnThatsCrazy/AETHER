@@ -11,7 +11,7 @@ import {
   Input,
 } from '@aether/ui';
 import { TruthBanner, useExplorationContext } from '@aether/ui/exploration';
-import type { ComparisonDefinition } from '@aether/shared/comparison-contract';
+import type { ComparisonDefinition } from '@olympuslabs/aether-shared/comparison-contract';
 import { RestClientError } from '@aether-app/lib/api/rest/client';
 import {
   assessFinding,

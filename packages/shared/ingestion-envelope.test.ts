@@ -7,7 +7,7 @@ import { SDK_INGESTION_PATH } from './sdk-version';
 // ---------------------------------------------------------------------------
 
 function makeLibraryContext(): LibraryContext {
-  return { name: '@aether/web', version: '8.9.0' };
+  return { name: '@olympuslabs/aether-web', version: '8.9.0' };
 }
 
 function makeEventContext(): EventContext {
@@ -42,7 +42,7 @@ describe('ingestion-envelope', () => {
     expect(event.timestamp).toBeTruthy();
     expect(event.sessionId).toBe('session-abc');
     expect(event.anonymousId).toBe('anon-xyz');
-    expect(event.context.library.name).toBe('@aether/web');
+    expect(event.context.library.name).toBe('@olympuslabs/aether-web');
     expect(event.context.library.version).toBe('8.9.0');
   });
 
@@ -92,7 +92,7 @@ describe('ingestion-envelope', () => {
       sentAt: new Date().toISOString(),
       context: { library: makeLibraryContext() },
     };
-    expect(envelope.context?.library.name).toBe('@aether/web');
+    expect(envelope.context?.library.name).toBe('@olympuslabs/aether-web');
   });
 
   it('batch envelope can contain an empty batch array', () => {

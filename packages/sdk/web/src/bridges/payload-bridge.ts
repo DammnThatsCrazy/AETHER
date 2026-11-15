@@ -16,7 +16,7 @@
 // lineage, so `provider` is empty metadata.
 // =============================================================================
 
-import type { BridgeResult, OrderSnapshot } from '@aether/shared/commerce-bridge';
+import type { BridgeResult, OrderSnapshot } from '@olympuslabs/aether-shared/commerce-bridge';
 
 /** Project a canonical order snapshot into the canonical commerce vocabulary. */
 export function payloadBridge(snapshot: OrderSnapshot): BridgeResult {

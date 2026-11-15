@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, LoadingState } from '@aether/ui';
-import type { PatternLens } from '@aether/shared';
+import type { PatternLens } from '@olympuslabs/aether-shared';
 import { Link } from 'react-router-dom';
 import { markPatternsSeen, usePatternDiscoveryEnabled, usePatternLens, type PatternSummaryRow } from './use-patterns';
 

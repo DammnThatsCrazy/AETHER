@@ -13,7 +13,7 @@ since_version: 0.1.0
 ## Initialize the SDK
 
 ```typescript
-import { Aether } from '@aether/web';
+import { Aether } from '@olympuslabs/aether-web';
 
 const aether = new Aether({
   tenantId: 'your-tenant-id',

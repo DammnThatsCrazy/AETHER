@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { EventEnvelope } from '@aether/proof-contracts';
 import { offlineQueueFixture } from '@aether/proof-fixtures';
 
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 
 describe('FPS-054: Web SDK Offline', () => {
   it('should detect offline state', () => {

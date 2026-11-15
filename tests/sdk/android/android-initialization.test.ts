@@ -49,7 +49,7 @@ describe('FPS-081: Android SDK Initialization', () => {
     const envelope = trackEventFixture as unknown as EventEnvelope;
     expect(envelope.tenant_id).toBe('aether-proof-tenant');
     expect(envelope.platform_id).toBe('web');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.event_type).toBe('page');
     expect(envelope.identity.anonymous_id).toBe('anon_001');
   });

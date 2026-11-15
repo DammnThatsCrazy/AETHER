@@ -14,7 +14,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^@aether\/shared\/consent-receipt$/,
+        find: /^@olympuslabs\/aether-shared\/consent-receipt$/,
         replacement: fileURLToPath(
           new URL('../../shared/consent-receipt.ts', import.meta.url),
         ),

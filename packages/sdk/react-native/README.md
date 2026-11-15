@@ -1,4 +1,4 @@
-# @aether/react-native
+# @olympuslabs/aether-react-native
 
 <!-- Badges -->
 ![Version](https://img.shields.io/badge/version-8.2.0-blue)
@@ -49,15 +49,15 @@
 ### 1. Install the package
 
 ```bash
-npm install @aether/react-native
+npm install @olympuslabs/aether-react-native
 ```
 
 ```bash
-yarn add @aether/react-native
+yarn add @olympuslabs/aether-react-native
 ```
 
 ```bash
-pnpm add @aether/react-native
+pnpm add @olympuslabs/aether-react-native
 ```
 
 ### 2. iOS -- install CocoaPods dependencies
@@ -86,7 +86,7 @@ Wrap your app in `AetherProvider` and start tracking:
 
 ```tsx
 import React from 'react';
-import { AetherProvider } from '@aether/react-native';
+import { AetherProvider } from '@olympuslabs/aether-react-native';
 import App from './App';
 
 export default function Root() {
@@ -106,7 +106,7 @@ export default function Root() {
 Then use the SDK anywhere in your component tree:
 
 ```tsx
-import { useAether, useIdentity, useScreenTracking } from '@aether/react-native';
+import { useAether, useIdentity, useScreenTracking } from '@olympuslabs/aether-react-native';
 
 function HomeScreen() {
   const aether = useAether();
@@ -154,7 +154,7 @@ Aether.feedback.showNPS('post_purchase');
 Pass an `AetherRNConfig` object to `AetherProvider` or call `Aether.init()` directly. Only `apiKey` is required.
 
 ```typescript
-import Aether from '@aether/react-native';
+import Aether from '@olympuslabs/aether-react-native';
 
 Aether.init({
   apiKey: 'your-api-key',
@@ -347,7 +347,7 @@ const { aether, isInitialized } = useAetherContext();
 `AetherProvider` initializes the SDK and makes it available to all descendant components via React context. Place it at the root of your component tree.
 
 ```tsx
-import { AetherProvider } from '@aether/react-native';
+import { AetherProvider } from '@olympuslabs/aether-react-native';
 
 function Root() {
   return (
@@ -430,7 +430,7 @@ class MainApplication : Application(), ReactApplication {
 
 ```tsx
 import { Linking } from 'react-native';
-import Aether from '@aether/react-native';
+import Aether from '@olympuslabs/aether-react-native';
 
 Linking.addEventListener('url', ({ url }) => {
   Aether.handleDeepLink(url);
@@ -448,7 +448,7 @@ import type {
   AetherRNConfig,
   Identity,
   IdentityData,
-} from '@aether/react-native';
+} from '@olympuslabs/aether-react-native';
 ```
 
 ---

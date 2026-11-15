@@ -9,8 +9,8 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import type { Store } from '../state/index';
-import type { ExplorationContextV1, TemporalSelection } from '@aether/shared/exploration-contract';
-import type { GraphContext, GraphScope } from '@aether/shared/graph-context-contract';
+import type { ExplorationContextV1, TemporalSelection } from '@olympuslabs/aether-shared/exploration-contract';
+import type { GraphContext, GraphScope } from '@olympuslabs/aether-shared/graph-context-contract';
 import {
   createGraphExplorationStore,
   createExplorationStore,

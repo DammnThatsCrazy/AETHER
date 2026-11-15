@@ -1,5 +1,5 @@
 {
-  "name": "@aether/server",
+  "name": "@olympuslabs/aether-server",
   "version": "0.1.0-alpha.0",
   "description": "Aether Server SDK — Node.js server-side event observation client with consent, retry, and scrubbing.",
   "main": "./dist/index.js",
@@ -14,7 +14,9 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "src"
+    "src",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -25,14 +27,19 @@
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
-  "peerDependencies": {
-    "@aether/shared": "*"
-  },
   "devDependencies": {
-    "@aether/shared": "*",
     "@vitest/coverage-v8": "^1.6.0",
-    "vitest": "^1.6.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
   },
-  "license": "UNLICENSED"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DammnThatsCrazy/AETHER.git",
+    "directory": "packages/sdk/server"
+  },
+  "homepage": "https://github.com/DammnThatsCrazy/AETHER/tree/main/packages/sdk/server",
+  "dependencies": {
+    "@olympuslabs/aether-shared": "^0.1.0-alpha.0"
+  }
 }

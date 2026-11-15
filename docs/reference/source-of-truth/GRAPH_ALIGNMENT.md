@@ -82,7 +82,7 @@ The `rail` field on payment events selects the downstream processing path
 
 ## Economic Observability extensions
 
-Defined in `packages/shared/economic.ts` and re-exported from `@aether/shared`.
+Defined in `packages/shared/economic.ts` and re-exported from `@olympuslabs/aether-shared`.
 All fields are **optional** and additive — no migration is required.
 
 | Primitive                | Where it attaches                        |

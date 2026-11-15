@@ -1,4 +1,4 @@
-import type { PlatformType } from '@aether/shared/contextual';
+import type { PlatformType } from '@olympuslabs/aether-shared/contextual';
 import type { SourceClassification } from './source-classification';
 
 /** A tenant — the top-level organizational entity. */

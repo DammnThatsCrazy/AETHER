@@ -17,7 +17,7 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:0f5968d9a03c8924c2f35571a670e2e35077cccd2c934a73332214d833f3504d"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"

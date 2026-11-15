@@ -296,7 +296,7 @@ The two marketing workspaces are npm workspace members, participate in the
 root `typecheck`/`test`/`build` gates, carry the platform version via
 `bump_version.py`, and are declared as test suites in
 `config/test_suites.yaml`. Their tests run under Vitest with the same jsdom
-setup and `@aether/shared` aliasing as the other frontend workspaces. The
+setup and `@olympuslabs/aether-shared` aliasing as the other frontend workspaces. The
 shared launch-pack content is an input to both suites, while the status shell
 has its own workspace test entry and remains fail-closed until a real health
 endpoint is configured.

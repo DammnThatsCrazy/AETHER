@@ -14,7 +14,7 @@ Platforms:
   - Web:          npm (@aether/sdk) + CDN (cdn.aether.network)
   - iOS:          CocoaPods + Swift Package Manager
   - Android:      Maven Central (com.aether:aether-android)
-  - React Native: npm (@aether/react-native), coordinated native deps
+  - React Native: npm (@olympuslabs/aether-react-native), coordinated native deps
 """
 
 from __future__ import annotations
@@ -288,7 +288,7 @@ def release_react_native_sdk(
     pre_release: PreRelease = PreRelease.NONE,
     dry_run: bool = False,
 ) -> ReleaseContext:
-    """Release pipeline for @aether/react-native."""
+    """Release pipeline for @olympuslabs/aether-react-native."""
     print("\n-- React Native SDK Release " + "-" * 33)
     new_version = bump_version(current_version, bump, pre_release)
     ctx = ReleaseContext(
@@ -314,7 +314,7 @@ def release_react_native_sdk(
     ]
 
     success = _execute_steps(ctx, steps)
-    ctx.published_to = [f"npm: @aether/react-native@{new_version}"]
+    ctx.published_to = [f"npm: @olympuslabs/aether-react-native@{new_version}"]
     ctx.success = success
     log(f"React Native SDK v{new_version} {'released' if success else 'FAILED'}", stage="SDK")
     return ctx

@@ -30,7 +30,7 @@ import {
 
 const PLATFORM_OVERRIDES = {
   platform_id: 'server',
-  sdk_name: '@aether/server',
+  sdk_name: '@olympuslabs/aether-server',
   device_platform: 'server',
   surface: 'server_backend',
 };
@@ -142,10 +142,10 @@ describe('PR D: Cross-Platform Parity — Server First-Value Journey', () => {
     for (const event of normalizedEvents) {
       expect(event.platform_id).toBe('server');
       expect(event.source.platform).toBe('server');
-      expect(event.source.sdk).toBe('@aether/server');
+      expect(event.source.sdk).toBe('@olympuslabs/aether-server');
       expect(event.source.environment).toBe('staging');
       expect(event.source.surface).toBe('server_backend');
-      expect(event.sdk.name).toBe('@aether/server');
+      expect(event.sdk.name).toBe('@olympuslabs/aether-server');
       expect(event.sdk.version).toBe('0.1.0-alpha.0');
       expect(event.device.platform).toBe('server');
     }

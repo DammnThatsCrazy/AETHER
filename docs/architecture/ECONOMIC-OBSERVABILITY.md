@@ -21,7 +21,7 @@ any existing schema**. Every primitive is additive and optional; existing data
 remains valid and no migration is required.
 
 The contracts live in `packages/shared/economic.ts` and are re-exported from
-`@aether/shared`. They mirror the structure backend services and downstream
+`@olympuslabs/aether-shared`. They mirror the structure backend services and downstream
 graph mutators already use, so the SDK and backend speak the same language
 about money flowing through agentic flows.
 
@@ -44,7 +44,7 @@ optional fields on the existing Action / Relationship / State models.
 ### 1. Action with an economic block
 
 ```ts
-import type { EconomicPayload } from '@aether/shared';
+import type { EconomicPayload } from '@olympuslabs/aether-shared';
 
 const economic: EconomicPayload = {
   amount: 0.05,
@@ -78,7 +78,7 @@ sequenceDiagram
 ```
 
 ```ts
-import { createHandshake, transitionHandshake } from '@aether/shared';
+import { createHandshake, transitionHandshake } from '@olympuslabs/aether-shared';
 
 let hs = createHandshake({
   id: 'hs_x402_1',
@@ -99,7 +99,7 @@ import type {
   EconomicPayload,
   RelationshipExtensions,
   ResourceNode,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 const apiResource: ResourceNode = {
   id: 'res_api_summarizer',
@@ -130,7 +130,7 @@ const edge: RelationshipExtensions = {
 import {
   aggregateEconomicState,
   validateRelationshipExtensions,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 const adSpend = {
   id: 'act_spend_1',
@@ -168,7 +168,7 @@ const state = aggregateEconomicState([adSpend, revenue], { units: 7 });
 ### 5. H2A authorized spend → A2A execution (observed externally)
 
 ```ts
-import { validateAuthorization, validateEconomicPayload } from '@aether/shared';
+import { validateAuthorization, validateEconomicPayload } from '@olympuslabs/aether-shared';
 
 const auth = validateAuthorization({
   source: 'human',

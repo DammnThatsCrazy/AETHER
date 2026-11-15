@@ -20,7 +20,7 @@ ConnectorRole, DataFlowDirection, LakeWritePolicy, GraphWritePolicy,
 ModelTrainingEligibility, ImplementationStatus, PriorityPhase, RiskTier,
 IntelligenceSourceMode/Coverage) which mirrors the connector-descriptor enums in
 ``services/api/connectors/integrations/connectors/base.py``. Those members are a stable
-compatibility surface consumed via the @aether/shared barrel (e.g.
+compatibility surface consumed via the @olympuslabs/aether-shared barrel (e.g.
 capability-state.ts), so the generator reproduces that section verbatim from a
 versioned template rather than deriving it — do not hand-edit the output.
 
@@ -58,7 +58,7 @@ if str(BACKEND) not in sys.path:
 #   services/api/connectors/integrations/connectors/base.py
 # plus the intelligence-source-coverage shape from services/provider_catalog.
 # It predates the unified catalog and is a stable public surface on
-# @aether/shared (packages/ui/core/src/status/capability-state.ts imports
+# @olympuslabs/aether-shared (packages/ui/core/src/status/capability-state.ts imports
 # ImplementationStatus through it), so the generator reproduces it unchanged.
 # The catalog-derived provider/category mirror is appended below the marker.
 # ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ _DESCRIPTOR_TAXONOMY_TEMPLATE = '''/**
  *        services/api/connectors/integrations/connectors/base.py
  *      (ConnectorClass, ConnectorRole, ImplementationStatus, ...) plus the
  *      provider-corpus intelligence-source coverage shape. Consumed via the
- *      @aether/shared barrel; reproduced verbatim by the generator.
+ *      @olympuslabs/aether-shared barrel; reproduced verbatim by the generator.
  *
  *   2. PROVIDER / CATEGORY MIRROR (generated) — a pure TypeScript mirror of the
  *      unified integration catalog derived from

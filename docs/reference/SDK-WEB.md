@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:40b7cd21b1d10ed068e057f249964ceb67fd8f0be088df67205eea50ae96e8d7"
+  "packages/sdk/web/src/index.ts": "sha256:e3f611f91767c9733bb1f8338f7531b28aa64ed94f8f4a315befbeb795ab290c"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
@@ -55,7 +55,7 @@ config. A publishing pipeline that would rather not hand-edit HTML can install
 from npm instead:
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ## Quick Start
@@ -65,7 +65,7 @@ JavaScript instead — an npm install, or attributes you would rather compute �
 call `init()` yourself:
 
 ```typescript
-import aether from '@aether/web';
+import aether from '@olympuslabs/aether-web';
 
 aether.init({
   apiKey: 'pk_your_publishable_key',
@@ -191,7 +191,7 @@ connect; if the backend matches, it returns a `ResolvedIdentity` and the SDK
 silently merges the anonymous IDs.
 
 ```typescript
-import type { ResolvedIdentity } from '@aether/web';
+import type { ResolvedIdentity } from '@olympuslabs/aether-web';
 
 aether.init({
   apiKey: '...',
@@ -250,7 +250,7 @@ again.
 
 Consent purposes are **registry-derived** — the canonical set of 12 purposes
 lives in `packages/shared/contracts/consent-registry.json` (the web SDK consumes
-the generated `@aether/shared` consent contract, never a hand copy). Base
+the generated `@olympuslabs/aether-shared` consent contract, never a hand copy). Base
 purposes (`analytics`, `marketing`, `personalization`, `web3`, `agent`,
 `commerce`) can be granted together; explicit opt-in purposes
 (`financial_activity`, `credit`, `location`, `economic_observability`,
@@ -484,7 +484,7 @@ that raw context and is interpreted only after server-side verification — the
 typed field is its ONLY carrier: the captured landing page URL is sanitized
 (fragments and sensitive query params such as `aether_ref` and click IDs
 stripped) so the token never travels inside a URL. The schema-versioned
-`AcquisitionEvidence` helper from `@aether/shared` (schema v3, including
+`AcquisitionEvidence` helper from `@olympuslabs/aether-shared` (schema v3, including
 `entryMethod`, `destinationDomain`, and first-touch fields) remains available
 to custom integrations through
 `evidenceFromSearchParams(new URLSearchParams(window.location.search))`.
@@ -530,7 +530,7 @@ interface AetherConfig {
     build?: string; environment?: string;  // context.application on every event
     namespace?: string;
   };
-  endpoint?: string;                       // Default: 'https://api.aether.io'
+  endpoint?: string;                       // Default: 'https://api.aether.network'
   wsEndpoint?: string;                     // WebSocket endpoint override
   debug?: boolean;                         // Enable console logging
   autoResumeJourney?: boolean;             // Cross-device resolve (default: true)
@@ -729,12 +729,12 @@ All events are silently dropped at flush time if the required consent purpose is
 - x402 lifecycle events → `commerce` consent required
 - `contract_action` → `web3` consent required
 
-## React Browser Wrapper (`@aether/web/react`)
+## React Browser Wrapper (`@olympuslabs/aether-web/react`)
 
-Install: `npm install @aether/web react`
+Install: `npm install @olympuslabs/aether-web react`
 
 ```tsx
-import { AetherProvider, useAether, useConsentState, useIdentity, useScreenOrPageTracking, useJourneyResumed } from '@aether/web/react';
+import { AetherProvider, useAether, useConsentState, useIdentity, useScreenOrPageTracking, useJourneyResumed } from '@olympuslabs/aether-web/react';
 
 function App() {
   return (

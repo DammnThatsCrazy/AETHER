@@ -15,7 +15,7 @@ The Aether React Native SDK is a thin observation client that captures observati
 ## Installation
 
 ```bash
-npm install @aether/react-native
+npm install @olympuslabs/aether-react-native
 ```
 
 ## Capabilities

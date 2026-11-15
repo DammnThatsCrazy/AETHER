@@ -8,9 +8,9 @@ status: experimental
 since_version: 0.1.0
 source_files: [packages/shared/acquisition-evidence.ts, packages/sdk/web/src/types.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/tracking/traffic-source-tracker.ts]
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:40b7cd21b1d10ed068e057f249964ceb67fd8f0be088df67205eea50ae96e8d7"
+  "packages/sdk/web/src/index.ts": "sha256:e3f611f91767c9733bb1f8338f7531b28aa64ed94f8f4a315befbeb795ab290c"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
-  "packages/sdk/web/src/types.ts": "sha256:ff3735a8abe9e88a71285646732366c2a071912089608ec84c87ed35aa7ab5cb"
+  "packages/sdk/web/src/types.ts": "sha256:eadea96972b4dd5646385a8d3654c63c519d452c7c0380cb614a016b803342a1"
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
 ---
 
@@ -97,7 +97,7 @@ The tracker reads `referralToken` directly from the `aether_ref` query parameter
 ## Shared helper
 
 ```typescript
-import { evidenceFromSearchParams, ACQUISITION_EVIDENCE_SCHEMA_VERSION } from '@aether/shared';
+import { evidenceFromSearchParams, ACQUISITION_EVIDENCE_SCHEMA_VERSION } from '@olympuslabs/aether-shared';
 
 // For integrations that need the shared schema-versioned representation:
 const evidence = evidenceFromSearchParams(new URLSearchParams(window.location.search));

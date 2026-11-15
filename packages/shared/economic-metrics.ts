@@ -1,7 +1,7 @@
 // =============================================================================
 // Aether SDK — Unified Economic Metrics (additive extension)
 //
-// WS-C row 28 (SDK thinness): this module is NOT part of the @aether/shared
+// WS-C row 28 (SDK thinness): this module is NOT part of the @olympuslabs/aether-shared
 // public barrel (removed in packages/shared/index.ts). It is a legacy SDK-side
 // mirror of backend economic aggregation whose canonical home is
 // `services/api/value/economic/economic360_contracts.py`.

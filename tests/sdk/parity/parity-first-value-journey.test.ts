@@ -118,7 +118,7 @@ describe('PR D: Cross-Platform Payload Snapshot Parity — Canonical First-Value
   it('should have consistent source fields across all events', () => {
     for (const event of canonicalEvents) {
       expect(event.source.platform).toBe('web');
-      expect(event.source.sdk).toBe('@aether/web');
+      expect(event.source.sdk).toBe('@olympuslabs/aether-web');
       expect(event.source.environment).toBe('staging');
       expect(event.source.surface).toBe('marketing_site');
     }
@@ -126,7 +126,7 @@ describe('PR D: Cross-Platform Payload Snapshot Parity — Canonical First-Value
 
   it('should have consistent SDK fields across all events', () => {
     for (const event of canonicalEvents) {
-      expect(event.sdk.name).toBe('@aether/web');
+      expect(event.sdk.name).toBe('@olympuslabs/aether-web');
       expect(event.sdk.version).toBe('0.1.0-alpha.0');
     }
   });

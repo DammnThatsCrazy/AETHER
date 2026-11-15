@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { ApplicabilityReport, ExplorationTruth } from '@aether/shared/exploration-contract';
+import type { ApplicabilityReport, ExplorationTruth } from '@olympuslabs/aether-shared/exploration-contract';
 import { TruthBanner } from './truth-banner';
 
 describe('TruthBanner honest states', () => {

@@ -5,7 +5,7 @@
  * `/v1/mobile/config`, `/v1/mobile/today`, `/v1/mobile/profile`,
  * `/v1/mobile/briefing`, `/v1/mobile/alerts`.
  *
- * The wire contracts live in `@aether/shared` (`packages/shared/mobile-projection.ts`)
+ * The wire contracts live in `@olympuslabs/aether-shared` (`packages/shared/mobile-projection.ts`)
  * as parity-tested twins of the Python-authoritative builders
  * (`services/api/ingestion/mobile/projections.py`) and are re-exported here under the app-local
  * names the screens consume — a single canonical shape, no app-local drift.

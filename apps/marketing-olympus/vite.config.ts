@@ -30,7 +30,7 @@ export default defineConfig({
   build: {
     sourcemap: true,
     commonjsOptions: {
-      // @aether/shared ships CJS-only. Extend the default node_modules include
+      // @olympuslabs/aether-shared ships CJS-only. Extend the default node_modules include
       // to also cover the workspace package so Rollup resolves named exports.
       include: [/node_modules/, /packages\/shared/],
     },

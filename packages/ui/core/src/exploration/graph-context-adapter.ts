@@ -1,4 +1,4 @@
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 import {
   toUniversalGraphQueryRequest,
   type CanonicalGraphQuery,
@@ -6,9 +6,9 @@ import {
   type GraphObjectRef,
   type GraphScope,
   validateCanonicalGraphQuery,
-} from '@aether/shared/graph-context-contract';
-import type { UniversalGraphQueryRequest } from '@aether/shared/graph-contract';
-import type { ProjectionId } from '@aether/shared/intelligence-projection';
+} from '@olympuslabs/aether-shared/graph-context-contract';
+import type { UniversalGraphQueryRequest } from '@olympuslabs/aether-shared/graph-contract';
+import type { ProjectionId } from '@olympuslabs/aether-shared/intelligence-projection';
 
 type GraphQueryLossField =
   | 'scope'

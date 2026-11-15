@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that @aether/web's declared distribution surface is buildable and self-consistent.
+"""Validate that @olympuslabs/aether-web's declared distribution surface is buildable and self-consistent.
 
 This is a *wiring* gate, not an artifact gate. It answers: "if we ran the build,
 would it emit everything package.json promises, and would the verifier catch it

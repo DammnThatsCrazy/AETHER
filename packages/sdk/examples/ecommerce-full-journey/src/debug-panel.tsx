@@ -2,7 +2,7 @@
 import type { SDKState } from './types';
 import type { ReactElement } from 'react';
 import React from 'react';
-import type { ConsentState } from '@aether/shared/consent';
+import type { ConsentState } from '@olympuslabs/aether-shared/consent';
 import { getRealConsentState, getSDKInstance } from './sdk';
 
 interface DebugPanelProps {
@@ -119,7 +119,7 @@ export function DebugPanel({ state }: DebugPanelProps): ReactElement {
               color: '#aaa',
             }}
           >
-            Real Consent State (from @aether/web SDK)
+            Real Consent State (from @olympuslabs/aether-web SDK)
           </h3>
           <ConsentGrid consent={realConsent} />
         </div>

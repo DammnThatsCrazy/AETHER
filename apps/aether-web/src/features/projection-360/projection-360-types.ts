@@ -14,10 +14,10 @@
  * the client never recomputes content and never synthesizes a metric.
  */
 
-import type { ExplorationResultEnvelope } from '@aether/shared/exploration-contract';
-import type { ProjectionId, SectionState } from '@aether/shared/intelligence-projection';
-import { intelligenceProjectionDefinitions } from '@aether/shared/intelligence-projections_generated';
-import { surfaceCapabilities } from '@aether/shared/surface-capabilities';
+import type { ExplorationResultEnvelope } from '@olympuslabs/aether-shared/exploration-contract';
+import type { ProjectionId, SectionState } from '@olympuslabs/aether-shared/intelligence-projection';
+import { intelligenceProjectionDefinitions } from '@olympuslabs/aether-shared/intelligence-projections_generated';
+import { surfaceCapabilities } from '@olympuslabs/aether-shared/surface-capabilities';
 
 /** Engine degradation level the projection surface reports (mirrors ProjectionDegradation.level). */
 export type ProjectionDegradationLevel = 'none' | 'partial' | 'full';

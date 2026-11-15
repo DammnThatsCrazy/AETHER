@@ -57,7 +57,7 @@ describe('one-tag bootstrap', () => {
       expect.objectContaining({
         apiKey: 'pk_live_abc',
         siteId: 'site_1',
-        endpoint: 'https://api.aether.io',
+        endpoint: 'https://api.aether.network',
       }),
     );
 
@@ -188,7 +188,7 @@ describe('one-tag bootstrap', () => {
     });
 
     const first = sent[0];
-    expect(first.url).toBe('https://api.aether.io/v1/batch');
+    expect(first.url).toBe('https://api.aether.network/v1/batch');
     expect(first.headers.Authorization).toBe('Bearer pk_live_abc');
     expect(first.headers['X-Aether-SDK']).toBe('web');
     expect(first.headers['X-Aether-Site']).toBe('site_9');

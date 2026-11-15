@@ -6,7 +6,7 @@ export type { Store } from './state/index';
 
 // The exploration fabric is exposed via the '@aether/ui/exploration' subpath
 // (like '@aether/ui/query'), NOT this barrel: it value-imports the CJS-only
-// '@aether/shared' registries, and keeping it off the main entry means apps
+// '@olympuslabs/aether-shared' registries, and keeping it off the main entry means apps
 // pulling '@aether/ui' for components don't drag that chain into their bundle.
 
 // Shared time system — the ONLY sanctioned home for Intl date/time formatting.
@@ -213,7 +213,7 @@ export type {
 export { NoesisWorkspace } from './components/noesis-workspace';
 export type { NoesisAction, NoesisGraphPayload, NoesisMessageItem, NoesisResponsePayload } from './components/noesis-workspace';
 
-// Relationship-layer vocabulary is canonical in @aether/shared (graph-contract).
+// Relationship-layer vocabulary is canonical in @olympuslabs/aether-shared (graph-contract).
 // Import it from there directly — this UI package no longer ships a divergent copy.
 
 export { parseProblemDetails, isProblemDetails } from './problem-details';

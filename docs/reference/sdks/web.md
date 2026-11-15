@@ -15,13 +15,13 @@ The Aether Web SDK is a thin observation client for browser-based applications.
 ## Installation
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ## Quick Start
 
 ```typescript
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 
 const aether = AetherSDK.init({
   tenantId: 'your-tenant-id',

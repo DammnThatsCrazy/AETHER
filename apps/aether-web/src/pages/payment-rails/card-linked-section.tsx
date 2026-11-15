@@ -11,7 +11,7 @@ import {
   Badge, CapabilityStatePanel, Card, CardContent, CardHeader, CardTitle, DataTable,
   EmptyState, ErrorState, LoadingState,
 } from '@aether/ui';
-import { paymentscanCardPrograms, cardActivityBases } from '@aether/shared';
+import { paymentscanCardPrograms, cardActivityBases } from '@olympuslabs/aether-shared';
 import {
   useCardLinkedFlows, type CardLinkedFlowRecord, type CardLinkedFilters,
 } from '@aether-app/features/card-linked';
