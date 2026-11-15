@@ -14,9 +14,10 @@ reviewed_source_commits:
   - commit: "482948261"
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
+  - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; this document needs no other change.'}
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:2a42c4b44d6baf7cb18fd3f2f54a336b8c0ee892c433fa521e2200179d0015ec"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:988f8838869a01d7e1613a38d42d1d3105ba1828b14d54db331c4a80a95fe473"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
