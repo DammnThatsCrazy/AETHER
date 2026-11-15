@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:e3f611f91767c9733bb1f8338f7531b28aa64ed94f8f4a315befbeb795ab290c"
+  "packages/sdk/web/src/index.ts": "sha256:b70d3b600c0c6584cb4b524dabd463eb70f90568bd1634047afee61916b47f38"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
@@ -585,7 +585,7 @@ interface AetherConfig {
     heartbeatInterval?: number;            // Session heartbeat in ms (default: 30000)
     batchSize?: number;                    // Events per batch (default: 10)
     flushInterval?: number;                // Flush interval in ms (default: 5000)
-    maxQueueSize?: number;                 // Max queued events (default: 100)
+    maxQueueSize?: number;                 // Hard cap on queued events (default: 100); see Delivery below
     retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
     customHeaders?: Record<string, string>;
     manifestPublicKey?: string;            // base64url P-256 key; verifies signed remote-config manifests
@@ -593,6 +593,28 @@ interface AetherConfig {
   };
 }
 ```
+
+## Delivery and failure handling
+
+- **Queue bound.** `maxQueueSize` is a hard cap. When the queue is full (for
+  example while offline) the oldest events are evicted first, except `consent`
+  and `identify` events, which are kept. Every eviction is counted as
+  `queue_full` in `getDiagnostics().droppedEvents`.
+- **Retries.** `5xx`, `429` and network failures retry with backoff, then the
+  batch returns to the queue for the next flush. Each event keeps its `id`, so a
+  resend is de-duplicated by the backend.
+- **Rejected key (`401` / `403`).** The events are valid; the key is not. The
+  SDK holds them (within the queue cap), pauses sending for 1 minute, doubling up
+  to 15 minutes per consecutive rejection, and resumes on its own once a send
+  succeeds. `onError` fires once per incident, and `getDiagnostics().authPaused`
+  is `true` while paused. Unload beacons are skipped while paused; the queue is
+  already persisted for the next page load.
+- **Other `4xx`** (malformed or rejected batch) are terminal: the batch is
+  dropped and reported through `onError`, so it cannot block later events.
+- **Persistence is per install.** The queue saved to `localStorage` on unload
+  is keyed by endpoint, key and site, so initializing with a different key or
+  site (for example the React provider restarting) never picks up and sends
+  another install's backlog.
 
 ## Plugins
 
@@ -758,5 +780,15 @@ function MyComponent() {
   return <button onClick={() => aether.track('cta_click')}>Click</button>;
 }
 ```
+
+The provider loads the SDK only in the browser (nothing runs during server
+rendering) and renders its children once the SDK is ready. It restarts the SDK
+(destroy, then init) only when `apiKey`, `siteId`, `endpoint` or `environment`
+changes, so an inline `config={{ ... }}` object does not restart it on every
+render. Other options are applied once at init; in development the provider
+warns if one changes later. It is safe under React Strict Mode (one init per
+mount) and cleans up on unmount. After a restart, late responses and route
+hooks from the previous key or site are ignored, so they cannot change the new
+install's configuration, identity or page views.
 
 The provider is SSR-safe: `AetherProvider` is a no-op when `typeof window === 'undefined'`.
