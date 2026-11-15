@@ -29,9 +29,9 @@ toc_depth: 3
 source_hashes:
   "scripts/certify_agent_correlation.py": "sha256:9d0bd1ef8e4e9100182487db07425f4acdb041bb55376b807d9f6dc4e3dcc5af"
   "services/api/actions/agent_correlation/bindings.py": "sha256:b345e8c5d707735c35965c9b802576495f5a9b220e3587a4377a4fff164827d6"
-  "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:9729a8ba0ac510aea96a8fb55451899c27a72936a925244b379a384b14d0fc5a"
+  "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:13bef311e6a1c855939f7fa3edf8ef52bf6a6d97e1564ff2bf317773fce0a19f"
   "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
-  "services/api/actions/agent_correlation/certification/recorders.py": "sha256:0aa5369877374e69deb1920b6e0147f200b5021b2cf604adb1a1f13a9d52b064"
+  "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c8056f3ba70415bc62b954bcdd7782cd63b48ef3d41b8c25c3dcc5e2fb554f2d"
   "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
   "services/api/actions/agent_correlation/engine.py": "sha256:c1a15719a8245a5713bf0c758ae7780eb1490f2d14bda7f33e7770bfc82e4e51"
   "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
@@ -251,6 +251,7 @@ way, because Grok exposes no public telemetry API.
 | Provider / kind | Role | Record read | Join keys produced |
 |---|---|---|---|
 | `shopify` / `order`, `inventory_level`, `product` | `system_of_record` | Admin webhook payloads | Exact object refs; `shopify_app:` and `shopify_staff:` actors; tokens in the order note, note attributes, or tags |
+| `shopify` / `order_graphql`, `inventory_level_graphql`, `product_graphql` | `system_of_record` | Admin GraphQL nodes (the provider runtime's GraphQL readers and the Shopify connector) | Translated to webhook field names and mapped by the kinds above, so one object revision yields one observation whichever path delivered it |
 | `shopify` / `access_grant` | `authority_issuer` | The connection's capture of an app or connector approval | App and staff actors |
 | `stripe` / `event` | `system_of_record` | PaymentIntent, Charge, Refund, Dispute events | Exact object refs (realm from `livemode`); tokens in metadata or description |
 | `ramp` / `transaction` | `system_of_record` | Card transaction | Exact object ref; `ramp_card:` and `ramp_user:` actors; token in memo |

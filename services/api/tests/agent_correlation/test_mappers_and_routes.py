@@ -180,3 +180,36 @@ def test_stripe_reads_the_owning_account_from_context() -> None:
         "data": {"object": {"object": "payment_intent", "id": "pi_cAbcdefghij"}},
     })
     assert obs.object_refs[0].source_account_key == "acct_ctx"
+
+
+def test_shopify_graphql_and_webhook_records_converge_on_one_observation() -> None:
+    """The same product revision from a webhook and from Admin GraphQL is one observation."""
+    (rest,) = map_record("shopify", "product", CTX, {
+        "id": 8801, "updated_at": "2026-11-14T07:00:00-05:00", "tags": "a, b", "variants": [{"id": 42}],
+    })
+    (gql,) = map_record("shopify", "product_graphql", CTX, {
+        "id": "gid://shopify/Product/8801", "updatedAt": "2026-11-14T12:00:00Z", "tags": ["a", "b"],
+        "variants": {"nodes": [{"id": "gid://shopify/ProductVariant/42", "inventoryItem": {"id": "gid://shopify/InventoryItem/7"}}]},
+    })
+    assert rest.observation_id == gql.observation_id
+    assert {r.scope_key for r in rest.object_refs} == {r.scope_key for r in gql.object_refs}
+
+
+def test_shopify_graphql_inventory_and_order() -> None:
+    (level,) = map_record("shopify", "inventory_level_graphql", CTX, {
+        "id": "gid://shopify/InventoryLevel/991?inventory_item_id=55", "updatedAt": "2026-11-14T12:00:00Z",
+        "item": {"id": "gid://shopify/InventoryItem/55"}, "location": {"id": "gid://shopify/Location/7"},
+    })
+    (rest_level,) = map_record("shopify", "inventory_level", CTX, {
+        "inventory_item_id": 55, "location_id": 7, "updated_at": "2026-11-14T12:00:00Z",
+        "admin_graphql_api_id": "gid://shopify/InventoryLevel/991?inventory_item_id=55",
+    })
+    assert level.observation_id == rest_level.observation_id
+    assert {r.object_type for r in level.object_refs} == {"inventory_level", "inventory_item"}
+    (order,) = map_record("shopify", "order_graphql", CTX, {
+        "id": "gid://shopify/Order/1001", "updatedAt": "2026-11-14T12:00:00Z", "note": "x",
+        "customAttributes": [{"key": "k", "value": "v"}], "app": {"id": "gid://shopify/App/55"},
+    })
+    assert order.actor_refs == ("shopify_app:55",)
+    with pytest.raises(MappingError, match="GID"):
+        map_record("shopify", "product_graphql", CTX, {"id": "8801", "updatedAt": "2026-11-14T12:00:00Z"})

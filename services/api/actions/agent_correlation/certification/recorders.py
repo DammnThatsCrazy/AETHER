@@ -179,6 +179,20 @@ async def record_shopify(client: httpx.AsyncClient, ctx: RecordingContext) -> li
             out.append(Recording("shopify", "inventory_level", "shopify.inventory_set",
                                  levels["inventory_levels"][0], api, bindings))
 
+        node = await gql(
+            """query($id: ID!, $item: ID!) {
+                 product(id: $id) { id createdAt updatedAt tags variants(first: 5) { nodes { id inventoryItem { id } } } }
+                 inventoryItem(id: $item) { inventoryLevels(first: 1) { nodes { id updatedAt item { id } location { id } } } }
+               }""",
+            {"id": product_gid, "item": item_gid}, "shopify read graphql nodes")
+        if node.get("product"):
+            out.append(Recording("shopify", "product_graphql", "shopify.product_draft_graphql",
+                                 node["product"], api, bindings))
+        levels_gql = ((node.get("inventoryItem") or {}).get("inventoryLevels") or {}).get("nodes") or []
+        if levels_gql:
+            out.append(Recording("shopify", "inventory_level_graphql", "shopify.inventory_set_graphql",
+                                 levels_gql[0], api, bindings))
+
         orders = _check(await client.get(f"{admin}/orders.json", headers=headers,
                                          params={"status": "any", "limit": "1"}), "shopify read orders")
         if orders.get("orders"):

@@ -66,13 +66,31 @@
     },
     {
       "fixtures": 0,
+      "kind": "inventory_level_graphql",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
       "kind": "order",
       "provider": "shopify",
       "status": "uncertified"
     },
     {
       "fixtures": 0,
+      "kind": "order_graphql",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
       "kind": "product",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "product_graphql",
       "provider": "shopify",
       "status": "uncertified"
     },

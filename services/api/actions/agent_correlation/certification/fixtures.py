@@ -86,6 +86,17 @@ _SCRUB: dict[tuple[str, str], Any] = {
         "id": 1, "admin_graphql_api_id": 1, "updated_at": 1, "created_at": 1, "tags": "*text",
         "variants": [{"id": 1, "inventory_item_id": 1}],
     },
+    ("shopify", "product_graphql"): {
+        "id": 1, "updatedAt": 1, "createdAt": 1, "tags": "*text",
+        "variants": {"nodes": [{"id": 1, "inventoryItem": {"id": 1}}]},
+    },
+    ("shopify", "inventory_level_graphql"): {
+        "id": 1, "updatedAt": 1, "item": {"id": 1}, "location": {"id": 1},
+    },
+    ("shopify", "order_graphql"): {
+        "id": 1, "updatedAt": 1, "createdAt": 1, "note": "*text", "tags": "*text",
+        "customAttributes": [{"key": 1, "value": "*text"}], "app": {"id": 1}, "staffMember": {"id": 1},
+    },
     ("stripe", "event"): {
         "id": 1, "type": 1, "created": 1, "livemode": 1, "account": 1, "context": 1, "api_version": 1,
         "data": {"object": {"object": 1, "id": 1, "payment_intent": 1, "charge": 1, "status": 1,

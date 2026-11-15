@@ -131,9 +131,83 @@ def map_access_grant(ctx: MapperContext, record: Mapping[str, Any]) -> list[Corr
     )]
 
 
+# ── Admin GraphQL records ────────────────────────────────────────────────
+#
+# The provider runtime's GraphQL readers and the Shopify connector return
+# Admin GraphQL nodes rather than webhook payloads. Each GraphQL kind
+# translates its node into the webhook field names and reuses the mapper
+# above, so one object revision yields the same observation ID whichever path
+# delivered it, and the two paths deduplicate instead of double counting.
+
+
+def _gid_number(value: Any, field: str) -> str:
+    match = _GID_NUMBER.match(str(value or ""))
+    if not match:
+        raise MappingError(f"{field} must be a Shopify GID")
+    return match.group(1)
+
+
+def _node_id(node: Any) -> Any:
+    return node.get("id") if isinstance(node, Mapping) else None
+
+
+def _nodes(connection: Any) -> list[Mapping[str, Any]]:
+    if isinstance(connection, Mapping):
+        items = connection.get("nodes")
+        if items is None and isinstance(connection.get("edges"), list):
+            items = [e.get("node") for e in connection["edges"] if isinstance(e, Mapping)]
+        return [n for n in items or [] if isinstance(n, Mapping)]
+    return []
+
+
+def map_product_graphql(ctx: MapperContext, record: Mapping[str, Any]) -> list[CorrelationObservation]:
+    variants = [
+        {"id": _gid_number(v.get("id"), "variant id")} for v in _nodes(record.get("variants")) if v.get("id")
+    ]
+    return map_product(ctx, {
+        "id": _gid_number(require(record, "id"), "id"),
+        "admin_graphql_api_id": record.get("id"),
+        "updated_at": record.get("updatedAt") or record.get("createdAt"),
+        "created_at": record.get("createdAt"),
+        "tags": record.get("tags"),
+        "variants": variants,
+    })
+
+
+def map_inventory_level_graphql(ctx: MapperContext, record: Mapping[str, Any]) -> list[CorrelationObservation]:
+    return map_inventory_level(ctx, {
+        "inventory_item_id": _gid_number(_node_id(record.get("item")), "item.id"),
+        "location_id": _gid_number(_node_id(record.get("location")), "location.id"),
+        "updated_at": record.get("updatedAt"),
+        "admin_graphql_api_id": require(record, "id"),
+    })
+
+
+def map_order_graphql(ctx: MapperContext, record: Mapping[str, Any]) -> list[CorrelationObservation]:
+    app_gid = _node_id(record.get("app"))
+    staff_gid = _node_id(record.get("staffMember"))
+    return map_order(ctx, {
+        "id": _gid_number(require(record, "id"), "id"),
+        "updated_at": record.get("updatedAt") or record.get("createdAt"),
+        "created_at": record.get("createdAt"),
+        "note": record.get("note"),
+        "note_attributes": [
+            {"name": a.get("key"), "value": a.get("value")}
+            for a in record.get("customAttributes") or []
+            if isinstance(a, Mapping)
+        ],
+        "tags": record.get("tags"),
+        "app_id": _gid_number(app_gid, "app.id") if app_gid else None,
+        "user_id": _gid_number(staff_gid, "staffMember.id") if staff_gid else None,
+    })
+
+
 KINDS = {
     "order": ("system_of_record", map_order),
     "inventory_level": ("system_of_record", map_inventory_level),
     "product": ("system_of_record", map_product),
     "access_grant": ("authority_issuer", map_access_grant),
+    "order_graphql": ("system_of_record", map_order_graphql),
+    "inventory_level_graphql": ("system_of_record", map_inventory_level_graphql),
+    "product_graphql": ("system_of_record", map_product_graphql),
 }
