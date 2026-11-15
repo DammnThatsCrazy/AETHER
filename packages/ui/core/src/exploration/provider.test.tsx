@@ -2,8 +2,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { useEffect } from 'react';
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
-import type { GraphScope } from '@aether/shared/graph-context-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
+import type { GraphScope } from '@olympuslabs/aether-shared/graph-context-contract';
 import { ExplorationProvider, GraphContextProvider, useExploration, useExplorationContext, useGraphActions, useGraphContext, useGraphHistory, useGraphSelection } from './provider';
 import { encodeExplorationContext } from './url-codec';
 

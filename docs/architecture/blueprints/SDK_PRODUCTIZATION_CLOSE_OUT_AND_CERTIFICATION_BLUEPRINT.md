@@ -47,7 +47,7 @@ PR #648 directly addresses the prior gap where the SDK existed but could not be 
 
 It adds:
 
-- build artifacts for `@aether/web`
+- build artifacts for `@olympuslabs/aether-web`
 - publish-surface gates
 - CDN release pipeline
 - standardized API/CDN domains

@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:af11bf4068796b601e6d9e4a35c10911059e8d05fc3632661c2dd39fd269af93"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:95527d29b9b08f5e3c753cc497f31d7168f229da345b57aa9701383ac52e6f7e"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -30,7 +30,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "0.1.0-alpha.0")
+    .package(url: "https://github.com/DammnThatsCrazy/aether-ios.git", from: "0.1.0-alpha.0")
 ]
 ```
 
@@ -364,7 +364,7 @@ struct AetherConfig {
     let apiKey: String
     var environment: Environment = .production   // .production, .staging, .development
     var debug: Bool = false                      // Console logging
-    var endpoint: String = "https://api.aether.io"
+    var endpoint: String = "https://api.aether.network"
     var modules: ModuleConfig = ModuleConfig()
     var privacy: PrivacyConfig = PrivacyConfig()
     var batchSize: Int = 10                      // Events per batch

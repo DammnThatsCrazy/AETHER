@@ -17,7 +17,7 @@ import {
   classifyEdgeType,
   countEdgesByLayer,
   LAYER_FILTERS,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 describe('GraphLayer type coverage', () => {
   it('RELATIONSHIP_LAYERS has exactly four entries', () => {

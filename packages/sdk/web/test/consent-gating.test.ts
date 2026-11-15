@@ -256,7 +256,7 @@ describe('consent-gating', () => {
 
     // Enqueue an event with consent stamped in context
     const event = makeAnalyticsEvent();
-    (event as any).context = { consent: consentState, library: { name: '@aether/web', version: '8.9.0' } };
+    (event as any).context = { consent: consentState, library: { name: '@olympuslabs/aether-web', version: '8.9.0' } };
     q.enqueue(event);
 
     let capturedBatch: AetherEvent[] = [];

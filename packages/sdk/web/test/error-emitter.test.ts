@@ -62,7 +62,7 @@ function buildErrorEvent(
     anonymousId: 'anon-1',
     properties: errorProps,
     context: {
-      library: { name: '@aether/web', version: '8.9.0' },
+      library: { name: '@olympuslabs/aether-web', version: '8.9.0' },
     },
   } as AetherEvent;
 }

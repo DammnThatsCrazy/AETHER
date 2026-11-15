@@ -4,7 +4,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState, Input,
   LoadingState, Select,
 } from '@aether/ui';
-import type { PatternVerdict } from '@aether/shared';
+import type { PatternVerdict } from '@olympuslabs/aether-shared';
 import {
   PATTERN_VERDICTS, PatternGraphCanvas, markPatternsSeen, usePatternCurate, usePatternDetail,
   usePatternDiscoveryEnabled, usePatternGraph, usePatternList, usePatternReview, useWhatsNew,

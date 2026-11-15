@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, LoadingState, ErrorState, formatCount, formatDate, formatUSD, useTimeContext } from '@aether/ui';
 import { useCampaign360Population } from '../use-campaign-360';
-import type { PopulationType } from '@aether/shared';
+import type { PopulationType } from '@olympuslabs/aether-shared';
 
 const POPULATION_TYPES: { value: PopulationType; label: string }[] = [
   { value: 'observed', label: 'Observed' },

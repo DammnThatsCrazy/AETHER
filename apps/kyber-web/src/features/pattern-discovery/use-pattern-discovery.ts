@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@kyber/lib/api';
-import type { PatternCurationAction, PatternKind, PatternVerdict } from '@aether/shared';
+import type { PatternCurationAction, PatternKind, PatternVerdict } from '@olympuslabs/aether-shared';
 import type { DiscoveredPatternDetail, DiscoveredPatternList, PatternSubgraph, PatternWhatsNew } from '@kyber/lib/api/endpoints';
 
 export type {
@@ -10,7 +10,7 @@ export type {
 /** Typed against the shared contract (packages/shared/pattern-discovery.ts), whose
  *  parity with the backend is asserted by tests/unit/test_pattern_discovery_contract_parity.py;
  *  a value outside the shared vocabulary fails the typecheck. */
-export type { PatternCurationAction, PatternKind, PatternVerdict } from '@aether/shared';
+export type { PatternCurationAction, PatternKind, PatternVerdict } from '@olympuslabs/aether-shared';
 
 export const PATTERN_VERDICTS = ['valid', 'malicious', 'benign', 'duplicate', 'unresolved'] as const satisfies readonly PatternVerdict[];
 

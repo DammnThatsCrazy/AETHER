@@ -1,0 +1,259 @@
+{
+  "account_bindings": {
+    "shopify": {
+      "source_account_key": "olympus-gvdoeyfv.myshopify.com",
+      "source_account_realm": "test"
+    }
+  },
+  "certification": {
+    "companions": [
+      {
+        "actor_refs": [],
+        "correlation_tokens": [
+          "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        ],
+        "infrastructure_refs": [],
+        "object_refs": [],
+        "observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "occurred_at": "2026-11-14T23:13:42Z",
+        "provider_family": "aether_certification",
+        "schema_version": "1",
+        "signed_request": null,
+        "source_role": "agent_runtime",
+        "tenant_id": "aether_certification"
+      }
+    ],
+    "key_b64": "2GAznibPJupHxFC48otqM99T2ug107zxMZX2PVbQM1c",
+    "key_id": "cert",
+    "tenant_id": "aether_certification"
+  },
+  "expected": {
+    "links": [],
+    "object_types": [],
+    "observation_count": 1,
+    "observation_digest": "aab699707fec87f60d2cd2461fe5ee91596d6dfbf973a384ad94511a2d4c63d9",
+    "roles": [
+      "authority_issuer"
+    ],
+    "tokens": 0
+  },
+  "kind": "access_grant_graphql",
+  "origin": "sandbox_recorded",
+  "provider": "shopify",
+  "provider_api": {
+    "api_version": "admin-graphql (connector-pinned)",
+    "host": "myshopify.com",
+    "via": "shopify_connector_dev_store"
+  },
+  "realm": "test",
+  "record": {
+    "installation": {
+      "accessScopes": [
+        {
+          "handle": "read_all_orders"
+        },
+        {
+          "handle": "read_analytics"
+        },
+        {
+          "handle": "read_apps"
+        },
+        {
+          "handle": "read_companies"
+        },
+        {
+          "handle": "read_legal_policies"
+        },
+        {
+          "handle": "read_reports"
+        },
+        {
+          "handle": "read_rollouts"
+        },
+        {
+          "handle": "write_checkout_branding_settings"
+        },
+        {
+          "handle": "write_checkouts"
+        },
+        {
+          "handle": "write_collective.access"
+        },
+        {
+          "handle": "write_content"
+        },
+        {
+          "handle": "write_customers"
+        },
+        {
+          "handle": "write_digital_products_product"
+        },
+        {
+          "handle": "write_discounts"
+        },
+        {
+          "handle": "write_draft_orders"
+        },
+        {
+          "handle": "write_files"
+        },
+        {
+          "handle": "write_fulfillments"
+        },
+        {
+          "handle": "write_inventory"
+        },
+        {
+          "handle": "write_locales"
+        },
+        {
+          "handle": "write_locations"
+        },
+        {
+          "handle": "write_marketing_events"
+        },
+        {
+          "handle": "write_markets"
+        },
+        {
+          "handle": "write_merchant_managed_fulfillment_orders"
+        },
+        {
+          "handle": "write_metaobject_definitions"
+        },
+        {
+          "handle": "write_metaobjects"
+        },
+        {
+          "handle": "write_online_store_navigation"
+        },
+        {
+          "handle": "write_order_edits"
+        },
+        {
+          "handle": "write_orders"
+        },
+        {
+          "handle": "write_price_rules"
+        },
+        {
+          "handle": "write_products"
+        },
+        {
+          "handle": "write_publications"
+        },
+        {
+          "handle": "write_returns"
+        },
+        {
+          "handle": "write_shipping"
+        },
+        {
+          "handle": "write_theme_agent.access"
+        },
+        {
+          "handle": "write_themes"
+        },
+        {
+          "handle": "write_translations"
+        },
+        {
+          "handle": "write_validations"
+        },
+        {
+          "handle": "read_checkout_branding_settings"
+        },
+        {
+          "handle": "read_checkouts"
+        },
+        {
+          "handle": "read_collective.access"
+        },
+        {
+          "handle": "read_content"
+        },
+        {
+          "handle": "read_customers"
+        },
+        {
+          "handle": "read_discounts"
+        },
+        {
+          "handle": "read_draft_orders"
+        },
+        {
+          "handle": "read_files"
+        },
+        {
+          "handle": "read_fulfillments"
+        },
+        {
+          "handle": "read_inventory"
+        },
+        {
+          "handle": "read_locales"
+        },
+        {
+          "handle": "read_locations"
+        },
+        {
+          "handle": "read_marketing_events"
+        },
+        {
+          "handle": "read_markets"
+        },
+        {
+          "handle": "read_merchant_managed_fulfillment_orders"
+        },
+        {
+          "handle": "read_metaobject_definitions"
+        },
+        {
+          "handle": "read_metaobjects"
+        },
+        {
+          "handle": "read_online_store_navigation"
+        },
+        {
+          "handle": "read_order_edits"
+        },
+        {
+          "handle": "read_orders"
+        },
+        {
+          "handle": "read_price_rules"
+        },
+        {
+          "handle": "read_products"
+        },
+        {
+          "handle": "read_publications"
+        },
+        {
+          "handle": "read_returns"
+        },
+        {
+          "handle": "read_shipping"
+        },
+        {
+          "handle": "read_themes"
+        },
+        {
+          "handle": "read_translations"
+        },
+        {
+          "handle": "read_validations"
+        }
+      ],
+      "app": {
+        "id": "gid://shopify/App/341262598145"
+      },
+      "id": "gid://shopify/AppInstallation/788602617926"
+    },
+    "observed_at": "2026-11-15T18:40:00Z"
+  },
+  "record_sha256": "28e8d78c5e66a59e3f2995eb1a0af21b6033cf5cf76eb733d51ce32a74d5cef7",
+  "recorded_at": "2026-11-15T18:54:40+00:00",
+  "recorder": "shopify.dev_store_app_installation",
+  "schema_version": "1"
+}

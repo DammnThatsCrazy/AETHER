@@ -1,7 +1,7 @@
 /**
  * @aether/mobile-core — the platform-agnostic mobile SDK core.
  *
- * Re-exports the `@aether/shared` contract twins the mobile apps consume, plus the
+ * Re-exports the `@olympuslabs/aether-shared` contract twins the mobile apps consume, plus the
  * typed API client, transport abstraction, config, and runtime guards. No React
  * Native / Expo dependency lives here; the host app injects transport + auth.
  */
@@ -20,7 +20,7 @@ export type {
   PushSubscription,
   SyncChangeType,
   SyncEvent,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 export {
   installationAppKinds,
@@ -28,13 +28,13 @@ export {
   installationTrustStates,
   pushProviders,
   syncChangeTypes,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 // Mobile-gateway projection wire twins (M3a, decision-log D12) — bounded,
 // redacted surfaces composed from the owning services on the backend. The wire
 // `MobileConfig` twin is re-exported as `WireMobileConfig` to avoid colliding with
 // the SDK's local client `MobileConfig` (`./config`).
-export type { MobileConfig as WireMobileConfig } from '@aether/shared';
+export type { MobileConfig as WireMobileConfig } from '@olympuslabs/aether-shared';
 export type {
   MobileAlertItem,
   MobileAlertsProjection,
@@ -48,8 +48,8 @@ export type {
   MobileRecentAlert,
   MobileSavedView,
   MobileTodayProjection,
-} from '@aether/shared';
-export { conversationSourceStatuses } from '@aether/shared';
+} from '@olympuslabs/aether-shared';
+export { conversationSourceStatuses } from '@olympuslabs/aether-shared';
 
 export type { MobileAppKind, MobileConfig } from './config';
 export { normalizeBaseUrl } from './config';

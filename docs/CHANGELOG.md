@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:77296ee5401a894d5f59da6b0820288ea7b20d2e50f86678dac2972bc131ce62"
+  "CHANGELOG.md": "sha256:1e79df49439c3cdaab426303cbaa3e61b20bef1c93801df9ab63502d29ce700e"
 ---
 # Changelog
 
@@ -28,7 +28,7 @@ source_hashes:
 
 - Agent economy observation: tenant-scoped run/action evidence, bounded trigger/policy/delegation/outcome explanations, outbox recovery, and a default-off public xAI catalog observer with source-attributed Agent 360 and graph views. X posts/news ingestion and canonical external-agent identity joins remain gated follow-on work.
 - Exact-reference commerce reconciliation: Shopify order revisions and signed Stripe `payment_intent.succeeded` observations can join on explicit `aether_order_ref` metadata with exact decimal amount/currency checks; payment completion remains distinct from payout settlement.
-- SDK distribution layer: `@aether/web` build artifacts are emitted and guarded on the publish surface, and a CDN release pipeline (`.github/workflows/publish-sdk.yml`) ships verified manifests with a derived version.
+- SDK distribution layer: `@olympuslabs/aether-web` build artifacts are emitted and guarded on the publish surface, and a CDN release pipeline (`.github/workflows/publish-sdk.yml`) ships verified manifests with a derived version.
 - Publishable (`pk_`) API keys — a site-scoped, ingestion-only key class alongside the existing secret (`ak_`) class, so a key in page HTML cannot reach the rest of the API.
 - One-tag SDK install: quickstart collapses to a single auto-init script tag that is a real install path, with the canonical envelope stamped on the signals it emits.
 - Install observability: the `sdk_*` event family (loaded / initialized / failed) is registered in the contract registry, and an install verifier reports whether a pasted install came up — distinguishing an install that failed from one that never ran.
@@ -309,7 +309,7 @@ All new surfaces are feature-flagged and default OFF.
 ## v8.8.0 — SDK Alignment, Agent Layer Multi-Controller, Commerce Control Plane, Audit Remediation (2026-04-05)
 
 ### Production audit remediation (monorepo-wide)
-- **`@aether/shared` workspace**: `packages/shared/` promoted to first-class npm workspace with `exports` map; React Native imports migrated from fragile relative paths to `@aether/shared/*`.
+- **`@olympuslabs/aether-shared` workspace**: `packages/shared/` promoted to first-class npm workspace with `exports` map; React Native imports migrated from fragile relative paths to `@olympuslabs/aether-shared/*`.
 - **Backend Docker buildable**: repaired broken `COPY` paths in `services/backend/Dockerfile`; added `.dockerignore` to strip unrelated subsystems from every backend build context.
 - **ml-serving stage pinned**: `target: serving` added to both root and staging docker-compose so Docker no longer builds the default-last `monitoring` stage that lacked the `serving/` module.
 - **Staging compose context fix**: staging ml-serving now points at `../../services/ml` (where the ML Dockerfile's relative COPY instructions resolve).

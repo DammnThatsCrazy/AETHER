@@ -30,12 +30,12 @@
 //   telemetry.task({ taskId: 't-1', status: 'started' });
 //   await telemetry.flush();
 
-import type { AgentDeploymentContext, EventType } from '@aether/shared';
+import type { AgentDeploymentContext, EventType } from '@olympuslabs/aether-shared';
 import {
   externalPlatforms,
   agentDeploymentEnvironments,
   agentDeploymentConsentModes,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { AetherServerSDK } from './index';
 import { scrubSensitiveFields } from './scrubber';

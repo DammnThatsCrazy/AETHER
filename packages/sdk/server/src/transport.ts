@@ -57,7 +57,7 @@ export async function sendBatch(
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.writeKey}`,
-        'User-Agent': config.userAgent ?? '@aether/server',
+        'User-Agent': config.userAgent ?? '@olympuslabs/aether-server',
         'X-Aether-Source': 'server-sdk',
       },
       // Canonical ingestion envelope — the backend BatchRequest requires

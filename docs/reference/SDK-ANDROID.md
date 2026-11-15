@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:0f65cda990c9aa4559dc08fced6a7cbeac7c1c26f411dab1439bef8accf81bfe"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:85c97af1c81ce994db3e565300039980c8acdd5eb8d83616bedb8b7db3d508bf"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -29,7 +29,7 @@ source_hashes:
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.aether:sdk-android:0.1.0-alpha.0")
+    implementation("com.olympuslabsml:aether-android:0.1.0-alpha.0")
 }
 ```
 
@@ -37,7 +37,7 @@ dependencies {
 
 ```groovy
 // build.gradle
-implementation 'io.aether:sdk-android:0.1.0-alpha.0'
+implementation 'com.olympuslabsml:aether-android:0.1.0-alpha.0'
 ```
 
 ## Quick Start
@@ -337,7 +337,7 @@ data class AetherConfig(
     val apiKey: String,
     val environment: Environment = Environment.PRODUCTION,
     val debug: Boolean = false,
-    val endpoint: String = "https://api.aether.io",
+    val endpoint: String = "https://api.aether.network",
     val batchSize: Int = 10,
     val flushIntervalMs: Long = 5000L,
     val modules: ModuleConfig = ModuleConfig(),

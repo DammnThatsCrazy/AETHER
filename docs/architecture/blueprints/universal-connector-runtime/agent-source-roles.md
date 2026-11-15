@@ -29,7 +29,7 @@ toc_depth: 3
 source_hashes:
   "scripts/certify_agent_correlation.py": "sha256:9d0bd1ef8e4e9100182487db07425f4acdb041bb55376b807d9f6dc4e3dcc5af"
   "services/api/actions/agent_correlation/bindings.py": "sha256:a6ca53cae6bca133e09fd5a9016c2e17c436aeff086a6dc93c96f4c2d8cb3bdb"
-  "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:13bef311e6a1c855939f7fa3edf8ef52bf6a6d97e1564ff2bf317773fce0a19f"
+  "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:17f25d536f73928ac18b8d1dfe6e3b7ca76f51e844c09eaf6d597caa5bd0df58"
   "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
   "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c275b92b8020e3c1e65392084affffd72ab970298e176c0aa6c58cd3981f66be"
   "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
@@ -39,7 +39,7 @@ source_hashes:
   "services/api/actions/agent_correlation/projection.py": "sha256:533ba53fd6932921a34e84667f6c7461eec8099906893da7f1852698ddbeb4bc"
   "services/api/actions/agent_correlation/routes.py": "sha256:6cc7bbf489ed282446b32fddbf8d8ca348aa26286b8173fb0160d723de5e7067"
   "services/api/actions/agent_correlation/service.py": "sha256:b8bf7252ce075d8f503da63a474956b20b4e9d1bb32cfc57b3acd6780ee33880"
-  "services/api/shared/integration_contracts/correlation.py": "sha256:3e0ab93ccd0bc9a1148f26e79aa4720fbc47f9cbdadf7d55b2db0a6e774dbb30"
+  "services/api/shared/integration_contracts/correlation.py": "sha256:2f2074fedca1438b4f18aa2bbc339dabf82ee91275a96db6f9eb0bd783c78513"
   "services/api/shared/integration_contracts/correlation_token.py": "sha256:bdc1861aad5f6d2afcb6f07ad0f9ab67e3f28bca7cfea49b11dda2aa0d0c9ae7"
   "services/api/shared/integration_contracts/source_roles.py": "sha256:002bcc66f8960fec8b92f7d63f8e665cd1a20b6679957bd9459be8d8d81d94ae"
   "services/api/shared/integration_contracts/streams.py": "sha256:cea0cdc53f61bbb90b57a627cd69f032d7cc8d1e2899b4099f04d2cf52ab36ac"
@@ -86,8 +86,18 @@ attribute and joined the task by `aether_correlation_token`. That run found
 that `Order.staffMember` requires the `read_users` scope, which Shopify grants
 only to finance embedded apps and Plus or Advanced stores. On other stores the
 staff actor is absent, so a Shopify order's provider-reported actor is usually
-only the app. The webhook-format Shopify kinds stay `uncertified` until an
-Admin API token is recorded. That recording showed that newer events name the owning
+only the app. `access_grant_graphql` is certified from the same store's
+app installation. Its app is the one that created order `#1001`, but the
+order predates the observed grant, so the standing-authority rule correctly
+does not link them. A test over the two recorded records shows this, and
+shows that the same order arriving after the grant links as a
+`PROVIDER_ASSERTED` candidate. That recording also caught a scrubber
+limit: it truncated lists at 50 entries, which would have dropped 15 of the
+65 scopes and changed the observation. The limit is now 200, and the
+record-time mapping check blocks any recording that truncation would alter.
+Stripe also has the payment's `charge.succeeded` event recorded. The
+webhook-format Shopify kinds stay `uncertified` until an Admin API token is
+recorded. That recording showed that newer events name the owning
 account in `context`, and the mapper now reads it. The other vendor kinds
 report `uncertified` in `config/agent_correlation_certification.json` until
 their sandboxes are recorded. Token issuance
@@ -204,7 +214,11 @@ meaningful between those roles:
   belong to domain reconciliation (see
   [canonical contracts §5](canonical-contracts.md#5-source-authority-and-reconciliation)).
 
-An object, actor, or infrastructure match also requires proximity in time.
+An object, actor, or infrastructure match also requires proximity in time,
+with one exception: an actor match with an `authority_issuer` record. A grant
+stands until it is revoked, so it matches a later act by the same actor
+however much later, and it never matches an earlier act, because a grant
+observed after the act does not show it was in effect.
 Without that, an agent that once read an order would bind to every later
 change of it. A unit test keeps vendor names out of the join code itself.
 
@@ -269,6 +283,7 @@ way, because Grok exposes no public telemetry API.
 |---|---|---|---|
 | `shopify` / `order`, `inventory_level`, `product` | `system_of_record` | Admin webhook payloads | Exact object refs; `shopify_app:` and `shopify_staff:` actors; tokens in the order note, note attributes, or tags |
 | `shopify` / `order_graphql`, `inventory_level_graphql`, `product_graphql` | `system_of_record` | Admin GraphQL nodes (the provider runtime's GraphQL readers and the Shopify connector) | Translated to webhook field names and mapped by the kinds above, so one object revision yields one observation whichever path delivered it |
+| `shopify` / `access_grant_graphql` | `authority_issuer` | The app installation's granted access scopes (`currentAppInstallation`), placed at the time the connection read them | `shopify_app:` actor; the scope set is part of the observation ID, so a changed grant is a new revision |
 | `shopify` / `access_grant` | `authority_issuer` | The connection's capture of an app or connector approval | App and staff actors |
 | `stripe` / `event` | `system_of_record` | PaymentIntent, Charge, Refund, Dispute events | Exact object refs (realm from `livemode`); tokens in metadata or description |
 | `ramp` / `transaction` | `system_of_record` | Card transaction | Exact object ref; `ramp_card:` and `ramp_user:` actors; token in memo |
@@ -391,7 +406,7 @@ proxy. Missing credentials skip a provider; they never certify it.
 | 3. Aether MCP bridge (done) | Agents register tasks and receive tokens; keys from `AGENT_CORRELATION_TOKEN_KEYS` | An end-to-end test registers a task over MCP, stamps the token into Stripe metadata, and links it |
 | 4. Projection (done) | `linked` verdicts become `CORRELATED_ACROSS_SOURCES` edges through the graph mutation gateway | Projected edges pass the graph write validator; candidates never project |
 | 5. Vendors per role (done for six) | Shopify, Stripe, Ramp, Cloudflare, OpenAI Agents, Aether MCP | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
-| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` and `shopify/{product,inventory_level,order}_graphql` certified from real sandbox records, with token round trips; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
+| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` and `shopify/{product,inventory_level,order,access_grant}_graphql` certified from real sandbox records, with token round trips; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
 | 7. Verified bindings (done) | Bindings from verified provider connections; declared scopes graded `TENANT_DECLARED` | Tests cover verified, declared, spoofed, realm-mismatched, revoked, and cross-tenant cases |
 
 Step 5 is the modularity test. A vendor that needs a change outside its own

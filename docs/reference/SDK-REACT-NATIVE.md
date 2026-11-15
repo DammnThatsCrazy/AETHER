@@ -11,8 +11,8 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:7c7d0a50b03eb713c19ffb66168f9d318e64565a88feff1f80a492eb9439a23a"
-  "packages/sdk/react-native/src/index.tsx": "sha256:f4d26aa7381b2af26066e5c995a6486e3a59f7529d0698305dbc0d61e8fbc91e"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:091ce96b8c65438b4176e0e8910fed824262f2ced75ebe93ca2c59ce1dff37e4"
+  "packages/sdk/react-native/src/index.tsx": "sha256:25cad4024a1305c105b5517f9fd2495cd7de9d4948147dbdc2dd448d70e8a0fc"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -23,9 +23,9 @@ source_hashes:
 ## Installation
 
 ```bash
-npm install @aether/react-native-sdk
+npm install @olympuslabs/aether-react-native
 # or
-yarn add @aether/react-native-sdk
+yarn add @olympuslabs/aether-react-native
 ```
 
 ### iOS Setup
@@ -41,7 +41,7 @@ No additional setup required — the native module auto-links.
 ## Quick Start
 
 ```tsx
-import { AetherProvider } from '@aether/react-native-sdk';
+import { AetherProvider } from '@olympuslabs/aether-react-native';
 
 export default function App() {
   return (
@@ -62,7 +62,7 @@ export default function App() {
 ### Event Tracking
 
 ```typescript
-import Aether from '@aether/react-native-sdk';
+import Aether from '@olympuslabs/aether-react-native';
 
 // Custom event
 Aether.track('button_tapped', { buttonId: 'cta-hero', screen: 'home' });
@@ -118,7 +118,7 @@ const fingerprintId = await Aether.getFingerprint();
 ### useAetherContext
 
 ```tsx
-import { useAetherContext } from '@aether/react-native-sdk';
+import { useAetherContext } from '@olympuslabs/aether-react-native';
 
 function MyComponent() {
   const { aether, isInitialized } = useAetherContext();
@@ -134,7 +134,7 @@ function MyComponent() {
 ### useIdentity
 
 ```tsx
-import { useIdentity } from '@aether/react-native-sdk';
+import { useIdentity } from '@olympuslabs/aether-react-native';
 
 function ProfileScreen() {
   const { identity, hydrate, reset } = useIdentity();
@@ -152,7 +152,7 @@ function ProfileScreen() {
 ### useScreenTracking
 
 ```tsx
-import { useScreenTracking } from '@aether/react-native-sdk';
+import { useScreenTracking } from '@olympuslabs/aether-react-native';
 
 function SettingsScreen() {
   useScreenTracking('SettingsScreen');
@@ -168,7 +168,7 @@ Subscribes to the SDK's consent state and re-renders when it changes — useful 
 rendering consent UI without manually wiring `onUpdate` callbacks.
 
 ```tsx
-import { useConsentState } from '@aether/react-native-sdk';
+import { useConsentState } from '@olympuslabs/aether-react-native';
 
 function PrivacyBanner() {
   const { consent } = useConsentState();
@@ -185,7 +185,7 @@ set until another event replaces it or the component unmounts. Use it to greet
 a returning user or restore session state without polling.
 
 ```tsx
-import { useJourneyResumed, type ResolvedIdentity } from '@aether/react-native-sdk';
+import { useJourneyResumed, type ResolvedIdentity } from '@olympuslabs/aether-react-native';
 
 function HomeScreen() {
   const resumed: ResolvedIdentity | null = useJourneyResumed();
@@ -397,7 +397,7 @@ Aether.trackPushOpened({
 interface AetherRNConfig {
   apiKey: string;
   environment?: 'production' | 'staging' | 'development';
-  endpoint?: string;           // Default: 'https://api.aether.io'
+  endpoint?: string;           // Default: 'https://api.aether.network'
   debug?: boolean;
   modules?: {
     screenTracking?: boolean;  // Auto screen tracking
@@ -450,7 +450,7 @@ stable `controlId` is captured — never rendered control text; anything else
 must be passed explicitly via `properties`.
 
 ```tsx
-import { AetherPressable } from '@aether/react-native-sdk';
+import { AetherPressable } from '@olympuslabs/aether-react-native';
 
 <AetherPressable aetherId="cta-checkout" onPress={goToCheckout}>
   <Text>Checkout</Text>

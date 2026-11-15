@@ -1,4 +1,4 @@
-import type { PlatformType } from '@aether/shared/contextual';
+import type { PlatformType } from '@olympuslabs/aether-shared/contextual';
 
 /** An SDK key — used by SDKs to authenticate with the Aether platform. */
 export interface SDKKey {

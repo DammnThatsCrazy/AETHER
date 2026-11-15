@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 import { campaignExplorationContext } from '@aether-app/features/campaigns/use-campaign-exploration';
 import { clusterExplorationContext } from '@aether-app/features/cluster360/use-cluster-exploration';
 import { geoExplorationContext } from '@aether-app/features/geo/use-geo-exploration';

@@ -52,7 +52,7 @@ function makeJourneyEvent(
       ...props,
     },
     context: {
-      library: { name: '@aether/web', version: '8.9.0' },
+      library: { name: '@olympuslabs/aether-web', version: '8.9.0' },
     },
   } as unknown as AetherEvent;
 }

@@ -112,7 +112,7 @@ def _batch_event(
         userId=user_id,
         properties=properties or {},
         context={
-            "library": {"name": "@aether/web", "version": "9.1.0"},
+            "library": {"name": "@olympuslabs/aether-web", "version": "9.1.0"},
             "consent": SDK_CONSENT if consent is None else consent,
             "device": device or {"type": "desktop"},
             "surface": "web",

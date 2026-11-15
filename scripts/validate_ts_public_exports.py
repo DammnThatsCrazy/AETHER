@@ -139,7 +139,7 @@ def main() -> int:
             print(f"  - {err}")
         print("\nRemediation: run npm run build, export public declaration types from package barrels, and update package.json exports.")
         return 1
-    print("TypeScript public export/package boundary validation passed for @aether/shared, @aether/web, and @aether/react-native.")
+    print("TypeScript public export/package boundary validation passed for @olympuslabs/aether-shared, @olympuslabs/aether-web, and @olympuslabs/aether-react-native.")
     return 0
 
 

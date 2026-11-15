@@ -15,7 +15,7 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>):
 
 const BASE = '/v1/targeting-intelligence';
 
-// ── Wire schemas (camelCase per @aether/shared targeting-intelligence contracts) ──
+// ── Wire schemas (camelCase per @olympuslabs/aether-shared targeting-intelligence contracts) ──
 // Tolerant on purpose: the backend is built in parallel. Aether observes
 // targeting — it never executes campaigns, so nothing here mutates external
 // campaign platforms.

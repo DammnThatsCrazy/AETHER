@@ -3,7 +3,7 @@ import type {
   ComparisonDefinition,
   ComparisonFinding,
   ComparisonRun,
-} from '@aether/shared/comparison-contract';
+} from '@olympuslabs/aether-shared/comparison-contract';
 import { restClient } from '@aether-app/lib/api/rest/client';
 
 const wrap = <T extends z.ZodTypeAny>(data: T) =>

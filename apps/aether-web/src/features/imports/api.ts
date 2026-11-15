@@ -8,8 +8,8 @@ import {
   importTransforms,
   importColumnTypes,
   importSensitivities,
-} from '@aether/shared';
-import type { FieldMapping } from '@aether/shared';
+} from '@olympuslabs/aether-shared';
+import type { FieldMapping } from '@olympuslabs/aether-shared';
 
 // ── Envelope + query helpers ────────────────────────────────────────────────
 

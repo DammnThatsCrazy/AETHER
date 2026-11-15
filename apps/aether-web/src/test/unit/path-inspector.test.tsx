@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { PathInspector } from '@aether-app/components/graph/path-inspector';
-import type { RelationshipPath, PathExplanation } from '@aether/shared/operational-intelligence';
+import type { RelationshipPath, PathExplanation } from '@olympuslabs/aether-shared/operational-intelligence';
 
 const MOCK_PATH: RelationshipPath = {
   path_id: 'abcdef1234567890',

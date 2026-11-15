@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { HeartbeatPayload, EventEnvelope } from '@aether/proof-contracts';
 import { heartbeatFixture } from '@aether/proof-fixtures';
 
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 
 describe('FPS-051: Web SDK Heartbeat', () => {
   it('should emit heartbeat with session ID', () => {

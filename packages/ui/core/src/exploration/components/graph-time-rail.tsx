@@ -1,4 +1,4 @@
-import type { GraphContext } from '@aether/shared/graph-context-contract';
+import type { GraphContext } from '@olympuslabs/aether-shared/graph-context-contract';
 
 import { Badge } from '../../components/badge';
 import { Button } from '../../components/button';

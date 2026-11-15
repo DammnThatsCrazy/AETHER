@@ -10,7 +10,7 @@
  */
 
 import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, cn } from '@aether/ui';
-import type { SectionState } from '@aether/shared/intelligence-projection';
+import type { SectionState } from '@olympuslabs/aether-shared/intelligence-projection';
 import {
   projectionDisplayName,
   type ProjectionSurfaceSummary,

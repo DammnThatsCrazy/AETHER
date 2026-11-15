@@ -2,7 +2,7 @@
  * FPS — Web SDK Identity Late Binding Test
  * Demonstrates: init, anonymous event, hydrateIdentity, reset, flush, consent
  */
-import { AetherSDK } from '@aether/web';
+import { AetherSDK } from '@olympuslabs/aether-web';
 
 const sdk = new AetherSDK();
 sdk.init({

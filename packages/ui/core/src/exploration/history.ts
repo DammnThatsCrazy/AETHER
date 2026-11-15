@@ -1,4 +1,4 @@
-import type { ExplorationTrailEntry, GraphObjectRef } from '@aether/shared/graph-context-contract';
+import type { ExplorationTrailEntry, GraphObjectRef } from '@olympuslabs/aether-shared/graph-context-contract';
 import type { SelectionScope } from './selection-model';
 
 export const DEFAULT_EXPLORATION_TRAIL_MAX = 50;

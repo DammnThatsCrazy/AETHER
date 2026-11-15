@@ -244,4 +244,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`\nCDN layout verified for @aether/web v${VERSION}: paths present, manifest hashes match, no maps published.`);
+console.log(`\nCDN layout verified for @olympuslabs/aether-web v${VERSION}: paths present, manifest hashes match, no maps published.`);

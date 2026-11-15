@@ -13,7 +13,7 @@ related:
   - concepts/economic-value-framing
   - concepts/tvl-gmv-revenue-metrics
 source_hashes:
-  "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
+  "packages/shared/economic-metrics.ts": "sha256:f91cd055d9a191bda609447574e91fd47fb083e12c69da6b4c170b280ed9f16f"
   "packages/shared/graph-relationships.ts": "sha256:032d9f24b21619538e79688359fc4761553e339fcf9d2e9c8662d1a0185e8641"
 ---
 

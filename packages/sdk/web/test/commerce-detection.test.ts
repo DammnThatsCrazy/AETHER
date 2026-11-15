@@ -6,7 +6,7 @@ import { CommerceDetectionModule } from '../src/modules/commerce-detection';
 import {
   SDK_SIGNAL_SCHEMA_VERSION,
   type SDKCommerceSignal,
-} from '@aether/shared/commerce-bridge';
+} from '@olympuslabs/aether-shared/commerce-bridge';
 
 type Signals = SDKCommerceSignal[];
 

@@ -1,4 +1,4 @@
-# @aether/web
+# @olympuslabs/aether-web
 
 <!-- Badges -->
 ![Version](https://img.shields.io/badge/version-0.1.0--alpha.0-blue)
@@ -49,15 +49,15 @@ parity tiers.
 ## Installation
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ```bash
-yarn add @aether/web
+yarn add @olympuslabs/aether-web
 ```
 
 ```bash
-pnpm add @aether/web
+pnpm add @olympuslabs/aether-web
 ```
 
 ### CDN (recommended -- one tag, no build step)
@@ -123,7 +123,7 @@ install the bundle under their own control:
 ## Quick Start
 
 ```typescript
-import aether from '@aether/web';
+import aether from '@olympuslabs/aether-web';
 
 // Initialize with your API key
 aether.init({
@@ -162,7 +162,7 @@ aether.init({
   apiKey: 'pk_your_publishable_key',
   siteId: 'site_your_site_id',     // required alongside a publishable key
   environment: 'production',       // 'production' | 'staging' | 'development'
-  endpoint: 'https://api.aether.io', // custom endpoint
+  endpoint: 'https://api.aether.network', // custom endpoint
   debug: false,
 
   modules: {

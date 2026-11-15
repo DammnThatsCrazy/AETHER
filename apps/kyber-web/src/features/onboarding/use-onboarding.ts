@@ -1,7 +1,7 @@
 import { useQuery } from '@aether/ui';
 import { z } from 'zod';
 import { restClient } from '@kyber/lib/api/rest/client';
-import type { TenantOnboardingStatus, CustomerSuccessTrigger, ImplementationBlocker } from '@aether/shared';
+import type { TenantOnboardingStatus, CustomerSuccessTrigger, ImplementationBlocker } from '@olympuslabs/aether-shared';
 
 const wrap = <T extends z.ZodType>(dataSchema: T) => z.object({ data: dataSchema, status: z.string(), timestamp: z.string() });
 const unknown = z.unknown();

@@ -29,7 +29,7 @@ describe('FPS-022: Connector Missing Fields', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'page',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
     };
@@ -44,7 +44,7 @@ describe('FPS-022: Connector Missing Fields', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'identify',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1', user_id: 'user_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
     };
@@ -92,7 +92,7 @@ describe('FPS-022: Connector Missing Fields', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'track',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
     };
@@ -101,7 +101,7 @@ describe('FPS-022: Connector Missing Fields', () => {
     expect(envelope.workspace_id).toBe('w1');
     expect(envelope.platform_id).toBe('web');
     expect(envelope.environment).toBe('staging');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.sdk.version).toBe('1.0.0');
     expect(envelope.identity.anonymous_id).toBe('anon_1');
   });
@@ -113,7 +113,7 @@ describe('FPS-022: Connector Missing Fields', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'custom_event',
-      sdk: { name: '@aether/web', version: '1.0.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '1.0.0' },
       identity: { anonymous_id: 'anon_1' },
       timestamp: '2024-01-01T00:00:00.000Z',
       properties: { partialData: true },

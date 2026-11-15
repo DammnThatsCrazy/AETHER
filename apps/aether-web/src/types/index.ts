@@ -14,7 +14,7 @@ export type {
   WalletType, TokenBalance, OnChainTransaction, ProtocolInteraction, Web3LoyaltySignals, Web3WalletProfile,
   // Loyalty
   LoyaltyTier, LoyaltyProfile,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 export type {
   // Actors & graph
@@ -23,7 +23,7 @@ export type {
   IdentifierSet, FlowSummary,
   EntityProfile, ClusterMember, EntityCluster, CollectiveTissue,
   GraphEntityNode, EntityGraph, RelationshipSummary,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 export type {
   // Intelligence & risk
@@ -38,7 +38,7 @@ export type {
   SessionsResponse, DevicesResponse, JourneysResponse, WalletsResponse,
   RelationshipsResponse, DelegationsResponse, ProfileDelegationsResponse,
   TimelineResponse, LakeResponse,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 export type AetherEnvironment = 'local' | 'staging' | 'production' | 'test';
 

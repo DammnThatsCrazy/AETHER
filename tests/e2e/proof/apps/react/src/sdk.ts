@@ -135,7 +135,7 @@ export function resetSession(): void {
   state.lastError = null;
 }
 
-// React provider + hooks stubs (mirrored from @aether/web/react)
+// React provider + hooks stubs (mirrored from @olympuslabs/aether-web/react)
 
 export function AetherProvider({ children }: { children: ReactNode }): ReactElement {
   console.log('[Aether React] AetherProvider render');

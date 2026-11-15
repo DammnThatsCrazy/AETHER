@@ -15,7 +15,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@aether/shared": "*",
+    "@olympuslabs/aether-shared": "*",
     "@aether/ui": "*",
     "@olympus/brand": "*",
     "react": "^19.0.0",

@@ -1,8 +1,8 @@
 // Server SDK types — the consent vocabulary is the canonical, registry-generated
-// contract re-exported from @aether/shared, so this SDK cannot drift from the
+// contract re-exported from @olympuslabs/aether-shared, so this SDK cannot drift from the
 // registry again (a hand-written copy here shipped 9 of 12 purposes).
 
-export type { ConsentPurpose } from '@aether/shared/consent';
+export type { ConsentPurpose } from '@olympuslabs/aether-shared/consent';
 
 export interface ServerConsentState {
   analytics: boolean;

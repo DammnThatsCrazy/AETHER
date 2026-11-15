@@ -1,5 +1,5 @@
 import { useQuery } from '@aether/ui';
-import { classifyEdgeType } from '@aether/shared';
+import { classifyEdgeType } from '@olympuslabs/aether-shared';
 import { api } from '@aether-app/lib/api/endpoints';
 
 /**

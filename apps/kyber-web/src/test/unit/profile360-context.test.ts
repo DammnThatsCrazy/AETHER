@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GraphScope } from "@aether/shared/graph-context-contract";
+import type { GraphScope } from "@olympuslabs/aether-shared/graph-context-contract";
 import {
   graphObjectRef,
   normalizeEvidence,

@@ -10,41 +10,68 @@ since_version: 0.1.0
 
 # Install the SDK
 
-## Web SDK
+The SDKs are in alpha (`0.1.0-alpha.0`). Pin the exact version until 1.0, since
+pre-1.0 minor releases may contain breaking changes.
+
+Use the key Aether issues for each SDK during onboarding. Browser SDKs (Web,
+React) get a site-bound **publishable key** (`pk_…`), which is safe to ship in
+page code. The Server SDK uses a **secret key**; keep it in an environment
+variable and never send it to a browser or app.
+
+## Web SDK (browser, React)
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web@0.1.0-alpha.0
 ```
+
+React apps use the same package: `import { AetherProvider } from '@olympuslabs/aether-web/react'`.
 
 ## Server SDK (Node.js)
 
 ```bash
-npm install @aether/server
+npm install @olympuslabs/aether-server@0.1.0-alpha.0
 ```
 
 ## React Native SDK
 
 ```bash
-npm install @aether/react-native
+npm install @olympuslabs/aether-react-native@0.1.0-alpha.0
+cd ios && pod install
 ```
+
+The package includes its native iOS and Android modules. Autolinking pulls in
+`AetherSDK` (CocoaPods) and `com.olympuslabsml:aether-android` (Maven Central),
+so no extra native dependency lines are needed.
 
 ## iOS SDK
 
-Add the Aether iOS SDK via Swift Package Manager:
+Swift Package Manager (Xcode: **File → Add Package Dependencies…**, or in `Package.swift`):
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/aether/ios-sdk", from: "0.1.0")
+    .package(url: "https://github.com/DammnThatsCrazy/aether-ios.git", exact: "0.1.0-alpha.0")
 ]
+// target dependency:
+.product(name: "AetherSDK", package: "aether-ios")
+```
+
+CocoaPods:
+
+```ruby
+pod 'AetherSDK', '0.1.0-alpha.0'
 ```
 
 ## Android SDK
 
-Add the Aether Android SDK via Gradle:
+The SDK is on Maven Central, which Android projects include by default:
 
 ```kotlin
-implementation("com.aether:android-sdk:0.1.0")
+dependencies {
+    implementation("com.olympuslabsml:aether-android:0.1.0-alpha.0")
+}
 ```
+
+The Kotlin package is `com.aether.sdk` (for example `import com.aether.sdk.Aether`).
 
 ## Next Steps
 

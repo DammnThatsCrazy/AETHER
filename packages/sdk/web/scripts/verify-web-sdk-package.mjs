@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // =============================================================================
-// Aether SDK — @aether/web PACKAGE ARTIFACT VERIFICATION
+// Aether SDK — @olympuslabs/aether-web PACKAGE ARTIFACT VERIFICATION
 //
 // Guards the boundary between "the build ran" and "the package is publishable".
 // A published tarball whose package.json points at files the build never emitted
@@ -169,7 +169,7 @@ checkPackageEntryPoints();
 checkPackManifest();
 checkSizeBudgets();
 
-console.log(`@aether/web v${pkg.version} — package artifact verification`);
+console.log(`@olympuslabs/aether-web v${pkg.version} — package artifact verification`);
 for (const note of notes) console.log(note);
 
 if (failures.length > 0) {

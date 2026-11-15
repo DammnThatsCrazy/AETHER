@@ -15,12 +15,12 @@ import type {
   ExplorationResultEnvelope,
   ExplorationSnapshot,
   ExplorationSnapshotComparison,
-} from '@aether/shared/exploration-contract';
-export type { ExplorationSnapshot, ExplorationSnapshotComparison } from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
+export type { ExplorationSnapshot, ExplorationSnapshotComparison } from '@olympuslabs/aether-shared/exploration-contract';
 import type {
   FilterExpression,
   FilterGroup,
-} from '@aether/shared/graph-contract';
+} from '@olympuslabs/aether-shared/graph-contract';
 import { isKnownField, isOperatorValidForField } from './registry';
 
 export interface ExplorationApiResponse<T> {

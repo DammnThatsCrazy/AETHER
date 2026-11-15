@@ -20,7 +20,7 @@
 //   - `token:<chain>:<addr>` -> no human symbol in the id; code is the full
 //                               canonical id and decimals are null.
 //
-// Runtime registry VALUES are imported from the `@aether/shared` leaf module
+// Runtime registry VALUES are imported from the `@olympuslabs/aether-shared` leaf module
 // (not the barrel) following the repo convention for CJS value imports (see
 // packages/ui/core/src/exploration/registry.ts).
 // =============================================================================
@@ -29,7 +29,7 @@ import {
   FIAT_REFERENCE_SEED,
   isNamespacedAssetId,
   type FiatCurrencyMetadata,
-} from '@aether/shared/financial-assets';
+} from '@olympuslabs/aether-shared/financial-assets';
 import type { AssetDisplayMeta } from './reporting-value';
 
 const FIAT_BY_ISO = new Map<string, FiatCurrencyMetadata>(

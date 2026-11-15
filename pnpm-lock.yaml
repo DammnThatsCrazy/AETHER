@@ -78,13 +78,13 @@ importers:
 
   apps/aether-web:
     dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
         version: link:../../packages/ui/core
-      '@aether/web':
+      '@olympuslabs/aether-shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@olympuslabs/aether-web':
         specifier: '*'
         version: link:../../packages/sdk/web
       '@tanstack/react-virtual':
@@ -166,13 +166,13 @@ importers:
 
   apps/demo:
     dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
         version: link:../../packages/ui/core
-      '@aether/web':
+      '@olympuslabs/aether-shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@olympuslabs/aether-web':
         specifier: '*'
         version: link:../../packages/sdk/web
       react:
@@ -301,13 +301,13 @@ importers:
 
   apps/kyber-web:
     dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
         version: link:../../packages/ui/core
-      '@aether/web':
+      '@olympuslabs/aether-shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@olympuslabs/aether-web':
         specifier: '*'
         version: link:../../packages/sdk/web
       clsx:
@@ -401,15 +401,15 @@ importers:
 
   apps/marketing-aether:
     dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
         version: link:../../packages/ui/core
       '@olympus/brand':
         specifier: '*'
         version: link:../../packages/ui/brand
+      '@olympuslabs/aether-shared':
+        specifier: '*'
+        version: link:../../packages/shared
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -624,7 +624,7 @@ importers:
 
   packages/sdk/mobile-core:
     dependencies:
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: '*'
         version: link:../../shared
     devDependencies:
@@ -634,7 +634,7 @@ importers:
 
   packages/sdk/react-native:
     dependencies:
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: ^0.1.0-alpha.0
         version: link:../../shared
       '@react-native-async-storage/async-storage':
@@ -655,10 +655,11 @@ importers:
         version: 5.9.3
 
   packages/sdk/server:
-    devDependencies:
-      '@aether/shared':
-        specifier: '*'
+    dependencies:
+      '@olympuslabs/aether-shared':
+        specifier: ^0.1.0-alpha.0
         version: link:../../shared
+    devDependencies:
       '@vitest/coverage-v8':
         specifier: ^1.6.0
         version: 1.6.1(vitest@1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2))
@@ -671,7 +672,7 @@ importers:
 
   packages/sdk/web:
     dependencies:
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: ^0.1.0-alpha.0
         version: link:../../shared
       react:
@@ -705,12 +706,12 @@ importers:
 
   packages/ui/core:
     dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../shared
       '@olympus/brand':
         specifier: '*'
         version: link:../brand
+      '@olympuslabs/aether-shared':
+        specifier: '*'
+        version: link:../../shared
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -781,7 +782,7 @@ importers:
 
   tests/e2e/proof/apps/android:
     dependencies:
-      '@aether/react-native':
+      '@olympuslabs/aether-react-native':
         specifier: '*'
         version: link:../../../../../packages/sdk/react-native
       expo:
@@ -809,7 +810,7 @@ importers:
       '@aether/proof-fixtures':
         specifier: '*'
         version: link:../../packages/fixtures
-      '@aether/web':
+      '@olympuslabs/aether-web':
         specifier: '*'
         version: link:../../../../../packages/sdk/web
       react:
@@ -843,7 +844,7 @@ importers:
 
   tests/e2e/proof/apps/ios:
     dependencies:
-      '@aether/react-native':
+      '@olympuslabs/aether-react-native':
         specifier: '*'
         version: link:../../../../../packages/sdk/react-native
       expo:
@@ -868,7 +869,7 @@ importers:
 
   tests/e2e/proof/apps/react:
     dependencies:
-      '@aether/web':
+      '@olympuslabs/aether-web':
         specifier: '*'
         version: link:../../../../../packages/sdk/web
       react:
@@ -902,10 +903,10 @@ importers:
 
   tests/e2e/proof/apps/web:
     dependencies:
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: '*'
         version: link:../../../../../packages/shared
-      '@aether/web':
+      '@olympuslabs/aether-web':
         specifier: '*'
         version: link:../../../../../packages/sdk/web
       react:
@@ -939,7 +940,7 @@ importers:
 
   tests/e2e/proof/packages/contracts:
     dependencies:
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: '*'
         version: link:../../../../../packages/shared
     devDependencies:
@@ -952,7 +953,7 @@ importers:
 
   tests/e2e/proof/packages/fixtures:
     dependencies:
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: '*'
         version: link:../../../../../packages/shared
     devDependencies:
@@ -974,7 +975,7 @@ importers:
       '@aether/proof-runner':
         specifier: '*'
         version: link:../runner
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: '*'
         version: link:../../../../../packages/shared
     devDependencies:
@@ -993,7 +994,7 @@ importers:
       '@aether/proof-fixtures':
         specifier: '*'
         version: link:../fixtures
-      '@aether/shared':
+      '@olympuslabs/aether-shared':
         specifier: '*'
         version: link:../../../../../packages/shared
     devDependencies:

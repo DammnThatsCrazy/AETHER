@@ -72,6 +72,7 @@ store.
   events are dropped first under sustained offline backlog.
 - Native multi-VM wallet support is manual metadata emission; automatic provider detection remains Web-only.
 - Native health payloads do not yet include every Web-only metric such as detailed endpoint latency histograms.
-- Publication still requires the repository's external npm, CocoaPods, and
-  GitHub Packages credentials; this checkout contains the workflow and release
-  gates, not those credentials.
+- Publication still requires the repository's external npm, CocoaPods, iOS
+  mirror deploy key, and Maven Central (Central Portal token and GPG signing key)
+  credentials; this checkout contains the workflow and release gates, not those
+  credentials.

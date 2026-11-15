@@ -12,7 +12,7 @@ import { queryCache, useQuery } from '@aether/ui';
 import { useAuth } from '@aether-app/features/auth';
 import { useGraphContext } from '@aether/ui/exploration';
 import { api } from '@aether-app/lib/api/endpoints';
-import type { ClientSyncResponse, SyncEvent } from '@aether/shared';
+import type { ClientSyncResponse, SyncEvent } from '@olympuslabs/aether-shared';
 import { isFeatureEnabled } from '@aether-app/lib/featureFlags';
 
 export function clientSyncQueryKey(tenantId: string, sessionScope: string, cursor: string | null): string {

@@ -18,8 +18,8 @@ import {
   paymentRailProviders,
   fundingSessionStatuses,
   reconciliationStates,
-} from '@aether/shared';
-import type { PaymentRailProvider, ReconciliationState } from '@aether/shared';
+} from '@olympuslabs/aether-shared';
+import type { PaymentRailProvider, ReconciliationState } from '@olympuslabs/aether-shared';
 import {
   useFundingSessions,
   useFundingSession,
@@ -58,7 +58,7 @@ import {
   providerLabel,
 } from './payment-rails-shared';
 import type { ProviderHealthStatus } from './payment-rails-shared';
-import type { PaymentRailProvider as PaymentRailProviderType } from '@aether/shared';
+import type { PaymentRailProvider as PaymentRailProviderType } from '@olympuslabs/aether-shared';
 
 const PROVIDER_OPTIONS = [
   { value: '', label: 'All providers' },

@@ -34,9 +34,9 @@ from config.settings import settings
 # Recognition set for server-side SDK libraries (name is advisory; version does
 # the real classification). Lower-cased substring matching.
 _KNOWN_SDK_NAMES: frozenset[str] = frozenset({
-    "@aether/web",
+    "@olympuslabs/aether-web",
     "aether-web",
-    "@aether/react-native",
+    "@olympuslabs/aether-react-native",
     "aether-react-native",
     "react-native",
     "aether-ios",

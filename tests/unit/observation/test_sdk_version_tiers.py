@@ -65,7 +65,7 @@ def test_classify_version_name_recognition_is_advisory():
     # Unknown name with an unparseable version stays unclassified.
     assert st.classify_sdk_version("nope", "analytics.js").id == "unclassified"
     # Known SDK names are recognized (substring, case-insensitive).
-    for name in ("@aether/web", "aether-react-native", "react-native", "ios"):
+    for name in ("@olympuslabs/aether-web", "aether-react-native", "react-native", "ios"):
         assert st.sdk_name_known(name) is True
     assert st.sdk_name_known("analytics.js") is False
     assert st.sdk_name_known(None) is False
@@ -110,7 +110,7 @@ def test_tiers_payload_always_served_and_reflects_flag(monkeypatch):
 
 def test_advisory_is_none_when_flag_off(monkeypatch):
     monkeypatch.setattr(st, "settings", _settings(enabled=False))
-    assert st.sdk_version_advisory({"name": "@aether/web", "version": "0.1.0-alpha.0"}) is None
+    assert st.sdk_version_advisory({"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"}) is None
 
 
 def test_advisory_is_none_without_library(monkeypatch):
@@ -121,15 +121,15 @@ def test_advisory_is_none_without_library(monkeypatch):
 
 def test_advisory_labels_tier_and_capabilities(monkeypatch):
     monkeypatch.setattr(st, "settings", _settings(enabled=True, mode="shadow"))
-    adv = st.sdk_version_advisory({"name": "@aether/web", "version": "0.1.0-alpha.0"})
+    adv = st.sdk_version_advisory({"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"})
     assert adv is not None
     assert adv["consulted"] is True
     assert adv["mode"] == "shadow"
     assert adv["tier"] == "supported"
-    assert adv["source"] == {"name": "@aether/web", "version": "0.1.0-alpha.0"}
+    assert adv["source"] == {"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"}
     assert "batch_ingestion" in adv["capabilities"]
 
-    unsup = st.sdk_version_advisory({"name": "@aether/web", "version": "0.0.9"})
+    unsup = st.sdk_version_advisory({"name": "@olympuslabs/aether-web", "version": "0.0.9"})
     assert unsup["tier"] == "unsupported"
     assert unsup["blocked_after"] == st.BLOCKED_AFTER_DATE
 
@@ -139,14 +139,14 @@ def test_advisory_labels_tier_and_capabilities(monkeypatch):
 def test_blocked_is_inert_when_flag_off(monkeypatch):
     monkeypatch.setattr(st, "settings", _settings(enabled=False, mode="enforce"))
     assert st.sdk_version_ingress_blocked(
-        {"name": "@aether/web", "version": "0.0.9"}
+        {"name": "@olympuslabs/aether-web", "version": "0.0.9"}
     ) is False
 
 
 def test_blocked_requires_enforce_mode(monkeypatch):
     monkeypatch.setattr(st, "settings", _settings(enabled=True, mode="shadow"))
     assert st.sdk_version_ingress_blocked(
-        {"name": "@aether/web", "version": "0.0.9"}
+        {"name": "@olympuslabs/aether-web", "version": "0.0.9"}
     ) is False
 
 
@@ -154,12 +154,12 @@ def test_blocked_is_date_gated(monkeypatch):
     monkeypatch.setattr(st, "settings", _settings(enabled=True, mode="enforce"))
     monkeypatch.setattr(st, "_utc_today_iso", lambda: "2026-09-05")  # before 2027-01-31
     assert st.sdk_version_ingress_blocked(
-        {"name": "@aether/web", "version": "0.0.9"}
+        {"name": "@olympuslabs/aether-web", "version": "0.0.9"}
     ) is False
 
     monkeypatch.setattr(st, "_utc_today_iso", lambda: "2027-02-01")  # after block date
     assert st.sdk_version_ingress_blocked(
-        {"name": "@aether/web", "version": "0.0.9"}
+        {"name": "@olympuslabs/aether-web", "version": "0.0.9"}
     ) is True
 
 
@@ -167,11 +167,11 @@ def test_blocked_never_blocks_supported_or_unclassified(monkeypatch):
     monkeypatch.setattr(st, "settings", _settings(enabled=True, mode="enforce"))
     monkeypatch.setattr(st, "_utc_today_iso", lambda: "2027-02-01")
     assert st.sdk_version_ingress_blocked(
-        {"name": "@aether/web", "version": "0.1.0-alpha.0"}
+        {"name": "@olympuslabs/aether-web", "version": "0.1.0-alpha.0"}
     ) is False
     assert st.sdk_version_ingress_blocked(
-        {"name": "@aether/web", "version": "0.2.0"}
+        {"name": "@olympuslabs/aether-web", "version": "0.2.0"}
     ) is False
-    assert st.sdk_version_ingress_blocked({"name": "@aether/web", "version": "latest"}) is False
+    assert st.sdk_version_ingress_blocked({"name": "@olympuslabs/aether-web", "version": "latest"}) is False
     assert st.sdk_version_ingress_blocked(None) is False
     assert st.sdk_version_ingress_blocked({}) is False

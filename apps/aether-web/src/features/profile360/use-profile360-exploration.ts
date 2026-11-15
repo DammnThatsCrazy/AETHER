@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { dimensionStates, type DimensionState } from '@aether/shared/dimension-state';
+import { dimensionStates, type DimensionState } from '@olympuslabs/aether-shared/dimension-state';
 import type {
   ApplicabilityReport,
   ExplorationCompleteness,
   ExplorationContextV1,
   ExplorationResultEnvelope,
   ExplorationTruth,
-} from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
 import {
   useExplorationClient,
   useExplorationContext,

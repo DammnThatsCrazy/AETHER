@@ -15,13 +15,13 @@ The Aether React SDK is a thin observation client that wraps the Web SDK with Re
 ## Installation
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 ## Quick Start
 
 ```tsx
-import { AetherProvider, useAether } from '@aether/web/react';
+import { AetherProvider, useAether } from '@olympuslabs/aether-web/react';
 
 function App() {
   return (

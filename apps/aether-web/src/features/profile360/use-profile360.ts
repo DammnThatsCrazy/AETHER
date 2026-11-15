@@ -10,7 +10,7 @@
  */
 import { useQuery } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
-import type { Profile360EntityType } from '@aether/shared';
+import type { Profile360EntityType } from '@olympuslabs/aether-shared';
 
 const STALE = 60_000;
 

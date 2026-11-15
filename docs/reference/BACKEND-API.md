@@ -29,19 +29,19 @@ reviewed_source_commits:
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
   - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
-  "services/api/actions/": "sha256:2c861229f6b15ec47e836ec1e701815acc5670b7b655e97a97f8f84332038b9b"
+  "services/api/actions/": "sha256:91cfc3c62393b72637056fc1608f98044dbd48be04e598c2566c8c56c0ca0f63"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:10a2470b6c7cda3aebcd2637a83cc17861d115d4024514e4b733b2f25c5d983e"
-  "services/api/ingestion/": "sha256:fa819af53c31d66e9833d5d2afdad3c5b0b6cf04c98e99920f2726e90aebdefd"
+  "services/api/ingestion/": "sha256:0852d3dad00e16c4516ab4328faf5ba8b8b351d35bbd2163c8e84f6437fb0249"
   "services/api/intelligence/": "sha256:c34832aa3c14a87c327021033fb4c4ffb55823430e264dfd104a9270a584415b"
   "services/api/journeys/": "sha256:159e97a5ab4eeca5aadd6f797cffd9e36a824b5f519d82eb96adc601ded570fb"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
-  "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
+  "services/api/value/": "sha256:0d0d0f6725363c849628c40905857fd06fbe65fd499a56956b7779a9033b2210"
   "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification

@@ -31,8 +31,8 @@ since_version: 0.1.0
 "Alpha" means the capability exists at `0.1.0-alpha.0` and may change before a
 stable release; it is not a production-readiness claim.
 
-- **React** is the `./react` entry point of `@aether/web`
-  (`packages/sdk/web/src/react.tsx`), imported as `@aether/web/react`, not a
+- **React** is the `./react` entry point of `@olympuslabs/aether-web`
+  (`packages/sdk/web/src/react.tsx`), imported as `@olympuslabs/aether-web/react`, not a
   separate package.
 - **React Native** is a JS bridge. Batching, retry and the offline spool are
   meant to be enforced by the native iOS/Android SDKs it wraps

@@ -13,11 +13,11 @@ export default defineConfig({
       // Resolve the workspace shared packages from source in clean frontend test
       // checkouts (the same aliasing the Aether suite uses).
       {
-        find: /^@aether\/shared\/(.+)$/,
+        find: /^@olympuslabs\/aether-shared\/(.+)$/,
         replacement: `${path.resolve(__dirname, '../../packages/shared')}/$1`,
       },
       {
-        find: '@aether/shared',
+        find: '@olympuslabs/aether-shared',
         replacement: path.resolve(__dirname, '../../packages/shared/index.ts'),
       },
     ],

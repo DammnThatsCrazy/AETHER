@@ -4,7 +4,7 @@ import type {
   ExplorationCompleteness,
   ExplorationContextV1,
   ExplorationTruth,
-} from '@aether/shared/exploration-contract';
+} from '@olympuslabs/aether-shared/exploration-contract';
 import {
   useExplorationClient,
   useExplorationContext,
@@ -14,7 +14,7 @@ import {
 import { api } from '@aether-app/lib/api/endpoints';
 import { RestClientError } from '@aether-app/lib/api/rest/client';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
-import { classifyEdgeType } from '@aether/shared';
+import { classifyEdgeType } from '@olympuslabs/aether-shared';
 import { assertCanonicalTruthState } from '@aether-app/features/profile360';
 
 // ── Types ──────────────────────────────────────────────────────────────────────

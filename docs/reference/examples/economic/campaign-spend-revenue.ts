@@ -14,7 +14,7 @@ import {
   validateEconomicPayload,
   validateRelationshipExtensions,
   type EconomicActionLike,
-} from '@aether/shared';
+} from '@olympuslabs/aether-shared';
 
 const campaign = createResourceNode({
   id: 'res_campaign_acme_2026Q1',

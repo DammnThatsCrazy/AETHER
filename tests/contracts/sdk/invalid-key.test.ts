@@ -67,7 +67,7 @@ describe('FPS-021: SDK Invalid Key Handling', () => {
       platform_id: 'web',
       environment: 'staging',
       event_type: 'sdk_config_failed',
-      sdk: { name: '@aether/web', version: '0.1.0-alpha.0' },
+      sdk: { name: '@olympuslabs/aether-web', version: '0.1.0-alpha.0' },
       identity: { anonymous_id: 'anon_invalid' },
       timestamp: '2024-09-11T12:15:00.000Z',
       properties: {

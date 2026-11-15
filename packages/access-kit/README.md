@@ -50,7 +50,7 @@ depends on the host OS credential service; unit tests inject a fake store and
 do not prove native Keychain, Credential Manager, or Secret Service access.
 
 Set `AETHER_API_URL` to an API origin if using a non-default environment. It
-defaults to `https://api.aether.io`; the client requires HTTPS except for
+defaults to `https://api.aether.network`; the client requires HTTPS except for
 loopback development origins.
 
 Supply only the credential required by the command being used:
@@ -348,7 +348,7 @@ Native application provisioned by the existing Terraform Auth0 module:
 ```sh
 export AETHER_AUTH0_DOMAIN=your-tenant.us.auth0.com
 export AETHER_AUTH0_CLIENT_ID="$(terraform -chdir=infra/aws/terraform output -raw aether_cli_auth0_client_id)"
-export AETHER_AUTH0_AUDIENCE=https://api.aether.io
+export AETHER_AUTH0_AUDIENCE=https://api.aether.network
 ```
 
 The CLI opens Auth0's verification URL and prints the short user code. It does
@@ -464,7 +464,7 @@ Build the standalone Access Kit image from the repository root:
 ```sh
 docker build -f packages/access-kit/Dockerfile -t aether-access-kit .
 docker run --rm -p 8080:8080 \
-  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_URL=https://api.aether.network \
   -e AETHER_MCP_ALLOWED_HOSTS=mcp.example.com \
   -e AETHER_MCP_ALLOWED_ORIGINS=https://console.example.com \
   aether-access-kit
@@ -546,7 +546,7 @@ service is required for explicit environment credentials:
 
 ```sh
 docker run --rm \
-  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_URL=https://api.aether.network \
   -e AETHER_API_KEY \
   aether-access-kit node ./bin/aether.js entities list --json
 ```
@@ -583,7 +583,7 @@ aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 ACCESS_KIT_IMAGE="${ECR_REGISTRY}/aether-access-mcp@${ACCESS_MCP_IMAGE_DIGEST}"
 docker run --rm \
-  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_URL=https://api.aether.network \
   -e AETHER_API_KEY \
   "$ACCESS_KIT_IMAGE" node ./bin/aether.js entities list --json
 ```

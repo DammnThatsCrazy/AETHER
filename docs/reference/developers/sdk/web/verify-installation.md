@@ -17,48 +17,51 @@ Related tickets: FPS-011 (Web SDK smoke), FPS-027 (Web SDK activation E2E).
 ## Install the SDK
 
 ```bash
-npm install @aether/web
+npm install @olympuslabs/aether-web
 ```
 
 If you use TypeScript, the package includes types. No separate types package is needed.
 
 ## Add your key
 
-You need a tenant ID and an API key for the environment you are targeting. For a proof run, use the proof tenant credentials from the staging environment. For local development, use your local tenant credentials. API keys are provisioned per tenant. See [Tenant Setup](/docs/developer/tenant-setup.md).
+You need the SDK key Aether issued for this app or site in the environment you are targeting (onboarding issues one per SDK; browser SDKs get a site-bound publishable `pk_` key). The key identifies the tenant, so there is no separate tenant ID. For a proof run, use the proof tenant credentials from the staging environment. For local development, use your local tenant credentials. API keys are provisioned per tenant. See [Tenant Setup](/docs/developer/tenant-setup.md).
 
-Do not commit API keys to the repository. Read them from the environment or your app's secret store.
+The publishable key is bound to your site's origins and can only ingest, so it is safe in page code. Never put a secret (`ak_`) key in browser code.
 
 ## Initialize
 
 ```typescript
-import { AetherSDK } from '@aether/web';
+import aether from '@olympuslabs/aether-web';
 
-const aether = AetherSDK.init({
-  tenantId: process.env.AETHER_TENANT_ID,
-  apiKey: process.env.AETHER_API_KEY,
-  appId: 'my-app',
+aether.init({
+  apiKey: 'pk_live_…',   // the site-bound publishable key
+  siteId: 'site_…',      // the site the key is bound to
+  onBatchResult: (health) => console.debug('[aether] batch', health),
 });
+
+// Events are gated by consent. Grant the purposes your consent banner collected.
+aether.consent.grant(['analytics']);
 ```
 
-Initialization configures the SDK with your tenant, app, and site metadata. The SDK does not start emitting until you call the tracking methods, but it does validate the configuration and prepare the batch queue.
+The key identifies the tenant on the server, so there is no tenant ID to pass.
+The ingestion endpoint defaults to `https://api.aether.network` (override with
+`endpoint`). If you install with the one-line CDN script tag instead, the tag's
+`data-key` and `data-site` attributes carry the same values.
 
 If initialization fails, the SDK surfaces a clear error. A failure to initialize is a reportable failure in the proof spine, with reason `INITIALIZATION_FAILED` and likely owning subsystem Web SDK.
 
 ## Emit a heartbeat
 
-Every Aether SDK emits periodic heartbeat events to confirm liveness and session continuity. The Web SDK emits the first heartbeat on initialization and subsequent heartbeats at the configured interval.
+Every Aether SDK emits periodic heartbeats to confirm liveness. The Web SDK starts its fleet heartbeat when `init()` runs, and records a `heartbeat` session event every 30 seconds by default (`advanced.heartbeatInterval`).
 
-To verify heartbeat emission in code:
+To check delivery from code, use the `onBatchResult` callback passed to `init()`, which reports each batch's outcome, and the queue diagnostics:
 
 ```typescript
-const health = await aether.health();
-console.log(health);
-// {
-//   status: 'ok',
-//   queue_depth: 0,
-//   endpoint_latency_ms: 42,
-//   ingestion_success_rate: 1.0
-// }
+// onBatchResult receives, per batch:
+// { accepted: 3, duplicate: 0, rejected: 0, dropped_by_consent: 0, queue_depth: 0 }
+
+aether.getQueueDepth();   // events waiting to send
+aether.getDiagnostics();  // dropped-event counts by reason, or null before init
 ```
 
 The heartbeat includes session state, SDK version, and contract version. See [SDK Heartbeat](/docs/sdks/heartbeat.md) for the full heartbeat contract.
@@ -67,13 +70,10 @@ In a proof run, the heartbeat is verified by the proof web app's heartbeat contr
 
 ## Track an event
 
-The canonical event capture entry point is `observe(type, properties)`.
+Use `pageView()` for page views and `observe(type, properties)` for other canonical event types.
 
 ```typescript
-aether.observe('page_view', {
-  url: window.location.href,
-  title: document.title,
-});
+aether.pageView(window.location.pathname, { title: document.title });
 ```
 
 The event type must be a canonical type from the event registry. Non-canonical types are ignored at ingestion. See [SDK Ingestion Contract](/docs/sdks/ingestion-contract.md) and [Event Contracts](/docs/sdks/event-contracts.md).
@@ -85,9 +85,9 @@ In a proof run, the tracked event is verified by the proof web app's track contr
 Attach an identity hint so the graph can associate events with a known user.
 
 ```typescript
-aether.identify('user_123', {
-  email: 'user@example.com',
-  name: 'Example User',
+aether.hydrateIdentity({
+  userId: 'user_123',
+  traits: { email: 'user@example.com', name: 'Example User' },
 });
 ```
 
@@ -111,12 +111,12 @@ The verification path for a proof run is described in [E2E Testing](/docs/testin
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| SDK does not initialize | Missing or invalid tenant ID or API key | Check the environment variables and the proof tenant credentials. |
-| No heartbeat in the Aether UI | SDK did not emit a heartbeat, or the event did not reach ingestion | Check `aether.health()` and the SDK version. Confirm the SDK is initialized. |
-| Tracked event not in the Aether UI | Event type is non-canonical, or the event did not reach ingestion | Confirm the event type is canonical. Check the ingestion surface. |
+| SDK does not initialize | Missing or invalid publishable key, or the page origin is not bound to the site | Check the key and site ID, and that the page's origin is one of the site's origins. |
+| No heartbeat in the Aether UI | SDK did not emit a heartbeat, or the event did not reach ingestion | Confirm `init()` ran. Check `onBatchResult` and `aether.getDiagnostics()`. |
+| Tracked event not in the Aether UI | Consent not granted, or the event did not reach ingestion | Confirm `analytics` consent is granted (`dropped_by_consent` in `onBatchResult`). Call `await aether.flush()`. |
 | Identity not associated | Identity hint not sent, or identity resolution not configured | Confirm the identify call fired. Check the tenant's identity merge rules. |
-| `queue_depth` growing | Network issue or endpoint down | Check the API key and endpoint URL. Check the SDK's offline spool. |
-| `ingestion_success_rate` below 1.0 | Schema validation failures | Check the event types and properties against the event registry. |
+| `queue_depth` growing | Network issue or endpoint down | Check the key and endpoint URL. |
+| `rejected` above 0 in `onBatchResult` | Schema validation failures | Check the event types and properties against the event registry. |
 
 For the full heartbeat troubleshooting table, see [Verify Heartbeat](/docs/developer/verify-heartbeat.md).
 

@@ -1,5 +1,5 @@
-import type { ApplicabilityReport } from '@aether/shared/exploration-contract';
-import type { FilterGroup } from '@aether/shared/graph-contract';
+import type { ApplicabilityReport } from '@olympuslabs/aether-shared/exploration-contract';
+import type { FilterGroup } from '@olympuslabs/aether-shared/graph-contract';
 import { chipsFromContext, operatorLabel } from '../filter-model';
 import { FilterDispositionBadge } from './disposition-badge';
 

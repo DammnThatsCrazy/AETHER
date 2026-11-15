@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
+import type { ExplorationContextV1 } from '@olympuslabs/aether-shared/exploration-contract';
 import {
   definitionRequestFromContext,
   preflightComparisonDraft,

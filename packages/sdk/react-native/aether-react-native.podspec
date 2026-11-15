@@ -7,7 +7,7 @@ Pod::Spec.new do |s|
   s.summary      = package['description']
   s.homepage     = "https://github.com/DammnThatsCrazy/AETHER"
   s.license      = { :type => package['license'] }
-  s.author       = { "Aether" => "sdk@aether.io" }
+  s.author       = { "Olympus Labs" => "https://olympuslabsml.com" }
 
   s.ios.deployment_target = "14.0"
   # AdServices (Apple Ads attribution token) ships with iOS 14.3; weak-link it
@@ -15,11 +15,15 @@ Pod::Spec.new do |s|
   s.ios.weak_frameworks = "AdServices"
   s.swift_version         = "5.9"
 
+  # This podspec is consumed by React Native autolinking from
+  # node_modules/@olympuslabs/aether-react-native (a :path pod), so paths are
+  # relative to this file and `source` is informational. It is not pushed to
+  # CocoaPods trunk: it depends on React-Core and only builds inside an RN app.
   s.source       = {
     :git => "https://github.com/DammnThatsCrazy/AETHER.git",
     :tag => "sdk/v#{s.version}"
   }
-  s.source_files = "packages/sdk/react-native/ios/**/*.{h,m,mm,swift}"
+  s.source_files = "ios/**/*.{h,m,mm,swift}"
 
   s.dependency "React-Core"
   # Pre-1.0 minors may break, so 0.x pins to the current minor; from 1.0 any compatible minor is allowed.

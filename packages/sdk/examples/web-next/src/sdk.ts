@@ -1,8 +1,8 @@
 // packages/sdk/examples/web-next/src/sdk.ts — adapted from tests/e2e/proof/apps/web/src/sdk.ts
 // Canonical first-value journey harness: install → init → manifest → heartbeat →
 // consent → event → identify → journey → commerce → flush → backend acceptance.
-import aether, { type AetherConfig } from '@aether/web';
-import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
+import aether, { type AetherConfig } from '@olympuslabs/aether-web';
+import type { ConsentState, ConsentPurpose } from '@olympuslabs/aether-shared/consent';
 import type { SDKState, BatchHealth } from './types';
 
 const SDK_VERSION = '0.1.0-alpha.0';
@@ -374,7 +374,7 @@ export function getDebugState(): SDKState {
   };
 }
 
-/** Raw consent state from the @aether/web SDK. */
+/** Raw consent state from the @olympuslabs/aether-web SDK. */
 export function getRealConsentState(): ConsentState | null {
   return tracking.consentState;
 }

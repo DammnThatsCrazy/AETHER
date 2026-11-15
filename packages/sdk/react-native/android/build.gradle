@@ -4,6 +4,13 @@ buildscript {
     }
 }
 
+import groovy.json.JsonSlurper
+
+// The bridge wraps the native Android SDK; pin it to this package's version so
+// the JS and native halves always ship as one release.
+def aetherPackage = new JsonSlurper().parse(file("../package.json"))
+def aetherSdkVersion = aetherPackage.version
+
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
@@ -25,6 +32,7 @@ android {
 
 dependencies {
     implementation "com.facebook.react:react-android:+"
+    implementation "com.olympuslabsml:aether-android:${aetherSdkVersion}"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:${safeExtGet('kotlinVersion', '1.9.20')}"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
     implementation "androidx.lifecycle:lifecycle-process:2.7.0"

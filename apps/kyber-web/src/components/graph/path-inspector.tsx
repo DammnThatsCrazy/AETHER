@@ -10,7 +10,7 @@ import type {
   RelationshipPath,
   PathExplanation,
   PathClassification,
-} from '@aether/shared/operational-intelligence';
+} from '@olympuslabs/aether-shared/operational-intelligence';
 
 // ---------------------------------------------------------------------------
 // Classification badge

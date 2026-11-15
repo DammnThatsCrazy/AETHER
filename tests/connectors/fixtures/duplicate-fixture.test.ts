@@ -58,7 +58,7 @@ describe('FPS-114: Duplicate Fixture', () => {
     expect(envelope.tenant_id).toBe('aether-proof-tenant');
     expect(envelope.platform_id).toBe('web');
     expect(envelope.event_type).toBe('page');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
     expect(envelope.identity.anonymous_id).toBe('anon_dup_001');
     expect(envelope.identity.user_id).toBe('user_009');
   });
@@ -70,7 +70,7 @@ describe('FPS-114: Duplicate Fixture', () => {
     expect(envelope.tenant_id).toBe('aether-proof-tenant');
     expect(envelope.platform_id).toBe('web');
     expect(envelope.event_type).toBe('track');
-    expect(envelope.sdk.name).toBe('@aether/web');
+    expect(envelope.sdk.name).toBe('@olympuslabs/aether-web');
   });
 
   it('should validate provider-error fixture has typed error shape', () => {

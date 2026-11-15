@@ -12,6 +12,7 @@ acted is decided only by a join with agent-side observations.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any, Mapping
 
@@ -209,6 +210,37 @@ def map_order_graphql(ctx: MapperContext, record: Mapping[str, Any]) -> list[Cor
     })
 
 
+def map_access_grant_graphql(ctx: MapperContext, record: Mapping[str, Any]) -> list[CorrelationObservation]:
+    """An app installation's granted access scopes, as the connection observed them.
+
+    Input: ``{"installation": <AppInstallation node>, "observed_at": <when read>}``.
+    Shopify returns no install or grant time, so the observation is placed at
+    the time the connection read it: the scopes are known to be in effect then,
+    and the standing-authority rule matches only acts at or after it. The scope
+    set is part of the observation ID, so a changed grant is a new revision.
+    """
+    binding = _binding(ctx)
+    installation = record.get("installation")
+    if not isinstance(installation, Mapping):
+        raise MappingError("installation is required")
+    install_id = _gid_number(require(installation, "id"), "installation id")
+    app_id = _gid_number(_node_id(installation.get("app")), "app.id")
+    scopes = sorted(
+        str(s.get("handle")) for s in installation.get("accessScopes") or [] if isinstance(s, Mapping) and s.get("handle")
+    )
+    if not scopes:
+        raise MappingError("an installation grant must list its access scopes")
+    scope_digest = hashlib.sha256(",".join(scopes).encode()).hexdigest()[:16]
+    return [CorrelationObservation(
+        tenant_id=ctx.tenant_id,
+        observation_id=f"shopify:app_installation:{binding.source_account_key}:{install_id}:{scope_digest}",
+        source_role="authority_issuer",
+        provider_family=FAMILY,
+        occurred_at=parse_time(record.get("observed_at"), field_name="observed_at"),
+        actor_refs=(f"shopify_app:{app_id}",),
+    )]
+
+
 KINDS = {
     "order": ("system_of_record", map_order),
     "inventory_level": ("system_of_record", map_inventory_level),
@@ -217,4 +249,5 @@ KINDS = {
     "order_graphql": ("system_of_record", map_order_graphql),
     "inventory_level_graphql": ("system_of_record", map_inventory_level_graphql),
     "product_graphql": ("system_of_record", map_product_graphql),
+    "access_grant_graphql": ("authority_issuer", map_access_grant_graphql),
 }

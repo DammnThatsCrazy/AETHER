@@ -1,4 +1,4 @@
-import { CATALOG_ENTRIES, EXPERIENCE_CATEGORY_ORDER } from "@aether/shared";
+import { CATALOG_ENTRIES, EXPERIENCE_CATEGORY_ORDER } from "@olympuslabs/aether-shared";
 
 /**
  * Public /integrations directory — DERIVED VIEW of the canonical catalog.

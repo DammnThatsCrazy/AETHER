@@ -38,19 +38,19 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    // @aether/shared ships CJS-only (its dist/index.js barrel re-exports via
+    // @olympuslabs/aether-shared ships CJS-only (its dist/index.js barrel re-exports via
     // __exportStar). The dev server's static export analysis cannot see through
     // that cross-file re-export, so chunks importing RUNTIME values from the
     // barrel (data-exchange, payment-rails, ai-efficiency, …) throw "does not
     // provide an export named …" under `npm run dev`. Pre-bundle the workspace
     // package so esbuild's CJS interop resolves named exports — the dev-side
     // counterpart to the build-time commonjsOptions.include below.
-    include: ['@aether/shared'],
+    include: ['@olympuslabs/aether-shared'],
   },
   build: {
     sourcemap: true,
     commonjsOptions: {
-      // @aether/shared ships CJS-only. Extend the default node_modules include
+      // @olympuslabs/aether-shared ships CJS-only. Extend the default node_modules include
       // to also cover the workspace package so Rollup resolves named exports.
       include: [/node_modules/, /packages\/shared/],
     },

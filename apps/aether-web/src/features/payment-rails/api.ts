@@ -7,8 +7,8 @@ import {
   fundingSessionStatuses,
   reconciliationStates,
   fundingActorKinds,
-} from '@aether/shared';
-import type { PaymentRailProvider } from '@aether/shared';
+} from '@olympuslabs/aether-shared';
+import type { PaymentRailProvider } from '@olympuslabs/aether-shared';
 
 const unknownSchema = z.unknown();
 const wrap = <T extends z.ZodType>(dataSchema: T) =>
@@ -25,7 +25,7 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>):
 
 const BASE = '/v1/integrations/providers/payment-rails';
 
-// ── Wire schemas (snake_case per backend; mirrors @aether/shared payment-rails) ──
+// ── Wire schemas (snake_case per backend; mirrors @olympuslabs/aether-shared payment-rails) ──
 
 export const fundingSessionSchema = z.object({
   id: z.string(),

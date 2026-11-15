@@ -4,7 +4,7 @@ import {
   EmptyState, ErrorState, FreshnessIndicator, LoadingState,
   formatCount, useTimeContext,
 } from '@aether/ui';
-import { SOURCE_CLASS_DEFAULTS, canonicalSourceClass, type SourceClass } from '@aether/shared/traffic-source';
+import { SOURCE_CLASS_DEFAULTS, canonicalSourceClass, type SourceClass } from '@olympuslabs/aether-shared/traffic-source';
 import { PageWrapper } from '@kyber/components/layout';
 import { useSourceClassificationOps, type TrafficIntelligenceFilters } from '@kyber/features/measurement';
 
