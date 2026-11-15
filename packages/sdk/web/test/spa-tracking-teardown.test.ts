@@ -66,4 +66,26 @@ describe('SPA route tracking across destroy()/init()', () => {
 
     expect(pages).toHaveLength(1);
   });
+
+  it('keeps a hook retained by another library\'s history wrapper inert after a restart', async () => {
+    const pages = capturePageViews();
+    aether.init(CONFIG);
+    // Another library wraps pushState after the SDK, so teardown cannot restore
+    // it without dropping that library's patch, and the SDK's hook stays in the chain.
+    const inner = window.history.pushState;
+    window.history.pushState = function (...args: Parameters<History['pushState']>) {
+      return inner.apply(window.history, args);
+    };
+    aether.destroy();
+    aether.init(CONFIG);
+    aether.consent.grant(['analytics']);
+    await aether.flush();
+    pages.length = 0;
+
+    await navigate('/docs');
+    await aether.flush();
+
+    expect(pages).toHaveLength(1);
+    window.history.pushState = originalPush;
+  });
 });

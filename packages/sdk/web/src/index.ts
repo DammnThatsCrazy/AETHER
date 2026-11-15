@@ -96,6 +96,14 @@ class AetherSDK implements AetherSDKInterface {
   private initialized = false;
   /** Removes the SPA route hooks installed by setupSPATracking(). */
   private spaTrackingTeardown: (() => void) | null = null;
+  /**
+   * Bumped by destroy(). Work started under one init (route hooks, config and
+   * identity requests, manifest callbacks) captures the generation and does
+   * nothing once it changes, so a destroy()/init() cycle (the React provider
+   * restarting for a new key or site) cannot have the previous install's late
+   * responses or retained hooks act on the replacement instance.
+   */
+  private initGeneration = 0;
   private debug = false;
   private _lastEmailHash: string | undefined = undefined;
   private healthAgent: SDKHealthAgent | null = null;
@@ -539,6 +547,7 @@ class AetherSDK implements AetherSDKInterface {
 
   destroy(): void {
     this.log('info', 'Destroying Aether SDK');
+    this.initGeneration++;
     this.healthAgentConsentUnsub?.();
     this.healthAgentConsentUnsub = null;
     this.healthAgent?.stop();
@@ -913,7 +922,10 @@ class AetherSDK implements AetherSDKInterface {
       },
       this.eventQueue!,
     );
-    this.healthAgent.onManifestUpdate((manifest) => this.applyRemoteManifest(manifest));
+    const generation = this.initGeneration;
+    this.healthAgent.onManifestUpdate((manifest) => {
+      if (generation === this.initGeneration) this.applyRemoteManifest(manifest);
+    });
     this.healthAgent.start();
   }
 
@@ -952,6 +964,7 @@ class AetherSDK implements AetherSDKInterface {
   /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
   private async fetchConfig(): Promise<void> {
     if (!this.config) return;
+    const generation = this.initGeneration;
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
 
     try {
@@ -969,6 +982,7 @@ class AetherSDK implements AetherSDKInterface {
         featureFlags?: { key: string; enabled: boolean; value?: unknown }[];
         funnelDefinitions?: FunnelDefinition[];
       };
+      if (generation !== this.initGeneration) return; // response for a destroyed instance
 
       // Load funnel definitions from backend
       if (data.funnelDefinitions && this.funnelModule) {
@@ -1390,6 +1404,7 @@ class AetherSDK implements AetherSDKInterface {
   }): Promise<void> {
     if (!this.config || !this.identityManager) return;
 
+    const generation = this.initGeneration;
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
     const currentAnonymousId = this.identityManager.getAnonymousId();
     const fp = this.fingerprintCollector;
@@ -1424,6 +1439,7 @@ class AetherSDK implements AetherSDKInterface {
 
       if (!res.ok) return;
       const data = await res.json() as { resolved: boolean; identity?: Record<string, unknown> };
+      if (generation !== this.initGeneration) return; // resolved for a destroyed instance
       if (!data.resolved || !data.identity) return;
 
       // Map snake_case backend fields to camelCase TypeScript type
@@ -1499,7 +1515,11 @@ class AetherSDK implements AetherSDKInterface {
       this.lastRouteCheckpointPath = path;
       this.checkpointJourney(path, { stepName: document.title || path, metadata: { source: 'spa_route' } });
     };
+    const generation = this.initGeneration;
     const onRoute = () => {
+      // A hook retained past destroy() (e.g. inside another library's later
+      // history wrapper, which teardown deliberately leaves in place) is inert.
+      if (generation !== this.initGeneration) return;
       this.pageView();
       // SPA route completion — correlate a pending navigation_intent.
       this.autoDiscovery?.recordArrival();

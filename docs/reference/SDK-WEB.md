@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:34152044673a01707a72971092b7e63305964e77d4ca925fedeeb5f80a79d4a1"
+  "packages/sdk/web/src/index.ts": "sha256:a5060b64ad3a20dc9902eeb148e21294b654ec1aca47f626c0a33f0d777d2738"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
@@ -787,6 +787,8 @@ rendering) and renders its children once the SDK is ready. It restarts the SDK
 changes, so an inline `config={{ ... }}` object does not restart it on every
 render. Other options are applied once at init; in development the provider
 warns if one changes later. It is safe under React Strict Mode (one init per
-mount) and cleans up on unmount.
+mount) and cleans up on unmount. After a restart, late responses and route
+hooks from the previous key or site are ignored, so they cannot change the new
+install's configuration, identity or page views.
 
 The provider is SSR-safe: `AetherProvider` is a no-op when `typeof window === 'undefined'`.
