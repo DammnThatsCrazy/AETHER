@@ -20,6 +20,7 @@
 // Environment:
 //   AETHER_API_URL               API origin (required)
 //   AETHER_W3_TENANT_A_KEY       read API key for tenant A (required)
+//   AETHER_W3_TENANT_A_ADMIN_KEY admin API key for tenant A, used only for reconciliation (required)
 //   AETHER_W3_TENANT_B_KEY       read API key for tenant B (required)
 //   AETHER_W3_PUBLISHABLE_KEY    tenant A site-bound pk_ key for ingest (required)
 //   AETHER_W3_SITE_ID            site bound to that key (required)
@@ -54,7 +55,7 @@ export const STEPS = Object.freeze([
 ]);
 
 const REQUIRED_ENV = [
-  'AETHER_API_URL', 'AETHER_W3_TENANT_A_KEY', 'AETHER_W3_TENANT_B_KEY',
+  'AETHER_API_URL', 'AETHER_W3_TENANT_A_KEY', 'AETHER_W3_TENANT_A_ADMIN_KEY', 'AETHER_W3_TENANT_B_KEY',
   'AETHER_W3_PUBLISHABLE_KEY', 'AETHER_W3_SITE_ID',
 ];
 
@@ -76,6 +77,8 @@ export function readConfig(env) {
     apiUrl: apiUrl.origin,
     keyA: env.AETHER_W3_TENANT_A_KEY.trim(),
     keyB: env.AETHER_W3_TENANT_B_KEY.trim(),
+    // Reconciliation is an admin route; the access checks keep the read-only key.
+    adminKeyA: env.AETHER_W3_TENANT_A_ADMIN_KEY.trim(),
     publishableKey: env.AETHER_W3_PUBLISHABLE_KEY.trim(),
     siteId: env.AETHER_W3_SITE_ID.trim(),
     mcpUrl: env.AETHER_MCP_URL?.trim() || null,
@@ -159,6 +162,18 @@ async function hostedMcpCall(url, key, name, args) {
     : JSON.parse(raw);
   if (json.error || json.result?.isError) throw new Error(`hosted MCP ${name} returned an error`);
   return json.result.structuredContent;
+}
+
+/**
+ * Slot IDs in a frame that expose any data: content, claims or evidence.
+ * Used for the cross-tenant check, where every such slot is a leak whatever
+ * its state (degraded slots can carry evidenced content).
+ */
+export function slotsExposingData(frame) {
+  return (frame?.slots || []).filter((slot) => (slot.content !== undefined && slot.content !== null)
+    || (Array.isArray(slot.claims) && slot.claims.length > 0)
+    || (Array.isArray(slot.evidenceRefs) && slot.evidenceRefs.length > 0)
+    || (Array.isArray(slot.provenance) && slot.provenance.length > 0)).map((slot) => slot.id);
 }
 
 function slotShape(frame) {
@@ -251,10 +266,9 @@ async function certify(config, report) {
 
   const search = await expectDenied(clientB.profile360.search({ session: sessionId }));
   const read = await expectDenied(clientB.profile360.get(entityId));
-  const leaked = read.denied ? [] : (read.result.data.slots || [])
-    .filter((slot) => slot.state === 'available' && slot.content !== undefined).map((slot) => slot.id);
+  const leaked = read.denied ? [] : slotsExposingData(read.result.data);
   if (!search.denied || leaked.length) {
-    throw new Error(`Tenant B reached tenant A's subject (search denied=${search.denied}, readable slots=${leaked.join(',')}).`);
+    throw new Error(`Tenant B reached tenant A's subject (search denied=${search.denied}, slots exposing data=${leaked.join(',')}).`);
   }
   step('cross_tenant_denial', {
     search: { status: search.status }, read: read.denied ? { status: read.status } : { readable_slots: 0 },
@@ -264,7 +278,7 @@ async function certify(config, report) {
   const minimum = usageBefore + (viaHosted ? 4 : 3);
   if (usageAfter < minimum) throw new Error(`Usage count ${usageAfter} did not include the reads (expected >= ${minimum}).`);
   const reconciliation = await requestAether('/v1/billing/usage/access-reconciliation', undefined, {
-    AETHER_API_URL: config.apiUrl, AETHER_API_KEY: config.keyA,
+    AETHER_API_URL: config.apiUrl, AETHER_API_KEY: config.adminKeyA,
   });
   step('usage_and_reconciliation', {
     usage_before: usageBefore, usage_after: usageAfter, reconciliation: reconciliation.data,

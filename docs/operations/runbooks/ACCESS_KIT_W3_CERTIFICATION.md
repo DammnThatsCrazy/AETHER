@@ -37,8 +37,8 @@ partner's own tenant repeats the same script after release.
 | `profile360_frame_node_client`, `_cli`, `_local_mcp`, `_hosted_mcp` | The same Profile360 frame is readable through the Node client, the CLI, the local stdio MCP server and the hosted MCP, each with request IDs and audit/usage references. |
 | `cross_surface_agreement` | Slot IDs and states are identical across surfaces. |
 | `slot_state_and_freshness` | Every slot carries a state and a freshness record (`fresh`, `stale` or `unknown` from source watermarks). |
-| `cross_tenant_denial` | Tenant B can neither resolve tenant A's session nor read any available slot content for A's entity. |
-| `usage_and_reconciliation` | The reads are counted in tenant A's usage, and audit/usage reconciliation answers. |
+| `cross_tenant_denial` | Tenant B can neither resolve tenant A's session nor see any content, claim, evidence or provenance for A's entity, in any slot state (degraded slots included). |
+| `usage_and_reconciliation` | The reads are counted in tenant A's usage, and audit/usage reconciliation answers (with tenant A's admin key). |
 
 It does not prove host-specific OAuth sign-in. That is the host matrix below,
 recorded by hand.
@@ -55,7 +55,8 @@ recorded by hand.
    the digest, and `enable_access_mcp_oauth=true`. For host self-registration
    also set `enable_access_mcp_dcr=true`.
 3. Two synthetic tenants exist in staging (created by the staging admin
-   bootstrap), each with a read API key. Tenant A also has a site and a
+   bootstrap), each with a read API key. Tenant A also has an admin API key,
+   used only for the audit/usage reconciliation route, which requires `admin`. Tenant A also has a site and a
    site-bound publishable key. Keys live in the staging GitHub environment or a
    local shell; never commit them.
 
@@ -67,7 +68,7 @@ cd packages/access-kit
 
 ```bash
 AETHER_API_URL=https://api.staging.example \
-AETHER_W3_TENANT_A_KEY=... AETHER_W3_TENANT_B_KEY=... \
+AETHER_W3_TENANT_A_KEY=... AETHER_W3_TENANT_A_ADMIN_KEY=... AETHER_W3_TENANT_B_KEY=... \
 AETHER_W3_PUBLISHABLE_KEY=pk_... AETHER_W3_SITE_ID=... \
 AETHER_MCP_URL=https://api.staging.example/v1/access/mcp \
 npm run certify:w3 -- --out w3-report.json
