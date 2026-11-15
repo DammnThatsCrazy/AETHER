@@ -4791,12 +4791,54 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "freshnessPolicy": {
-            "required": True,
             "maxAgeSeconds": None,
-            "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
-            "requirementStatus": "contract_requirement_not_provider_attestation"
+            "required": True,
+            "requirementStatus": "contract_requirement_not_provider_attestation",
+            "slots": {
+                "agent_delegations": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("agent_access",)
+                },
+                "communications": {
+                    "maxAgeSeconds": 3600,
+                    "watermarkAuthorities": ("communication_facts",)
+                },
+                "economic_value_context": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("economic_facts",)
+                },
+                "location_temporal": {
+                    "maxAgeSeconds": 604800,
+                    "watermarkAuthorities": ("geo_observations",)
+                },
+                "relationship_context": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("relationship_facts",)
+                },
+                "relationships": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("relationship_facts",)
+                },
+                "risk_context": {
+                    "maxAgeSeconds": 21600,
+                    "watermarkAuthorities": ("risk_outputs",)
+                },
+                "risk_summary": {
+                    "maxAgeSeconds": 21600,
+                    "watermarkAuthorities": ("risk_outputs",)
+                },
+                "session_history": {
+                    "maxAgeSeconds": 3600,
+                    "watermarkAuthorities": ("analytics_events",)
+                },
+                "value_summary": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("economic_facts",)
+                }
+            },
+            "sourceTimestamps": "preserve"
         },
         "id": "profile360",
         "lensContract": {

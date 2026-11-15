@@ -5145,7 +5145,69 @@
         "sourceTimestamps": "preserve",
         "missingTimestamp": "unknown",
         "onStale": "mark_affected_slots_stale",
-        "requirementStatus": "contract_requirement_not_provider_attestation"
+        "requirementStatus": "contract_requirement_not_provider_attestation",
+        "slots": {
+          "session_history": {
+            "maxAgeSeconds": 3600,
+            "watermarkAuthorities": [
+              "analytics_events"
+            ]
+          },
+          "communications": {
+            "maxAgeSeconds": 3600,
+            "watermarkAuthorities": [
+              "communication_facts"
+            ]
+          },
+          "risk_summary": {
+            "maxAgeSeconds": 21600,
+            "watermarkAuthorities": [
+              "risk_outputs"
+            ]
+          },
+          "risk_context": {
+            "maxAgeSeconds": 21600,
+            "watermarkAuthorities": [
+              "risk_outputs"
+            ]
+          },
+          "relationships": {
+            "maxAgeSeconds": 86400,
+            "watermarkAuthorities": [
+              "relationship_facts"
+            ]
+          },
+          "relationship_context": {
+            "maxAgeSeconds": 86400,
+            "watermarkAuthorities": [
+              "relationship_facts"
+            ]
+          },
+          "agent_delegations": {
+            "maxAgeSeconds": 86400,
+            "watermarkAuthorities": [
+              "agent_access"
+            ]
+          },
+          "value_summary": {
+            "maxAgeSeconds": 86400,
+            "watermarkAuthorities": [
+              "economic_facts"
+            ]
+          },
+          "economic_value_context": {
+            "maxAgeSeconds": 86400,
+            "watermarkAuthorities": [
+              "economic_facts"
+            ]
+          },
+          "location_temporal": {
+            "maxAgeSeconds": 604800,
+            "watermarkAuthorities": [
+              "geo_observations"
+            ]
+          }
+        }
       },
       "policyBehavior": {
         "tenantScopeRequired": true,

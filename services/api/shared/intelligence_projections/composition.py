@@ -337,12 +337,27 @@ def compose_experience360_frame(
             and freshness_model.state == "unknown"
             and isinstance(freshness_policy, Mapping)
         ):
-            if freshness_policy.get("maxAgeSeconds") is None:
+            slot_policies = freshness_policy.get("slots")
+            slot_threshold = (
+                slot_policies.get(slot_id, {}).get("maxAgeSeconds")
+                if isinstance(slot_policies, Mapping)
+                and isinstance(slot_policies.get(slot_id), Mapping)
+                else None
+            )
+            if (
+                freshness_model.maxAgeSeconds is None
+                and slot_threshold is None
+                and freshness_policy.get("maxAgeSeconds") is None
+            ):
                 reasons.append("freshness_threshold_not_configured")
             elif freshness_model.sourceAsOf is None:
                 reasons.append("freshness_source_timestamp_missing")
             else:
                 reasons.append("freshness_not_evaluated")
+        elif slot_state in {"available", "degraded"} and freshness_model.state == "stale":
+            # onStale: mark_affected_slots_stale. The content stays readable;
+            # the stale verdict and this reason travel with it.
+            reasons.append("slot_freshness_stale")
 
         # The catalog is reconstructed from the previously reviewed SSOT and
         # awaits clause-by-clause source alignment. Surface this as metadata.
