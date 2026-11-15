@@ -72,6 +72,7 @@ reviewed_source_commits:
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
   - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; the Profile360 slot statements here are updated.'}
+  - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; this document needs no other change.'}
 source_hashes:
   "packages/shared/": "sha256:c32e159f6e4eeb17cd5bf6e2012437300667174091410f3b48518a42bc34d90b"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
@@ -104,7 +105,7 @@ source_hashes:
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
   "services/api/main.py": "sha256:6647f3160e499a6449f1689e3031debf56031a3abfd57885e0292510b26fac59"
-  "services/api/middleware/middleware.py": "sha256:a759e3d55b5791e9fa6c9d022fa68551bc4227638cdcc7871c039bbdad2ccab5"
+  "services/api/middleware/middleware.py": "sha256:ff86aed1bace982417e3cad43476d0fbb02f49988432e4c960b05d24163d2408"
   "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:edbdaa60384c89a717379f14f94182904cc02c7525ec0408e7a4757fe995f4b1"

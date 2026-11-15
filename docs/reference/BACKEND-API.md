@@ -26,6 +26,7 @@ reviewed_source_commits:
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
   - {'commit': 'b8530123', 'reason': 'Reviewed atomic objective idempotency claims in services/api/actions/agent/runtime_repository.py. Retry and changed-content conflict semantics are unchanged; simultaneous first submissions now create one objective. No change to this document is needed.'}
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; the freshness behavior is documented here.'}
+  - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
 source_hashes:
   "services/api/actions/": "sha256:a2fdbf45fc4318fadf08eea3f900064a4ae363e5e322e9ca0fc5bea8a1cd8a9d"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -33,7 +34,7 @@ source_hashes:
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
   "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
-  "services/api/identity/": "sha256:82343e60e7de0cc13aa9518cc06872f43e232c69f9e212aa6b7288ba313953f8"
+  "services/api/identity/": "sha256:10a2470b6c7cda3aebcd2637a83cc17861d115d4024514e4b733b2f25c5d983e"
   "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
   "services/api/intelligence/": "sha256:af8fd23685d68f5bbf7ffe83b9fe140e39a4bfe54141919a259c71bfa6949d9a"
   "services/api/journeys/": "sha256:0387a8be4f6883d713fef73ba3f975152f840812396ba858b0b5986f5ee4261a"
@@ -1810,6 +1811,7 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 | GET | `/v1/profile/{user_id}/identifiers` | All linked wallets, emails, devices, sessions, social handles |
 | GET | `/v1/profile/{user_id}/provenance` | Source attribution across identity, onchain, social data |
 | GET | `/v1/profile/resolve` | Resolve any identifier to canonical profile_id (query params: `wallet`, `email`, `device`, `session`, `social`, `customer`) |
+| POST | `/v1/profile/resolve` | Same resolution with exactly one identifier in the JSON body (`wallet`, `email`, `device`, `session`, `social` or `customer`), so the identifier never appears in a URL; a read (`read` permission), on the delegated-MCP read allowlist |
 | GET | `/v1/profile/{user_id}/lake/{domain}` | Domain-specific Gold data (identity, market, onchain, social) |
 | GET | `/v1/profile/{user_id}/campaigns` | Campaign attribution derived from analytics event stream |
 | GET | `/v1/profile/{user_id}/tier` | Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank |
