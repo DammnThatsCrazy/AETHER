@@ -2812,16 +2812,17 @@ async def test_profile_value_summary_routes_exact_subject_to_economic360_after_p
             )
             assert projection_request.tenantId == TENANT
             assert projection_request.subject == subject
+            projection_id = projection_request.projectionId
             claim = ClaimEnvelope(
-                id=f"economic360.summary.{subject_id}",
-                kind="economic_rollup",
+                id=f"{projection_id}.summary.{subject_id}",
+                kind="economic_rollup" if projection_id == "economic360" else "outcome_state",
                 subject=subject,
                 evidenceRefs=[value_evidence],
                 claims=["A tenant-scoped economic fact records this exact subject."],
                 domainSlotIds=["value_summary"],
             )
             return ProjectionResult(
-                projectionId="economic360",
+                projectionId=projection_id,
                 tenantId=projection_request.tenantId,
                 contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
                 sections=[
@@ -2829,7 +2830,11 @@ async def test_profile_value_summary_routes_exact_subject_to_economic360_after_p
                         id=section_id,
                         state="available",
                         content={"subjectId": subject_id, "evidenceRefs": [value_evidence]},
-                        canonicalAuthorityRefs=["economic_facts", "evidence"],
+                        canonicalAuthorityRefs=(
+                            ["economic_facts", "evidence"]
+                            if projection_id == "economic360"
+                            else ["outcome_facts", "evidence"]
+                        ),
                     )
                     for section_id in section_ids
                 ],
@@ -2855,17 +2860,25 @@ async def test_profile_value_summary_routes_exact_subject_to_economic360_after_p
     )
 
     assert events[0] == ("policy", "profile360", subject_id)
-    assert runtime.calls == [("economic360", subject_id, ("evidence", "summary"))]
-    assert events[1] == ("projection", "economic360", subject_id)
+    expected_calls = [("economic360", subject_id, ("evidence", "summary"))]
+    if subject_kind == "entity":
+        # Entity subjects also join Outcome360 for measured outcomes.
+        expected_calls.append(("outcome360", subject_id, ("evidence", "outcomes")))
+    assert sorted(runtime.calls) == sorted(expected_calls)
+    assert all(event[0] == "projection" for event in events[1:])
     slot = frame.slots[0]
     assert slot.state == "degraded"
     assert slot.content is not None
-    assert [claim.id for claim in slot.claims] == [f"economic360.summary.{subject_id}"]
+    assert sorted(claim.id for claim in slot.claims) == sorted(
+        f"{call[0]}.summary.{subject_id}" for call in expected_calls
+    )
     assert slot.evidenceRefs == [value_evidence]
-    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
-        "evidence",
-        "summary",
-    }
+    expected_sections = {"evidence", "summary"} | (
+        {"outcomes"} if subject_kind == "entity" else set()
+    )
+    assert {
+        item.sectionId for item in slot.provenance if item.sourceKind == "section"
+    } == expected_sections
     assert "slot_partial_implementation" in slot.reasonCodes
 
 

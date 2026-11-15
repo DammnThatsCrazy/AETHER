@@ -1008,7 +1008,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationState: 'implemented',
     implementationBlueprint: 'docs/architecture/blueprints/outcome360.md',
     ownsCanonicalTruth: false,
-    subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'population'],
+    subjectKinds: ['agent', 'campaign', 'entity', 'episode', 'journey', 'population'],
     canonicalAuthorities: ['evidence', 'graph', 'measurement_contract', 'outcome_facts'],
     hardDependencies: ['measurement_outcome_contract', 'temporal_kernel'],
     projectionDependencies: ['temporal360'],
@@ -4666,7 +4666,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           {
             projectionId: 'outcome360',
             role: 'supporting',
-            subjectKinds: [],
+            subjectKinds: ['entity'],
             sectionIds: ['evidence', 'outcomes']
           }
         ]
@@ -4891,13 +4891,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['ai_execution_facts', 'economic_facts', 'outcome_facts'],
         description: 'Direct tenant-scoped economic facts for the exact canonical entity or Agent subject; measured outcomes and attribution remain unresolved.',
         id: 'value_summary',
-        partialImplementationReason: 'Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects; Outcome360 does not yet support exact entity/profile subjects for attributed outcomes, and Profile-specific freshness remains unknown.',
+        partialImplementationReason: 'Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects, and Outcome360 joins durable outcome truth only for the same-id human (user) subject of an entity request; attribution of outcomes to economic facts, historical replay and producer coverage remain unknown. Freshness is evaluated from the tenant economic_facts watermark.',
         projectionBindings: [
           {
             projectionId: 'economic360',
             role: 'primary',
             subjectKinds: ['agent', 'entity'],
             sectionIds: ['evidence', 'summary']
+          },
+          {
+            projectionId: 'outcome360',
+            role: 'supporting',
+            subjectKinds: ['entity'],
+            sectionIds: ['evidence', 'outcomes']
           }
         ],
         requirement: 'required'

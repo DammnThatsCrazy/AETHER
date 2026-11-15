@@ -1459,6 +1459,7 @@
       "subjectKinds": [
         "agent",
         "campaign",
+        "entity",
         "episode",
         "journey",
         "population"
@@ -4820,9 +4821,20 @@
                 "agent",
                 "entity"
               ]
+            },
+            {
+              "projectionId": "outcome360",
+              "role": "supporting",
+              "sectionIds": [
+                "outcomes",
+                "evidence"
+              ],
+              "subjectKinds": [
+                "entity"
+              ]
             }
           ],
-          "partialImplementationReason": "Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects; Outcome360 does not yet support exact entity/profile subjects for attributed outcomes, and Profile-specific freshness remains unknown."
+          "partialImplementationReason": "Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects, and Outcome360 joins durable outcome truth only for the same-id human (user) subject of an entity request; attribution of outcomes to economic facts, historical replay and producer coverage remain unknown. Freshness is evaluated from the tenant economic_facts watermark."
         },
         {
           "id": "risk_summary",
@@ -5064,7 +5076,9 @@
                 "outcomes",
                 "evidence"
               ],
-              "subjectKinds": []
+              "subjectKinds": [
+                "entity"
+              ]
             }
           ]
         }

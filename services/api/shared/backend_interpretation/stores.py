@@ -409,6 +409,12 @@ _PROJECTION_SUBJECT_KINDS = frozenset(
 )
 
 
+def _row_subject_kind(subject: Any) -> Optional[str]:
+    if isinstance(subject, dict):
+        return subject.get("kind")
+    return getattr(subject, "kind", None)
+
+
 def subject_matches_request(subject: Any, request_kind: str, request_id: str) -> bool:
     """Match a durable row's ``EntityRef`` subject to a coarse request subject.
 
@@ -469,6 +475,11 @@ class OutcomeTruthStoreReader:
         subject_kind = getattr(subject, "kind", None)
         for row in rows:
             if not subject_matches_request(row.subject, subject_kind, subject_id):
+                continue
+            if subject_kind == "entity" and _row_subject_kind(row.subject) != "user":
+                # A Profile360 entity subject is a canonical human: only the
+                # same-id human (``user``) outcome row is that entity, never a
+                # same-id campaign, agent or other resource row.
                 continue
             value: Optional[float] = None
             if row.value_state in ("present", "zero", "empty", "degraded"):
