@@ -638,3 +638,27 @@ async def test_deprecation_revokes_memberships_a_failed_projection_partly_wrote(
     deprecated = await svc.deprecate(T, pid, actor="a", reason="ring dismantled; retire the pattern")
     report = deprecated["promotion"]["graph_revocation"]
     assert report["from_projection"] == "failed" and report["revoked"] == 14 and len(revoked) == 14
+
+
+def test_cross_domain_alone_stays_unmeasured_so_composites_do_not_age():
+    result = run_discovery(T, normal_traffic(2, 2), baseline=empty_baseline(T), kinds=[KIND_CROSS_DOMAIN])
+    assert KIND_CROSS_DOMAIN not in result.kinds_run
+    assert result.stats["detectors"]["cross_domain"]["skipped"] == "no_constituent_detectors"
+
+
+def test_cycle_search_is_budgeted_on_dense_graphs(monkeypatch):
+    from intelligence.pattern_discovery.contracts import KIND_NOVEL_MOTIF
+    from intelligence.pattern_discovery.detectors import motifs
+
+    monkeypatch.setattr(motifs, "MAX_CYCLE_IDENTITIES", 50)
+    rows, i = [], 0
+    names = [f"d{k}" for k in range(12)]
+    for a in names:  # a complete invitation graph: combinatorially many cycles
+        for b in names:
+            if a != b:
+                i += 1
+                rows.append(ev(i, "user_id", a, "invite_accepted", BASE + timedelta(seconds=i), invited_by=b))
+    result = run_discovery(T, rows, baseline=empty_baseline(T), kinds=[KIND_NOVEL_MOTIF])
+    stats = result.stats["detectors"]["motifs"]
+    assert stats["cycles_truncated"] is True
+    assert stats["cycles"] <= 50
