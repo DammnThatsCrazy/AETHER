@@ -53,6 +53,7 @@ reviewed_source_commits:
     reason: "Reviewed the new Auth0 Native Aether CLI client and connection grants. The Auth0 deployment inventory now records the public Device Authorization client and its human-session deployment gate; the independent operator tfmcp service is unchanged."
   - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
   - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
+  - {'commit': '55078498', 'reason': 'Reviewed 55078498: Terraform plan tests now encode staging as the second Access Kit MCP owner (repository allowed, service gated by repository and the lifecycle-matrix precondition). Test-only change; the staging MCP description here already matches.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -80,7 +81,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:c4723aa54207062525baed4ab43db02e4c271f998dc7ce91616eee279cd1e277"
+  "infra/aws/terraform/": "sha256:41e663a27e3b5d7acfd997640d363fb8550e1a55e765042535d66d81163b9079"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"

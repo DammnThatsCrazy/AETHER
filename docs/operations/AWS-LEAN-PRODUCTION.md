@@ -27,6 +27,7 @@ reviewed_source_commits:
     reason: "Reviewed the linked root main.tf change; it updates the Auth0 section comment only. The dedicated Native CLI client change does not alter lean AWS topology, deployment lane, or runtime settings described here."
   - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
   - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
+  - {'commit': '55078498', 'reason': 'Reviewed 55078498: Terraform plan tests now encode staging as the second Access Kit MCP owner (repository allowed, service gated by repository and the lifecycle-matrix precondition). Test-only change; the staging MCP description here already matches.'}
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
@@ -38,7 +39,7 @@ source_hashes:
   "infra/aws/terraform/moved.tf": "sha256:3a816e2a5b402a98a89d949b1801bd6c3cd99242a26cc17039c6d140faa3a342"
   "infra/aws/terraform/profiles.tf": "sha256:3dca37890ae8fe1f354b0fc33d137224373c8ba6ceca80b6bb96c321a675d371"
   "infra/aws/terraform/profiles/production.tfvars": "sha256:85f0417ff14534587c2210d4164adc3e9e775170f01495f62c2884c6f308c36c"
-  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:65c25850344e2b70121207e64f5883d48677feaab93d3a39d6f7aa474908d8d8"
+  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:ec2c81d8fcc8e2c29e95bc0de87fd4874cc9be0b4b67b1b57523e2feaaa03301"
   "infra/aws/terraform/variables.tf": "sha256:22328f7f50c525c17270afcf588ebdc28e6e6a09425c7b12e15e8860afd5a870"
 ---
 
