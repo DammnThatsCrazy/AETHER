@@ -4927,7 +4927,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         },
         economic_value_context: {
           maxAgeSeconds: 86400,
-          watermarkAuthorities: ['economic_facts']
+          watermarkAuthorities: ['ai_execution_facts', 'economic_facts']
         },
         location_temporal: {
           maxAgeSeconds: 604800,
@@ -4955,7 +4955,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         },
         value_summary: {
           maxAgeSeconds: 86400,
-          watermarkAuthorities: ['economic_facts']
+          watermarkAuthorities: ['ai_execution_facts', 'economic_facts']
         }
       }
     },

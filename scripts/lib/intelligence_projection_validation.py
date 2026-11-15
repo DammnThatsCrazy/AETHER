@@ -1879,6 +1879,7 @@ def validate_outcome_registry(reg: dict, ctx: Optional[dict] = None) -> list[Vio
 WATERMARKED_AUTHORITIES = frozenset(
     {
         "agent_access",
+        "ai_execution_facts",
         "analytics_events",
         "communication_facts",
         "economic_facts",

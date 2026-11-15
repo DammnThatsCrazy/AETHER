@@ -161,7 +161,8 @@ WRITERS = [
     ("journeys.comms.repository", "CommsFactsRepository", "upsert", "communication_facts"),
     ("repositories.graph_mutation_ledger", "GraphMutationLedgerRepository", "append", "relationship_facts"),
     ("graph.geo.location_facts", "LocationFactRepository", "record", "geo_observations"),
-    ("journeys.measurement.repositories.conversion_repo", "ConversionRepository", "upsert", "economic_facts"),
+    ("intelligence.computation.repositories", "ComputedResultsRepository", "insert_result", "economic_facts"),
+    ("intelligence.computation.repositories", "ComputedResultsRepository", "supersede", "economic_facts"),
     ("intelligence.risk360.store", "RiskAssessmentRepository", "upsert_scoped", "risk_outputs"),
     ("intelligence.risk360.store", "RiskAssessmentRepository", "update_scoped", "risk_outputs"),
 ]
@@ -176,7 +177,44 @@ def test_every_owning_writer_advances_its_watermark(module_name, cls_name, metho
 
 
 def test_every_watermarked_authority_has_a_writer():
-    assert {w[3] for w in WRITERS} == set(wm.WATERMARKED_AUTHORITIES)
+    authorities = {w[3] for w in WRITERS} | {"ai_execution_facts"}
+    assert authorities == set(wm.WATERMARKED_AUTHORITIES)
+
+
+def test_ai_execution_fact_writer_advances_its_watermark():
+    from ingestion.silver.projectors import ai_invocation_projector
+
+    assert hasattr(ai_invocation_projector.write_execution_fact, "__wrapped__")
+
+
+def test_conversions_no_longer_mark_profile_value_fresh():
+    from journeys.measurement.repositories.conversion_repo import ConversionRepository
+
+    assert not hasattr(ConversionRepository.upsert, "__wrapped__")
+
+
+def test_value_slots_require_both_economic_sources():
+    policies = slot_freshness_policies(PROFILE)
+    for slot in ("value_summary", "economic_value_context"):
+        assert sorted(policies[slot]["watermarkAuthorities"]) == ["ai_execution_facts", "economic_facts"]
+    verdicts = evaluate_slot_freshness(
+        policies, ["value_summary"],
+        {"economic_facts": NOW.isoformat(), "ai_execution_facts": None}, NOW.isoformat(),
+    )
+    assert verdicts["value_summary"].state == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_module_level_writer_tenant_comes_from_first_argument_and_tuple_result():
+    class Observed:
+        tenant_id = "t-mod"
+
+    @wm.advances_watermark("ai_execution_facts")
+    async def write(observed):
+        return ("written", None)
+
+    await write(Observed())
+    assert (await wm.read_source_watermarks("t-mod", ["ai_execution_facts"]))["ai_execution_facts"]
 
 
 @pytest.mark.asyncio

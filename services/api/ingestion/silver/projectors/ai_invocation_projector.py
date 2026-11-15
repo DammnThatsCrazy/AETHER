@@ -29,6 +29,7 @@ from pydantic import ValidationError
 
 from config.settings import settings
 from shared.logger.logger import get_logger, metrics
+from shared.freshness.source_watermarks import advances_watermark
 from shared.store import get_store
 
 from value.economic.ai_costs import CostSelection, select_cost
@@ -67,6 +68,7 @@ def _data_quality_status(observed: AIInvocationObserved, selection: CostSelectio
     return "complete"
 
 
+@advances_watermark("ai_execution_facts")
 async def write_execution_fact(
     observed: AIInvocationObserved,
 ) -> tuple[str, Optional[AIExecutionFact]]:
