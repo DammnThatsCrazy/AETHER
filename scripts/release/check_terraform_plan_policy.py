@@ -1038,6 +1038,34 @@ def check_service_cardinality(
                 "customer Access Kit MCP service matches its explicit Terraform opt-in",
                 enabled=access_mcp_enabled)
 
+    if profile == "staging":
+        # Staging lifecycle builds its exact inventory from
+        # customer_services.access-mcp.enabled; the plan must agree, and the
+        # service must have no autoscaling target that could wake it.
+        declared = bool(
+            ((entry.get("customer_services") or {}).get("access-mcp") or {}).get("enabled")
+        )
+        mcp_targets = sorted(
+            res["address"] for res in resources
+            if res["type"] == "aws_appautoscaling_target"
+            and is_active(res)
+            and "access-mcp" in str((res.get("values") or {}).get("resource_id", ""))
+        )
+        if declared != access_mcp_enabled or mcp_targets:
+            message = (
+                "ecs services: staging Access Kit MCP must match "
+                f"customer_services.access-mcp.enabled={declared} "
+                f"(var.enable_access_mcp={access_mcp_enabled}) and have no "
+                f"autoscaling target (observed={mcp_targets!r})"
+            )
+            r.fail(message)
+            _record(results, "staging.access_mcp_lifecycle", False, message,
+                    declared=declared, enabled=access_mcp_enabled, targets=mcp_targets)
+        else:
+            _record(results, "staging.access_mcp_lifecycle", True,
+                    "staging Access Kit MCP matches the lifecycle matrix with no scaling target",
+                    declared=declared, enabled=access_mcp_enabled)
+
     expected = len(units) + (1 if remote_ml else 0) + int(access_mcp_enabled)
     mode = str(entry.get("execution_mode") or "unspecified")
     services = [

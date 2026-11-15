@@ -497,19 +497,19 @@ module "ecs" {
   first_admin_bootstrap_email = var.deployment_lane == "pilot" ? var.alert_email : ""
   # Internal staff who join the operator tenant as owner on a verified
   # sign-in. Pilot staging only; no other lane admits anyone by email.
-  platform_operator_emails     = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
-  platform_operator_tenant_ids = var.platform_operator_tenant_ids
-  deployment_lane              = var.deployment_lane
+  platform_operator_emails              = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
+  platform_operator_tenant_ids          = var.platform_operator_tenant_ids
+  deployment_lane                       = var.deployment_lane
   identity_verification_secrets_enabled = var.identity_verification_secrets_enabled
-  email_enabled                = var.email_enabled
-  self_signup_enabled          = local.self_signup_enabled
-  email_sender_domain          = var.email_sender_domain
-  lead_notification_email      = var.lead_notification_email
-  stripe_billing_enabled       = var.deployment_lane == "pilot"
-  stripe_annual_prices_enabled = var.stripe_annual_prices_enabled
-  stripe_checkout_success_url  = "${local.aether_app_base_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
-  stripe_checkout_cancel_url   = "${local.aether_app_base_url}/billing/cancel"
-  stripe_portal_return_url     = "${local.aether_app_base_url}/billing"
+  email_enabled                         = var.email_enabled
+  self_signup_enabled                   = local.self_signup_enabled
+  email_sender_domain                   = var.email_sender_domain
+  lead_notification_email               = var.lead_notification_email
+  stripe_billing_enabled                = var.deployment_lane == "pilot"
+  stripe_annual_prices_enabled          = var.stripe_annual_prices_enabled
+  stripe_checkout_success_url           = "${local.aether_app_base_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
+  stripe_checkout_cancel_url            = "${local.aether_app_base_url}/billing/cancel"
+  stripe_portal_return_url              = "${local.aether_app_base_url}/billing"
 
   # E3: Aurora Serverless v2 replaces RDS as the active database.
   # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.
@@ -660,7 +660,7 @@ module "access_mcp" {
   service_assertion_secret_arn  = var.enable_access_mcp_oauth ? aws_secretsmanager_secret_version.access_mcp_service_assertion[0].arn : ""
   service_assertion_kms_key_arn = module.secrets.kms_key_arn
   log_retention_days            = var.log_retention_days
-  desired_count                 = var.access_mcp_desired_count
+  desired_count                 = local.access_mcp_desired_count
 }
 
 # ---------------------------------------------------------------------------

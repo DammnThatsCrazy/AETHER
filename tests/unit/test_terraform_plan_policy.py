@@ -148,6 +148,52 @@ def test_service_cardinality_accepts_only_the_explicit_access_mcp_service():
     )["status"] == "fail"
 
 
+def test_staging_access_mcp_must_match_lifecycle_matrix_without_scaling_target():
+    def runtime(enabled: bool) -> dict:
+        return {
+            "profiles": {
+                "staging": {
+                    "services": {"api": {}, "lean-worker": {}},
+                    "customer_services": {"access-mcp": {"enabled": enabled, "desired_count": 1}},
+                    "remote_ml": False,
+                    "execution_mode": "consolidated",
+                }
+            }
+        }
+
+    services = [
+        "module.ecs.aws_ecs_service.backend",
+        'module.ecs.aws_ecs_service.runtime_role["lean-worker"]',
+        "module.access_mcp[0].aws_ecs_service.this",
+    ]
+
+    def check(declared: bool, enabled: bool, extra: list[dict] | None = None):
+        reporter = MODULE.Reporter("staging Access MCP lifecycle unit")
+        results: list[dict] = []
+        resources = [
+            {"type": "aws_ecs_service", "address": address, "actions": ["no-op"]}
+            for address in (services if enabled else services[:2])
+        ] + (extra or [])
+        plan = {"variables": {"enable_access_mcp": {"value": enabled}}}
+        MODULE.check_service_cardinality(
+            reporter, results, "staging", runtime(declared), resources, plan,
+        )
+        row = next(r for r in results if r["check"] == "staging.access_mcp_lifecycle")
+        return row["status"]
+
+    assert check(True, True) == "pass"
+    assert check(False, False) == "pass"
+    assert check(False, True) == "fail"
+    assert check(True, False) == "fail"
+    scaling = {
+        "type": "aws_appautoscaling_target",
+        "address": "module.access_mcp[0].aws_appautoscaling_target.this",
+        "actions": ["create"],
+        "values": {"resource_id": "service/AETHER-staging/AETHER-staging-access-mcp"},
+    }
+    assert check(True, True, [scaling]) == "fail"
+
+
 def test_access_mcp_service_cost_sizing_resolves_its_task_definition():
     module_address = "module.access_mcp[0]"
     resources = [
