@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:d04c938eaec29f23e86e7d248233ef02bab1010616c7e52d7c8d4447a30a8d57"
+  "services/api/actions/": "sha256:91cdd186b7713453c7d6ea8eb0bf71f11250d5d60b03881277d6c830c2ae2ef0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:82343e60e7de0cc13aa9518cc06872f43e232c69f9e212aa6b7288ba313953f8"
   "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
   "services/api/intelligence/": "sha256:f56736e8c0bdc2015fa25b602db1803dd46e0d68414c5c2aa343755c0b102c50"
-  "services/api/journeys/": "sha256:9f708044881acbe762dc87102b50fa527af280e879dbe0cda1ec196f78e7c2e6"
+  "services/api/journeys/": "sha256:34e47fcaf6aaeae42d22ad4537cb05773babaa019b72312cbb964a5731cb32db"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
@@ -3986,6 +3986,8 @@ When on, canonical activity emitted by the silver projectors requests a debounce
   - `{resolved: false, status}` with `not_attributed`, `invalid`, `unavailable` or `token_already_bound`.
 
   A token binds to the first anonymous ID that presented it (only its SHA-256 is stored), so it cannot attribute another device. Apple Ads campaigns only. Other ad networks stay Direct / Unknown at user level.
+
+  Recording an attribution requests a rebuild of the journey it belongs to: through the debounced activity rebuild when `JOURNEY_ACTIVITY_REBUILD_ENABLED` is on, otherwise through the touchpoint rebuild path directly. Attribution often resolves after the install's activity was compiled, so this puts the acquisition touchpoint into the journey even if the user does nothing else. The rebuild is best-effort; a failure never loses the recorded attribution.
 
 Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handoff_sweep`, maintenance role) and erased by anonymous ID through the `journey_handoffs` DSR component.
 

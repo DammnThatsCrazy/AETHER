@@ -33,7 +33,7 @@ source_hashes:
   "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
   "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c275b92b8020e3c1e65392084affffd72ab970298e176c0aa6c58cd3981f66be"
   "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
-  "services/api/actions/agent_correlation/engine.py": "sha256:f032ab826de7727baa1a11065bd720a4bd79072ab59fba7bc16ad17f21605331"
+  "services/api/actions/agent_correlation/engine.py": "sha256:8e8ab2b44ff02d18c2d08bee38f49ea62019e5d3ba5334382713b21a0df94d28"
   "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
   "services/api/actions/agent_correlation/mcp_server.py": "sha256:b20c135f39ae243eb5df8073f45df2a69c5ae8e00b635b2a84dd72ba3e6f4cde"
   "services/api/actions/agent_correlation/projection.py": "sha256:533ba53fd6932921a34e84667f6c7461eec8099906893da7f1852698ddbeb4bc"
@@ -282,7 +282,12 @@ When a record arrives, the engine:
 
 1. Stores it. A repeated delivery is a no-op.
 2. Indexes its join keys: verified task refs, object refs, signed request IDs,
-   actors, infrastructure refs, and its time bucket.
+   actors, infrastructure refs, and its time bucket. This happens *before* the
+   candidate lookup, so two matching records ingested at the same moment
+   cannot both look before either is indexed: whichever looks second finds the
+   first. Verdict IDs are symmetric in the pair and recorded with an atomic
+   create-if-absent, so when both sides find each other they converge on one
+   verdict.
 3. Finds candidates that share a key or fall in an adjacent bucket, capped at
    500.
 4. Runs the join rules.
