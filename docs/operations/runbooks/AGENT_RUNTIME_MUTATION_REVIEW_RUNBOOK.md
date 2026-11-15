@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "services/api/actions/agent/mutation_commit.py": "sha256:738e936f630f69091a278cece603ae64e35be3c074d3b740f0e84f582bff5cfc"
-  "services/api/actions/agent/runtime_repository.py": "sha256:fe50fbbfb53e4383d3d7b470b372b43924a7237cab4277b9a36a85617407b517"
+  "services/api/actions/agent/runtime_repository.py": "sha256:40faa2e405baadb9974ee14fed3d433731959fe38fce64ef99f103462106b780"
 ---
 
 # Agent Runtime & Mutation Review Runbook
@@ -63,7 +63,8 @@ review disabled, `commit_approved_mutations`/`rollback_mutation` refuse
    same content returns the existing objective; reusing the key for changed
    content is a conflict. The key is claimed with a conditional write, so
    simultaneous first submissions from different API instances also produce
-   one objective.
+   one objective. If a claim's owner stops before writing, a later request
+   finishes the write under an expiring, releasable lease.
 
 ## Rollback
 

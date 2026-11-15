@@ -14,11 +14,11 @@ source_files:
   - scripts/prune_auth0_mcp_clients.py
 canonical_owner: platform@aether
 source_hashes:
-  "packages/access-kit/scripts/w3-certify.mjs": "sha256:5d59ceb71f233705101073b35186b14524b44fd38d54d4ea2341046c540558ff"
+  "packages/access-kit/scripts/w3-certify.mjs": "sha256:cc911c0ae5192402cbe926c3fd7db7fd924436214b5a0fc806983338296f9708"
   "packages/access-kit/src/profile360-tools.mjs": "sha256:98c417ee9ceb5987a41c1a79916e047b29dfdd422886460d1a64664a30235a3a"
   "packages/access-kit/src/profile360.mjs": "sha256:32c8c44211d7330c269a7ffa34832cf44e1dc796e94a10d9348275ab42cb9b05"
   "scripts/prune_auth0_mcp_clients.py": "sha256:eff4697c57eb53a965e0e1f7a6c125b674746c42a4d6990f0dbd39d51336584e"
-  "scripts/release/staging_customer_services.py": "sha256:849e65317cd3ec56fffc47f5c418e7320a625f062326923a57f7f03ff491564a"
+  "scripts/release/staging_customer_services.py": "sha256:16bb7756b4e2534c6ceb5d289b7cddb0f01b4062d72fcabd5285735e7d08deca"
 ---
 
 # Access Kit W3 certification (design partner)
@@ -51,9 +51,10 @@ recorded by hand.
    [Staging wake/sleep](../STAGING-WAKE-SLEEP.md): staging
    `aether-access-mcp` repository, a published image (`target: staging`), the live
    `AetherStagingDeploy` policy updated to the reviewed manifest, then
-   `customer_services.access-mcp.enabled: true` with `enable_access_mcp=true`,
-   the digest, and `enable_access_mcp_oauth=true`. For host self-registration
-   also set `enable_access_mcp_dcr=true`.
+   `customer_services.access-mcp` with `repository: true`, the `image_digest`,
+   `enabled: true` and `oauth: true` (and `dcr: true` for host
+   self-registration). The lifecycle carries that entry into every wake and
+   sleep plan.
 3. Two synthetic tenants exist in staging (created by the staging admin
    bootstrap), each with a read API key. Tenant A also has an admin API key,
    used only for the audit/usage reconciliation route, which requires `admin`. Tenant A also has a site and a

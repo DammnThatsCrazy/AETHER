@@ -71,7 +71,7 @@ that a surface is complete.
 |---|---|
 | Adapter surface | Narrowed to `profile360`, the only surface audited for design-partner use; the generic frame read rejects other surfaces before any request. |
 | Named reads | `profile360.search` (`POST /v1/profile/resolve`, identifier in the body), `profile360.get`, `profile360.slot.get` (up to 8 slots) and `profile360.evidence.get`, over CLI, local and hosted MCP (named tools, also for delegated OAuth) and the Node client. |
-| Freshness | Ten Profile360 slots carry fresh/stale/unknown verdicts from per-tenant source watermarks advanced by the seven owning writers (sessions/communications 1h, risk 6h, relationships/delegations/value 24h, location 7d). |
+| Freshness | Ten Profile360 slots carry fresh/stale/unknown verdicts from per-tenant source watermarks advanced by the owning writers (value slots require both the computed-economics and AI-execution-fact watermarks) (sessions/communications 1h, risk 6h, relationships/delegations/value 24h, location 7d). |
 | Value | `value_summary` and `economic_value_context` join Outcome360 outcomes for the same-id human (`user`) subject of an entity request. |
 | Staging hosted MCP | Covered by the wake/sleep lifecycle (`customer_services.access-mcp`, 1 awake / 0 asleep, no autoscaling target); disabled until the staging repository, image and live apply policy exist. |
 | Host registration | Opt-in `enable_access_mcp_dcr`: Auth0 DCR and CIMD with a read-only third-party default grant; idle registrations pruned by `scripts/prune_auth0_mcp_clients.py`. |

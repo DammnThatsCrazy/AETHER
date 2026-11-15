@@ -51,12 +51,12 @@ source_hashes:
   ".github/workflows/pilot-staging.yml": "sha256:36ebc8a80d84008b4b55c2fd562b28aa67f6a02e08478de9e4a4cbd77897a07a"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:b48c4f2b4edfc25be0b4de2aba35213dca689af9684e13d34856ee76c77e08b1"
-  ".github/workflows/staging-lifecycle.yml": "sha256:08b0ef49779fb2c3081c4b44da0b840e8b5a45be652c829ca03ff60b96af2c4e"
+  ".github/workflows/staging-lifecycle.yml": "sha256:4a78b4a305c65399ccf66646af91fdee44b2058a355f00ab6cdbf05bdaa5d9a2"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:072313f747f4cb1f6f695112090b7e8942c691d94731908f68987da6e03e03d7"
+  "config/runtime_deployment.yaml": "sha256:1804416eb007538b602b287d7cea226871d2571578d182e0ab89697bf27806ff"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
@@ -123,21 +123,29 @@ matrix, under `profiles.staging.customer_services.access-mcp` in
   output precondition fails the plan otherwise.
 
 Enabling it is ordered, because the staging account owns its own
-`aether-access-mcp` repository:
+`aether-access-mcp` repository. Every step is a reviewed change to
+`profiles.staging.customer_services.access-mcp`, which the lifecycle passes to
+each wake and sleep plan (`staging_customer_services.py --promote-inputs`), so
+the applied MCP state survives every wake and sleep:
 
-1. Plan and apply staging with `enable_access_mcp_repository=true` only.
+1. Set `repository: true` and plan and apply staging (which passes
+   `enable_access_mcp_repository=true`).
 2. Publish an image with **Publish Access Kit MCP image** (`target: staging`,
    from `main` or `staging`), using the staging environment's
    `AWS_ACCESS_MCP_PUBLISH_ROLE_ARN`.
-3. In one reviewed change, set `customer_services.access-mcp.enabled: true`,
-   then plan staging with `enable_access_mcp=true`, the published
-   `access_mcp_image_digest` and, for delegated sign-in,
-   `enable_access_mcp_oauth=true`.
+3. Set `image_digest` to the published digest and `enabled: true`; for
+   delegated sign-in also `oauth: true`, and for host self-registration
+   `dcr: true`. Plan and apply.
 4. Before that apply, update the live `AetherStagingDeploy` policy to the
    reviewed `config/staging_apply_iam_policy.yaml`. It adds management and
    `iam:PassRole` for `AETHER-staging-access-mcp-execution` and
    `AETHER-staging-access-mcp-task`. The role is managed outside Terraform, and
    the effective-policy check blocks the apply until it matches.
+
+The helper rejects inconsistent states (enabled without a repository and
+digest, OAuth without the service, DCR without OAuth, a mutable tag), and a
+Terraform output precondition fails any staging plan whose MCP inputs differ
+from the entry.
 
 `staging_state` is a **root Terraform variable**, not a tfvars constant, with
 a validated domain of `awake | asleep` and a default of `awake`. It resolves

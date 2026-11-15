@@ -14,7 +14,7 @@ source_hashes:
   "config/aws_price_book.yaml": "sha256:428e6099d0a5d2d985c8675b6f382a30403ef9690464f75dff192cc60199ba19"
   "config/cost_exceptions.yaml": "sha256:de8e6133251fea495e15437cf890bdbdea491ff41422dc48a1b7d925a09c72da"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:072313f747f4cb1f6f695112090b7e8942c691d94731908f68987da6e03e03d7"
+  "config/runtime_deployment.yaml": "sha256:1804416eb007538b602b287d7cea226871d2571578d182e0ab89697bf27806ff"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/profiles.tf": "sha256:3dca37890ae8fe1f354b0fc33d137224373c8ba6ceca80b6bb96c321a675d371"
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"

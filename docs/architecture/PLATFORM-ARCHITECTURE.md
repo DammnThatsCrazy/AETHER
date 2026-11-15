@@ -74,8 +74,9 @@ reviewed_source_commits:
   - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; the Profile360 slot statements here are updated.'}
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; this document needs no other change.'}
   - {'commit': '5dcf75ba', 'reason': 'Reviewed 5dcf75ba: the contract generator now types freshnessPolicy.slots and states per-slot maximum ages in the surface catalog. Generated-output typing only; this document needs no change.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
-  "packages/shared/": "sha256:ea40ae47490b3a4be6e917c03f6698c380b6dc5f48ba651814bf45bd538685bc"
+  "packages/shared/": "sha256:c1574dda66ac78623b29526539b985079e65e1ebd006acf5baa4939c32d0e952"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:3438710d537a48fe068478cfe3170255a9decfec1d81adecabeabd03b3766ec7"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
@@ -701,7 +702,8 @@ remains degraded while its partial-implementation limits stand.
 Profile360's required `value_summary` slot now binds to Economic360's exact
 tenant-scoped entity and Agent summary/evidence, and for entity subjects joins
 Outcome360 outcomes recorded for the same-id human (`user`) subject. Freshness is
-evaluated against the `economic_facts` watermark (24 hours). Attribution of
+evaluated against the `economic_facts` (computed economic results) and
+`ai_execution_facts` watermarks (24 hours; both must be current). Attribution of
 outcomes to economic facts and producer coverage remain unresolved, so it also
 remains degraded.
 Profile360's required `relationships` slot now reads Relationship360 graph-ledger

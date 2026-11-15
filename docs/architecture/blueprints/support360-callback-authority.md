@@ -20,8 +20,9 @@ reviewed_source_commits:
     reason: "Reviewed the current Support360 registry, callback authority, provider, routes, and focused tests. The callback slot contract remains as documented; later provider joins for other Support360 slots do not change callback schedule or event semantics."
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
   - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; this document needs no other change.'}
+  - {'commit': '547276e8', 'reason': 'Reviewed f28b09f3..547276e8 (Codex review follow-ups on #882): expiring, releasable objective-repair lease; Profile360 value freshness bound to computed economic results and AI execution facts (conversions no longer advance it); full staging Access Kit MCP state carried through lifecycle wake/sleep plans with a stricter Terraform agreement guard; W3 leak check across slot states and admin key for reconciliation. Docs describing these behaviors are updated; the rest need no change.'}
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:988f8838869a01d7e1613a38d42d1d3105ba1828b14d54db331c4a80a95fe473"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:683c8355a25835c0564e9755f2ddfc29384afe77cbacf0cd82927a02393fa534"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/journeys/support360/callbacks.py": "sha256:839b7619b305ae54cf0b8f384adeab91ab7ffd28d1d1976e4d40fadd068b173b"
   "services/api/journeys/support360/cases.py": "sha256:34c94f68a108fe323e0bb8b6aa34e68dc8b988f003ca9e9191e3fcde7c5caa60"

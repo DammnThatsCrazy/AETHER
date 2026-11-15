@@ -8,7 +8,7 @@ status: experimental
 since_version: "0.1.0"
 source_files: [packages/shared/contracts/intelligence-projection-registry.json]
 source_hashes:
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:988f8838869a01d7e1613a38d42d1d3105ba1828b14d54db331c4a80a95fe473"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:683c8355a25835c0564e9755f2ddfc29384afe77cbacf0cd82927a02393fa534"
 ---
 
 # 360 System Blueprint
@@ -36,8 +36,11 @@ data. `services/api/shared/freshness/source_watermarks.py` keeps one
 watermark per (tenant, canonical authority). The owning writers advance it
 monotonically after each successful write: analytics events, delegation
 grants (`agent_access`), Silver comms facts, the graph mutation ledger
-(`relationship_facts`), location facts, conversions (`economic_facts`), and
-Risk360 assessments. A surface's `freshnessPolicy.slots` names each slot's
+(`relationship_facts`), location facts, computed economic results
+(`economic_facts`), AI execution facts (`ai_execution_facts`), and Risk360
+assessments. The value slots depend on both economic sources, matching what
+Economic360 reads for entity and Agent subjects; a tenant with no AI execution
+facts therefore reads `unknown`, never fresh. A surface's `freshnessPolicy.slots` names each slot's
 `maxAgeSeconds` and the watermarked authorities it depends on; the oldest of
 those watermarks decides the slot. Profile360 declares ten slots: sessions
 and communications 1 hour, risk 6 hours, relationships, agent delegations and
