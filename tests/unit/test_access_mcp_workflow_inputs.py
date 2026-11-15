@@ -172,3 +172,20 @@ def test_workflow_invokes_validator_and_passes_same_path_to_terraform() -> None:
 def test_task_definition_pins_access_mcp_image_by_digest() -> None:
     module = (ROOT / "infra" / "aws" / "terraform" / "modules" / "access_mcp" / "main.tf").read_text()
     assert 'image     = "${var.ecr_repository_url}@${var.image_digest}"' in module
+
+
+def test_client_registration_requires_oauth() -> None:
+    with pytest.raises(ValueError, match="enable_access_mcp_dcr requires enable_access_mcp_oauth"):
+        _validate(enable_dcr="true", enable_oauth="false")
+    _validate(enable_dcr="true", enable_oauth="true")
+    with pytest.raises(ValueError, match="enable_access_mcp_dcr"):
+        _validate(enable_dcr="maybe", enable_oauth="true")
+
+
+def test_promotion_workflow_passes_the_registration_opt_in() -> None:
+    workflow = _workflow("terraform-promote.yml")
+    dispatch = workflow.get("on", workflow.get(True))
+    assert dispatch["workflow_dispatch"]["inputs"]["enable_access_mcp_dcr"]["default"] is False
+    text = (ROOT / ".github/workflows/terraform-promote.yml").read_text()
+    assert "TF_VAR_enable_access_mcp_dcr: ${{ inputs.enable_access_mcp_dcr }}" in text
+    assert "ENABLE_ACCESS_MCP_DCR: ${{ inputs.enable_access_mcp_dcr }}" in text

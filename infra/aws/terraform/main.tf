@@ -771,6 +771,8 @@ module "auth0" {
   environment      = var.environment
   api_audience     = var.auth0_api_audience
   mcp_resource_uri = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+  # Self-registration for MCP hosts (DCR / CIMD), read-only by default grant.
+  enable_mcp_client_registration = var.enable_access_mcp_dcr
 
   # Per-PR previews (pr-<N>.<preview app domain>) sign in against the same
   # staging Auth0 application; Auth0 accepts a leading subdomain wildcard.

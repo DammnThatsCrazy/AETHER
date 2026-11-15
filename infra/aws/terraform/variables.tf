@@ -97,6 +97,16 @@ variable "enable_access_mcp_oauth" {
   }
 }
 
+variable "enable_access_mcp_dcr" {
+  type        = bool
+  description = "Opt in to MCP client self-registration (Auth0 Dynamic Client Registration and Client ID Metadata Documents). Registered hosts are third-party clients whose only access is a read-only default grant on the MCP audience. Requires enable_access_mcp_oauth."
+  default     = false
+  validation {
+    condition     = !var.enable_access_mcp_dcr || var.enable_access_mcp_oauth
+    error_message = "enable_access_mcp_dcr requires enable_access_mcp_oauth."
+  }
+}
+
 variable "enable_access_continuations" {
   type        = bool
   description = "Opt in to the existing tenant continuation authority on the API task for bounded Access Kit create/get calls. Defaults off."

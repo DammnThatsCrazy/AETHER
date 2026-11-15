@@ -1704,7 +1704,21 @@ PILOT_AUTH0_MUTABLE_ADDRESSES = frozenset({
     "module.auth0.auth0_client_credentials.aether_cli_public",
     "module.auth0.auth0_client_grant.aether_cli_api",
     "module.auth0.auth0_connection_client.aether_cli_db",
+    # Hosted Access Kit MCP OAuth (owner-approved for design-partner staging
+    # certification): the MCP audience and its single read scope, the tenant
+    # client-registration flags, the read-only third-party default grant, and
+    # the DB connection's domain-level flag that lets registered hosts sign in.
+    # Each is created only by its explicit opt-in; deletion or replacement
+    # stays a destructive violation.
+    "module.auth0.auth0_resource_server.access_mcp[0]",
+    "module.auth0.auth0_resource_server_scope.access_mcp_read[0]",
+    "module.auth0.auth0_tenant.access_mcp_client_registration[0]",
+    "module.auth0.auth0_client_grant.access_mcp_third_party_read[0]",
 })
+# The shared DB connection may change in pilot only to flip its domain-level
+# flag for MCP client registration; any other attribute change is out of scope.
+PILOT_AUTH0_DOMAIN_CONNECTION_ADDRESS = "module.auth0.auth0_connection.database"
+PILOT_AUTH0_DOMAIN_CONNECTION_ATTRIBUTES = frozenset({"is_domain_connection"})
 PILOT_AUTH0_STATE_ONLY_REMOVALS = frozenset({
     "module.auth0.auth0_connection_clients.aether_db",
     "module.auth0.auth0_connection_clients.kyber_db",
@@ -1976,6 +1990,16 @@ def pilot_plan_safety_violations(plan: dict[str, Any]) -> dict[str, list[str]]:
         if address.startswith("module.auth0.") and actions != ["no-op"]:
             if (address in PILOT_AUTH0_STATE_ONLY_REMOVALS
                     and actions == ["forget"]):
+                continue
+            if address == PILOT_AUTH0_DOMAIN_CONNECTION_ADDRESS and actions == ["update"]:
+                before = change.get("before") or {}
+                after = change.get("after") or {}
+                changed = {
+                    key for key in set(before) | set(after)
+                    if before.get(key) != after.get(key)
+                }
+                if not changed or not changed <= PILOT_AUTH0_DOMAIN_CONNECTION_ATTRIBUTES:
+                    violations["pilot.auth0_scope"].append(address)
                 continue
             if address not in PILOT_AUTH0_MUTABLE_ADDRESSES:
                 violations["pilot.auth0_scope"].append(address)

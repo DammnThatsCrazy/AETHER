@@ -1439,3 +1439,40 @@ def test_pilot_may_create_the_aether_cli_auth0_path_but_never_destroy_it():
     assert replaced.get("pilot.auth0_destructive_change") == [cli[0]]
     kyber = MODULE.pilot_plan_safety_violations(plan(("module.auth0.auth0_client.kyber", ["update"])))
     assert kyber.get("pilot.auth0_scope") == ["module.auth0.auth0_client.kyber"]
+
+
+def test_pilot_allows_mcp_oauth_and_registration_auth0_resources_but_not_deletion():
+    mcp = (
+        "module.auth0.auth0_resource_server.access_mcp[0]",
+        "module.auth0.auth0_resource_server_scope.access_mcp_read[0]",
+        "module.auth0.auth0_tenant.access_mcp_client_registration[0]",
+        "module.auth0.auth0_client_grant.access_mcp_third_party_read[0]",
+    )
+
+    def plan(*changes):
+        return {"resource_changes": [
+            {"address": address, "type": address.split(".")[2].split("[")[0], "change": change}
+            for address, change in changes
+        ]}
+
+    created = MODULE.pilot_plan_safety_violations(plan(*[(a, {"actions": ["create"]}) for a in mcp]))
+    assert not created.get("pilot.auth0_scope")
+    assert not created.get("pilot.auth0_destructive_change")
+    deleted = MODULE.pilot_plan_safety_violations(plan((mcp[3], {"actions": ["delete"]})))
+    assert deleted.get("pilot.auth0_destructive_change") == [mcp[3]]
+
+    db = "module.auth0.auth0_connection.database"
+    domain_only = MODULE.pilot_plan_safety_violations(plan((db, {
+        "actions": ["update"],
+        "before": {"name": "aether-staging-db", "is_domain_connection": False},
+        "after": {"name": "aether-staging-db", "is_domain_connection": True},
+    })))
+    assert not domain_only.get("pilot.auth0_scope")
+    other_change = MODULE.pilot_plan_safety_violations(plan((db, {
+        "actions": ["update"],
+        "before": {"name": "aether-staging-db", "is_domain_connection": False, "show_as_button": False},
+        "after": {"name": "aether-staging-db", "is_domain_connection": True, "show_as_button": True},
+    })))
+    assert other_change.get("pilot.auth0_scope") == [db]
+    replaced = MODULE.pilot_plan_safety_violations(plan((db, {"actions": ["delete", "create"]})))
+    assert replaced.get("pilot.auth0_scope") == [db]

@@ -19,6 +19,16 @@ variable "mcp_resource_uri" {
   }
 }
 
+variable "enable_mcp_client_registration" {
+  type        = bool
+  description = "Open MCP client registration (Dynamic Client Registration and Client ID Metadata Documents) with a read-only third-party default grant on the MCP audience. Requires mcp_resource_uri."
+  default     = false
+  validation {
+    condition     = !var.enable_mcp_client_registration || var.mcp_resource_uri != ""
+    error_message = "enable_mcp_client_registration requires remote MCP OAuth (mcp_resource_uri)."
+  }
+}
+
 # ── Aether SPA ────────────────────────────────────────────────────────────
 
 variable "aether_callback_urls" {
