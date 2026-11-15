@@ -540,3 +540,125 @@ def test_a_kinds_filtered_run_preserves_baselines_of_detectors_it_did_not_run():
     # A detector that ran and measured nothing still decays its section.
     measured = update_baseline(learned, **{**result.baseline_delta, "ngram_rates": {}})
     assert measured["ngram_rate"].get("browse>buy", 0) < 1000.0
+
+
+# ── Review follow-ups: graph fidelity, aging, cycle counting, revocation ────
+
+def test_pattern_graph_draws_only_observed_agent_principal_pairs_and_interactions():
+    from intelligence.pattern_discovery.graphview import pattern_subgraph
+
+    result = run_discovery(T, _agent_world(), baseline=empty_baseline(T),
+                           kinds=[KIND_AGENT_TOOL_SIGNATURE, KIND_AGENT_INTERACTION])
+    tools = next(r for r in result.records if r["kind"] == KIND_AGENT_TOOL_SIGNATURE)
+    acts = {(e["source"], e["target"]) for e in pattern_subgraph(tools)["edges"] if e["type"] == "ACTS_FOR"}
+    # Six independently owned agents: six pairs, not the 36-edge cartesian product.
+    assert acts == {(f"agent:play{a}", f"user:person{a}") for a in range(6)}
+
+    ring = next(r for r in result.records if r["kind"] == KIND_AGENT_INTERACTION)
+    links = {(e["source"], e["target"]) for e in pattern_subgraph(ring)["edges"]
+             if e["source"].startswith("agent:") and e["target"].startswith("agent:")}
+    assert links == {(f"agent:ring{a}", f"agent:ring{(a + 1) % 4}") for a in range(4)}
+
+
+def test_agent_interaction_graph_is_the_observed_star_not_a_sorted_chain():
+    from intelligence.pattern_discovery.graphview import pattern_subgraph
+
+    rows = [ev(k, "agent_id", "hub", "agent_payment", BASE + timedelta(minutes=k),
+               counterparty_agent=spoke, principal_id="ownerH")
+            for k, spoke in enumerate(("spokeB", "spokeC", "spokeD"), start=1)]
+    rows += [ev(10 + k, "agent_id", spoke, "agent_started", BASE + timedelta(minutes=10 + k), principal_id=f"owner{k}")
+             for k, spoke in enumerate(("spokeB", "spokeC", "spokeD"))]
+    result = run_discovery(T, rows, baseline=empty_baseline(T), kinds=[KIND_AGENT_INTERACTION])
+    star = next(r for r in result.records if r["kind"] == KIND_AGENT_INTERACTION)
+    links = {(e["source"], e["target"]) for e in pattern_subgraph(star)["edges"]
+             if e["source"].startswith("agent:") and e["target"].startswith("agent:")}
+    assert links == {("agent:hub", f"agent:{s}") for s in ("spokeB", "spokeC", "spokeD")}
+
+
+def test_principal_evidence_without_pairs_links_principals_to_the_pattern_only():
+    from intelligence.pattern_discovery.graphview import pattern_subgraph
+
+    legacy = {"pattern_id": "p", "kind": KIND_AGENT_TOOL_SIGNATURE, "status": "surfaced",
+              "affected_entity_keys": ["agent:a", "agent:b", "user:x", "user:y"],
+              "evidence": [{"type": "cross_principal_reuse", "detail": {"principals": ["user:x", "user:y"]}}]}
+    edges = pattern_subgraph(legacy)["edges"]
+    assert not [e for e in edges if e["type"] == "ACTS_FOR"]
+    assert {e["target"] for e in edges if e["type"] == "INVOLVES_PRINCIPAL"} == {"user:x", "user:y"}
+
+
+def test_cross_domain_with_too_few_inputs_counts_as_run_so_its_patterns_age():
+    result = run_discovery(T, normal_traffic(2, 2), baseline=empty_baseline(T),
+                           kinds=[KIND_SEQUENCE, KIND_CROSS_DOMAIN])
+    assert KIND_CROSS_DOMAIN in result.kinds_run
+    assert result.stats["detectors"]["cross_domain"]["skipped"] == "insufficient_inputs"
+
+
+def test_cycle_count_does_not_depend_on_the_retained_example_cap():
+    from intelligence.pattern_discovery.contracts import KIND_NOVEL_MOTIF
+
+    rows, i = [], 0
+    for ring in range(40):  # 40 disconnected, identically typed bidirectional triangles
+        members = [f"t{ring}_{k}" for k in range(3)]
+        for k, m in enumerate(members):
+            for other in (members[(k + 1) % 3], members[(k + 2) % 3]):
+                i += 1
+                rows.append(ev(i, "user_id", m, "invite_accepted", BASE + timedelta(seconds=i), invited_by=other))
+    result = run_discovery(T, rows, baseline=empty_baseline(T), kinds=[KIND_NOVEL_MOTIF])
+    cycles = {k: v for k, v in (result.baseline_delta.get("motif_counts") or {}).items() if k.startswith("cyc|")}
+    # Two traversal directions per triangle, each counted once per triangle.
+    assert cycles and all(v == 40 for v in cycles.values())
+
+
+@pytest.mark.asyncio
+async def test_deprecation_revokes_memberships_a_failed_projection_partly_wrote(monkeypatch):
+    applied, revoked = [], []
+
+    class _Gateway:
+        def __init__(self, graph_client=None):
+            pass
+
+        async def apply(self, intent):
+            applied.append(intent)
+            if len(applied) == 3:  # vertex, first membership, then the second membership fails
+                raise RuntimeError("graph write timed out")
+
+    monkeypatch.setattr("shared.graph.mutation_gateway.GraphMutationGateway", _Gateway)
+
+    def _revocation(**kw):
+        revoked.append(kw["subject_id"])
+        return {"revoke": kw["subject_id"]}
+
+    monkeypatch.setattr("shared.graph.mutation_intents.revocation_intent", _revocation)
+    svc = _svc(normal_traffic(2, 2) + fraud_ring(2))
+    await svc.run(T)
+    pid = (await svc.list_patterns(T, kind=KIND_SHARED_ATTRIBUTE))["items"][0]["pattern_id"]
+    await svc.review(T, pid, reviewer_id="a", verdict="malicious", reason="card farm confirmed by ops")
+    promoted = await svc.promote(T, pid, reviewer_id="a", reason="graph and risk promotion")
+    assert promoted["promotion"]["graph_projection"]["status"] == "failed"
+    deprecated = await svc.deprecate(T, pid, actor="a", reason="ring dismantled; retire the pattern")
+    report = deprecated["promotion"]["graph_revocation"]
+    assert report["from_projection"] == "failed" and report["revoked"] == 14 and len(revoked) == 14
+
+
+def test_cross_domain_alone_stays_unmeasured_so_composites_do_not_age():
+    result = run_discovery(T, normal_traffic(2, 2), baseline=empty_baseline(T), kinds=[KIND_CROSS_DOMAIN])
+    assert KIND_CROSS_DOMAIN not in result.kinds_run
+    assert result.stats["detectors"]["cross_domain"]["skipped"] == "no_constituent_detectors"
+
+
+def test_cycle_search_is_budgeted_on_dense_graphs(monkeypatch):
+    from intelligence.pattern_discovery.contracts import KIND_NOVEL_MOTIF
+    from intelligence.pattern_discovery.detectors import motifs
+
+    monkeypatch.setattr(motifs, "MAX_CYCLE_IDENTITIES", 50)
+    rows, i = [], 0
+    names = [f"d{k}" for k in range(12)]
+    for a in names:  # a complete invitation graph: combinatorially many cycles
+        for b in names:
+            if a != b:
+                i += 1
+                rows.append(ev(i, "user_id", a, "invite_accepted", BASE + timedelta(seconds=i), invited_by=b))
+    result = run_discovery(T, rows, baseline=empty_baseline(T), kinds=[KIND_NOVEL_MOTIF])
+    stats = result.stats["detectors"]["motifs"]
+    assert stats["cycles_truncated"] is True
+    assert stats["cycles"] <= 50

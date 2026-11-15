@@ -29,7 +29,7 @@ from .extraction import extract_events, extract_payload
 from .feed import (
     PatternViewerStateRepository, annotate_new, notify_new_patterns, resolve_since, summarize, whats_new,
 )
-from .graph import project_promotion, revoke_promotion, tenant_graph_edges
+from .graph import REVOCABLE_PROJECTIONS, project_promotion, revoke_promotion, tenant_graph_edges
 from .graphview import keys_for_ids, overlay, pattern_subgraph
 from .lenses import LENSES, SEGMENT_LENSES, lens_segment_key, lens_view
 from .ml import score_windows
@@ -547,7 +547,8 @@ class PatternDiscoveryService:
         Its Risk360 signals stay: they are attributed history the risk plane owns."""
         updated = await self.registry.mutate(tenant_id, pid,
                                              lambda row: apply_deprecation(row, actor=actor, reason=reason))
-        if updated is not None and (updated.get("promotion") or {}).get("graph_projection", {}).get("status") == "projected":
+        if updated is not None and ((updated.get("promotion") or {}).get("graph_projection") or {}).get(
+                "status") in REVOCABLE_PROJECTIONS:
             report = await revoke_promotion(updated, self._graph)
 
             def note(row: dict[str, Any]) -> dict[str, Any]:

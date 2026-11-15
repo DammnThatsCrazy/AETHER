@@ -120,6 +120,9 @@ async def project_promotion(pattern: dict[str, Any], risk_outcomes: list[dict[st
             "skipped_subjects": len(risk_outcomes) - len(members)}
 
 
+REVOCABLE_PROJECTIONS = ("projected", "failed")
+
+
 async def revoke_promotion(pattern: dict[str, Any], graph: Optional[Any] = None) -> dict[str, Any]:
     """Soft-revoke the membership edges of a promoted pattern being deprecated."""
     from shared.graph.graph import get_graph_client
@@ -128,16 +131,23 @@ async def revoke_promotion(pattern: dict[str, Any], graph: Optional[Any] = None)
 
     promotion = pattern.get("promotion") or {}
     projection = promotion.get("graph_projection") or {}
-    if projection.get("status") != "projected":
+    # A failed projection may have written some memberships before it stopped,
+    # so it is cleaned up too: every subject that received a signal is revoked.
+    if projection.get("status") not in REVOCABLE_PROJECTIONS:
         return {"status": "nothing_to_revoke"}
     graph = graph or get_graph_client()
-    vid = projection["vertex_id"]
-    revoked = 0
+    vid = projection.get("vertex_id") or cluster_vertex_id(pattern["pattern_id"])
+    revoked = failed = 0
     try:
         gateway = GraphMutationGateway(graph_client=graph)
-        for o in promotion.get("risk_signals") or []:
-            if o.get("status") != "written" or not o.get("subject_id"):
-                continue
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pattern_discovery.graph_revoke_failed",
+                       extra={"tenant_id": pattern.get("tenant_id"), "error_type": type(exc).__name__})
+        return {"status": "failed", "error_type": type(exc).__name__, "revoked": 0}
+    for o in promotion.get("risk_signals") or []:
+        if o.get("status") != "written" or not o.get("subject_id"):
+            continue
+        try:
             await gateway.apply(revocation_intent(
                 from_vertex_id=o["subject_id"], to_vertex_id=vid, edge_type=EDGE_TYPE,
                 reason="pattern_deprecated", tenant_id=pattern["tenant_id"], actor_id=ACTOR,
@@ -145,8 +155,10 @@ async def revoke_promotion(pattern: dict[str, Any], graph: Optional[Any] = None)
                 reason_code="pattern_deprecated",
             ))
             revoked += 1
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("pattern_discovery.graph_revoke_failed",
-                       extra={"tenant_id": pattern.get("tenant_id"), "error_type": type(exc).__name__})
-        return {"status": "failed", "error_type": type(exc).__name__, "revoked": revoked}
-    return {"status": "revoked", "revoked": revoked, "vertex_id": vid}
+        except Exception as exc:  # noqa: BLE001 - keep revoking the others
+            failed += 1
+            logger.warning("pattern_discovery.graph_revoke_failed",
+                           extra={"tenant_id": pattern.get("tenant_id"), "error_type": type(exc).__name__})
+    status = "revoked" if not failed else ("partial" if revoked else "failed")
+    return {"status": status, "revoked": revoked, "failed": failed, "vertex_id": vid,
+            "from_projection": projection.get("status")}
