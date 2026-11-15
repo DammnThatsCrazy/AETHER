@@ -94,6 +94,8 @@ export interface Diagnostics {
     queueDepth: number;
     lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
     manifestStatus: ManifestStatus;
+    /** True while the queue holds events and pauses sending after a 401/403. */
+    authPaused: boolean;
 }
 export declare class SDKHealthAgent {
     private readonly config;

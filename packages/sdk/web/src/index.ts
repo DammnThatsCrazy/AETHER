@@ -94,6 +94,8 @@ class AetherSDK implements AetherSDKInterface {
   private fingerprintCollector: DeviceFingerprintCollector | null = null;
   private plugins: AetherPlugin[] = [];
   private initialized = false;
+  /** Removes the SPA route hooks installed by setupSPATracking(). */
+  private spaTrackingTeardown: (() => void) | null = null;
   private debug = false;
   private _lastEmailHash: string | undefined = undefined;
   private healthAgent: SDKHealthAgent | null = null;
@@ -586,6 +588,8 @@ class AetherSDK implements AetherSDKInterface {
       document.removeEventListener('visibilitychange', this.journeyVisibilityHandler);
     }
     this.journeyVisibilityHandler = null;
+    this.spaTrackingTeardown?.();
+    this.spaTrackingTeardown = null;
     this.currentJourney = null;
     this.lastJourneyPauseAt = null;
     this.initialized = false;
@@ -901,7 +905,8 @@ class AetherSDK implements AetherSDKInterface {
         customHeaders: this.config.advanced?.customHeaders ?? {},
         manifestPublicKey: this.config.advanced?.manifestPublicKey ?? '',
         getDynamicState: () => ({
-          authValid: true,
+          // False while the queue is paused after the API rejected the key.
+          authValid: !(this.eventQueue?.isAuthPaused() ?? false),
           consentValid: this.consentModule?.hasConsent('analytics') ?? true,
           walletConnected: (this.identityManager?.getWallets().length ?? 0) > 0,
         }),
@@ -1504,9 +1509,21 @@ class AetherSDK implements AetherSDKInterface {
     };
     const origPush = history.pushState;
     const origReplace = history.replaceState;
-    history.pushState = (...args) => { origPush.apply(history, args); setTimeout(onRoute, 0); };
-    history.replaceState = (...args) => { origReplace.apply(history, args); setTimeout(onRoute, 0); };
-    window.addEventListener('popstate', () => { setTimeout(onRoute, 0); });
+    const patchedPush: History['pushState'] = (...args) => { origPush.apply(history, args); setTimeout(onRoute, 0); };
+    const patchedReplace: History['replaceState'] = (...args) => { origReplace.apply(history, args); setTimeout(onRoute, 0); };
+    const onPopState = () => { setTimeout(onRoute, 0); };
+    history.pushState = patchedPush;
+    history.replaceState = patchedReplace;
+    window.addEventListener('popstate', onPopState);
+    // Undone in destroy(), so a destroy()/init() cycle (for example the React
+    // provider restarting for a new key) does not stack a second set of hooks
+    // and record every navigation twice. The history methods are restored only
+    // if nothing has wrapped them since, so another library's patch survives.
+    this.spaTrackingTeardown = () => {
+      window.removeEventListener('popstate', onPopState);
+      if (history.pushState === patchedPush) history.pushState = origPush;
+      if (history.replaceState === patchedReplace) history.replaceState = origReplace;
+    };
   }
 
   private log(level: 'debug' | 'info' | 'warn' | 'error', ...args: unknown[]): void {

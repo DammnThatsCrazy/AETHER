@@ -129,6 +129,8 @@ export interface Diagnostics {
   queueDepth: number;
   lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
   manifestStatus: ManifestStatus;
+  /** True while the queue holds events and pauses sending after a 401/403. */
+  authPaused: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -265,11 +267,20 @@ export class SDKHealthAgent {
 
   /** Return current diagnostics for the SDK. */
   getDiagnostics(): Diagnostics {
+    // The event queue owns the real drop counters (queue_full evictions,
+    // consent filtering) and the credential-pause state, so forward them;
+    // per-reason counts take the larger of the two sources.
+    const queue = this.eventQueue.getDiagnostics();
+    const droppedEvents = { ...this.droppedCounts };
+    for (const [reason, count] of Object.entries(queue.droppedEvents) as [keyof DroppedEventCounts, number][]) {
+      droppedEvents[reason] = Math.max(droppedEvents[reason] ?? 0, count);
+    }
     return {
-      droppedEvents: { ...this.droppedCounts },
+      droppedEvents,
       queueDepth: this.eventQueue.size,
       lastFlushStatus: this.lastFlushStatus,
       manifestStatus: this.manifestStatus,
+      authPaused: queue.authPaused,
     };
   }
 

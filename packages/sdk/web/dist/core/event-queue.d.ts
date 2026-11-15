@@ -39,6 +39,8 @@ interface QueueConfig {
 }
 export declare class EventQueue {
     private queue;
+    /** localStorage key for this install's persisted queue (see installStorageKey). */
+    private readonly storageKey;
     private config;
     private flushTimer;
     private isFlushing;

@@ -10,6 +10,24 @@ import { EVENT_CONSENT_PURPOSE } from './generated-consent-map';
 export type { BatchHealth } from '../types';
 
 const QUEUE_STORAGE_KEY = 'event_queue';
+
+/**
+ * Persisted queues are namespaced by install identity (endpoint, key, site), so
+ * an instance initialized for a different install never restores, and then
+ * sends under its own credentials, another install's backlog. That happens
+ * when the React provider restarts the SDK for a new key or site while events
+ * are held after a 401/403. FNV-1a is enough here: the hash only partitions
+ * storage, and keeps the raw key out of the storage key name.
+ */
+function installStorageKey(endpoint: string, apiKey: string, siteId?: string): string {
+  const identity = `${endpoint}|${apiKey}|${siteId ?? ''}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < identity.length; i++) {
+    hash ^= identity.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${QUEUE_STORAGE_KEY}:${hash.toString(16).padStart(8, '0')}`;
+}
 const MAX_STORED_EVENTS = 1000;
 const SDK_VERSION = '0.1.0-alpha.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 
@@ -201,6 +219,8 @@ function scrubSensitiveFields(props: Record<string, unknown>): Record<string, un
 
 export class EventQueue {
   private queue: AetherEvent[] = [];
+  /** localStorage key for this install's persisted queue (see installStorageKey). */
+  private readonly storageKey: string;
   private config: QueueConfig;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private isFlushing = false;
@@ -240,6 +260,7 @@ export class EventQueue {
       onAttempt: config.onAttempt,
       onBatchResult: config.onBatchResult,
     };
+    this.storageKey = installStorageKey(config.endpoint, config.apiKey, config.siteId);
     this.restoreQueue();
     this.startFlushTimer();
     this.setupLifecycleHandlers();
@@ -383,7 +404,11 @@ export class EventQueue {
         this.config.onError?.(error, allowedEvents);
         this.lastFlushStatus = 'failed';
       } else {
+        // Transient failure (network, exhausted 5xx/429, ambiguous 2xx): the
+        // batch goes back to the head. Events enqueued while it was in flight
+        // may push the queue past its bound, so the cap applies here too.
         this.queue.unshift(...allowedEvents);
+        this.enforceCap();
         this.persistQueue();
         this.config.onError?.(error as Error, allowedEvents);
         this.lastFlushStatus = 'pending';
@@ -604,14 +629,14 @@ export class EventQueue {
   }
 
   private persistQueue(): void {
-    storage.set(QUEUE_STORAGE_KEY, this.queue.slice(0, MAX_STORED_EVENTS));
+    storage.set(this.storageKey, this.queue.slice(0, MAX_STORED_EVENTS));
   }
 
   private restoreQueue(): void {
-    const stored = storage.get<AetherEvent[]>(QUEUE_STORAGE_KEY);
+    const stored = storage.get<AetherEvent[]>(this.storageKey);
     if (stored && Array.isArray(stored)) {
       this.queue = [...stored, ...this.queue];
-      storage.remove(QUEUE_STORAGE_KEY);
+      storage.remove(this.storageKey);
       this.enforceCap();
     }
   }

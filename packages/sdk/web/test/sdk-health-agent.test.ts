@@ -68,4 +68,29 @@ describe('SDKHealthAgent', () => {
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(headerSpy[idx]['X-Gateway-Token']).toBe('gw-123');
   });
+
+  it('forwards the event queue\'s drop counters and credential-pause state', () => {
+    const queue = {
+      size: 2,
+      getDiagnostics: () => ({
+        droppedEvents: {
+          consent_denied: 1, schema_invalid: 0, queue_full: 4, offline_expired: 0, retry_exhausted: 0,
+          manifest_blocked: 0, unsupported_sdk_version: 0, payload_too_large: 0, auth_failed: 0, shutdown_unflushed: 0,
+        },
+        queueDepth: 2,
+        lastFlushStatus: 'pending',
+        authPaused: true,
+      }),
+    } as unknown as import('../src/core/event-queue').EventQueue;
+    const agent = new SDKHealthAgent(
+      { endpoint: 'https://api.test', apiKey: 'k', sdkId: 'web_test' },
+      queue,
+    );
+
+    const d = agent.getDiagnostics();
+    expect(d.droppedEvents.queue_full).toBe(4);
+    expect(d.droppedEvents.consent_denied).toBe(1);
+    expect(d.authPaused).toBe(true);
+    expect(d.queueDepth).toBe(2);
+  });
 });

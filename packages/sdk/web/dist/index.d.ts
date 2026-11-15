@@ -27,6 +27,8 @@ declare class AetherSDK implements AetherSDKInterface {
     private fingerprintCollector;
     private plugins;
     private initialized;
+    /** Removes the SPA route hooks installed by setupSPATracking(). */
+    private spaTrackingTeardown;
     private debug;
     private _lastEmailHash;
     private healthAgent;

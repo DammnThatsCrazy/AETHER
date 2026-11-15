@@ -720,4 +720,52 @@ describe('EventQueue', () => {
       q2.destroy();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Persisted queues are scoped to one install (endpoint + key + site)
+  // -------------------------------------------------------------------------
+
+  describe('install-scoped persistence', () => {
+    it('never restores another install\'s backlog, and restores its own', () => {
+      globalThis.fetch = vi.fn(async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+      const a = makeQueue({ apiKey: 'pk_a', siteId: 'site_a' });
+      a.enqueue(makeTrackEvent());
+      a.destroy(); // persists under site_a's key
+
+      const b = makeQueue({ apiKey: 'pk_b', siteId: 'site_b' });
+      expect(b.size).toBe(0); // a different install must not inherit it
+      b.destroy();
+
+      const again = makeQueue({ apiKey: 'pk_a', siteId: 'site_a' });
+      expect(again.size).toBe(1);
+      again.destroy();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // The cap also holds when a transient failure puts a batch back
+  // -------------------------------------------------------------------------
+
+  describe('queue bound on transient requeue', () => {
+    it('evicts down to maxQueueSize when a failed batch returns while new events arrived', async () => {
+      const q = makeQueue({
+        maxQueueSize: 3,
+        batchSize: 1000,
+        flushInterval: 1e9,
+        retry: { maxRetries: 0, baseDelay: 1, maxDelay: 1, backoffMultiplier: 1 },
+      });
+      for (let i = 0; i < 3; i++) q.enqueue(makeTrackEvent());
+
+      let reject!: (r: Response) => void;
+      globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { reject = resolve; })) as unknown as typeof fetch;
+      const inFlight = q.flush();                       // takes the 3 events
+      for (let i = 0; i < 3; i++) q.enqueue(makeTrackEvent()); // 3 more arrive meanwhile
+      reject({ ok: false, status: 503, statusText: 'Service Unavailable', headers: new Headers() } as Response);
+      await inFlight;
+
+      expect(q.size).toBe(3);
+      expect(q.getDiagnostics().droppedEvents.queue_full).toBe(3);
+      q.destroy();
+    });
+  });
 });

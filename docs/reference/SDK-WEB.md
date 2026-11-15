@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:e3f611f91767c9733bb1f8338f7531b28aa64ed94f8f4a315befbeb795ab290c"
+  "packages/sdk/web/src/index.ts": "sha256:34152044673a01707a72971092b7e63305964e77d4ca925fedeeb5f80a79d4a1"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
@@ -611,6 +611,10 @@ interface AetherConfig {
   already persisted for the next page load.
 - **Other `4xx`** (malformed or rejected batch) are terminal: the batch is
   dropped and reported through `onError`, so it cannot block later events.
+- **Persistence is per install.** The queue saved to `localStorage` on unload
+  is keyed by endpoint, key and site, so initializing with a different key or
+  site (for example the React provider restarting) never picks up and sends
+  another install's backlog.
 
 ## Plugins
 

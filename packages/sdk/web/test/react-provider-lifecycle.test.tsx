@@ -5,9 +5,13 @@
 // restart on identity-config changes only, cancellation of a pending import,
 // and cleanup on unmount. The SDK singleton is mocked; the React wrapper is
 // what is under test.
-import { StrictMode } from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { StrictMode, type ReactElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Tell React this is a test environment so act() flushes effects synchronously.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const sdk = vi.hoisted(() => ({
   init: vi.fn(),
@@ -18,6 +22,30 @@ const sdk = vi.hoisted(() => ({
 vi.mock('@olympuslabs/aether-web', () => ({ default: sdk }));
 
 import { AetherProvider, useAether } from '../src/react';
+
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+
+function render(ui: ReactElement) {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => root!.render(ui));
+  return {
+    rerender: (next: ReactElement) => act(() => root!.render(next)),
+    unmount: () => {
+      act(() => root!.unmount());
+      root = null;
+    },
+  };
+}
+
+function cleanup() {
+  if (root) act(() => root!.unmount());
+  root = null;
+  container?.remove();
+  container = null;
+}
 
 function Child() {
   useAether();
@@ -48,7 +76,7 @@ describe('AetherProvider lifecycle', () => {
       </StrictMode>,
     );
     await settle();
-    expect(screen.getByText('ready')).toBeTruthy();
+    expect(container?.textContent).toBe('ready');
     expect(sdk.init).toHaveBeenCalledTimes(1);
     expect(sdk.init).toHaveBeenCalledWith({ apiKey: 'pk_1', siteId: 'site_1' });
   });
