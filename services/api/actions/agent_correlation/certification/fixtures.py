@@ -14,6 +14,9 @@ from actions.agent_correlation.mappers._common import _SHOPIFY_GID, _STRIPE_ID
 from shared.integration_contracts.correlation_token import extract_correlation_tokens
 
 FIXTURE_SCHEMA_VERSION: Literal["1"] = "1"
+# Lists longer than this are truncated; the record-time check that scrubbed and
+# raw payloads map identically fails if truncation drops anything mapped.
+MAX_LIST_ITEMS = 200
 FIXTURE_ROOT = Path(__file__).resolve().parents[3] / "tests" / "agent_correlation" / "fixtures" / "sandbox"
 
 Origin = Literal["sandbox_recorded"]
@@ -97,6 +100,10 @@ _SCRUB: dict[tuple[str, str], Any] = {
         "id": 1, "updatedAt": 1, "createdAt": 1, "note": "*text", "tags": "*text",
         "customAttributes": [{"key": 1, "value": "*text"}], "app": {"id": 1}, "staffMember": {"id": 1},
     },
+    ("shopify", "access_grant_graphql"): {
+        "observed_at": 1,
+        "installation": {"id": 1, "app": {"id": 1}, "accessScopes": [{"handle": 1}]},
+    },
     ("stripe", "event"): {
         "id": 1, "type": 1, "created": 1, "livemode": 1, "account": 1, "context": 1, "api_version": 1,
         "data": {"object": {"object": 1, "id": 1, "payment_intent": 1, "charge": 1, "status": 1,
@@ -137,7 +144,7 @@ def _apply(spec: Any, value: Any) -> Any:
     if isinstance(spec, list):
         if not isinstance(value, list):
             return []
-        return [_apply(spec[0], item) for item in value[:50]]
+        return [_apply(spec[0], item) for item in value[:MAX_LIST_ITEMS]]
     if isinstance(spec, dict):
         if not isinstance(value, Mapping):
             return None

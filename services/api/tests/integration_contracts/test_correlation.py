@@ -240,3 +240,13 @@ def test_new_vendor_joins_through_existing_rules() -> None:
     agent_task = _obs("task-1", "agent_runtime", family="some_agent_runtime", correlation_tokens=(token,))
     verdict = correlate(spend_grant, agent_task, token_verifier=VERIFY)
     assert verdict.status == "linked"
+
+
+def test_standing_authority_matches_later_acts_but_never_earlier_ones() -> None:
+    grant = _obs("grant-1", "authority_issuer", at=T0, actor_refs=("shopify_app:9",))
+    later = _obs("order-1", "system_of_record", at=T0 + timedelta(days=30), actor_refs=("shopify_app:9",))
+    earlier = _obs("order-0", "system_of_record", at=T0 - timedelta(minutes=1), actor_refs=("shopify_app:9",))
+    assert correlate(grant, later).key_kind == "provider_actor_ref"
+    assert correlate(grant, later).status == "candidate"
+    verdict = correlate(earlier, grant)
+    assert verdict.key_kind != "provider_actor_ref"

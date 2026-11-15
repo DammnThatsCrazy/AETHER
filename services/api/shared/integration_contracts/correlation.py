@@ -282,7 +282,15 @@ def correlate(
         ):
             matched.append("provider_signed_request")
 
-    if "provider_actor_ref" in eligible and near and set(left.actor_refs) & set(right.actor_refs):
+    # A grant stands until revoked, so an authority record matches a later act
+    # by the same actor however much later; it never matches an earlier act,
+    # because a grant observed after the act does not show it was in effect.
+    if left.source_role == "authority_issuer" or right.source_role == "authority_issuer":
+        authority, other = (left, right) if left.source_role == "authority_issuer" else (right, left)
+        actor_in_time = authority.occurred_at <= other.occurred_at
+    else:
+        actor_in_time = near
+    if "provider_actor_ref" in eligible and actor_in_time and set(left.actor_refs) & set(right.actor_refs):
         matched.append("provider_actor_ref")
 
     if "infrastructure_ref" in eligible and near and set(left.infrastructure_refs) & set(right.infrastructure_refs):

@@ -22,7 +22,9 @@ import { AetherServerSDK } from '@olympuslabs/aether-server';
 // Server-side only: the write key is a secret. Never ship it to a browser or app.
 const aether = new AetherServerSDK({
   writeKey: process.env.AETHER_WRITE_KEY!,
-  consent: { analytics: true },
+  // order_completed requires the `commerce` purpose (see the event registry);
+  // grant only purposes you have actually collected consent for.
+  consent: { analytics: true, commerce: true },
   application: { name: 'checkout-api', environment: 'production' },
 });
 
