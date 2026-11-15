@@ -638,3 +638,38 @@ def test_outcome_store_is_a_protocol() -> None:
     import typing
 
     assert typing.Protocol in OutcomeStore.__bases__
+
+
+@pytest.mark.asyncio
+async def test_entity_subject_reads_only_same_id_human_outcomes(monkeypatch):
+    """Profile360 value_summary: an entity request is a canonical human."""
+    import shared.backend_interpretation.stores as truth_stores
+
+    backing = InMemoryStore("outcome-truth-entity-test")
+    monkeypatch.setattr(truth_stores, "_kv", lambda _name: backing)
+    truth_store = OutcomeTruthStore()
+
+    def record(outcome_id: str, tenant_id: str, kind: str, subject_id: str) -> OutcomeTruthRecord:
+        return OutcomeTruthRecord(
+            outcome_id=outcome_id,
+            tenant_id=tenant_id,
+            definition_ref="purchase_recorded",
+            subject=EntityRef(kind=kind, id=subject_id),
+            state="final",
+            evidence_refs=[EvidenceRef(id=f"ev-{outcome_id}", type="event", source="measurement")],
+            source_event_ids=[f"source-{outcome_id}"],
+            observed_at="2026-10-17T12:00:00Z",
+            updated_at="2026-10-17T12:00:01Z",
+        )
+
+    for item in [
+        record("o-human", "tenant-a", "user", "ent-1"),
+        record("o-agent-same-id", "tenant-a", "agent", "ent-1"),
+        record("o-other-human", "tenant-a", "user", "ent-2"),
+        record("o-other-tenant", "tenant-b", "user", "ent-1"),
+    ]:
+        await truth_store.upsert(item)
+
+    reader = OutcomeTruthStoreReader(store=truth_store)
+    outcomes = await reader.list_outcomes("tenant-a", ProjectionSubject(kind="entity", id="ent-1"))
+    assert [outcome.id for outcome in outcomes] == ["o-human"]

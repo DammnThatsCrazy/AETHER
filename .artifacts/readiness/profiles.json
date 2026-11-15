@@ -7,6 +7,7 @@
       "title": "Local development",
       "disposition": "BLOCKED_BY_CODE",
       "required_features": [
+        "access-kit",
         "agentic-x402",
         "backend-api",
         "campaign-intelligence",
@@ -46,8 +47,8 @@
       "coverage": {
         "implementation": {
           "ok": 27,
-          "of": 34,
-          "percent": 79.4
+          "of": 35,
+          "percent": 77.1
         },
         "productionization": {
           "ok": 0,
@@ -56,22 +57,22 @@
         },
         "activation": {
           "ok": 16,
-          "of": 34,
-          "percent": 47.1
+          "of": 35,
+          "percent": 45.7
         },
         "environment_evidence": {
-          "ok": 34,
-          "of": 34,
+          "ok": 35,
+          "of": 35,
           "percent": 100.0
         },
         "dependency_satisfaction": {
-          "ok": 34,
-          "of": 34,
+          "ok": 35,
+          "of": 35,
           "percent": 100.0
         },
         "operational_ownership": {
-          "ok": 33,
-          "of": 34,
+          "ok": 34,
+          "of": 35,
           "percent": 97.1
         },
         "business_readiness": {
@@ -81,6 +82,7 @@
         }
       },
       "feature_dispositions": {
+        "access-kit": "BLOCKED_BY_CODE",
         "agentic-x402": "TECHNICALLY_RELEASE_ELIGIBLE",
         "backend-api": "TECHNICALLY_RELEASE_ELIGIBLE",
         "campaign-intelligence": "TECHNICALLY_RELEASE_ELIGIBLE",
@@ -118,6 +120,7 @@
         "tenant-import-engine": "TECHNICALLY_RELEASE_ELIGIBLE"
       },
       "hard_blockers": [
+        "access-kit: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
         "card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
         "card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor",
         "card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests",
@@ -173,6 +176,7 @@
         "tenant-import-engine"
       ],
       "experimental_features": [
+        "access-kit",
         "agentic-x402",
         "card-linked-payments",
         "data-lake-feeders",
@@ -223,6 +227,7 @@
         }
       },
       "feature_dispositions": {
+        "access-kit": "BLOCKED_BY_PRODUCTIONIZATION",
         "agentic-x402": "READY_TO_VALIDATE",
         "backend-api": "READY_TO_VALIDATE",
         "campaign-intelligence": "READY_TO_VALIDATE",
@@ -260,6 +265,7 @@
         "tenant-import-engine": "READY_TO_VALIDATE"
       },
       "hard_blockers": [
+        "access-kit: productionization 75% (< 100% of in-scope productionization controls); remaining: hosted ci / verdict on the design-partner branch; npm prerelease publication and staging aether-access-mcp image publication",
         "card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
         "card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor",
         "card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests",
@@ -282,6 +288,8 @@
         "stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening"
       ],
       "external_blockers": [
+        "access-kit: ENVIRONMENT_VALIDATION_PENDING: No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3). (owner: platform-ops)",
+        "access-kit: INFRASTRUCTURE_WAITING: The staging aether-access-mcp repository, image and enabled service do not exist yet, and the live AetherStagingDeploy policy must match the reviewed manifest. (owner: platform-ops)",
         "agentic-x402: ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)",
         "card-linked-payments: CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)",
         "connectors-byok: CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)",
@@ -317,6 +325,7 @@
         "identity-resolution"
       ],
       "experimental_features": [
+        "access-kit",
         "agentic-x402",
         "backend-api",
         "campaign-intelligence",
@@ -386,6 +395,7 @@
         }
       },
       "feature_dispositions": {
+        "access-kit": "BLOCKED_BY_CODE",
         "agentic-x402": "BLOCKED_BY_CODE",
         "backend-api": "BLOCKED_BY_CODE",
         "campaign-intelligence": "READY_TO_VALIDATE",
@@ -421,6 +431,7 @@
         "tenant-import-engine": "BLOCKED_BY_CODE"
       },
       "hard_blockers": [
+        "access-kit: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
         "agentic-x402: implementation state VERIFIED is below the TURNKEY floor",
         "backend-api: implementation state VERIFIED is below the TURNKEY floor",
         "card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
@@ -455,6 +466,7 @@
         "tenant-import-engine: implementation state VERIFIED is below the TURNKEY floor"
       ],
       "external_blockers": [
+        "access-kit: ENVIRONMENT_VALIDATION_PENDING: No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3). (owner: platform-ops)",
         "agentic-x402: ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)",
         "card-linked-payments: CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)",
         "connectors-byok: CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)",

@@ -18,7 +18,7 @@ source_hashes:
   "services/api/journeys/handoff/continuation_jobs.py": "sha256:13081b7ff46f57f7ae26c005163275d92cef3b7e7bf52959c02df345b0292630"
   "services/api/journeys/handoff/continuation_scope.py": "sha256:4805ff2560480a30d0e5452eefdd92dfc500cc6f84109ad10f5dc38de4e6ad08"
   "services/api/journeys/measurement/activity_rebuild.py": "sha256:f9a05aefbcb77f51aad95b980405b761e5f557cec88a8baf2d72334bcf7286c8"
-  "services/api/journeys/traffic/apple_ads_attribution.py": "sha256:03622327b54beefc07c555cf35361138df3d908cb0206d9f080c57d203e8b5cc"
+  "services/api/journeys/traffic/apple_ads_attribution.py": "sha256:985da23f7154804913c16859f5e02b7fff6b6505af74629c1d32148cd52c85f1"
 ---
 
 # Cross-Device Journey Certification (XD-1)
@@ -77,7 +77,9 @@ Acquisition paths by platform:
    Browse, then log in. Record the profile ID.
 4. Grant an agent a delegation from that person and let it run one tool call.
 5. Wait for the continuation job and the activity rebuild window (30 seconds by
-   default, `AETHER_JOURNEY_ACTIVITY_REBUILD_WINDOW_SECONDS`).
+   default, `AETHER_JOURNEY_ACTIVITY_REBUILD_WINDOW_SECONDS`). A resolved Apple
+   Ads attribution requests its own journey rebuild, so the acquisition
+   touchpoint appears even if the app does nothing after resolving.
 
 ## 4. Collect evidence
 

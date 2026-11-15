@@ -1237,6 +1237,12 @@ jobs:
 
           expected = {ecs_name(k): int(v.get("desired_count", 0)) * int(multiplier)
                       for k, v in services.items()}
+          # Customer services (Access Kit MCP) run a fixed count with no
+          # autoscaling target; an enabled one joins the exact inventory.
+          sys.path.insert(0, "scripts/release")
+          from staging_customer_services import enabled_customer_services
+          for key, desired in enabled_customer_services(profile).items():
+              expected[f"AETHER-{env}-{key}"] = int(desired) * int(multiplier)
           expected_autoscaling = {}
           for key, service in services.items():
               scaling = service.get("autoscaling") or {}
@@ -1829,11 +1835,22 @@ jobs:
           mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
           test "${#services[@]}" -gt 0 \
             || { echo '::error::staging exposes no services; the approved image is unverified'; exit 1; }
+          mapfile -t customer_services < <(python scripts/release/staging_customer_services.py --cluster "$STAGING_CLUSTER")
           for service in "${services[@]}"; do
             task_def="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
               --query 'services[0].taskDefinition' --output text)"
             running_image="$(aws ecs describe-task-definition --task-definition "$task_def" \
               --query 'taskDefinition.containerDefinitions[0].image' --output text)"
+            service_name="${service##*/}"
+            if printf '%s\n' "${customer_services[@]:-}" | grep -qxF "$service_name"; then
+              # The Access Kit MCP ships its own image; it must be digest-pinned
+              # to the dedicated immutable repository, never a tag.
+              if ! printf '%s' "$running_image" | grep -Eq '/aether-access-mcp@sha256:[0-9a-f]{64}$'; then
+                echo "::error::${service_name} runs ${running_image}, not a digest-pinned aether-access-mcp image"
+                exit 1
+              fi
+              continue
+            fi
             if [ "$running_image" != "$image_uri" ]; then
               echo "::error::${service} runs ${running_image}, not the approved ${image_uri}"
               exit 1
@@ -3314,6 +3331,12 @@ jobs:
 
           expected = {ecs_name(k): int(v.get("desired_count", 0)) * int(multiplier)
                       for k, v in services.items()}
+          # Customer services (Access Kit MCP) run a fixed count with no
+          # autoscaling target; an enabled one joins the exact inventory.
+          sys.path.insert(0, "scripts/release")
+          from staging_customer_services import enabled_customer_services
+          for key, desired in enabled_customer_services(profile).items():
+              expected[f"AETHER-{env}-{key}"] = int(desired) * int(multiplier)
           if any(expected.values()):
               sys.exit(f"::error::the asleep shape is not all-zero: {expected}")
           expected_autoscaling = {}
@@ -3448,6 +3471,10 @@ jobs:
           cluster = os.environ["EXPECTED_CLUSTER"]
           for key in sorted(services):
               print(f"{cluster}-{'backend' if key == 'api' else key}")
+          sys.path.insert(0, "scripts/release")
+          from staging_customer_services import enabled_customer_services
+          for key in sorted(enabled_customer_services("staging")):
+              print(f"{cluster}-{key}")
           PY
           then
             :
@@ -3756,6 +3783,10 @@ jobs:
           cluster = os.environ["EXPECTED_CLUSTER"]
           for key in sorted(services):
               print(f"{cluster}-{'backend' if key == 'api' else key}")
+          sys.path.insert(0, "scripts/release")
+          from staging_customer_services import enabled_customer_services
+          for key in sorted(enabled_customer_services("staging")):
+              print(f"{cluster}-{key}")
           PY
           then
             :

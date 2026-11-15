@@ -34,6 +34,9 @@ from intelligence.risk360.contracts import (
     RiskPoisoningLifecycleEvent,
     RiskInterventionRecord,
 )
+from shared.freshness.source_watermarks import advances_watermark
+
+
 class RiskPoisoningEvidenceConflict(RuntimeError):
     """A poisoning evidence id or version chain conflicts with stored truth."""
 
@@ -216,6 +219,18 @@ class RiskAssessmentRepository(TenantScopedRiskRepository):
 
     def __init__(self) -> None:
         super().__init__("risk_assessments")
+
+    @advances_watermark("risk_outputs")
+    async def upsert_scoped(
+        self, tenant_id: str, natural_id: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await super().upsert_scoped(tenant_id, natural_id, data)
+
+    @advances_watermark("risk_outputs")
+    async def update_scoped(
+        self, tenant_id: str, natural_id: str, patch: dict[str, Any]
+    ) -> Optional[dict[str, Any]]:
+        return await super().update_scoped(tenant_id, natural_id, patch)
 
     async def list_by_subject(
         self,

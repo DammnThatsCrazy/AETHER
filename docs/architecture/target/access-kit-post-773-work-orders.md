@@ -73,10 +73,10 @@ It has separate `agent:manage` and `agent:approve` gates and durable status. The
 follow-up owner hardening now compares objective request fingerprints when an
 idempotency key is reused, assigns staged edges an action-specific stable replay
 key, records the `GraphMutationGateway` result, and refuses to mark a blocked
-or unapplied outcome committed. The objective key check is still a read-then-
-write operation because `DurableStore` has no atomic conditional insert, so
-simultaneous first requests are not yet protected from creating duplicate
-objectives.
+or unapplied outcome committed. The objective key is claimed with a
+conditional write before the objective is created, so simultaneous first
+requests create one objective
+(`services/api/tests/unit/test_agent_objective_idempotency_race.py`).
 
 This still does not make the route a governed customer action. Commit does not
 resolve or carry a Rights Authority decision into `MutationIntent`; rollback

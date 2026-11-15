@@ -19,6 +19,16 @@ output "access_mcp_repository_url" {
 output "access_mcp_service_name" {
   description = "Customer Access Kit MCP ECS service name, empty unless explicitly enabled."
   value       = try(module.access_mcp[0].service_name, "")
+
+  # runtime_deployment.yaml is the single staging switch the lifecycle workflow
+  # reads to build its exact service inventory; the plan fails if Terraform
+  # disagrees with it.
+  precondition {
+    condition = !local.staging || (
+      var.enable_access_mcp == try(local.access_mcp_runtime.enabled, false)
+    )
+    error_message = "In staging, enable_access_mcp must equal config/runtime_deployment.yaml profiles.staging.customer_services.access-mcp.enabled, which drives the lifecycle service inventory."
+  }
 }
 
 output "access_mcp_endpoint" {

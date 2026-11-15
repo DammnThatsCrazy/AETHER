@@ -14,6 +14,16 @@ import {
   listEntities,
 } from './api.mjs';
 import { experience360FrameInput } from './experience360.mjs';
+import {
+  getProfile360,
+  getProfile360Evidence,
+  getProfile360Slots,
+  profile360EvidenceGetInput,
+  profile360GetInput,
+  profile360SearchInput,
+  profile360SlotGetInput,
+  searchProfile360,
+} from './profile360.mjs';
 
 // This is the Access Kit adapter's closed dispatch table. It describes calls
 // this package can make; it is not a tenant grant or an Aether server registry.
@@ -143,6 +153,46 @@ const definitions = [
     mcp: null,
     input: experience360FrameInput,
     call: (input, env) => getExperience360Frame(input, env),
+  },
+  {
+    id: 'profile360.get',
+    description: 'Read the full governed Profile360 frame for one entity: every slot with its server-reported state, per-slot freshness verdict, evidence and limitations.',
+    api: 'POST /v1/experience360/frames',
+    owner: 'experience360_projection',
+    cli: 'aether profile360 get',
+    mcp: 'profile360_get',
+    input: profile360GetInput,
+    call: (input, env) => getProfile360(input, env),
+  },
+  {
+    id: 'profile360.slot.get',
+    description: 'Read up to 8 named Profile360 slots (for example risk_summary or value_summary) with evidence, without composing the whole frame.',
+    api: 'POST /v1/experience360/frames',
+    owner: 'experience360_projection',
+    cli: 'aether profile360 slots',
+    mcp: 'profile360_slot_get',
+    input: profile360SlotGetInput,
+    call: (input, env) => getProfile360Slots(input, env),
+  },
+  {
+    id: 'profile360.evidence.get',
+    description: 'Read the evidence trace for a Profile360 frame or selected slots: evidence references, provenance, claim evidence, freshness and reason codes as reported by the server; slot content is omitted.',
+    api: 'POST /v1/experience360/frames',
+    owner: 'experience360_projection',
+    cli: 'aether profile360 evidence',
+    mcp: 'profile360_evidence_get',
+    input: profile360EvidenceGetInput,
+    call: (input, env) => getProfile360Evidence(input, env),
+  },
+  {
+    id: 'profile360.search',
+    description: 'Resolve exactly one known identifier (email, wallet, device, session, social or customer) to the canonical entity ID to open with profile360.get. The identifier is sent in the request body.',
+    api: 'POST /v1/profile/resolve',
+    owner: 'identity_profile',
+    cli: 'aether profile360 search',
+    mcp: 'profile360_search',
+    input: profile360SearchInput,
+    call: (input, env) => searchProfile360(input, env),
   },
   {
     id: 'usage.summary',

@@ -1873,6 +1873,64 @@ def validate_outcome_registry(reg: dict, ctx: Optional[dict] = None) -> list[Vio
     return violations
 
 
+# Authorities whose writers advance a per-tenant source watermark. Mirrors
+# ``services/api/shared/freshness/source_watermarks.WATERMARKED_AUTHORITIES``;
+# a unit test keeps the two equal.
+WATERMARKED_AUTHORITIES = frozenset(
+    {
+        "agent_access",
+        "analytics_events",
+        "communication_facts",
+        "economic_facts",
+        "geo_observations",
+        "relationship_facts",
+        "risk_outputs",
+    }
+)
+
+
+def _validate_slot_freshness(slots: object, surface: dict, sid: str) -> list[Violation]:
+    """``freshnessPolicy.slots``: per-slot thresholds bound to watermarked sources."""
+    out: list[Violation] = []
+    if not isinstance(slots, dict) or not slots:
+        return [Violation("product_surface_catalog", "error", "freshnessPolicy.slots must be a non-empty object", sid)]
+    declared = {
+        slot.get("id"): slot
+        for slot in surface.get("domainSlots", [])
+        if isinstance(slot, dict)
+    }
+    for slot_id, entry in slots.items():
+        where = f"{sid}:{slot_id}"
+        slot = declared.get(slot_id)
+        if slot is None:
+            out.append(Violation("product_surface_catalog", "error", "freshnessPolicy.slots names an undeclared slot", where))
+            continue
+        if not isinstance(entry, dict) or set(entry) != {"maxAgeSeconds", "watermarkAuthorities"}:
+            out.append(Violation("product_surface_catalog", "error", "slot freshness needs exactly maxAgeSeconds and watermarkAuthorities", where))
+            continue
+        max_age = entry["maxAgeSeconds"]
+        if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age <= 0:
+            out.append(Violation("product_surface_catalog", "error", "slot maxAgeSeconds must be a positive integer", where))
+        authorities = entry["watermarkAuthorities"]
+        slot_authorities = set(slot.get("canonicalAuthorityRefs") or [])
+        if (
+            not isinstance(authorities, list)
+            or not authorities
+            or len(set(authorities)) != len(authorities)
+            or not all(isinstance(a, str) and a in WATERMARKED_AUTHORITIES for a in authorities)
+            or not set(authorities) <= slot_authorities
+        ):
+            out.append(
+                Violation(
+                    "product_surface_catalog",
+                    "error",
+                    "watermarkAuthorities must be unique watermarked authorities the slot already reads",
+                    where,
+                )
+            )
+    return out
+
+
 def validate_product_surface_catalog(reg: dict) -> list[Violation]:
     """Validate the 18-product 360 catalog and its projection crosswalk.
 
@@ -2484,6 +2542,8 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
             violations.append(
                 Violation("product_surface_catalog", "error", "maxAgeSeconds must be null or a positive integer", sid)
             )
+        if isinstance(freshness, dict) and "slots" in freshness:
+            violations.extend(_validate_slot_freshness(freshness["slots"], surface, sid))
 
         policy = surface.get("policyBehavior")
         if (

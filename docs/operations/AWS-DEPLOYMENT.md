@@ -51,6 +51,9 @@ source_files:
 reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the new Auth0 Native Aether CLI client and connection grants. The Auth0 deployment inventory now records the public Device Authorization client and its human-session deployment gate; the independent operator tfmcp service is unchanged."
+  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
+  - {'commit': '03b42818', 'reason': 'Reviewed 03b42818: opt-in MCP host self-registration (enable_access_mcp_dcr, Auth0 DCR and CIMD with a read-only third-party default grant, MCP audience denies client credentials, domain-level DB connection only while on), its promotion input and pilot plan-policy allowance. Documents that describe the Access Kit MCP options are updated; the others need no change.'}
+  - {'commit': '55078498', 'reason': 'Reviewed 55078498: Terraform plan tests now encode staging as the second Access Kit MCP owner (repository allowed, service gated by repository and the lifecycle-matrix precondition). Test-only change; the staging MCP description here already matches.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -58,12 +61,12 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:5438ebb42b66a0d798a3488b24c463e17725337b4c19e8ec2ca522c563217be7"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:f918b6273852de669facf8f15ed2f5640864350628ababee8983a91351e7a531"
+  ".github/workflows/staging-lifecycle.yml": "sha256:6497327dc1b07a876c3371db5dd5ccdb59fa48879337818b4473a7d319dac6a3"
   ".github/workflows/staging-state-reconcile.yml": "sha256:3da807f71996e7b397bc4a593fafd27d3818c3d4f0d7a2fa37b5619674209d48"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
+  ".github/workflows/terraform-promote.yml": "sha256:a0fc8bcfe12f9c63f9c726c87543be36dbbb04a4f3f614898d6f69320a5554fd"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
-  "config/staging_apply_iam_policy.yaml": "sha256:528cc930bd8cedf9f347f4f0630e50e61bf1360bdf5beeb8088c90485519b142"
+  "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_lifecycle_trust_policy.json": "sha256:9623d3b8d39575a1bf00b5cc0ba2e14159e5fc821dfbfa84e26a108ba91fd5d6"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
@@ -78,7 +81,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:a9e4be4d113fbfc912ad1b80a9ccee3ab7e3bab8a9fc73851956a38d70ff613c"
+  "infra/aws/terraform/": "sha256:41e663a27e3b5d7acfd997640d363fb8550e1a55e765042535d66d81163b9079"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -871,7 +874,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `rds` | Legacy RDS Postgres | **never** — superseded by Aurora |
 | `s3` | — | **not instantiated by this root** |
 | `tfmcp` | tfmcp MCP server (ECS Fargate, IAM, Secrets, ALB rule) | **not wired** into the live root; neither profile provisions it |
-| `access_mcp` | Customer-facing Access Kit MCP (dedicated ECR, Fargate, task/execution roles, security group, log group, ALB target/rule) | **opt-in** — production is the single persistent ECR/state owner; immutable image digest required; staging is blocked |
+| `access_mcp` | Customer-facing Access Kit MCP (dedicated ECR, Fargate, task/execution roles, security group, log group, ALB target/rule) | **opt-in** — production and staging each own their account's ECR/state; immutable image digest required; staging runs it under the wake/sleep lifecycle |
 | `vpc_endpoints` | — | **not instantiated by this root** |
 
 The Auth0 module's CLI client is a public Native application with no client
@@ -896,7 +899,10 @@ or revocable session and forwards that same identity to tenant APIs. Optional
 delegated OAuth uses a distinct Auth0 MCP audience and a KMS-backed Secrets
 Manager key injected into the MCP and API tasks. Each OAuth downstream call is
 signed so the MCP token cannot be used directly on the public REST API with a
-spoofed surface header. `enable_access_continuations` separately opens the
+spoofed surface header. `enable_access_mcp_dcr` adds MCP host
+self-registration (Auth0 DCR and Client ID Metadata Documents): registered
+hosts are third-party clients limited to a read-only default grant on the MCP
+audience. `enable_access_continuations` separately opens the
 existing tenant continuation route on the API task; the continuation tools
 still require the caller's read or write permission.
 
@@ -904,10 +910,11 @@ The image is built from a clean reviewed commit by
 `infra/aws/terraform/scripts/publish_access_mcp_image.sh`; Terraform consumes
 the returned immutable digest. `.github/workflows/terraform-promote.yml`
 accepts these opt-ins on a reviewed `action=plan`, then applies only the exact
-stored plan by run ID and checksum. The service and globally named ECR
-repository are allowed only on the canonical `production` state; one
-owner prevents profile-state races for that shared repository. The
-staging lifecycle does not yet manage its always-on task count.
+stored plan by run ID and checksum. The service and the account-scoped ECR
+repository are allowed only on the persistent state owner of each account,
+`production` or `staging`; one owner per account prevents profile-state races
+for that repository. In staging the lifecycle manages its task count (1 awake,
+0 asleep) and its exact inventory; see [Staging wake/sleep](STAGING-WAKE-SLEEP.md).
 The route shares the existing API hostname and TLS listener. See the
 [deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md)
 for the repository-first, image-publish, service-enable sequence and cost gate.

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from shared.logger.logger import get_logger
 from repositories.repos import get_pool
+from shared.freshness.source_watermarks import advances_watermark
 
 logger = get_logger("aether.measurement.conversion_repo")
 
@@ -175,6 +176,7 @@ class ConversionRepository:
     async def _pool(self):
         return await get_pool()
 
+    @advances_watermark("economic_facts")
     async def upsert(self, row: dict[str, Any]) -> dict[str, Any]:
         """Insert a conversion, or merge it into the canonical row for its dedup key.
 

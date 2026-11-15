@@ -41,17 +41,30 @@ def test_hosted_access_kit_workflow_checks_container_and_npm_artifacts() -> None
     assert "/readyz" in commands
 
 
-def test_image_publication_fails_closed_without_production_reviewers() -> None:
+def test_image_publication_fails_closed_without_target_reviewers() -> None:
     workflow = _workflow("publish-access-mcp-image.yml")
     jobs = workflow["jobs"]
     reviewer_gate = jobs["require-production-reviewers"]
     gate_script = "\n".join(step.get("run", "") for step in reviewer_gate["steps"])
     assert reviewer_gate.get("environment") is None
     assert reviewer_gate["permissions"] == {"actions": "read", "contents": "read"}
-    assert "environments/production" in gate_script
+    # The gate checks the reviewers of whichever protected environment
+    # (production or staging) the image is published from.
+    assert "environments/${TARGET}" in gate_script
+    assert "production|staging" in gate_script
     assert '"required_reviewers"' in gate_script
     assert jobs["publish"]["needs"] == "require-production-reviewers"
-    assert jobs["publish"]["environment"] == "production"
+    assert jobs["publish"]["environment"] == "${{ inputs.target }}"
+    dispatch = workflow.get("on", workflow.get(True))
+    target = dispatch["workflow_dispatch"]["inputs"]["target"]
+    assert target["type"] == "choice"
+    assert target["options"] == ["production", "staging"]
+    assert target["default"] == "production"
+    # Production publishes only from main; staging also from the staging branch.
+    for job in ("require-production-reviewers", "publish"):
+        condition = jobs[job]["if"]
+        assert "github.ref == 'refs/heads/main'" in condition
+        assert "inputs.target == 'staging' && github.ref == 'refs/heads/staging'" in condition
     assert workflow["permissions"]["id-token"] == "write"
 
 
@@ -93,10 +106,17 @@ def test_accepts_canonical_production_scale_deployment() -> None:
     )
 
 
-@pytest.mark.parametrize("profile", ["staging", "production-scale", "preview"])
+@pytest.mark.parametrize("profile", ["production-scale", "preview"])
 def test_rejects_noncanonical_repository_owner(profile: str) -> None:
-    with pytest.raises(ValueError, match="production state owner"):
+    with pytest.raises(ValueError, match="production and staging state owners"):
         _validate(profile=profile, enable_service="false", image_digest="")
+
+
+def test_staging_is_the_second_state_owner() -> None:
+    # Staging owns its own aether-access-mcp repository in its own account so
+    # the hosted MCP can be certified there before production.
+    _validate(profile="staging", enable_service="false", image_digest="")
+    _validate(profile="staging")
 
 
 def test_service_requires_repository_and_digest() -> None:
@@ -152,3 +172,20 @@ def test_workflow_invokes_validator_and_passes_same_path_to_terraform() -> None:
 def test_task_definition_pins_access_mcp_image_by_digest() -> None:
     module = (ROOT / "infra" / "aws" / "terraform" / "modules" / "access_mcp" / "main.tf").read_text()
     assert 'image     = "${var.ecr_repository_url}@${var.image_digest}"' in module
+
+
+def test_client_registration_requires_oauth() -> None:
+    with pytest.raises(ValueError, match="enable_access_mcp_dcr requires enable_access_mcp_oauth"):
+        _validate(enable_dcr="true", enable_oauth="false")
+    _validate(enable_dcr="true", enable_oauth="true")
+    with pytest.raises(ValueError, match="enable_access_mcp_dcr"):
+        _validate(enable_dcr="maybe", enable_oauth="true")
+
+
+def test_promotion_workflow_passes_the_registration_opt_in() -> None:
+    workflow = _workflow("terraform-promote.yml")
+    dispatch = workflow.get("on", workflow.get(True))
+    assert dispatch["workflow_dispatch"]["inputs"]["enable_access_mcp_dcr"]["default"] is False
+    text = (ROOT / ".github/workflows/terraform-promote.yml").read_text()
+    assert "TF_VAR_enable_access_mcp_dcr: ${{ inputs.enable_access_mcp_dcr }}" in text
+    assert "ENABLE_ACCESS_MCP_DCR: ${{ inputs.enable_access_mcp_dcr }}" in text

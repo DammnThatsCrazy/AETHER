@@ -925,7 +925,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationState": "implemented",
         "implementationBlueprint": "docs/architecture/blueprints/outcome360.md",
         "ownsCanonicalTruth": False,
-        "subjectKinds": ("agent", "campaign", "episode", "journey", "population"),
+        "subjectKinds": ("agent", "campaign", "entity", "episode", "journey", "population"),
         "canonicalAuthorities": ("evidence", "graph", "measurement_contract", "outcome_facts"),
         "hardDependencies": ("measurement_outcome_contract", "temporal_kernel"),
         "projectionDependencies": ("temporal360",),
@@ -4553,7 +4553,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     {
                         "projectionId": "outcome360",
                         "role": "supporting",
-                        "subjectKinds": [],
+                        "subjectKinds": ("entity",),
                         "sectionIds": ("evidence", "outcomes")
                     }
                 ]
@@ -4778,13 +4778,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("ai_execution_facts", "economic_facts", "outcome_facts"),
                 "description": "Direct tenant-scoped economic facts for the exact canonical entity or Agent subject; measured outcomes and attribution remain unresolved.",
                 "id": "value_summary",
-                "partialImplementationReason": "Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects; Outcome360 does not yet support exact entity/profile subjects for attributed outcomes, and Profile-specific freshness remains unknown.",
+                "partialImplementationReason": "Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects, and Outcome360 joins durable outcome truth only for the same-id human (user) subject of an entity request; attribution of outcomes to economic facts, historical replay and producer coverage remain unknown. Freshness is evaluated from the tenant economic_facts watermark.",
                 "projectionBindings": [
                     {
                         "projectionId": "economic360",
                         "role": "primary",
                         "subjectKinds": ("agent", "entity"),
                         "sectionIds": ("evidence", "summary")
+                    },
+                    {
+                        "projectionId": "outcome360",
+                        "role": "supporting",
+                        "subjectKinds": ("entity",),
+                        "sectionIds": ("evidence", "outcomes")
                     }
                 ],
                 "requirement": "required"
@@ -4796,7 +4802,49 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
-            "requirementStatus": "contract_requirement_not_provider_attestation"
+            "requirementStatus": "contract_requirement_not_provider_attestation",
+            "slots": {
+                "agent_delegations": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("agent_access",)
+                },
+                "communications": {
+                    "maxAgeSeconds": 3600,
+                    "watermarkAuthorities": ("communication_facts",)
+                },
+                "economic_value_context": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("economic_facts",)
+                },
+                "location_temporal": {
+                    "maxAgeSeconds": 604800,
+                    "watermarkAuthorities": ("geo_observations",)
+                },
+                "relationship_context": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("relationship_facts",)
+                },
+                "relationships": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("relationship_facts",)
+                },
+                "risk_context": {
+                    "maxAgeSeconds": 21600,
+                    "watermarkAuthorities": ("risk_outputs",)
+                },
+                "risk_summary": {
+                    "maxAgeSeconds": 21600,
+                    "watermarkAuthorities": ("risk_outputs",)
+                },
+                "session_history": {
+                    "maxAgeSeconds": 3600,
+                    "watermarkAuthorities": ("analytics_events",)
+                },
+                "value_summary": {
+                    "maxAgeSeconds": 86400,
+                    "watermarkAuthorities": ("economic_facts",)
+                }
+            }
         },
         "id": "profile360",
         "lensContract": {

@@ -784,10 +784,54 @@ AREAS: list[Area] = [
             "services/api/tests/pattern_discovery/",
         ],
     ),
+    Area(
+        "Access Kit (MCP / CLI / API)",
+        3,
+        "Governed read access for design-partner agents and operators. One closed operation "
+        "table drives the CLI, local stdio MCP, hosted Streamable HTTP MCP and the Node client "
+        "through the owning tenant routes; tenant and actor come only from the credential. "
+        "Named Profile360 reads (search with the identifier in the body, full frame, up to 8 "
+        "slots, evidence-only view) return server state verbatim, with per-slot fresh/stale/"
+        "unknown verdicts from per-tenant source watermarks and Outcome360 outcomes for exact "
+        "human entities. Delegated MCP OAuth uses an exact read allowlist; optional host "
+        "self-registration (DCR/CIMD) is limited to a read-only third-party grant. Per-"
+        "credential rate limits, audit/usage correlation, daily reconciliation and signed "
+        "webhooks are in place, and staging can run the hosted MCP under wake/sleep. "
+        "Pre-production: no hosted verdict on this slice, no staging or real-tenant (W3) run, "
+        "no published npm package or deployed hosted MCP, and no governed external action.",
+        [
+            "packages/access-kit/src/access-operations.mjs",
+            "packages/access-kit/src/profile360.mjs",
+            "packages/access-kit/src/profile360-tools.mjs",
+            "packages/access-kit/test/profile360.test.mjs",
+            "services/api/shared/freshness/source_watermarks.py",
+            "services/api/shared/freshness/slot_freshness.py",
+            "services/api/tests/unit/test_profile360_source_freshness.py",
+            "services/api/tests/unit/test_profile_resolve_post.py",
+            "scripts/release/staging_customer_services.py",
+            "docs/architecture/target/mcp-api-cli-access-kit.md",
+            "docs/operations/runbooks/ACCESS_KIT_W3_CERTIFICATION.md",
+        ],
+    ),
 ]
 
 
 BLOCKERS: list[Blocker] = [
+    Blocker(
+        "pre-production-blocker",
+        "Access Kit has no real-tenant end-to-end certification (W3)",
+        "Access Kit (MCP / CLI / API)",
+        "Run docs/operations/runbooks/ACCESS_KIT_W3_CERTIFICATION.md in staging: two synthetic "
+        "tenants, ingest to Profile360 over API, CLI, local and hosted MCP, cross-tenant denial "
+        "and usage reconciliation, recording request IDs.",
+    ),
+    Blocker(
+        "pre-production-blocker",
+        "Hosted Access Kit MCP is not deployed in any environment",
+        "Access Kit (MCP / CLI / API)",
+        "Follow the ordered staging enablement in docs/operations/STAGING-WAKE-SLEEP.md "
+        "(repository, image, enabled flag with digest, live AetherStagingDeploy policy).",
+    ),
     Blocker(
         "pre-production-blocker",
         "Pattern discovery detectors have no measured precision/recall on production data",

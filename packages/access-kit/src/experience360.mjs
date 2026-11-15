@@ -16,7 +16,11 @@ export const MAX_EXPERIENCE360_SUBJECT_ID_LENGTH = 256;
 export const MAX_EXPERIENCE360_FRAME_SLOTS = 64;
 export const MAX_EXPERIENCE360_FRAME_BYTES = 4 * 1024 * 1024;
 
-const surfaceIds = Object.keys(EXPERIENCE360_SURFACES);
+// Surfaces the Access Kit exposes. Only Profile360 has been audited slot by
+// slot for design-partner use; the other catalogued surfaces stay readable in
+// the product but are not offered through this adapter until audited.
+export const ACCESS_KIT_FRAME_SURFACES = Object.freeze(['profile360']);
+const surfaceIds = ACCESS_KIT_FRAME_SURFACES.filter((id) => id in EXPERIENCE360_SURFACES);
 const RFC3339_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
 const SLOT_ID_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 // eslint-disable-next-line no-control-regex

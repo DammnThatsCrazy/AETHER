@@ -64,6 +64,7 @@ _ACCESS_KIT_CAPABILITIES = {
     ("POST", "/v1/continuations"): "continuations.create",
     ("GET", "/v1/continuations/{continuation_id}"): "continuations.get",
     ("POST", "/v1/experience360/frames"): "experience360.frame.read",
+    ("POST", "/v1/profile/resolve"): "profile360.identifier.resolve",
 }
 # POST routes that carry a read body but have no write effect. They are checked
 # against the ``read`` permission, attributed as reads, and (for delegated MCP
@@ -71,6 +72,7 @@ _ACCESS_KIT_CAPABILITIES = {
 # belongs here only if its handler performs no mutation.
 _READ_SEMANTIC_POST_ROUTES = frozenset({
     ("POST", "/v1/experience360/frames"),
+    ("POST", "/v1/profile/resolve"),
 })
 _UNMETERED_ACCESS_CAPABILITIES = frozenset({"billing.usage.summary.read"})
 _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})

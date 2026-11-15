@@ -39,6 +39,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 from dependencies.providers import get_cache, get_graph
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from repositories.lake import gold_identity, gold_market, gold_onchain, gold_social
@@ -313,6 +315,49 @@ async def resolve_identifier(
     )
 
     return APIResponse(data={"resolved_user_id": resolved}).to_dict()
+
+
+class ResolveIdentifierBody(BaseModel):
+    """Exactly one identifier, carried in the body so it never reaches URL logs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    wallet: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    email: Optional[str] = Field(default=None, min_length=1, max_length=320)
+    device: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    session: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    social: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    customer: Optional[str] = Field(default=None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "ResolveIdentifierBody":
+        provided = [name for name, value in self.model_dump().items() if value is not None]
+        if len(provided) != 1:
+            raise ValueError("pass exactly one identifier")
+        return self
+
+
+@router.post("/resolve")
+async def resolve_identifier_body(
+    body: ResolveIdentifierBody,
+    request: Request,
+    resolver: ProfileResolver = Depends(_get_resolver),
+):
+    """Resolve one identifier to a canonical profile ID (a read; body keeps PII out of URLs).
+
+    Same authority and result as ``GET /v1/profile/resolve``: ``read``
+    permission, the authenticated tenant only, 404 when unresolvable.
+    """
+    return await resolve_identifier(
+        request,
+        resolver=resolver,
+        wallet=body.wallet,
+        email=body.email,
+        device=body.device,
+        session=body.session,
+        social=body.social,
+        customer=body.customer,
+    )
 
 
 # ── Profile360 normalized Kyber surfaces ────────────────────────────
