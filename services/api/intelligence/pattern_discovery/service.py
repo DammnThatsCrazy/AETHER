@@ -195,6 +195,10 @@ class PatternDiscoveryService:
             unmeasured.add(KIND_TRAFFIC_ANOMALY)
         if (coverage.get("graph") or {}).get("graph") == "unavailable":
             unmeasured.add(KIND_NOVEL_MOTIF)
+        # A cycle search cut short by its budget did not visit every component,
+        # so a motif missing from this run may simply not have been searched.
+        if ((result.stats.get("detectors") or {}).get("motifs") or {}).get("cycles_truncated"):
+            unmeasured.add(KIND_NOVEL_MOTIF)
         coverage["aging"] = {"status": "skipped_store_unavailable" if store_unavailable else "applied",
                              "skipped_kinds": sorted(unmeasured)}
         for existing in ([] if store_unavailable else await self.registry.scan(tenant_id)):

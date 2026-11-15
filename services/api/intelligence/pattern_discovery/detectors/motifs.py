@@ -185,9 +185,17 @@ def detect_motifs(frame: DiscoveryFrame) -> DetectorOutput:
                             cycles[rot].append(tuple(path))
                 elif nxt not in path and nxt > start and len(path) < 4:
                     stack.append((nxt, path + [nxt], types + [typ]))
+    prior_rates = frame.baseline.get("motif_rate") or {}
+    if cycles_truncated:
+        # Unsearched cycles are not observed zeros: keep every known cycle
+        # signature at no less than its learned rate so a truncated search
+        # does not decay the baseline (observed counts are lower bounds).
+        for key, rate in prior_rates.items():
+            if key.startswith("cyc|"):
+                motif_counts[key] = float(rate)
     for rot, count in cyc_counts.items():
         key = "cyc|" + "|".join(rot)
-        motif_counts[key] = float(count)
+        motif_counts[key] = max(float(count), float(prior_rates.get(key, 0.0))) if cycles_truncated else float(count)
         types = frozenset(part.split("-", 1)[1] for part in rot)
         if types in known or count < max(2, cfg.motif_min_instances - 1):
             continue

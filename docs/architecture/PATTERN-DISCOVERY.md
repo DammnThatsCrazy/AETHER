@@ -9,7 +9,7 @@ since_version: "0.1.0"
 source_files:
   - services/api/intelligence/pattern_discovery/
 source_hashes:
-  "services/api/intelligence/pattern_discovery/": "sha256:e48e8e931c9df056542f33532d96e2fd708239af59357e6501a10e1e2c5cdbec"
+  "services/api/intelligence/pattern_discovery/": "sha256:7da3a05f5810d75d73ba770b3c773b54bf9ec0e9cdd8a5d8d2a1de33d0ad9c04"
 ---
 
 # Pattern Discovery and Unstructured Evidence Intelligence
@@ -440,4 +440,7 @@ with discovery enabled gets patterns surfaced with no manual run. On-demand runs
   to 5,000 and 2,000 patterns per tenant respectively. The motif detector's
   cycle search stops after 500,000 path expansions or 100,000 distinct cycles
   and reports `cycles_truncated` in its stats; cycle counts are then lower
-  bounds.
+  bounds. A truncated search marks `novel_motif` unmeasured for aging (it
+  appears in `coverage.aging.skipped_kinds`), and known cycle signatures keep
+  at least their learned baseline rate, because an unsearched cycle is not an
+  observed absence.
