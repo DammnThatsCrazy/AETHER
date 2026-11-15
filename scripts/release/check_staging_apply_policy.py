@@ -598,6 +598,9 @@ _INFRA_ROLE_ARNS = {
     "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role",
     "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
     "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role",
+    # module.access_mcp in staging (customer_services.access-mcp).
+    "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-execution",
+    "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-task",
 }
 _AMPLIFY_DOMAIN_ROLE_ARN = (
     "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role"
@@ -1039,6 +1042,8 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-execution",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-task",
             }
             if {s.get("resource") for s in matching} != expected_scopes:
                 fail("iam:PassRole has an unexpected resource scope")
@@ -1054,6 +1059,8 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": ["lambda.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": ["monitoring.rds.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": ["amplify.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-execution": ["ecs-tasks.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-task": ["ecs-tasks.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
             expected_operators = {
@@ -1068,6 +1075,8 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": None,
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": None,
                 "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-execution": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-task": None,
             }:
                 fail("iam:PassRole condition operators do not match the reviewed service bindings")
         elif action == "iam:CreateServiceLinkedRole":

@@ -15,12 +15,13 @@ reviewed_source_commits:
     reason: "Reviewed the CSV Rights Authority import-admission change. This runbook now describes the required purposes/source grant, fail-closed no-write behavior, persisted attempt history, and recovery path."
   - commit: "af851e21c"
     reason: "Reviewed commit failure and retry handling for missing graph-ledger Rights ancestry, including repair of an already projected same-commit edge."
+  - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
   "services/api/ingestion/imports/commit.py": "sha256:8c9a53efb8ff51e7a28a301ca2d047d91c8732bc49782608ac547c1f596a9cf8"
   "services/api/ingestion/imports/kyber_routes.py": "sha256:72539f001ee0853b94b1c2abce5d8f2eb98231b2676bf124e6f9c2e84bdeb749"
   "services/api/ingestion/imports/rights_admission.py": "sha256:43f3777f5334afd0c48355ff9c16b807174c57036c63a40ca3b988a2a29fbaa1"
   "services/api/ingestion/imports/service.py": "sha256:6d9c346282442e8af10b462367ebb187ca0d574521fe5f13b2f68152aeeacd98"
-  "services/api/repositories/graph_mutation_ledger.py": "sha256:b347022c798f92360a89fb13cae1a2086792510cd37cb9b92c3ddc9988640f31"
+  "services/api/repositories/graph_mutation_ledger.py": "sha256:8e36a20b8ea578a54825f45e252dbecbfba4029d0e2957cf4dfbe3d7ceddb0b4"
   "services/api/repositories/imports_repo.py": "sha256:6bdc0f6089e66d63b93456e5cf99b79653b896a338e3548f19551c48ae3c4f0e"
   "services/api/shared/graph/graph.py": "sha256:455fee6db2e5a19392a8fd86e9084b41a5fe26291f139952a70a54ed1bce089d"
   "services/api/shared/graph/mutation_gateway.py": "sha256:0539972689a73905af7f29440cfc4331883b8979ba2c7e8293cd876fb74e07ea"

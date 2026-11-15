@@ -35,6 +35,7 @@ from typing import Any, Optional
 from repositories.repos import BaseRepository
 from shared.common.common import utc_now
 from shared.geo.models import LocationFact
+from shared.freshness.source_watermarks import advances_watermark
 
 # Lifecycle state a stored location-fact row carries (soft-revoke envelope).
 LOCATION_FACT_ACTIVE = "active"
@@ -70,6 +71,7 @@ class LocationFactRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("location_facts")
 
+    @advances_watermark("geo_observations")
     async def record(
         self,
         fact: LocationFact,

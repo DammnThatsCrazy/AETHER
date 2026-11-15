@@ -25,9 +25,9 @@ const registryPath = fileURLToPath(
 );
 
 const validInput = () => ({
-  surface: 'agent360',
+  surface: 'profile360',
   subject: { kind: 'agent', id: 'agent-1' },
-  requested_slots: ['identity', 'tool_usage', 'risk_summary', 'capabilities'],
+  requested_slots: ['identity_spine', 'agent_delegations', 'risk_summary', 'entity_identity'],
   as_of: '2026-10-29T10:00:00Z',
   include_evidence: true,
 });
@@ -71,13 +71,13 @@ function runCli(args, extraEnv = {}) {
 }
 
 const cliFrameArgs = [
-  'experience360', 'frame', 'get', '--surface', 'agent360', '--subject-kind', 'agent',
-  '--subject-id', 'agent-1', '--slots', 'identity,tool_usage,risk_summary,capabilities',
+  'experience360', 'frame', 'get', '--surface', 'profile360', '--subject-kind', 'agent',
+  '--subject-id', 'agent-1', '--slots', 'identity_spine,agent_delegations,risk_summary,entity_identity',
   '--as-of', '2026-10-29T10:00:00Z', '--json',
 ];
 
 test('operation list declares the bounded 360 frame read once, as a read-only closed-table entry', () => {
-  assert.equal(accessOperationIds.length, 11);
+  assert.equal(accessOperationIds.length, 15);
   assert.equal(accessOperationIds.filter((id) => id === OPERATION_ID).length, 1);
   const operation = getAccessOperation(OPERATION_ID);
   assert.deepEqual(
@@ -140,9 +140,10 @@ test('pinned catalog allowlist matches the shared projection registry', () => {
 
 test('invalid, oversized, unknown-field, and tenant-bearing input is rejected before any network call', async (t) => {
   const calls = installFetch(t, (call) => frameResponse(call));
-  const slots = EXPERIENCE360_SURFACES.agent360.slots;
+  const slots = EXPERIENCE360_SURFACES.profile360.slots;
   const bad = {
     'unknown surface': { ...validInput(), surface: 'admin360' },
+    'catalogued but unaudited surface': { ...validInput(), surface: 'agent360' },
     'tenant id': { ...validInput(), tenant_id: 'tenant-other' },
     'camel tenant id': { ...validInput(), tenantId: 'tenant-other' },
     'tenant in subject': { ...validInput(), subject: { kind: 'agent', id: 'a', tenant_id: 'tenant-other' } },
@@ -157,7 +158,7 @@ test('invalid, oversized, unknown-field, and tenant-bearing input is rejected be
     'time range': { ...validInput(), time_range: { from: '2020-01-01T00:00:00Z' } },
     'provider url': { ...validInput(), provider_url: 'https://evil.example.test' },
     'missing surface': { subject: { kind: 'agent', id: 'a' } },
-    'missing subject': { surface: 'agent360' },
+    'missing subject': { surface: 'profile360' },
     'subject kind not allowed for surface': { ...validInput(), subject: { kind: 'campaign', id: 'c1' } },
     'unknown subject kind': { ...validInput(), subject: { kind: 'tenant', id: 't1' } },
     'empty subject id': { ...validInput(), subject: { kind: 'agent', id: '' } },
@@ -167,7 +168,7 @@ test('invalid, oversized, unknown-field, and tenant-bearing input is rejected be
     'empty slot list': { ...validInput(), requested_slots: [] },
     'unknown slot': { ...validInput(), requested_slots: ['not_a_slot'] },
     'slot from another surface': { ...validInput(), requested_slots: ['campaign_identity'] },
-    'duplicate slots': { ...validInput(), requested_slots: ['identity', 'identity'] },
+    'duplicate slots': { ...validInput(), requested_slots: ['identity_spine', 'identity_spine'] },
     'too many slots': { ...validInput(), requested_slots: [...slots, ...slots, ...slots] },
     'non-string slot': { ...validInput(), requested_slots: [1] },
     'as_of without timezone': { ...validInput(), as_of: '2026-10-29T10:00:00' },
@@ -192,7 +193,7 @@ test('invalid, oversized, unknown-field, and tenant-bearing input is rejected be
   assert.equal(calls.length, 0);
 
   const cli = runCli([
-    'experience360', 'frame', 'get', '--surface', 'agent360', '--subject-kind', 'campaign',
+    'experience360', 'frame', 'get', '--surface', 'profile360', '--subject-kind', 'campaign',
     '--subject-id', 'c1', '--json',
   ]);
   assert.equal(cli.status, 1);
@@ -212,9 +213,9 @@ test('the wire request is one POST to the mounted route with only allowlisted bo
   assert.equal(call.init.method, 'POST');
   assert.equal(call.init.redirect, 'error');
   assert.deepEqual(call.body, {
-    surfaceId: 'agent360',
+    surfaceId: 'profile360',
     subject: { kind: 'agent', id: 'agent-1' },
-    requestedSlotIds: ['identity', 'tool_usage', 'risk_summary', 'capabilities'],
+    requestedSlotIds: ['identity_spine', 'agent_delegations', 'risk_summary', 'entity_identity'],
     asOf: '2026-10-29T10:00:00Z',
     includeEvidence: true,
   });
@@ -235,7 +236,7 @@ test('Node client, MCP, and CLI return the same unmodified server frame with par
   const calls = installFetch(t, (call) => frameResponse(call, {
     'x-aether-audit-event-id': 'audit-from-server',
   }));
-  const expectedFrame = frameFor({ surfaceId: 'agent360', subject: validInput().subject });
+  const expectedFrame = frameFor({ surfaceId: 'profile360', subject: validInput().subject });
 
   const client = createAccessClient({ apiUrl: env.AETHER_API_URL, apiKey: env.AETHER_API_KEY });
   const viaClient = await client.experience360.frame(validInput());
@@ -264,13 +265,13 @@ test('Node client, MCP, and CLI return the same unmodified server frame with par
   for (const data of [viaClient.data, viaMcp.structuredContent.data, viaCli.data]) {
     const byId = Object.fromEntries(data.slots.map((slot) => [slot.id, slot]));
     assert.equal(data.state, 'partial');
-    assert.equal(byId.tool_usage.state, 'unknown');
-    assert.equal(byId.tool_usage.content, undefined);
+    assert.equal(byId.agent_delegations.state, 'unknown');
+    assert.equal(byId.agent_delegations.content, undefined);
     assert.equal(byId.risk_summary.state, 'degraded');
     assert.deepEqual(byId.risk_summary.limitations, ['source_stale']);
-    assert.equal(byId.capabilities.state, 'suppressed');
-    assert.equal(byId.capabilities.policyDisposition.state, 'denied');
-    assert.deepEqual(byId.identity.evidenceRefs, ['ev-1']);
+    assert.equal(byId.entity_identity.state, 'suppressed');
+    assert.equal(byId.entity_identity.policyDisposition.state, 'denied');
+    assert.deepEqual(byId.identity_spine.evidenceRefs, ['ev-1']);
     assert.deepEqual(data.degradation, { degraded: true, reasonCodes: ['freshness_exceeded'] });
     assert.equal(data.ownsCanonicalTruth, false);
   }
@@ -366,9 +367,9 @@ test('a frame for a different surface or subject, or a non-frame body, is a cont
   installFetch(t, () => new Response(JSON.stringify(body), {
     status: 200, headers: { 'content-type': 'application/json', 'x-request-id': 'req-contract' },
   }));
-  const good = frameFor({ surfaceId: 'agent360', subject: { kind: 'agent', id: 'agent-1' } });
+  const good = frameFor({ surfaceId: 'profile360', subject: { kind: 'agent', id: 'agent-1' } });
   const cases = {
-    'wrong surface': { ...good, surfaceId: 'profile360' },
+    'wrong surface': { ...good, surfaceId: 'agent360' },
     'wrong subject id': { ...good, subject: { kind: 'agent', id: 'someone-else' } },
     'wrong subject kind': { ...good, subject: { kind: 'entity', id: 'agent-1' } },
     'missing slots': { ...good, slots: undefined },

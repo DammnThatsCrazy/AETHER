@@ -59,6 +59,14 @@ export function createAccessClient({ apiUrl, apiKey, sessionToken } = {}) {
     experience360: Object.freeze({
       frame: (input) => invoke('experience360.frame.get', input),
     }),
+    profile360: Object.freeze({
+      search: (identifier) => invoke('profile360.search', identifier),
+      get: (entityId, input = {}) => invoke('profile360.get', { ...input, entity_id: entityId }),
+      slots: (entityId, slots, input = {}) => invoke('profile360.slot.get', {
+        ...input, entity_id: entityId, slots,
+      }),
+      evidence: (entityId, input = {}) => invoke('profile360.evidence.get', { ...input, entity_id: entityId }),
+    }),
     continuations: Object.freeze({
       create: async (input) => {
         const result = await createContinuation(input, env, { sourceClient: 'agent' });

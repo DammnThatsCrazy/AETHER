@@ -50,6 +50,7 @@ from repositories.repos import get_pool
 from shared.common.common import parse_iso, utc_now
 from shared.graph.mutation_models import MutationRecord
 from shared.logger.logger import get_logger
+from shared.freshness.source_watermarks import advances_watermark
 
 logger = get_logger("aether.repository.graph_mutation_ledger")
 
@@ -316,6 +317,7 @@ class GraphMutationLedgerRepository:
 
     # ── Append (transactional close-and-append) ──────────────────────────────
 
+    @advances_watermark("relationship_facts")
     async def append(
         self,
         record: MutationRecord,

@@ -173,6 +173,13 @@ async def build_experience360_frame(
     else:
         readable_slot_ids = set()
 
+    if freshness_by_slot is None and request.asOf is None:
+        # Current reads only: a point-in-time read cannot be judged against now.
+        freshness_by_slot = await _watermark_freshness(
+            surface, [slot_id for slot_id in requested_slot_ids if slot_id in readable_slot_ids],
+            request.tenantId,
+        )
+
     journey_dispatch_policy = None
     risk_dispatch_policy = None
     agent_behavior_policy = None
@@ -2094,6 +2101,26 @@ def _merge_identity360_authority_result(
             "warnings": warnings,
             "degradation": degradation,
         }
+    )
+
+
+async def _watermark_freshness(
+    surface: Mapping[str, Any], slot_ids: list[str], tenant_id: str,
+) -> Optional[dict[str, Experience360Freshness]]:
+    """Slot freshness from per-tenant source watermarks, or ``None`` if unused."""
+    from shared.freshness.slot_freshness import evaluate_slot_freshness, slot_freshness_policies
+    from shared.freshness.source_watermarks import read_source_watermarks
+
+    policies = slot_freshness_policies(surface)
+    targeted = [slot_id for slot_id in slot_ids if slot_id in policies]
+    if not targeted:
+        return None
+    authorities = {
+        authority for slot_id in targeted for authority in policies[slot_id]["watermarkAuthorities"]
+    }
+    watermarks = await read_source_watermarks(tenant_id, authorities)
+    return evaluate_slot_freshness(
+        policies, targeted, watermarks, datetime.now(timezone.utc).isoformat(),
     )
 
 

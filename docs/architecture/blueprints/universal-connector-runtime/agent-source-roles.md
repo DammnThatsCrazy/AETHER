@@ -33,7 +33,7 @@ source_hashes:
   "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
   "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c275b92b8020e3c1e65392084affffd72ab970298e176c0aa6c58cd3981f66be"
   "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
-  "services/api/actions/agent_correlation/engine.py": "sha256:f032ab826de7727baa1a11065bd720a4bd79072ab59fba7bc16ad17f21605331"
+  "services/api/actions/agent_correlation/engine.py": "sha256:8e8ab2b44ff02d18c2d08bee38f49ea62019e5d3ba5334382713b21a0df94d28"
   "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
   "services/api/actions/agent_correlation/mcp_server.py": "sha256:b20c135f39ae243eb5df8073f45df2a69c5ae8e00b635b2a84dd72ba3e6f4cde"
   "services/api/actions/agent_correlation/projection.py": "sha256:533ba53fd6932921a34e84667f6c7461eec8099906893da7f1852698ddbeb4bc"
@@ -79,9 +79,15 @@ the task by `aether_correlation_token` (`DETERMINISTIC_BINDING`), and its
 inventory level was read back after a quantity change. The run also found two
 Admin API changes, now fixed in the token recorder: `inventorySetQuantities`
 takes the compare value per quantity (`changeFromQuantity`), and it requires an
-`@idempotent` key. Preview stores cannot read orders, so `order_graphql` and
-the webhook-format Shopify kinds stay `uncertified` until a signed-in store or
-an Admin API token is recorded. That recording showed that newer events name the owning
+`@idempotent` key. Preview stores cannot read orders, so `order_graphql` was
+then certified on the signed-in development store: a $1.00 custom-item draft
+order, completed into order `#1001`, carried the token in its note and a custom
+attribute and joined the task by `aether_correlation_token`. That run found
+that `Order.staffMember` requires the `read_users` scope, which Shopify grants
+only to finance embedded apps and Plus or Advanced stores. On other stores the
+staff actor is absent, so a Shopify order's provider-reported actor is usually
+only the app. The webhook-format Shopify kinds stay `uncertified` until an
+Admin API token is recorded. That recording showed that newer events name the owning
 account in `context`, and the mapper now reads it. The other vendor kinds
 report `uncertified` in `config/agent_correlation_certification.json` until
 their sandboxes are recorded. Token issuance
@@ -276,7 +282,12 @@ When a record arrives, the engine:
 
 1. Stores it. A repeated delivery is a no-op.
 2. Indexes its join keys: verified task refs, object refs, signed request IDs,
-   actors, infrastructure refs, and its time bucket.
+   actors, infrastructure refs, and its time bucket. This happens *before* the
+   candidate lookup, so two matching records ingested at the same moment
+   cannot both look before either is indexed: whichever looks second finds the
+   first. Verdict IDs are symmetric in the pair and recorded with an atomic
+   create-if-absent, so when both sides find each other they converge on one
+   verdict.
 3. Finds candidates that share a key or fall in an adjacent bucket, capped at
    500.
 4. Runs the join rules.
@@ -380,7 +391,7 @@ proxy. Missing credentials skip a provider; they never certify it.
 | 3. Aether MCP bridge (done) | Agents register tasks and receive tokens; keys from `AGENT_CORRELATION_TOKEN_KEYS` | An end-to-end test registers a task over MCP, stamps the token into Stripe metadata, and links it |
 | 4. Projection (done) | `linked` verdicts become `CORRELATED_ACROSS_SOURCES` edges through the graph mutation gateway | Projected edges pass the graph write validator; candidates never project |
 | 5. Vendors per role (done for six) | Shopify, Stripe, Ramp, Cloudflare, OpenAI Agents, Aether MCP | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
-| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event`, `shopify/product_graphql`, and `shopify/inventory_level_graphql` certified from real sandbox records, with token round trips; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
+| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` and `shopify/{product,inventory_level,order}_graphql` certified from real sandbox records, with token round trips; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
 | 7. Verified bindings (done) | Bindings from verified provider connections; declared scopes graded `TENANT_DECLARED` | Tests cover verified, declared, spoofed, realm-mismatched, revoked, and cross-tenant cases |
 
 Step 5 is the modularity test. A vendor that needs a change outside its own

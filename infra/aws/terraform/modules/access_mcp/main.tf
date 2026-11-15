@@ -1,8 +1,13 @@
 locals {
-  service_name = "${lower(var.project)}-${var.environment}-access-mcp"
+  # Staging names follow the staging IAM contracts (`AETHER-staging-*` service
+  # ARNs, roles and `/aether/AETHER-staging/*` log groups) so the lifecycle and
+  # apply roles can manage this service without wider grants. Production names
+  # are unchanged.
+  staging      = var.environment == "staging"
+  service_name = local.staging ? "${var.project}-staging-access-mcp" : "${lower(var.project)}-${var.environment}-access-mcp"
   task_cpu     = 256
   task_memory  = 512
-  log_group    = "/aether/${var.environment}/access-mcp"
+  log_group    = local.staging ? "/aether/${var.project}-staging/access-mcp" : "/aether/${var.environment}/access-mcp"
 }
 
 data "aws_caller_identity" "current" {}

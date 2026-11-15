@@ -184,6 +184,13 @@ def map_inventory_level_graphql(ctx: MapperContext, record: Mapping[str, Any]) -
 
 
 def map_order_graphql(ctx: MapperContext, record: Mapping[str, Any]) -> list[CorrelationObservation]:
+    """An Admin GraphQL order.
+
+    ``staffMember`` needs the ``read_users`` scope, which Shopify grants only to
+    finance embedded apps and Plus or Advanced stores (found by sandbox
+    certification). Elsewhere it is null or denied, so the staff actor is
+    absent and only the app actor remains: absence never means "no staff".
+    """
     app_gid = _node_id(record.get("app"))
     staff_gid = _node_id(record.get("staffMember"))
     return map_order(ctx, {

@@ -4756,6 +4756,21 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/operations/runbooks/ACCESS_KIT_W3_CERTIFICATION.md",
+      "title": "Access Kit W3 Certification Runbook",
+      "slug": "runbooks/access-kit-w3-certification",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
       "title": "Agent Runtime & Mutation Review Runbook",
       "slug": "runbooks/agent-runtime-mutation-review",

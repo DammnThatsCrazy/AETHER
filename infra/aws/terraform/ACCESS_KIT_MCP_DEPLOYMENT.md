@@ -54,16 +54,32 @@ and timestamp. The API requires this short-lived assertion before accepting
 the MCP-audience token, so a surface header on public REST does not bypass the
 MCP boundary. Rotating the key requires coordinated API and MCP task restarts.
 
-Auth0 Dynamic Client Registration is **not** enabled by Terraform. Auth0's
-open DCR permits unauthenticated client creation, while its third-party clients
-need an explicit API grant. A host can instead use a reviewed preregistered
-client. Before using DCR, the identity owner must approve Auth0 tenant settings,
-the exact third-party delegated read grant, application consent and connection
-policy, callback URI handling, rate limits, and client revocation. The MCP
-service does not proxy a registration endpoint or mint OAuth tokens. Current
-MCP guidance prefers Client ID Metadata Documents; DCR is a compatibility
-mechanism. This repository cannot claim host onboarding or delegated OAuth
-conformance until the Auth0 configuration and a real host are exercised.
+MCP host self-registration is a separate opt-in, `enable_access_mcp_dcr`, which
+requires `enable_access_mcp_oauth`. It turns on Auth0 Dynamic Client
+Registration and Client ID Metadata Documents (the mechanism current MCP
+guidance prefers) so hosts such as Claude, Cursor, VS Code and ChatGPT can
+register without a preregistered client. The abuse controls are Auth0-enforced:
+
+- Registered hosts are third-party clients. Their only API access is a default
+  user-delegated grant (`default_for = third_party_clients`) on the MCP audience
+  with exactly `access_kit:read`. Without their own grant, third-party clients
+  get no token for any other API, including the Aether REST API.
+- The MCP audience denies client-credentials flows, issues one-hour tokens
+  without refresh tokens, and always shows the user a consent screen. The API
+  accepts MCP tokens only with the MCP service's signed per-request assertion.
+- The database connection becomes domain-level only while registration is on,
+  so registered hosts can sign users in. The pilot plan policy allows that
+  connection to change only in its `is_domain_connection` flag.
+- Auth0 rate-limits the registration endpoint. Idle registrations are removed
+  with `scripts/prune_auth0_mcp_clients.py` (dry run by default; `--apply`
+  deletes third-party clients with no successful sign-in in `--max-idle-days`,
+  never first-party clients).
+
+The tenant flags stay under Terraform while remote MCP OAuth is on, so turning
+`enable_access_mcp_dcr` off writes `false` back. Turn it off before disabling
+OAuth. The MCP service does not proxy registration or mint OAuth tokens. Host
+onboarding and delegated OAuth conformance are not claimed until a real host
+completes registration, sign-in and a read against a deployed tenant.
 
 The ECS task role has no attached AWS permission policy. The separate task
 execution role can pull from only `aether-access-mcp`, read the optional
@@ -109,11 +125,12 @@ create the ECS task until an image already exists in ECR. Use
 dispatch consumes the exact binary plan artifact by run ID and checksum; the
 Access MCP inputs are plan-only and an apply dispatch cannot reshape that plan.
 
-Use only `production-scale` and keep all steps in the same AWS account,
-region, and Terraform state. The ECR repository name is global within an
-account and region, so `production-scale` is its canonical persistent state
-owner. `production`, `enterprise-isolated`, staging, and expiring `demo`
-and `preview` profiles cannot create this repository or service. The selected protected GitHub environment, OIDC roles,
+Use `production` (or `staging` for the staging account) and keep all steps in
+the same AWS account, region, and Terraform state. The ECR repository name is
+global within an account and region, so each account has one persistent state
+owner: `production` in the production account and `staging` in the staging
+account. `production-scale`, `enterprise-isolated`, and expiring `demo` and
+`preview` profiles cannot create this repository or service. The selected protected GitHub environment, OIDC roles,
 Terraform backend, API domain, HTTPS listener/certificate, and required
 application inputs must already be configured. The production GitHub
 environments and credentials are not provisioned by this change.
@@ -163,10 +180,12 @@ environments and credentials are not provisioned by this change.
    client before customer rollout.
 
 The script does not create AWS resources or accept an application credential.
-The Publish Access Kit MCP image workflow is the repeatable production path:
-it runs only from main, first verifies that the production environment has at
-least one required reviewer, then waits for that environment's approval before
-assuming AWS_ACCESS_MCP_PUBLISH_ROLE_ARN through GitHub OIDC. It publishes
+The Publish Access Kit MCP image workflow is the repeatable path. Its `target`
+input selects the account: `production` runs only from main; `staging` runs
+from main or the staging branch. It first verifies that the target environment
+has at least one required reviewer, then waits for that environment's approval
+before assuming the environment's AWS_ACCESS_MCP_PUBLISH_ROLE_ARN through
+GitHub OIDC. It publishes
 the clean checked-out commit. Configure that role's trust for
 this repository and `refs/heads/main`; scope its policy to this repository
 with `ecr:GetAuthorizationToken` plus
@@ -203,18 +222,23 @@ ECR.
 
 ## Deployment gate and cost profile
 
-The promotion workflow and Terraform both allow the repository and service
-only in `production-scale` with `environment=production`. The plan-policy
+The promotion workflow and Terraform allow the repository and service only for
+the two per-account state owners: `production` with `environment=production`,
+and `staging` with `environment=staging`. The plan-policy
 checker accepts only the dedicated `module.access_mcp[0]` service address
 when explicitly enabled. At the default two tasks, the service compute plus
 five GiB of ECR storage adds an estimated USD 18.52/month before variable ALB,
 CloudWatch, traffic, and data-transfer costs; the exact profile plan and cost
 report remain the deployment review evidence.
 
-The service's fixed desired count is independent of staging's sleep multiplier
-and it creates no Application Auto Scaling target. Staging, demo, and preview
-are blocked until their lifecycle owners include it in wake/sleep, capacity,
-TTL, and cleanup checks. This PR has not applied Terraform, created the ECR
+The service creates no Application Auto Scaling target. In production its
+fixed desired count is `access_mcp_desired_count`. In staging it is declared
+under `profiles.staging.customer_services.access-mcp` in
+`config/runtime_deployment.yaml`, multiplied by `staging_state` (1 awake,
+0 asleep), and included in the lifecycle's exact wake/sleep inventory, drain
+and image checks when `enabled` is true; Terraform's `enable_access_mcp` must
+match that flag. See [Staging wake/sleep](../../../docs/operations/STAGING-WAKE-SLEEP.md)
+for the ordered staging enablement. Demo and preview remain blocked. This PR has not applied Terraform, created the ECR
 repository, published an image, or proved service/domain readiness or customer
 access.
 

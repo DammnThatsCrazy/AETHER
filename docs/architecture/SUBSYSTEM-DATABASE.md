@@ -38,6 +38,7 @@ reviewed_source_commits:
   - {'commit': '30d10ccb6', 'reason': 'Reviewed CSV import rights-lineage persistence. The body now documents the additive Bronze metadata and silver_import_facts JSONB refs/record IDs; other repository and database dispatch behavior is unchanged.'}
   - {'commit': 'fa28339e9', 'reason': 'Reviewed fa28339e9 and 9b7d55daa: Workflow360 rejects padded action-edge join identifiers and requires exact persisted Tool identity evidence; the database persistence model is unchanged. Added read and coverage behavior below.'}
   - {'commit': '9b7d55daa', 'reason': 'Reviewed exact Tool identity validation and incomplete Workflow360 action-read handling; no schema or repository persistence change.'}
+  - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
   "config/storage_policies.yaml": "sha256:0d039cd6c9a8b9a9acdbdf4f39f935fa22b6126929f3e0f6661891982d5dd022"
   "services/api/actions/agent/invocation_runtime.py": "sha256:140fdda726aab2d9a6d25afeb688409594f31d0fb2bde61d4be996e9d52ba96d"
@@ -53,11 +54,11 @@ source_hashes:
   "services/api/alembic/versions/20261030_model_governance_evaluations_approvals.py": "sha256:bb313b4f28028cca340689dbd67154cd9c02810ba08d31c3a0b8a48a98a3e842"
   "services/api/alembic/versions/20261104_merge_value_behavior_heads.py": "sha256:1a84e8f75dfc529b50d8d82f4dc83de87fe5499c4370b2d2580b4f315e39d52c"
   "services/api/intelligence/model_governance/evaluations.py": "sha256:687b5fb2d1e263a4ed921a1e76a5e74c1462ff3f1905b7ca9e9cedc2b10d07e3"
-  "services/api/intelligence/risk360/store.py": "sha256:19bcff42d26da16df4c860e60cdb6908015c0e0b4cbebccc139f87a199d39dc4"
+  "services/api/intelligence/risk360/store.py": "sha256:722b5e112ca4126093ccbabb64c81dd209f4f213c61d0b8b436864aed4360894"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:3d8bf744af89fc6d06816848c5ab3d43d5bdd6b469b3b8fd3fc505bb5c5e6848"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
+  "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/attribution_model_validation.py": "sha256:d2ea75981effed3f2aaba070ddcf29c9156acbab9a285a6601cb045a48774719"

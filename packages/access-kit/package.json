@@ -40,6 +40,7 @@
     "start:mcp": "node ./bin/aether-mcp.js",
     "start:mcp:http": "node ./bin/aether-mcp-http.js",
     "acceptance:v1": "node ./scripts/v1-acceptance.mjs",
+    "certify:w3": "node ./scripts/w3-certify.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
