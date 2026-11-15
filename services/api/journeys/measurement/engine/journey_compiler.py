@@ -151,8 +151,15 @@ class JourneyCompiler:
         scope = await _continuation_scope(tenant_id, seeds)
         if scope is None or not scope.handoffs:
             return activities, conversions
-        present = set(seeds)
-        linked = [a for a in scope.anonymous_ids if a not in present]
+        # An anonymous journey already loaded every row of its own anonymous ID.
+        # A profile or cluster journey loaded only rows carrying that profile or
+        # cluster, so its seed devices' unowned (pre-login) activity must be
+        # loaded too, or an acquisition on a device that later logged in would
+        # drop out of the journey.
+        if identity_type == "anonymous":
+            linked = [a for a in scope.anonymous_ids if a != identity_id]
+        else:
+            linked = list(scope.anonymous_ids)
         if not linked:
             return activities, conversions
 

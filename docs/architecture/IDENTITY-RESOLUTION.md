@@ -656,8 +656,11 @@ share one journey, and a handoff that joins two existing continuations leaves on
 the oldest root current. A profile or cluster journey takes in linked anonymous activity only
 when that activity is not already owned by a different profile or cluster. This is
 journey linkage: no identity is merged, no anonymous ID is rewritten, and identity
-resolution never sees it. Erasing a subject's handoffs removes the link, and the next
-compile builds separate journeys again.
+resolution never sees it. A profile or cluster journey loads the unowned activity of
+every anonymous ID in the scope, including the devices it already had rows on, so a
+pre-login acquisition stays in the journey after that device also logs in. Erasing a
+subject's handoffs removes the link, and the next compile builds separate journeys
+again.
 
 Redeeming a handoff queues the durable `journey.handoff_continuation` job
 (`continuation_jobs.py`, idempotent per handoff, internal only). The job compiles

@@ -379,6 +379,38 @@ def _apply_duplicates(record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
+def remove_duplicate(target: dict[str, Any], duplicate_id: str) -> dict[str, Any]:
+    """Withdraw a duplicate's contribution from the pattern it was merged into.
+
+    Used when a reviewer reverses or retargets a ``duplicate`` verdict: the old
+    canonical pattern must stop implicating the duplicate's members and
+    counting its support. The remaining duplicates are re-folded onto the base;
+    with none left, the base membership and support are restored."""
+    updated = copy.deepcopy(target)
+    dups = [d for d in updated.get("duplicates") or [] if d.get("pattern_id") != duplicate_id]
+    if len(dups) == len(updated.get("duplicates") or []):
+        return updated
+    base_keys = list(updated.get("base_entity_keys") or [])
+    base_count = int(updated.get("base_entity_count") or len(base_keys))
+    base_occ = int(updated.get("base_occurrence_count") or 0)
+    updated["duplicates"] = dups
+    if dups:
+        updated = _apply_duplicates(updated)
+    else:
+        updated["affected_entity_keys"] = base_keys[:MAX_AFFECTED_ENTITIES]
+        updated["affected_entities"] = [entity_ref(k) for k in updated["affected_entity_keys"]]
+        updated["affected_entity_count"] = base_count
+        updated["affected_entities_truncated"] = len(base_keys) > MAX_AFFECTED_ENTITIES
+        updated["entity_kinds"] = sorted({k.split(":", 1)[0] for k in updated["affected_entity_keys"]})
+        updated["occurrence_count"] = base_occ
+        for key in ("base_entity_keys", "base_entity_count", "base_occurrence_count"):
+            updated.pop(key, None)
+    updated["review_history"] = [*updated.get("review_history", []), {
+        "decision": "duplicate_withdrawn", "duplicate_pattern_id": duplicate_id, "at": utc_now().isoformat(),
+    }]
+    return updated
+
+
 def merge_duplicate(target: dict[str, Any], duplicate: dict[str, Any]) -> dict[str, Any]:
     """Fold a pattern people marked duplicate into the pattern it duplicates.
 

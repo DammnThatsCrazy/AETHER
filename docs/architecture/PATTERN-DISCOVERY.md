@@ -9,7 +9,7 @@ since_version: "0.1.0"
 source_files:
   - services/api/intelligence/pattern_discovery/
 source_hashes:
-  "services/api/intelligence/pattern_discovery/": "sha256:307d9f8378b04252b1edc8b29682ebc1a11ec6bf2eccffc0a4eb79a9619d5137"
+  "services/api/intelligence/pattern_discovery/": "sha256:5cdefe9f10416c5e5a7c7c238a0965afa9af737f454120110690a41225725b94"
 ---
 
 # Pattern Discovery and Unstructured Evidence Intelligence
@@ -215,7 +215,9 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   re-entering the queue. Re-merging the same duplicate refreshes its
   contribution whenever its members or support changed, even under an
   unchanged fingerprint (which ignores individual members and counts), and is
-  a no-op otherwise.
+  a no-op otherwise. Reversing or retargeting a `duplicate` verdict withdraws
+  the contribution from the old canonical pattern (`duplicate_withdrawn` in
+  its history), restoring its own membership and support.
 - Promotion is allowed only from a confirmed status whose evidence has not
   changed since review, and it is sticky. Seeing a pattern is automatic;
   letting it write risk signals and graph edges stays a human act.
@@ -258,7 +260,10 @@ PostgreSQL when `PATTERN_DISCOVERY_TEST_DSN` is set. Storage policies are in
   `session:` keys or the bare id) from affected entities, evidence, signature
   content, title, summary, review history and promotion outcomes, and from
   merged-duplicate state (`base_entity_keys`, `duplicates[*].entity_keys`) so
-  re-detection cannot fold the subject back in. The pattern
+  re-detection cannot fold the subject back in. User-authored text is scrubbed
+  too: a renamed `display_title` and refs embedded inside review-history text
+  (a rename to "Investigate user:alice" becomes "Investigate [erased]"), and a
+  subject named only there is still found. The pattern
   id and signature hash are kept. Patterns left with fewer than two entities
   are deleted, because one remaining entity would re-identify the erased one
   by difference. Run records listing a redacted pattern are deleted too, as

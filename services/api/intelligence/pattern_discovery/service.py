@@ -38,6 +38,7 @@ from .projections import consent_allows, entity_context, promote_to_risk, simila
 from .registry import (
     PatternDiscoveryRunRepository, PatternFeedbackRepository, PatternRegistryRepository,
     apply_curation, apply_deprecation, apply_promotion, apply_review, mark_unseen, merge_duplicate,
+    remove_duplicate,
 )
 
 logger = get_logger("aether.pattern_discovery.service")
@@ -455,6 +456,8 @@ class PatternDiscoveryService:
             from .registry import LifecycleError
 
             raise LifecycleError("duplicate_of does not name a pattern in this tenant")
+        before = await self.registry.get(tenant_id, pid)
+        previous_target = (before or {}).get("duplicate_of") if (before or {}).get("status") == "duplicate" else None
         updated = await self.registry.mutate(
             tenant_id, pid,
             lambda row: apply_review(row, reviewer_id=reviewer_id, verdict=verdict, reason=reason,
@@ -462,6 +465,11 @@ class PatternDiscoveryService:
         )
         if updated is not None:
             await self.feedback.record(tenant_id, updated, reviewer_id=reviewer_id, verdict=verdict, reason=reason)
+            if previous_target and (verdict != "duplicate" or duplicate_of != previous_target):
+                # The duplicate verdict was withdrawn or retargeted: the old
+                # canonical pattern stops folding in this pattern's contribution.
+                await self.registry.mutate(tenant_id, previous_target,
+                                           lambda row, dup_id=pid: remove_duplicate(row, dup_id))
             if verdict == "duplicate" and duplicate_of:
                 await self.registry.mutate(tenant_id, duplicate_of,
                                            lambda row, dup=updated: merge_duplicate(row, dup))

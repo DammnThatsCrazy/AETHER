@@ -217,3 +217,17 @@ async def test_joining_two_continuations_retires_every_former_root():
     for member in ("B", "C", "D"):
         assert await repo.find_current_for_profile(T, member, identity_type="anonymous") == []
     assert len(await repo.find_current_for_profile(T, "A", identity_type="anonymous")) == 1
+
+
+async def test_profile_journey_keeps_seed_devices_pre_login_activity():
+    # The mobile acquisition (unowned) must stay in the profile journey after
+    # the mobile device also logs in, which makes it a seed of the profile.
+    await _activity(0, anon="anon-m", session="mob-1", platform="mobile_ios", device="dev-m")
+    await _activity(1, anon="anon-w", session="web-1", platform="web", device="dev-w", profile="user-1")
+    await _handoff("anon-m", "mob-1", "anon-w", "web-1")
+    first = await JourneyCompiler().compile_for_profile(T, "user-1", identity_type="profile")
+    assert first["step_count"] == 2
+    await _activity(2, anon="anon-m", session="mob-1", platform="mobile_ios", device="dev-m", profile="user-1")
+    again = await JourneyCompiler().compile_for_profile(T, "user-1", identity_type="profile")
+    ids = {s["activity_id"] for s in await _steps(again)}
+    assert ids == {f"{T}-a0", f"{T}-a1", f"{T}-a2"}

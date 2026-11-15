@@ -96,12 +96,33 @@ def _contribution_keys(row: dict[str, Any]) -> set[str]:
     return out
 
 
+def _scrub_text_deep(value: Any, keys: set[str]) -> Any:
+    """Replace subject refs embedded inside free text anywhere in a structure
+    (user-authored renames and reasons), not only whole-string matches."""
+    if isinstance(value, dict):
+        return {k: _scrub_text_deep(v, keys) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_text_deep(v, keys) for v in value]
+    return _scrub_text(value, keys)
+
+
+def _text_names_deep(value: Any, keys: set[str]) -> bool:
+    if isinstance(value, dict):
+        return any(_text_names_deep(v, keys) for v in value.values())
+    if isinstance(value, list):
+        return any(_text_names_deep(v, keys) for v in value)
+    return _text_names(value, keys)
+
+
 def names_subject(row: dict[str, Any], keys: set[str]) -> bool:
     if set(row.get("affected_entity_keys") or []) & keys:
         return True
     if _contribution_keys(row) & keys:
         return True
-    if _text_names(row.get("title"), keys) or _text_names(row.get("summary"), keys):
+    if (_text_names(row.get("title"), keys) or _text_names(row.get("summary"), keys)
+            or _text_names(row.get("display_title"), keys)):
+        return True
+    if _text_names_deep(row.get("review_history"), keys):
         return True
     _, changed = _scrub({"evidence": row.get("evidence"), "competing": row.get("competing_explanations"),
                          "signature": row.get("signature")}, keys)
@@ -136,7 +157,10 @@ def redact(row: dict[str, Any], keys: set[str]) -> dict[str, Any]:
     out["signature"], _ = _scrub(row.get("signature") or {}, keys)
     out["title"] = _scrub_text(row.get("title"), keys)
     out["summary"] = _scrub_text(row.get("summary"), keys)
-    out["review_history"], _ = _scrub(row.get("review_history") or [], keys)
+    if row.get("display_title") is not None:
+        out["display_title"] = _scrub_text(row.get("display_title"), keys)
+    history, _ = _scrub(row.get("review_history") or [], keys)
+    out["review_history"] = _scrub_text_deep(history, keys)
     promotion = row.get("promotion")
     if isinstance(promotion, dict):
         promotion = dict(promotion)
