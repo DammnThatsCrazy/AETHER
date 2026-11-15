@@ -51,20 +51,20 @@ source_files:
 reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the new Auth0 Native Aether CLI client and connection grants. The Auth0 deployment inventory now records the public Device Authorization client and its human-session deployment gate; the independent operator tfmcp service is unchanged."
+  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:76a685c742a3a57790baecd1f774ed606e30a3237d339c017ca9aa0bba6be73e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:7a1ca755a832d43137268b2d50ea032f241fa79aa0a57cb187099402e4f186a6"
+  ".github/workflows/staging-lifecycle.yml": "sha256:08b0ef49779fb2c3081c4b44da0b840e8b5a45be652c829ca03ff60b96af2c4e"
   ".github/workflows/staging-state-reconcile.yml": "sha256:3da807f71996e7b397bc4a593fafd27d3818c3d4f0d7a2fa37b5619674209d48"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
-  "config/staging_apply_iam_policy.yaml": "sha256:528cc930bd8cedf9f347f4f0630e50e61bf1360bdf5beeb8088c90485519b142"
+  "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_lifecycle_trust_policy.json": "sha256:9623d3b8d39575a1bf00b5cc0ba2e14159e5fc821dfbfa84e26a108ba91fd5d6"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
@@ -79,7 +79,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:a9e4be4d113fbfc912ad1b80a9ccee3ab7e3bab8a9fc73851956a38d70ff613c"
+  "infra/aws/terraform/": "sha256:e7f243b348a83ebae10a92122020268d0b81fc390e47daab8a8bbd27f27619f9"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
