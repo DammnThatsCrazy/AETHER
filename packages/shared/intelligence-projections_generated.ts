@@ -1807,7 +1807,7 @@ export interface Product360SurfaceDefinition {
   directProviderBindings?: readonly Product360DirectProviderBinding[];
   blueprintContract?: { sourceSection: string; priority: 'P0' | 'P1' | 'P2'; canonicalOwner: string; subjectIdentifiers: readonly string[]; requiredLensIds: readonly string[]; purpose: string; requiredSlotIds: readonly string[] };
   sourceOfTruth: { canonicalAuthorities: readonly string[]; ownsCanonicalTruth: false; prohibitedOwnership: readonly string[] };
-  freshnessPolicy: { required: true; maxAgeSeconds: number | null; sourceTimestamps: string; missingTimestamp: string; onStale: string; requirementStatus: string };
+  freshnessPolicy: { required: true; maxAgeSeconds: number | null; sourceTimestamps: string; missingTimestamp: string; onStale: string; requirementStatus: string; slots?: Readonly<Record<string, { maxAgeSeconds: number; watermarkAuthorities: readonly string[] }>> };
   policyBehavior: { tenantScopeRequired: true; authorizationBeforeRead: true; policyEvaluation: string; historicalConsentEvaluation: string; redactionBehavior: string; requirementStatus: string };
   backendCapabilities: { required: readonly string[]; projectionCapabilityKeys: readonly string[]; providerCapabilityStatus: string };
   lensContract: { expectedCount: number | null; lensIds: readonly string[]; sourceAlignmentStatus: string };
@@ -4910,10 +4910,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     freshnessPolicy: {
+      required: true,
       maxAgeSeconds: null,
+      sourceTimestamps: 'preserve',
       missingTimestamp: 'unknown',
       onStale: 'mark_affected_slots_stale',
-      required: true,
       requirementStatus: 'contract_requirement_not_provider_attestation',
       slots: {
         agent_delegations: {
@@ -4956,8 +4957,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           maxAgeSeconds: 86400,
           watermarkAuthorities: ['economic_facts']
         }
-      },
-      sourceTimestamps: 'preserve'
+      }
     },
     id: 'profile360',
     lensContract: {

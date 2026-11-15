@@ -4797,10 +4797,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "freshnessPolicy": {
+            "required": True,
             "maxAgeSeconds": None,
+            "sourceTimestamps": "preserve",
             "missingTimestamp": "unknown",
             "onStale": "mark_affected_slots_stale",
-            "required": True,
             "requirementStatus": "contract_requirement_not_provider_attestation",
             "slots": {
                 "agent_delegations": {
@@ -4843,8 +4844,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                     "maxAgeSeconds": 86400,
                     "watermarkAuthorities": ("economic_facts",)
                 }
-            },
-            "sourceTimestamps": "preserve"
+            }
         },
         "id": "profile360",
         "lensContract": {
