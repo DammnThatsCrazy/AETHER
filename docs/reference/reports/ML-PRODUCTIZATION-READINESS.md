@@ -10,7 +10,7 @@ canonical_owner: ml@aether
 source_files: [services/ml/common/model_registry.py, services/ml/common/feature_contracts.py, services/ml/common/artifact_registry.py, services/ml/training/pipelines/train.py, services/ml/serving/src/api.py, services/api/intelligence/ml_serving/routes.py, services/api/governance/model_extraction_defense/defense_layer.py]
 source_hashes:
   "services/api/governance/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
-  "services/api/intelligence/ml_serving/routes.py": "sha256:b296abed4c48f9f4f845808ae0241c01e2ad45ee1c506fcee3183d20db73f8a3"
+  "services/api/intelligence/ml_serving/routes.py": "sha256:7438c7b8fd7245e70c11919ed9dccdc9c358489e97caa1a4452e5ca586ee74c5"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"

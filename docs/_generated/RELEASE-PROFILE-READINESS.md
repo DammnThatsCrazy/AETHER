@@ -6,7 +6,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 | Profile | Disposition | Required | Impl | Prod | Activation | Env evidence | Deps | Ownership |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Local development | BLOCKED_BY_CODE | 33 | 81.8% | n/a | 48.5% | 100% | 100% | 97% |
+| Local development | BLOCKED_BY_CODE | 34 | 79.4% | n/a | 47.1% | 100% | 100% | 97.1% |
 | Staging | READY_TO_ACTIVATE | 24 | 100% | 100% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
 | Production | BLOCKED_BY_CODE | 23 | 43.5% | 100% | 65.2% | 0% | 100% | 100% |
@@ -35,6 +35,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `measurement-attribution`: TECHNICALLY_RELEASE_ELIGIBLE
 - `measurement-integrity`: TECHNICALLY_RELEASE_ELIGIBLE
 - `notification-intelligence`: TECHNICALLY_RELEASE_ELIGIBLE
+- `pattern-discovery`: BLOCKED_BY_CODE
 - `payment-rail-observability`: BLOCKED_BY_CODE
 - `profile-360`: TECHNICALLY_RELEASE_ELIGIBLE
 - `provider-certification-plane`: TECHNICALLY_RELEASE_ELIGIBLE
@@ -58,6 +59,9 @@ A release profile is only as ready as its weakest **required** capability. The d
 - interoperability-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - interoperability-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - interoperability-intelligence: open repository work: complete repository-controlled verification + hardening
+- pattern-discovery: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
+- pattern-discovery: implementation state IMPLEMENTED is below the VERIFIED floor
+- pattern-discovery: open repository work: reconcile readiness controls with the PostgreSQL migration and route authorization tests
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
@@ -104,6 +108,9 @@ A release profile is only as ready as its weakest **required** capability. The d
 - interoperability-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - interoperability-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - interoperability-intelligence: open repository work: complete repository-controlled verification + hardening
+- pattern-discovery: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
+- pattern-discovery: implementation state IMPLEMENTED is below the VERIFIED floor
+- pattern-discovery: open repository work: reconcile readiness controls with the PostgreSQL migration and route authorization tests
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
@@ -127,6 +134,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - graph-mutation-safety: INFRASTRUCTURE_WAITING: Graph Mutation Safety activation waits on an external infra condition. (owner: platform-ops)
 - interoperability-intelligence: INFRASTRUCTURE_WAITING: Interoperability Intelligence activation waits on an external infra condition. (owner: platform-ops)
 - notification-intelligence: CREDENTIAL_WAITING: Action Notifications activation waits on an external credential condition. (owner: tenant / platform-ops)
+- pattern-discovery: LIVE_DATA_WAITING: Pattern Discovery detectors have no measured precision/recall on labelled production data. (owner: tenant / platform-ops)
 - payment-rail-observability: LIVE_DATA_WAITING: Payment Rail Observability activation waits on an external live data condition. (owner: tenant / provider)
 - provider-certification-plane: LIVE_DATA_WAITING: Provider Certification Plane activation waits on an external live data condition. (owner: tenant / provider)
 - push-notification-delivery: ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)
@@ -161,6 +169,9 @@ A release profile is only as ready as its weakest **required** capability. The d
 - kyber-operator-console: implementation state VERIFIED is below the TURNKEY floor
 - measurement-attribution: implementation state VERIFIED is below the TURNKEY floor
 - measurement-integrity: implementation state VERIFIED is below the TURNKEY floor
+- pattern-discovery: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
+- pattern-discovery: implementation state IMPLEMENTED is below the TURNKEY floor
+- pattern-discovery: open repository work: reconcile readiness controls with the PostgreSQL migration and route authorization tests
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
@@ -185,6 +196,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - graph-mutation-safety: INFRASTRUCTURE_WAITING: Graph Mutation Safety activation waits on an external infra condition. (owner: platform-ops)
 - interoperability-intelligence: INFRASTRUCTURE_WAITING: Interoperability Intelligence activation waits on an external infra condition. (owner: platform-ops)
 - notification-intelligence: CREDENTIAL_WAITING: Action Notifications activation waits on an external credential condition. (owner: tenant / platform-ops)
+- pattern-discovery: LIVE_DATA_WAITING: Pattern Discovery detectors have no measured precision/recall on labelled production data. (owner: tenant / platform-ops)
 - payment-rail-observability: LIVE_DATA_WAITING: Payment Rail Observability activation waits on an external live data condition. (owner: tenant / provider)
 - provider-certification-plane: LIVE_DATA_WAITING: Provider Certification Plane activation waits on an external live data condition. (owner: tenant / provider)
 - push-notification-delivery: ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)

@@ -14,7 +14,7 @@ customer-facing fallback is **Direct / Unknown** — never a typed-URL claim.
 | `economic_class` | 4 | `paid`, `unpaid`, `unknown`, `nonhuman` |
 | `channel_family` | 15 | `search`, `social`, `email`, `referral`, `affiliate`, `partner`, `ai`, `agent`, `push`, `sms`, `app_store`, `internal`, `direct`, `machine`, `unknown` |
 | `source_class` | 19 | `paid_search`, `paid_social`, `display`, `organic_search`, `organic_social`, `owned_referral`, `external_referral`, `email`, `affiliate`, `partner`, `ai_referral`, `agent_referral`, `push`, `sms`, `app_store_referral`, `internal_navigation`, `direct_unknown`, `machine_referral`, `unknown` |
-| `entry_method` | 18 | `verified_source_link`, `server_redirect`, `web_referrer`, `paid_click_id`, `utm_declaration`, `android_install_referrer`, `android_app_link`, `ios_universal_link`, `ios_custom_url`, `ios_adattributionkit`, `push_notification`, `email_link`, `qr_code`, `nfc`, `vanity_url`, `internal_navigation`, `manual_sdk_evidence`, `unknown` |
+| `entry_method` | 19 | `verified_source_link`, `server_redirect`, `web_referrer`, `paid_click_id`, `utm_declaration`, `android_install_referrer`, `android_app_link`, `ios_universal_link`, `ios_custom_url`, `ios_adattributionkit`, `ios_apple_ads_attribution`, `push_notification`, `email_link`, `qr_code`, `nfc`, `vanity_url`, `internal_navigation`, `manual_sdk_evidence`, `unknown` |
 | `proof_level` | 7 | `cryptographic`, `platform_verified`, `domain_verified`, `server_observed`, `declared`, `inferred`, `none` |
 
 ## Source classes

@@ -41,7 +41,7 @@ manifest's three identity fields must agree.
 | `accounts` | Whether account discovery and selection are supported |
 | `webhooks` | Whether webhooks are supported, whether registration is automated, and the signature verification scheme |
 | `sync` | Initial backfill, incremental sync, reconciliation, and the cursor field an incremental sync advances |
-| `streams` | Optional versioned `StreamDescriptor` inventory: stable stream ID, source object/domain, pull/webhook/report/stream modes, cursor/topics, scopes, output, classification, and authority class |
+| `streams` | Optional versioned `StreamDescriptor` inventory: stable stream ID, source object/domain, pull/webhook/report/stream modes, cursor/topics, scopes, output, classification, authority class, and an optional `source_role` (what the stream proves: agent runtime, tool bridge, system of record, network observer, or authority issuer) |
 | `data_outputs` | Canonical output streams the plugin writes to (e.g. `bronze.provider_events`) |
 | `product_destinations` | Downstream products the capability feeds |
 | `deployment` | Required environment variables, secrets, public URLs, and provider-side registration steps |

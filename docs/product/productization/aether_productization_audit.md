@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:a014adb603a1fb8b56f4653bdc3e8708a410fd8d4e35ec838af9b984d26a6b99"
+  "scripts/production_status.py": "sha256:b71f250a3fc16797858f1ad58f62c0acdc06c4fbce2c39dda9d690f24acdca62"
 ---
 
 # AETHER Productization Audit
@@ -224,9 +224,19 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | payment rail observability | 3 |
 | semantic intelligence | 2 |
 | card-linked payment rails | 2 |
+| pattern discovery | 2 |
 
-**Overall: ~3.77/5 — pre-production** (canonical live figure from
+**Overall: ~3.68/5 — pre-production** (canonical live figure from
 `make production-status`; this table is a dated excerpt of the full scorecard).
+The 2026-11-14 pass added **pattern discovery at 2/5 (partial/pilot)**: a
+complete, flag-gated discovery plane (schema-on-read extraction, segmented and
+seasonal baselines, 13 detectors, a lifecycle that surfaces patterns
+automatically and keeps them reviewable, what's-new digests and notifications,
+pattern subgraphs and graph overlay, 360 sections and segment lenses, DSR
+erasure, consent gates, Risk360 and graph promotion, scheduler, Kyber and
+Aether surfaces) held at 2 because no detector has measured precision on production
+data. Like the semantic intelligence addition, the lower average is honest
+denominator growth, not a regression in any existing area.
 A W3C trace-context seam (correlation-id + traceparent propagation across the
 jobs platform, no-op unless `AETHER_OTEL_ENABLED`) landed with a matching
 declared pre-production blocker: no OpenTelemetry SDK/exporter is integrated,

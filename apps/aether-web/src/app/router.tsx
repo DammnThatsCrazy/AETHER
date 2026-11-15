@@ -31,6 +31,7 @@ const NotificationCenterPage = lazy(() => import('@aether-app/pages/notification
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const SignalsPage = lazy(() => import('@aether-app/pages/signals').then(m => ({ default: m.SignalsPage })));
 const RiskPage = lazy(() => import('@aether-app/pages/risk').then(m => ({ default: m.RiskPage })));
+const PatternsPage = lazy(() => import('@aether-app/pages/patterns').then(m => ({ default: m.PatternsPage })));
 const SyndicatesPage = lazy(() => import('@aether-app/pages/syndicates').then(m => ({ default: m.SyndicatesPage })));
 const RelationshipsPage = lazy(() => import('@aether-app/pages/relationships').then(m => ({ default: m.RelationshipsPage })));
 const CommunicationsPage = lazy(() => import('@aether-app/pages/communications').then(m => ({ default: m.CommunicationsPage })));
@@ -188,6 +189,7 @@ export function AppRouter() {
                 <Route path="/geo" element={<PageSuspense frameless><GeoPage /></PageSuspense>} />
                 <Route path="/signals" element={<PageSuspense frameless><SignalsPage /></PageSuspense>} />
                 <Route path="/risk" element={<PageSuspense frameless><RiskPage /></PageSuspense>} />
+                <Route path="/patterns" element={<PageSuspense><PatternsPage /></PageSuspense>} />
                 <Route path="/syndicates" element={<PageSuspense frameless><SyndicatesPage /></PageSuspense>} />
                 <Route path="/syndicates/:syndicateId" element={<PageSuspense frameless><SyndicatesPage /></PageSuspense>} />
                 <Route path="/relationships" element={<PageSuspense frameless><RelationshipsPage /></PageSuspense>} />

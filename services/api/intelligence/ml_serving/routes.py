@@ -185,6 +185,18 @@ _http_client: Optional[httpx.AsyncClient] = None
 _client_lock = __import__("threading").Lock()
 
 
+def service_auth_headers() -> dict[str, str]:
+    """The credential standalone ML serving requires (``X-Service-Token``).
+
+    services/ml/serving/src/api.py::_require_service_token rejects requests
+    without ``ML_SERVICE_TOKEN`` in staging and production unless serving is
+    embedded inline. Empty when no token is configured (local / inline)."""
+    import os
+
+    token = os.environ.get("ML_SERVICE_TOKEN", "")
+    return {"X-Service-Token": token} if token else {}
+
+
 def _get_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is not None:
@@ -194,6 +206,7 @@ def _get_client() -> httpx.AsyncClient:
             _http_client = httpx.AsyncClient(
                 base_url=_ML_SERVING_URL,
                 timeout=httpx.Timeout(30.0, connect=5.0),
+                headers=service_auth_headers(),
             )
     return _http_client
 

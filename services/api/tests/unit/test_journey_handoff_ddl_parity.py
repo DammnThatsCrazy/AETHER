@@ -30,3 +30,20 @@ def test_ddl_matches_migration():
 
 def test_migration_chains_after_spawn_lineage():
     assert _consts()["down_revision"] == "20261022_agent_spawn_lineage"
+
+
+CONTINUATION_MIGRATION = MIGRATION.with_name("20261114_journey_handoff_continuation.py")
+
+
+def test_continuation_indexes_match_migration():
+    from repositories.journey_handoff_repo import JOURNEY_HANDOFF_CONTINUATION_INDEXES
+
+    consts: dict[str, object] = {}
+    for node in ast.parse(CONTINUATION_MIGRATION.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+            try:
+                consts[node.targets[0].id] = ast.literal_eval(node.value)
+            except (ValueError, TypeError):
+                pass
+    assert consts["JOURNEY_HANDOFF_CONTINUATION_INDEXES"] == JOURNEY_HANDOFF_CONTINUATION_INDEXES
+    assert consts["down_revision"] == "20261114_pattern_discovery_stores"

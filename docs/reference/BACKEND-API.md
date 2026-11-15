@@ -25,20 +25,20 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:0cb68557f87405b32c05c34b36889685ca2af6dc122ef37aeee8b44038969319"
+  "services/api/actions/": "sha256:1acd940d36e922fc50e8e422c0b502d7c142b2a0df6631ab5df8a0c26b46c802"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
-  "services/api/connectors/": "sha256:a928f782d01f2b695684f82b53c8da66674cc936d256cacf8570662484f4b3bd"
-  "services/api/governance/": "sha256:1fa42276acc1c8c489d2f0f4a7ab325c9fa4c0b2d7fd7318bb6cd2726f41d3db"
+  "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
+  "services/api/governance/": "sha256:95f6608937f9bba9ed119232b278e976b976890870ba74188f8de73f2e65050c"
   "services/api/graph/": "sha256:6a732ea9d2d9e9bbe8c88c309299259e9ef6944a21f2804b8796e3fdfa3e59b7"
-  "services/api/identity/": "sha256:a52e1403d9780c9ab1a9c409c9f89a54d4f22c9667c5e58b5f35981bf5408d2a"
-  "services/api/ingestion/": "sha256:c0309307b81eae98ad3a7828e6ab3880298cefb7122868a54c913d91e3710bd6"
-  "services/api/intelligence/": "sha256:17c9f024e594831089f1fecc771e2e86ced5697217592a0c48473bbe6663f68a"
-  "services/api/journeys/": "sha256:e378b9911e8d8d53d2663ce84f57b55803cfa609870b2fdda7d472c4d3f84a00"
+  "services/api/identity/": "sha256:82343e60e7de0cc13aa9518cc06872f43e232c69f9e212aa6b7288ba313953f8"
+  "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
+  "services/api/intelligence/": "sha256:1bfd99eedf87e138a59117622ba586985fb5b22b087bcf918625afad72120ba1"
+  "services/api/journeys/": "sha256:9f708044881acbe762dc87102b50fa527af280e879dbe0cda1ec196f78e7c2e6"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
+  "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
-  "services/api/workers/": "sha256:a6c6b55338c45947832201ac3cfa3d006fa3f6ef029501bf29856755eae0b3b1"
+  "services/api/workers/": "sha256:4ad003fbb2f0ce63171859336eb1da53f6659e88863bca0f58db0ca259417ced"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1555,7 +1555,7 @@ discovery — callers can determine available capabilities without trial-and-err
 | `providers` | Configured providers with `status`, `last_successful_sync`, `error_count`, `staleness_label`, `circuit_breaker` |
 | `consent_purposes_granted` | Consent purposes the tenant has enabled |
 | `consent_purposes_all` | Full list of supported consent purposes |
-| `feature_flags` | Active flag values: `suggestions_enabled`, `connectors_enabled`, `data_quality_enabled`, etc. |
+| `feature_flags` | Active flag values: `suggestions_enabled`, `connectors_enabled`, `data_quality_enabled`, `pattern_discovery_enabled`, etc. |
 | `evaluated_at` | ISO-8601 timestamp of the capability snapshot |
 
 **Permissions:** `read` (any authenticated tenant call)
@@ -3970,6 +3970,23 @@ All routes need `agent:manage` and the deployment registry flag. Tenant scope co
 
 `GET /v1/journeys/{id}/transitions` now also returns `link_basis` counts (`explicit_handoff` vs `inferred`) for cross-device hops.
 
+A successful redemption also queues the internal `journey.handoff_continuation` job. The rebuilt journey spans both devices: the activity of every anonymous ID linked by redeemed handoffs is compiled into one journey, owned by the root (the source of the oldest handoff). The redeemed end's standalone anonymous journey stops being current. `GET /v1/journeys?profile_id=<anonymous id>` for the root returns it. No identity is merged.
+
+`POST /v1/journeys/{journey_id}/rebuild` rebuilds the journey's own identity type: anonymous, profile or cluster.
+
+### Journey activity rebuilds (flag `JOURNEY_ACTIVITY_REBUILD_ENABLED`)
+
+When on, canonical activity emitted by the silver projectors requests a debounced compile of the journey that owns it: profile, then cluster, then anonymous. One compile runs per identity per window (`AETHER_JOURNEY_ACTIVITY_REBUILD_WINDOW_SECONDS`, default 30). The queue is process-local and best effort, and a lost flush heals on the next activity. There is no route. Staging turns it on; production keeps it off.
+
+### Apple Ads attribution (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`)
+
+- `POST /v1/attribution/apple-ads/resolve` — SDK key. Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). The activity references its touchpoint (`silver_table` / `silver_fact_id`, with an ID derived from the token hash), so the touchpoint is listed in the journey's `touchpoint_ids`, including the profile journey after login, and attribution can credit it. Responses:
+  - `{resolved: true, evidence}`;
+  - `{resolved: false, status: pending, retry_after_seconds: 5}`: Apple's record is not ready, so retry;
+  - `{resolved: false, status}` with `not_attributed`, `invalid`, `unavailable` or `token_already_bound`.
+
+  A token binds to the first anonymous ID that presented it (only its SHA-256 is stored), so it cannot attribute another device. Apple Ads campaigns only. Other ad networks stay Direct / Unknown at user level.
+
 Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handoff_sweep`, maintenance role) and erased by anonymous ID through the `journey_handoffs` DSR component.
 
 ### Fleet hypotheses (flag `FEATURE_FRAUD_NETWORKS`)
@@ -3977,6 +3994,29 @@ Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handof
 - `POST /v1/fraud/fleet-hypotheses/build` — `fraud:evaluate`. Builds an evidence-graded common-operator hypothesis for an orchestrator; with `AETHER_FRAUD360_ENABLED` it also mirrors it into Fraud360 (response `fraud360`).
 - `GET /v1/fraud/fleet-hypotheses` and `GET /v1/fraud/fleet-hypotheses/{id}` — `fraud:read`.
 - `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status. Written atomically against the record's `revision`, so concurrent reviews are all kept in `review_history`.
+
+### Pattern discovery (flag `AETHER_PATTERN_DISCOVERY_ENABLED`)
+
+Discovers patterns nobody defined in advance from raw and semi-structured evidence. Patterns that clear the confidence and novelty bar are `surfaced` to users automatically (no human step); every pattern stays `inferred`, with capped confidence and competing explanations, and stays reviewable through curation (hide / unhide / pin / unpin / rename) and optional verdicts. Only a deliberate promotion writes risk signals or graph edges. Kinds: `sequence`, `shared_attribute_cluster`, `behavioral_cohort`, `temporal_burst`, `lockstep`, `behavioral_outlier`, `novel_motif`, `schema_drift`, `segment_shift`, `agent_spawn_anomaly`, `agent_tool_signature`, `agent_interaction_cluster`, `traffic_anomaly`, `cross_domain`. See `docs/architecture/PATTERN-DISCOVERY.md`.
+
+- `GET /v1/intelligence/patterns` — `read`. Filters `status`, `feed=true` (the visible statuses: surfaced, unresolved, confirmed_valid, confirmed_malicious, promoted; `queue=true` is a deprecated alias), `kind`, `min_confidence`, `limit`, `offset`; pinned first, then priority, severity, confidence.
+- `GET /v1/intelligence/patterns/whats-new` — `read`. `scope` (`feed`, `<surface>:<entity key>`, `lens:<lens>:<subject>`), optional `since`. New (surfaced after the caller last looked), changed (new evidence version) and retired patterns with digests; defaults to a 7-day lookback when the caller has never marked the scope seen. Entity scopes are consent-gated.
+- `POST /v1/intelligence/patterns/whats-new/seen` — `read`. `{scope, at?}` records the caller's last-seen time for the scope.
+- `GET /v1/intelligence/patterns/lenses/{lens}/{subject}` — `read`. `campaign360/<campaign id>`, `geographic360/<country code>`, `communication360/<channel|all>`, `journey360/<profile id>` (consent-gated). Visible patterns concentrated in the subject, grouped by kind, with `new_count` and per-row `is_new` / `is_changed`.
+- `POST /v1/intelligence/patterns/graph-overlay` — `read`. `{node_ids: [...]}` (at most 500; bare ids or `kind:id`). Per node, the visible patterns it belongs to, plus the pattern list.
+- `GET /v1/intelligence/patterns/{id}/graph` — `read`. The pattern as `{nodes, edges}`: pattern, members, shared attribute values and counterparties, principals, member patterns (at most 300 nodes, `truncated`).
+- `POST /v1/intelligence/patterns/{id}/curate` — `write`. `{action: hide|unhide|pin|unpin|rename, title? (rename), reason?}`. Recorded in review history; a hide also counts as noise feedback. Curation persists across re-detection; a hidden pattern resurfaces only when its evidence materially changes.
+- `GET /v1/intelligence/patterns/stats` and `GET /v1/intelligence/patterns/runs` — `read`. Counts by status/kind, analyst calibration per kind, suppressed families, baseline health; recent runs with coverage (event store, graph, ML, baseline) and per-detector stats including `threshold_tuning`.
+- `POST /v1/intelligence/patterns/runs` — `write`. Body `{window_hours?, max_events?, kinds?, events?, edges?, include_store?}`. Reads the tenant's recent events (truncation reported in `coverage`), the tenant's canonical graph edges for motif discovery (unless `edges` is supplied or `PATTERN_DISCOVERY_GRAPH_MOTIFS_ENABLED=false`), ML window scores when `PATTERN_DISCOVERY_ML_ENABLED`, plus optional inline evidence (rows naming another tenant are rejected). Upserts patterns, correlates with still-active patterns from earlier runs, merges re-detected duplicates, ages open patterns it did not re-observe, and folds the run into the tenant baseline only when its window has advanced at least half a window (`coverage.baseline` reports a skip).
+- `POST /v1/intelligence/patterns/extract` — `read`. Schema-on-read preview of one payload: typed attributes (sensitive values hashed), counterparties, message templates, field profile. Nothing is stored.
+- `GET /v1/intelligence/patterns/entities/{kind:id}` — `read`. Advisory emerging-pattern context for one entity; withheld (`withheld: true`, `reason_code`) without an affirmative analytics consent receipt.
+- `GET /v1/profile/{user_id}/patterns`, `GET /v1/agent/{agent_id}/patterns`, `GET /v1/risk360/{subject_kind}/{subject_id}/patterns` — `read`. Profile 360 / Agent 360 / Risk 360 pattern sections (consent-gated like the entity context; `subject_kind` one of `entity`, `user`, `agent`, `wallet`, `anon`, `session`).
+- `GET /v1/intelligence/patterns/{id}` — `read`. Full record with evidence, competing explanations, review history, merged duplicates, cross-domain members and similar patterns.
+- `POST /v1/intelligence/patterns/{id}/review` — `write`. `{verdict: valid|malicious|benign|duplicate|unresolved, reason (>=10 chars), duplicate_of?}`. Recorded as analyst feedback that calibrates the kind and, with five or more verdicts, tunes its detector threshold. A `duplicate` verdict merges the pattern into `duplicate_of`.
+- `POST /v1/intelligence/patterns/{id}/promote` — `admin`. Only from `confirmed_valid` / `confirmed_malicious` with unchanged evidence. On an already-promoted pattern it makes no second transition and re-runs only incomplete risk or graph projections (`promotion.projection_retries`). Writes `attributed` Risk360 signals for canonical, consented subjects (others reported as `unresolved_subject` / `consent_withheld`) and a governed `RiskCluster` vertex with `MEMBER_OF_CLUSTER` edges for those subjects (`AETHER_PATTERN_RISK_PROMOTION_ENABLED`, `AETHER_PATTERN_GRAPH_PROMOTION_ENABLED`).
+- `POST /v1/intelligence/patterns/{id}/deprecate` — `write`. A promoted pattern's graph memberships are soft-revoked; its Risk360 signals remain.
+- Kyber operator routes `GET /v1/kyber/patterns/queue` (the surfaced feed unless `status` is given), `GET /v1/kyber/patterns/stats`, `GET /v1/kyber/patterns/whats-new`, `POST /v1/kyber/patterns/whats-new/seen`, `GET /v1/kyber/patterns/{id}`, `GET /v1/kyber/patterns/{id}/graph`, `POST /v1/kyber/patterns/runs`, `POST /v1/kyber/patterns/{id}/review|curate|promote|deprecate` take `tenant_id` as a query parameter and record the operator as `kyber:<actor>` in review history.
+- Durable job `pattern_discovery.run` (enqueued per tenant by the `pattern_discovery_sweep` worker when `PATTERN_DISCOVERY_SCHEDULER_ENABLED`, default on) runs one pass with the configured window. A pass that surfaces high or critical patterns raises one in-app notification per tenant per day (`AETHER_PATTERN_NOTIFICATIONS_ENABLED`).
 
 ## Agentic Observability Layer
 
@@ -3995,6 +4035,20 @@ Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handof
 ### Feature flags and tenant boundary
 
 Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABLED=true` (default true for local compatibility). Subsystems are separately controlled by `AGENTIC_MCP_OBSERVABILITY_ENABLED`, `AGENTIC_EXTERNAL_ACCOUNTS_ENABLED`, `AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED`, and `AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED`. Authenticated tenant context is authoritative: request-body `tenant_id`/`tenantId` may not override it, and mismatches return HTTP 403.
+
+### Agent correlation
+
+`AGENT_CORRELATION_ENABLED` (default true) mounts the cross-role agent correlation routes under `/v1/observability/agent/correlation`:
+
+- `POST /tasks` registers an agent task and returns a correlation token (requires `AGENT_CORRELATION_TOKEN_KEYS`; otherwise `503`).
+- `POST /observations/{provider}/{kind}` maps one vendor record (`shopify`, `stripe`, `ramp`, `cloudflare`, `openai`, `aether_mcp`) and returns its link decisions. A record the mapper cannot read returns `422`.
+- `PUT /account-bindings/{family}` declares the tenant's provider account; when the family has verified provider connections, only one of those accounts is accepted (`422` otherwise).
+- `GET /account-bindings` lists each family's effective binding and whether a verified connection backs it.
+- `GET /tasks/{task_ref}/chain` and `GET /observations/{observation_id}/chain` return the evidence-graded chain with explicit gaps.
+- `GET /catalog` lists the mapped providers and roles, with each kind's sandbox certification status from `config/agent_correlation_certification.json`.
+- `POST /mcp` is an MCP endpoint (JSON-RPC 2.0) with the `aether_register_task`, `aether_report_tool_call`, `aether_report_outcome`, and `aether_get_task_chain` tools.
+
+Only links with proof-class evidence project to the graph, as `CORRELATED_ACROSS_SOURCES` edges. See `docs/architecture/blueprints/universal-connector-runtime/agent-source-roles.md`.
 
 Graph projection is currently best-effort until the durable outbox ships. Responses distinguish mutations built from mutations actually persisted; `graph_mutations_queued` is retained for compatibility and equals the persisted count, not a fake queued count.
 

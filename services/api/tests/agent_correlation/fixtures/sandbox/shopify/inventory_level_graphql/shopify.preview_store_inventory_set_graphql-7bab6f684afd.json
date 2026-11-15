@@ -1,0 +1,66 @@
+{
+  "account_bindings": {
+    "shopify": {
+      "source_account_key": "xtq7hr-aj.myshopify.com",
+      "source_account_realm": "test"
+    }
+  },
+  "certification": {
+    "companions": [
+      {
+        "actor_refs": [],
+        "correlation_tokens": [
+          "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        ],
+        "infrastructure_refs": [],
+        "object_refs": [],
+        "observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "occurred_at": "2026-11-14T23:13:42Z",
+        "provider_family": "aether_certification",
+        "schema_version": "1",
+        "signed_request": null,
+        "source_role": "agent_runtime",
+        "tenant_id": "aether_certification"
+      }
+    ],
+    "key_b64": "2GAznibPJupHxFC48otqM99T2ug107zxMZX2PVbQM1c",
+    "key_id": "cert",
+    "tenant_id": "aether_certification"
+  },
+  "expected": {
+    "links": [],
+    "object_types": [
+      "inventory_item",
+      "inventory_level"
+    ],
+    "observation_count": 1,
+    "observation_digest": "371bfbf40cdf51581eacbf74e647c722f498bb10d4200210d034f5c68d3eddae",
+    "roles": [
+      "system_of_record"
+    ],
+    "tokens": 0
+  },
+  "kind": "inventory_level_graphql",
+  "origin": "sandbox_recorded",
+  "provider": "shopify",
+  "provider_api": {
+    "api_version": "admin-graphql (connector-pinned)",
+    "host": "myshopify.com",
+    "via": "shopify_connector_preview_store"
+  },
+  "realm": "test",
+  "record": {
+    "id": "gid://shopify/InventoryLevel/176364257528?inventory_item_id=70100207599864",
+    "item": {
+      "id": "gid://shopify/InventoryItem/70100207599864"
+    },
+    "location": {
+      "id": "gid://shopify/Location/96939016440"
+    },
+    "updatedAt": "2026-11-15T00:09:30Z"
+  },
+  "record_sha256": "7bab6f684afd744d81b4a3afcb5c4fe1e0e41abd1e070ee25e018438dfb111c2",
+  "recorded_at": "2026-11-15T00:09:57+00:00",
+  "recorder": "shopify.preview_store_inventory_set_graphql",
+  "schema_version": "1"
+}

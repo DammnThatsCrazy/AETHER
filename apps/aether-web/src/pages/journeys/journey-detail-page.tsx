@@ -18,6 +18,7 @@ import {
 } from '@aether-app/features/journeys/journey-model';
 import { useUserProfile } from '@aether-app/features/users/use-user-profile';
 import { profileIdentity } from '@aether-app/pages/user-profile/profile-model';
+import { PatternLensPanel } from '@aether-app/features/pattern-discovery';
 
 type Tab = 'overview' | 'timeline' | 'participants' | 'episodes' | 'outcome' | 'evidence';
 
@@ -505,6 +506,7 @@ export function JourneyDetailPage() {
             {tab === 'episodes' && <Episodes episodes={episodes} profileId={profileId} />}
             {tab === 'outcome' && <Outcome journey={data} profileId={profileId} />}
             {tab === 'evidence' && <Evidence steps={steps} focus={focus} />}
+            {tab === 'overview' && profileId && <PatternLensPanel lens="journey360" subject={profileId} />}
           </>
         )}
       </div>

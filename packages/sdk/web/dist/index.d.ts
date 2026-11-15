@@ -81,6 +81,12 @@ declare class AetherSDK implements AetherSDKInterface {
      * flag off, unauthorised app). The token is shown once; hand it over out of band
      * (link, QR code, deep link) as `aether_handoff=<token>`.
      */
+    /**
+     * Headers for the handoff calls. They use the same site-bound key as
+     * ingestion, and the backend refuses a publishable key that declares no site,
+     * so X-Aether-Site must travel here exactly as it does on event batches.
+     */
+    private handoffHeaders;
     createJourneyHandoff(opts?: {
         ttlSeconds?: number;
     }): Promise<JourneyHandoffToken | null>;

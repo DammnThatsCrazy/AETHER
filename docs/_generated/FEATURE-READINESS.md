@@ -28,6 +28,7 @@ Each feature is measured across independent dimensions. Implementation completio
 | Measurement & Attribution | measurement-attribution-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Measurement Integrity Plane | measurement-integrity-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Action Notifications | notification-intelligence-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | CREDENTIAL_WAITING | MODERATE |
+| Pattern Discovery | pattern-discovery-v1 v1 | 60% | 0% | CODE_COMPLETE | — | LIVE_DATA_WAITING | LOW |
 | Payment Rail Observability | payment-rail-observability-v1 v1 | 80% | 50% | RUNTIME_INTEGRATED | ✅ | LIVE_DATA_WAITING | LOW |
 | Profile 360 | profile-360-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
 | Provider Certification Plane | provider-certification-plane-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | LIVE_DATA_WAITING | MODERATE |
@@ -304,6 +305,18 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
 - **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+
+## Pattern Discovery (`pattern-discovery`)
+
+- **Scope:** pattern-discovery-v1 v1 — observation-pilot
+- **Implementation:** IMPLEMENTED · 60% of in-scope repository controls (migration-derived)
+- **Productionization:** 0% of in-scope productionization controls (migration-derived)
+- **Repository ceiling:** CODE_COMPLETE (achieved: no)
+- **Activation:** LIVE_DATA_WAITING
+- **Remaining repository work:** reconcile readiness controls with the PostgreSQL migration and route authorization tests
+- **Confidence:** LOW — gap: no detector validated on labelled production data
+- **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=NOT_ATTEMPTED, production=NOT_APPLICABLE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Payment Rail Observability (`payment-rail-observability`)
 

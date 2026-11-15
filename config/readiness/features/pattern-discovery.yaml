@@ -1,0 +1,172 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Derived from scripts/production_status.py (legacy area: 'pattern discovery', score 2/5).
+# The 0-5 maturity score is decomposed across the model's independent dimensions;
+# an external blocker never reduces implementation.
+feature_id: pattern-discovery
+title: Pattern Discovery
+owning_system: aether
+summary: 'Governed discovery of patterns nobody defined in advance: schema-on-read extraction (PII digested),
+  tenant baselines, deterministic detectors with cross-domain correlation, a lifecycle that surfaces patterns
+  automatically and keeps them reviewable (curation, optional verdicts), what''s-new digests, pattern subgraphs,
+  360 sections and segment lenses, DSR erasure and consent gates, promotion into attributed Risk360 signals,
+  and Kyber/Aether surfaces. The master flag defaults OFF and no detector has measured precision or recall
+  on labelled production data.'
+scope:
+  id: pattern-discovery-v1
+  version: 1
+  title: Pattern Discovery V1
+  target: observation-pilot
+  included:
+  - contracts-and-schemas
+  - core-behavior
+  - runtime-wiring
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  excluded: []
+  deferred: []
+repository_ceiling:
+  type: CODE_COMPLETE
+  achieved: false
+  remaining_after_ceiling:
+  - Run discovery in shadow on a pilot tenant and record analyst-verdict precision per detector kind.
+  remaining_is_repository_controlled: false
+  evidence:
+  - services/api/intelligence/pattern_discovery/
+  - services/api/alembic/versions/20261114_pattern_discovery_stores.py
+  - docs/architecture/PATTERN-DISCOVERY.md
+  - services/api/tests/pattern_discovery/
+implementation:
+  state: IMPLEMENTED
+  denominator: in-scope repository controls (migration-derived)
+  controls:
+  - id: contracts-and-schemas
+    description: contracts and schemas
+    weight: 20
+    satisfied: true
+  - id: core-behavior
+    description: core behavior
+    weight: 20
+    satisfied: true
+  - id: runtime-wiring
+    description: runtime wiring
+    weight: 20
+    satisfied: true
+  - id: persistence-and-migrations
+    description: persistence and migrations
+    weight: 20
+    satisfied: false
+  - id: authorization-and-tenant-isolation
+    description: authorization and tenant isolation
+    weight: 20
+    satisfied: false
+  remaining_work:
+  - reconcile readiness controls with the PostgreSQL migration and route authorization tests
+productionization:
+  denominator: in-scope productionization controls (migration-derived)
+  controls:
+  - id: security-controls
+    description: security controls
+    weight: 25
+    satisfied: false
+  - id: observability-metrics-logs
+    description: observability metrics logs
+    weight: 25
+    satisfied: false
+  - id: reliability-idempotency-retry
+    description: reliability idempotency retry
+    weight: 25
+    satisfied: false
+  - id: ci-and-release-gates
+    description: ci and release gates
+    weight: 25
+    satisfied: false
+  remaining_work:
+  - security controls
+  - observability metrics logs
+  - reliability idempotency retry
+  - ci and release gates
+activation:
+  state: LIVE_DATA_WAITING
+  blockers:
+  - type: LIVE_DATA_WAITING
+    description: Pattern Discovery detectors have no measured precision/recall on labelled production data.
+    owner: tenant / platform-ops
+    required_action: Run discovery in shadow on a pilot tenant, collect analyst verdicts until each kind has
+      calibration evidence, and record precision per kind before surfacing patterns to customers.
+    source_code_change_expected: false
+    affected_environments:
+    - staging
+    - production
+    affected_release_profiles:
+    - staging
+    - pilot
+    evidence_required: per-kind analyst-verdict precision from a shadow pilot
+dependencies:
+  hard: []
+  soft: []
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: NOT_ATTEMPTED
+    credentialed: false
+  staging:
+    state: NOT_ATTEMPTED
+    credentialed: false
+  production:
+    state: NOT_APPLICABLE
+operational_ownership:
+  team: intelligence-platform
+  technical_owner: intelligence-platform
+  operational_owner: platform-ops
+  escalation: pagerduty:intelligence-platform
+  runbook: docs/architecture/PATTERN-DISCOVERY.md
+  dashboards:
+  - grafana:intelligence-platform
+  alerts:
+  - pagerduty:intelligence-platform
+  service_level_target: per founding-tenant SLO
+  recovery_objective: RTO 30m / RPO 5m
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: LOW
+  reasons:
+  - 'repository evidence: services/api/intelligence/pattern_discovery/'
+  evidence_gaps:
+  - no detector validated on labelled production data
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: experimental
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production:
+    participation: not_in_release
+    note: The pattern discovery master flag defaults OFF; not part of the founding-tenant release scope.
+  production-scale:
+    participation: not_in_release
+    note: The pattern discovery master flag defaults OFF; not part of the founding-tenant release scope.
+historical:
+  historical_maturity_index: 2
+  historical_maturity_index_scale: 0-5
+  historical_maturity_index_authoritative: false
+  migration_derived: true
+  legacy_area: pattern discovery
+  note: Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is
+    a proxy pending per-capability SME review.

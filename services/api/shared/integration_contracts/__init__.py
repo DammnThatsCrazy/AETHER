@@ -10,6 +10,9 @@ built on:
 * :mod:`deployment` — the typed per-capability deployment contract (§14)
 * :mod:`streams` — versioned, declared source-object streams
 * :mod:`source_objects` — non-identity source refs and logical event keys
+* :mod:`source_roles` — what a stream proves, independent of its vendor
+* :mod:`correlation` — role-pair join rules between observations
+* :mod:`correlation_token` — tenant-bound tokens agents carry into other systems
 
 It reuses (never re-defines) the existing readiness, connector, and provider
 types. This wave is purely additive: no existing registry or adapter is

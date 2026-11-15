@@ -71,6 +71,7 @@ class BaseProjector:
         self, silver_table: str, rows: list[dict[str, Any]]
     ) -> None:
         """Adapt silver rows and upsert into canonical_activity."""
+        emitted: list[dict[str, Any]] = []
         try:
             from journeys.measurement.silver_adapters import adapt_from_silver
             from journeys.measurement.repositories.activity_repo import ActivityRepository
@@ -80,10 +81,20 @@ class BaseProjector:
                 activity = adapt_from_silver(silver_table, row)
                 if activity:
                     await repo.upsert(activity)
+                    emitted.append(activity)
         except Exception as exc:
             logger.warning(
                 "canonical_activity emit failed for table=%s: %s",
                 silver_table, exc,
+            )
+        try:
+            from journeys.measurement.activity_rebuild import request_for_activities
+
+            await request_for_activities(emitted)
+        except Exception as exc:  # noqa: BLE001 — journey freshness never blocks ingestion
+            logger.warning(
+                "journey activity rebuild request failed for table=%s: %s",
+                silver_table, type(exc).__name__,
             )
 
     # ------------------------------------------------------------------

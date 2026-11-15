@@ -19,12 +19,12 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
-  "services/api/config/settings.py": "sha256:cd5b6303c4887c8638e9f5976600bebd28d157febe26701a5304310cb73be756"
-  "services/api/main.py": "sha256:de56ce0732ea727eaa54e6e01a7f4814e3b32e27c14c0d719fdf24cc90d108b5"
+  "services/api/config/settings.py": "sha256:2536c1ddf856b7674a693bfc142c2dafec74499bd5430dda22d564365d7a0cf0"
+  "services/api/main.py": "sha256:a70c70ae4201523e1162a5b93f95f5a8785f5d9f1a214d8fbd0d0be4f45ce8e3"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:9dc895c61c99ce3bcf81c979bc4b195a2e230822233ab178159a48379f6d4f0b"
+  "services/api/workers/runtime/roles.py": "sha256:976796e657b941759e2aceeb1658cb89866c615fc95023bf334de29ae1369181"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:3577fea917036f2540ee653b1be770e2cf0056b1f3ec4dde7f0c845af60b81ec"
+  "services/api/workers/runtime/specs.py": "sha256:bed3da6f0117ac5a47f856c6405b6e2553bf0ad568c740e5716d14f3c0b9b884"
 ---
 
 # Backend Execution Model
@@ -46,7 +46,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `graph-writer` | Profile/graph projection and delegation mutation consumers, including retryable card-linked and external-agent graph projection outboxes. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
-| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
+| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane, and the flag-gated pattern discovery sweep). |
 | `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, the daily Access Kit audit-versus-usage reconciliation (`access_reconciliation`, read-only, logs gaps), SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). Also the Rights Authority retention deletion executor (`rights_deletion_executor` — one periodic sweep that executes the pending `delete_at_expiry` impact rows the retention seam only schedules; default OFF). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
@@ -97,8 +97,15 @@ python -m workers.runtime.run_role maintenance    # cron/sweeper workers
   process in `run_role` (the handler registry is per process). A worker that
   hosts the `maintenance` role's `job_worker` (for example `lean-worker`)
   therefore runs the jobs the API enqueues — `consent.erasure`, exports,
-  imports — instead of failing them as `unknown job_type`. Registration is
-  idempotent and keeps each handler's existing flag gate.
+  imports, `journey.handoff_continuation` — instead of failing them as
+  `unknown job_type`. Registration is idempotent and keeps each handler's
+  existing flag gate. `journey.handoff_continuation` is queued by a
+  successful journey-handoff redemption (idempotent per handoff, internal
+  only) and rebuilds the cross-device continuation journey.
+- With `JOURNEY_ACTIVITY_REBUILD_ENABLED`, the process that emits canonical
+  activity (the silver projector path) also debounces one journey compile per
+  identity (`journeys/measurement/activity_rebuild.py`). It is process-local
+  and best effort, not a worker spec.
 
 ## Lifespan gating (`WORKER_ROLES_ENABLED`)
 
@@ -244,6 +251,11 @@ depending on an operator manually draining a queue:
   tenant's RPC and advances the on-chain-final ones to SETTLED. Tenant-isolated,
   idempotent, kill-switch aware (skips SUSPENDED x402 capabilities), durable
   per-tenant cursor in `x402_reconciliation_cursor`.
+- **`pattern_discovery_sweep`** (`materializer`, gated by
+  `AETHER_PATTERN_DISCOVERY_ENABLED` + `PATTERN_DISCOVERY_SCHEDULER_ENABLED`
+  (default on, so the master flag decides), re-read every pass) — enqueues one durable `pattern_discovery.run` job per
+  tenant with analytics events every `PATTERN_DISCOVERY_INTERVAL_MINUTES`; the
+  interval bucket is the idempotency key, so a restart never doubles a pass.
 - **`reward_reservation_release`** (`maintenance`) — returns stale,
   never-committed budget reservations to the tenant's available balance.
 - **`reward_dlq_sweeper`** (`maintenance`) — samples reward-outbox dead-letter

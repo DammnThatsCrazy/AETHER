@@ -15,6 +15,7 @@ import {
   type GeoExplorationRow,
 } from '@aether-app/features/geo/use-geo-exploration';
 import { GeoDotMap, geoPosition, type MapMarker } from './geo-dot-map';
+import { PatternLensPanel } from '@aether-app/features/pattern-discovery';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -489,6 +490,7 @@ export function GeoPage() {
           )}
         </GlassSection>
       </div>
+      {currentLevel === 'country' && currentGeoId && <PatternLensPanel lens="geographic360" subject={currentGeoId} />}
     </GlassPage>
   );
 }

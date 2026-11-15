@@ -34,6 +34,7 @@ services:
   agent_access_intelligence: {class: experimental, stage: intelligence, reason: "agent capability catalog, authority and governance"}
   agent_behavior: {class: experimental, stage: intelligence, reason: "derived, rebuildable agent behavior projections over canonical agent facts (ADR-AB-001)"}
   agent_lineage: {class: experimental, stage: intelligence, reason: "derived, rebuildable principal to agent lineage read model over canonical evidence"}
+  agent_correlation: {class: experimental, stage: intake, reason: "observation-only cross-role agent correlation routes, MCP tools, and evidence-graded graph links"}
   agent_comm_observability: {class: experimental, stage: intake, reason: "observation-only agent communication routes"}
   agent_marketplace: {class: experimental, stage: intake, reason: "provider-neutral, observation-only agent marketplace catalog and run lineage"}
   agentic_observability: {class: experimental, stage: intake, reason: "observation-only agent activity routes"}
@@ -117,6 +118,7 @@ services:
   onchain: {class: experimental, stage: action, reason: "on-chain action recording, chain listening and RPC gateway"}
   operational_intelligence: {class: beta, stage: intelligence, reason: "operational intelligence contracts and graph routes"}
   oracle: {class: experimental, stage: action, reason: "oracle bridge proofs for on-chain reward claims"}
+  pattern_discovery: {class: experimental, stage: intelligence, reason: "flag-gated discovery of unknown patterns from raw and semi-structured evidence; review-gated, default off"}
   payment_catalog: {class: experimental, stage: intake, reason: "card-linked payment catalog seed"}
   pnl: {class: experimental, stage: intelligence, reason: "realized and unrealized PNL and TVL delta"}
   policy: {class: core, stage: control-plane, reason: "consent policy decision evidence"}

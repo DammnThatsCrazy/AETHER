@@ -17,6 +17,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from shared.integration_contracts.source_roles import SourceRole, role_domain_pack_violation
 from shared.privacy.classification import DataClassification
 
 
@@ -55,6 +56,10 @@ class StreamDescriptor(BaseModel):
     webhook_topics: tuple[str, ...] = ()
     initial_backfill: bool = False
     incremental: bool = False
+    # What this stream proves, independent of the vendor (see
+    # ``source_roles``). Optional so existing declarations keep validating;
+    # when declared, the domain pack must be one the role may emit.
+    source_role: Optional[SourceRole] = None
 
     @field_validator("stream_id", "object_kind", "domain_pack")
     @classmethod
@@ -80,6 +85,10 @@ class StreamDescriptor(BaseModel):
             raise ValueError("activation_config_field must be non-empty")
         if self.activation_config_value is not None and not self.activation_config_value.strip():
             raise ValueError("activation_config_value must be non-empty")
+        if self.source_role is not None:
+            violation = role_domain_pack_violation(self.source_role, self.domain_pack)
+            if violation is not None:
+                raise ValueError(violation)
         return self
 
 
