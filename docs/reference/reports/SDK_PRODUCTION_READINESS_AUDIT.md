@@ -11,7 +11,7 @@ source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/s
 source_hashes:
   "docs/reference/source-of-truth/PLATFORM_PARITY.md": "sha256:abb0660e91963d129b1f5d4a5b472c24bfb55001cd336952b709fdf9dbf13771"
   "packages/sdk/web/src/core/event-queue.ts": "sha256:a6432770dbfd5327ec62c928181e5358b7ccdca917b2915e375ae6c74cb68896"
-  "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:71a2cf51114a50a6891b23e732e0dfa98d8866c5de2799a9279a5efc59334f96"
+  "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:76a1286566e27649203558aa2de096a5181a8937b7da91cffe6d2082f07bdeaa"
   "packages/sdk/web/src/index.ts": "sha256:34152044673a01707a72971092b7e63305964e77d4ca925fedeeb5f80a79d4a1"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"

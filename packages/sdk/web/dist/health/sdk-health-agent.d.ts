@@ -105,6 +105,13 @@ export declare class SDKHealthAgent {
     private manifestTimer;
     private currentManifest;
     private manifestCallbacks;
+    /**
+     * Set by stop(). A manifest request still in flight when the agent stops
+     * (for example the React provider restarting the SDK for a new key or site)
+     * must not apply its response to the shared SDK, where it would overwrite
+     * the replacement install's configuration.
+     */
+    private stopped;
     private isRunning;
     private manifestStatus;
     private droppedCounts;

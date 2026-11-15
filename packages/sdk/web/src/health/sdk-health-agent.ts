@@ -163,6 +163,13 @@ export class SDKHealthAgent {
   private manifestTimer: ReturnType<typeof setInterval> | null = null;
   private currentManifest: SDKManifest | null = null;
   private manifestCallbacks: ManifestUpdateCallback[] = [];
+  /**
+   * Set by stop(). A manifest request still in flight when the agent stops
+   * (for example the React provider restarting the SDK for a new key or site)
+   * must not apply its response to the shared SDK, where it would overwrite
+   * the replacement install's configuration.
+   */
+  private stopped = false;
   private isRunning = false;
   private manifestStatus: ManifestStatus = 'healthy';
   private droppedCounts: DroppedEventCounts = {
@@ -199,6 +206,7 @@ export class SDKHealthAgent {
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
+    this.stopped = false;
 
     // Immediate first run
     this.sendHeartbeat().catch(() => {/* fire-and-forget */});
@@ -218,6 +226,7 @@ export class SDKHealthAgent {
   /** Stop the health agent and clear all timers. */
   stop(): void {
     this.isRunning = false;
+    this.stopped = true;
     if (this.heartbeatTimer !== null) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -270,9 +279,11 @@ export class SDKHealthAgent {
     // The event queue owns the real drop counters (queue_full evictions,
     // consent filtering) and the credential-pause state, so forward them;
     // per-reason counts take the larger of the two sources.
-    const queue = this.eventQueue.getDiagnostics();
+    // SDKHealthAgent is exported, so tolerate a queue-like object without
+    // getDiagnostics() and fall back to the agent's own counters.
+    const queue = typeof this.eventQueue.getDiagnostics === 'function' ? this.eventQueue.getDiagnostics() : null;
     const droppedEvents = { ...this.droppedCounts };
-    for (const [reason, count] of Object.entries(queue.droppedEvents) as [keyof DroppedEventCounts, number][]) {
+    for (const [reason, count] of Object.entries(queue?.droppedEvents ?? {}) as [keyof DroppedEventCounts, number][]) {
       droppedEvents[reason] = Math.max(droppedEvents[reason] ?? 0, count);
     }
     return {
@@ -280,7 +291,7 @@ export class SDKHealthAgent {
       queueDepth: this.eventQueue.size,
       lastFlushStatus: this.lastFlushStatus,
       manifestStatus: this.manifestStatus,
-      authPaused: queue.authPaused,
+      authPaused: queue?.authPaused ?? false,
     };
   }
 
@@ -385,6 +396,7 @@ export class SDKHealthAgent {
         this.currentManifest === null ||
         this.currentManifest.manifest_version !== manifest.manifest_version
       ) {
+        if (this.stopped) return manifest; // stale response from a stopped agent
         this.currentManifest = manifest;
         this.config.configVersion = manifest.manifest_version;
         for (const cb of this.manifestCallbacks) {
@@ -407,6 +419,11 @@ export class SDKHealthAgent {
 
   private buildHeartbeatPayload(): SDKHeartbeatPayload {
     const dynamic = this.config.getDynamicState();
+    // Drops are counted by the event queue (evictions, consent filtering), so
+    // report the merged counters getDiagnostics() exposes, not only the
+    // agent's own, which the queue never feeds.
+    const droppedCounts = this.getDiagnostics().droppedEvents;
+    const droppedTotal = Object.values(droppedCounts).reduce((sum, n) => sum + n, 0);
     return {
       sdk_id: this.config.sdkId,
       sdk_version: SDK_VERSION,
@@ -414,7 +431,7 @@ export class SDKHealthAgent {
       app_version: this.config.appVersion,
       queue_depth: this.eventQueue.size,
       retry_count: this.metrics.retryCount,
-      dropped_events: this.metrics.droppedEvents,
+      dropped_events: Math.max(this.metrics.droppedEvents, droppedTotal),
       endpoint_latency_ms: this.metrics.lastLatencyMs,
       ingestion_success_rate: this.metrics.lastSuccessRate,
       schema_hash: this.computeSchemaHash(),
@@ -424,7 +441,7 @@ export class SDKHealthAgent {
       config_version: this.config.configVersion,
       rollout_cohort: this.config.rolloutCohort,
       manifest_status: this.manifestStatus,
-      dropped_event_counts: { ...this.droppedCounts },
+      dropped_event_counts: { ...droppedCounts },
     };
   }
 
