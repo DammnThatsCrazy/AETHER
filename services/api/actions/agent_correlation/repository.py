@@ -80,6 +80,16 @@ class CorrelationObservationRepository(BaseRepository):
         row = await self.find_by_id(self.row_id(tenant_id, observation_id))
         return row if row and row.get("tenant_id") == tenant_id else None
 
+    async def mark_correlated(self, tenant_id: str, observation_id: str) -> None:
+        """Ingestion checkpoint: indexing and correlation finished for this row."""
+        await self.update(self.row_id(tenant_id, observation_id), {
+            "tenant_id": tenant_id, "correlation_completed_at": _iso(datetime.now(timezone.utc)),
+        })
+
+    async def is_correlated(self, tenant_id: str, observation_id: str) -> bool:
+        row = await self.get(tenant_id, observation_id)
+        return bool(row and row.get("correlation_completed_at"))
+
     async def get_observation(self, tenant_id: str, observation_id: str) -> Optional[CorrelationObservation]:
         row = await self.get(tenant_id, observation_id)
         return CorrelationObservation.model_validate(row["observation"]) if row else None
@@ -92,13 +102,15 @@ class CorrelationKeyIndexRepository(BaseRepository):
         super().__init__("agent_correlation_keys")
 
     async def index(self, tenant_id: str, observation_id: str, keys: Iterable[tuple[str, str]]) -> None:
+        # Idempotent: a redelivery that resumes an interrupted ingestion replays
+        # the index, and an existing key row is left as it is.
         for key_kind, key_value in keys:
-            await self.insert("ack_" + _digest(tenant_id, key_kind, key_value, observation_id), {
+            await self.insert_if_absent("ack_" + _digest(tenant_id, key_kind, key_value, observation_id), {
                 "tenant_id": tenant_id,
                 "key_kind": key_kind,
                 "key_value": key_value,
                 "observation_id": observation_id,
-            })
+            }, tenant_id)
 
     async def observations_for(self, tenant_id: str, key_kind: str, key_value: str) -> list[str]:
         rows = await self.find_many(

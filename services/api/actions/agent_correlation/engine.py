@@ -122,11 +122,22 @@ class CorrelationEngine:
         stored = await self._observations.save(obs, provider=provider, kind=kind)
         result = IngestResult(observation_id=obs.observation_id, source_role=obs.source_role, duplicate=not stored)
         if not stored:
+            if not await self._observations.is_correlated(obs.tenant_id, obs.observation_id):
+                # The first delivery saved the observation but failed before
+                # indexing and correlation finished: resume them (both are
+                # idempotent) instead of treating the stored row as complete.
+                await self._correlate(obs, result)
+                await self._observations.mark_correlated(obs.tenant_id, obs.observation_id)
+                return result
             # A redelivery completes any graph projection a transient outage left
             # unfinished; observation existence alone is not projection success.
             await self._retry_incomplete_projections(obs.tenant_id, obs.observation_id, result)
             return result
+        await self._correlate(obs, result)
+        await self._observations.mark_correlated(obs.tenant_id, obs.observation_id)
+        return result
 
+    async def _correlate(self, obs: CorrelationObservation, result: "IngestResult") -> None:
         index_keys = join_index_keys(obs, self._verifier)
         candidate_ids: list[str] = []
         lookups = index_keys + [("time", bucket) for bucket in time_buckets(obs.occurred_at, self._window)]
@@ -157,7 +168,6 @@ class CorrelationEngine:
                     new or not _projection_complete(await self._verdicts.get(obs.tenant_id, verdict_id))):
                 decision.projection = await self._project(obs, other, verdict, verdict_id)
             result.decisions.append(decision)
-        return result
 
     async def _project(self, left: CorrelationObservation, right: CorrelationObservation,
                        verdict: Any, verdict_id: str) -> dict[str, Any]:

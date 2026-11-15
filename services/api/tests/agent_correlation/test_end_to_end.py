@@ -296,3 +296,25 @@ async def test_a_redelivery_completes_a_projection_a_graph_outage_left_failed(se
     calls = projector.calls
     third = await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
     assert third[0]["links"] == [] and projector.calls == calls
+
+
+@pytest.mark.asyncio
+async def test_a_redelivery_resumes_an_ingestion_that_failed_after_the_save(service, tenant_id, monkeypatch) -> None:
+    task = await service.register_task(tenant_id, agent_platform="xai_grok")
+    call = {"agent_platform": "xai_grok", "call_id": "c9", "correlation_token": task["correlation_token"],
+            "occurred_at": iso(0), "output": "ok"}
+    keys = service.engine._keys  # noqa: SLF001 - test seam
+    real = keys.observations_for
+
+    async def down(*a, **k):
+        raise ConnectionError("key index down")
+
+    monkeypatch.setattr(keys, "observations_for", down)
+    with pytest.raises(ConnectionError):
+        await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
+    monkeypatch.setattr(keys, "observations_for", real)
+    again = await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
+    assert again[0]["duplicate"] is True
+    assert any(l["status"] == "linked" for l in again[0]["links"])  # correlation resumed
+    third = await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
+    assert third[0]["links"] == []  # complete now: nothing replayed

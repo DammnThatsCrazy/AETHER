@@ -9,7 +9,7 @@ since_version: "0.1.0"
 source_files:
   - services/api/intelligence/pattern_discovery/
 source_hashes:
-  "services/api/intelligence/pattern_discovery/": "sha256:5cdefe9f10416c5e5a7c7c238a0965afa9af737f454120110690a41225725b94"
+  "services/api/intelligence/pattern_discovery/": "sha256:9fa1800205281b39f8b44e619cd99480befcb8bf9e5ef160ae61124e370e2d40"
 ---
 
 # Pattern Discovery and Unstructured Evidence Intelligence
@@ -108,6 +108,11 @@ identifiers. Rows of another tenant are counted and ignored.
 A run is folded into the baseline only once its evidence window ends at least
 half a window after the last fold. Overlapping scheduled runs over mostly the
 same events therefore never count one stretch of activity many times.
+
+A run filtered to some kinds leaves the baseline sections of detectors it did
+not run untouched: `ngram_rate` is updated only when the sequence detector
+ran, and `motif_rate` only when motif detection ran. A detector that ran and
+measured nothing still decays its section.
 
 ## Detectors
 
@@ -228,6 +233,9 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   detector are deprecated automatically. Reviewed patterns never are. A run
   whose evidence-store read failed ages nothing (`coverage.aging.status:
   skipped_store_unavailable`): absence from an unread store is not evidence.
+  The same holds per detector: `traffic_anomaly` patterns are not aged unless
+  ML scoring ran (`scored` or `no_windows`), and `novel_motif` patterns are
+  not aged when the graph read was unavailable (`coverage.aging.skipped_kinds`).
   The scheduled job reports such a run as failed so the jobs worker retries it.
 - Every write after the first is a compare-and-set on `revision`.
 

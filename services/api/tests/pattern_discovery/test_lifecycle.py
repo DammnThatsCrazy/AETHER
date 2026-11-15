@@ -639,3 +639,18 @@ async def test_reversing_a_duplicate_verdict_withdraws_its_contribution():
     assert restored["review_history"][-1]["decision"] == "duplicate_withdrawn"
     only_in_dup = set(dup_row["affected_entity_keys"]) - set(target_before["affected_entity_keys"])
     assert not (only_in_dup & set(restored["affected_entity_keys"]))
+
+
+@pytest.mark.asyncio
+async def test_traffic_anomaly_patterns_do_not_age_when_ml_scoring_did_not_run():
+    from intelligence.pattern_discovery.contracts import KIND_TRAFFIC_ANOMALY
+
+    svc = _service(normal_traffic(2, 2))
+    rec = dict(_by_kind(_ring_records(), KIND_SEQUENCE), kind=KIND_TRAFFIC_ANOMALY,
+               pattern_id=f"{T}:pat:traffic", status=STATUS_SURFACED)
+    await svc.registry.upsert_detected(rec)
+    for _ in range(STALE_AFTER_RUNS + 1):
+        out = await svc.run(T)
+        assert KIND_TRAFFIC_ANOMALY in out["coverage"]["aging"]["skipped_kinds"]
+    row = await svc.registry.get(T, rec["pattern_id"])
+    assert row["status"] == STATUS_SURFACED

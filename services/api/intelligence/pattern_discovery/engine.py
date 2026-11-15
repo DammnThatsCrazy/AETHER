@@ -163,11 +163,13 @@ def run_discovery(
         contributions["group_events"] = counts
     baseline_delta = {
         "token_rates": frame.token_rates(),
-        "ngram_rates": contributions.get("ngram_rates", {}),
+        # None (not {}) when the detector did not run: an unmeasured section is
+        # preserved, while {} would decay every learned rate as if observed zero.
+        "ngram_rates": contributions.get("ngram_rates"),
         "signatures": {r["signature_hash"]: float(r["affected_entity_count"]) for r in records},
         "field_profiles": contributions.get("field_profiles", {}),
         "group_events": contributions.get("group_events", {}),
-        "motif_counts": contributions.get("motif_counts", {}),
+        "motif_counts": contributions.get("motif_counts"),
         "attribute_degree": contributions.get("attribute_degree", {}),
         "segment_rates": frame.segment_rates(),
         "hour_of_week": frame.hour_of_week_rates(),

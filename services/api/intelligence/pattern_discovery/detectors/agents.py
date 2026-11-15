@@ -176,14 +176,17 @@ def detect_agents(frame: DiscoveryFrame) -> DetectorOutput:
     # ── Agent-to-agent interaction clusters ────────────────────────────────
     uf = _UnionFind()
     link_events: dict[str, list] = defaultdict(list)
-    relations: Counter = Counter()
+    # Relation counts per source agent, summed per component below: a count
+    # pooled across disconnected groups would credit one group with another's
+    # links and change its signature (and so its pattern id).
+    relations_by_agent: dict[str, Counter] = defaultdict(Counter)
     for e in frame.events:
         if not e.entity.startswith("agent:"):
             continue
         for rel, target in e.counterparties:
             if target.startswith("agent:") and target != e.entity and rel not in ("SPAWNED_BY", "DELEGATED_BY"):
                 uf.union(e.entity, target)
-                relations[rel] += 1
+                relations_by_agent[e.entity][rel] += 1
                 link_events[e.entity].append(e)
     groups: dict[str, set[str]] = defaultdict(set)
     for a in uf.parent:
@@ -197,6 +200,9 @@ def detect_agents(frame: DiscoveryFrame) -> DetectorOutput:
             continue
         clusters += 1
         evs = [ev for a in members for ev in link_events.get(a, [])]
+        relations: Counter = Counter()
+        for a in members:
+            relations.update(relations_by_agent.get(a, Counter()))
         first, last = bounds(evs)
         patterns.append(RawPattern(
             kind=KIND_AGENT_INTERACTION,

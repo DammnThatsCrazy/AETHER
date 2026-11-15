@@ -187,9 +187,19 @@ class PatternDiscoveryService:
         # run actually read the evidence store. After a failed read the absence
         # means nothing, so aging (and the deprecation it leads to) is skipped.
         store_unavailable = include_store and coverage.get("store") == "unavailable"
-        coverage["aging"] = {"status": "skipped_store_unavailable" if store_unavailable else "applied"}
+        # Per detector too: a kind whose own evidence source failed this run
+        # (ML scoring for traffic anomalies, the graph read for motifs) is not
+        # measured, so its patterns are not aged on this run's absence.
+        unmeasured: set[str] = set()
+        if (coverage.get("ml") or {}).get("status") not in ("scored", "no_windows"):
+            unmeasured.add(KIND_TRAFFIC_ANOMALY)
+        if (coverage.get("graph") or {}).get("graph") == "unavailable":
+            unmeasured.add(KIND_NOVEL_MOTIF)
+        coverage["aging"] = {"status": "skipped_store_unavailable" if store_unavailable else "applied",
+                             "skipped_kinds": sorted(unmeasured)}
         for existing in ([] if store_unavailable else await self.registry.scan(tenant_id)):
             if (existing["pattern_id"] in seen or existing.get("kind") not in result.kinds_run
+                    or existing.get("kind") in unmeasured
                     or existing.get("status") in (STATUS_DEPRECATED, STATUS_PROMOTED)):
                 continue
             updated = await self.registry.mutate(tenant_id, existing["pattern_id"],

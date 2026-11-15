@@ -501,3 +501,42 @@ def test_the_shared_ml_client_carries_the_service_token(monkeypatch):
         assert client.headers.get("X-Service-Token") == "svc-token"
     finally:
         monkeypatch.setattr(routes, "_http_client", None)
+
+
+def _payment_ring(i0=0):
+    return [ev(i0 + a, "agent_id", f"ring{a}", "agent_payment", BASE + timedelta(hours=3, minutes=a),
+               counterparty_agent=f"ring{(a + 1) % 4}", principal_id=f"owner{a}") for a in range(4)]
+
+
+def _targeting_ring(i0=100):
+    return [ev(i0 + a, "agent_id", f"tgt{a}", "agent_probe", BASE + timedelta(hours=4, minutes=a),
+               target_agent=f"tgt{(a + 1) % 3}", principal_id=f"boss{a}") for a in range(3)]
+
+
+def test_a_separate_agent_ring_never_changes_another_rings_relations_or_identity():
+    alone = [r for r in run_discovery(T, _payment_ring(), baseline=empty_baseline(T),
+                                      kinds=[KIND_AGENT_INTERACTION]).records]
+    both = run_discovery(T, _payment_ring() + _targeting_ring(), baseline=empty_baseline(T),
+                         kinds=[KIND_AGENT_INTERACTION]).records
+    pay = next(r for r in both if "agent:ring0" in r["affected_entity_keys"])
+    tgt = next(r for r in both if "agent:tgt0" in r["affected_entity_keys"])
+    assert pay["signature"]["relations"] == ["TRANSACTS_WITH"]
+    assert tgt["signature"]["relations"] == ["TARGETS"]
+    assert pay["pattern_id"] == alone[0]["pattern_id"]
+    links = next(e for e in pay["evidence"] if e["type"] == "agent_to_agent_links")["detail"]["relations"]
+    assert set(links) == {"TRANSACTS_WITH"}
+
+
+def test_a_kinds_filtered_run_preserves_baselines_of_detectors_it_did_not_run():
+    from intelligence.pattern_discovery.baselines import update_baseline
+
+    learned = dict(empty_baseline(T), ngram_rate={"browse>buy": 1000.0}, motif_rate={"cycle:3": 4.0}, runs=5)
+    rows = normal_traffic(1, 1)
+    result = run_discovery(T, rows, baseline=learned, kinds=[KIND_SHARED_ATTRIBUTE])
+    assert result.baseline_delta["ngram_rates"] is None and result.baseline_delta["motif_counts"] is None
+    after = result.apply_to_baseline(learned)
+    assert after["ngram_rate"] == {"browse>buy": 1000.0}
+    assert after["motif_rate"] == {"cycle:3": 4.0}
+    # A detector that ran and measured nothing still decays its section.
+    measured = update_baseline(learned, **{**result.baseline_delta, "ngram_rates": {}})
+    assert measured["ngram_rate"].get("browse>buy", 0) < 1000.0
