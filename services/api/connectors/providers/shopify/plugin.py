@@ -187,6 +187,7 @@ class ShopifyOrdersPlugin(_PluginBase):
                     acquisition_modes=("pull",),
                     output_contract="bronze.provider_events",
                     source_authority_class="commerce.store_order",
+                    source_role="system_of_record",
                     data_classification=DataClassification.SENSITIVE_PII,
                     required_scopes=(),
                     cursor_scheme="shopify-rest-v1",
@@ -205,6 +206,7 @@ class ShopifyOrdersPlugin(_PluginBase):
                     acquisition_modes=("pull",),
                     output_contract="bronze.provider_events",
                     source_authority_class="commerce.store_order",
+                    source_role="system_of_record",
                     data_classification=DataClassification.SENSITIVE_PII,
                     required_scopes=(),
                     cursor_scheme="shopify-rest-v1",
@@ -221,6 +223,7 @@ class ShopifyOrdersPlugin(_PluginBase):
                     acquisition_modes=("pull",),
                     output_contract="bronze.provider_events",
                     source_authority_class="commerce.store_order",
+                    source_role="system_of_record",
                     data_classification=DataClassification.SENSITIVE_PII,
                     # StreamDescriptor.required_scopes is restricted to
                     # OAuth2 manifests. GraphQL checks read_orders at
@@ -246,6 +249,7 @@ class ShopifyOrdersPlugin(_PluginBase):
                     acquisition_modes=("webhook",),
                     output_contract="bronze.provider_events",
                     source_authority_class="commerce.store_order",
+                    source_role="system_of_record",
                     data_classification=DataClassification.SENSITIVE_PII,
                     required_scopes=(),
                     webhook_topics=SHOPIFY_ORDER_WEBHOOK_TOPICS,

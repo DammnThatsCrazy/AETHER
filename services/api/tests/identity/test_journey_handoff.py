@@ -272,3 +272,34 @@ def test_handoff_prefix_is_classified_and_publishable_keys_reach_only_the_sdk_po
     assert classify("/sdk/journey-handoff/redeem") is not None
     assert _SDK_HANDOFF_PATHS == {"/sdk/journey-handoff", "/sdk/journey-handoff/redeem"}
     assert "/sdk/journey-handoff/journeys/jrn-1" not in _SDK_HANDOFF_PATHS
+
+
+@pytest.mark.asyncio
+async def test_redeem_queues_the_continuation_rebuild_and_rejects_do_not(monkeypatch, enabled):
+    from governance.consent import authority
+    from shared.common.common import NotFoundError
+
+    async def allow(tenant_id, anonymous_id):
+        return True, "", {}
+
+    queued = []
+
+    async def fake_queue(tenant_id, link, **_kw):
+        queued.append((tenant_id, link["handoff_id"]))
+        return True
+
+    monkeypatch.setattr(authority, "evaluate_identity_link_consent", allow)
+    monkeypatch.setattr(handoff_routes, "queue_handoff_continuation", fake_queue)
+    issued = (await handoff_routes.issue(
+        handoff_routes.IssueRequest(
+            journey_id="jrn-1", session_id="mob-sess", anonymous_id="anon-mobile", platform="ios"
+        ), _request(),
+    ))["data"]
+    body = handoff_routes.RedeemRequest(
+        token=issued["token"], session_id="web-sess", anonymous_id="anon-web", platform="web"
+    )
+    out = await handoff_routes.redeem(body, _request())
+    assert len(queued) == 1 and queued[0][1] == out["data"]["handoff_id"]
+    with pytest.raises(NotFoundError):
+        await handoff_routes.redeem(body, _request())  # already spent
+    assert len(queued) == 1

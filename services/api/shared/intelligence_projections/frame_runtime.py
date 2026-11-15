@@ -175,6 +175,20 @@ async def build_experience360_frame(
 
     journey_dispatch_policy = None
     risk_dispatch_policy = None
+    agent_behavior_policy = None
+    agent_behavior_evaluator = getattr(evaluator, "evaluate_agent_behavior_read", None)
+    agent_behavior_slot = {
+        ("agent360", "agent"): "agent_behavior",
+        ("profile360", "entity"): "agent_delegations",
+    }.get((request.surfaceId, request.subject.kind))
+    if (agent_behavior_slot is not None and agent_behavior_slot in readable_slot_ids
+            and callable(agent_behavior_evaluator)):
+        try:
+            agent_behavior_policy = Experience360PolicyDisposition.model_validate(
+                await agent_behavior_evaluator(request)
+            )
+        except Exception:  # noqa: BLE001 - missing authority fails closed
+            agent_behavior_policy = None
     profile_outcome_policy = None
     risk_dispatch_evaluator = getattr(evaluator, "evaluate_risk_dispatch_read", None)
     if (request.surfaceId == "risk360" and "interventions" in readable_slot_ids
@@ -445,6 +459,26 @@ async def build_experience360_frame(
                         capabilityKey="social360.read", policyState=disposition.state,
                         policyIds=list(disposition.policyIds), policyEvaluatedAt=disposition.evaluatedAt,
                     ))
+        if (
+            agent_behavior_slot is not None
+            and projection_id == request.surfaceId
+            and agent_behavior_slot in readable_slot_ids
+            and agent_behavior_policy is not None
+            and agent_behavior_policy.state == "allowed"
+            and agent_behavior_policy.policyIds and agent_behavior_policy.evaluatedAt
+        ):
+            # Behavior reads need an explicit agent_behavior decision
+            # (agent:manage) on top of the slot's own authority-domain check:
+            # Agent 360's behavior sections, and Profile 360's agents acting
+            # for a person.
+            read_authorizations.append(ProjectionReadAuthorization(
+                tenantId=request.tenantId, sourceSurfaceId=request.surfaceId,
+                sourceSubject=request.subject, sourceSlotId=agent_behavior_slot,
+                consumerProjectionId=projection_id, targetProjectionId=projection_id,
+                capabilityKey="agent_behavior", policyState="allowed",
+                policyIds=list(agent_behavior_policy.policyIds),
+                policyEvaluatedAt=agent_behavior_policy.evaluatedAt,
+            ))
         if request.surfaceId == "agent360" and projection_id == "agent360":
             # Agent360 can make a nested current Risk360 read while assembling
             # its broader state section. Carry the exact outer slot decision

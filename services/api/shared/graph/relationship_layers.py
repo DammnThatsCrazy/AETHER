@@ -113,6 +113,7 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.PERFORMED_ACTION: RelationshipLayer.A2A,
     EdgeType.REFERENCES_DELEGATION_RECORD: RelationshipLayer.EXCLUDED,
     EdgeType.CORRELATED_WITH_ECONOMIC_RECORD: RelationshipLayer.EXCLUDED,
+    EdgeType.CORRELATED_ACROSS_SOURCES: RelationshipLayer.EXCLUDED,
     EdgeType.EXECUTED_AS: RelationshipLayer.A2A,
     EdgeType.PRODUCED: RelationshipLayer.A2A,
     EdgeType.UPDATES_CONFIDENCE_FOR: RelationshipLayer.A2A,

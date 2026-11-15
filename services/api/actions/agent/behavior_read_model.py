@@ -193,3 +193,43 @@ async def build_agent_behavior_read_model(tenant_id: str, agent_ref: str, *,
     inputs = await load_behavior_inputs(tenant_id, agent_ref)
     reviews = await agent_continuity_reviews(tenant_id, agent_ref) if include_reviews else None
     return compose_behavior_read_model(inputs, agent_ref, queued_reviews=reviews)
+
+
+PRINCIPAL_AGENTS_CAP = 25
+
+
+async def build_principal_agents(tenant_id: str, entity_id: str, *, grants_repo: Any = None) -> dict[str, Any]:
+    """Agents acting for one person, by recorded grant or declared beneficiary.
+
+    Shared by ``GET /v1/agent/agents/principals/{entity_id}/agents`` and the
+    Profile 360 ``agent_delegations`` section. A reconciliation view, never an
+    identity merge: the person and each agent stay separate subjects, agent
+    refs stay source-reported, and capped fact reads are flagged.
+    """
+    from intelligence.agent_behavior.read_models import profile360_agents
+
+    if grants_repo is None:
+        from repositories.repos import DelegationRepository
+
+        grants_repo = DelegationRepository()
+    grants = [g for g in await grants_repo.find_many(
+        filters={"tenant_id": tenant_id, "grantor_entity_id": entity_id}, limit=100)
+        if g.get("tenant_id") == tenant_id and not g.get("revoked_at")]
+    facts: list[Any] = []
+    truncated = False
+    seen: set[tuple[Any, ...]] = set()
+    refs = sorted({g["grantee_entity_id"] for g in grants if g.get("grantee_entity_id")})
+    for ref in refs[:PRINCIPAL_AGENTS_CAP]:
+        agent_facts, was_truncated = await load_behavior_facts(tenant_id, ref)
+        # Each load includes spawned descendants' activity and the tenant's spawn
+        # edges, so a child granted alongside its parent would repeat; keep one.
+        for fact in agent_facts:
+            key = (fact.event_id, fact.event_type, fact.agent_ref, fact.child_agent_ref)
+            if key not in seen:
+                seen.add(key)
+                facts.append(fact)
+        truncated = truncated or was_truncated
+    data = profile360_agents(entity_id, facts, grants)
+    data["source_truncated"] = truncated
+    data["agents_capped_at"] = PRINCIPAL_AGENTS_CAP
+    return data

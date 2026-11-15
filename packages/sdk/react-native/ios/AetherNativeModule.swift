@@ -257,6 +257,20 @@ class AetherNativeModule: RCTEventEmitter {
         }
     }
 
+    /// Resolve Apple Ads install attribution (AdServices token, verified by the
+    /// backend). Resolves with the stored first-touch evidence JSON when the
+    /// backend recorded an attribution, or null otherwise.
+    @objc
+    func resolveAppleAdsAttribution(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        Aether.shared.resolveAppleAdsAttribution { resolved in
+            guard resolved else {
+                resolve(NSNull())
+                return
+            }
+            resolve(Aether.shared.getFirstTouchAttributionJSON() ?? NSNull())
+        }
+    }
+
     /// Resolves `{ token, handoffId, expiresAt }`, or NSNull when no handoff could be created.
     @objc
     func createJourneyHandoff(_ ttlSeconds: NSNumber, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {

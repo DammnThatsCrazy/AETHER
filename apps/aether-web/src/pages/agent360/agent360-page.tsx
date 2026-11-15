@@ -10,6 +10,7 @@ import {
   AgentLineagePanel,
   useAgent360,
 } from '@aether-app/features/agent360';
+import { PatternSectionPanel } from '@aether-app/features/pattern-discovery';
 
 type RecordValue = Record<string, unknown>;
 
@@ -175,6 +176,8 @@ export function Agent360Page() {
       </Card>
 
       <AgentLineagePanel agentId={agentId} />
+      <PatternSectionPanel surface="agent360" entityId={agentId} />
+      <PatternSectionPanel surface="risk360" entityId={agentId} riskKind="agent" />
       <AgentMarketplaceCatalogPanel />
       <AgentBehaviorPanel agentRef={agentId} />
       <AgentRunEvidencePanel agentId={agentId} />

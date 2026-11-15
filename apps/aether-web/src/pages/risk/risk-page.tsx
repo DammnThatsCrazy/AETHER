@@ -1,3 +1,4 @@
+import { RiskPatternQueueCard } from '@aether-app/features/pattern-discovery';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GlassPage } from '@aether-app/components/app-shell';
@@ -416,6 +417,7 @@ export function RiskPage() {
                 )}
               </GlassSection>
             </div>
+            <RiskPatternQueueCard />
           </div>
         ) : (
           <div className="flex flex-col gap-3" data-testid="risk-register">

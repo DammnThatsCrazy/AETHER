@@ -1,0 +1,654 @@
+"""Pattern registry: versioned pattern records and their governed lifecycle.
+
+A pattern's identity is ``(tenant, kind, signature)``. Re-detecting the same
+signature in a later run updates the same record (support, evidence,
+``times_observed``) instead of creating a new one, and bumps ``version`` when
+the evidence fingerprint changes.
+
+Lifecycle (surfaced by default, review optional)::
+
+    candidate <-> surfaced  (automatic: shown to users with no human step)
+    surfaced / candidate --(optional verdict)--> confirmed_valid / confirmed_malicious
+                                                 benign / duplicate / unresolved
+    any visible state --(hide)--> hidden --(unhide)--> back where it was
+    confirmed_* --(promote: deliberate human act)--> promoted
+    any open or reviewed state --(user or staleness)--> deprecated --(re-detected)--> funnel
+
+Rules:
+
+* The backend surfaces patterns automatically. People curate afterwards:
+  :func:`apply_curation` hides, unhides, pins and renames; :func:`apply_review`
+  records an optional verdict (with a reason). Curation and verdicts persist
+  across re-detection while the evidence fingerprint is unchanged.
+* Only :func:`apply_promotion` promotes, only from a confirmed status: seeing a
+  pattern is automatic, letting it write risk signals and graph edges is not.
+* A verdict is valid for the evidence it was made on. A re-detection whose
+  evidence fingerprint differs from the reviewed fingerprint supersedes the
+  verdict (kept in ``review_history``) and the pattern re-enters the funnel.
+* Promotion is sticky: a promoted pattern is a known pattern; re-detection
+  refreshes its support but never re-queues it.
+* Open patterns not re-observed for :data:`STALE_AFTER_RUNS` runs are
+  deprecated automatically; reviewed ones are never auto-deprecated.
+* Every write after the first is a compare-and-set on ``revision``.
+"""
+from __future__ import annotations
+
+import copy
+import json
+from datetime import datetime
+from typing import Any, Callable, Optional
+
+from repositories.repos import BaseRepository
+from shared.common.common import ConflictError, utc_now
+
+from .contracts import (
+    DETECTOR_VERSION, MAX_AFFECTED_ENTITIES, PROMOTABLE_STATUSES, REVIEWED_STATUSES,
+    STALE_AFTER_RUNS, STATUS_CANDIDATE, STATUS_DEPRECATED, STATUS_DUPLICATE, STATUS_HIDDEN,
+    STATUS_SURFACED, STATUS_PROMOTED, SYSTEM_STATUSES, VERDICT_STATUS, RawPattern, content_hash,
+    entity_ref, pattern_id, size_bucket,
+)
+
+_VERDICT_TARGETS = frozenset(VERDICT_STATUS.values())
+LEGAL_TRANSITIONS: dict[str, frozenset[str]] = {
+    STATUS_CANDIDATE: frozenset({STATUS_SURFACED, STATUS_DEPRECATED, STATUS_HIDDEN}) | _VERDICT_TARGETS,
+    STATUS_SURFACED: frozenset({STATUS_CANDIDATE, STATUS_DEPRECATED, STATUS_HIDDEN}) | _VERDICT_TARGETS,
+    **{s: (_VERDICT_TARGETS - {s}) | {STATUS_DEPRECATED, STATUS_HIDDEN} for s in REVIEWED_STATUSES},
+    STATUS_PROMOTED: frozenset({STATUS_DEPRECATED, STATUS_HIDDEN}),
+    STATUS_DEPRECATED: frozenset({STATUS_CANDIDATE, STATUS_SURFACED}),
+    # Unhide restores the stored pre-hide status (validated in apply_curation).
+    STATUS_HIDDEN: frozenset({STATUS_CANDIDATE, STATUS_SURFACED, STATUS_DEPRECATED, STATUS_PROMOTED})
+    | _VERDICT_TARGETS,
+}
+for _s in PROMOTABLE_STATUSES:
+    LEGAL_TRANSITIONS[_s] = LEGAL_TRANSITIONS[_s] | {STATUS_PROMOTED}
+
+MAX_RUNS_TRACKED = 10
+
+
+class LifecycleError(ValueError):
+    pass
+
+
+def check_transition(current: str, target: str) -> None:
+    if target == current:
+        return
+    if target not in LEGAL_TRANSITIONS.get(current, frozenset()):
+        raise LifecycleError(f"illegal pattern transition {current} -> {target}")
+
+
+def evidence_fingerprint(record: dict[str, Any]) -> str:
+    """What a reviewer evaluated: the signature, the kinds of evidence, the
+    order of magnitude of the affected population and the risk reading.
+    Individual entities coming and going is drift, not a new claim."""
+    return content_hash({
+        "kind": record.get("kind"),
+        "signature_hash": record.get("signature_hash"),
+        "evidence_types": sorted(str(e.get("type")) for e in record.get("evidence", [])),
+        "size_bucket": size_bucket(int(record.get("affected_entity_count") or 0)),
+        "risk_categories": sorted(record.get("risk_categories") or []),
+    }, 32)
+
+
+def _iso(value: Optional[datetime]) -> Optional[str]:
+    return value.isoformat() if value else None
+
+
+def build_record(tenant_id: str, raw: RawPattern, scored: dict[str, Any], *, run_id: str) -> dict[str, Any]:
+    now = utc_now().isoformat()
+    sig_hash = raw.signature_hash
+    entities = sorted(dict.fromkeys(raw.affected_entities))
+    span = ((raw.last_observed_at - raw.first_observed_at).total_seconds()
+            if raw.first_observed_at and raw.last_observed_at else None)
+    record = {
+        "pattern_id": pattern_id(tenant_id, raw.kind, sig_hash),
+        "tenant_id": tenant_id,
+        "kind": raw.kind,
+        "signature": raw.signature,
+        "signature_hash": sig_hash,
+        "family": scored["family"],
+        "title": raw.title[:300],
+        "summary": raw.summary[:2000],
+        "version": 1,
+        "status": scored["status"],
+        "priority": scored["priority"],
+        "severity": scored["severity"],
+        "severity_score": scored["severity_score"],
+        "confidence": scored["confidence"],
+        "confidence_cap": scored["confidence_cap"],
+        "raw_confidence": scored["raw_confidence"],
+        "calibration": scored["calibration"],
+        "suppressed_by_feedback": scored["suppressed_by_feedback"],
+        "novelty": scored["novelty"],
+        "novelty_detail": scored["novelty_detail"],
+        "claim_state": "inferred",
+        "affected_entities": [entity_ref(e) for e in entities[:MAX_AFFECTED_ENTITIES]],
+        "affected_entity_keys": entities[:MAX_AFFECTED_ENTITIES],
+        "affected_entity_count": len(entities),
+        "affected_entities_truncated": len(entities) > MAX_AFFECTED_ENTITIES,
+        "entity_kinds": sorted({e.split(":", 1)[0] for e in entities}),
+        "occurrence_count": raw.occurrence_count,
+        "episode_count": raw.episode_count,
+        "first_observed_at": _iso(raw.first_observed_at),
+        "last_observed_at": _iso(raw.last_observed_at),
+        "span_seconds": span,
+        "evidence": [e.to_dict() for e in raw.evidence],
+        "risk_categories": sorted(set(raw.risk_categories)),
+        "competing_explanations": raw.competing_explanations,
+        "baseline": raw.baseline,
+        "detector": raw.detector,
+        "detector_version": DETECTOR_VERSION,
+        "member_pattern_ids": raw.member_pattern_ids,
+        "duplicate_of": None,
+        "run_ids": [run_id],
+        "last_run_id": run_id,
+        "runs_since_seen": 0,
+        "times_observed": 1,
+        "review_history": [],
+        "promotion": None,
+        "created_at": now,
+        "detected_at": now,
+        "surfaced_at": now if scored["status"] == STATUS_SURFACED else None,
+        "changed_at": now,
+        "deprecated_at": None,
+        "pinned": False,
+        "display_title": None,
+        "segment_profile": {},
+        "segment_keys": [],
+    }
+    record["evidence_fingerprint"] = evidence_fingerprint(record)
+    return record
+
+
+def merge_redetection(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
+    """Fold a re-detection into the stored record (pure)."""
+    record = copy.deepcopy(fresh)
+    record["created_at"] = existing.get("created_at", fresh["created_at"])
+    record["review_history"] = list(existing.get("review_history") or [])
+    record["promotion"] = existing.get("promotion")
+    record["duplicate_of"] = existing.get("duplicate_of")
+    record["times_observed"] = int(existing.get("times_observed") or 0) + 1
+    record["run_ids"] = ([*existing.get("run_ids", []), fresh["last_run_id"]])[-MAX_RUNS_TRACKED:]
+    if existing.get("first_observed_at") and (
+        not record.get("first_observed_at") or existing["first_observed_at"] < record["first_observed_at"]
+    ):
+        record["first_observed_at"] = existing["first_observed_at"]
+    changed = existing.get("evidence_fingerprint") != record["evidence_fingerprint"]
+    record["version"] = int(existing.get("version") or 1) + (1 if changed else 0)
+    status = existing.get("status", STATUS_CANDIDATE)
+    now = utc_now().isoformat()
+    # Curation survives re-detection; timestamps drive "what's new".
+    for key in ("pinned", "pinned_by", "pinned_at", "display_title", "hidden_from_status",
+                "hidden_at", "hidden_by", "duplicates"):
+        if key in existing:
+            record[key] = existing[key]
+    if record.get("duplicates"):
+        # The fresh detection is the new base; merged duplicates are re-folded on top.
+        record["base_entity_keys"] = list(record.get("affected_entity_keys") or [])
+        record["base_entity_count"] = int(record.get("affected_entity_count") or 0)
+        record["base_occurrence_count"] = int(record.get("occurrence_count") or 0)
+        _apply_duplicates(record)
+    record["surfaced_at"] = existing.get("surfaced_at")
+    record["changed_at"] = now if changed else existing.get("changed_at") or existing.get("created_at")
+    record["deprecated_at"] = existing.get("deprecated_at")
+    if status in SYSTEM_STATUSES:
+        # A surfaced pattern stays surfaced until a person acts or it goes
+        # stale: recurrence lowers novelty, and that must not silently pull a
+        # pattern out of view.
+        if status == STATUS_SURFACED and record["status"] == STATUS_CANDIDATE:
+            record["status"] = STATUS_SURFACED
+            record["priority"] = existing.get("priority", record["priority"])
+    elif status == STATUS_DEPRECATED:
+        record["deprecated_at"] = None
+        record["review_history"].append({
+            "decision": "revived", "reason": "re_detected_after_deprecation",
+            "previous_status": status, "at": now,
+        })
+    elif status == STATUS_PROMOTED:
+        record["status"] = STATUS_PROMOTED
+        record["priority"] = "low"
+        if changed:
+            record["review_history"].append({
+                "decision": "evidence_changed_after_promotion", "previous_fingerprint":
+                existing.get("evidence_fingerprint"), "new_fingerprint": record["evidence_fingerprint"], "at": now,
+            })
+    elif status in REVIEWED_STATUSES or status == STATUS_HIDDEN:
+        reviewed = existing.get("reviewed_fingerprint") or existing.get("evidence_fingerprint")
+        if reviewed == record["evidence_fingerprint"]:
+            record["status"] = status
+            record["reviewed_fingerprint"] = reviewed
+            record["priority"] = existing.get("priority", record["priority"])
+        else:
+            # The pattern changed materially since a person judged or hid it:
+            # show it again rather than keep acting on a stale judgement.
+            for key in ("hidden_from_status", "hidden_at", "hidden_by"):
+                record.pop(key, None)
+            record["review_history"].append({
+                "decision": "resurfaced_after_material_change" if status == STATUS_HIDDEN else "superseded",
+                "reason": "evidence_changed_since_review",
+                "previous_status": status,
+                "reviewed_fingerprint": reviewed,
+                "new_fingerprint": record["evidence_fingerprint"],
+                "at": now,
+            })
+    if record["status"] == STATUS_SURFACED and not record.get("surfaced_at"):
+        record["surfaced_at"] = now
+    return record
+
+
+def apply_review(record: dict[str, Any], *, reviewer_id: str, verdict: str, reason: str,
+                 duplicate_of: Optional[str] = None) -> dict[str, Any]:
+    if verdict not in VERDICT_STATUS:
+        raise LifecycleError(f"verdict must be one of {sorted(VERDICT_STATUS)}")
+    if not reviewer_id.strip():
+        raise LifecycleError("reviewer is required")
+    if len(reason.strip()) < 10:
+        raise LifecycleError("a reason of at least 10 characters is required")
+    target = VERDICT_STATUS[verdict]
+    if target == STATUS_DUPLICATE:
+        if not duplicate_of or duplicate_of == record.get("pattern_id"):
+            raise LifecycleError("a duplicate verdict must name a different pattern in duplicate_of")
+    elif duplicate_of:
+        raise LifecycleError("duplicate_of is only valid with a duplicate verdict")
+    check_transition(record.get("status", STATUS_CANDIDATE), target)
+    updated = copy.deepcopy(record)
+    updated["status"] = target
+    updated["duplicate_of"] = duplicate_of if target == STATUS_DUPLICATE else None
+    updated["reviewed_fingerprint"] = record.get("evidence_fingerprint")
+    updated["priority"] = "low"
+    updated["review_history"] = [*record.get("review_history", []), {
+        "reviewer_id": reviewer_id.strip(), "decision": verdict, "reason": reason.strip()[:2000],
+        "previous_status": record.get("status"), "evidence_fingerprint": record.get("evidence_fingerprint"),
+        "duplicate_of": duplicate_of, "at": utc_now().isoformat(),
+    }]
+    return updated
+
+
+CURATION_ACTIONS = ("hide", "unhide", "pin", "unpin", "rename")
+
+
+def apply_curation(record: dict[str, Any], *, actor: str, action: str, title: Optional[str] = None,
+                   reason: Optional[str] = None) -> dict[str, Any]:
+    """User curation of an automatically surfaced pattern. No verdict needed.
+
+    ``hide`` removes it from the default feed and lenses (restorable with
+    ``unhide``), ``pin`` keeps it first, ``rename`` sets a display title (the
+    detector's title is kept). Every action is recorded in ``review_history``.
+    """
+    if action not in CURATION_ACTIONS:
+        raise LifecycleError(f"action must be one of {list(CURATION_ACTIONS)}")
+    if not actor.strip():
+        raise LifecycleError("actor is required")
+    updated = copy.deepcopy(record)
+    now = utc_now().isoformat()
+    status = record.get("status", STATUS_CANDIDATE)
+    if action == "hide":
+        if status == STATUS_HIDDEN:
+            return updated
+        check_transition(status, STATUS_HIDDEN)
+        updated.update({"status": STATUS_HIDDEN, "hidden_from_status": status, "hidden_at": now,
+                        "hidden_by": actor.strip(), "reviewed_fingerprint": record.get("evidence_fingerprint")})
+    elif action == "unhide":
+        if status != STATUS_HIDDEN:
+            raise LifecycleError("pattern is not hidden")
+        back = record.get("hidden_from_status") or STATUS_SURFACED
+        check_transition(STATUS_HIDDEN, back)
+        updated["status"] = back
+        for key in ("hidden_from_status", "hidden_at", "hidden_by"):
+            updated.pop(key, None)
+        if back == STATUS_SURFACED and not updated.get("surfaced_at"):
+            updated["surfaced_at"] = now
+    elif action in ("pin", "unpin"):
+        updated["pinned"] = action == "pin"
+        updated["pinned_by"] = actor.strip() if action == "pin" else None
+        updated["pinned_at"] = now if action == "pin" else None
+    elif action == "rename":
+        clean = (title or "").strip()
+        if not clean or len(clean) > 300:
+            raise LifecycleError("rename needs a title of 1-300 characters")
+        updated["display_title"] = clean
+    updated["review_history"] = [*record.get("review_history", []), {
+        "reviewer_id": actor.strip(), "decision": action, "reason": (reason or "").strip()[:2000] or None,
+        "title": title if action == "rename" else None, "previous_status": status, "at": now,
+    }]
+    return updated
+
+
+def apply_promotion(record: dict[str, Any], *, reviewer_id: str, reason: str) -> dict[str, Any]:
+    if not reviewer_id.strip():
+        raise LifecycleError("reviewer is required")
+    if len(reason.strip()) < 10:
+        raise LifecycleError("a reason of at least 10 characters is required")
+    status = record.get("status")
+    if status not in PROMOTABLE_STATUSES:
+        raise LifecycleError("only a reviewer-confirmed pattern (valid or malicious) can be promoted")
+    if record.get("reviewed_fingerprint") and record["reviewed_fingerprint"] != record.get("evidence_fingerprint"):
+        raise LifecycleError("evidence changed since review; review again before promoting")
+    check_transition(status, STATUS_PROMOTED)
+    updated = copy.deepcopy(record)
+    now = utc_now().isoformat()
+    updated["status"] = STATUS_PROMOTED
+    updated["priority"] = "low"
+    updated["promotion"] = {
+        "promoted_by": reviewer_id.strip(), "promoted_at": now, "reason": reason.strip()[:2000],
+        "from_status": status, "verdict": "malicious" if status == "confirmed_malicious" else "valid",
+        "evidence_fingerprint": record.get("evidence_fingerprint"), "risk_signals": [],
+    }
+    updated["review_history"] = [*record.get("review_history", []), {
+        "reviewer_id": reviewer_id.strip(), "decision": "promote", "reason": reason.strip()[:2000],
+        "previous_status": status, "at": now,
+    }]
+    return updated
+
+
+def apply_deprecation(record: dict[str, Any], *, actor: str, reason: str, automatic: bool = False) -> dict[str, Any]:
+    if not automatic and len(reason.strip()) < 10:
+        raise LifecycleError("a reason of at least 10 characters is required")
+    check_transition(record.get("status", STATUS_CANDIDATE), STATUS_DEPRECATED)
+    updated = copy.deepcopy(record)
+    updated["status"] = STATUS_DEPRECATED
+    updated["priority"] = "low"
+    updated["deprecated_at"] = utc_now().isoformat()
+    updated["review_history"] = [*record.get("review_history", []), {
+        "reviewer_id": actor, "decision": "deprecate_stale" if automatic else "deprecate",
+        "reason": reason.strip()[:2000], "previous_status": record.get("status"),
+        "at": utc_now().isoformat(),
+    }]
+    return updated
+
+
+def _apply_duplicates(record: dict[str, Any]) -> dict[str, Any]:
+    """Fold the stored contributions of merged duplicates into a record:
+    entity union (bounded) and summed occurrence support. Pure and repeatable,
+    so it can run after every re-detection without double counting."""
+    dups = record.get("duplicates") or []
+    if not dups:
+        return record
+    base_keys = list(record.get("base_entity_keys") or record.get("affected_entity_keys") or [])
+    base_count = int(record.get("base_entity_count") or record.get("affected_entity_count") or 0)
+    base_occ = int(record.get("base_occurrence_count") or record.get("occurrence_count") or 0)
+    keys = list(dict.fromkeys([*base_keys, *(k for d in dups for k in d.get("entity_keys") or [])]))
+    record["base_entity_keys"] = base_keys
+    record["base_entity_count"] = base_count
+    record["base_occurrence_count"] = base_occ
+    record["affected_entity_keys"] = keys[:MAX_AFFECTED_ENTITIES]
+    record["affected_entities"] = [entity_ref(k) for k in record["affected_entity_keys"]]
+    record["affected_entity_count"] = base_count + (len(keys) - len(base_keys))
+    record["affected_entities_truncated"] = len(keys) > MAX_AFFECTED_ENTITIES
+    record["entity_kinds"] = sorted({k.split(":", 1)[0] for k in record["affected_entity_keys"]})
+    record["occurrence_count"] = base_occ + sum(int(d.get("occurrence_count") or 0) for d in dups)
+    return record
+
+
+def remove_duplicate(target: dict[str, Any], duplicate_id: str) -> dict[str, Any]:
+    """Withdraw a duplicate's contribution from the pattern it was merged into.
+
+    Used when a reviewer reverses or retargets a ``duplicate`` verdict: the old
+    canonical pattern must stop implicating the duplicate's members and
+    counting its support. The remaining duplicates are re-folded onto the base;
+    with none left, the base membership and support are restored."""
+    updated = copy.deepcopy(target)
+    dups = [d for d in updated.get("duplicates") or [] if d.get("pattern_id") != duplicate_id]
+    if len(dups) == len(updated.get("duplicates") or []):
+        return updated
+    base_keys = list(updated.get("base_entity_keys") or [])
+    base_count = int(updated.get("base_entity_count") or len(base_keys))
+    base_occ = int(updated.get("base_occurrence_count") or 0)
+    updated["duplicates"] = dups
+    if dups:
+        updated = _apply_duplicates(updated)
+    else:
+        updated["affected_entity_keys"] = base_keys[:MAX_AFFECTED_ENTITIES]
+        updated["affected_entities"] = [entity_ref(k) for k in updated["affected_entity_keys"]]
+        updated["affected_entity_count"] = base_count
+        updated["affected_entities_truncated"] = len(base_keys) > MAX_AFFECTED_ENTITIES
+        updated["entity_kinds"] = sorted({k.split(":", 1)[0] for k in updated["affected_entity_keys"]})
+        updated["occurrence_count"] = base_occ
+        for key in ("base_entity_keys", "base_entity_count", "base_occurrence_count"):
+            updated.pop(key, None)
+    updated["review_history"] = [*updated.get("review_history", []), {
+        "decision": "duplicate_withdrawn", "duplicate_pattern_id": duplicate_id, "at": utc_now().isoformat(),
+    }]
+    return updated
+
+
+def merge_duplicate(target: dict[str, Any], duplicate: dict[str, Any]) -> dict[str, Any]:
+    """Fold a pattern people marked duplicate into the pattern it duplicates.
+
+    The duplicate's entities and support are recorded on the canonical
+    pattern (``duplicates``) and folded in by :func:`_apply_duplicates`, which
+    re-runs after every re-detection, so the merged support is never lost or
+    double counted. Re-merging the same duplicate refreshes its contribution."""
+    updated = copy.deepcopy(target)
+    dup_id = duplicate["pattern_id"]
+    seen = {d["pattern_id"]: d for d in updated.get("duplicates") or []}
+    first_merge = dup_id not in seen
+    entity_keys = list(duplicate.get("affected_entity_keys") or [])[:MAX_AFFECTED_ENTITIES]
+    occurrence_count = int(duplicate.get("occurrence_count") or 0)
+    # evidence_fingerprint deliberately ignores individual members and counts, so
+    # an unchanged fingerprint does not mean an unchanged contribution: compare
+    # the contribution itself before skipping the refresh.
+    if (not first_merge
+            and seen[dup_id].get("evidence_fingerprint") == duplicate.get("evidence_fingerprint")
+            and list(seen[dup_id].get("entity_keys") or []) == entity_keys
+            and int(seen[dup_id].get("occurrence_count") or 0) == occurrence_count):
+        return _apply_duplicates(updated)
+    if not updated.get("duplicates"):
+        updated["base_entity_keys"] = list(updated.get("affected_entity_keys") or [])
+        updated["base_entity_count"] = int(updated.get("affected_entity_count") or 0)
+        updated["base_occurrence_count"] = int(updated.get("occurrence_count") or 0)
+    seen[dup_id] = {"pattern_id": dup_id, "kind": duplicate.get("kind"),
+                    "evidence_fingerprint": duplicate.get("evidence_fingerprint"),
+                    "entity_keys": entity_keys,
+                    "occurrence_count": occurrence_count,
+                    "merged_at": utc_now().isoformat()}
+    updated["duplicates"] = list(seen.values())
+    before = int(updated.get("affected_entity_count") or 0)
+    for field_name, pick in (("first_observed_at", min), ("last_observed_at", max)):
+        values = [v for v in (updated.get(field_name), duplicate.get(field_name)) if v]
+        updated[field_name] = pick(values) if values else None
+    updated = _apply_duplicates(updated)
+    updated["review_history"] = [*updated.get("review_history", []), {
+        "decision": "merged_duplicate", "duplicate_pattern_id": dup_id,
+        "entities_added": max(0, int(updated["affected_entity_count"]) - before),
+        "refreshed": not first_merge, "at": utc_now().isoformat(),
+    }]
+    return updated
+
+
+def mark_unseen(record: dict[str, Any], run_id: str) -> dict[str, Any]:
+    """A run that did not re-observe the pattern. Open patterns go stale."""
+    updated = copy.deepcopy(record)
+    updated["runs_since_seen"] = int(record.get("runs_since_seen") or 0) + 1
+    if record.get("status") in SYSTEM_STATUSES and updated["runs_since_seen"] >= STALE_AFTER_RUNS:
+        updated = apply_deprecation(updated, actor="system", automatic=True,
+                                    reason=f"not re-observed for {updated['runs_since_seen']} runs (last run {run_id})")
+    return updated
+
+
+_MAX_WRITE_ATTEMPTS = 5
+_SCAN_PAGE = 500
+_SCAN_LIMIT = 5_000
+
+
+class PatternRegistryRepository(BaseRepository):
+    """Tenant-scoped JSONB store of discovered patterns (``discovered_patterns``)."""
+
+    def __init__(self) -> None:
+        super().__init__("discovered_patterns")
+
+    async def get(self, tenant_id: str, pid: str) -> Optional[dict[str, Any]]:
+        row = await self.find_by_id(pid)
+        return copy.deepcopy(row) if row and row.get("tenant_id") == tenant_id else None
+
+    async def upsert_detected(self, record: dict[str, Any]) -> dict[str, Any]:
+        tenant_id = record["tenant_id"]
+        for _ in range(_MAX_WRITE_ATTEMPTS):
+            existing = await self.get(tenant_id, record["pattern_id"])
+            if existing is None:
+                fresh = copy.deepcopy(record)
+                fresh["revision"] = 1
+                if await self.insert_if_absent(fresh["pattern_id"], fresh, tenant_id):
+                    return copy.deepcopy(fresh)
+                continue
+            merged = merge_redetection(existing, record)
+            merged["revision"] = int(existing.get("revision", 0)) + 1
+            if await self.replace_if_matches(merged["pattern_id"], merged, tenant_id,
+                                             {"revision": existing.get("revision", 0)}):
+                return copy.deepcopy(merged)
+        raise ConflictError("pattern changed concurrently; retry")
+
+    async def mutate(self, tenant_id: str, pid: str,
+                     fn: Callable[[dict[str, Any]], dict[str, Any]]) -> Optional[dict[str, Any]]:
+        """Apply ``fn`` atomically; ``None`` when the pattern does not exist.
+        ``LifecycleError`` from ``fn`` propagates unchanged."""
+        for _ in range(_MAX_WRITE_ATTEMPTS):
+            row = await self.get(tenant_id, pid)
+            if row is None:
+                return None
+            expected = row.get("revision", 0)  # before fn, which may mutate row in place
+            updated = fn(copy.deepcopy(row))
+            updated["revision"] = int(expected) + 1
+            if await self.replace_if_matches(pid, updated, tenant_id, {"revision": expected}):
+                return copy.deepcopy(updated)
+        raise ConflictError("pattern changed concurrently; retry")
+
+    async def scan(self, tenant_id: str, *, status: Optional[str] = None, kind: Optional[str] = None,
+                   limit: int = _SCAN_LIMIT) -> list[dict[str, Any]]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if status:
+            filters["status"] = status
+        if kind:
+            filters["kind"] = kind
+        out: list[dict[str, Any]] = []
+        offset = 0
+        while len(out) < limit:
+            page = await self.find_many(filters=filters, limit=_SCAN_PAGE, offset=offset)
+            out.extend(copy.deepcopy(r) for r in page if r.get("tenant_id") == tenant_id)
+            if len(page) < _SCAN_PAGE:
+                break
+            offset += _SCAN_PAGE
+        return out[:limit]
+
+    async def list_patterns(self, tenant_id: str, *, statuses: Optional[set[str]] = None,
+                            kind: Optional[str] = None, min_confidence: float = 0.0,
+                            limit: int = 50, offset: int = 0) -> tuple[list[dict[str, Any]], int]:
+        if statuses:
+            # One indexed (tenant, status) read per status instead of a tenant scan.
+            rows = [r for st in sorted(statuses) for r in await self.scan(tenant_id, status=st, kind=kind)]
+        else:
+            rows = await self.scan(tenant_id, kind=kind)
+        rows = [r for r in rows if float(r.get("confidence") or 0) >= min_confidence]
+        prio = {"high": 0, "normal": 1, "low": 2}
+        rows.sort(key=lambda r: (not r.get("pinned"), prio.get(r.get("priority"), 3),
+                                 -float(r.get("severity_score") or 0),
+                                 -float(r.get("confidence") or 0), r.get("pattern_id", "")))
+        return rows[offset: offset + limit], len(rows)
+
+    async def _jsonb_any(self, tenant_id: str, field: str, keys: list[str], limit: int) -> Optional[list[dict[str, Any]]]:
+        """GIN-indexed ``data->field ?| keys`` on PostgreSQL; None in memory."""
+        pool = await self._ensure_pool()
+        if pool is None:
+            return None
+        await self._ensure_table()
+        records = await pool.fetch(
+            f"SELECT data FROM discovered_patterns WHERE tenant_id = $1 AND data->'{field}' ?| $2::text[] LIMIT $3",
+            tenant_id, keys, max(1, min(int(limit), 5_000)),
+        )
+        rows = [json.loads(r["data"]) if isinstance(r["data"], str) else dict(r["data"]) for r in records]
+        return [r for r in rows if r.get("tenant_id") == tenant_id]
+
+    async def for_entities(self, tenant_id: str, entity_keys: list[str], limit: int = 2_000) -> list[dict[str, Any]]:
+        """Patterns implicating any of ``entity_keys`` (graph overlay)."""
+        keys = sorted(set(entity_keys))[:3_000]
+        if not keys:
+            return []
+        rows = await self._jsonb_any(tenant_id, "affected_entity_keys", keys, limit)
+        if rows is None:
+            wanted = set(keys)
+            rows = [r for r in await self.scan(tenant_id) if wanted & set(r.get("affected_entity_keys") or [])]
+        return rows[:limit]
+
+    async def for_segment(self, tenant_id: str, segment_key: str, limit: int = 500) -> list[dict[str, Any]]:
+        """Patterns concentrated in one ``dimension=value`` (segment lenses)."""
+        rows = await self._jsonb_any(tenant_id, "segment_keys", [segment_key], limit)
+        if rows is None:
+            rows = [r for r in await self.scan(tenant_id) if segment_key in (r.get("segment_keys") or [])]
+        return rows[:limit]
+
+    async def for_entity(self, tenant_id: str, entity_key: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Patterns implicating one entity. On PostgreSQL this is a GIN-indexed
+        ``data->'affected_entity_keys' ? $2`` lookup; in memory it filters."""
+        pool = await self._ensure_pool()
+        if pool is not None:
+            await self._ensure_table()
+            records = await pool.fetch(
+                "SELECT data FROM discovered_patterns WHERE tenant_id = $1 "
+                "AND data->'affected_entity_keys' ? $2 LIMIT $3",
+                tenant_id, entity_key, max(1, min(int(limit) * 4, 2_000)),
+            )
+            rows = [json.loads(r["data"]) if isinstance(r["data"], str) else dict(r["data"]) for r in records]
+            rows = [r for r in rows if r.get("tenant_id") == tenant_id]
+        else:
+            rows = [r for r in await self.scan(tenant_id) if entity_key in (r.get("affected_entity_keys") or [])]
+        rows.sort(key=lambda r: (-float(r.get("severity_score") or 0), r.get("pattern_id", "")))
+        return rows[:limit]
+
+
+class PatternFeedbackRepository(BaseRepository):
+    """Append-only analyst verdicts; the calibration source."""
+
+    def __init__(self) -> None:
+        super().__init__("pattern_feedback")
+
+    async def record(self, tenant_id: str, pattern: dict[str, Any], *, reviewer_id: str,
+                     verdict: str, reason: str) -> dict[str, Any]:
+        now = utc_now().isoformat()
+        fid = f"{tenant_id}:pfb:{content_hash([pattern['pattern_id'], reviewer_id, verdict, now], 24)}"
+        row = {
+            "feedback_id": fid, "tenant_id": tenant_id, "pattern_id": pattern["pattern_id"],
+            "kind": pattern.get("kind"), "family": pattern.get("family"), "detector": pattern.get("detector"),
+            "verdict": verdict, "reviewer_id": reviewer_id, "reason": reason[:2000],
+            "evidence_fingerprint": pattern.get("evidence_fingerprint"), "created_at": now,
+        }
+        await self.insert_if_absent(fid, row, tenant_id)
+        return row
+
+    async def aggregate(self, tenant_id: str) -> dict[str, Any]:
+        kinds: dict[str, dict[str, int]] = {}
+        families: dict[str, dict[str, int]] = {}
+        total = 0
+        offset = 0
+        while offset < 20_000:
+            page = await self.find_many(filters={"tenant_id": tenant_id}, limit=_SCAN_PAGE, offset=offset)
+            for row in page:
+                if row.get("tenant_id") != tenant_id:
+                    continue
+                total += 1
+                v = str(row.get("verdict"))
+                kinds.setdefault(str(row.get("kind")), {}).setdefault(v, 0)
+                kinds[str(row.get("kind"))][v] += 1
+                if row.get("family"):
+                    families.setdefault(str(row["family"]), {}).setdefault(v, 0)
+                    families[str(row["family"])][v] += 1
+            if len(page) < _SCAN_PAGE:
+                break
+            offset += _SCAN_PAGE
+        return {"kinds": kinds, "families": families, "total": total}
+
+
+class PatternDiscoveryRunRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("pattern_discovery_runs")
+
+    async def save_run(self, run: dict[str, Any]) -> dict[str, Any]:
+        await self.insert_if_absent(run["run_id"], copy.deepcopy(run), run["tenant_id"])
+        return run
+
+    async def list_runs(self, tenant_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows = await self.find_many(filters={"tenant_id": tenant_id}, limit=max(1, min(limit, 200)),
+                                    sort_by="created_at")
+        return [copy.deepcopy(r) for r in rows if r.get("tenant_id") == tenant_id]
+
+    async def get_run(self, tenant_id: str, run_id: str) -> Optional[dict[str, Any]]:
+        row = await self.find_by_id(run_id)
+        return copy.deepcopy(row) if row and row.get("tenant_id") == tenant_id else None

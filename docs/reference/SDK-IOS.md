@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:d0c3891f8bfe89be4551207efdc6ed0b96c67e9303fc090b5c2499a4f3e8eac3"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:af11bf4068796b601e6d9e4a35c10911059e8d05fc3632661c2dd39fd269af93"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
   "packages/shared/events.ts": "sha256:0d7ed2ce418588cecb617545f6d9694ef28d7d5e37469552073a88c0275305cc"
@@ -320,6 +320,30 @@ a deterministic deferred-attribution handoff via
 a match — an unmatched install simply stays unattributed. A successful match
 persists first-touch evidence (only if none exists yet) and emits
 `deferred_attribution_resolved`.
+
+### Apple Ads attribution
+
+```swift
+Aether.shared.resolveAppleAdsAttribution { recorded in
+    // true only when the backend verified an Apple Ads attribution and recorded it
+}
+```
+
+Call it once after `initialize`. The SDK reads the AdServices attribution token
+(`AAAttribution.attributionToken()`, iOS 14.3 and later, no App Tracking
+Transparency prompt) and posts it to `POST /v1/attribution/apple-ads/resolve`.
+The backend exchanges it with Apple and records the result server-side as
+`entry_method: ios_apple_ads_attribution` with `proof_level: platform_verified`.
+The SDK asserts nothing itself and emits no event. On success the verified
+evidence becomes the stored first touch (only if none exists). If Apple's record
+is not ready, the SDK retries up to three times, five seconds apart. A finished
+attempt is not repeated on later launches.
+
+This covers Apple Ads (Apple Search Ads) campaigns only. Other ad networks stay
+Direct / Unknown at user level. With `gdprMode` on, it needs the `marketing`
+consent purpose. It also needs the backend flag
+`AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`. AdServices is weak-linked, so apps
+targeting iOS 14.0 to 14.2 still launch (the call does nothing there).
 
 ## Push Notification Tracking
 

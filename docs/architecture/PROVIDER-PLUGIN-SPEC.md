@@ -20,7 +20,7 @@ estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
   "services/api/connectors/provider_runtime/": "sha256:4fa95e07354c324881e678764057d4fa14edadbadc97b1a5aefe55a8fff96875"
-  "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
+  "services/api/connectors/providers/shopify/": "sha256:3d9cd3b533fb526c24f93af1d921164f29699f4ad7ae59803dce62b5597958f2"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
   "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
@@ -91,6 +91,11 @@ manifest and installed `pull()`, `webhook()`, `report()`, or `stream()` adapters
 `ProviderRegistry.streams_for(identity_key)` exposes the validated declarations.
 The plugin ABI remains v1: a declaration does not by itself dispatch a
 per-stream worker or prove live provider behavior.
+A descriptor may declare a `source_role` (what the stream proves, such as
+`system_of_record` or `agent_runtime`); a plugin's roles are derived from its
+streams, never declared for the vendor. The Shopify order streams declare
+`system_of_record`. See the
+[agent source roles blueprint](blueprints/universal-connector-runtime/agent-source-roles.md).
 
 ### Identity rules
 

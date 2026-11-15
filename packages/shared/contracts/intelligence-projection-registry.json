@@ -3430,6 +3430,40 @@
           "implementationCrosswalk": [
             "business_outcomes"
           ]
+        },
+        {
+          "id": "agent_behavior",
+          "requirement": "optional",
+          "description": "Optional Aether provider context retained for Agent 360: derived agent behavior (decisions, journey, influence, authority, value, risk, trust, market, observability) over source-reported Silver agent facts. Readable only with a server-derived agent_behavior read authorization (agent:manage).",
+          "canonicalAuthorityRefs": [
+            "agent_executions",
+            "observations"
+          ],
+          "projectionBindings": [
+            {
+              "projectionId": "agent360",
+              "role": "primary",
+              "sectionIds": [
+                "behavior",
+                "behavior_decisions",
+                "behavior_journey",
+                "behavior_influence",
+                "behavior_authority",
+                "behavior_value",
+                "behavior_risk",
+                "behavior_trust",
+                "behavior_market",
+                "behavior_observability"
+              ],
+              "subjectKinds": [
+                "agent"
+              ]
+            }
+          ],
+          "implementationCrosswalk": [
+            "agent_behavior"
+          ],
+          "partialImplementationReason": "The behavior read model is a current bounded rebuild from at most 1,000 recent facts per agent; every rate and confidence is uncalibrated (Wilson intervals only), and event-time windows and as-of anchors are not applied."
         }
       ],
       "projectionBindings": [
@@ -4678,7 +4712,7 @@
         {
           "id": "agent_delegations",
           "requirement": "required",
-          "description": "Current delegation and action-scoped authority evidence for an exact Agent subject or canonical Agent entity; unbound profiles remain unknown.",
+          "description": "Current delegation and action-scoped authority evidence for an exact Agent subject or canonical Agent entity; for a person entity, the agents acting for that person by recorded grant or declared beneficiary (agent:manage only); unbound profiles remain unknown.",
           "canonicalAuthorityRefs": [
             "agent_access",
             "agent_executions",
@@ -4697,7 +4731,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "Exact Agent subjects and canonical Agent entities reuse Agent360 identity and delegation evidence; unbound profile links, historical replay, effective authorization, and freshness remain unknown."
+          "partialImplementationReason": "Exact Agent subjects and canonical Agent entities reuse Agent360 identity and delegation evidence; person entities list agents by recorded grant or declared beneficiary from bounded, capped fact reads without identity merge; unbound profile links, historical replay, effective authorization, and freshness remain unknown."
         },
         {
           "id": "communications",

@@ -71,6 +71,7 @@ def _feature_flags(settings) -> dict[str, bool]:
         "data_exchange_enabled": settings.data_exchange.enabled,
         "identity_manual_review_enabled": settings.identity_continuity.manual_review_enabled,
         "tenant_identity_activation_dashboard_enabled": settings.identity_continuity.activation_dashboard_enabled,
+        "pattern_discovery_enabled": settings.pattern_discovery.enabled,
     }
 
 # Profile360 sub-resources that Aether can surface per tenant.

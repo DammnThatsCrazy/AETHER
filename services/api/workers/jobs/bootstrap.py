@@ -27,6 +27,7 @@ def register_durable_job_handlers(settings: Optional[Any] = None) -> None:
         settings = _settings
 
     from actions.agent_lineage.jobs import register_agent_lineage_handlers
+    from intelligence.pattern_discovery.jobs import register_pattern_discovery_handlers
     from governance.consent.erasure_jobs import register_consent_erasure_handler
     from ingestion.export import register_export_handlers
     from ingestion.imports.commit import register_import_handlers
@@ -34,6 +35,7 @@ def register_durable_job_handlers(settings: Optional[Any] = None) -> None:
         register_projection_restatement_handler,
     )
     from intelligence.semantic_intelligence.jobs import register_semantic_replay_handler
+    from journeys.handoff.continuation_jobs import register_handoff_continuation_handler
     from journeys.traffic.repair import register_source_classification_repair_handler
 
     register_export_handlers()  # export.generate / export.expire_sweep
@@ -43,6 +45,8 @@ def register_durable_job_handlers(settings: Optional[Any] = None) -> None:
     register_consent_erasure_handler()  # consent.erasure (durable DSR erasure)
     register_semantic_replay_handler()  # semantic.replay (flag-gated inside)
     register_agent_lineage_handlers()  # agent_lineage.reconcile (rebuildable read model)
+    register_pattern_discovery_handlers()  # pattern_discovery.run (flag-gated sweep enqueues it)
+    register_handoff_continuation_handler()  # journey.handoff_continuation (internal only)
 
     if settings.provider_runtime.enabled:
         from connectors.provider_runtime.replay import register_provider_raw_replay_handler

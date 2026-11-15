@@ -79,6 +79,7 @@ export const NAV_GROUPS: ReadonlyArray<readonly NavEntry[]> = [
     { kind: 'route', to: '/signals', label: 'Signals', icon: { name: 'radio-tower' }, tint: 'solar' },
     { kind: 'route', to: '/value-review', label: 'Value', icon: { destination: 'aether-value-review' }, tint: 'sage' },
     { kind: 'route', to: '/risk', label: 'Risk', icon: { name: 'shield-alert' }, tint: 'ember' },
+    { kind: 'route', to: '/patterns', label: 'Patterns', icon: { name: 'scan-search' }, tint: 'ember', requirement: { flag: 'pattern_discovery_enabled' } },
   ],
   [
     { kind: 'route', to: '/settings/integrations', label: 'Connectors', icon: { destination: 'aether-integrations' }, requirement: { flag: 'connectors_enabled' } },

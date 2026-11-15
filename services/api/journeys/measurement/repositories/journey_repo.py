@@ -245,6 +245,42 @@ class JourneyRepository:
             )
             return [dict(r) for r in rows]
 
+    async def retire_current_anonymous(self, tenant_id: str, anonymous_id: str) -> int:
+        """Mark an anonymous journey non-current because another root now owns it.
+
+        Used when a redeemed handoff makes ``anonymous_id`` part of a
+        continuation journey compiled under a different root anonymous ID. The
+        versions stay as lineage; only ``is_current`` flips. If the handoff is
+        later erased, the next compile for ``anonymous_id`` starts a fresh
+        journey of its own.
+        """
+        pool = await self._pool()
+        if pool is None:
+            retired = 0
+            for v in _local_store.values():
+                if (
+                    v.get("tenant_id") == tenant_id
+                    and v.get("profile_id") == anonymous_id
+                    and v.get("journey_type") == "anonymous"
+                    and v.get("is_current")
+                ):
+                    v["is_current"] = False
+                    retired += 1
+            return retired
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE journey_versions SET is_current = FALSE
+                WHERE tenant_id=$1 AND profile_id=$2
+                  AND journey_type='anonymous' AND is_current=TRUE
+                """,
+                tenant_id, anonymous_id,
+            )
+        try:
+            return int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            return 0
+
     async def find_current_for_profile(
         self,
         tenant_id: str,

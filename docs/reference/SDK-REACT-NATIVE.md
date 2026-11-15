@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:c2c2fd02cc736db5105bfda3a4013ac8e38259ec4d22a6647181488c1a4e8730"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:7c7d0a50b03eb713c19ffb66168f9d318e64565a88feff1f80a492eb9439a23a"
   "packages/sdk/react-native/src/index.tsx": "sha256:f4d26aa7381b2af26066e5c995a6486e3a59f7529d0698305dbc0d61e8fbc91e"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:d190c0c4fddff8e3c8f9d63328c2bc26defef0db711f4665c5242317ede2a613"
@@ -374,6 +374,11 @@ const latest = await Aether.attribution.getLatestTouch();
 // Deterministic deferred-attribution handoff by explicit identifier;
 // resolves with stored first-touch evidence on a server match, else null
 const evidence = await Aether.attribution.resolveDeferredHandoff(identifier);
+
+// iOS only: Apple Ads install attribution from the AdServices token, verified
+// and recorded by the backend; resolves with the stored first touch, else null
+// (always null on Android). Needs AETHER_APPLE_ADS_ATTRIBUTION_ENABLED.
+const appleAds = await Aether.attribution.resolveAppleAdsAttribution();
 ```
 
 ## Push Notifications

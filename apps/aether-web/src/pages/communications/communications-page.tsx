@@ -13,6 +13,7 @@ import {
   CHANNELS, channelLabel, communicationHref, eventSplit, matchesQuery, messageRows,
   type ChannelKey, type CommsMessageRow,
 } from './communications-model';
+import { PatternLensPanel } from '@aether-app/features/pattern-discovery';
 
 type ChannelFilter = 'all' | ChannelKey;
 
@@ -206,6 +207,7 @@ export function CommunicationsPage() {
           </Eyebrow>
         )}
       </div>
+      <PatternLensPanel lens="communication360" subject="all" />
     </GlassPage>
   );
 }

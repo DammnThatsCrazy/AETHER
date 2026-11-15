@@ -112,6 +112,9 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_webhook_unknown_endpoint_total",
     # Payment Rail provider polling health (services/.../payment_rails/service.py)
     "payment_rail_provider_poll_degraded_total",
+    # Payment Rail Kyber fleet aggregate (services/.../payment_rails/kyber_aggregate.py):
+    # the credential inventory read failed, so configured coverage is unknown.
+    "kyber_fleet_credential_inventory_failures",
     # Card-linked payment rails (services/api/value/card_linked_payments)
     "card_linked_flows_upserted_total",
     "card_linked_audit_total",

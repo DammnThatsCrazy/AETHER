@@ -14,7 +14,7 @@ source_hashes:
   "services/api/governance/model_extraction_defense/__init__.py": "sha256:0c26347a6e4f591d1d55cb315b0543fb89854b98acaf4ac8bf3f729bf2d0b8c1"
   "services/api/governance/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
   "services/api/governance/model_extraction_defense/rate_limiter.py": "sha256:a2429c3ad4dd0198764124b8a4c5e1d7a9046eca740b9fe983564b4c6d80c7a8"
-  "services/api/intelligence/ml_serving/routes.py": "sha256:b296abed4c48f9f4f845808ae0241c01e2ad45ee1c506fcee3183d20db73f8a3"
+  "services/api/intelligence/ml_serving/routes.py": "sha256:7438c7b8fd7245e70c11919ed9dccdc9c358489e97caa1a4452e5ca586ee74c5"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/serving/src/api.py": "sha256:6f4245be3d28dd75a1ba1495252ec6418cd66e28b13d7f2de9c1e26fe6443147"
 ---
@@ -93,7 +93,7 @@ backend gateway access controls and tenant isolation.
 
 | Control | Location | State |
 |---------|----------|-------|
-| Service token auth (`X-Service-Token` vs `ML_SERVICE_TOKEN`) for standalone serving | `serving/src/api.py` | ✅ (⚠️ requires token provisioning) |
+| Service token auth (`X-Service-Token` vs `ML_SERVICE_TOKEN`) for standalone serving; the backend client (`ml_serving/routes.py::service_auth_headers`) sends it on every request | `serving/src/api.py`, `ml_serving/routes.py` | ✅ (⚠️ requires token provisioning on both sides) |
 | Inline serving uses the backend tenant/API-key boundary; no second HTTP token is required | `_require_service_token` dependency | ✅ |
 | Backend proxies all ML requests (single entry point) | `ml_serving/routes.py` | ✅ |
 | Extraction defense applied before cache lookup | `defense_layer.py` | ✅ |

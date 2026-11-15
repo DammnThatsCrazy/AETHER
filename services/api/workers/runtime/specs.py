@@ -254,6 +254,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_reconcile_sweep_coro()
 
+    def _pattern_discovery_sweep() -> Coroutine[Any, Any, None]:
+        from intelligence.pattern_discovery.jobs import build_sweep_coro
+
+        return build_sweep_coro()
+
     def _agent_behavior_jobs() -> Coroutine[Any, Any, None]:
         """Snapshot, drift and Risk360 evidence for deployment agents (default OFF)."""
         from intelligence.agent_behavior.scheduler import build_agent_behavior_coro
@@ -631,6 +636,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="agent_lineage_reconcile_sweep",
             factory=_agent_lineage_reconcile_sweep,
+        ),
+        # Scheduled pattern discovery: enqueues one pattern_discovery.run job per
+        # tenant each interval. Inert unless AETHER_PATTERN_DISCOVERY_ENABLED and
+        # PATTERN_DISCOVERY_SCHEDULER_ENABLED (re-read every pass).
+        WorkerSpec(
+            name="pattern_discovery_sweep",
+            factory=_pattern_discovery_sweep,
         ),
         # Retention for journey handoff rows (they hold anonymous IDs): hard
         # deletes rows past their retention window. Runs even when the handoff

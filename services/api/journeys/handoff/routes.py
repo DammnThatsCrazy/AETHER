@@ -10,6 +10,7 @@ from config.settings import settings
 from shared.common.common import BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
+from .continuation_jobs import queue_handoff_continuation
 from .service import issue_handoff, list_handoffs, peek_handoff_source, redeem_handoff
 
 logger = get_logger("aether.service.journey_handoff")
@@ -123,6 +124,7 @@ async def redeem(body: RedeemRequest, request: Request) -> dict:
         metrics.increment("journey_handoff_rejected_total", labels={"reason": reason})
         raise NotFoundError("handoff token")
     metrics.increment("journey_handoff_redeemed_total")
+    await queue_handoff_continuation(tenant_id, link)
     return {"data": link}
 
 

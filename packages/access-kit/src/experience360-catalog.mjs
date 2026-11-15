@@ -24,6 +24,7 @@ export const EXPERIENCE360_SURFACES = Object.freeze({
       'communications',
       'economic_cost_and_settlement',
       'business_outcomes',
+      'agent_behavior',
     ]),
   }),
   execution360: Object.freeze({

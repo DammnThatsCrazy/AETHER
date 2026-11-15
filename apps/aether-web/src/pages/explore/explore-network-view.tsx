@@ -105,23 +105,25 @@ function CategoryGlyph({ category }: { readonly category: NodeCategory }) {
   );
 }
 
-function Card({ card, selectedId, scopeId, onSelect, refFor }: {
+function Card({ card, selectedId, scopeId, onSelect, refFor, highlighted = false }: {
   readonly card: PrincipalCard;
   readonly selectedId: string | null;
   readonly scopeId: string | null;
   readonly onSelect: (node: GraphNode) => void;
   readonly refFor: (id: string) => (el: HTMLDivElement | null) => void;
+  readonly highlighted?: boolean;
 }) {
   const selected = card.node.id === selectedId;
   return (
     <div
       ref={refFor(card.node.id)}
       data-graph-card={card.node.id}
+      data-pattern-highlight={highlighted ? 'true' : undefined}
       className="relative z-[1] flex min-w-0 flex-col rounded-[14px] sm:min-h-[150px]"
       style={{
         background: 'var(--ae-raised)',
-        border: `1px solid ${selected ? 'var(--ae-blue)' : 'var(--ae-edge)'}`,
-        boxShadow: selected ? '0 0 0 3px var(--ae-blue-tint)' : 'var(--ae-lift)',
+        border: `1px solid ${selected ? 'var(--ae-blue)' : highlighted ? 'var(--ae-amber)' : 'var(--ae-edge)'}`,
+        boxShadow: selected ? '0 0 0 3px var(--ae-blue-tint)' : highlighted ? '0 0 0 3px var(--ae-amber-tint, rgba(214,158,46,0.25))' : 'var(--ae-lift)',
       }}
     >
       <button
@@ -186,12 +188,13 @@ function exitPoint(r: DOMRect, ox: number, oy: number, tx: number, ty: number) {
   return { x: cx + dx * s, y: cy + dy * s };
 }
 
-function CardGrid({ cards, links, selectedId, scopeId, onSelect }: {
+function CardGrid({ cards, links, selectedId, scopeId, onSelect, highlightIds }: {
   readonly cards: readonly PrincipalCard[];
   readonly links: readonly CardLink[];
   readonly selectedId: string | null;
   readonly scopeId: string | null;
   readonly onSelect: (node: GraphNode) => void;
+  readonly highlightIds?: ReadonlySet<string> | undefined;
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const els = useRef(new Map<string, HTMLDivElement>());
@@ -269,7 +272,8 @@ function CardGrid({ cards, links, selectedId, scopeId, onSelect }: {
       </svg>
       <div className="grid gap-x-7 gap-y-6 sm:grid-cols-[repeat(auto-fill,minmax(186px,1fr))]">
         {cards.map(card => (
-          <Card key={card.node.id} card={card} selectedId={selectedId} scopeId={scopeId} onSelect={onSelect} refFor={refFor} />
+          <Card key={card.node.id} card={card} selectedId={selectedId} scopeId={scopeId} onSelect={onSelect} refFor={refFor}
+            highlighted={highlightIds?.has(card.node.id) ?? false} />
         ))}
       </div>
       {segments.map(s => {
@@ -455,6 +459,7 @@ export function ExploreNetworkView({
   onSelectObject,
   onOpenTrace,
   onOpenAdvanced,
+  highlightIds,
 }: {
   readonly snapshot: GraphSnapshot;
   readonly scopeId: string | null;
@@ -462,6 +467,8 @@ export function ExploreNetworkView({
   readonly onSelectObject: (node: GraphNode) => void;
   readonly onOpenTrace: (id: string | null, visual: 'globe' | 'flow') => void;
   readonly onOpenAdvanced: () => void;
+  /** Graph node ids to highlight (members of the pattern shown on the graph). */
+  readonly highlightIds?: ReadonlySet<string> | undefined;
 }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -524,7 +531,8 @@ export function ExploreNetworkView({
   } else {
     content = (
       <div className="flex flex-col gap-4">
-        <CardGrid cards={layout.cards} links={layout.links} selectedId={selected?.id ?? null} scopeId={scope?.id ?? null} onSelect={select} />
+        <CardGrid cards={layout.cards} links={layout.links} selectedId={selected?.id ?? null} scopeId={scope?.id ?? null} onSelect={select}
+          highlightIds={highlightIds} />
         <Legend />
       </div>
     );

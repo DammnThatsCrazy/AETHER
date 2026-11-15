@@ -60,6 +60,9 @@ Component → store map (see ``docs/reference/privacy/dsr-erasure-coverage.md``)
   financial_value_snapshots derivatives_pnl_snapshots of the subject's trading
                            accounts (hard delete); the value_* / valuation snapshot
                            stores carry no subject key (asset-level)
+  pattern_discovery        discovered_patterns redacted (subject removed from affected
+                           entities and evidence; patterns left with <2 entities and the
+                           run records listing them hard deleted); legal hold skips
   agent_lineage_projection principal_agent_lineage + summary, clusters, nodes,
                            restatements, tenant-declared bindings and delegations naming
                            the subject (hard delete); Delegation vertices projected from
@@ -111,6 +114,7 @@ RISK_POISONING_EVIDENCE_COMPONENT = "risk_poisoning_evidence"
 RISK_INTERVENTION_RECORDS_COMPONENT = "risk_intervention_records"
 SOCIAL_RELATIONSHIP_EVIDENCE_COMPONENT = "social_relationship_evidence_events"
 AGENT_LINEAGE_COMPONENT = "agent_lineage_projection"
+PATTERN_DISCOVERY_COMPONENT = "pattern_discovery"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -1698,6 +1702,29 @@ async def erase_agent_lineage_plane(subject: ErasureSubject) -> dict[str, Receip
 
 PlaneFn = Callable[[ErasureSubject], Awaitable[dict[str, Receipt]]]
 
+async def erase_pattern_discovery_plane(subject: ErasureSubject) -> dict[str, Receipt]:
+    """Redact the subject from discovered patterns; drop patterns left with <2 entities.
+
+    See ``intelligence/pattern_discovery/erasure.py``. A legal hold on
+    ``discovered_patterns`` for any subject ref skips the whole plane.
+    """
+    from intelligence.pattern_discovery.erasure import erase_pattern_discovery
+
+    result = await erase_pattern_discovery(subject.tenant_id, subject.refs)
+    hold = result.get("hold")
+    if hold is not None:
+        return {PATTERN_DISCOVERY_COMPONENT: Receipt(
+            status="skipped_legal_hold",
+            policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+            blocked_reason=str(hold.get("reason") or "legal hold"),
+        )}
+    return {PATTERN_DISCOVERY_COMPONENT: Receipt(
+        records_impacted=int(result["records_impacted"]),
+        requires_recompute=bool(result["records_impacted"]),
+        detail={k: int(v) for k, v in result["detail"].items()},
+    )}
+
+
 # Entity-keyed planes, run in this order before the identity plane. The ML
 # artifact assessment is sequenced by the job right after ``feature_rows``
 # (it reads the feature plane's training-eligible count).
@@ -1730,6 +1757,7 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
         erase_social_relationship_evidence_plane,
     ),
     ("agent_lineage", (AGENT_LINEAGE_COMPONENT,), erase_agent_lineage_plane),
+    ("pattern_discovery", (PATTERN_DISCOVERY_COMPONENT,), erase_pattern_discovery_plane),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )
 ML_ARTIFACT_COMPONENTS = (TRAINING_DATASETS_COMPONENT, MODEL_ARTIFACTS_COMPONENT)

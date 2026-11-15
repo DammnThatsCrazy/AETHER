@@ -1790,8 +1790,10 @@ async def test_agent_delegations_keeps_non_agent_entity_unknown():
     )
 
     section = _section(result, "agent_delegations")
-    assert section.state == "unknown"
-    assert section.content["delegationAuthority"]["state"] == "unknown"
+    # A person is never treated as an agent. With the external agent registry
+    # off there is no principal-agents read either.
+    assert section.state == "not_applicable"
+    assert section.content["delegationAuthority"]["reason"] == "external_agent_registry_not_enabled"
     assert section.canonicalAuthorityRefs is None
     assert not any(
         "agent_delegations" in (claim.domainSlotIds or []) for claim in result.claims
@@ -2372,3 +2374,91 @@ async def test_profile_syndicates_keeps_current_materialization_unknown_for_temp
     assert _section(as_of_result, "syndicates").state == "unknown"
     assert _section(bounded_result, "syndicates").state == "unknown"
     assert not any(call[0] == "syndicates" for call in source.calls)
+
+
+
+def _person_profile_source(entity_id: str):
+    return _FakeProfileSource(
+        entity=CanonicalEntityRead(
+            record={"tenant_id": TENANT, "entity_id": entity_id, "entity_type": "human",
+                    "created_at": "2026-05-01T00:00:00Z"},
+            available=True,
+            scope_known=True,
+        )
+    )
+
+
+def _registry_on(monkeypatch):
+    import dataclasses
+
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "external_agent_telemetry",
+                        dataclasses.replace(settings.external_agent_telemetry, registry_enabled=True))
+
+
+def _behavior_auth(subject_id: str, *, slot: str = "agent_delegations", target: str = "profile360"):
+    from shared.intelligence_projections.contracts import ProjectionReadAuthorization
+
+    return ProjectionReadAuthorization(
+        tenantId=TENANT, sourceSurfaceId="profile360",
+        sourceSubject=ProjectionSubject(kind="entity", id=subject_id), sourceSlotId=slot,
+        consumerProjectionId="profile360", targetProjectionId=target,
+        capabilityKey="agent_behavior", policyState="allowed",
+        policyIds=["tenant_permission:agent:manage"], policyEvaluatedAt="2026-11-14T10:00:00Z",
+    )
+
+
+async def _project_person(monkeypatch, authorizations, built=None):
+    from actions.agent import behavior_read_model
+
+    calls = []
+
+    async def fake_build(tenant_id, entity_id, **_kw):
+        calls.append((tenant_id, entity_id))
+        return built or {"human_entity_id": entity_id, "agents": [
+            {"agent_ref": "agent-7", "link_basis": "recorded_grant"}], "identity_merge": "not_performed",
+            "source_truncated": False}
+
+    monkeypatch.setattr(behavior_read_model, "build_principal_agents", fake_build)
+    request = _request(include_sections=["agent_delegations"], subject_kind="entity", subject_id="person-1")
+    context = await ProviderRegistry().build_context(
+        "profile360", request, experience360_read_authorizations=authorizations)
+    result = await Profile360Provider(_person_profile_source("person-1")).project(request, context)
+    return _section(result, "agent_delegations"), calls
+
+
+@pytest.mark.asyncio
+async def test_person_agent_delegations_lists_agents_acting_for_them(monkeypatch):
+    _registry_on(monkeypatch)
+    section, calls = await _project_person(monkeypatch, [_behavior_auth("person-1")])
+    assert calls == [(TENANT, "person-1")]
+    assert section.state == "available"
+    assert section.content["subjectRole"] == "principal"
+    assert section.content["identityMerge"] == "not_performed"
+    assert section.content["principalAgents"]["agents"][0]["agent_ref"] == "agent-7"
+
+
+@pytest.mark.asyncio
+async def test_person_agent_delegations_flags_capped_reads(monkeypatch):
+    _registry_on(monkeypatch)
+    section, _ = await _project_person(
+        monkeypatch, [_behavior_auth("person-1")],
+        built={"agents": [], "source_truncated": True, "identity_merge": "not_performed"},
+    )
+    assert section.state == "degraded"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("auths", [
+    [],
+    [_behavior_auth("someone-else")],
+    [_behavior_auth("person-1", slot="relationships")],
+    [_behavior_auth("person-1", target="agent360")],
+])
+async def test_person_agent_delegations_need_the_exact_behavior_authorization(monkeypatch, auths):
+    _registry_on(monkeypatch)
+    section, calls = await _project_person(monkeypatch, auths)
+    assert section.state == "suppressed"
+    assert section.content["delegationAuthority"]["reason"] == "agent_behavior_not_authorized"
+    assert calls == []

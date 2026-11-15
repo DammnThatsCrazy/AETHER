@@ -23,6 +23,7 @@ import {
 import { useUnifiedJourney, TouchpointEvidenceInspector } from '@aether-app/features/journey';
 import { Profile360IdentityPanel } from '@aether-app/features/identity/Profile360IdentityPanel';
 import { PrincipalAgentLineagePanel } from '@aether-app/features/agent360';
+import { PatternSectionPanel } from '@aether-app/features/pattern-discovery';
 import { api } from '@aether-app/lib/api/endpoints';
 import {
   sourceClassLabel,
@@ -425,6 +426,8 @@ function OverviewTab({ userId, identity, onTab }: { userId: string; identity: Pr
         <SemanticSentimentSection userId={userId} />
 
         <PrincipalAgentLineagePanel principalId={userId} />
+
+        <PatternSectionPanel surface="profile360" entityId={userId} />
 
         <Section
           title={journeys.length > 0 ? `Journeys · ${journeys.length}` : 'Journeys'}

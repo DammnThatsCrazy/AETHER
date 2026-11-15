@@ -1,0 +1,68 @@
+{
+  "account_bindings": {},
+  "certification": {
+    "companions": [
+      {
+        "actor_refs": [],
+        "correlation_tokens": [
+          "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        ],
+        "infrastructure_refs": [],
+        "object_refs": [],
+        "observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "occurred_at": "2026-11-14T23:13:42Z",
+        "provider_family": "aether_certification",
+        "schema_version": "1",
+        "signed_request": null,
+        "source_role": "agent_runtime",
+        "tenant_id": "aether_certification"
+      }
+    ],
+    "key_b64": "2GAznibPJupHxFC48otqM99T2ug107zxMZX2PVbQM1c",
+    "key_id": "cert",
+    "tenant_id": "aether_certification"
+  },
+  "expected": {
+    "links": [],
+    "object_types": [
+      "payment_intent"
+    ],
+    "observation_count": 1,
+    "observation_digest": "a6cff1a6fdcb207c26ef459b883b6e179fe0c5761e6239eca13f187c03853a3a",
+    "roles": [
+      "system_of_record"
+    ],
+    "tokens": 0
+  },
+  "kind": "event",
+  "origin": "sandbox_recorded",
+  "provider": "stripe",
+  "provider_api": {
+    "api_version": "2026-03-25.dahlia",
+    "host": "api.stripe.com",
+    "via": "stripe_connector_read"
+  },
+  "realm": "test",
+  "record": {
+    "api_version": "2026-03-25.dahlia",
+    "context": "acct_1TOploG4IgWgDCUX",
+    "created": 1793832998,
+    "data": {
+      "object": {
+        "description": "",
+        "id": "pi_3UYD6gG4IgWgDCUX1tRla0Mk",
+        "livemode": false,
+        "metadata": {},
+        "object": "payment_intent",
+        "status": "requires_payment_method"
+      }
+    },
+    "id": "evt_3UYD6gG4IgWgDCUX1z3gkozE",
+    "livemode": false,
+    "type": "payment_intent.created"
+  },
+  "record_sha256": "0b57f23ad430b7a4122fe9fd501bddd6e17cc6e342c865599bb2ab10d5648b07",
+  "recorded_at": "2026-11-14T23:24:20+00:00",
+  "recorder": "stripe.sandbox_existing_events",
+  "schema_version": "1"
+}

@@ -67,8 +67,37 @@ class JourneyCompiler:
         trigger_reason: str = "manual",
         identity_version: Optional[str] = None,
         session_timeout_seconds: int = _SESSION_TIMEOUT_SECONDS,
+        _continuation_root: bool = False,
     ) -> dict[str, Any]:
-        """Build the current unified journey version for a typed identity."""
+        """Build the current unified journey version for a typed identity.
+
+        Redeemed cross-device handoffs extend the activity set (see
+        ``journeys.handoff.continuation_scope``). An anonymous journey that is
+        part of a handoff continuation is compiled once, under its root
+        anonymous ID; compiling a non-root member retires its standalone
+        journey and returns the root's continuation journey.
+        """
+        if identity_type == "anonymous" and not _continuation_root:
+            scope = await _continuation_scope(tenant_id, [profile_id])
+            if scope is not None and scope.linked:
+                # Every non-root member's standalone journey is superseded, not
+                # only the requested one: a handoff that joins two existing
+                # continuations (A->B and C->D, then B->D) must also retire the
+                # former root C, or two current journeys would overlap.
+                for member in scope.anonymous_ids:
+                    if member != scope.root_anonymous_id:
+                        await self._journey_repo.retire_current_anonymous(tenant_id, member)
+            if scope is not None and scope.linked and scope.root_anonymous_id != profile_id:
+                return await self.compile_for_profile(
+                    tenant_id,
+                    scope.root_anonymous_id,
+                    identity_type="anonymous",
+                    trigger_reason=trigger_reason,
+                    identity_version=identity_version,
+                    session_timeout_seconds=session_timeout_seconds,
+                    _continuation_root=True,
+                )
+
         # Load cross-rail canonical activity
         activities = await self._activity_repo.list_by_profile(
             tenant_id,
@@ -84,6 +113,9 @@ class JourneyCompiler:
             attribution_eligible_only=False,
             limit=500,
         )
+        activities, conversions = await self._with_handoff_continuation(
+            tenant_id, profile_id, identity_type, activities, conversions,
+        )
 
         return await self._build_and_persist(
             tenant_id=tenant_id,
@@ -95,6 +127,78 @@ class JourneyCompiler:
             identity_version=identity_version,
             session_timeout_seconds=session_timeout_seconds,
         )
+
+    async def _with_handoff_continuation(
+        self,
+        tenant_id: str,
+        identity_id: str,
+        identity_type: str,
+        activities: list[dict[str, Any]],
+        conversions: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Add activity and conversions of anonymous IDs linked by redeemed handoffs.
+
+        Linked rows already owned by a DIFFERENT profile or cluster are never
+        pulled in: a handoff continues a journey, it does not merge subjects.
+        """
+        if identity_type == "anonymous":
+            seeds = [identity_id]
+        else:
+            seeds = sorted({str(a["anonymous_id"]) for a in activities if a.get("anonymous_id")})
+            seeds = seeds[:_continuation_scope_module().MAX_ANONYMOUS_IDS]
+        if not seeds:
+            return activities, conversions
+        scope = await _continuation_scope(tenant_id, seeds)
+        if scope is None or not scope.handoffs:
+            return activities, conversions
+        # An anonymous journey already loaded every row of its own anonymous ID.
+        # A profile or cluster journey loaded only rows carrying that profile or
+        # cluster, so its seed devices' unowned (pre-login) activity must be
+        # loaded too, or an acquisition on a device that later logged in would
+        # drop out of the journey.
+        if identity_type == "anonymous":
+            linked = [a for a in scope.anonymous_ids if a != identity_id]
+        else:
+            linked = list(scope.anonymous_ids)
+        if not linked:
+            return activities, conversions
+
+        def owned_elsewhere(row: dict[str, Any]) -> bool:
+            if identity_type == "profile":
+                return bool(row.get("profile_id")) and row.get("profile_id") != identity_id
+            if identity_type == "cluster":
+                return bool(row.get("cluster_id")) and row.get("cluster_id") != identity_id
+            return False
+
+        seen_activity = {str(a.get("activity_id")) for a in activities}
+        seen_conversion = {str(c.get("conversion_id")) for c in conversions}
+        merged_activities = list(activities)
+        merged_conversions = list(conversions)
+        for anonymous_id in linked:
+            for row in await self._activity_repo.list_by_profile(
+                tenant_id, anonymous_id, identity_type="anonymous", limit=_MAX_JOURNEY_STEPS,
+            ):
+                key = str(row.get("activity_id"))
+                if key in seen_activity or owned_elsewhere(row):
+                    continue
+                seen_activity.add(key)
+                merged_activities.append(row)
+            for row in await self._conversion_repo.list_by_profile(
+                tenant_id, anonymous_id, identity_type="anonymous",
+                attribution_eligible_only=False, limit=500,
+            ):
+                key = str(row.get("conversion_id"))
+                if key in seen_conversion or owned_elsewhere(row):
+                    continue
+                seen_conversion.add(key)
+                merged_conversions.append(row)
+        merged_activities = _sort_deterministically(merged_activities)[:_MAX_JOURNEY_STEPS]
+        if scope.truncated:
+            logger.warning(
+                "journey handoff continuation truncated tenant=%s identity_type=%s ids=%d",
+                tenant_id, identity_type, len(scope.anonymous_ids),
+            )
+        return merged_activities, merged_conversions
 
     async def rebuild_affected_by_touchpoint(
         self,
@@ -565,6 +669,23 @@ _CROSS_DEVICE_TYPES = frozenset({
     TransitionType.mobile_to_web.value,
     TransitionType.web_to_mobile.value,
 })
+
+
+def _continuation_scope_module():
+    from journeys.handoff import continuation_scope
+
+    return continuation_scope
+
+
+async def _continuation_scope(tenant_id: str, seeds: list[str]):
+    """Fail-soft continuation lookup: a failure compiles without the extension."""
+    try:
+        return await _continuation_scope_module().resolve_continuation_scope(tenant_id, seeds)
+    except Exception as exc:  # noqa: BLE001 — continuation is additive, never blocks compilation
+        logger.warning(
+            "journey handoff continuation lookup failed tenant=%s: %s", tenant_id, type(exc).__name__,
+        )
+        return None
 
 
 async def _explicit_handoff_links(

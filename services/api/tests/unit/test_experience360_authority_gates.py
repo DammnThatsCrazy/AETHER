@@ -170,3 +170,117 @@ async def test_journey_dispatch_requires_separate_policy(slot_state, dispatch_st
         assert len(dispatch) == 1
         assert dispatch[0].tenantId == "tenant-a" and dispatch[0].sourceSubject == subject
         assert dispatch[0].policyIds == ["actions-policy"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind,slot_state,behavior_state,expected", [
+    ("agent", "allowed", "allowed", True), ("agent", "allowed", "denied", False),
+    ("agent", "allowed", "error", False), ("agent", "denied", "allowed", False),
+    ("entity", "allowed", "allowed", False),
+])
+async def test_agent_behavior_requires_slot_and_agent_manage(kind, slot_state, behavior_state, expected):
+    seen = []
+    subject = ProjectionSubject(kind=kind, id="agent-1")
+    request = Experience360FrameRequest(surfaceId="agent360", tenantId="tenant-a", subject=subject,
+                                        requestedSlotIds=["agent_behavior"])
+
+    class Policy:
+        async def evaluate(self, frame_request):
+            return Experience360PolicyEvaluation(
+                surfaceId="agent360", tenantId="tenant-a", evaluatedAt="2026-11-14T10:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={"agent_behavior": Experience360PolicyDisposition(
+                    state=slot_state, policyIds=["slot-policy"], evaluatedAt="2026-11-14T10:00:00Z")},
+            )
+
+        async def evaluate_agent_behavior_read(self, frame_request):
+            if behavior_state == "error":
+                raise RuntimeError("unavailable")
+            return Experience360PolicyDisposition(state=behavior_state,
+                                                   policyIds=["tenant_permission:agent:manage"],
+                                                   evaluatedAt="2026-11-14T10:00:00Z")
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **kwargs):
+            seen.extend(kwargs.get("experience360_read_authorizations", []))
+            return ProjectionResult(
+                projectionId=projection_request.projectionId, tenantId="tenant-a",
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[ProjectionSection(id=section, state="unknown", content={})
+                          for section in projection_request.includeSections or []],
+                claims=[], dependencyState=[], generatedAt="2026-11-14T10:00:00Z", degradedReasons=[],
+            )
+
+    await build_experience360_frame(request, policy_evaluator=Policy(), projection_runtime=Runtime())
+    behavior = [item for item in seen if item.capabilityKey == "agent_behavior"]
+    assert bool(behavior) is expected
+    if expected:
+        [auth] = behavior
+        assert auth.tenantId == "tenant-a" and auth.sourceSubject == subject
+        assert auth.targetProjectionId == "agent360" and auth.consumerProjectionId == "agent360"
+        assert auth.policyIds == ["tenant_permission:agent:manage"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("granted,tenant,expected", [
+    (True, "tenant-a", "allowed"), (False, "tenant-a", "denied"), (True, "tenant-b", "denied"),
+])
+async def test_request_evaluator_agent_behavior_mirrors_agent_manage(monkeypatch, granted, tenant, expected):
+    from types import SimpleNamespace
+
+    from shared.intelligence_projections import policy
+
+    monkeypatch.setattr(policy, "tenant_actor", lambda _r: SimpleNamespace(tenant_id="tenant-a"))
+    state_tenant = SimpleNamespace(tenant_id=tenant, has_permission=lambda p: granted and p == "agent:manage")
+    evaluator = policy.RequestAccessPolicyEvaluator(SimpleNamespace(state=SimpleNamespace(tenant=state_tenant)))
+    frame = Experience360FrameRequest(surfaceId="agent360", tenantId="tenant-a",
+                                      subject=ProjectionSubject(kind="agent", id="a1"),
+                                      requestedSlotIds=["agent_behavior"])
+    decision = await evaluator.evaluate_agent_behavior_read(frame)
+    assert decision.state == expected
+    with pytest.raises(ValueError):
+        await evaluator.evaluate_agent_behavior_read(frame.model_copy(update={"surfaceId": "risk360"}))
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("behavior_state,expected", [("allowed", True), ("denied", False)])
+async def test_profile360_agent_delegations_issue_agent_behavior_for_people(behavior_state, expected):
+    seen = []
+    subject = ProjectionSubject(kind="entity", id="person-1")
+    request = Experience360FrameRequest(surfaceId="profile360", tenantId="tenant-a", subject=subject,
+                                        requestedSlotIds=["agent_delegations"])
+
+    class Policy:
+        async def evaluate(self, frame_request):
+            return Experience360PolicyEvaluation(
+                surfaceId="profile360", tenantId="tenant-a", evaluatedAt="2026-11-14T10:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={"agent_delegations": Experience360PolicyDisposition(
+                    state="allowed", policyIds=["slot-policy"], evaluatedAt="2026-11-14T10:00:00Z")},
+            )
+
+        async def evaluate_agent_behavior_read(self, frame_request):
+            return Experience360PolicyDisposition(state=behavior_state,
+                                                   policyIds=["tenant_permission:agent:manage"],
+                                                   evaluatedAt="2026-11-14T10:00:00Z")
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **kwargs):
+            seen.extend((projection_request.projectionId, a)
+                        for a in kwargs.get("experience360_read_authorizations", []))
+            return ProjectionResult(
+                projectionId=projection_request.projectionId, tenantId="tenant-a",
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[ProjectionSection(id=section, state="unknown", content={})
+                          for section in projection_request.includeSections or []],
+                claims=[], dependencyState=[], generatedAt="2026-11-14T10:00:00Z", degradedReasons=[],
+            )
+
+    await build_experience360_frame(request, policy_evaluator=Policy(), projection_runtime=Runtime())
+    behavior = [(pid, a) for pid, a in seen if a.capabilityKey == "agent_behavior"]
+    assert bool(behavior) is expected
+    if expected:
+        [(pid, auth)] = behavior
+        assert pid == "profile360" and auth.targetProjectionId == "profile360"
+        assert auth.sourceSlotId == "agent_delegations" and auth.sourceSubject == subject

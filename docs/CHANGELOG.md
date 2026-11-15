@@ -12,13 +12,19 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:5adbdebb8c891237e7b893d8df1c57bd8c98f7904d941453addf81d27da1369d"
+  "CHANGELOG.md": "sha256:77296ee5401a894d5f59da6b0820288ea7b20d2e50f86678dac2972bc131ce62"
 ---
 # Changelog
 
 ## [Unreleased]
 
 ### Added
+
+- Cross-device journey continuation: a redeemed journey handoff now makes one journey span both devices (bounded, tenant-scoped walk over redeemed handoffs; the root device owns it). Redemption queues the durable `journey.handoff_continuation` rebuild. No identity is merged.
+- `JOURNEY_ACTIVITY_REBUILD_ENABLED`: newly emitted canonical activity recompiles its journey (debounced per identity), so late events reach the journey. On in staging, off in production.
+- Apple Ads attribution: `POST /v1/attribution/apple-ads/resolve` (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`) verifies the AdServices token with Apple and records `ios_apple_ads_attribution` / `platform_verified` evidence server-side. The iOS SDK adds `resolveAppleAdsAttribution`, also exposed through the React Native bridge.
+- The `agent_behavior` read authorization (`agent:manage`) is issued by the Experience 360 frame runtime: for Agent 360's new optional `agent_behavior` slot, and for Profile 360's `agent_delegations` slot, which now lists the agents acting for a person.
+- XD-1 cross-device certification: an end-to-end test, a read-only evidence script (`scripts/cross_device_certification.py`) and a runbook.
 
 - Agent economy observation: tenant-scoped run/action evidence, bounded trigger/policy/delegation/outcome explanations, outbox recovery, and a default-off public xAI catalog observer with source-attributed Agent 360 and graph views. X posts/news ingestion and canonical external-agent identity joins remain gated follow-on work.
 - Exact-reference commerce reconciliation: Shopify order revisions and signed Stripe `payment_intent.succeeded` observations can join on explicit `aether_order_ref` metadata with exact decimal amount/currency checks; payment completion remains distinct from payout settlement.

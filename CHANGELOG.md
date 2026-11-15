@@ -8,6 +8,12 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 
 ### Added
 
+- Cross-device journey continuation: a redeemed journey handoff now makes one journey span both devices (bounded, tenant-scoped walk over redeemed handoffs; the root device owns it). Redemption queues the durable `journey.handoff_continuation` rebuild. No identity is merged.
+- `JOURNEY_ACTIVITY_REBUILD_ENABLED`: newly emitted canonical activity recompiles its journey (debounced per identity), so late events reach the journey. On in staging, off in production.
+- Apple Ads attribution: `POST /v1/attribution/apple-ads/resolve` (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`) verifies the AdServices token with Apple and records `ios_apple_ads_attribution` / `platform_verified` evidence server-side. The iOS SDK adds `resolveAppleAdsAttribution`, also exposed through the React Native bridge.
+- The `agent_behavior` read authorization (`agent:manage`) is issued by the Experience 360 frame runtime: for Agent 360's new optional `agent_behavior` slot, and for Profile 360's `agent_delegations` slot, which now lists the agents acting for a person.
+- XD-1 cross-device certification: an end-to-end test, a read-only evidence script (`scripts/cross_device_certification.py`) and a runbook.
+
 - Exact-reference commerce reconciliation: Shopify order revisions and signed Stripe `payment_intent.succeeded` observations can join on explicit `aether_order_ref` metadata with exact decimal amount/currency checks; payment completion remains distinct from payout settlement.
 - SDK distribution layer: `@aether/web` build artifacts are emitted and guarded on the publish surface, and a CDN release pipeline (`.github/workflows/publish-sdk.yml`) ships verified manifests with a derived version.
 - Publishable (`pk_`) API keys — a site-scoped, ingestion-only key class alongside the existing secret (`ak_`) class, so a key in page HTML cannot reach the rest of the API.

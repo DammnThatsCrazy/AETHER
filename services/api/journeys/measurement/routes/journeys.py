@@ -403,12 +403,20 @@ async def rebuild_journey(journey_id: str, request: Request, body: RebuildReques
     if current is None:
         raise NotFoundError("Journey")
 
-    profile_id = current.get("profile_id") or current.get("cluster_id")
+    if current.get("journey_type") == "anonymous":
+        identity_type, profile_id = "anonymous", current.get("profile_id")
+    elif current.get("profile_id"):
+        identity_type, profile_id = "profile", current.get("profile_id")
+    else:
+        identity_type, profile_id = "cluster", current.get("cluster_id")
     if not profile_id:
         return APIResponse(data=None, meta={"reason": "no_profile_id"}).to_dict()
 
+    # Rebuild the journey's own typed identity: an anonymous or cluster journey
+    # compiled as a profile would start a different lineage.
     new_version = await _compiler.compile_for_profile(
-        tenant.tenant_id, profile_id, trigger_reason=body.trigger_reason
+        tenant.tenant_id, profile_id, identity_type=identity_type,
+        trigger_reason=body.trigger_reason,
     )
     return APIResponse(data=new_version, meta={"rebuilt": True}).to_dict()
 

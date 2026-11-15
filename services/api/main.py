@@ -235,6 +235,7 @@ from journeys.traffic.deferred_attribution import router as deferred_attribution
 from intelligence.fraud.routes import router as fraud_router
 from value.attribution.routes import router as attribution_router
 from value.attribution.apple_postbacks import router as apple_postbacks_router
+from journeys.traffic.apple_ads_attribution import router as apple_ads_attribution_router
 from value.rewards.routes import router as rewards_router
 from value.rewards.operator_routes import router as rewards_operator_router
 from graph.oracle.routes import router as oracle_router
@@ -865,6 +866,7 @@ def create_app() -> FastAPI:
     app.include_router(attribution_router)
     app.include_router(deferred_attribution_router)  # /v1/attribution/deferred — deterministic iOS handoffs
     app.include_router(apple_postbacks_router)       # /v1/attribution/apple-postbacks — campaign-level platform evidence
+    app.include_router(apple_ads_attribution_router) # /v1/attribution/apple-ads — user-level Apple Ads token exchange (flag-gated)
     app.include_router(rewards_router)
     # Kyber operator reward surfaces (/v1/admin/kyber/rewards/health +
     # /v1/admin/kyber/tenants/{tenant_id}/{campaigns,decisions,actions,audit}).
@@ -1310,6 +1312,24 @@ def create_app() -> FastAPI:
     else:
         logger.info("Fraud Network Intelligence: disabled (set FEATURE_FRAUD_NETWORKS=true to enable)")
 
+    # ── Pattern Discovery & Unstructured Evidence Intelligence (flagged) ──
+    if settings.pattern_discovery.enabled:
+        from intelligence.pattern_discovery.routes import (
+            agent_router as pattern_agent_router,
+            kyber_router as pattern_kyber_router,
+            profile_router as pattern_profile_router,
+            risk_router as pattern_risk_router,
+            router as pattern_discovery_router,
+        )
+        app.include_router(pattern_discovery_router)
+        app.include_router(pattern_kyber_router)
+        app.include_router(pattern_profile_router)
+        app.include_router(pattern_agent_router)
+        app.include_router(pattern_risk_router)
+        logger.info("Pattern Discovery: routes mounted (/v1/intelligence/patterns + /v1/kyber/patterns)")
+    else:
+        logger.info("Pattern Discovery: disabled (set AETHER_PATTERN_DISCOVERY_ENABLED=true to enable)")
+
     if fi.flow_trace_enabled:
         from value.flow_trace.routes import router as flow_trace_router
         app.include_router(flow_trace_router)
@@ -1364,6 +1384,9 @@ def create_app() -> FastAPI:
         if agentic_flags.communication_enabled:
             from actions.agent_comm_observability.routes import router as comm_obs_router
             app.include_router(comm_obs_router, tags=["Agent Comm Observability"])
+        if settings.agent_correlation.enabled:
+            from actions.agent_correlation.routes import router as agent_correlation_router
+            app.include_router(agent_correlation_router, tags=["Agent Correlation"])
         if agentic_flags.external_accounts_enabled:
             from connectors.external_account_observability.routes import router as ext_account_obs_router
             app.include_router(ext_account_obs_router, tags=["External Account Observability"])

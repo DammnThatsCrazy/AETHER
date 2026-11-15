@@ -262,6 +262,17 @@ overlays (`enable-communications`, `enable-campaigns`, `enable-agent-beta`,
 `enable-x402-experimental`, `enable-kyber-internal`, `enable-gcp-oauth`,
 `enable-advanced-value`, `enable-sovereign-controls`) are flags, not profiles.
 
+New capability flags are added default-off and must be read by code
+(`scripts/validate_settings_flags.py`). The cross-device journey work adds three:
+
+- `JOURNEY_ACTIVITY_REBUILD_ENABLED`: activity-driven journey compiles.
+- `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`: Apple Ads token exchange.
+- `JOURNEY_HANDOFF_ENABLED`: now switched on for staging tasks, and still off in
+  production.
+
+None is a profile. Staging turns them on through the release manifest's
+`task_environment`, not a new deployment posture.
+
 **Staging holds.** A push to `main` builds an immutable release and, through
 `deploy.yml`, rolls it out to staging only when the repository variable
 `STAGING_RUNTIME_ENABLED` is `true`. The weekday timer deploys the newest release
@@ -284,7 +295,7 @@ explanation, action, outcome.
 | Archive or remove | dead routes, duplicate pages, old terminology, unused feature flags and deployment profiles, old docs manifests, stale fixtures, duplicate graph mocks, duplicate 360 components, obsolete naming layers, legacy Audience and Campaign terminology, abandoned proofs of concept, implementation-detail tests, docs checks unrelated to changed code |
 
 [`config/service_classification.yaml`](../../../../config/service_classification.yaml)
-binds one class and one runtime-spine stage to each of the 142 backend service
+binds one class and one runtime-spine stage to each of the 147 backend service
 directories, and `scripts/validate_service_classification.py` (run by
 `make repo-doctor` and as the `service_classification` router check in every
 PR-lane plan) fails when a directory that holds Python source has no entry, an
@@ -293,8 +304,11 @@ blank, or a `deprecated` service has no row in the ledger. A directory holding
 only `__pycache__` is not a service. `--report` prints counts per class.
 
 The first pass is **proposed**, derived from each package's own docstring and the
-lists above, and is not a readiness claim: 51 core, 47 beta, 33 experimental, 9
-internal, 2 deprecated (`resolution`, `social`). The maintainer reviews and edits
+lists above, and is not a readiness claim. It was 51 core, 47 beta, 33
+experimental, 9 internal and 2 deprecated (`resolution`, `social`). It is now 51
+core, 49 beta, 37 experimental, 10 internal and 0 deprecated
+(`validate_service_classification.py --report`). The latest addition is
+`pattern_discovery` (experimental, intelligence). The maintainer reviews and edits
 it like any other change; a reclassification is a one-line diff. The same binding
 for frontend apps and shared packages is the next registry step.
 

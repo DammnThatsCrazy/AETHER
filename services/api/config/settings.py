@@ -1429,6 +1429,38 @@ class FraudIntelligenceConfig:
 
 
 # ---------------------------------------------------------------------------
+# Pattern Discovery & Unstructured Evidence Intelligence
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PatternDiscoveryConfig:
+    """Governed discovery of unknown patterns (intelligence/pattern_discovery).
+
+    ``enabled`` mounts the tenant and Kyber routes. Discovery itself never
+    writes canonical graph facts. ``risk_promotion_enabled`` /
+    ``graph_promotion_enabled`` control what a reviewer's promotion writes
+    (attributed Risk360 signals / governed RiskCluster membership edges).
+    ``graph_motifs_enabled`` lets motif discovery read the tenant's canonical
+    graph; ``ml_scoring_enabled`` scores hourly traffic windows with the ML
+    ``anomaly_detection`` model; ``scheduler_enabled`` runs discovery for
+    every active tenant every ``scheduler_interval_minutes``;
+    ``notifications_enabled`` raises one in-app notification per day when
+    high or critical patterns surface.
+    """
+
+    enabled: bool = _env_bool("AETHER_PATTERN_DISCOVERY_ENABLED", False)
+    window_hours: int = _env_int("PATTERN_DISCOVERY_WINDOW_HOURS", 72)
+    max_events: int = _env_int("PATTERN_DISCOVERY_MAX_EVENTS", 50_000)
+    risk_promotion_enabled: bool = _env_bool("AETHER_PATTERN_RISK_PROMOTION_ENABLED", True)
+    graph_promotion_enabled: bool = _env_bool("AETHER_PATTERN_GRAPH_PROMOTION_ENABLED", True)
+    graph_motifs_enabled: bool = _env_bool("PATTERN_DISCOVERY_GRAPH_MOTIFS_ENABLED", True)
+    ml_scoring_enabled: bool = _env_bool("PATTERN_DISCOVERY_ML_ENABLED", False)
+    scheduler_enabled: bool = _env_bool("PATTERN_DISCOVERY_SCHEDULER_ENABLED", True)
+    scheduler_interval_minutes: int = _env_int("PATTERN_DISCOVERY_INTERVAL_MINUTES", 360)
+    notifications_enabled: bool = _env_bool("AETHER_PATTERN_NOTIFICATIONS_ENABLED", True)
+
+
+# ---------------------------------------------------------------------------
 # Delivery Worker
 # ---------------------------------------------------------------------------
 
@@ -1469,6 +1501,24 @@ class AgenticObservabilityConfig:
     external_accounts_enabled: bool = _env_bool("AGENTIC_EXTERNAL_ACCOUNTS_ENABLED", True)
     communication_enabled: bool = _env_bool("AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED", True)
     protocol_enabled: bool = _env_bool("AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED", True)
+
+
+@dataclass(frozen=True)
+class AgentCorrelationConfig:
+    """Cross-role agent correlation (agent runtime / tool bridge / system of
+    record / network observer / authority issuer).
+
+    ``token_keys`` is a comma-separated ``key_id:base64url_secret`` list; the
+    first entry signs new correlation tokens and every entry verifies, so a key
+    rotates by prepending the new key and dropping the old one after its tokens
+    expire. Each secret must decode to at least 32 bytes. With no keys the
+    routes still accept observations but cannot issue or verify tokens.
+    """
+    enabled: bool = _env_bool("AGENT_CORRELATION_ENABLED", True)
+    token_keys: tuple[str, ...] = field(
+        default_factory=lambda: tuple(_env_list("AGENT_CORRELATION_TOKEN_KEYS"))
+    )
+    time_window_seconds: int = _env_int("AGENT_CORRELATION_TIME_WINDOW_SECONDS", 300)
 
 
 @dataclass(frozen=True)
@@ -1956,6 +2006,10 @@ class ClientSyncConfig:
 class MobileConfig:
     # Mobile gateway (/v1/mobile — installations + push subscriptions). Default OFF.
     enabled: bool = _env_bool("AETHER_MOBILE_ENABLED", False)
+    # Apple Ads attribution-token exchange (/v1/attribution/apple-ads). Default
+    # OFF: the backend calls Apple's AdServices API with the token the iOS SDK
+    # reads from AAAttribution, so enable it only where that egress is allowed.
+    apple_ads_attribution_enabled: bool = _env_bool("AETHER_APPLE_ADS_ATTRIBUTION_ENABLED", False)
 
 
 @dataclass(frozen=True)
@@ -2019,6 +2073,11 @@ class IdentityContinuityConfig:
     agent_resolution_enabled: bool = _env_bool("AGENT_IDENTITY_RESOLUTION_ENABLED", False)
     # Server-issued cross-device journey handoff tokens (mobile -> web).
     journey_handoff_enabled: bool = _env_bool("JOURNEY_HANDOFF_ENABLED", False)
+    # Recompile the journey of each identity that receives new canonical
+    # activity (debounced per identity, process-local). Without it a journey
+    # only rebuilds on identity restatement, comms, privacy, repair, a redeemed
+    # handoff or an operator rebuild, so late events never reach it.
+    journey_activity_rebuild_enabled: bool = _env_bool("JOURNEY_ACTIVITY_REBUILD_ENABLED", False)
 
 
 @dataclass(frozen=True)
@@ -2157,12 +2216,16 @@ class Settings:
 
     # Fraud Network Intelligence + Flow-of-Funds (disabled by default)
     fraud_intelligence: FraudIntelligenceConfig = field(default_factory=FraudIntelligenceConfig)
+    pattern_discovery: PatternDiscoveryConfig = field(default_factory=PatternDiscoveryConfig)
 
     # Delivery Worker (durable provider dispatch + outcome tracking)
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
 
     # Agentic Intelligence observability rollout flags
     agentic_observability: AgenticObservabilityConfig = field(default_factory=AgenticObservabilityConfig)
+
+    # Cross-role agent correlation (source roles, join rules, correlation tokens)
+    agent_correlation: AgentCorrelationConfig = field(default_factory=AgentCorrelationConfig)
 
     # Agentic observation ingestion through the canonical durable spine (default OFF)
     agentic_observability_ingestion: AgenticObservabilityIngestionConfig = field(

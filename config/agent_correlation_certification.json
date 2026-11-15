@@ -1,0 +1,117 @@
+{
+  "kinds": [
+    {
+      "basis": "Aether's own MCP surface; covered by the MCP and end-to-end tests",
+      "fixtures": 0,
+      "kind": "outcome_reported",
+      "provider": "aether_mcp",
+      "status": "first_party"
+    },
+    {
+      "basis": "Aether's own MCP surface; covered by the MCP and end-to-end tests",
+      "fixtures": 0,
+      "kind": "task_registered",
+      "provider": "aether_mcp",
+      "status": "first_party"
+    },
+    {
+      "basis": "Aether's own MCP surface; covered by the MCP and end-to-end tests",
+      "fixtures": 0,
+      "kind": "tool_call_reported",
+      "provider": "aether_mcp",
+      "status": "first_party"
+    },
+    {
+      "fixtures": 0,
+      "kind": "ai_gateway_log",
+      "provider": "cloudflare",
+      "status": "uncertified"
+    },
+    {
+      "basis": "tenant Logpush or Worker export; Cloudflare has no read API for request rows",
+      "fixtures": 0,
+      "kind": "http_request",
+      "provider": "cloudflare",
+      "status": "not_recordable"
+    },
+    {
+      "fixtures": 0,
+      "kind": "export",
+      "provider": "openai",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "limit",
+      "provider": "ramp",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "transaction",
+      "provider": "ramp",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "access_grant",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "inventory_level",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 1,
+      "kind": "inventory_level_graphql",
+      "last_recorded_at": "2026-11-15T00:09:57+00:00",
+      "provider": "shopify",
+      "provider_api": [
+        "{\"api_version\": \"admin-graphql (connector-pinned)\", \"host\": \"myshopify.com\", \"via\": \"shopify_connector_preview_store\"}"
+      ],
+      "status": "sandbox_certified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "order",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "order_graphql",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 0,
+      "kind": "product",
+      "provider": "shopify",
+      "status": "uncertified"
+    },
+    {
+      "fixtures": 1,
+      "kind": "product_graphql",
+      "last_recorded_at": "2026-11-15T00:09:57+00:00",
+      "provider": "shopify",
+      "provider_api": [
+        "{\"api_version\": \"admin-graphql (connector-pinned)\", \"host\": \"myshopify.com\", \"via\": \"shopify_connector_preview_store\"}"
+      ],
+      "status": "sandbox_certified"
+    },
+    {
+      "fixtures": 2,
+      "kind": "event",
+      "last_recorded_at": "2026-11-14T23:50:03+00:00",
+      "provider": "stripe",
+      "provider_api": [
+        "{\"api_version\": \"2026-03-25.dahlia\", \"host\": \"api.stripe.com\", \"via\": \"stripe_connector_read\"}"
+      ],
+      "status": "sandbox_certified"
+    }
+  ],
+  "schema_version": "1"
+}
