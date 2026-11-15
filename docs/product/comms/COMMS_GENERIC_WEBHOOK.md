@@ -10,12 +10,13 @@ source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comm
 reviewed_source_commits:
   - commit: "3906b500a"
     reason: "Reviewed the 360 PR Communication360 repository diff: bounded participant and exact-reference reads do not change webhook signature validation, endpoint ownership, or ingestion procedure."
+  - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
   "services/api/connectors/integrations/connectors/routes.py": "sha256:d537cd13e0607f0d8e9c9db85797bdfcf42cb450815883dee6a44c8cca987a5e"
   "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
   "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
-  "services/api/journeys/comms/repository.py": "sha256:ce8230d0d3f362eb838f12d97c37346dd10f8c98ec29e07d6c1029c90d74de5d"
+  "services/api/journeys/comms/repository.py": "sha256:d004eebae56513405edd97c485121aca171786de9e85a5fce808cdabc997a2cf"
   "services/api/journeys/comms/routes.py": "sha256:5bf1ea2871a2a9c12fe5cc29190b9a98d14af014c56f76b702d58485f362c4de"
   "services/api/journeys/communication360/contracts.py": "sha256:f6f10414aec7e8659fbc6952b183cb0312b2eab43346e3373d940b20cd3bbf1a"
   "services/api/journeys/communication360/observations.py": "sha256:e564be344a2ee6380d8c79c1c9b89e8648b8bf3bd0e4c928108699172c90d0f8"

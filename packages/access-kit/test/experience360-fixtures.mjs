@@ -12,18 +12,18 @@ export function frameFor(body) {
     state: 'partial',
     slots: [
       {
-        id: 'identity',
+        id: 'identity_spine',
         requirement: 'required',
         state: 'available',
         content: { display: 'Example agent' },
-        provenance: [{ projectionId: 'agent360', tenantId: 'tenant-from-auth', evidenceRefs: ['ev-1'] }],
+        provenance: [{ projectionId: 'profile360', tenantId: 'tenant-from-auth', evidenceRefs: ['ev-1'] }],
         evidenceRefs: ['ev-1'],
         policyDisposition: { state: 'allowed' },
         limitations: [],
         reasonCodes: [],
       },
       {
-        id: 'tool_usage',
+        id: 'agent_delegations',
         requirement: 'optional',
         state: 'unknown',
         policyDisposition: { state: 'allowed' },
@@ -42,7 +42,7 @@ export function frameFor(body) {
         reasonCodes: ['freshness_exceeded'],
       },
       {
-        id: 'capabilities',
+        id: 'entity_identity',
         requirement: 'optional',
         state: 'suppressed',
         policyDisposition: { state: 'denied', reasonCodes: ['scope_missing'] },

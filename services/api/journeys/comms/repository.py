@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from shared.logger.logger import get_logger
 from repositories.repos import get_pool
+from shared.freshness.source_watermarks import advances_watermark
 
 logger = get_logger("aether.comms.repository")
 
@@ -164,6 +165,7 @@ class CommsFactsRepository:
 
     # ── Write ────────────────────────────────────────────────────────────────
 
+    @advances_watermark("communication_facts")
     async def upsert(self, row: dict[str, Any]) -> dict[str, Any]:
         """Insert or ignore on (tenant_id, idempotency_key) conflict — replay safe."""
         row.setdefault("fact_id", str(uuid4()))

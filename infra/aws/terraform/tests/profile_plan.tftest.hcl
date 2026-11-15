@@ -1129,7 +1129,11 @@ run "access_mcp_service_requires_repository_and_digest" {
   expect_failures = [var.enable_access_mcp]
 }
 
-run "access_mcp_service_is_rejected_on_staging" {
+# Staging is the second per-account owner of the MCP repository and service.
+# The service runs under the staging wake/sleep lifecycle, so Terraform must
+# agree with config/runtime_deployment.yaml customer_services.access-mcp.enabled.
+
+run "access_mcp_service_on_staging_requires_repository" {
   command = plan
 
   variables {
@@ -1148,11 +1152,57 @@ run "access_mcp_service_is_rejected_on_staging" {
   expect_failures = [var.enable_access_mcp]
 }
 
-run "access_mcp_repository_is_rejected_on_staging" {
+run "access_mcp_repository_is_allowed_on_staging" {
   command = plan
 
   variables {
     deployment_profile           = "staging"
+    environment                  = "staging"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_access_mcp_repository = true
+  }
+
+  assert {
+    condition = alltrue([
+      contains(keys(module.ecr.repository_urls), "aether-access-mcp"),
+      length(module.access_mcp) == 0,
+    ])
+    error_message = "Staging owns its account's aether-access-mcp repository; provisioning it must not start the service."
+  }
+}
+
+run "access_mcp_service_on_staging_must_match_lifecycle_matrix" {
+  command = plan
+
+  # customer_services.access-mcp.enabled is false in the runtime matrix, so a
+  # staging plan that enables the service must fail the agreement guard.
+  variables {
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_access_mcp_repository = true
+    enable_access_mcp            = true
+    access_mcp_image_digest      = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  expect_failures = [output.access_mcp_service_name]
+}
+
+run "access_mcp_repository_is_rejected_for_mismatched_profile_and_environment" {
+  command = plan
+
+  variables {
+    deployment_profile           = "production"
     environment                  = "staging"
     network_egress_mode          = null
     aurora_min_acu               = 0

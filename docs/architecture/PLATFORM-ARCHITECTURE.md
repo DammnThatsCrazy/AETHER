@@ -70,8 +70,12 @@ reviewed_source_commits:
     reason: "Reviewed fa28339e9 and 9b7d55daa: Agent360 and Workflow360 reject padded or malformed authority join identifiers, and Workflow360 requires exact persisted Tool identity evidence. Updated the provider behavior notes below."
   - commit: "9b7d55daa"
     reason: "Reviewed the follow-up exact persisted Tool identity validation and bounded Workflow360 action-read behavior; partial rows remain visibly incomplete and do not establish effects."
+  - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
+  - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; the Profile360 slot statements here are updated.'}
+  - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; this document needs no other change.'}
+  - {'commit': '5dcf75ba', 'reason': 'Reviewed 5dcf75ba: the contract generator now types freshnessPolicy.slots and states per-slot maximum ages in the surface catalog. Generated-output typing only; this document needs no change.'}
 source_hashes:
-  "packages/shared/": "sha256:86f28a22f29495472609578e844bc8ff90086a70b67647df3430aa6993e1a759"
+  "packages/shared/": "sha256:ea40ae47490b3a4be6e917c03f6698c380b6dc5f48ba651814bf45bd538685bc"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:3438710d537a48fe068478cfe3170255a9decfec1d81adecabeabd03b3766ec7"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
@@ -102,10 +106,10 @@ source_hashes:
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
   "services/api/main.py": "sha256:a70c70ae4201523e1162a5b93f95f5a8785f5d9f1a214d8fbd0d0be4f45ce8e3"
-  "services/api/middleware/middleware.py": "sha256:a759e3d55b5791e9fa6c9d022fa68551bc4227638cdcc7871c039bbdad2ccab5"
-  "services/api/repositories/repos.py": "sha256:d509d7fe259f7f34670131c369aa262749a0e5cef6aadd267a70f2b849099bbc"
+  "services/api/middleware/middleware.py": "sha256:ff86aed1bace982417e3cad43476d0fbb02f49988432e4c960b05d24163d2408"
+  "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:7ded6e7485446260858dbb211146d813dd892929ad5d76a608fb9742c4777796"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:edbdaa60384c89a717379f14f94182904cc02c7525ec0408e7a4757fe995f4b1"
   "services/api/value/commerce/commerce360_provider.py": "sha256:635f93631d2946d681c9f3d98c8f6b2bb929fc9a200c42b70afeeacdd49b085c"
   "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:f2e4d9a401fe5458202ec6af80634e8d2e06d894e31bdbe31b25eba99bc83942"
@@ -691,16 +695,19 @@ Account360 contract evidence requires the billing authority's explicit
 `id` is not promoted to contract identity. Obligations, history, and freshness
 remain partial.
 Profile360's required `risk_summary` slot now binds to Risk360 assessments and
-evidence for exact tenant-scoped entity and Agent subjects; it remains degraded
-while a Profile-specific freshness threshold is unknown.
+evidence for exact tenant-scoped entity and Agent subjects. Its freshness is
+evaluated against the tenant's `risk_outputs` source watermark (6 hours); it
+remains degraded while its partial-implementation limits stand.
 Profile360's required `value_summary` slot now binds to Economic360's exact
-tenant-scoped entity and Agent summary/evidence; Outcome360 attribution to
-entity/profile subjects and Profile-specific freshness remain unresolved, so it
-also remains degraded.
+tenant-scoped entity and Agent summary/evidence, and for entity subjects joins
+Outcome360 outcomes recorded for the same-id human (`user`) subject. Freshness is
+evaluated against the `economic_facts` watermark (24 hours). Attribution of
+outcomes to economic facts and producer coverage remain unresolved, so it also
+remains degraded.
 Profile360's required `relationships` slot now reads Relationship360 graph-ledger
-evidence for an exact tenant entity subject; profile/member alias resolution,
-ledger completeness, and Profile-specific freshness remain unknown, so the
-slot stays degraded.
+evidence for an exact tenant entity subject; freshness is evaluated against the
+`relationship_facts` watermark (24 hours), while profile/member alias resolution
+and ledger completeness remain unknown, so the slot stays degraded.
 Profile360's required `location_temporal` slot now reads Geographic360's
 tenant-scoped location evidence and timeline for an exact entity subject. The
 provider marks recorded location observations explicitly; profile alias

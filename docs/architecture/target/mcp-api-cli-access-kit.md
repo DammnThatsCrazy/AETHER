@@ -83,6 +83,9 @@ not a new service route or data authority.
 | CLI | `aether agents decisions show AGENT_REF DECISION_ID [--json]` | One reconstructed decision (`agents.decision`) | Query, `agent:manage` |
 | CLI | `aether experience360 frame get --surface S --subject-kind K --subject-id ID [--slots a,b] [--as-of T] [--no-evidence] [--json]` | `POST /v1/experience360/frames` (`experience360.frame.get`) | Query, `read`; one governed 360 frame |
 | MCP / Node | `access_invoke_read` with `experience360.frame.get`; `createAccessClient().experience360.frame(input)` | Same route | Query, `read`; no dedicated MCP tool |
+| CLI | `aether profile360 search --email V` (or `--wallet`, `--device`, `--session`, `--social`, `--customer`) | `POST /v1/profile/resolve` (`profile360.search`) | Query, `read`; identifier in the body |
+| CLI | `aether profile360 get ENTITY_ID`, `aether profile360 slots ENTITY_ID --slots a,b`, `aether profile360 evidence ENTITY_ID [--slots a,b]` | `POST /v1/experience360/frames` (`profile360.get`, `profile360.slot.get`, `profile360.evidence.get`) | Query, `read` |
+| MCP / Node | `profile360_search`, `profile360_get`, `profile360_slot_get`, `profile360_evidence_get`; `createAccessClient().profile360.{search,get,slots,evidence}` | Same routes | Query, `read`; advertised to delegated OAuth sessions |
 | CLI | `aether access operations list/show` and `aether access invoke` | Closed adapter read declaration and delegated API call | Discovery is local; invoke is query with the operation's declared `required_server_permission` (`read` unless stated) |
 | CLI | `aether account context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth context [--json]` | `/v1/me` safe projection | Query, `read` |
@@ -214,6 +217,9 @@ Access Kit returns the frame unmodified and never promotes a slot state.
   tenant, actor, policy, or graph-query field, and the client rejects them before
   any request. `read` suffices: the route is a read-semantic POST, so route
   policy checks `read` instead of `write`.
+- **Surface.** The adapter accepts only `profile360`, the one surface audited
+  slot by slot for design-partner use. Other catalogued surfaces stay readable in
+  the product but are rejected by the adapter before any request.
 - **Bounds.** The client bounds the subject ID (1 to 256 characters), the slot
   list (at most 32 from the chosen surface), and `as_of`, and never sends lens
   IDs, `purpose`, paging, or `authorizationContextRef`. The server bounds those
@@ -233,6 +239,27 @@ Access Kit returns the frame unmodified and never promotes a slot state.
   created beyond those the API returns.
 - **Hosted MCP.** The route is on the delegated-token read allowlist. A live
   hosted-MCP login has not been run.
+
+## Named Profile360 reads
+
+Four named reads give agents and operators a direct path to Profile360 without
+building frame requests by hand. All four are `read` operations in the closed
+table, so `access_invoke_read`, the named MCP tool, the CLI command and the Node
+method behave identically.
+
+| Operation | Route | Use |
+|---|---|---|
+| `profile360.search` | `POST /v1/profile/resolve` | Resolve exactly one identifier (email, wallet, device, session, social or customer) to the canonical entity ID. The identifier travels in the request body, never the URL, so it stays out of access logs. 404 when nothing resolves. |
+| `profile360.get` | `POST /v1/experience360/frames` | Full frame for one entity (subject kind defaults to `entity`), evidence on by default. |
+| `profile360.slot.get` | same | Up to 8 named slots with evidence, e.g. `risk_summary,value_summary`. |
+| `profile360.evidence.get` | same | Per slot: state, freshness, evidence references, provenance, claim evidence, reason codes and policy disposition, copied from the server frame. Slot content is omitted. |
+
+Each slot carries a freshness verdict evaluated by the server against the
+tenant's source watermarks (`fresh`, `stale` or `unknown`; see the 360 system
+blueprint). The adapter never rewrites a slot state, a freshness verdict or an
+evidence reference. `POST /v1/profile/resolve` is a read-semantic POST: route
+policy checks `read`, it is attributed as `profile360.identifier.resolve`, and it
+is on the delegated-MCP read allowlist.
 
 ### Operator runbook
 
@@ -416,9 +443,12 @@ tokens are read-only. The server-side REST permission check remains authoritativ
   per-endpoint capability classification, scopes, pagination, output limits,
   and owner review before exposure.
 - Auth0 remains the OAuth authorization server. The opt-in MCP resource server
-  and protected-resource metadata are implemented; public DCR, client
-  onboarding, MCP Apps, external capability execution, and graph-write/action
-  tools are not. The continuation create/get pair is a resource write, not an
+  and protected-resource metadata are implemented. Host self-registration
+  (Auth0 DCR and Client ID Metadata Documents) is a separate opt-in,
+  `enable_access_mcp_dcr`, that gives registered hosts only a read-only
+  third-party default grant on the MCP audience (see the Access Kit MCP AWS
+  runbook). MCP Apps, external capability execution, and graph-write/action
+  tools are not implemented. The continuation create/get pair is a resource write, not an
   external action dispatcher. CLI/MCP intake remains limited to generic site-bound `track`
   path described above; batch collections, identity writes, and arbitrary
   direct route payloads are not exposed.

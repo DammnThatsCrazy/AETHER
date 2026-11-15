@@ -817,7 +817,27 @@ statements:
       - arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role
       - arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role
       - arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role
+      # module.access_mcp (customer Access Kit MCP), created only when
+      # customer_services.access-mcp.enabled is true in runtime_deployment.yaml.
+      - arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-execution
+      - arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-task
     scope: staging-infra-roles
+  - sid: PassOnlyStagingAccessMcpExecutionRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-execution
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+    scope: staging-name-prefix
+  - sid: PassOnlyStagingAccessMcpTaskRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-access-mcp-task
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+    scope: staging-name-prefix
   - sid: PassOnlyStagingAuroraMonitoringRole
     actions:
       - iam:PassRole

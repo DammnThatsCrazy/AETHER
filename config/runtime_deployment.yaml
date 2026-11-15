@@ -72,6 +72,17 @@ profiles:
       states:
         awake: {desired_count_multiplier: 1}
         asleep: {desired_count_multiplier: 0}
+    # Customer-facing services outside the worker matrix. The Access Kit MCP
+    # Fargate service runs a fixed count (no autoscaling target) multiplied by
+    # staging_state, so it sleeps with the rest of staging. `enabled` is the
+    # single switch: Terraform's enable_access_mcp must match it, and the
+    # lifecycle workflow adds the service to its exact inventory only when true.
+    # Enable it only after the staging aether-access-mcp repository exists and
+    # an immutable image digest is published (see STAGING-WAKE-SLEEP.md).
+    customer_services:
+      access-mcp:
+        enabled: false
+        desired_count: 1
     services:
       api:
         roles: [api]

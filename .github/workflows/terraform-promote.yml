@@ -52,6 +52,11 @@ on:
         type: boolean
         default: false
         required: false
+      enable_access_mcp_dcr:
+        description: Plan-only opt-in for MCP host self-registration (Auth0 DCR + Client ID Metadata Documents) with a read-only third-party default grant; requires enable_access_mcp_oauth
+        type: boolean
+        default: false
+        required: false
       enable_access_continuations:
         description: Plan-only opt-in for the existing tenant continuation API used by Access Kit create/get; default off
         type: boolean
@@ -240,6 +245,7 @@ jobs:
       TF_VAR_enable_access_mcp_repository: ${{ inputs.enable_access_mcp_repository }}
       TF_VAR_enable_access_mcp: ${{ inputs.enable_access_mcp }}
       TF_VAR_enable_access_mcp_oauth: ${{ inputs.enable_access_mcp_oauth }}
+      TF_VAR_enable_access_mcp_dcr: ${{ inputs.enable_access_mcp_dcr }}
       TF_VAR_enable_access_continuations: ${{ inputs.enable_access_continuations }}
       TF_VAR_identity_verification_secrets_enabled: ${{ inputs.identity_verification_secrets_enabled }}
       TF_VAR_access_mcp_image_digest: ${{ inputs.access_mcp_image_digest }}
@@ -304,6 +310,7 @@ jobs:
           ENABLE_ACCESS_MCP_REPOSITORY: ${{ inputs.enable_access_mcp_repository }}
           ENABLE_ACCESS_MCP: ${{ inputs.enable_access_mcp }}
           ENABLE_ACCESS_MCP_OAUTH: ${{ inputs.enable_access_mcp_oauth }}
+          ENABLE_ACCESS_MCP_DCR: ${{ inputs.enable_access_mcp_dcr }}
           ACCESS_MCP_IMAGE_DIGEST: ${{ inputs.access_mcp_image_digest }}
           ACCESS_MCP_DESIRED_COUNT: ${{ inputs.access_mcp_desired_count }}
           ACCESS_MCP_ALLOWED_ORIGINS: ${{ inputs.access_mcp_allowed_origins || '[]' }}

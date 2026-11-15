@@ -84,6 +84,7 @@ AREA_TO_FEATURE_EXACT = {
     "payment rail observability": "payment-rail-observability",
     "semantic intelligence": "semantic-intelligence",
     "card-linked payment rails": "card-linked-payments",
+    "Access Kit (MCP / CLI / API)": "access-kit",
     "pattern discovery": "pattern-discovery",
 }
 

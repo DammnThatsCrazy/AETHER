@@ -2541,6 +2541,8 @@ _PRODUCT_FRESHNESS_FIELD_ORDER = (
     "required", "maxAgeSeconds", "sourceTimestamps", "missingTimestamp", "onStale",
     "requirementStatus",
 )
+# A surface may add per-slot freshness thresholds bound to source watermarks.
+_PRODUCT_FRESHNESS_WITH_SLOTS_FIELD_ORDER = (*_PRODUCT_FRESHNESS_FIELD_ORDER, "slots")
 _PRODUCT_POLICY_FIELD_ORDER = (
     "tenantScopeRequired", "authorizationBeforeRead", "policyEvaluation",
     "historicalConsentEvaluation", "redactionBehavior", "requirementStatus",
@@ -2570,6 +2572,7 @@ _OBJECT_FIELD_ORDERS = {
     frozenset(_PRODUCT_DIRECT_PROVIDER_BINDING_FIELD_ORDER): _PRODUCT_DIRECT_PROVIDER_BINDING_FIELD_ORDER,
     frozenset(_PRODUCT_SOURCE_OF_TRUTH_FIELD_ORDER): _PRODUCT_SOURCE_OF_TRUTH_FIELD_ORDER,
     frozenset(_PRODUCT_FRESHNESS_FIELD_ORDER): _PRODUCT_FRESHNESS_FIELD_ORDER,
+    frozenset(_PRODUCT_FRESHNESS_WITH_SLOTS_FIELD_ORDER): _PRODUCT_FRESHNESS_WITH_SLOTS_FIELD_ORDER,
     frozenset(_PRODUCT_POLICY_FIELD_ORDER): _PRODUCT_POLICY_FIELD_ORDER,
     frozenset(_PRODUCT_BACKEND_CAPABILITIES_FIELD_ORDER): _PRODUCT_BACKEND_CAPABILITIES_FIELD_ORDER,
     frozenset(_PRODUCT_LENS_CONTRACT_FIELD_ORDER): _PRODUCT_LENS_CONTRACT_FIELD_ORDER,
@@ -2937,7 +2940,7 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
     lines.append("  directProviderBindings?: readonly Product360DirectProviderBinding[];")
     lines.append("  blueprintContract?: { sourceSection: string; priority: 'P0' | 'P1' | 'P2'; canonicalOwner: string; subjectIdentifiers: readonly string[]; requiredLensIds: readonly string[]; purpose: string; requiredSlotIds: readonly string[] };")
     lines.append("  sourceOfTruth: { canonicalAuthorities: readonly string[]; ownsCanonicalTruth: false; prohibitedOwnership: readonly string[] };")
-    lines.append("  freshnessPolicy: { required: true; maxAgeSeconds: number | null; sourceTimestamps: string; missingTimestamp: string; onStale: string; requirementStatus: string };")
+    lines.append("  freshnessPolicy: { required: true; maxAgeSeconds: number | null; sourceTimestamps: string; missingTimestamp: string; onStale: string; requirementStatus: string; slots?: Readonly<Record<string, { maxAgeSeconds: number; watermarkAuthorities: readonly string[] }>> };")
     lines.append("  policyBehavior: { tenantScopeRequired: true; authorizationBeforeRead: true; policyEvaluation: string; historicalConsentEvaluation: string; redactionBehavior: string; requirementStatus: string };")
     lines.append("  backendCapabilities: { required: readonly string[]; projectionCapabilityKeys: readonly string[]; providerCapabilityStatus: string };")
     lines.append("  lensContract: { expectedCount: number | null; lensIds: readonly string[]; sourceAlignmentStatus: string };")
@@ -3299,7 +3302,7 @@ def gen_product_360_surface_catalog_md(reg: dict) -> str:
                 "",
                 "The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.",
                 "",
-                f"Freshness requirement: source timestamps `{surface['freshnessPolicy']['sourceTimestamps']}`; missing timestamps become `{surface['freshnessPolicy']['missingTimestamp']}`; stale slots become `{surface['freshnessPolicy']['onStale']}`. Maximum age is unset pending authority-specific configuration.",
+                f"Freshness requirement: source timestamps `{surface['freshnessPolicy']['sourceTimestamps']}`; missing timestamps become `{surface['freshnessPolicy']['missingTimestamp']}`; stale slots become `{surface['freshnessPolicy']['onStale']}`. " + ("Per-slot maximum ages are evaluated against tenant source watermarks: " + ", ".join(f"`{slot_id}` {cfg['maxAgeSeconds']}s ({', '.join(cfg['watermarkAuthorities'])})" for slot_id, cfg in sorted(surface['freshnessPolicy']['slots'].items())) + "." if surface['freshnessPolicy'].get('slots') else "Maximum age is unset pending authority-specific configuration."),
                 "",
                 f"Policy requirement: tenant scope `{str(surface['policyBehavior']['tenantScopeRequired']).lower()}`, authorization before read `{str(surface['policyBehavior']['authorizationBeforeRead']).lower()}`, policy evaluation `{surface['policyBehavior']['policyEvaluation']}`, historical consent `{surface['policyBehavior']['historicalConsentEvaluation']}`, redaction `{surface['policyBehavior']['redactionBehavior']}`.",
                 "",
