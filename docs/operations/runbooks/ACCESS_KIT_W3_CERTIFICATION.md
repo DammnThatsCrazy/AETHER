@@ -13,6 +13,12 @@ source_files:
   - scripts/release/staging_customer_services.py
   - scripts/prune_auth0_mcp_clients.py
 canonical_owner: platform@aether
+source_hashes:
+  "packages/access-kit/scripts/w3-certify.mjs": "sha256:5d59ceb71f233705101073b35186b14524b44fd38d54d4ea2341046c540558ff"
+  "packages/access-kit/src/profile360-tools.mjs": "sha256:98c417ee9ceb5987a41c1a79916e047b29dfdd422886460d1a64664a30235a3a"
+  "packages/access-kit/src/profile360.mjs": "sha256:32c8c44211d7330c269a7ffa34832cf44e1dc796e94a10d9348275ab42cb9b05"
+  "scripts/prune_auth0_mcp_clients.py": "sha256:eff4697c57eb53a965e0e1f7a6c125b674746c42a4d6990f0dbd39d51336584e"
+  "scripts/release/staging_customer_services.py": "sha256:849e65317cd3ec56fffc47f5c418e7320a625f062326923a57f7f03ff491564a"
 ---
 
 # Access Kit W3 certification (design partner)
