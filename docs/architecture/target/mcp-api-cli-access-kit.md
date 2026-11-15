@@ -443,9 +443,12 @@ tokens are read-only. The server-side REST permission check remains authoritativ
   per-endpoint capability classification, scopes, pagination, output limits,
   and owner review before exposure.
 - Auth0 remains the OAuth authorization server. The opt-in MCP resource server
-  and protected-resource metadata are implemented; public DCR, client
-  onboarding, MCP Apps, external capability execution, and graph-write/action
-  tools are not. The continuation create/get pair is a resource write, not an
+  and protected-resource metadata are implemented. Host self-registration
+  (Auth0 DCR and Client ID Metadata Documents) is a separate opt-in,
+  `enable_access_mcp_dcr`, that gives registered hosts only a read-only
+  third-party default grant on the MCP audience (see the Access Kit MCP AWS
+  runbook). MCP Apps, external capability execution, and graph-write/action
+  tools are not implemented. The continuation create/get pair is a resource write, not an
   external action dispatcher. CLI/MCP intake remains limited to generic site-bound `track`
   path described above; batch collections, identity writes, and arbitrary
   direct route payloads are not exposed.

@@ -20,7 +20,7 @@ source_hashes:
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
   "scripts/release/check_cost_policy.py": "sha256:1fd906153be98a14c66a4abcf176a8ecd7259b9af4945bd14e9af50305654916"
   "scripts/release/check_cost_policy_terraform.py": "sha256:d5dcbd7547d76dad5c46ea611d282c2652970a60aa9d420eb2b80641a0fa0469"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:281f7ca83d82f6b7392a260953ac4d15ad010e5f49f0bdeb8b36219763a60ad5"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:49b1d6ac537fd2b44c5f498cf4ecc8b36674c919b07ad1191ae960eb75f91d5f"
 ---
 
 # Cost Optimization

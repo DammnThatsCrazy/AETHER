@@ -54,16 +54,32 @@ and timestamp. The API requires this short-lived assertion before accepting
 the MCP-audience token, so a surface header on public REST does not bypass the
 MCP boundary. Rotating the key requires coordinated API and MCP task restarts.
 
-Auth0 Dynamic Client Registration is **not** enabled by Terraform. Auth0's
-open DCR permits unauthenticated client creation, while its third-party clients
-need an explicit API grant. A host can instead use a reviewed preregistered
-client. Before using DCR, the identity owner must approve Auth0 tenant settings,
-the exact third-party delegated read grant, application consent and connection
-policy, callback URI handling, rate limits, and client revocation. The MCP
-service does not proxy a registration endpoint or mint OAuth tokens. Current
-MCP guidance prefers Client ID Metadata Documents; DCR is a compatibility
-mechanism. This repository cannot claim host onboarding or delegated OAuth
-conformance until the Auth0 configuration and a real host are exercised.
+MCP host self-registration is a separate opt-in, `enable_access_mcp_dcr`, which
+requires `enable_access_mcp_oauth`. It turns on Auth0 Dynamic Client
+Registration and Client ID Metadata Documents (the mechanism current MCP
+guidance prefers) so hosts such as Claude, Cursor, VS Code and ChatGPT can
+register without a preregistered client. The abuse controls are Auth0-enforced:
+
+- Registered hosts are third-party clients. Their only API access is a default
+  user-delegated grant (`default_for = third_party_clients`) on the MCP audience
+  with exactly `access_kit:read`. Without their own grant, third-party clients
+  get no token for any other API, including the Aether REST API.
+- The MCP audience denies client-credentials flows, issues one-hour tokens
+  without refresh tokens, and always shows the user a consent screen. The API
+  accepts MCP tokens only with the MCP service's signed per-request assertion.
+- The database connection becomes domain-level only while registration is on,
+  so registered hosts can sign users in. The pilot plan policy allows that
+  connection to change only in its `is_domain_connection` flag.
+- Auth0 rate-limits the registration endpoint. Idle registrations are removed
+  with `scripts/prune_auth0_mcp_clients.py` (dry run by default; `--apply`
+  deletes third-party clients with no successful sign-in in `--max-idle-days`,
+  never first-party clients).
+
+The tenant flags stay under Terraform while remote MCP OAuth is on, so turning
+`enable_access_mcp_dcr` off writes `false` back. Turn it off before disabling
+OAuth. The MCP service does not proxy registration or mint OAuth tokens. Host
+onboarding and delegated OAuth conformance are not claimed until a real host
+completes registration, sign-in and a read against a deployed tenant.
 
 The ECS task role has no attached AWS permission policy. The separate task
 execution role can pull from only `aether-access-mcp`, read the optional
