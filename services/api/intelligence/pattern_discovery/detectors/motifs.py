@@ -151,6 +151,9 @@ def detect_motifs(frame: DiscoveryFrame) -> DetectorOutput:
     # Directed relationship cycles of length 3..4.
     cycles: dict[tuple, list[tuple]] = defaultdict(list)
     cyc_counts: Counter = Counter()
+    # Every counted cycle's identity, independent of the bounded example sample,
+    # so the sample cap cannot change what counts as a distinct instance.
+    cyc_seen: dict[tuple, set[tuple]] = defaultdict(set)
     nodes = sorted(n for n in out_rel if len(out_rel[n]) <= MAX_DEGREE)
     for start in nodes:
         stack = [(start, [start], [])]
@@ -161,7 +164,8 @@ def detect_motifs(frame: DiscoveryFrame) -> DetectorOutput:
                     seq = tuple(f"{_kind(path[i])}-{types[i] if i < len(types) else typ}" for i in range(len(path)))
                     rot = min(seq[i:] + seq[:i] for i in range(len(seq)))
                     inst = tuple(sorted(path))
-                    if inst not in {tuple(sorted(x)) for x in cycles[rot]}:
+                    if inst not in cyc_seen[rot]:
+                        cyc_seen[rot].add(inst)
                         cyc_counts[rot] += 1
                         if len(cycles[rot]) < MAX_INSTANCES_KEPT:
                             cycles[rot].append(tuple(path))

@@ -9,7 +9,7 @@ since_version: "0.1.0"
 source_files:
   - services/api/intelligence/pattern_discovery/
 source_hashes:
-  "services/api/intelligence/pattern_discovery/": "sha256:9fa1800205281b39f8b44e619cd99480befcb8bf9e5ef160ae61124e370e2d40"
+  "services/api/intelligence/pattern_discovery/": "sha256:c1bcdbf62474f76e1e0195b26fcdcf71114a7b8b6c66afdfcce63c8c0769695f"
 ---
 
 # Pattern Discovery and Unstructured Evidence Intelligence
@@ -236,6 +236,9 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   The same holds per detector: `traffic_anomaly` patterns are not aged unless
   ML scoring ran (`scored` or `no_windows`), and `novel_motif` patterns are
   not aged when the graph read was unavailable (`coverage.aging.skipped_kinds`).
+  A selected `cross_domain` pass with too few input patterns counts as run
+  with no match (`skipped: insufficient_inputs`), so composites age once their
+  constituent patterns disappear.
   The scheduled job reports such a run as failed so the jobs worker retries it.
 - Every write after the first is a compare-and-set on `revision`.
 
@@ -311,7 +314,11 @@ projection) and counts the retry in `promotion.projection_retries`; with
 nothing incomplete it returns the pattern unchanged. Both projections are
 idempotent.
 
-Deprecating a promoted pattern soft-revokes its membership edges. Its Risk360
+Deprecating a promoted pattern soft-revokes its membership edges, including
+after a `failed` graph projection that may have written some memberships
+before stopping: every subject that received a signal is revoked, one failure
+does not stop the rest, and the report says `revoked`, `partial` or `failed`
+with counts. Its Risk360
 signals remain as attributed history owned by the risk plane. The conversion
 is also registered as the `pattern_discovery` producer in
 `intelligence.risk360.signals`. Risk360 and the Agent 360 canonical risk read
@@ -350,7 +357,13 @@ ids in a graph view (bare ids or `kind:id` keys, at most 500) and returns, per
 node, the visible patterns it belongs to. A member is linked to a shared
 attribute value only when the detector observed it with that value
 (`owners` in the shared-attribute evidence, at most 50 per value); records
-without owner sets draw no member-to-attribute edges.
+without owner sets draw no member-to-attribute edges. Likewise, `ACTS_FOR`
+edges are drawn only for the agent/principal pairs the agent detectors
+observed (`agent_principals`), and agent-to-agent edges only for observed
+`(source, relation, target)` links (`links`), labelled with the relation.
+Records without those draw principals attached to the pattern node
+(`INVOLVES_PRINCIPAL`) and no agent-to-agent edges, rather than inventing
+relationships.
 
 **Segment lenses** (`lenses.py`). The engine stores a `segment_profile` on
 each pattern: the share of its entities' events in each campaign, channel,

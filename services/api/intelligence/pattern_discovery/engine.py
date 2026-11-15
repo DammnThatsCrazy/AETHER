@@ -135,7 +135,13 @@ def run_discovery(
         prior_raws.append(_raw_from_record(rec))
         prior_ids.append(rec["pattern_id"])
         prior_conf.append(float(rec.get("confidence") or 0.0))
-    if KIND_CROSS_DOMAIN in wanted and raws and len(raws) + len(prior_raws) >= 2:
+    if KIND_CROSS_DOMAIN in wanted and not (raws and len(raws) + len(prior_raws) >= 2):
+        # Too few inputs is a measured "no match", not an unexecuted detector:
+        # existing cross-domain patterns must still age when their inputs vanish.
+        detector_stats["cross_domain"] = {"inputs": len(raws) + len(prior_raws), "skipped": "insufficient_inputs"}
+        detectors_run.append("cross_domain")
+        kinds_run.add(KIND_CROSS_DOMAIN)
+    elif KIND_CROSS_DOMAIN in wanted:
         cross = correlate(raws + prior_raws, [r["pattern_id"] for r in records] + prior_ids, cfg,
                           [r["confidence"] for r in records] + prior_conf, current_count=len(raws))
         detector_stats["cross_domain"] = cross.stats
