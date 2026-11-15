@@ -149,3 +149,72 @@ def test_validator_mirrors_runtime_authorities():
         sys.modules.pop("ipv", None)
         sys.path.remove(str(root / "scripts"))
     assert module.WATERMARKED_AUTHORITIES == wm.WATERMARKED_AUTHORITIES
+
+
+# ---------------------------------------------------------------- writers
+
+WRITERS = [
+    ("repositories.repos", "AnalyticsRepository", "record_event", "analytics_events"),
+    ("repositories.repos", "AnalyticsRepository", "record_processed_event", "analytics_events"),
+    ("repositories.repos", "DelegationRepository", "grant", "agent_access"),
+    ("repositories.repos", "DelegationRepository", "revoke", "agent_access"),
+    ("journeys.comms.repository", "CommsFactsRepository", "upsert", "communication_facts"),
+    ("repositories.graph_mutation_ledger", "GraphMutationLedgerRepository", "append", "relationship_facts"),
+    ("graph.geo.location_facts", "LocationFactRepository", "record", "geo_observations"),
+    ("journeys.measurement.repositories.conversion_repo", "ConversionRepository", "upsert", "economic_facts"),
+    ("intelligence.risk360.store", "RiskAssessmentRepository", "upsert_scoped", "risk_outputs"),
+    ("intelligence.risk360.store", "RiskAssessmentRepository", "update_scoped", "risk_outputs"),
+]
+
+
+@pytest.mark.parametrize("module_name,cls_name,method,authority", WRITERS)
+def test_every_owning_writer_advances_its_watermark(module_name, cls_name, method, authority):
+    import importlib
+
+    fn = getattr(getattr(importlib.import_module(module_name), cls_name), method)
+    assert hasattr(fn, "__wrapped__"), f"{cls_name}.{method} does not advance {authority}"
+
+
+def test_every_watermarked_authority_has_a_writer():
+    assert {w[3] for w in WRITERS} == set(wm.WATERMARKED_AUTHORITIES)
+
+
+@pytest.mark.asyncio
+async def test_decorator_uses_result_tenant_and_skips_failures():
+    @wm.advances_watermark("economic_facts")
+    async def write(row):
+        return row
+
+    @wm.advances_watermark("economic_facts")
+    async def broken(row):
+        raise ValueError("write failed")
+
+    with pytest.raises(ValueError):
+        await broken({"tenant_id": "t9"})
+    assert (await wm.read_source_watermarks("t9", ["economic_facts"]))["economic_facts"] is None
+    await write({"tenant_id": "t9"})
+    assert (await wm.read_source_watermarks("t9", ["economic_facts"]))["economic_facts"] is not None
+
+
+def test_decorator_rejects_unknown_authority():
+    with pytest.raises(ValueError):
+        wm.advances_watermark("identity")
+
+
+@pytest.mark.asyncio
+async def test_risk_assessment_write_advances_risk_outputs():
+    from intelligence.risk360.store import RiskAssessmentRepository
+
+    await RiskAssessmentRepository().upsert_scoped("t-risk", "a1", {"subject_id": "e1"})
+    read = await wm.read_source_watermarks("t-risk", ["risk_outputs"])
+    assert read["risk_outputs"] is not None
+
+
+@pytest.mark.asyncio
+async def test_analytics_event_write_advances_analytics_events():
+    from repositories.repos import AnalyticsRepository
+    from shared.cache.cache import CacheClient
+
+    await AnalyticsRepository(CacheClient()).record_event("ev1", {"tenant_id": "t-an", "event_id": "ev1"})
+    read = await wm.read_source_watermarks("t-an", ["analytics_events"])
+    assert read["analytics_events"] is not None

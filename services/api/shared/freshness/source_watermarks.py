@@ -14,9 +14,10 @@ reads as ``None`` and must be treated as unknown freshness, never as fresh.
 
 from __future__ import annotations
 
+import functools
 import time
 from datetime import datetime, timezone
-from typing import Iterable, Optional
+from typing import Any, Awaitable, Callable, Iterable, Optional, TypeVar
 
 from shared.logger.logger import get_logger, metrics
 from shared.store import DurableStore, get_store
@@ -137,3 +138,53 @@ async def read_source_watermarks(
             parsed = None
         result[authority] = parsed.isoformat() if parsed else None
     return result
+
+
+_F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
+
+
+def _tenant_of(value: Any) -> Optional[str]:
+    if isinstance(value, dict):
+        tenant = value.get("tenant_id")
+    else:
+        tenant = getattr(value, "tenant_id", None)
+    return tenant if isinstance(tenant, str) and tenant else None
+
+
+def _find_tenant(args: tuple, kwargs: dict, result: Any) -> Optional[str]:
+    tenant = kwargs.get("tenant_id")
+    if isinstance(tenant, str) and tenant:
+        return tenant
+    for candidate in (result, *args[1:], *kwargs.values()):
+        tenant = _tenant_of(candidate)
+        if tenant:
+            return tenant
+    return None
+
+
+def advances_watermark(authority: str) -> Callable[[_F], _F]:
+    """Advance ``authority``'s watermark for the written tenant after success.
+
+    The tenant comes from a ``tenant_id`` keyword, the returned record, or an
+    argument record carrying ``tenant_id``. An exception from the write
+    propagates unchanged and advances nothing; watermark bookkeeping itself
+    never raises.
+    """
+    if authority not in WATERMARKED_AUTHORITIES:
+        raise ValueError(f"{authority!r} is not a watermarked authority")
+
+    def decorate(fn: _F) -> _F:
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            result = await fn(*args, **kwargs)
+            try:
+                tenant = _find_tenant(args, kwargs, result)
+            except Exception:  # noqa: BLE001
+                tenant = None
+            if tenant:
+                await advance_source_watermark(tenant, authority, source=fn.__qualname__)
+            return result
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorate
