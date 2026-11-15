@@ -6,8 +6,8 @@
   "note": "The legacy 0-5 average is retained as historical_maturity_index and is non-authoritative for release eligibility. The authoritative signal is the per-profile hard-gate disposition in the multidimensional model.",
   "counts": {
     "legacy_areas": 32,
-    "migrated_automatically": 31,
-    "requires_manual_classification": 1
+    "migrated_automatically": 32,
+    "requires_manual_classification": 0
   },
   "migrated": [
     {
@@ -654,6 +654,27 @@
       "scope": "card-linked-payments-v1 v1"
     },
     {
+      "legacy_area": "pattern discovery",
+      "historical_maturity_index": 2,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "pattern-discovery",
+      "hypothesized_implementation_state": "IMPLEMENTED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "IMPLEMENTED",
+      "new_productionization_percent": 0.0,
+      "new_activation_state": "LIVE_DATA_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "pattern-discovery-v1 v1"
+    },
+    {
       "legacy_area": "Access Kit (MCP / CLI / API)",
       "historical_maturity_index": 3,
       "historical_maturity_index_scale": "0-5",
@@ -675,20 +696,7 @@
       "scope": "access-kit-design-partner-v1 v1"
     }
   ],
-  "requires_manual_classification": [
-    {
-      "legacy_area": "pattern discovery",
-      "historical_maturity_index": 2,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "IMPLEMENTED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    }
-  ],
+  "requires_manual_classification": [],
   "externally_blocked_capabilities_in_matrix": [
     "backup_restore"
   ],
@@ -716,6 +724,7 @@
     "measurement-attribution",
     "measurement-integrity",
     "notification-intelligence",
+    "pattern-discovery",
     "payment-rail-observability",
     "profile-360",
     "provider-certification-plane",

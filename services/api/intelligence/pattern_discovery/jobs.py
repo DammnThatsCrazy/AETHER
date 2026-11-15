@@ -35,10 +35,15 @@ async def run_job(payload: dict, ctx: Any) -> Any:
         max_events=payload.get("max_events"),
         requested_by="scheduler",
     )
-    return JobOutcome(status="succeeded", result={
+    result = {
         "run_id": out["run_id"], "patterns_detected": out["patterns_detected"],
         "patterns_by_status": out["patterns_by_status_after_merge"], "coverage": out["coverage"],
-    })
+    }
+    if (out.get("coverage") or {}).get("store") == "unavailable":
+        # The scheduled run exists to read the evidence store; a failed read is a
+        # failed run, so the jobs worker retries it instead of recording success.
+        return JobOutcome(status="failed", result=result, error="event_store_unavailable")
+    return JobOutcome(status="succeeded", result=result)
 
 
 def register_pattern_discovery_handlers() -> None:

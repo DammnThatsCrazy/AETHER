@@ -157,3 +157,18 @@ def test_statistics_helpers():
     assert abs(poisson_sf(1, 1.0) - (1 - 0.36787944)) < 1e-6
     med, sigma = robust_stats([1, 1, 1, 1, 50])
     assert med == 1 and sigma > 0
+
+
+def test_disjoint_lockstep_groups_on_the_same_token_stay_distinct_patterns():
+    base = datetime(2026, 11, 6, 9, tzinfo=timezone.utc)
+    rows = [ev(300 + i, "user_id", f"y{i}", "browse", base + timedelta(hours=i)) for i in range(30)]
+    for group, offset in (("a", 0), ("b", 30)):
+        for window in (0, 2):
+            rows += [ev(1000 + offset * 10 + window * 100 + i, "user_id", f"{group}{i}", "withdraw",
+                        base + timedelta(hours=window, minutes=offset, seconds=i)) for i in range(5)]
+    result = run_discovery(T, rows, baseline=empty_baseline(T), kinds=[KIND_LOCKSTEP])
+    lockstep = [r for r in result.records if r["signature"]["token"] == "withdraw"]
+    assert len(lockstep) == 2
+    assert len({r["pattern_id"] for r in lockstep}) == 2
+    members = [set(r["affected_entity_keys"]) for r in lockstep]
+    assert members[0].isdisjoint(members[1])

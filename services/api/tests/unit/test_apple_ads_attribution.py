@@ -84,6 +84,9 @@ async def test_attributed_token_is_recorded_server_side(monkeypatch):
     [tp] = touchpoint_repo._local_store.values()
     assert tp["external_campaign_id"] == "542370539" and tp["campaign_resolution_status"] == "unresolved"
     assert tp["is_click_through"] is True and tp["proof_level"] == "platform_verified"
+    # The activity carries the touchpoint reference the journey compiler reads.
+    assert activity["silver_table"] == "silver_campaign_touchpoint_facts"
+    assert activity["silver_fact_id"] == tp["touchpoint_id"]
 
 
 async def test_replayed_token_cannot_attribute_a_second_device(monkeypatch):

@@ -94,6 +94,10 @@ scopes:
   version: 1
   denominator_signature: 101b51999f5fde26
   feature_id: notification-intelligence
+- scope_id: pattern-discovery-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: pattern-discovery
 - scope_id: payment-rail-observability-v1
   version: 1
   denominator_signature: 101b51999f5fde26

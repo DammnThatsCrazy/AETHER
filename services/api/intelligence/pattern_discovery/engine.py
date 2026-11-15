@@ -135,7 +135,20 @@ def run_discovery(
         prior_raws.append(_raw_from_record(rec))
         prior_ids.append(rec["pattern_id"])
         prior_conf.append(float(rec.get("confidence") or 0.0))
-    if KIND_CROSS_DOMAIN in wanted and raws and len(raws) + len(prior_raws) >= 2:
+    # Composites are reassessed only when at least one constituent detector ran
+    # this time. Without one (kinds=["cross_domain"] alone, or every constituent
+    # failed) the evidence was not re-read, so cross-domain stays unmeasured and
+    # its existing patterns are not aged.
+    constituents_ran = bool(kinds_run - {KIND_CROSS_DOMAIN})
+    if KIND_CROSS_DOMAIN in wanted and not constituents_ran:
+        detector_stats["cross_domain"] = {"inputs": len(prior_raws), "skipped": "no_constituent_detectors"}
+    elif KIND_CROSS_DOMAIN in wanted and not (raws and len(raws) + len(prior_raws) >= 2):
+        # Too few inputs is a measured "no match", not an unexecuted detector:
+        # existing cross-domain patterns must still age when their inputs vanish.
+        detector_stats["cross_domain"] = {"inputs": len(raws) + len(prior_raws), "skipped": "insufficient_inputs"}
+        detectors_run.append("cross_domain")
+        kinds_run.add(KIND_CROSS_DOMAIN)
+    elif KIND_CROSS_DOMAIN in wanted:
         cross = correlate(raws + prior_raws, [r["pattern_id"] for r in records] + prior_ids, cfg,
                           [r["confidence"] for r in records] + prior_conf, current_count=len(raws))
         detector_stats["cross_domain"] = cross.stats
@@ -163,11 +176,13 @@ def run_discovery(
         contributions["group_events"] = counts
     baseline_delta = {
         "token_rates": frame.token_rates(),
-        "ngram_rates": contributions.get("ngram_rates", {}),
+        # None (not {}) when the detector did not run: an unmeasured section is
+        # preserved, while {} would decay every learned rate as if observed zero.
+        "ngram_rates": contributions.get("ngram_rates"),
         "signatures": {r["signature_hash"]: float(r["affected_entity_count"]) for r in records},
         "field_profiles": contributions.get("field_profiles", {}),
         "group_events": contributions.get("group_events", {}),
-        "motif_counts": contributions.get("motif_counts", {}),
+        "motif_counts": contributions.get("motif_counts"),
         "attribute_degree": contributions.get("attribute_degree", {}),
         "segment_rates": frame.segment_rates(),
         "hour_of_week": frame.hour_of_week_rates(),

@@ -651,13 +651,17 @@ from the journey's anonymous IDs (tenant-scoped, at most 16 anonymous IDs and 8 
 a truncated walk is logged) and adds the activity and conversions of every linked
 anonymous ID. An anonymous continuation is owned by its root: the source of the
 oldest redeemed handoff, normally the device the journey started on. Compiling any
-other member retires that member's standalone journey and returns the root's
-journey, so the mobile visitor and the desktop visitor who redeemed its token share
-one journey. A profile or cluster journey takes in linked anonymous activity only
+member retires the standalone journey of every non-root member and returns the
+root's journey. So the mobile visitor and the desktop visitor who redeemed its token
+share one journey, and a handoff that joins two existing continuations leaves only
+the oldest root current. A profile or cluster journey takes in linked anonymous activity only
 when that activity is not already owned by a different profile or cluster. This is
 journey linkage: no identity is merged, no anonymous ID is rewritten, and identity
-resolution never sees it. Erasing a subject's handoffs removes the link, and the next
-compile builds separate journeys again.
+resolution never sees it. A profile or cluster journey loads the unowned activity of
+every anonymous ID in the scope, including the devices it already had rows on, so a
+pre-login acquisition stays in the journey after that device also logs in. Erasing a
+subject's handoffs removes the link, and the next compile builds separate journeys
+again.
 
 Redeeming a handoff queues the durable `journey.handoff_continuation` job
 (`continuation_jobs.py`, idempotent per handoff, internal only). The job compiles

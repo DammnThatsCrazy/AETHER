@@ -71,8 +71,12 @@ def pattern_subgraph(pattern: dict[str, Any]) -> dict[str, Any]:
             for attr in detail.get("attributes") or []:
                 aid = f"{attr.get('type')}:{attr.get('value')}"
                 _node(nodes, aid, kind=str(attr.get("type")), label=str(attr.get("value")), role="attribute")
-                for m in members:
-                    edge(m, aid, f"USES_{str(attr.get('type')).split(':', 1)[0].upper()}")
+                # Only the members the detector observed with this value. A record
+                # without an owner set draws no member-to-attribute edges at all
+                # rather than inventing links across a transitive cluster.
+                for m in attr.get("owners") or []:
+                    if m in member_set:
+                        edge(m, aid, f"USES_{str(attr.get('type')).split(':', 1)[0].upper()}")
         elif etype == "motif_instances":
             for inst in detail.get("examples") or []:
                 inst = [n for n in inst if isinstance(n, str)]
@@ -82,17 +86,29 @@ def pattern_subgraph(pattern: dict[str, Any]) -> dict[str, Any]:
                           role="member" if n in member_set else "attribute")
                 for a, b in zip(inst, inst[1:] + inst[:1]):
                     edge(a, b, "MOTIF_LINK")
-        elif etype in ("cross_principal_reuse", "cross_principal_ring"):
+        elif etype in ("cross_principal_reuse", "cross_principal_agent_ring"):
             for principal in detail.get("principals") or []:
                 _node(nodes, principal, kind=principal.split(":", 1)[0], label=principal.split(":", 1)[-1],
                       role="principal")
-                for m in members:
-                    if m.startswith("agent:"):
-                        edge(m, principal, "ACTS_FOR")
+            # Only the agent/principal pairs the detector observed. A record without
+            # them links its principals to the pattern instead of asserting authority
+            # relationships between every agent and every principal.
+            pairs = [p for p in detail.get("agent_principals") or [] if isinstance(p, list) and len(p) == 2]
+            if pairs:
+                for agent, principal in pairs:
+                    if agent in member_set:
+                        _node(nodes, principal, kind=principal.split(":", 1)[0],
+                              label=principal.split(":", 1)[-1], role="principal")
+                        edge(agent, principal, "ACTS_FOR")
+            else:
+                for principal in detail.get("principals") or []:
+                    edge(pid, principal, "INVOLVES_PRINCIPAL")
         elif etype == "agent_to_agent_links":
-            agents = [a for a in detail.get("agents") or [] if isinstance(a, str)]
-            for a, b in zip(agents, agents[1:]):
-                edge(a, b, "INTERACTS_WITH")
+            # Observed (source, relation, target) links only; a record without them
+            # draws no agent-to-agent edges rather than a made-up chain.
+            for link in detail.get("links") or []:
+                if isinstance(link, list) and len(link) == 3 and link[0] in member_set and link[2] in member_set:
+                    edge(link[0], link[2], str(link[1]) or "INTERACTS_WITH")
         elif etype == "independent_detector_agreement":
             for m in detail.get("members") or []:
                 mid = m.get("pattern_id")

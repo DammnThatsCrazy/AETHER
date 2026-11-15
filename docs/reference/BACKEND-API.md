@@ -28,7 +28,7 @@ reviewed_source_commits:
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; the freshness behavior is documented here.'}
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
 source_hashes:
-  "services/api/actions/": "sha256:a2fdbf45fc4318fadf08eea3f900064a4ae363e5e322e9ca0fc5bea8a1cd8a9d"
+  "services/api/actions/": "sha256:3f94697fcea8dcb28f886be2ef31d7a8fd5a38e80508ab293759887be7a8a342"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
@@ -36,8 +36,8 @@ source_hashes:
   "services/api/graph/": "sha256:1ff48a257aa4e05fa6da49ca63ca0329ffb7ac4f06fd59a910070e18a8950c04"
   "services/api/identity/": "sha256:10a2470b6c7cda3aebcd2637a83cc17861d115d4024514e4b733b2f25c5d983e"
   "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
-  "services/api/intelligence/": "sha256:af8fd23685d68f5bbf7ffe83b9fe140e39a4bfe54141919a259c71bfa6949d9a"
-  "services/api/journeys/": "sha256:0387a8be4f6883d713fef73ba3f975152f840812396ba858b0b5986f5ee4261a"
+  "services/api/intelligence/": "sha256:a56bc62b46aad46294e562e7f9b512763a61341423241bdbeb651af9ecaf465b"
+  "services/api/journeys/": "sha256:bbf97457014cc4afba49b87ed2a94c4d96f60a4997ceb1fc803bb110f20db49a"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"
@@ -3992,7 +3992,7 @@ When on, canonical activity emitted by the silver projectors requests a debounce
 
 ### Apple Ads attribution (flag `AETHER_APPLE_ADS_ATTRIBUTION_ENABLED`)
 
-- `POST /v1/attribution/apple-ads/resolve` — SDK key. Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). Responses:
+- `POST /v1/attribution/apple-ads/resolve` — SDK key. Body `{token, anonymous_id, session_id?, install_id?}` (extra fields are a 422). The backend exchanges the AdServices attribution token with Apple (`api-adservices.apple.com`). An attributed answer is recorded server-side as a canonical activity (`app_install_attributed`) and a touchpoint, with `entry_method: ios_apple_ads_attribution` and `proof_level: platform_verified`. Apple's campaign ID is stored as `external_campaign_id` (`campaign_resolution_status: unresolved`). The activity references its touchpoint (`silver_table` / `silver_fact_id`, with an ID derived from the token hash), so the touchpoint is listed in the journey's `touchpoint_ids`, including the profile journey after login, and attribution can credit it. Responses:
   - `{resolved: true, evidence}`;
   - `{resolved: false, status: pending, retry_after_seconds: 5}`: Apple's record is not ready, so retry;
   - `{resolved: false, status}` with `not_attributed`, `invalid`, `unavailable` or `token_already_bound`.
@@ -4025,7 +4025,7 @@ Discovers patterns nobody defined in advance from raw and semi-structured eviden
 - `GET /v1/profile/{user_id}/patterns`, `GET /v1/agent/{agent_id}/patterns`, `GET /v1/risk360/{subject_kind}/{subject_id}/patterns` — `read`. Profile 360 / Agent 360 / Risk 360 pattern sections (consent-gated like the entity context; `subject_kind` one of `entity`, `user`, `agent`, `wallet`, `anon`, `session`).
 - `GET /v1/intelligence/patterns/{id}` — `read`. Full record with evidence, competing explanations, review history, merged duplicates, cross-domain members and similar patterns.
 - `POST /v1/intelligence/patterns/{id}/review` — `write`. `{verdict: valid|malicious|benign|duplicate|unresolved, reason (>=10 chars), duplicate_of?}`. Recorded as analyst feedback that calibrates the kind and, with five or more verdicts, tunes its detector threshold. A `duplicate` verdict merges the pattern into `duplicate_of`.
-- `POST /v1/intelligence/patterns/{id}/promote` — `admin`. Only from `confirmed_valid` / `confirmed_malicious` with unchanged evidence. Writes `attributed` Risk360 signals for canonical, consented subjects (others reported as `unresolved_subject` / `consent_withheld`) and a governed `RiskCluster` vertex with `MEMBER_OF_CLUSTER` edges for those subjects (`AETHER_PATTERN_RISK_PROMOTION_ENABLED`, `AETHER_PATTERN_GRAPH_PROMOTION_ENABLED`).
+- `POST /v1/intelligence/patterns/{id}/promote` — `admin`. Only from `confirmed_valid` / `confirmed_malicious` with unchanged evidence. On an already-promoted pattern it makes no second transition and re-runs only incomplete risk or graph projections (`promotion.projection_retries`). Writes `attributed` Risk360 signals for canonical, consented subjects (others reported as `unresolved_subject` / `consent_withheld`) and a governed `RiskCluster` vertex with `MEMBER_OF_CLUSTER` edges for those subjects (`AETHER_PATTERN_RISK_PROMOTION_ENABLED`, `AETHER_PATTERN_GRAPH_PROMOTION_ENABLED`).
 - `POST /v1/intelligence/patterns/{id}/deprecate` — `write`. A promoted pattern's graph memberships are soft-revoked; its Risk360 signals remain.
 - Kyber operator routes `GET /v1/kyber/patterns/queue` (the surfaced feed unless `status` is given), `GET /v1/kyber/patterns/stats`, `GET /v1/kyber/patterns/whats-new`, `POST /v1/kyber/patterns/whats-new/seen`, `GET /v1/kyber/patterns/{id}`, `GET /v1/kyber/patterns/{id}/graph`, `POST /v1/kyber/patterns/runs`, `POST /v1/kyber/patterns/{id}/review|curate|promote|deprecate` take `tenant_id` as a query parameter and record the operator as `kyber:<actor>` in review history.
 - Durable job `pattern_discovery.run` (enqueued per tenant by the `pattern_discovery_sweep` worker when `PATTERN_DISCOVERY_SCHEDULER_ENABLED`, default on) runs one pass with the configured window. A pass that surfaces high or critical patterns raises one in-app notification per tenant per day (`AETHER_PATTERN_NOTIFICATIONS_ENABLED`).
@@ -4047,6 +4047,20 @@ Discovers patterns nobody defined in advance from raw and semi-structured eviden
 ### Feature flags and tenant boundary
 
 Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABLED=true` (default true for local compatibility). Subsystems are separately controlled by `AGENTIC_MCP_OBSERVABILITY_ENABLED`, `AGENTIC_EXTERNAL_ACCOUNTS_ENABLED`, `AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED`, and `AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED`. Authenticated tenant context is authoritative: request-body `tenant_id`/`tenantId` may not override it, and mismatches return HTTP 403.
+
+### Agent correlation
+
+`AGENT_CORRELATION_ENABLED` (default true) mounts the cross-role agent correlation routes under `/v1/observability/agent/correlation`:
+
+- `POST /tasks` registers an agent task and returns a correlation token (requires `AGENT_CORRELATION_TOKEN_KEYS`; otherwise `503`).
+- `POST /observations/{provider}/{kind}` maps one vendor record (`shopify`, `stripe`, `ramp`, `cloudflare`, `openai`, `aether_mcp`) and returns its link decisions. A record the mapper cannot read returns `422`.
+- `PUT /account-bindings/{family}` declares the tenant's provider account; when the family has verified provider connections, only one of those accounts is accepted (`422` otherwise).
+- `GET /account-bindings` lists each family's effective binding and whether a verified connection backs it.
+- `GET /tasks/{task_ref}/chain` and `GET /observations/{observation_id}/chain` return the evidence-graded chain with explicit gaps.
+- `GET /catalog` lists the mapped providers and roles, with each kind's sandbox certification status from `config/agent_correlation_certification.json`.
+- `POST /mcp` is an MCP endpoint (JSON-RPC 2.0) with the `aether_register_task`, `aether_report_tool_call`, `aether_report_outcome`, and `aether_get_task_chain` tools.
+
+Only links with proof-class evidence project to the graph, as `CORRELATED_ACROSS_SOURCES` edges. See `docs/architecture/blueprints/universal-connector-runtime/agent-source-roles.md`.
 
 Graph projection is currently best-effort until the durable outbox ships. Responses distinguish mutations built from mutations actually persisted; `graph_mutations_queued` is retained for compatibility and equals the persisted count, not a fake queued count.
 

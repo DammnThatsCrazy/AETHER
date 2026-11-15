@@ -85,6 +85,7 @@ AREA_TO_FEATURE_EXACT = {
     "semantic intelligence": "semantic-intelligence",
     "card-linked payment rails": "card-linked-payments",
     "Access Kit (MCP / CLI / API)": "access-kit",
+    "pattern discovery": "pattern-discovery",
 }
 
 # Keyword fallback for any legacy area not in the exact map.

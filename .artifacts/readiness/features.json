@@ -4340,6 +4340,209 @@
       }
     },
     {
+      "feature_id": "pattern-discovery",
+      "title": "Pattern Discovery",
+      "owning_system": "aether",
+      "scope": {
+        "id": "pattern-discovery-v1",
+        "version": 1,
+        "title": "Pattern Discovery V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "CODE_COMPLETE",
+        "achieved": false,
+        "remaining_after_ceiling": [
+          "Run discovery in shadow on a pilot tenant and record analyst-verdict precision per detector kind."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "IMPLEMENTED",
+        "completion_percent": 60.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "reconcile readiness controls with the PostgreSQL migration and route authorization tests"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 0.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "security controls",
+          "observability metrics logs",
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "LIVE_DATA_WAITING",
+        "blockers": [
+          {
+            "type": "LIVE_DATA_WAITING",
+            "description": "Pattern Discovery detectors have no measured precision/recall on labelled production data.",
+            "owner": "tenant / platform-ops",
+            "required_action": "Run discovery in shadow on a pilot tenant, collect analyst verdicts until each kind has calibration evidence, and record precision per kind before surfacing patterns to customers.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "per-kind analyst-verdict precision from a shadow pilot"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "intelligence-platform",
+        "runbook": "docs/architecture/PATTERN-DISCOVERY.md",
+        "dashboards": [
+          "grafana:intelligence-platform"
+        ],
+        "alerts": [
+          "pagerduty:intelligence-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: services/api/intelligence/pattern_discovery/"
+        ],
+        "evidence_gaps": [
+          "no detector validated on labelled production data"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: reconcile readiness controls with the PostgreSQL migration and route authorization tests"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: reconcile readiness controls with the PostgreSQL migration and route authorization tests"
+          ],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Pattern Discovery detectors have no measured precision/recall on labelled production data. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the TURNKEY floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: reconcile readiness controls with the PostgreSQL migration and route authorization tests"
+          ],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Pattern Discovery detectors have no measured precision/recall on labelled production data. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 2,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "pattern discovery",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
       "feature_id": "payment-rail-observability",
       "title": "Payment Rail Observability",
       "owning_system": "aether",

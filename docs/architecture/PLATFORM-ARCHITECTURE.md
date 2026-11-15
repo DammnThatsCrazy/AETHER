@@ -74,7 +74,7 @@ reviewed_source_commits:
   - {'commit': '01beec62', 'reason': 'Reviewed 01beec62: Outcome360 accepts entity subjects matching only same-id human (user) outcome rows, and Profile360 value_summary / economic_value_context bind it for entity subjects; the Profile360 slot statements here are updated.'}
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; this document needs no other change.'}
 source_hashes:
-  "packages/shared/": "sha256:c32e159f6e4eeb17cd5bf6e2012437300667174091410f3b48518a42bc34d90b"
+  "packages/shared/": "sha256:59d6e16683ab161b55fb087d170f65a745eb733f5d9f65d68154675a21b9f72a"
   "scripts/generate_feature_surface_manifest.py": "sha256:998d181fea2e26e34e07fb110d19e8503e4b9b2d391f6d778efc2366b616c382"
   "services/api/actions/agent/agent360_provider.py": "sha256:3438710d537a48fe068478cfe3170255a9decfec1d81adecabeabd03b3766ec7"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
@@ -91,7 +91,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
   "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
-  "services/api/config/settings.py": "sha256:792ed64340a76ab4efe2f22e42ece719f8f588689feccb6f7d769bb87c9eb798"
+  "services/api/config/settings.py": "sha256:2536c1ddf856b7674a693bfc142c2dafec74499bd5430dda22d564365d7a0cf0"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:aa4aa6ff322f85cf36c933079f20dd62820fca4e4a4ce7ff9bacdfd8419bf1db"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/account360_provider.py": "sha256:a320533cd4d718ef9c616e4ed627b0581271bfc3d66484a2fa4ad92a5e5fe166"
@@ -104,7 +104,7 @@ source_hashes:
   "services/api/journeys/communication360/participant_writer.py": "sha256:26ebbb76e6c1dd928b4f047371e248e73f58892c6439954ed4c19a91dac6c142"
   "services/api/journeys/communication360/provider.py": "sha256:5e7e81167b9c921ddae366b02edd4d984fb9b247616d46a9ae1ca4598a89ce18"
   "services/api/journeys/support360/": "sha256:7c1c21f1b3240e0a4778b09898c8aafcba65ffdd5f97b69dd19a9b2458977a97"
-  "services/api/main.py": "sha256:6647f3160e499a6449f1689e3031debf56031a3abfd57885e0292510b26fac59"
+  "services/api/main.py": "sha256:a70c70ae4201523e1162a5b93f95f5a8785f5d9f1a214d8fbd0d0be4f45ce8e3"
   "services/api/middleware/middleware.py": "sha256:ff86aed1bace982417e3cad43476d0fbb02f49988432e4c960b05d24163d2408"
   "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"

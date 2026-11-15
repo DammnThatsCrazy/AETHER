@@ -95,13 +95,32 @@ def test_staff_account_effect_alone_does_not_name_an_agent() -> None:
 
 
 def test_tool_call_returning_object_id_binds_deterministically() -> None:
-    effect = _obs("shop-1", "system_of_record", family="shopify", object_refs=(INVENTORY,))
+    verified = INVENTORY.model_copy(update={"account_verification_ref": "conn_1:store-1"})
+    effect = _obs("shop-1", "system_of_record", family="shopify", object_refs=(verified,))
     call = _obs("mcp-1", "tool_bridge", family="shopify", at=T0 - timedelta(seconds=3), object_refs=(INVENTORY,))
     verdict = correlate(call, effect)
     assert verdict.status == "linked"
     assert verdict.key_kind == "shared_object_ref"
     assert verdict.evidence_class in PRINCIPAL_PROOF_EVIDENCE_CLASSES
     assert verdict.supporting_keys == ("shared_object_ref", "time_window")
+
+
+def test_object_match_on_declared_accounts_is_tenant_declared() -> None:
+    """Without a verified account on either side, the scope rests on the tenant's word."""
+    effect = _obs("shop-1", "system_of_record", object_refs=(INVENTORY,))
+    call = _obs("mcp-1", "tool_bridge", at=T0 - timedelta(seconds=3), object_refs=(INVENTORY,))
+    verdict = correlate(call, effect)
+    assert verdict.status == "candidate"
+    assert verdict.key_kind == "declared_object_ref"
+    assert verdict.evidence_class == "TENANT_DECLARED"
+
+
+def test_verification_ref_is_evidence_not_scope() -> None:
+    verified = INVENTORY.model_copy(update={"account_verification_ref": "conn_1:store-1"})
+    assert verified.scope_key == INVENTORY.scope_key
+    effect = _obs("shop-1", "system_of_record", object_refs=(INVENTORY,))
+    call = _obs("mcp-1", "tool_bridge", object_refs=(verified,))
+    assert correlate(call, effect).key_kind == "shared_object_ref"
 
 
 def test_object_match_far_apart_in_time_does_not_bind() -> None:

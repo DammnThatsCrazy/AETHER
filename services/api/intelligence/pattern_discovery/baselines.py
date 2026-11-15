@@ -123,16 +123,20 @@ def update_baseline(
     baseline: dict[str, Any],
     *,
     token_rates: dict[str, float],
-    ngram_rates: dict[str, float],
+    ngram_rates: Optional[dict[str, float]],
     signatures: dict[str, float],
     field_profiles: dict[str, dict[str, dict[str, Any]]],
     group_events: dict[str, int],
-    motif_counts: dict[str, float],
+    motif_counts: Optional[dict[str, float]],
     attribute_degree: dict[str, dict[str, float]],
     segment_rates: Optional[dict[str, float]] = None,
     hour_of_week: Optional[dict[str, dict[int, float]]] = None,
 ) -> dict[str, Any]:
-    """Fold one run's observations into the baseline (pure; returns a copy)."""
+    """Fold one run's observations into the baseline (pure; returns a copy).
+
+    ``ngram_rates`` / ``motif_counts`` are ``None`` when their detector did not
+    run (a kinds-filtered run): that section is left untouched rather than
+    decayed toward zero."""
     runs = int(baseline.get("runs") or 0)
     out = dict(baseline)
 
@@ -141,10 +145,11 @@ def update_baseline(
         tok[key] = round(_ewma(tok.get(key), token_rates.get(key, 0.0), runs), 6)
     out["token_rate"] = _cap({k: v for k, v in tok.items() if v > 1e-6}, MAX_TOKENS)
 
-    ng = dict(baseline.get("ngram_rate") or {})
-    for key in set(ng) | set(ngram_rates):
-        ng[key] = round(_ewma(ng.get(key), ngram_rates.get(key, 0.0), runs), 6)
-    out["ngram_rate"] = _cap({k: v for k, v in ng.items() if v > 1e-6}, MAX_NGRAMS)
+    if ngram_rates is not None:
+        ng = dict(baseline.get("ngram_rate") or {})
+        for key in set(ng) | set(ngram_rates):
+            ng[key] = round(_ewma(ng.get(key), ngram_rates.get(key, 0.0), runs), 6)
+        out["ngram_rate"] = _cap({k: v for k, v in ng.items() if v > 1e-6}, MAX_NGRAMS)
 
     sigs = {k: dict(v) for k, v in (baseline.get("signatures") or {}).items()}
     now = utc_now().isoformat()
@@ -182,10 +187,11 @@ def update_baseline(
         ge[group] = round(_ewma(ge.get(group), count, runs), 2)
     out["group_events"] = _cap(ge, MAX_GROUPS)
 
-    mc = dict(baseline.get("motif_rate") or {})
-    for key in set(mc) | set(motif_counts):
-        mc[key] = round(_ewma(mc.get(key), motif_counts.get(key, 0.0), runs), 4)
-    out["motif_rate"] = _cap({k: v for k, v in mc.items() if v > 1e-4}, MAX_MOTIFS)
+    if motif_counts is not None:
+        mc = dict(baseline.get("motif_rate") or {})
+        for key in set(mc) | set(motif_counts):
+            mc[key] = round(_ewma(mc.get(key), motif_counts.get(key, 0.0), runs), 4)
+        out["motif_rate"] = _cap({k: v for k, v in mc.items() if v > 1e-4}, MAX_MOTIFS)
 
     ad = dict(baseline.get("attribute_degree") or {})
     for attr_type, stats in attribute_degree.items():

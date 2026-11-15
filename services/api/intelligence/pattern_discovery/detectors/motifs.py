@@ -32,6 +32,11 @@ NAME = "motifs"
 MAX_DEGREE = 200
 MAX_EDGES = 100_000
 MAX_INSTANCES_KEPT = 30
+# Cycle search budget. Dense graphs make cycle enumeration combinatorial, so
+# the search stops after this many path expansions or distinct cycle
+# identities and reports ``cycles_truncated``; counts are then lower bounds.
+MAX_CYCLE_EXPANSIONS = 500_000
+MAX_CYCLE_IDENTITIES = 100_000
 RELATION_TYPES = frozenset({"TRANSACTS_WITH", "DELEGATED_BY", "SPAWNED_BY", "INVITED_BY", "TARGETS"})
 
 
@@ -151,25 +156,46 @@ def detect_motifs(frame: DiscoveryFrame) -> DetectorOutput:
     # Directed relationship cycles of length 3..4.
     cycles: dict[tuple, list[tuple]] = defaultdict(list)
     cyc_counts: Counter = Counter()
+    # Every counted cycle's identity, independent of the bounded example sample,
+    # so the sample cap cannot change what counts as a distinct instance.
+    cyc_seen: dict[tuple, set[tuple]] = defaultdict(set)
+    identities = expansions = 0
+    cycles_truncated = False
     nodes = sorted(n for n in out_rel if len(out_rel[n]) <= MAX_DEGREE)
     for start in nodes:
+        if cycles_truncated:
+            break
         stack = [(start, [start], [])]
         while stack:
+            expansions += 1
+            if expansions > MAX_CYCLE_EXPANSIONS or identities >= MAX_CYCLE_IDENTITIES:
+                cycles_truncated = True
+                break
             node, path, types = stack.pop()
             for nxt, typ in out_rel.get(node, ()):
                 if nxt == start and len(path) >= 3:
                     seq = tuple(f"{_kind(path[i])}-{types[i] if i < len(types) else typ}" for i in range(len(path)))
                     rot = min(seq[i:] + seq[:i] for i in range(len(seq)))
                     inst = tuple(sorted(path))
-                    if inst not in {tuple(sorted(x)) for x in cycles[rot]}:
+                    if inst not in cyc_seen[rot]:
+                        cyc_seen[rot].add(inst)
+                        identities += 1
                         cyc_counts[rot] += 1
                         if len(cycles[rot]) < MAX_INSTANCES_KEPT:
                             cycles[rot].append(tuple(path))
                 elif nxt not in path and nxt > start and len(path) < 4:
                     stack.append((nxt, path + [nxt], types + [typ]))
+    prior_rates = frame.baseline.get("motif_rate") or {}
+    if cycles_truncated:
+        # Unsearched cycles are not observed zeros: keep every known cycle
+        # signature at no less than its learned rate so a truncated search
+        # does not decay the baseline (observed counts are lower bounds).
+        for key, rate in prior_rates.items():
+            if key.startswith("cyc|"):
+                motif_counts[key] = float(rate)
     for rot, count in cyc_counts.items():
         key = "cyc|" + "|".join(rot)
-        motif_counts[key] = float(count)
+        motif_counts[key] = max(float(count), float(prior_rates.get(key, 0.0))) if cycles_truncated else float(count)
         types = frozenset(part.split("-", 1)[1] for part in rot)
         if types in known or count < max(2, cfg.motif_min_instances - 1):
             continue
@@ -233,5 +259,6 @@ def detect_motifs(frame: DiscoveryFrame) -> DetectorOutput:
         p.risk_categories = sorted(set(p.risk_categories))
     return DetectorOutput(NAME, patterns, {"motif_counts": motif_counts}, {
         "edges": len(edges), "triangles": total_tri, "cycles": sum(cyc_counts.values()),
+        "cycles_truncated": cycles_truncated, "cycle_expansions": min(expansions, MAX_CYCLE_EXPANSIONS),
         "known_signatures": len(known), "reported": len(patterns),
     })

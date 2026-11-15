@@ -1,0 +1,82 @@
+{
+  "account_bindings": {
+    "shopify": {
+      "source_account_key": "olympus-gvdoeyfv.myshopify.com",
+      "source_account_realm": "test"
+    }
+  },
+  "certification": {
+    "companions": [
+      {
+        "actor_refs": [],
+        "correlation_tokens": [
+          "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+        ],
+        "infrastructure_refs": [],
+        "object_refs": [],
+        "observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "occurred_at": "2026-11-14T23:13:42Z",
+        "provider_family": "aether_certification",
+        "schema_version": "1",
+        "signed_request": null,
+        "source_role": "agent_runtime",
+        "tenant_id": "aether_certification"
+      }
+    ],
+    "key_b64": "2GAznibPJupHxFC48otqM99T2ug107zxMZX2PVbQM1c",
+    "key_id": "cert",
+    "tenant_id": "aether_certification"
+  },
+  "expected": {
+    "links": [
+      {
+        "evidence_class": "DETERMINISTIC_BINDING",
+        "key_kind": "aether_correlation_token",
+        "observation_id": "shopify:order:olympus-gvdoeyfv.myshopify.com:7128875728966:2026-11-15T04:52:49+00:00",
+        "other_observation_id": "aether_mcp:task:ctk_PSEt4S7rF7mTLf0JrCed7g",
+        "status": "linked"
+      }
+    ],
+    "object_types": [
+      "order"
+    ],
+    "observation_count": 1,
+    "observation_digest": "22a2584130c3b5bac06ee77e36b98c9ecfa9a6b85ae5e1aa76afa1aa17785abf",
+    "roles": [
+      "system_of_record"
+    ],
+    "tokens": 1
+  },
+  "kind": "order_graphql",
+  "origin": "sandbox_recorded",
+  "provider": "shopify",
+  "provider_api": {
+    "api_version": "admin-graphql (connector-pinned)",
+    "host": "myshopify.com",
+    "via": "shopify_connector_dev_store"
+  },
+  "realm": "test",
+  "record": {
+    "app": {
+      "id": "gid://shopify/App/341262598145"
+    },
+    "createdAt": "2026-11-15T04:52:47Z",
+    "customAttributes": [
+      {
+        "key": "aether_correlation",
+        "value": "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY"
+      }
+    ],
+    "id": "gid://shopify/Order/7128875728966",
+    "note": "aet1.eyJlIjoxNzk1MzAyODIyLCJpIjoxNzk0Njk4MDIyLCJrIjoiY2VydCIsInQiOiJjdGtfUFNFdDRTN3JGN21UTGYwSnJDZWQ3ZyIsInYiOjF9.TLZS280O0F9FB-fMPS4XC5TH91Au0A6yuH5eVuvm3LY",
+    "staffMember": null,
+    "tags": [
+      ""
+    ],
+    "updatedAt": "2026-11-15T04:52:49Z"
+  },
+  "record_sha256": "fcd393aa415c927f398a2dc7f9887d28c0bea5daa1ce70bf8d8b20614fcf1882",
+  "recorded_at": "2026-11-15T04:53:26+00:00",
+  "recorder": "shopify.dev_store_draft_order_completed",
+  "schema_version": "1"
+}

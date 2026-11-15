@@ -16,7 +16,7 @@ reviewed_source_commits:
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:6f93c34a5fce45f690b7daa8bf2b8771f7331af6fc1fc15c6f7ff649c3b11903"
-  "packages/shared/graph-contract.ts": "sha256:49dee41404e17e9b43087caff7a60ba03ad33899e27d3b90681fa62e1aa276ce"
+  "packages/shared/graph-contract.ts": "sha256:a5ba6a664fe7425a7217b23b47c642c340647bc25479a2654468bd1ccc6ec809"
   "services/api/actions/agent/deployment_routes.py": "sha256:1ad26d4901bbb8ccb6827cb60703052876c13f06014907e90f9d53c3a9bf7090"
   "services/api/actions/agent/user_agents.py": "sha256:eaceae5394305883231eba2d664c49141d078d15b730eb82f7b8d8f0f603fe7a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -32,8 +32,8 @@ source_hashes:
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:2a49a255b2efa3344a709cf243e4b03f33873a44f0afaff748a23ba05aa81cc0"
   "services/api/repositories/commerce_repos.py": "sha256:8c49d39ce010798b1bc1bd959d3845dddace8d33135c4f98c1d604eed120612e"
   "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"
-  "services/api/shared/graph/graph.py": "sha256:010d6407208f45456dd4c4b61d99482c5e792ff8b74a953d71c3b619ffd6aa6b"
-  "services/api/shared/graph/relationship_layers.py": "sha256:2f8fc236ca4134d81ca597883a31cfa1889380b484891ec21a41c574d090d17f"
+  "services/api/shared/graph/graph.py": "sha256:455fee6db2e5a19392a8fd86e9084b41a5fe26291f139952a70a54ed1bce089d"
+  "services/api/shared/graph/relationship_layers.py": "sha256:23fc1906ddda008e3a668b6e86f349f0f06ef58db45958e2971bd7e2cedcdd15"
   "services/api/value/x402/commerce_models.py": "sha256:50dbf80d7699ccdfcd5206d94a2dadc33ae73c1c06caac80da23e953320e282a"
   "services/api/value/x402/commerce_store.py": "sha256:4edc09e2cd51b0a7eefbf0c12cb4894f389b4f01f4e66a1ffacf10d9c7bd46e9"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"

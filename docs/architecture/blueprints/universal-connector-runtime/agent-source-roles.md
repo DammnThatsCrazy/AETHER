@@ -11,11 +11,35 @@ source_files:
   - services/api/shared/integration_contracts/correlation.py
   - services/api/shared/integration_contracts/correlation_token.py
   - services/api/shared/integration_contracts/streams.py
+  - services/api/actions/agent_correlation/engine.py
+  - services/api/actions/agent_correlation/service.py
+  - services/api/actions/agent_correlation/mcp_server.py
+  - services/api/actions/agent_correlation/routes.py
+  - services/api/actions/agent_correlation/projection.py
+  - services/api/actions/agent_correlation/mappers/__init__.py
+  - services/api/actions/agent_correlation/bindings.py
+  - services/api/actions/agent_correlation/certification/runner.py
+  - services/api/actions/agent_correlation/certification/record.py
+  - services/api/actions/agent_correlation/certification/recorders.py
+  - services/api/actions/agent_correlation/certification/fixtures.py
+  - scripts/certify_agent_correlation.py
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/api/shared/integration_contracts/correlation.py": "sha256:466dea8b14bb0795db7b5177a0dbc9e488f66840d3fe512d8a9cff95b91cb684"
+  "scripts/certify_agent_correlation.py": "sha256:9d0bd1ef8e4e9100182487db07425f4acdb041bb55376b807d9f6dc4e3dcc5af"
+  "services/api/actions/agent_correlation/bindings.py": "sha256:a6ca53cae6bca133e09fd5a9016c2e17c436aeff086a6dc93c96f4c2d8cb3bdb"
+  "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:13bef311e6a1c855939f7fa3edf8ef52bf6a6d97e1564ff2bf317773fce0a19f"
+  "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
+  "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c275b92b8020e3c1e65392084affffd72ab970298e176c0aa6c58cd3981f66be"
+  "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
+  "services/api/actions/agent_correlation/engine.py": "sha256:f032ab826de7727baa1a11065bd720a4bd79072ab59fba7bc16ad17f21605331"
+  "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
+  "services/api/actions/agent_correlation/mcp_server.py": "sha256:b20c135f39ae243eb5df8073f45df2a69c5ae8e00b635b2a84dd72ba3e6f4cde"
+  "services/api/actions/agent_correlation/projection.py": "sha256:533ba53fd6932921a34e84667f6c7461eec8099906893da7f1852698ddbeb4bc"
+  "services/api/actions/agent_correlation/routes.py": "sha256:6cc7bbf489ed282446b32fddbf8d8ca348aa26286b8173fb0160d723de5e7067"
+  "services/api/actions/agent_correlation/service.py": "sha256:b8bf7252ce075d8f503da63a474956b20b4e9d1bb32cfc57b3acd6780ee33880"
+  "services/api/shared/integration_contracts/correlation.py": "sha256:3e0ab93ccd0bc9a1148f26e79aa4720fbc47f9cbdadf7d55b2db0a6e774dbb30"
   "services/api/shared/integration_contracts/correlation_token.py": "sha256:bdc1861aad5f6d2afcb6f07ad0f9ab67e3f28bca7cfea49b11dda2aa0d0c9ae7"
   "services/api/shared/integration_contracts/source_roles.py": "sha256:002bcc66f8960fec8b92f7d63f8e665cd1a20b6679957bd9459be8d8d81d94ae"
   "services/api/shared/integration_contracts/streams.py": "sha256:cea0cdc53f61bbb90b57a627cd69f032d7cc8d1e2899b4099f04d2cf52ab36ac"
@@ -23,11 +47,51 @@ source_hashes:
 
 # Agent source roles and cross-role correlation
 
-**State:** contract foundation implemented: source roles on stream descriptors,
-role-pair join rules, and the Aether correlation token, with unit tests. No
-provider beyond Shopify declares roles yet. No runtime path calls the join
-rules, and no verdict reaches the graph. The rollout steps below are targets,
-not claims that any agent platform is connected.
+**State:** implemented end to end in the API, with unit and route tests:
+
+- **Contracts:** source roles on stream descriptors, role-pair join rules, and
+  the Aether correlation token.
+- **Runtime:** vendor mappers for Shopify, Stripe, Ramp, Cloudflare, OpenAI
+  Agents, and the Aether MCP channel, plus stored tasks, observations, join
+  keys, and append-only verdicts.
+- **Correlation:** an engine that correlates every new observation and a
+  projector that writes only proven links to the graph.
+- **Interfaces:** REST routes and an MCP endpoint, mounted by default
+  (`AGENT_CORRELATION_ENABLED`).
+
+Account bindings come from verified provider connections where they exist
+(see [Verified bindings](#verified-bindings)). Certification against
+provider sandboxes is built (see [Sandbox certification](#sandbox-certification)),
+and `stripe/event` is `sandbox_certified` from two real Stripe sandbox events
+read through the Stripe connector (API version `2026-03-25.dahlia`):
+
+- an existing `payment_intent.created`;
+- a `payment_intent.succeeded` from a $1.00 test-card payment on a sandbox
+  payment link. The link's PaymentIntent metadata carried a certification
+  token, and the payment joined the certification task by
+  `aether_correlation_token` (`DETERMINISTIC_BINDING`); replay reproduces that
+  link.
+
+`shopify/product_graphql` and `shopify/inventory_level_graphql` are
+`sandbox_certified` from a Shopify preview store created through the Shopify
+connector. A draft product carried the certification token as a tag and joined
+the task by `aether_correlation_token` (`DETERMINISTIC_BINDING`), and its
+inventory level was read back after a quantity change. The run also found two
+Admin API changes, now fixed in the token recorder: `inventorySetQuantities`
+takes the compare value per quantity (`changeFromQuantity`), and it requires an
+`@idempotent` key. Preview stores cannot read orders, so `order_graphql` was
+then certified on the signed-in development store: a $1.00 custom-item draft
+order, completed into order `#1001`, carried the token in its note and a custom
+attribute and joined the task by `aether_correlation_token`. That run found
+that `Order.staffMember` requires the `read_users` scope, which Shopify grants
+only to finance embedded apps and Plus or Advanced stores. On other stores the
+staff actor is absent, so a Shopify order's provider-reported actor is usually
+only the app. The webhook-format Shopify kinds stay `uncertified` until an
+Admin API token is recorded. That recording showed that newer events name the owning
+account in `context`, and the mapper now reads it. The other vendor kinds
+report `uncertified` in `config/agent_correlation_certification.json` until
+their sandboxes are recorded. Token issuance
+needs `AGENT_CORRELATION_TOKEN_KEYS`.
 
 ## Why roles, not vendors
 
@@ -70,17 +134,18 @@ The evidence classes are `PRINCIPAL_EVIDENCE_CLASSES` from
 introduced. `cap_evidence(role, cls)` clamps a stream's self-reported evidence
 to its role ceiling and never strengthens it.
 
-A vendor plays the roles its streams declare. Mapping the vendors in scope is
-a design target; each needs the provider's actual API, scopes, and rights
-confirmed before its module is built:
+A vendor plays the roles its streams declare. The runtime maps these today
+(see [Runtime](#runtime)); live certification against each provider's sandbox
+is still open:
 
-| Vendor | Streams by role (target) |
+| Vendor | Streams by role |
 |---|---|
-| Shopify | `system_of_record` (orders, inventory, products: the order streams are tagged today); `authority_issuer` (app and connector access grants) |
-| Stripe | `system_of_record` (payments, refunds, disputes); `authority_issuer` (restricted key scopes) |
+| Shopify | `system_of_record` (orders, inventory, products); `authority_issuer` (app and connector access grants) |
+| Stripe | `system_of_record` (payments, refunds, disputes) |
 | Ramp | `system_of_record` (card transactions, bills); `authority_issuer` (card limits, spend policies, approvals) |
 | Cloudflare | `network_observer` (AI gateway logs and agent traffic on tenant-owned zones) |
-| OpenAI, Grok | `agent_runtime` (run, task, and tool-call records the tenant can export or emit); `tool_bridge` where the tenant hosts the MCP server |
+| OpenAI | `agent_runtime` (traces) and `tool_bridge` (function spans) from the tenant's tracing export |
+| Grok and other platforms | `agent_runtime` and `tool_bridge` through the Aether MCP endpoint |
 | Aether MCP | `tool_bridge` (first-party; issues correlation tokens) |
 
 ## Stream contract
@@ -181,15 +246,148 @@ connector.
 | + the same correlation token on the bot's task and the store note | `linked` by token, even hours apart |
 | + write-access grant naming the connector's client | `candidate` `PROVIDER_ASSERTED` link to the authority; `VERIFIED_AUTHORITY` needs the issuer's own record |
 
+## Runtime
+
+`services/api/actions/agent_correlation/` holds the runtime. Every route is
+tenant-scoped through the authenticated tenant context and observation-only.
+
+| Route (`/v1/observability/agent/correlation`) | Purpose |
+|---|---|
+| `POST /tasks` | Register an agent task; returns the token and where to stamp it per system |
+| `POST /observations/{provider}/{kind}` | Map one vendor record and correlate it; returns each link decision |
+| `PUT /account-bindings/{family}` | Declare the tenant's account for a provider family (scopes agent-side object IDs) |
+| `GET /tasks/{task_ref}/chain`, `GET /observations/{id}/chain` | The evidence-graded chain: observations in time order, proven links, unproven links, and gaps |
+| `GET /catalog` | Mapped providers, kinds, and roles; whether token issuance is available |
+| `POST /mcp` | MCP endpoint (JSON-RPC 2.0, streamable HTTP with JSON responses) |
+
+The MCP endpoint offers four tools to any agent platform that accepts a custom
+MCP server: `aether_register_task`, `aether_report_tool_call`,
+`aether_report_outcome`, and `aether_get_task_chain`. Grok bots report this
+way, because Grok exposes no public telemetry API.
+
+| Provider / kind | Role | Record read | Join keys produced |
+|---|---|---|---|
+| `shopify` / `order`, `inventory_level`, `product` | `system_of_record` | Admin webhook payloads | Exact object refs; `shopify_app:` and `shopify_staff:` actors; tokens in the order note, note attributes, or tags |
+| `shopify` / `order_graphql`, `inventory_level_graphql`, `product_graphql` | `system_of_record` | Admin GraphQL nodes (the provider runtime's GraphQL readers and the Shopify connector) | Translated to webhook field names and mapped by the kinds above, so one object revision yields one observation whichever path delivered it |
+| `shopify` / `access_grant` | `authority_issuer` | The connection's capture of an app or connector approval | App and staff actors |
+| `stripe` / `event` | `system_of_record` | PaymentIntent, Charge, Refund, Dispute events | Exact object refs (realm from `livemode`); tokens in metadata or description |
+| `ramp` / `transaction` | `system_of_record` | Card transaction | Exact object ref; `ramp_card:` and `ramp_user:` actors; token in memo |
+| `ramp` / `limit` | `authority_issuer` | Limit or spend program | Card and holder actors; token in display name |
+| `cloudflare` / `ai_gateway_log` | `network_observer` | AI Gateway log | Token in metadata; gateway log ref |
+| `cloudflare` / `http_request` | `network_observer` | Tenant-exported request row (`RayID`, `EdgeStartTimestamp`, signature nonce and check) | Signed request; Ray ID |
+| `openai` / `export` | `agent_runtime`, `tool_bridge` | Agents tracing export batch | Trace token inherited by its function spans; object IDs in function input and output |
+| `aether_mcp` / `task_registered`, `tool_call_reported`, `outcome_reported` | `agent_runtime`, `tool_bridge` | Aether MCP tool calls | Token; object IDs in input and output; signature nonce |
+
+When a record arrives, the engine:
+
+1. Stores it. A repeated delivery is a no-op.
+2. Indexes its join keys: verified task refs, object refs, signed request IDs,
+   actors, infrastructure refs, and its time bucket.
+3. Finds candidates that share a key or fall in an adjacent bucket, capped at
+   500.
+4. Runs the join rules.
+5. Appends linked, candidate, and conflicting verdicts.
+6. Projects linked verdicts that are new or whose recorded projection is not
+   complete. Each verdict row keeps a projection checkpoint
+   (`graph_projection_status`, `graph_projection_attempts`); only `persisted`
+   or `not_applicable` counts as complete.
+
+Each observation row also records `correlation_completed_at` once indexing
+and correlation finish. A repeated delivery of an observation without it (the
+first delivery failed after the save) resumes indexing and correlation, both
+idempotent, before the row counts as complete.
+
+A repeated delivery stores nothing new, but it does retry the graph
+projection of every linked verdict for that observation whose checkpoint is
+incomplete, so a transient graph outage does not lose a proven link.
+
+The chain view lists, for each role, a gap message when no observation of that
+role is linked. An answer never implies coverage it does not have.
+
+## Verified bindings
+
+A binding scopes provider object IDs to an account.
+`actions/agent_correlation/bindings.py` resolves bindings from the provider
+runtime's own records, using the same rule `object_refs` applies. An account
+counts as verified only when all of these hold:
+
+- The account and its connection belong to the tenant and share the provider
+  identity.
+- The connection was verified and is not revoked, disabled, failed, or waiting
+  for reauthorization.
+- The account is one the connection selected.
+- Its external ID and realm are recorded.
+
+Verified bindings are keyed by provider family, realm and account ID, so the
+same account ID verified in both the live and the test realm keeps both
+bindings, and each record resolves against its own realm.
+
+A verified binding carries the account record as its `verification_ref`, and
+every object ref scoped by it carries `account_verification_ref`.
+
+| Situation | Effect |
+|---|---|
+| Object match where either side's scope is verified | `shared_object_ref`, `DETERMINISTIC_BINDING`, `linked` |
+| Object match where neither scope is verified | `declared_object_ref`, `TENANT_DECLARED`, `candidate` |
+| Family has verified accounts; a request or declaration names another account | Rejected (`422`) |
+| The account is verified only in the other realm | Rejected |
+| Family has one verified account | It becomes the default for agent-side object IDs |
+
+`GET /account-bindings` shows each family's effective binding and whether a
+verified connection backs it. Today the provider runtime holds connections for
+the commerce providers, Shopify among them. Stripe, Ramp, and Cloudflare
+bindings are tenant-declared, so their object matches grade `TENANT_DECLARED`.
+Token matches are unaffected: the token's MAC binds it to the tenant.
+
+## Sandbox certification
+
+A mapper kind is certified only by payloads the provider itself returned from a
+sandbox account:
+
+1. `python scripts/certify_agent_correlation.py record --provider <name>` runs
+   the provider's recorder. Each recorder creates test activity and reads back
+   the provider's own records:
+   - **Stripe:** the account must report `livemode: false` first. The recorder
+     creates a $1.00 PaymentIntent and a refund carrying a certification token,
+     then reads their events.
+   - **Shopify:** a draft product with the token as a tag, its inventory level,
+     and an existing order if there is one. The product is deleted afterwards.
+   - **Ramp:** read-only transactions and limits.
+   - **Cloudflare:** read-only AI Gateway logs.
+   - **OpenAI Agents:** one traced agent turn, when `openai-agents` is
+     installed.
+2. Each payload is mapped, then scrubbed to the fields mappers read. Free text
+   is reduced to tokens and provider object IDs, so fixtures hold no customer
+   data. If the scrubbed payload would map differently, the recording fails.
+   The link decisions the payload made live against the certification task are
+   stored with it, along with a certification-only key so they replay.
+3. `python scripts/certify_agent_correlation.py replay` re-maps every fixture
+   and writes `config/agent_correlation_certification.json`.
+
+| Status | Meaning |
+|---|---|
+| `sandbox_certified` | Recorded fixtures exist and all replay |
+| `failed` | A recorded fixture no longer maps the same way |
+| `uncertified` | No recording yet |
+| `not_recordable` | No provider read API returns this record (Cloudflare request rows come from tenant exports) |
+| `first_party` | Aether's own MCP surface |
+
+A test fails when a committed fixture stops replaying or the committed report
+is stale. `GET /catalog` shows each kind's status. Credentials are read from
+the environment variables listed in the script, or injected by a credential
+proxy. Missing credentials skip a provider; they never certify it.
+
 ## Delivery sequence
 
 | Step | Outcome | Exit evidence |
 |---|---|---|
-| 1. Contracts (this change) | Roles on streams, role/pack rules, join rules, token | Unit tests for role validation, every verdict path, token tamper/expiry/tenant cases, and the no-vendor-names guard |
-| 2. Persistence | Store verdicts as append-only decision records keyed by tenant and both observation IDs, with the policy version | Replay produces identical verdicts; no graph write yet |
-| 3. Aether MCP bridge | Agents register tasks and receive tokens; key custody through the credential broker | Token issued, stamped into a sandbox payment's metadata, and joined |
-| 4. Projection | A projector turns `linked` verdicts into lineage relationships (`INVOKED`, `PRODUCED_EFFECT`, `AUTHORIZED`) through the graph mutation gateway | Graph shows each edge's evidence class and verification state; candidates stay out of proof views |
-| 5. Second vendor per role | Add one more agent runtime, network observer, and authority issuer | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
+| 1. Contracts (done) | Roles on streams, role/pack rules, join rules, token | Unit tests for role validation, every verdict path, token tamper/expiry/tenant cases, and the no-vendor-names guard |
+| 2. Persistence (done) | Append-only verdicts keyed by tenant, observation pair, policy version, and outcome | Repeated deliveries and repeated decisions write nothing new |
+| 3. Aether MCP bridge (done) | Agents register tasks and receive tokens; keys from `AGENT_CORRELATION_TOKEN_KEYS` | An end-to-end test registers a task over MCP, stamps the token into Stripe metadata, and links it |
+| 4. Projection (done) | `linked` verdicts become `CORRELATED_ACROSS_SOURCES` edges through the graph mutation gateway | Projected edges pass the graph write validator; candidates never project |
+| 5. Vendors per role (done for six) | Shopify, Stripe, Ramp, Cloudflare, OpenAI Agents, Aether MCP | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
+| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` and `shopify/{product,inventory_level,order}_graphql` certified from real sandbox records, with token round trips; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
+| 7. Verified bindings (done) | Bindings from verified provider connections; declared scopes graded `TENANT_DECLARED` | Tests cover verified, declared, spoofed, realm-mismatched, revoked, and cross-tenant cases |
 
 Step 5 is the modularity test. A vendor that needs a change outside its own
 module means the abstraction is leaking.

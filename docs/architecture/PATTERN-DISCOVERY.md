@@ -9,7 +9,7 @@ since_version: "0.1.0"
 source_files:
   - services/api/intelligence/pattern_discovery/
 source_hashes:
-  "services/api/intelligence/pattern_discovery/": "sha256:26138d8443966f019a9d2e405a6e64751437491a6bd139c4036ffcafadb8a278"
+  "services/api/intelligence/pattern_discovery/": "sha256:7da3a05f5810d75d73ba770b3c773b54bf9ec0e9cdd8a5d8d2a1de33d0ad9c04"
 ---
 
 # Pattern Discovery and Unstructured Evidence Intelligence
@@ -109,6 +109,11 @@ A run is folded into the baseline only once its evidence window ends at least
 half a window after the last fold. Overlapping scheduled runs over mostly the
 same events therefore never count one stretch of activity many times.
 
+A run filtered to some kinds leaves the baseline sections of detectors it did
+not run untouched: `ngram_rate` is updated only when the sequence detector
+ran, and `motif_rate` only when motif detection ran. A detector that ran and
+measured nothing still decays its section.
+
 ## Detectors
 
 All detectors are deterministic, bounded and dependency-free. None of them
@@ -121,7 +126,7 @@ normal flow.
 | `shared_attribute_cluster` | Entities converging on devices, IPs, wallets, cards, emails or learned fields | Hub values (robust z per attribute type) plus components linked by hubs or by two or more shared values |
 | `behavioral_cohort` | Near-identical behaviour across many entities | TF-IDF + time-of-day cosine with a population-learned threshold; normal-flow cohorts dropped |
 | `temporal_burst` | Token rates far above normal *for that hour of the week* | Poisson tail against the seasonal rate, otherwise the flat baseline or the same window without its peak |
-| `lockstep` | Many entities doing the same thing in the same minute, repeatedly | Membership Jaccard across windows |
+| `lockstep` | Many entities doing the same thing in the same minute, repeatedly | Membership Jaccard across windows; the signature's `anchor` (the group's smallest member) keeps disjoint groups distinct |
 | `behavioral_outlier` | Entities extreme on the same set of features, compared only within their cohort (humans, agents, anonymous) | Upward robust z per cohort |
 | `segment_shift` | A token surging inside one country, app, cohort or agent type while the rest of the tenant does not | Segment Poisson tail; localization against the rest of the tenant; single-valued dimensions excluded |
 | `agent_spawn_anomaly` | Sub-agent fan-out extreme against the agent population, or spawn bursts | Robust z on child counts; children per 2-minute window |
@@ -129,7 +134,7 @@ normal flow.
 | `agent_interaction_cluster` | Agents transacting with, targeting or messaging each other across principals | Connected components of agent-to-agent links |
 | `novel_motif` | Typed triangles and directed 3–4 cycles not in `relationship-motif-registry.json`, over extraction edges **and the tenant's canonical graph** | Closure rate relative to the graph average |
 | `schema_drift` | New event groups, new, dropped or retyped fields, new identifier fields | Field presence against the baseline profile |
-| `traffic_anomaly` | Hourly windows the ML `anomaly_detection` model flags | Model score > 0.5 on contract-shaped window features |
+| `traffic_anomaly` | Hourly windows the ML `anomaly_detection` model flags | Model score > 0.5 on contract-shaped window features; requests carry `X-Service-Token` from `ML_SERVICE_TOKEN` for standalone serving |
 | `cross_domain` | Patterns of different kinds implicating the same entities, including still-active patterns from earlier runs | Entity-set Jaccard ≥ 0.4 across kinds; at least one current-run member |
 
 A detector that raises an exception is recorded in the run stats and skipped;
@@ -212,7 +217,12 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   duplicate is merged into it: entities and support are added, and the
   duplicate's id is recorded in `duplicates`. Later re-detections of the
   duplicate signature strengthen the canonical pattern instead of
-  re-entering the queue. Merging is idempotent per duplicate fingerprint.
+  re-entering the queue. Re-merging the same duplicate refreshes its
+  contribution whenever its members or support changed, even under an
+  unchanged fingerprint (which ignores individual members and counts), and is
+  a no-op otherwise. Reversing or retargeting a `duplicate` verdict withdraws
+  the contribution from the old canonical pattern (`duplicate_withdrawn` in
+  its history), restoring its own membership and support.
 - Promotion is allowed only from a confirmed status whose evidence has not
   changed since review, and it is sticky. Seeing a pattern is automatic;
   letting it write risk signals and graph edges stays a human act.
@@ -220,7 +230,18 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   fingerprint change, i.e. a new `version`) and `deprecated_at` drive "what's
   new".
 - Open patterns not re-observed for `STALE_AFTER_RUNS` (6) runs of their
-  detector are deprecated automatically. Reviewed patterns never are.
+  detector are deprecated automatically. Reviewed patterns never are. A run
+  whose evidence-store read failed ages nothing (`coverage.aging.status:
+  skipped_store_unavailable`): absence from an unread store is not evidence.
+  The same holds per detector: `traffic_anomaly` patterns are not aged unless
+  ML scoring ran (`scored` or `no_windows`), and `novel_motif` patterns are
+  not aged when the graph read was unavailable (`coverage.aging.skipped_kinds`).
+  A selected `cross_domain` pass with too few input patterns counts as run
+  with no match (`skipped: insufficient_inputs`), so composites age once their
+  constituent patterns disappear. A pass where no constituent detector ran
+  (`kinds=["cross_domain"]` alone, or every constituent failed) stays
+  unmeasured (`skipped: no_constituent_detectors`) and ages nothing.
+  The scheduled job reports such a run as failed so the jobs worker retries it.
 - Every write after the first is a compare-and-set on `revision`.
 
 ### Stores
@@ -250,7 +271,12 @@ PostgreSQL when `PATTERN_DISCOVERY_TEST_DSN` is set. Storage policies are in
   durable erasure job (`governance/consent/erasure_planes.py`). For a subject
   it redacts every exact subject ref (`user:`, `anon:`, `entity:`, `agent:`,
   `session:` keys or the bare id) from affected entities, evidence, signature
-  content, title, summary, review history and promotion outcomes. The pattern
+  content, title, summary, review history and promotion outcomes, and from
+  merged-duplicate state (`base_entity_keys`, `duplicates[*].entity_keys`) so
+  re-detection cannot fold the subject back in. User-authored text is scrubbed
+  too: a renamed `display_title` and refs embedded inside review-history text
+  (a rename to "Investigate user:alice" becomes "Investigate [erased]"), and a
+  subject named only there is still found. The pattern
   id and signature hash are kept. Patterns left with fewer than two entities
   are deleted, because one remaining entity would re-identify the erased one
   by difference. Run records listing a redacted pattern are deleted too, as
@@ -283,7 +309,18 @@ PostgreSQL when `PATTERN_DISCOVERY_TEST_DSN` is set. Storage policies are in
    and `causality_class: inferred_influence` (flag
    `AETHER_PATTERN_GRAPH_PROMOTION_ENABLED`).
 
-Deprecating a promoted pattern soft-revokes its membership edges. Its Risk360
+Calling promote again on an already-promoted pattern performs no second
+lifecycle transition. It re-runs only the projections a transient outage left
+incomplete (outcomes never recorded, a failed risk write, or a failed graph
+projection) and counts the retry in `promotion.projection_retries`; with
+nothing incomplete it returns the pattern unchanged. Both projections are
+idempotent.
+
+Deprecating a promoted pattern soft-revokes its membership edges, including
+after a `failed` graph projection that may have written some memberships
+before stopping: every subject that received a signal is revoked, one failure
+does not stop the rest, and the report says `revoked`, `partial` or `failed`
+with counts. Its Risk360
 signals remain as attributed history owned by the risk plane. The conversion
 is also registered as the `pattern_discovery` producer in
 `intelligence.risk360.signals`. Risk360 and the Agent 360 canonical risk read
@@ -319,7 +356,16 @@ shared attribute values and counterparties its evidence names (hashed values
 stay hashed), principals and member patterns, and the links between them (at
 most 300 nodes; `truncated` says so). `POST .../graph-overlay` takes the node
 ids in a graph view (bare ids or `kind:id` keys, at most 500) and returns, per
-node, the visible patterns it belongs to.
+node, the visible patterns it belongs to. A member is linked to a shared
+attribute value only when the detector observed it with that value
+(`owners` in the shared-attribute evidence, at most 50 per value); records
+without owner sets draw no member-to-attribute edges. Likewise, `ACTS_FOR`
+edges are drawn only for the agent/principal pairs the agent detectors
+observed (`agent_principals`), and agent-to-agent edges only for observed
+`(source, relation, target)` links (`links`), labelled with the relation.
+Records without those draw principals attached to the pattern node
+(`INVOLVES_PRINCIPAL`) and no agent-to-agent edges, rather than inventing
+relationships.
 
 **Segment lenses** (`lenses.py`). The engine stores a `segment_profile` on
 each pattern: the share of its entities' events in each campaign, channel,
@@ -391,4 +437,10 @@ with discovery enabled gets patterns surfaced with no manual run. On-demand runs
   pattern lists them.
 - **Bounded reads.** A run reads at most `PATTERN_DISCOVERY_MAX_EVENTS` events
   and 20,000 graph edges. The stats listing and the cross-run context scan up
-  to 5,000 and 2,000 patterns per tenant respectively.
+  to 5,000 and 2,000 patterns per tenant respectively. The motif detector's
+  cycle search stops after 500,000 path expansions or 100,000 distinct cycles
+  and reports `cycles_truncated` in its stats; cycle counts are then lower
+  bounds. A truncated search marks `novel_motif` unmeasured for aging (it
+  appears in `coverage.aging.skipped_kinds`), and known cycle signatures keep
+  at least their learned baseline rate, because an unsearched cycle is not an
+  observed absence.

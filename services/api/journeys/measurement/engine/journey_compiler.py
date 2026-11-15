@@ -79,8 +79,15 @@ class JourneyCompiler:
         """
         if identity_type == "anonymous" and not _continuation_root:
             scope = await _continuation_scope(tenant_id, [profile_id])
+            if scope is not None and scope.linked:
+                # Every non-root member's standalone journey is superseded, not
+                # only the requested one: a handoff that joins two existing
+                # continuations (A->B and C->D, then B->D) must also retire the
+                # former root C, or two current journeys would overlap.
+                for member in scope.anonymous_ids:
+                    if member != scope.root_anonymous_id:
+                        await self._journey_repo.retire_current_anonymous(tenant_id, member)
             if scope is not None and scope.linked and scope.root_anonymous_id != profile_id:
-                await self._journey_repo.retire_current_anonymous(tenant_id, profile_id)
                 return await self.compile_for_profile(
                     tenant_id,
                     scope.root_anonymous_id,
@@ -144,8 +151,15 @@ class JourneyCompiler:
         scope = await _continuation_scope(tenant_id, seeds)
         if scope is None or not scope.handoffs:
             return activities, conversions
-        present = set(seeds)
-        linked = [a for a in scope.anonymous_ids if a not in present]
+        # An anonymous journey already loaded every row of its own anonymous ID.
+        # A profile or cluster journey loaded only rows carrying that profile or
+        # cluster, so its seed devices' unowned (pre-login) activity must be
+        # loaded too, or an acquisition on a device that later logged in would
+        # drop out of the journey.
+        if identity_type == "anonymous":
+            linked = [a for a in scope.anonymous_ids if a != identity_id]
+        else:
+            linked = list(scope.anonymous_ids)
         if not linked:
             return activities, conversions
 

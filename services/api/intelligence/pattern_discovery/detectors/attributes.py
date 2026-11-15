@@ -53,6 +53,9 @@ def _type_label(attr_type: str) -> str:
     return attr_type.replace("field:", "field ").replace("_", " ")
 
 
+MAX_ATTRIBUTE_OWNERS = 50
+
+
 def detect_shared_attributes(frame: DiscoveryFrame) -> DetectorOutput:
     cfg = frame.config
     owners: dict[tuple[str, str], set[str]] = defaultdict(set)
@@ -138,7 +141,10 @@ def detect_shared_attributes(frame: DiscoveryFrame) -> DetectorOutput:
             EvidenceItem("shared_attribute_values", "observed", 0.2, {
                 "attributes": [
                     {"type": k[0], "value": k[1], "entities_in_cluster": c, "entities_total": len(owners[k]),
-                     "extraction_confidence": confidence.get(k)}
+                     "extraction_confidence": confidence.get(k),
+                     # The cluster members actually observed with this value, so a
+                     # view never links a member to an attribute it was not seen with.
+                     "owners": sorted(owners[k] & es)[:MAX_ATTRIBUTE_OWNERS]}
                     for k, c in shared[:20]
                 ],
             }, event_refs(cluster_events)),

@@ -21,7 +21,7 @@ reviewed_source_commits:
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; this document needs no other change.'}
 source_hashes:
-  "packages/shared/graph-contract.ts": "sha256:49dee41404e17e9b43087caff7a60ba03ad33899e27d3b90681fa62e1aa276ce"
+  "packages/shared/graph-contract.ts": "sha256:a5ba6a664fe7425a7217b23b47c642c340647bc25479a2654468bd1ccc6ec809"
   "services/api/graph/risk_overlay/": "sha256:0e4fa40ecad53abcac06d3d843d1044efff9226aa78ccef901ea0af44684a9a3"
   "services/api/intelligence/fraud_networks/": "sha256:d5e8c0a0e46b89c971588b052c48eb357e6187f5d10b5863f902b1a5d77a4240"
   "services/api/repositories/repos.py": "sha256:6ab41a149fadc210e61f6a7ba2337ed719d7ca09ac9f98d79ef0113259c5a392"

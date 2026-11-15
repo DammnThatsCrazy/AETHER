@@ -23,7 +23,7 @@ source_hashes:
   "services/api/ingestion/imports/service.py": "sha256:6d9c346282442e8af10b462367ebb187ca0d574521fe5f13b2f68152aeeacd98"
   "services/api/repositories/graph_mutation_ledger.py": "sha256:8e36a20b8ea578a54825f45e252dbecbfba4029d0e2957cf4dfbe3d7ceddb0b4"
   "services/api/repositories/imports_repo.py": "sha256:6bdc0f6089e66d63b93456e5cf99b79653b896a338e3548f19551c48ae3c4f0e"
-  "services/api/shared/graph/graph.py": "sha256:010d6407208f45456dd4c4b61d99482c5e792ff8b74a953d71c3b619ffd6aa6b"
+  "services/api/shared/graph/graph.py": "sha256:455fee6db2e5a19392a8fd86e9084b41a5fe26291f139952a70a54ed1bce089d"
   "services/api/shared/graph/mutation_gateway.py": "sha256:0539972689a73905af7f29440cfc4331883b8979ba2c7e8293cd876fb74e07ea"
 ---
 

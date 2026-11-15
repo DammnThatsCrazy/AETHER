@@ -29,7 +29,7 @@ from .extraction import extract_events, extract_payload
 from .feed import (
     PatternViewerStateRepository, annotate_new, notify_new_patterns, resolve_since, summarize, whats_new,
 )
-from .graph import project_promotion, revoke_promotion, tenant_graph_edges
+from .graph import REVOCABLE_PROJECTIONS, project_promotion, revoke_promotion, tenant_graph_edges
 from .graphview import keys_for_ids, overlay, pattern_subgraph
 from .lenses import LENSES, SEGMENT_LENSES, lens_segment_key, lens_view
 from .ml import score_windows
@@ -38,6 +38,7 @@ from .projections import consent_allows, entity_context, promote_to_risk, simila
 from .registry import (
     PatternDiscoveryRunRepository, PatternFeedbackRepository, PatternRegistryRepository,
     apply_curation, apply_deprecation, apply_promotion, apply_review, mark_unseen, merge_duplicate,
+    remove_duplicate,
 )
 
 logger = get_logger("aether.pattern_discovery.service")
@@ -63,6 +64,21 @@ def _advances(last: Optional[str], current: str, window_hours: int) -> bool:
         return True
     return (b - a).total_seconds() >= window_hours * 3600 / 2
 
+
+
+def _projections_incomplete(row: dict[str, Any]) -> bool:
+    """True when a promoted pattern's risk or graph projection did not finish."""
+    promotion = row.get("promotion") or {}
+    if "risk_projection" not in promotion:
+        return True  # the promotion was persisted but its outcomes never were
+    cfg = _config()
+    if cfg.risk_promotion_enabled and any(
+            o.get("status") == "failed" for o in promotion.get("risk_signals") or []):
+        return True
+    if cfg.graph_promotion_enabled and (promotion.get("graph_projection") or {}).get("status") in (
+            None, "failed", "disabled"):
+        return True
+    return False
 
 class PatternDiscoveryService:
     def __init__(self, *, registry: Optional[PatternRegistryRepository] = None,
@@ -167,8 +183,27 @@ class PatternDiscoveryService:
             notification = await self._notifier(tenant_id, newly_surfaced, run_id=run_id)
         seen = {r["pattern_id"] for r in result.records}
         aged = deprecated = 0
-        for existing in await self.registry.scan(tenant_id):
+        # A pattern missing from this run is evidence it went away only when the
+        # run actually read the evidence store. After a failed read the absence
+        # means nothing, so aging (and the deprecation it leads to) is skipped.
+        store_unavailable = include_store and coverage.get("store") == "unavailable"
+        # Per detector too: a kind whose own evidence source failed this run
+        # (ML scoring for traffic anomalies, the graph read for motifs) is not
+        # measured, so its patterns are not aged on this run's absence.
+        unmeasured: set[str] = set()
+        if (coverage.get("ml") or {}).get("status") not in ("scored", "no_windows"):
+            unmeasured.add(KIND_TRAFFIC_ANOMALY)
+        if (coverage.get("graph") or {}).get("graph") == "unavailable":
+            unmeasured.add(KIND_NOVEL_MOTIF)
+        # A cycle search cut short by its budget did not visit every component,
+        # so a motif missing from this run may simply not have been searched.
+        if ((result.stats.get("detectors") or {}).get("motifs") or {}).get("cycles_truncated"):
+            unmeasured.add(KIND_NOVEL_MOTIF)
+        coverage["aging"] = {"status": "skipped_store_unavailable" if store_unavailable else "applied",
+                             "skipped_kinds": sorted(unmeasured)}
+        for existing in ([] if store_unavailable else await self.registry.scan(tenant_id)):
             if (existing["pattern_id"] in seen or existing.get("kind") not in result.kinds_run
+                    or existing.get("kind") in unmeasured
                     or existing.get("status") in (STATUS_DEPRECATED, STATUS_PROMOTED)):
                 continue
             updated = await self.registry.mutate(tenant_id, existing["pattern_id"],
@@ -435,6 +470,8 @@ class PatternDiscoveryService:
             from .registry import LifecycleError
 
             raise LifecycleError("duplicate_of does not name a pattern in this tenant")
+        before = await self.registry.get(tenant_id, pid)
+        previous_target = (before or {}).get("duplicate_of") if (before or {}).get("status") == "duplicate" else None
         updated = await self.registry.mutate(
             tenant_id, pid,
             lambda row: apply_review(row, reviewer_id=reviewer_id, verdict=verdict, reason=reason,
@@ -442,6 +479,11 @@ class PatternDiscoveryService:
         )
         if updated is not None:
             await self.feedback.record(tenant_id, updated, reviewer_id=reviewer_id, verdict=verdict, reason=reason)
+            if previous_target and (verdict != "duplicate" or duplicate_of != previous_target):
+                # The duplicate verdict was withdrawn or retargeted: the old
+                # canonical pattern stops folding in this pattern's contribution.
+                await self.registry.mutate(tenant_id, previous_target,
+                                           lambda row, dup_id=pid: remove_duplicate(row, dup_id))
             if verdict == "duplicate" and duplicate_of:
                 await self.registry.mutate(tenant_id, duplicate_of,
                                            lambda row, dup=updated: merge_duplicate(row, dup))
@@ -461,11 +503,23 @@ class PatternDiscoveryService:
         return updated
 
     async def promote(self, tenant_id: str, pid: str, *, reviewer_id: str, reason: str) -> Optional[dict[str, Any]]:
-        updated = await self.registry.mutate(
-            tenant_id, pid, lambda row: apply_promotion(row, reviewer_id=reviewer_id, reason=reason),
-        )
-        if updated is None:
+        current = await self.registry.get(tenant_id, pid)
+        if current is None:
             return None
+        retry = current.get("status") == STATUS_PROMOTED
+        if retry:
+            # Already approved: no second lifecycle transition. Re-run only the
+            # projections a transient risk-store or graph outage left incomplete;
+            # both are idempotent (signal ids and graph idempotency keys).
+            if not _projections_incomplete(current):
+                return current
+            updated = current
+        else:
+            updated = await self.registry.mutate(
+                tenant_id, pid, lambda row: apply_promotion(row, reviewer_id=reviewer_id, reason=reason),
+            )
+            if updated is None:
+                return None
         outcomes: list[dict[str, Any]] = []
         risk_status = "disabled"
         if _config().risk_promotion_enabled:
@@ -482,6 +536,9 @@ class PatternDiscoveryService:
             promotion["risk_signals"] = outcomes
             promotion["risk_projection"] = risk_status
             promotion["graph_projection"] = graph_report
+            if retry:
+                promotion["projection_retries"] = int(promotion.get("projection_retries") or 0) + 1
+                promotion["last_projection_retry"] = {"by": reviewer_id.strip(), "at": utc_now().isoformat()}
             row["promotion"] = promotion
             return row
 
@@ -494,7 +551,8 @@ class PatternDiscoveryService:
         Its Risk360 signals stay: they are attributed history the risk plane owns."""
         updated = await self.registry.mutate(tenant_id, pid,
                                              lambda row: apply_deprecation(row, actor=actor, reason=reason))
-        if updated is not None and (updated.get("promotion") or {}).get("graph_projection", {}).get("status") == "projected":
+        if updated is not None and ((updated.get("promotion") or {}).get("graph_projection") or {}).get(
+                "status") in REVOCABLE_PROJECTIONS:
             report = await revoke_promotion(updated, self._graph)
 
             def note(row: dict[str, Any]) -> dict[str, Any]:

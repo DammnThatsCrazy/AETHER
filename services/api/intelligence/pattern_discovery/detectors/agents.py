@@ -42,6 +42,14 @@ _VICTIM = {"id": "principal_may_be_a_victim",
            "note": "Delegation shows authority was granted, not intent; a principal may be the victim of a hijacked or over-scoped agent."}
 
 
+MAX_GRAPH_PAIRS = 120
+
+
+def _pairs(agents: set[str], principals: dict[str, set[str]]) -> list[list[str]]:
+    """The observed (agent, principal) pairs for a set of agents, bounded."""
+    return [[a, p] for a in sorted(agents) for p in sorted(principals.get(a, set()))][:MAX_GRAPH_PAIRS]
+
+
 def _principals(frame: DiscoveryFrame) -> dict[str, set[str]]:
     out: dict[str, set[str]] = defaultdict(set)
     for e in frame.events:
@@ -155,7 +163,9 @@ def detect_agents(frame: DiscoveryFrame) -> DetectorOutput:
                 EvidenceItem("identical_tool_sequence", "observed", 0.2,
                              {"tools": list(tools), "agents": len(ags)}, event_refs(evs)),
                 EvidenceItem("cross_principal_reuse", "inferred", min(0.45, 0.1 * len(prin)),
-                             {"principals": sorted(prin)[:20], "principal_count": len(prin)}),
+                             {"principals": sorted(prin)[:20], "principal_count": len(prin),
+                              # The observed pairs, not the cartesian product of agents and principals.
+                              "agent_principals": _pairs(ags, principals)}),
             ],
             occurrence_count=len(evs),
             first_observed_at=first,
@@ -176,14 +186,21 @@ def detect_agents(frame: DiscoveryFrame) -> DetectorOutput:
     # ── Agent-to-agent interaction clusters ────────────────────────────────
     uf = _UnionFind()
     link_events: dict[str, list] = defaultdict(list)
-    relations: Counter = Counter()
+    # Relation counts per source agent, summed per component below: a count
+    # pooled across disconnected groups would credit one group with another's
+    # links and change its signature (and so its pattern id).
+    relations_by_agent: dict[str, Counter] = defaultdict(Counter)
+    # Observed (source, relation, target) links per source agent, so the pattern
+    # graph draws the interactions that happened rather than inferring a chain.
+    links_by_agent: dict[str, set[tuple[str, str, str]]] = defaultdict(set)
     for e in frame.events:
         if not e.entity.startswith("agent:"):
             continue
         for rel, target in e.counterparties:
             if target.startswith("agent:") and target != e.entity and rel not in ("SPAWNED_BY", "DELEGATED_BY"):
                 uf.union(e.entity, target)
-                relations[rel] += 1
+                relations_by_agent[e.entity][rel] += 1
+                links_by_agent[e.entity].add((e.entity, rel, target))
                 link_events[e.entity].append(e)
     groups: dict[str, set[str]] = defaultdict(set)
     for a in uf.parent:
@@ -197,6 +214,11 @@ def detect_agents(frame: DiscoveryFrame) -> DetectorOutput:
             continue
         clusters += 1
         evs = [ev for a in members for ev in link_events.get(a, [])]
+        relations: Counter = Counter()
+        links: set[tuple[str, str, str]] = set()
+        for a in members:
+            relations.update(relations_by_agent.get(a, Counter()))
+            links |= links_by_agent.get(a, set())
         first, last = bounds(evs)
         patterns.append(RawPattern(
             kind=KIND_AGENT_INTERACTION,
@@ -207,9 +229,11 @@ def detect_agents(frame: DiscoveryFrame) -> DetectorOutput:
             affected_entities=sorted(members | prin),
             evidence=[
                 EvidenceItem("agent_to_agent_links", "observed", 0.2,
-                             {"agents": sorted(members)[:30], "relations": dict(relations)}, event_refs(evs)),
+                             {"agents": sorted(members)[:30], "relations": dict(relations),
+                              "links": [list(link) for link in sorted(links)[:MAX_GRAPH_PAIRS]]}, event_refs(evs)),
                 EvidenceItem("cross_principal_agent_ring", "inferred", min(0.45, 0.08 * len(members) + 0.05 * len(prin)),
-                             {"principal_count": len(prin)}),
+                             {"principal_count": len(prin), "principals": sorted(prin)[:20],
+                              "agent_principals": _pairs(members, principals)}),
             ],
             occurrence_count=len(evs),
             first_observed_at=first,
