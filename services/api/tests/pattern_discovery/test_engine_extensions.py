@@ -662,3 +662,42 @@ def test_cycle_search_is_budgeted_on_dense_graphs(monkeypatch):
     stats = result.stats["detectors"]["motifs"]
     assert stats["cycles_truncated"] is True
     assert stats["cycles"] <= 50
+
+
+def _complete_invite_graph(prefix: str, size: int, start: int = 0):
+    rows, i = [], start
+    names = [f"{prefix}{k}" for k in range(size)]
+    for a in names:
+        for b in names:
+            if a != b:
+                i += 1
+                rows.append(ev(i, "user_id", a, "invite_accepted", BASE + timedelta(seconds=i), invited_by=b))
+    return rows
+
+
+@pytest.mark.asyncio
+async def test_truncated_cycle_search_does_not_age_motif_patterns(monkeypatch):
+    from intelligence.pattern_discovery.contracts import KIND_NOVEL_MOTIF
+    from intelligence.pattern_discovery.detectors import motifs
+
+    monkeypatch.setattr(motifs, "MAX_CYCLE_IDENTITIES", 50)
+    svc = _svc(_complete_invite_graph("dense", 12))
+    run = await svc.run(T, kinds=[KIND_NOVEL_MOTIF])
+    assert KIND_NOVEL_MOTIF in run["coverage"]["aging"]["skipped_kinds"]
+
+
+def test_truncated_cycle_search_keeps_learned_cycle_rates():
+    from intelligence.pattern_discovery.contracts import KIND_NOVEL_MOTIF
+    from intelligence.pattern_discovery.detectors import motifs
+
+    baseline = empty_baseline(T)
+    baseline["motif_rate"] = {"cyc|user-INVITED_BY|user-INVITED_BY|user-INVITED_BY": 99.0}
+    original = motifs.MAX_CYCLE_IDENTITIES
+    motifs.MAX_CYCLE_IDENTITIES = 5
+    try:
+        result = run_discovery(T, _complete_invite_graph("dense", 10), baseline=baseline, kinds=[KIND_NOVEL_MOTIF])
+    finally:
+        motifs.MAX_CYCLE_IDENTITIES = original
+    assert result.stats["detectors"]["motifs"]["cycles_truncated"] is True
+    counts = result.baseline_delta["motif_counts"]
+    assert counts["cyc|user-INVITED_BY|user-INVITED_BY|user-INVITED_BY"] >= 99.0
