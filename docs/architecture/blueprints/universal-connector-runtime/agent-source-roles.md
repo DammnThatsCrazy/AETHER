@@ -31,7 +31,7 @@ source_hashes:
   "services/api/actions/agent_correlation/bindings.py": "sha256:a6ca53cae6bca133e09fd5a9016c2e17c436aeff086a6dc93c96f4c2d8cb3bdb"
   "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:13bef311e6a1c855939f7fa3edf8ef52bf6a6d97e1564ff2bf317773fce0a19f"
   "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
-  "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c8056f3ba70415bc62b954bcdd7782cd63b48ef3d41b8c25c3dcc5e2fb554f2d"
+  "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c275b92b8020e3c1e65392084affffd72ab970298e176c0aa6c58cd3981f66be"
   "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
   "services/api/actions/agent_correlation/engine.py": "sha256:2a3ce9bb574dec5b4e6de1038d1de1768e4676ff547b37539d3d03f34334ae38"
   "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
@@ -70,7 +70,18 @@ read through the Stripe connector (API version `2026-03-25.dahlia`):
   payment link. The link's PaymentIntent metadata carried a certification
   token, and the payment joined the certification task by
   `aether_correlation_token` (`DETERMINISTIC_BINDING`); replay reproduces that
-  link. That recording showed that newer events name the owning
+  link.
+
+`shopify/product_graphql` and `shopify/inventory_level_graphql` are
+`sandbox_certified` from a Shopify preview store created through the Shopify
+connector. A draft product carried the certification token as a tag and joined
+the task by `aether_correlation_token` (`DETERMINISTIC_BINDING`), and its
+inventory level was read back after a quantity change. The run also found two
+Admin API changes, now fixed in the token recorder: `inventorySetQuantities`
+takes the compare value per quantity (`changeFromQuantity`), and it requires an
+`@idempotent` key. Preview stores cannot read orders, so `order_graphql` and
+the webhook-format Shopify kinds stay `uncertified` until a signed-in store or
+an Admin API token is recorded. That recording showed that newer events name the owning
 account in `context`, and the mapper now reads it. The other vendor kinds
 report `uncertified` in `config/agent_correlation_certification.json` until
 their sandboxes are recorded. Token issuance
@@ -364,7 +375,7 @@ proxy. Missing credentials skip a provider; they never certify it.
 | 3. Aether MCP bridge (done) | Agents register tasks and receive tokens; keys from `AGENT_CORRELATION_TOKEN_KEYS` | An end-to-end test registers a task over MCP, stamps the token into Stripe metadata, and links it |
 | 4. Projection (done) | `linked` verdicts become `CORRELATED_ACROSS_SOURCES` edges through the graph mutation gateway | Projected edges pass the graph write validator; candidates never project |
 | 5. Vendors per role (done for six) | Shopify, Stripe, Ramp, Cloudflare, OpenAI Agents, Aether MCP | No change to `correlation.py`, lineage, graph mutation, Profile 360, or Value 360 |
-| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event` certified from real sandbox events, including the token round trip on a test payment; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
+| 6. Sandbox certification (harness built; Stripe recorded) | Record, scrub, and replay provider sandbox payloads; report per kind | `stripe/event`, `shopify/product_graphql`, and `shopify/inventory_level_graphql` certified from real sandbox records, with token round trips; Shopify, Ramp, Cloudflare, and OpenAI become `sandbox_certified` once their sandboxes are recorded |
 | 7. Verified bindings (done) | Bindings from verified provider connections; declared scopes graded `TENANT_DECLARED` | Tests cover verified, declared, spoofed, realm-mismatched, revoked, and cross-tenant cases |
 
 Step 5 is the modularity test. A vendor that needs a change outside its own

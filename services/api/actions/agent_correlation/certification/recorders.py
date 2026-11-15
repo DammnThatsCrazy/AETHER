@@ -166,11 +166,19 @@ async def record_shopify(client: httpx.AsyncClient, ctx: RecordingContext) -> li
         await gql(
             """mutation($item: ID!, $loc: ID!) { inventoryActivate(inventoryItemId: $item, locationId: $loc) { userErrors { message } } }""",
             {"item": item_gid, "loc": location_gid}, "shopify activate inventory")
+        # Current Admin API versions take the compare-and-set value per quantity
+        # (changeFromQuantity) and require an @idempotent key on this mutation.
+        idempotency_key = f"aether-cert-{ctx.task_ref}"
+        set_quantities = (
+            "mutation($input: InventorySetQuantitiesInput!) { "
+            f'inventorySetQuantities(input: $input) @idempotent(key: "{idempotency_key}") '
+            "{ userErrors { message } } }"
+        )
         await gql(
-            """mutation($input: InventorySetQuantitiesInput!) {
-                 inventorySetQuantities(input: $input) { userErrors { message } } }""",
-            {"input": {"name": "available", "reason": "correction", "ignoreCompareQuantity": True,
-                       "quantities": [{"inventoryItemId": item_gid, "locationId": location_gid, "quantity": 5}]}},
+            set_quantities,
+            {"input": {"name": "available", "reason": "correction",
+                       "quantities": [{"inventoryItemId": item_gid, "locationId": location_gid,
+                                       "quantity": 5, "changeFromQuantity": 0}]}},
             "shopify set inventory")
         item_id = item_gid.rsplit("/", 1)[-1]
         levels = _check(await client.get(f"{admin}/inventory_levels.json", headers=headers,
