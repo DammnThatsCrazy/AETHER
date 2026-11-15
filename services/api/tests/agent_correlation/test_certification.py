@@ -142,3 +142,36 @@ def test_report_never_certifies_without_recordings() -> None:
     assert statuses[("stripe", "event")] == "uncertified"
     assert statuses[("cloudflare", "http_request")] == "not_recordable"
     assert statuses[("aether_mcp", "task_registered")] == "first_party"
+
+
+def test_scrub_keeps_long_scope_lists_that_change_the_observation() -> None:
+    """Found by certifying a real Shopify installation with 65 access scopes."""
+    from actions.agent_correlation.certification.runner import context_for, expected_from
+    from actions.agent_correlation.mappers import map_record
+
+    record = {"observed_at": "2026-11-15T18:40:00Z", "installation": {
+        "id": "gid://shopify/AppInstallation/1", "app": {"id": "gid://shopify/App/2"},
+        "accessScopes": [{"handle": f"read_scope_{i:03d}"} for i in range(65)]}}
+    ctx = context_for("t", {"shopify": {"source_account_key": "s.myshopify.com", "source_account_realm": "test"}})
+    raw = expected_from(map_record("shopify", "access_grant_graphql", ctx, record))
+    scrubbed = expected_from(map_record("shopify", "access_grant_graphql", ctx, fx.scrub("shopify", "access_grant_graphql", record)))
+    assert raw["observation_digest"] == scrubbed["observation_digest"]
+
+
+def test_real_shopify_grant_and_order_follow_the_standing_authority_rule() -> None:
+    """Uses the recorded installation and order: same app, ordered in time."""
+    from actions.agent_correlation.certification.runner import context_for
+    from actions.agent_correlation.mappers import map_record
+    from shared.integration_contracts.correlation import correlate
+
+    by_kind = {f.kind: f for f in fx.load_fixtures() if f.provider == "shopify"}
+    grant_fx, order_fx = by_kind["access_grant_graphql"], by_kind["order_graphql"]
+    ctx = context_for("t", grant_fx.account_bindings)
+    (grant,) = map_record("shopify", "access_grant_graphql", ctx, grant_fx.record)
+    (order,) = map_record("shopify", "order_graphql", ctx, order_fx.record)
+    assert set(grant.actor_refs) & set(order.actor_refs)  # the order was created by the granted app
+    # The order predates the observed grant: no evidence the grant was in effect.
+    assert correlate(grant, order).key_kind != "provider_actor_ref"
+    later = order.model_copy(update={"observation_id": "later", "occurred_at": grant.occurred_at.replace(year=2027)})
+    verdict = correlate(grant, later)
+    assert verdict.key_kind == "provider_actor_ref" and verdict.status == "candidate"
