@@ -72,6 +72,20 @@ class TerminalIngestError extends Error {
  * packages/sdk/server/src/index.ts flush(), which requeues on `result.ok &&
  * !result.counters` instead of crediting it).
  */
+/**
+ * The API refused the credential (401/403): a revoked, rotated or
+ * misconfigured key. Unlike a malformed batch, the events themselves are
+ * fine and will succeed once the key is fixed, so they are held, not dropped:
+ * `flush()` returns the batch to the queue head and pauses sending on a slow
+ * backoff until a send succeeds again.
+ */
+class AuthRejectedError extends Error {
+  constructor(public readonly status: number, statusText: string) {
+    super(`Aether API rejected the credential: ${status} ${statusText}. Events are held and sending is paused until the key is accepted.`);
+    this.name = 'AuthRejectedError';
+  }
+}
+
 class AmbiguousDeliveryError extends Error {
   constructor() {
     super('Aether API: 2xx response with no parseable delivery counters — delivery unconfirmed, not credited');
@@ -103,6 +117,17 @@ interface QueueConfig {
    */
   onBatchResult?: (health: BatchHealth) => void;
 }
+
+/** First and longest pause after the API rejects the credential (401/403). */
+const AUTH_PAUSE_INITIAL_MS = 60_000;
+const AUTH_PAUSE_MAX_MS = 15 * 60_000;
+
+/**
+ * Event types never evicted when the queue is full: consent records and
+ * identity hydration carry state later events depend on, and losing one
+ * silently mis-attributes everything after it.
+ */
+const PROTECTED_EVENT_TYPES: ReadonlySet<string> = new Set(['consent', 'identify']);
 
 const DEFAULT_RETRY: Required<RetryConfig> = {
   maxRetries: 3,
@@ -194,6 +219,12 @@ export class EventQueue {
     shutdown_unflushed: 0,
   };
   private lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events' = 'no_events';
+  /** Epoch ms until which sending is paused after a 401/403; 0 = not paused. */
+  private authPausedUntil = 0;
+  /** Current auth pause length; doubles per consecutive rejection up to the cap. */
+  private authPauseMs = AUTH_PAUSE_INITIAL_MS;
+  /** onError fires once per auth incident, not once per retry. */
+  private authErrorReported = false;
 
   constructor(config: Omit<Partial<QueueConfig>, 'retry'> & Pick<QueueConfig, 'endpoint' | 'apiKey'> & { retry?: RetryConfig }) {
     this.config = {
@@ -224,11 +255,28 @@ export class EventQueue {
       ? ({ ...event, properties: scrubSensitiveFields(event.properties) } as AetherEvent)
       : event;
     this.queue.push(safe);
+    this.enforceCap();
     if (this.queue.length >= this.config.batchSize) this.flush();
-    if (this.queue.length >= this.config.maxQueueSize) {
+  }
+
+  /**
+   * Hold the queue to `maxQueueSize` by evicting the oldest evictable events
+   * (consent and identify are protected). Each eviction is a real drop and is
+   * counted as `queue_full`. If every queued event is protected, the oldest is
+   * evicted anyway so the bound always holds.
+   */
+  private enforceCap(): void {
+    while (this.queue.length > this.config.maxQueueSize) {
+      let index = this.queue.findIndex((e) => !PROTECTED_EVENT_TYPES.has(e.type as string));
+      if (index === -1) index = 0;
+      this.queue.splice(index, 1);
       this.droppedCounts.queue_full++;
-      this.flush();
     }
+  }
+
+  /** True while sending is paused after the API rejected the credential. */
+  isAuthPaused(): boolean {
+    return this.authPausedUntil > Date.now();
   }
 
   /**
@@ -238,11 +286,13 @@ export class EventQueue {
     droppedEvents: DroppedEventCounts;
     queueDepth: number;
     lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
+    authPaused: boolean;
   } {
     return {
       droppedEvents: { ...this.droppedCounts },
       queueDepth: this.queue.length,
       lastFlushStatus: this.lastFlushStatus,
+      authPaused: this.isAuthPaused(),
     };
   }
 
@@ -266,6 +316,12 @@ export class EventQueue {
   async flush(): Promise<void> {
     if (this.isFlushing || this.queue.length === 0 || this.isDestroyed) {
       if (this.queue.length === 0) this.lastFlushStatus = 'no_events';
+      return;
+    }
+    // Paused after a 401/403: hold everything until the backoff elapses. The
+    // flush timer calls back in, so sending resumes on its own.
+    if (this.isAuthPaused()) {
+      this.lastFlushStatus = 'pending';
       return;
     }
     this.lastFlushStatus = 'flushing';
@@ -307,9 +363,22 @@ export class EventQueue {
       });
       this.persistQueue();
       this.lastFlushStatus = 'success';
+      this.clearAuthPause();
     } catch (error) {
       this.config.onAttempt?.(Date.now() - start, false);
-      if (error instanceof TerminalIngestError) {
+      if (error instanceof AuthRejectedError) {
+        // Hold, don't drop: the events are valid; the key is not (yet).
+        this.queue.unshift(...allowedEvents);
+        this.enforceCap();
+        this.persistQueue();
+        this.authPausedUntil = Date.now() + this.authPauseMs;
+        this.authPauseMs = Math.min(this.authPauseMs * 2, AUTH_PAUSE_MAX_MS);
+        if (!this.authErrorReported) {
+          this.authErrorReported = true;
+          this.config.onError?.(error, allowedEvents);
+        }
+        this.lastFlushStatus = 'pending';
+      } else if (error instanceof TerminalIngestError) {
         this.persistQueue();
         this.config.onError?.(error, allowedEvents);
         this.lastFlushStatus = 'failed';
@@ -321,8 +390,14 @@ export class EventQueue {
       }
     } finally {
       this.isFlushing = false;
-      if (this.queue.length >= this.config.batchSize) this.flush();
+      if (this.queue.length >= this.config.batchSize && !this.isAuthPaused()) this.flush();
     }
+  }
+
+  private clearAuthPause(): void {
+    this.authPausedUntil = 0;
+    this.authPauseMs = AUTH_PAUSE_INITIAL_MS;
+    this.authErrorReported = false;
   }
 
   get size(): number {
@@ -339,7 +414,7 @@ export class EventQueue {
       // carry a stable id, so a re-send after a beacon that actually succeeded
       // is deduped at the backend (at-least-once beats at-most-once here).
       this.persistQueue();
-      this.sendBeacon(this.queue);
+      if (!this.isAuthPaused()) this.sendBeacon(this.queue);
     }
     this.queue = [];
   }
@@ -399,8 +474,13 @@ export class EventQueue {
         return this.sendBatch(events, retryCount + 1);
       }
 
+      if (response.status === 401 || response.status === 403) {
+        // A credential problem, not a bad batch: hold the events (see flush()).
+        throw new AuthRejectedError(response.status, response.statusText);
+      }
+
       if (response.status >= 400 && response.status < 500) {
-        // Non-429 4xx is a terminal rejection (malformed/poison batch): retrying
+        // Any other non-429 4xx is a terminal rejection (malformed/poison batch): retrying
         // it forever would block the queue head. Mark it terminal so flush drops it.
         throw new TerminalIngestError(
           response.status,
@@ -502,6 +582,9 @@ export class EventQueue {
         // (network down, or the queue exceeds the browser's ~64KB keepalive cap)
         // the events survive for restoreQueue() on the next page load.
         this.persistQueue();
+        // While the credential is rejected a beacon would only be refused too;
+        // keep the queue (already persisted) for when the key works again.
+        if (this.isAuthPaused()) return;
         const sent = this.sendBeacon(this.queue);
         if (sent) this.queue = [];
         // If beacon rejected, leave queue intact — periodic flush will retry
@@ -510,6 +593,7 @@ export class EventQueue {
     window.addEventListener('pagehide', () => {
       if (this.queue.length > 0) {
         this.persistQueue();
+        if (this.isAuthPaused()) return;
         const sent = this.sendBeacon(this.queue);
         if (sent) this.queue = [];
       }
@@ -528,6 +612,7 @@ export class EventQueue {
     if (stored && Array.isArray(stored)) {
       this.queue = [...stored, ...this.queue];
       storage.remove(QUEUE_STORAGE_KEY);
+      this.enforceCap();
     }
   }
 

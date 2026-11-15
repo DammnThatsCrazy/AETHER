@@ -46,11 +46,26 @@ export declare class EventQueue {
     private consent;
     private droppedCounts;
     private lastFlushStatus;
+    /** Epoch ms until which sending is paused after a 401/403; 0 = not paused. */
+    private authPausedUntil;
+    /** Current auth pause length; doubles per consecutive rejection up to the cap. */
+    private authPauseMs;
+    /** onError fires once per auth incident, not once per retry. */
+    private authErrorReported;
     constructor(config: Omit<Partial<QueueConfig>, 'retry'> & Pick<QueueConfig, 'endpoint' | 'apiKey'> & {
         retry?: RetryConfig;
     });
     setConsent(consent: ConsentState): void;
     enqueue(event: AetherEvent): void;
+    /**
+     * Hold the queue to `maxQueueSize` by evicting the oldest evictable events
+     * (consent and identify are protected). Each eviction is a real drop and is
+     * counted as `queue_full`. If every queued event is protected, the oldest is
+     * evicted anyway so the bound always holds.
+     */
+    private enforceCap;
+    /** True while sending is paused after the API rejected the credential. */
+    isAuthPaused(): boolean;
     /**
      * Public API: get diagnostics including dropped-event counts by reason.
      */
@@ -58,6 +73,7 @@ export declare class EventQueue {
         droppedEvents: DroppedEventCounts;
         queueDepth: number;
         lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
+        authPaused: boolean;
     };
     /**
      * Public API: get current queue depth.
@@ -71,6 +87,7 @@ export declare class EventQueue {
      * Public API: flush the queue immediately.
      */
     flush(): Promise<void>;
+    private clearAuthPause;
     get size(): number;
     destroy(): void;
     private filterByConsent;

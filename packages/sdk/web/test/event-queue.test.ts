@@ -567,4 +567,157 @@ describe('EventQueue', () => {
       q2.destroy();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Queue bound: maxQueueSize is a real cap (drop oldest, protect consent/identify)
+  // -------------------------------------------------------------------------
+
+  describe('queue bound', () => {
+    function typed(type: string, id: string): AetherEvent {
+      return { ...makeTrackEvent(), type, id, messageId: id } as unknown as AetherEvent;
+    }
+
+    it('never holds more than maxQueueSize events and counts each eviction', () => {
+      const q = makeQueue({ maxQueueSize: 3, batchSize: 1000 });
+      for (let i = 0; i < 5; i++) q.enqueue(typed('track', `e${i}`));
+      expect(q.size).toBe(3);
+      expect(q.getDiagnostics().droppedEvents.queue_full).toBe(2);
+      q.destroy();
+    });
+
+    it('evicts the oldest evictable event and keeps consent and identify', () => {
+      const q = makeQueue({ maxQueueSize: 3, batchSize: 1000 });
+      q.enqueue(typed('consent', 'c'));
+      q.enqueue(typed('identify', 'i'));
+      q.enqueue(typed('track', 'old'));
+      q.enqueue(typed('track', 'new'));
+      q.destroy(); // persists the in-memory queue
+      const ids = (JSON.parse([...storage.values()].find((v) => v.includes('"c"')) ?? '[]') as { id: string }[])
+        .map((e) => e.id);
+      expect(ids).toEqual(['c', 'i', 'new']);
+    });
+
+    it('caps a restored queue too', () => {
+      const first = makeQueue({ maxQueueSize: 50, batchSize: 1000 });
+      for (let i = 0; i < 40; i++) first.enqueue(typed('track', `e${i}`));
+      globalThis.fetch = vi.fn(async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+      first.destroy();
+      const restored = makeQueue({ maxQueueSize: 10, batchSize: 1000 });
+      expect(restored.size).toBe(10);
+      expect(restored.getDiagnostics().droppedEvents.queue_full).toBe(30);
+      restored.destroy();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 401/403: hold events and pause, never drop
+  // -------------------------------------------------------------------------
+
+  describe('credential rejected (401/403)', () => {
+    function respond(status: number) {
+      return status === 200
+        ? ({ ok: true, status: 200, json: async () => ({ accepted: 1, duplicate: 0, rejected: 0 }) } as unknown as Response)
+        : ({ ok: false, status, statusText: status === 401 ? 'Unauthorized' : 'Forbidden', headers: new Headers() } as Response);
+    }
+
+    it.each([401, 403])('holds the batch on %i instead of dropping it', async (status) => {
+      const errors: Error[] = [];
+      const q = makeQueue({ onError: (e) => errors.push(e), flushInterval: 1e9 });
+      q.enqueue(makeTrackEvent());
+      globalThis.fetch = vi.fn(async () => respond(status)) as unknown as typeof fetch;
+
+      await q.flush();
+
+      expect(q.size).toBe(1);
+      expect(q.isAuthPaused()).toBe(true);
+      expect(q.getDiagnostics().authPaused).toBe(true);
+      expect(errors).toHaveLength(1);
+      expect(errors[0].name).toBe('AuthRejectedError');
+      q.destroy();
+    });
+
+    it('does not send while paused and reports the incident once', async () => {
+      const errors: Error[] = [];
+      const q = makeQueue({ onError: (e) => errors.push(e), flushInterval: 1e9 });
+      q.enqueue(makeTrackEvent());
+      const fetchMock = vi.fn(async () => respond(401));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      await q.flush();
+      await q.flush();
+      await q.flush();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(60_000); // first pause elapses
+      await q.flush();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(errors).toHaveLength(1); // still the same incident
+      q.destroy();
+    });
+
+    it('backs off longer on each consecutive rejection, up to 15 minutes', async () => {
+      const q = makeQueue({ flushInterval: 1e9 });
+      q.enqueue(makeTrackEvent());
+      const fetchMock = vi.fn(async () => respond(401));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      await q.flush();                 // pause 60s
+      vi.advanceTimersByTime(60_000);
+      await q.flush();                 // pause 120s
+      vi.advanceTimersByTime(60_000);
+      await q.flush();                 // still paused
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      vi.advanceTimersByTime(60_000);
+      await q.flush();
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      q.destroy();
+    });
+
+    it('resumes and delivers the held events once the key is accepted', async () => {
+      const errors: Error[] = [];
+      const q = makeQueue({ onError: (e) => errors.push(e), flushInterval: 1e9 });
+      q.enqueue(makeTrackEvent());
+      let status = 401;
+      globalThis.fetch = vi.fn(async () => respond(status)) as unknown as typeof fetch;
+
+      await q.flush();
+      status = 200;
+      vi.advanceTimersByTime(60_000);
+      await q.flush();
+
+      expect(q.size).toBe(0);
+      expect(q.isAuthPaused()).toBe(false);
+
+      // A later incident is reported again.
+      q.enqueue(makeTrackEvent());
+      status = 403;
+      await q.flush();
+      expect(errors).toHaveLength(2);
+      q.destroy();
+    });
+
+    it('keeps other 4xx responses terminal', async () => {
+      const q = makeQueue({ flushInterval: 1e9 });
+      q.enqueue(makeTrackEvent());
+      globalThis.fetch = vi.fn(async () => respond(422)) as unknown as typeof fetch;
+      await q.flush();
+      expect(q.size).toBe(0);
+      expect(q.isAuthPaused()).toBe(false);
+      q.destroy();
+    });
+
+    it('skips the unload beacon while paused and keeps the events persisted', async () => {
+      const q = makeQueue({ flushInterval: 1e9 });
+      q.enqueue(makeTrackEvent());
+      const fetchMock = vi.fn(async () => respond(401));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      await q.flush();
+
+      q.destroy();
+      expect(fetchMock).toHaveBeenCalledTimes(1); // no beacon
+      const q2 = makeQueue({ flushInterval: 1e9 });
+      expect(q2.size).toBe(1);
+      q2.destroy();
+    });
+  });
 });

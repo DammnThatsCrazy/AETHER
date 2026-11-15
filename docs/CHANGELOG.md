@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:1e79df49439c3cdaab426303cbaa3e61b20bef1c93801df9ab63502d29ce700e"
+  "CHANGELOG.md": "sha256:34f6d13608899783bde6ed446e1d0c6bacc0a7716eff0a63831ccc69318c3c08"
 ---
 # Changelog
 

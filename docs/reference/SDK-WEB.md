@@ -585,7 +585,7 @@ interface AetherConfig {
     heartbeatInterval?: number;            // Session heartbeat in ms (default: 30000)
     batchSize?: number;                    // Events per batch (default: 10)
     flushInterval?: number;                // Flush interval in ms (default: 5000)
-    maxQueueSize?: number;                 // Max queued events (default: 100)
+    maxQueueSize?: number;                 // Hard cap on queued events (default: 100); see Delivery below
     retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
     customHeaders?: Record<string, string>;
     manifestPublicKey?: string;            // base64url P-256 key; verifies signed remote-config manifests
@@ -593,6 +593,24 @@ interface AetherConfig {
   };
 }
 ```
+
+## Delivery and failure handling
+
+- **Queue bound.** `maxQueueSize` is a hard cap. When the queue is full (for
+  example while offline) the oldest events are evicted first, except `consent`
+  and `identify` events, which are kept. Every eviction is counted as
+  `queue_full` in `getDiagnostics().droppedEvents`.
+- **Retries.** `5xx`, `429` and network failures retry with backoff, then the
+  batch returns to the queue for the next flush. Each event keeps its `id`, so a
+  resend is de-duplicated by the backend.
+- **Rejected key (`401` / `403`).** The events are valid; the key is not. The
+  SDK holds them (within the queue cap), pauses sending for 1 minute, doubling up
+  to 15 minutes per consecutive rejection, and resumes on its own once a send
+  succeeds. `onError` fires once per incident, and `getDiagnostics().authPaused`
+  is `true` while paused. Unload beacons are skipped while paused; the queue is
+  already persisted for the next page load.
+- **Other `4xx`** (malformed or rejected batch) are terminal: the batch is
+  dropped and reported through `onError`, so it cannot block later events.
 
 ## Plugins
 
@@ -758,5 +776,13 @@ function MyComponent() {
   return <button onClick={() => aether.track('cta_click')}>Click</button>;
 }
 ```
+
+The provider loads the SDK only in the browser (nothing runs during server
+rendering) and renders its children once the SDK is ready. It restarts the SDK
+(destroy, then init) only when `apiKey`, `siteId`, `endpoint` or `environment`
+changes, so an inline `config={{ ... }}` object does not restart it on every
+render. Other options are applied once at init; in development the provider
+warns if one changes later. It is safe under React Strict Mode (one init per
+mount) and cleans up on unmount.
 
 The provider is SSR-safe: `AetherProvider` is a no-op when `typeof window === 'undefined'`.
