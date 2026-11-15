@@ -4,6 +4,229 @@
   "generated_by": "scripts/readiness_status.py --emit-artifacts",
   "features": [
     {
+      "feature_id": "access-kit",
+      "title": "Access Kit (MCP / CLI / API)",
+      "owning_system": "aether",
+      "scope": {
+        "id": "access-kit-design-partner-v1",
+        "version": 1,
+        "title": "Access Kit read-only V1 for a design partner",
+        "target": "design-partner-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "authorization-and-tenant-isolation",
+          "persistence-and-migrations"
+        ],
+        "excluded": [
+          "governed-external-actions",
+          "billable-intelligence-operations"
+        ],
+        "deferred": [
+          "surfaces-beyond-profile360"
+        ]
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": false,
+        "remaining_after_ceiling": [
+          "Run the hosted ci / verdict on the design-partner branch and record it.",
+          "Certify a real tenant end to end (W3) in staging over API, CLI, local MCP and hosted MCP.",
+          "Publish the npm prerelease and prove the four MCP host families."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "RUNTIME_INTEGRATED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 75.0,
+        "denominator": "in-scope productionization controls",
+        "remaining_work": [
+          "hosted ci / verdict on the design-partner branch",
+          "npm prerelease publication and staging aether-access-mcp image publication"
+        ]
+      },
+      "activation": {
+        "state": "ENVIRONMENT_VALIDATION_PENDING",
+        "blockers": [
+          {
+            "type": "ENVIRONMENT_VALIDATION_PENDING",
+            "description": "No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3).",
+            "owner": "platform-ops",
+            "required_action": "Run docs/operations/runbooks/ACCESS_KIT_W3_CERTIFICATION.md in staging and record the evidence.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "W3 certification report with request IDs for every step"
+          },
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "The staging aether-access-mcp repository, image and enabled service do not exist yet, and the live AetherStagingDeploy policy must match the reviewed manifest.",
+            "owner": "platform-ops",
+            "required_action": "Follow the ordered staging enablement in docs/operations/STAGING-WAKE-SLEEP.md.",
+            "source_code_change_expected": true,
+            "affected_environments": [
+              "staging"
+            ],
+            "affected_release_profiles": [
+              "staging"
+            ],
+            "evidence_required": "applied staging plan with the MCP service and a passing wake rehearsal"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "profile-360",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/operations/runbooks/ACCESS_KIT_W3_CERTIFICATION.md",
+        "dashboards": [
+          "grafana:platform"
+        ],
+        "alerts": [
+          "pagerduty:platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "local unit, contract and fixture tests across the API, Node client, CLI and MCP"
+        ],
+        "evidence_gaps": [
+          "no hosted verdict on this branch yet",
+          "no staging, real-tenant or real-host execution"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_PRODUCTIONIZATION",
+          "intrinsic_disposition": "BLOCKED_BY_PRODUCTIONIZATION",
+          "implementation_floor": "RUNTIME_INTEGRATED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "productionization 75% (< 100% of in-scope productionization controls); remaining: hosted ci / verdict on the design-partner branch; npm prerelease publication and staging aether-access-mcp image publication"
+          ],
+          "external_blockers": [
+            "ENVIRONMENT_VALIDATION_PENDING: No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3). (owner: platform-ops)",
+            "INFRASTRUCTURE_WAITING: The staging aether-access-mcp repository, image and enabled service do not exist yet, and the live AetherStagingDeploy policy must match the reviewed manifest. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor"
+          ],
+          "external_blockers": [
+            "ENVIRONMENT_VALIDATION_PENDING: No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3). (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": false,
+        "legacy_area": "Access Kit (MCP / CLI / API)",
+        "note": "Scored at pre-production from repository evidence; raise only with staging and real-tenant evidence."
+      }
+    },
+    {
       "feature_id": "agentic-x402",
       "title": "Agentic x402",
       "owning_system": "aether",

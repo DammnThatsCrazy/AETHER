@@ -6,7 +6,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 | Profile | Disposition | Required | Impl | Prod | Activation | Env evidence | Deps | Ownership |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Local development | BLOCKED_BY_CODE | 33 | 81.8% | n/a | 48.5% | 100% | 100% | 97% |
+| Local development | BLOCKED_BY_CODE | 34 | 79.4% | n/a | 47.1% | 100% | 100% | 97.1% |
 | Staging | READY_TO_ACTIVATE | 24 | 100% | 100% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
 | Production | BLOCKED_BY_CODE | 23 | 43.5% | 100% | 65.2% | 0% | 100% | 100% |
@@ -14,6 +14,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 ## Local development (`local`) — BLOCKED_BY_CODE
 
+- `access-kit`: BLOCKED_BY_CODE
 - `agentic-x402`: TECHNICALLY_RELEASE_ELIGIBLE
 - `backend-api`: TECHNICALLY_RELEASE_ELIGIBLE
 - `campaign-intelligence`: TECHNICALLY_RELEASE_ELIGIBLE
@@ -49,6 +50,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `tenant-import-engine`: TECHNICALLY_RELEASE_ELIGIBLE
 
 **Hard blockers:**
+- access-kit: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor
 - card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
@@ -95,6 +97,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `tenant-import-engine`: READY_TO_VALIDATE
 
 **Hard blockers:**
+- access-kit: productionization 75% (< 100% of in-scope productionization controls); remaining: hosted ci / verdict on the design-partner branch; npm prerelease publication and staging aether-access-mcp image publication
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor
 - card-linked-payments: open repository work: wire the card-linked service-catalog entitlement and durable usage meter (Section 6 W3); reconcile readiness controls with implemented persistence and tenant-isolation tests
@@ -114,6 +117,8 @@ A release profile is only as ready as its weakest **required** capability. The d
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
 
 **External blockers:**
+- access-kit: ENVIRONMENT_VALIDATION_PENDING: No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3). (owner: platform-ops)
+- access-kit: INFRASTRUCTURE_WAITING: The staging aether-access-mcp repository, image and enabled service do not exist yet, and the live AetherStagingDeploy policy must match the reviewed manifest. (owner: platform-ops)
 - agentic-x402: ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)
 - card-linked-payments: CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)
 - connectors-byok: CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)
@@ -143,6 +148,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `identity-resolution`: READY_TO_VALIDATE
 
 **Hard blockers:**
+- access-kit: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - agentic-x402: implementation state VERIFIED is below the TURNKEY floor
 - backend-api: implementation state VERIFIED is below the TURNKEY floor
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
@@ -174,6 +180,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - tenant-import-engine: implementation state VERIFIED is below the TURNKEY floor
 
 **External blockers:**
+- access-kit: ENVIRONMENT_VALIDATION_PENDING: No real tenant has completed install, sign-in, a Profile360 read, cross-tenant denial and usage reconciliation in staging (W3). (owner: platform-ops)
 - agentic-x402: ENVIRONMENT_VALIDATION_PENDING: The wired x402 and agent lifecycle consumers have not run in a deployment; which mapper-owned tables populate is unverified. (owner: platform-ops)
 - card-linked-payments: CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)
 - connectors-byok: CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)

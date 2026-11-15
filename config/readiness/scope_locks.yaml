@@ -2,6 +2,10 @@ schema_version: 1
 note: 'Scope denominator locks. A denominator change at the same scope version fails
   validation. Regenerate with: python scripts/validate_readiness_model.py --update-locks'
 scopes:
+- scope_id: access-kit-design-partner-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: access-kit
 - scope_id: agentic-x402-v1
   version: 1
   denominator_signature: 101b51999f5fde26
