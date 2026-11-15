@@ -65,16 +65,42 @@ describe('AetherServerSDK — durable queue selection', () => {
     await sdk.shutdown();
   });
 
-  it('selects the durable queue when durable:true, using a default spool path', async () => {
-    // Unique write key -> unique default spool file -> no cross-run state.
-    const sdk = new AetherServerSDK({
-      writeKey: `sk-${Math.random().toString(36).slice(2)}`,
+  it('rejects durable:true without a spoolPath instead of guessing a temp dir', () => {
+    expect(() => new AetherServerSDK({
+      writeKey: 'sk-test',
       endpoint: 'http://localhost',
       durable: true,
+    })).toThrow(/requires `spoolPath`/);
+  });
+
+  it('enables durability from spoolPath alone', async () => {
+    const sdk = new AetherServerSDK({
+      writeKey: 'sk-test',
+      endpoint: 'http://localhost',
+      spoolPath: path.join(tmpDir, 'spool.jsonl'),
     });
     expect(sdk.isDurable()).toBe(true);
     expect(sdk.spoolHealthy()).toBe(true);
     await sdk.shutdown();
+  });
+
+  it('warns that a local spool is not durable on AWS Lambda', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const previous = process.env.AWS_LAMBDA_FUNCTION_NAME;
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'checkout-handler';
+    try {
+      const sdk = new AetherServerSDK({
+        writeKey: 'sk-test',
+        endpoint: 'http://localhost',
+        spoolPath: path.join(tmpDir, 'lambda-spool.jsonl'),
+      });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('AWS Lambda'));
+      await sdk.shutdown();
+    } finally {
+      if (previous === undefined) delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+      else process.env.AWS_LAMBDA_FUNCTION_NAME = previous;
+      warn.mockRestore();
+    }
   });
 
   it('reports a degraded spool via spoolHealthy() but still accepts events', async () => {

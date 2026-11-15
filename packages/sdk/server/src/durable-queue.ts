@@ -13,7 +13,7 @@
 // recovered by replaying the spool on the next process start.
 //
 // Wiring status: M5 wires this into AetherServerSDK (see ./index.ts) as an
-// opt-in queue — the SDK selects it when `durable: true` or a `spoolPath`
+// opt-in queue — the SDK selects it when a `spoolPath`
 // is configured, replays its spool on client init, and calls ack() from
 // flush() on confirmed delivery so delivered entries are pruned instead of
 // replaying forever. The class itself stays transport-agnostic: ack() is

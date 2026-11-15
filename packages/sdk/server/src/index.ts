@@ -16,8 +16,7 @@
 //   await aether.flush();
 
 import os from 'node:os';
-import path from 'node:path';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { EVENT_FAMILY, CONTRACT_SCHEMA_VERSION } from '@olympuslabs/aether-shared';
 // Registry-generated purpose sets — hand-written copies here drifted to 9 of
@@ -78,6 +77,11 @@ export {
 export type { AgentEventEnvelope } from './agentic';
 
 
+/** True inside an AWS Lambda execution environment. */
+function isAwsLambda(): boolean {
+  return typeof process.env.AWS_LAMBDA_FUNCTION_NAME === 'string';
+}
+
 const DEFAULT_ENDPOINT = 'https://api.aether.network/v1/batch';
 
 export class AetherServerSDK {
@@ -137,13 +141,27 @@ export class AetherServerSDK {
     this.consent = this.buildConsentState(config.consent ?? {});
 
     // --- Durable queue selection (Reliability Phase 2 §2, M5) -------------
-    // Durability is opt-in: on when `durable: true` OR a `spoolPath` is given
-    // (a spoolPath implies durable). Off by default -> in-memory EventQueue,
-    // identical to pre-M5 behavior, so existing consumers see no change.
+    // Durability is opt-in and needs an explicit, host-chosen spool location:
+    // a `spoolPath` turns it on. `durable: true` without one is a config
+    // error, not a silent fallback to the OS temp dir, which containers and
+    // serverless platforms discard on restart (that would look durable and
+    // lose events). Off by default -> in-memory EventQueue.
     this.onSpoolDrop = config.onSpoolDrop;
-    const durableEnabled = config.durable === true || typeof config.spoolPath === 'string';
+    if (config.durable === true && typeof config.spoolPath !== 'string') {
+      throw new Error(
+        'Aether Server SDK: `durable: true` requires `spoolPath`, a file on storage that survives ' +
+          'restarts (for example a mounted volume). The SDK no longer falls back to the OS temp directory.',
+      );
+    }
+    const durableEnabled = typeof config.spoolPath === 'string';
+    if (durableEnabled && isAwsLambda()) {
+      console.warn(
+        '[aether] Durable mode on AWS Lambda: the spool lives on this instance\'s local disk and is lost ' +
+          'when the instance is recycled. Call `await aether.flush()` before each handler returns.',
+      );
+    }
     if (durableEnabled) {
-      const spoolPath = config.spoolPath ?? this.defaultSpoolPath();
+      const spoolPath = config.spoolPath as string;
       const durable = new DurableEventQueue({
         spoolPath,
         maxSize: this.config.maxQueueSize,
@@ -412,18 +430,6 @@ export class AetherServerSDK {
     }
   }
 
-  /**
-   * Default spool file used when `durable: true` is set without a `spoolPath`.
-   * It must be STABLE across restarts (durability replays the same file) and
-   * must not collide across write keys, but the write key is a secret — so
-   * only a short, non-reversible digest of it appears in the filename. The OS
-   * temp dir is a pragmatic default; hosts wanting stronger durability set an
-   * explicit `spoolPath` on a persistent volume.
-   */
-  private defaultSpoolPath(): string {
-    const digest = createHash('sha256').update(this.config.writeKey).digest('hex').slice(0, 16);
-    return path.join(os.tmpdir(), 'aether-server-spool', `${digest}.jsonl`);
-  }
 
   private buildConsentState(partial: Partial<ServerConsentState>): ServerConsentState {
     // Deny-by-default across the full registry vocabulary, then apply the

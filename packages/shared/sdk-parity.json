@@ -250,7 +250,7 @@
         "server": {
           "status": "partial",
           "evidence": "packages/sdk/server/src/queue.ts#EventQueue",
-          "note": "Bounded in-process queue with retry by default; durable: true or spoolPath selects the disk-backed DurableEventQueue (persists and replays at startup)."
+          "note": "Bounded in-process queue with retry by default; spoolPath selects the disk-backed DurableEventQueue (durable: true alone throws) (persists and replays at startup)."
         },
         "react-native": {
           "status": "delegated_native",
