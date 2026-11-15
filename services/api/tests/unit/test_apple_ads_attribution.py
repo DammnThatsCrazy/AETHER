@@ -141,3 +141,62 @@ async def test_blank_and_extra_fields_are_rejected():
         mod.AppleAdsResolve(token="  ", anonymous_id="a")
     with pytest.raises(ValueError):
         mod.AppleAdsResolve(token="t", anonymous_id="a", proof_level="cryptographic")
+
+
+def _rebuild_spies(monkeypatch, *, activity_queued: int):
+    from journeys.measurement import activity_rebuild
+    from journeys.measurement.engine import journey_compiler
+
+    calls = {"activities": [], "touchpoints": []}
+
+    async def request_for_activities(activities):
+        calls["activities"].append([a.get("anonymous_id") for a in activities])
+        return activity_queued
+
+    async def rebuild_affected_by_touchpoint(self, tenant_id, touchpoint_id):
+        calls["touchpoints"].append((tenant_id, touchpoint_id))
+        return [{"journey_id": "j1"}]
+
+    monkeypatch.setattr(activity_rebuild, "request_for_activities", request_for_activities)
+    monkeypatch.setattr(journey_compiler.JourneyCompiler, "rebuild_affected_by_touchpoint",
+                        rebuild_affected_by_touchpoint)
+    return calls
+
+
+async def test_recorded_attribution_requests_a_debounced_journey_rebuild(monkeypatch):
+    calls = _rebuild_spies(monkeypatch, activity_queued=1)
+    _apple(monkeypatch, body=APPLE_OK)
+    out = await mod.resolve_apple_ads_attribution(_body(), _req())
+    assert out["resolved"] is True
+    assert calls["activities"] == [["anon-ios"]]
+    assert calls["touchpoints"] == []  # the debounced path took it
+
+
+async def test_attribution_rebuilds_through_the_touchpoint_when_activity_rebuild_is_off(monkeypatch):
+    calls = _rebuild_spies(monkeypatch, activity_queued=0)
+    _apple(monkeypatch, body=APPLE_OK)
+    await mod.resolve_apple_ads_attribution(_body(), _req())
+    [tp] = touchpoint_repo._local_store.values()
+    assert calls["touchpoints"] == [(T, tp["touchpoint_id"])]
+
+
+async def test_a_failed_rebuild_never_loses_the_attribution(monkeypatch):
+    from journeys.measurement import activity_rebuild
+
+    async def broken(activities):
+        raise RuntimeError("compiler down")
+
+    monkeypatch.setattr(activity_rebuild, "request_for_activities", broken)
+    _apple(monkeypatch, body=APPLE_OK)
+    out = await mod.resolve_apple_ads_attribution(_body(), _req())
+    assert out["resolved"] is True
+    assert len(activity_repo._local_store) == 1 and len(touchpoint_repo._local_store) == 1
+
+
+async def test_a_token_bound_elsewhere_requests_no_rebuild(monkeypatch):
+    _apple(monkeypatch, body=APPLE_OK)
+    await mod.resolve_apple_ads_attribution(_body(anon="anon-1"), _req())
+    calls = _rebuild_spies(monkeypatch, activity_queued=1)
+    other = await mod.resolve_apple_ads_attribution(_body(anon="anon-2"), _req())
+    assert other["status"] == "token_already_bound"
+    assert calls == {"activities": [], "touchpoints": []}

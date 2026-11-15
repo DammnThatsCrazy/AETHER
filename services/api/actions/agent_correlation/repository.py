@@ -115,7 +115,8 @@ class CorrelationKeyIndexRepository(BaseRepository):
     async def observations_for(self, tenant_id: str, key_kind: str, key_value: str) -> list[str]:
         rows = await self.find_many(
             {"tenant_id": tenant_id, "key_kind": key_kind, "key_value": key_value},
-            limit=MAX_CANDIDATES_PER_KEY,
+            # +1: the caller's own key row is now indexed before its lookup.
+            limit=MAX_CANDIDATES_PER_KEY + 1,
         )
         return [r["observation_id"] for r in rows if r.get("tenant_id") == tenant_id]
 
@@ -144,7 +145,10 @@ class CorrelationVerdictRepository(BaseRepository):
         row_id = self.row_id(tenant_id, left.observation_id, right.observation_id, verdict)
         if await self.find_by_id(row_id):
             return row_id, False
-        await self.insert(row_id, {
+        # Both sides of a concurrent pair can reach this point for the same
+        # (symmetric) verdict id: an atomic create-if-absent lets exactly one
+        # record it and the other read it as already recorded.
+        created = await self.insert_if_absent(row_id, {
             "tenant_id": tenant_id,
             "verdict_id": row_id,
             "policy_version": CORRELATION_CONTRACT_VERSION,
@@ -154,8 +158,8 @@ class CorrelationVerdictRepository(BaseRepository):
             "right_role": right.source_role,
             "decided_at": _iso(datetime.now(timezone.utc)),
             **verdict.model_dump(mode="json"),
-        })
-        return row_id, True
+        }, tenant_id)
+        return row_id, created
 
     async def get(self, tenant_id: str, verdict_id: str) -> Optional[dict[str, Any]]:
         row = await self.find_by_id(verdict_id)

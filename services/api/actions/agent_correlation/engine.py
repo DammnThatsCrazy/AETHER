@@ -139,6 +139,18 @@ class CorrelationEngine:
 
     async def _correlate(self, obs: CorrelationObservation, result: "IngestResult") -> None:
         index_keys = join_index_keys(obs, self._verifier)
+        # Publish this observation's keys BEFORE looking for candidates. Two
+        # matching observations ingested concurrently then cannot both finish
+        # their lookups before either is indexed: whichever looks second sees
+        # the first, and the verdict id is symmetric in the pair, so both sides
+        # converge on one verdict. (Indexing after the lookup let simultaneous
+        # arrivals miss each other permanently: redelivery returns as a
+        # duplicate and never re-runs the lookup.)
+        await self._keys.index(
+            obs.tenant_id,
+            obs.observation_id,
+            index_keys + [("time", own_time_bucket(obs.occurred_at, self._window))],
+        )
         candidate_ids: list[str] = []
         lookups = index_keys + [("time", bucket) for bucket in time_buckets(obs.occurred_at, self._window)]
         for key_kind, key_value in lookups:
@@ -147,11 +159,6 @@ class CorrelationEngine:
                     candidate_ids.append(other_id)
             if len(candidate_ids) >= MAX_CANDIDATES:
                 break
-        await self._keys.index(
-            obs.tenant_id,
-            obs.observation_id,
-            index_keys + [("time", own_time_bucket(obs.occurred_at, self._window))],
-        )
 
         for other_id in candidate_ids[:MAX_CANDIDATES]:
             other = await self._observations.get_observation(obs.tenant_id, other_id)
