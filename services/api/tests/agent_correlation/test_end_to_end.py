@@ -318,3 +318,55 @@ async def test_a_redelivery_resumes_an_ingestion_that_failed_after_the_save(serv
     assert any(l["status"] == "linked" for l in again[0]["links"])  # correlation resumed
     third = await service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call)
     assert third[0]["links"] == []  # complete now: nothing replayed
+
+
+@pytest.mark.asyncio
+async def test_matching_observations_ingested_concurrently_still_link(service, tenant_id) -> None:
+    import asyncio
+
+    await connect_verified_account(tenant_id, account_key=STORE)
+    task = await service.register_task(tenant_id, agent_platform="xai_grok")
+    gid = "gid://shopify/InventoryLevel/77?inventory_item_id=66"
+    call = {"correlation_token": task["correlation_token"], "agent_platform": "xai_grok", "call_id": "race_1",
+            "tool_name": "set-inventory", "input": {"available": 3},
+            "output": {"inventoryLevel": {"id": gid}}, "occurred_at": iso(5)}
+    level = {"inventory_item_id": 66, "location_id": 7, "available": 3, "updated_at": iso(6),
+             "admin_graphql_api_id": gid, "user_id": 4242}
+
+    # Force the worst interleaving: neither observation may write its keys until
+    # BOTH have reached the indexing step. With the old order (look up, then
+    # index) each side has finished every lookup by then and misses the other;
+    # indexing first means both lookups run after both keys are published.
+    keys = service.engine._keys  # noqa: SLF001 - test seam
+    real_index, real_lookup = keys.index, keys.observations_for
+    arrived: set[str] = set()
+    both_arrived = asyncio.Event()
+
+    async def index(tenant, observation_id, ks):
+        arrived.add(observation_id)
+        if len(arrived) >= 2:
+            both_arrived.set()
+        try:
+            await asyncio.wait_for(both_arrived.wait(), timeout=2.0)
+        except asyncio.TimeoutError:
+            pass
+        await real_index(tenant, observation_id, ks)
+
+    lookup = real_lookup
+    keys.index, keys.observations_for = index, lookup
+    try:
+        tool, shop = await asyncio.gather(
+            service.ingest_record(tenant_id, "aether_mcp", "tool_call_reported", call),
+            service.ingest_record(tenant_id, "shopify", "inventory_level", level,
+                                  account_bindings={"shopify": {"source_account_key": STORE}}),
+        )
+    finally:
+        keys.index, keys.observations_for = real_index, real_lookup
+
+    tool_id = "aether_mcp:tool_call:xai_grok:race_1"
+    links = [l for l in tool[0]["links"] + shop[0]["links"]
+             if l["status"] == "linked" and l["key_kind"] == "shared_object_ref"
+             and tool_id in (l["other_observation_id"], tool[0]["observation_id"])]
+    assert links, "concurrently ingested matching observations must link"
+    # Both sides may find each other; the symmetric verdict id means one verdict.
+    assert len({l["verdict_id"] for l in links}) == 1

@@ -28,7 +28,7 @@ reviewed_source_commits:
   - {'commit': '1a34c58c', 'reason': 'Reviewed 5f221db1 and 1a34c58c: Profile360 slot freshness from per-tenant source watermarks (freshnessPolicy.slots in the projection registry, frame runtime evaluation) and watermark-advancing decorators on existing repository writes. Write semantics, return values and endpoints are unchanged; the freshness behavior is documented here.'}
   - {'commit': 'fea42ee5', 'reason': 'Reviewed fea42ee5: POST /v1/profile/resolve (identifier in the body, same read authority as GET) and its read-semantic, delegated-MCP and Access Kit capability registration in the middleware; the POST resolve route is documented here.'}
 source_hashes:
-  "services/api/actions/": "sha256:3f94697fcea8dcb28f886be2ef31d7a8fd5a38e80508ab293759887be7a8a342"
+  "services/api/actions/": "sha256:5784dfe0304ea0a61e825f9d17763e6d7b3f80ec2575a9334ab24fa0a37d409b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:5676d6eec39e22c0627d190227707a0eade70a519ba736414e8f50c27e8cdcb6"
   "services/api/connectors/": "sha256:13fb8ede9b2ab11d9ccfccb18fcb5a0b0caa5fb353ca67d498fcee2f26c28ae8"
@@ -37,7 +37,7 @@ source_hashes:
   "services/api/identity/": "sha256:10a2470b6c7cda3aebcd2637a83cc17861d115d4024514e4b733b2f25c5d983e"
   "services/api/ingestion/": "sha256:ea42e6db1c094cf4c14290caf24d3a4ce1a52749dc6ec3df46a1fe1d88000bff"
   "services/api/intelligence/": "sha256:a56bc62b46aad46294e562e7f9b512763a61341423241bdbeb651af9ecaf465b"
-  "services/api/journeys/": "sha256:bbf97457014cc4afba49b87ed2a94c4d96f60a4997ceb1fc803bb110f20db49a"
+  "services/api/journeys/": "sha256:5b0ab70a719050ab69dfde2605ca5b35375e5360c5b4c4ddd0437ee9b1cf8a6f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b6efa7a22d5d467cf998834341049817d0c0c8801794ca77048c8042ab4773e4"
   "services/api/value/": "sha256:58d9c7f7e2e5f6a22e6482650d25fe9c3ec10d0e743f20420771460653883c17"

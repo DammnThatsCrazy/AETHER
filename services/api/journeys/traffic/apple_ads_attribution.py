@@ -219,7 +219,37 @@ async def record_attribution(
         "occurred_at": occurred_at,
         "properties": {k: v for k, v in evidence.items() if v is not None},
     })
+    await _request_journey_rebuild(tenant_id, activity, touchpoint_id)
     return True, activity
+
+
+async def _request_journey_rebuild(tenant_id: str, activity: dict[str, Any], touchpoint_id: str) -> str:
+    """Recompile the journey that now carries the verified acquisition touchpoint.
+
+    Both upserts above are storage-only: the activity-driven rebuild hook runs in
+    the silver projectors, which this endpoint bypasses, and the iOS resolver
+    emits no further event. Attribution often resolves after the install's
+    ordinary activity was already compiled, so without this a user who does
+    nothing else keeps a journey missing its acquisition touchpoint.
+
+    Uses the debounced activity rebuild when that is enabled, otherwise the
+    touchpoint rebuild path directly. Best-effort: the attribution is already
+    durable, and compilation is an idempotent recomputation from those facts.
+    Returns how the rebuild was requested, for observability and tests.
+    """
+    try:
+        from journeys.measurement.activity_rebuild import request_for_activities
+
+        if await request_for_activities([activity]):
+            return "activity_rebuild_queued"
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
+
+        rebuilt = await JourneyCompiler().rebuild_affected_by_touchpoint(tenant_id, touchpoint_id)
+        return "touchpoint_rebuilt" if rebuilt else "no_journey_identity"
+    except Exception as exc:  # noqa: BLE001 - the stored attribution is the source of truth
+        logger.warning("apple_ads.journey_rebuild_failed",
+                       extra={"tenant_id": tenant_id, "error_type": type(exc).__name__})
+        return "rebuild_failed"
 
 
 def _require_enabled() -> None:
