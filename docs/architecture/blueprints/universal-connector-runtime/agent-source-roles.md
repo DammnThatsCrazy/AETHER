@@ -28,7 +28,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "scripts/certify_agent_correlation.py": "sha256:9d0bd1ef8e4e9100182487db07425f4acdb041bb55376b807d9f6dc4e3dcc5af"
-  "services/api/actions/agent_correlation/bindings.py": "sha256:b345e8c5d707735c35965c9b802576495f5a9b220e3587a4377a4fff164827d6"
+  "services/api/actions/agent_correlation/bindings.py": "sha256:a6ca53cae6bca133e09fd5a9016c2e17c436aeff086a6dc93c96f4c2d8cb3bdb"
   "services/api/actions/agent_correlation/certification/fixtures.py": "sha256:13bef311e6a1c855939f7fa3edf8ef52bf6a6d97e1564ff2bf317773fce0a19f"
   "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
   "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c8056f3ba70415bc62b954bcdd7782cd63b48ef3d41b8c25c3dcc5e2fb554f2d"
