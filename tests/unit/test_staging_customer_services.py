@@ -70,3 +70,55 @@ def test_terraform_names_staging_service_inside_lifecycle_iam_prefix():
     assert '"/aether/${var.project}-staging/access-mcp"' in module
     policy = (ROOT / "config/staging_lifecycle_iam_policy.yaml").read_text()
     assert "service/AETHER-staging/AETHER-staging-*" in policy
+
+
+DIGEST = "sha256:" + "a" * 64
+
+
+def _full(**overrides):
+    entry = {"enabled": False, "desired_count": 1, "repository": False,
+             "image_digest": "", "oauth": False, "dcr": False}
+    entry.update(overrides)
+    return {"profiles": {"staging": {"customer_services": {"access-mcp": entry}}}}
+
+
+def test_promote_inputs_mirror_the_declared_state():
+    inputs = dict(MODULE.access_mcp_promote_inputs("staging", _full(
+        enabled=True, repository=True, image_digest=DIGEST, oauth=True, dcr=True,
+    )))
+    assert inputs == {
+        "enable_access_mcp_repository": "true", "enable_access_mcp": "true",
+        "enable_access_mcp_oauth": "true", "enable_access_mcp_dcr": "true",
+        "access_mcp_image_digest": DIGEST,
+    }
+    disabled = dict(MODULE.access_mcp_promote_inputs("staging", _full()))
+    assert disabled["enable_access_mcp"] == "false" and disabled["access_mcp_image_digest"] == ""
+
+
+def test_repository_only_state_is_carried_so_plans_do_not_destroy_it():
+    inputs = dict(MODULE.access_mcp_promote_inputs("staging", _full(repository=True)))
+    assert inputs["enable_access_mcp_repository"] == "true"
+    assert inputs["enable_access_mcp"] == "false"
+
+
+@pytest.mark.parametrize("overrides", [
+    {"enabled": True},                                   # no repository / digest
+    {"enabled": True, "repository": True},               # no digest
+    {"oauth": True},                                     # oauth without service
+    {"enabled": True, "repository": True, "image_digest": DIGEST, "dcr": True},  # dcr without oauth
+    {"image_digest": "latest"},                          # mutable tag
+    {"repository": "yes"},                               # non-boolean
+])
+def test_inconsistent_promote_state_fails_closed(overrides):
+    with pytest.raises(ValueError):
+        MODULE.access_mcp_promote_inputs("staging", _full(**overrides))
+
+
+def test_lifecycle_wake_and_sleep_plans_pass_the_mcp_inputs():
+    workflow = (ROOT / ".github/workflows/staging-lifecycle.yml").read_text()
+    assert workflow.count("staging_customer_services.py --promote-inputs") == 2
+    assert workflow.count('"${access_mcp_inputs[@]}"') == 2
+
+
+def test_repository_matrix_promote_inputs_are_valid():
+    MODULE.access_mcp_promote_inputs("staging")

@@ -936,6 +936,10 @@ jobs:
             reconcile_staging_state ''
           fi
           # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          # Carry the declared staging Access Kit MCP state into the plan
+          # (config/runtime_deployment.yaml customer_services.access-mcp).
+          access_mcp_raw="$(python scripts/release/staging_customer_services.py --promote-inputs)"
+          mapfile -t access_mcp_inputs <<< "$access_mcp_raw"
           dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
@@ -944,6 +948,7 @@ jobs:
             -f staging_state="$STAGING_STATE" \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
+            "${access_mcp_inputs[@]}" \
             -f expected_commit_sha="$INTENDED_RELEASE_SHA")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
@@ -3199,6 +3204,10 @@ jobs:
             reconcile_staging_state ''
           fi
           # The dispatch helper prints any gh failure, then exits 1 (never retries).
+          # Carry the declared staging Access Kit MCP state into the plan
+          # (config/runtime_deployment.yaml customer_services.access-mcp).
+          access_mcp_raw="$(python scripts/release/staging_customer_services.py --promote-inputs)"
+          mapfile -t access_mcp_inputs <<< "$access_mcp_raw"
           dispatch_output="$(scripts/ci/dispatch_workflow.sh "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
@@ -3208,6 +3217,7 @@ jobs:
             -f secret_preflight_required=false \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
+            "${access_mcp_inputs[@]}" \
             -f expected_commit_sha="$EXPECTED_COMMIT_SHA")"
           printf '%s\n' "$dispatch_output"
           run_id="$(printf '%s\n' "$dispatch_output" \
