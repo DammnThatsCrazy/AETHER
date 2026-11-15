@@ -33,12 +33,12 @@ source_hashes:
   "services/api/actions/agent_correlation/certification/record.py": "sha256:24b8570f342f378362ae5fdd3c2502b13d1dbcd2253c42202eff474ce599a37b"
   "services/api/actions/agent_correlation/certification/recorders.py": "sha256:c8056f3ba70415bc62b954bcdd7782cd63b48ef3d41b8c25c3dcc5e2fb554f2d"
   "services/api/actions/agent_correlation/certification/runner.py": "sha256:f6a73c32909978d0e554ac9888d3cdccca1c049c28d615e66ca90f8840620bd8"
-  "services/api/actions/agent_correlation/engine.py": "sha256:c1a15719a8245a5713bf0c758ae7780eb1490f2d14bda7f33e7770bfc82e4e51"
+  "services/api/actions/agent_correlation/engine.py": "sha256:2a3ce9bb574dec5b4e6de1038d1de1768e4676ff547b37539d3d03f34334ae38"
   "services/api/actions/agent_correlation/mappers/__init__.py": "sha256:6f74fb42e57a1657fe5c142ccfb97944b3f0f6dcdbf3bc89f63fceb6c0faa27b"
   "services/api/actions/agent_correlation/mcp_server.py": "sha256:b20c135f39ae243eb5df8073f45df2a69c5ae8e00b635b2a84dd72ba3e6f4cde"
   "services/api/actions/agent_correlation/projection.py": "sha256:533ba53fd6932921a34e84667f6c7461eec8099906893da7f1852698ddbeb4bc"
   "services/api/actions/agent_correlation/routes.py": "sha256:6cc7bbf489ed282446b32fddbf8d8ca348aa26286b8173fb0160d723de5e7067"
-  "services/api/actions/agent_correlation/service.py": "sha256:6756cb8aadd411875e3b1d37a1a0cbc79f704af3cc3803ae0f2efaf9fe361c60"
+  "services/api/actions/agent_correlation/service.py": "sha256:b8bf7252ce075d8f503da63a474956b20b4e9d1bb32cfc57b3acd6780ee33880"
   "services/api/shared/integration_contracts/correlation.py": "sha256:3e0ab93ccd0bc9a1148f26e79aa4720fbc47f9cbdadf7d55b2db0a6e774dbb30"
   "services/api/shared/integration_contracts/correlation_token.py": "sha256:bdc1861aad5f6d2afcb6f07ad0f9ab67e3f28bca7cfea49b11dda2aa0d0c9ae7"
   "services/api/shared/integration_contracts/source_roles.py": "sha256:002bcc66f8960fec8b92f7d63f8e665cd1a20b6679957bd9459be8d8d81d94ae"
@@ -270,7 +270,14 @@ When a record arrives, the engine:
    500.
 4. Runs the join rules.
 5. Appends linked, candidate, and conflicting verdicts.
-6. Projects new linked verdicts.
+6. Projects linked verdicts that are new or whose recorded projection is not
+   complete. Each verdict row keeps a projection checkpoint
+   (`graph_projection_status`, `graph_projection_attempts`); only `persisted`
+   or `not_applicable` counts as complete.
+
+A repeated delivery stores nothing new, but it does retry the graph
+projection of every linked verdict for that observation whose checkpoint is
+incomplete, so a transient graph outage does not lose a proven link.
 
 The chain view lists, for each role, a gap message when no observation of that
 role is linked. An answer never implies coverage it does not have.
@@ -289,6 +296,10 @@ counts as verified only when all of these hold:
 - The account is one the connection selected.
 - Its external ID and realm are recorded.
 
+Verified bindings are keyed by provider family, realm and account ID, so the
+same account ID verified in both the live and the test realm keeps both
+bindings, and each record resolves against its own realm.
+
 A verified binding carries the account record as its `verification_ref`, and
 every object ref scoped by it carries `account_verification_ref`.
 
@@ -297,7 +308,7 @@ every object ref scoped by it carries `account_verification_ref`.
 | Object match where either side's scope is verified | `shared_object_ref`, `DETERMINISTIC_BINDING`, `linked` |
 | Object match where neither scope is verified | `declared_object_ref`, `TENANT_DECLARED`, `candidate` |
 | Family has verified accounts; a request or declaration names another account | Rejected (`422`) |
-| Family has verified accounts; the realm differs | Rejected |
+| The account is verified only in the other realm | Rejected |
 | Family has one verified account | It becomes the default for agent-side object IDs |
 
 `GET /account-bindings` shows each family's effective binding and whether a

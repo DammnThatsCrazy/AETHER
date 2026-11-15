@@ -9,7 +9,7 @@ since_version: "0.1.0"
 source_files:
   - services/api/intelligence/pattern_discovery/
 source_hashes:
-  "services/api/intelligence/pattern_discovery/": "sha256:26138d8443966f019a9d2e405a6e64751437491a6bd139c4036ffcafadb8a278"
+  "services/api/intelligence/pattern_discovery/": "sha256:307d9f8378b04252b1edc8b29682ebc1a11ec6bf2eccffc0a4eb79a9619d5137"
 ---
 
 # Pattern Discovery and Unstructured Evidence Intelligence
@@ -121,7 +121,7 @@ normal flow.
 | `shared_attribute_cluster` | Entities converging on devices, IPs, wallets, cards, emails or learned fields | Hub values (robust z per attribute type) plus components linked by hubs or by two or more shared values |
 | `behavioral_cohort` | Near-identical behaviour across many entities | TF-IDF + time-of-day cosine with a population-learned threshold; normal-flow cohorts dropped |
 | `temporal_burst` | Token rates far above normal *for that hour of the week* | Poisson tail against the seasonal rate, otherwise the flat baseline or the same window without its peak |
-| `lockstep` | Many entities doing the same thing in the same minute, repeatedly | Membership Jaccard across windows |
+| `lockstep` | Many entities doing the same thing in the same minute, repeatedly | Membership Jaccard across windows; the signature's `anchor` (the group's smallest member) keeps disjoint groups distinct |
 | `behavioral_outlier` | Entities extreme on the same set of features, compared only within their cohort (humans, agents, anonymous) | Upward robust z per cohort |
 | `segment_shift` | A token surging inside one country, app, cohort or agent type while the rest of the tenant does not | Segment Poisson tail; localization against the rest of the tenant; single-valued dimensions excluded |
 | `agent_spawn_anomaly` | Sub-agent fan-out extreme against the agent population, or spawn bursts | Robust z on child counts; children per 2-minute window |
@@ -129,7 +129,7 @@ normal flow.
 | `agent_interaction_cluster` | Agents transacting with, targeting or messaging each other across principals | Connected components of agent-to-agent links |
 | `novel_motif` | Typed triangles and directed 3–4 cycles not in `relationship-motif-registry.json`, over extraction edges **and the tenant's canonical graph** | Closure rate relative to the graph average |
 | `schema_drift` | New event groups, new, dropped or retyped fields, new identifier fields | Field presence against the baseline profile |
-| `traffic_anomaly` | Hourly windows the ML `anomaly_detection` model flags | Model score > 0.5 on contract-shaped window features |
+| `traffic_anomaly` | Hourly windows the ML `anomaly_detection` model flags | Model score > 0.5 on contract-shaped window features; requests carry `X-Service-Token` from `ML_SERVICE_TOKEN` for standalone serving |
 | `cross_domain` | Patterns of different kinds implicating the same entities, including still-active patterns from earlier runs | Entity-set Jaccard ≥ 0.4 across kinds; at least one current-run member |
 
 A detector that raises an exception is recorded in the run stats and skipped;
@@ -212,7 +212,10 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   duplicate is merged into it: entities and support are added, and the
   duplicate's id is recorded in `duplicates`. Later re-detections of the
   duplicate signature strengthen the canonical pattern instead of
-  re-entering the queue. Merging is idempotent per duplicate fingerprint.
+  re-entering the queue. Re-merging the same duplicate refreshes its
+  contribution whenever its members or support changed, even under an
+  unchanged fingerprint (which ignores individual members and counts), and is
+  a no-op otherwise.
 - Promotion is allowed only from a confirmed status whose evidence has not
   changed since review, and it is sticky. Seeing a pattern is automatic;
   letting it write risk signals and graph edges stays a human act.
@@ -220,7 +223,10 @@ any open or reviewed state --> deprecated --(re-detected)--> funnel
   fingerprint change, i.e. a new `version`) and `deprecated_at` drive "what's
   new".
 - Open patterns not re-observed for `STALE_AFTER_RUNS` (6) runs of their
-  detector are deprecated automatically. Reviewed patterns never are.
+  detector are deprecated automatically. Reviewed patterns never are. A run
+  whose evidence-store read failed ages nothing (`coverage.aging.status:
+  skipped_store_unavailable`): absence from an unread store is not evidence.
+  The scheduled job reports such a run as failed so the jobs worker retries it.
 - Every write after the first is a compare-and-set on `revision`.
 
 ### Stores
@@ -250,7 +256,9 @@ PostgreSQL when `PATTERN_DISCOVERY_TEST_DSN` is set. Storage policies are in
   durable erasure job (`governance/consent/erasure_planes.py`). For a subject
   it redacts every exact subject ref (`user:`, `anon:`, `entity:`, `agent:`,
   `session:` keys or the bare id) from affected entities, evidence, signature
-  content, title, summary, review history and promotion outcomes. The pattern
+  content, title, summary, review history and promotion outcomes, and from
+  merged-duplicate state (`base_entity_keys`, `duplicates[*].entity_keys`) so
+  re-detection cannot fold the subject back in. The pattern
   id and signature hash are kept. Patterns left with fewer than two entities
   are deleted, because one remaining entity would re-identify the erased one
   by difference. Run records listing a redacted pattern are deleted too, as
@@ -282,6 +290,13 @@ PostgreSQL when `PATTERN_DISCOVERY_TEST_DSN` is set. Storage policies are in
    `build_edge_properties` (so it passes `GraphWriteValidator` in production)
    and `causality_class: inferred_influence` (flag
    `AETHER_PATTERN_GRAPH_PROMOTION_ENABLED`).
+
+Calling promote again on an already-promoted pattern performs no second
+lifecycle transition. It re-runs only the projections a transient outage left
+incomplete (outcomes never recorded, a failed risk write, or a failed graph
+projection) and counts the retry in `promotion.projection_retries`; with
+nothing incomplete it returns the pattern unchanged. Both projections are
+idempotent.
 
 Deprecating a promoted pattern soft-revokes its membership edges. Its Risk360
 signals remain as attributed history owned by the risk plane. The conversion
@@ -319,7 +334,10 @@ shared attribute values and counterparties its evidence names (hashed values
 stay hashed), principals and member patterns, and the links between them (at
 most 300 nodes; `truncated` says so). `POST .../graph-overlay` takes the node
 ids in a graph view (bare ids or `kind:id` keys, at most 500) and returns, per
-node, the visible patterns it belongs to.
+node, the visible patterns it belongs to. A member is linked to a shared
+attribute value only when the detector observed it with that value
+(`owners` in the shared-attribute evidence, at most 50 per value); records
+without owner sets draw no member-to-attribute edges.
 
 **Segment lenses** (`lenses.py`). The engine stores a `segment_profile` on
 each pattern: the share of its entities' events in each campaign, channel,
