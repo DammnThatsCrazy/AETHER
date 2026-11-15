@@ -28,10 +28,11 @@ toc_depth: 3
 reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
+  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
 source_hashes:
-  ".github/workflows/": "sha256:00b5260da5d1d2100c337b7801de024e08e0690da8eca5702f5bdb2ee82fda66"
+  ".github/workflows/": "sha256:68c23bcf7b8806cff6ce8dcf45951d02f9cea8ff29ad2a522c41c12c5366a268"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
-  "config/staging_apply_iam_policy.yaml": "sha256:528cc930bd8cedf9f347f4f0630e50e61bf1360bdf5beeb8088c90485519b142"
+  "config/staging_apply_iam_policy.yaml": "sha256:14947d3137601d8680d855c035fa90bac3d461c57480d4355c68002f639f21bf"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:327097c1efc7b214e8b56ead967d30dbab9376854840c20a2d59372660f2b6d5"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -476,7 +477,8 @@ enforced by any workflow in `.github/workflows/`.
 
 The customer-facing Access Kit MCP image follows its own opt-in release path:
 after Terraform provisions the dedicated immutable ECR repository in the
-canonical `production` state, a clean reviewed commit is built as
+target account's persistent state (`production`, or `staging` for staging
+certification), a clean reviewed commit is built as
 `linux/amd64` and pushed by
 `infra/aws/terraform/scripts/publish_access_mcp_image.sh`. The publisher checks
 the repository's encryption, tag immutability, and scan-on-push settings,

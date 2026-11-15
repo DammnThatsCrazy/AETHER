@@ -25,19 +25,20 @@ toc_depth: 3
 reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the linked root main.tf change; it updates the Auth0 section comment only. The dedicated Native CLI client change does not alter lean AWS topology, deployment lane, or runtime settings described here."
+  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
   ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
-  "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
+  "config/runtime_deployment.yaml": "sha256:072313f747f4cb1f6f695112090b7e8942c691d94731908f68987da6e03e03d7"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:7d1aa3e9fd042bbb27d8173ea690f41747eee0ea91c5ddcab6c85a5edd688ea6"
-  "infra/aws/terraform/main.tf": "sha256:b6f5669c78ac87a35f01642cf0840a96293c6bd836f4f3ecc5079ecec15483d0"
+  "infra/aws/terraform/main.tf": "sha256:c5b03bf7f6ebe8e8539793bff7191f968680fa77a16ea51c865bc34a9ab7c87f"
   "infra/aws/terraform/moved.tf": "sha256:3a816e2a5b402a98a89d949b1801bd6c3cd99242a26cc17039c6d140faa3a342"
-  "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
+  "infra/aws/terraform/profiles.tf": "sha256:3dca37890ae8fe1f354b0fc33d137224373c8ba6ceca80b6bb96c321a675d371"
   "infra/aws/terraform/profiles/production.tfvars": "sha256:85f0417ff14534587c2210d4164adc3e9e775170f01495f62c2884c6f308c36c"
   "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:65c25850344e2b70121207e64f5883d48677feaab93d3a39d6f7aa474908d8d8"
-  "infra/aws/terraform/variables.tf": "sha256:ca0ecdd26f0d7212e4ab11cd7361af4ae6e562915a9f36b7e5d76cb97c1a4b6e"
+  "infra/aws/terraform/variables.tf": "sha256:0391b5c156574c5e5f30af5e2d5a35a81785ea10c64eae3bf3be8cbf6f63d015"
 ---
 
 # AWS Lean Production
@@ -315,10 +316,10 @@ about USD 0.50/month for 5 GiB of ECR storage. At roughly USD 207.45/month
 before variable ALB and CloudWatch charges, that option exceeds the fixed USD
 200 hard ceiling. The existing Terraform cost gate rejects the production
 plan unless an active, time-bounded cost exception authorizes the overage.
-Access Kit MCP is currently constrained to the canonical `production`
-state because that state owns the globally named ECR repository; this
-production figure is a cost comparison, not an allowed deployment
-profile. Optional delegated OAuth adds a Secrets Manager secret and its
+Access Kit MCP is constrained to each account's persistent state owner
+(`production`, or `staging` under its wake/sleep lifecycle), because that state
+owns the account's ECR repository; this production figure is a cost
+comparison, not an allowed deployment profile. Optional delegated OAuth adds a Secrets Manager secret and its
 associated variable charges beyond this base estimate. See the
 [Access Kit MCP AWS deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
 

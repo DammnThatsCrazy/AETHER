@@ -54,6 +54,7 @@ reviewed_source_commits:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
+  - {'commit': 'ddb2934b', 'reason': 'Reviewed ddb2934b: staging can own the Access Kit MCP under the wake/sleep lifecycle (customer_services.access-mcp, fixed count times staging_state, no autoscaling target, exact inventory, image check, plan policy, apply IAM roles, staging publish target); the Access Kit MCP staging statements here are updated.'}
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:76a685c742a3a57790baecd1f774ed606e30a3237d339c017ca9aa0bba6be73e"
@@ -871,7 +872,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `rds` | Legacy RDS Postgres | **never** — superseded by Aurora |
 | `s3` | — | **not instantiated by this root** |
 | `tfmcp` | tfmcp MCP server (ECS Fargate, IAM, Secrets, ALB rule) | **not wired** into the live root; neither profile provisions it |
-| `access_mcp` | Customer-facing Access Kit MCP (dedicated ECR, Fargate, task/execution roles, security group, log group, ALB target/rule) | **opt-in** — production is the single persistent ECR/state owner; immutable image digest required; staging is blocked |
+| `access_mcp` | Customer-facing Access Kit MCP (dedicated ECR, Fargate, task/execution roles, security group, log group, ALB target/rule) | **opt-in** — production and staging each own their account's ECR/state; immutable image digest required; staging runs it under the wake/sleep lifecycle |
 | `vpc_endpoints` | — | **not instantiated by this root** |
 
 The Auth0 module's CLI client is a public Native application with no client
@@ -904,10 +905,11 @@ The image is built from a clean reviewed commit by
 `infra/aws/terraform/scripts/publish_access_mcp_image.sh`; Terraform consumes
 the returned immutable digest. `.github/workflows/terraform-promote.yml`
 accepts these opt-ins on a reviewed `action=plan`, then applies only the exact
-stored plan by run ID and checksum. The service and globally named ECR
-repository are allowed only on the canonical `production` state; one
-owner prevents profile-state races for that shared repository. The
-staging lifecycle does not yet manage its always-on task count.
+stored plan by run ID and checksum. The service and the account-scoped ECR
+repository are allowed only on the persistent state owner of each account,
+`production` or `staging`; one owner per account prevents profile-state races
+for that repository. In staging the lifecycle manages its task count (1 awake,
+0 asleep) and its exact inventory; see [Staging wake/sleep](STAGING-WAKE-SLEEP.md).
 The route shares the existing API hostname and TLS listener. See the
 [deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md)
 for the repository-first, image-publish, service-enable sequence and cost gate.
